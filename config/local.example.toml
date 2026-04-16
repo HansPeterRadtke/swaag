@@ -1,0 +1,10 @@
+[model]
+base_url = "http://127.0.0.1:14829"
+context_limit = 2048
+
+[sessions]
+root = "./var/sessions"
+
+[tools]
+read_roots = ["."]
+allow_side_effect_tools = false

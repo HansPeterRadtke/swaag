@@ -1,0 +1,10 @@
+include README.md
+include LICENSE
+include build.sh
+include run_tests.py
+recursive-include config *.toml
+recursive-include doc *.md *.txt
+recursive-include src/swaag/assets *.toml *.txt
+recursive-include src/swaag/benchmark/fixtures *.json
+recursive-include src/swaag/benchmark/terminal_tasks *
+recursive-include src/swaag/tests *.py

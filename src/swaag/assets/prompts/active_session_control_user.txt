@@ -1,0 +1,20 @@
+Classify the new control-plane message for an already active session.
+
+Return JSON only.
+
+Rules:
+- Preserve the current task unless the user clearly requested stop, cancel, or replacement.
+- A progress question or side question does not stop current work.
+- Added clarification or added constraints should continue the task with the new information.
+- If the message clearly asks to replace the current task, set action=replace_task.
+- If the user wants another task to happen later, set action=queue_after_current.
+- If the message is ambiguous in a way that makes a destructive action unsafe, set action=clarify_conflict.
+
+Fields:
+- action: one of [status, session_summary, continue_with_note, cancel, stop, replace_task, queue_after_current, clarify_conflict]
+- reason: short explanation
+- response_text: short user-facing acknowledgement if useful, else empty string
+- added_context: clarified requirement or constraint to attach to the current task, else empty string
+- replacement_goal: replacement task if action=replace_task, else empty string
+- queued_task: deferred task if action=queue_after_current, else empty string
+- clarification_question: short question only when action=clarify_conflict, else empty string

@@ -1,0 +1,90 @@
+SWAAG repository launch report
+=============================
+
+Name
+----
+SWAAG = Selfhosted Working Autonomous Agent.
+
+Scope of this pass
+------------------
+This pass turned the existing local agent project into a standalone `swaag`
+repository that is ready for editable installs, package builds, and PyPI
+publication work.
+
+What changed
+------------
+- Migrated the project into the new repo at `/data/src/github/swaag`.
+- Renamed the Python package from the old nested path to `src/swaag`.
+- Replaced remaining package-path and repo-path references so the project is
+  internally consistent under the `swaag` name.
+- Added pip-facing packaging files in the style used by the `capov` repo:
+  - `pyproject.toml`
+  - `MANIFEST.in`
+  - `build.sh`
+  - `run_tests.py`
+  - `LICENSE`
+- Added packaged smoke tests under `src/swaag/tests` so an installed package can
+  be verified with `python3 -m swaag.tests`.
+- Rewrote `README.md` for installation, local llama.cpp setup, testing, and
+  benchmark entrypoints.
+- Added `doc/installation.md` and updated the existing `doc/` documentation to
+  use the new repo and package name.
+- Fixed repo-root discovery bugs introduced by the package move so packaged
+  benchmark helpers and lane tooling resolve the correct project root.
+
+Important user-facing commands
+------------------------------
+- CLI:
+  - `python3 -m swaag --help`
+  - `python3 -m swaag ask "..."`
+  - `python3 -m swaag chat`
+- Packaged smoke tests:
+  - `python3 -m swaag.tests`
+- Repo tests:
+  - `python3 run_tests.py`
+  - `python3 -m pytest -q`
+- Build artifacts:
+  - `python3 -m build`
+  - `./build.sh`
+
+Local model dependency
+----------------------
+SWAAG targets a local `llama.cpp` HTTP server.
+
+Required endpoints:
+- `/health`
+- `/tokenize`
+- `/completion`
+
+Recommended references:
+- llama.cpp: `https://github.com/ggml-org/llama.cpp`
+- example general model: `https://huggingface.co/Qwen/Qwen2.5-7B-Instruct-GGUF`
+
+Verification completed in this pass
+-----------------------------------
+- Editable install succeeded:
+  - `python3 -m pip install -e .[test]`
+- Packaged smoke tests succeeded:
+  - `python3 -m swaag.tests`
+- Focused repo verification succeeded:
+  - `python3 -m pytest -q tests/test_imports.py tests/test_cli.py tests/test_testlanes.py tests/test_terminal_bench_local.py tests/test_runtime.py::test_runtime_continues_other_ready_work_while_background_process_runs tests/test_clean_install.py::test_package_installs_and_cli_runs_from_clean_venv -x`
+- CLI help succeeded:
+  - `python3 -m swaag --help`
+- Source and wheel build succeeded in an isolated temporary build venv:
+  - `python3 -m venv <tmp>`
+  - `<tmp>/bin/python -m pip install build twine`
+  - `<tmp>/bin/python -m build`
+
+Packaging notes
+---------------
+- `pyproject.toml` now uses SPDX-style `license = "MIT"` metadata and declares
+  `license-files = ["LICENSE"]`.
+- Build outputs belong in `dist/`, which is ignored by git.
+- If the active Python environment is not writable for publish extras, build in
+  a dedicated temporary venv instead of modifying the agent runtime environment.
+
+Current status
+--------------
+The `swaag` repo is now in a state where it can be installed locally, tested,
+built into distribution artifacts, and prepared for a PyPI upload under the
+`swaag` name.

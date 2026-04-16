@@ -1,0 +1,2 @@
+Summarize this transcript for future continuation:
+{history_block}

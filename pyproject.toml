@@ -1,0 +1,82 @@
+[project]
+name = "swaag"
+version = "0.1.0"
+description = "SWAAG: a selfhosted working autonomous agent for a local llama.cpp server"
+readme = "README.md"
+requires-python = ">=3.11"
+authors = [{ name = "Hans-Peter Radtke" }]
+license = "MIT"
+license-files = ["LICENSE"]
+classifiers = [
+  "Programming Language :: Python :: 3",
+  "Programming Language :: Python :: 3 :: Only",
+  "Programming Language :: Python :: 3.11",
+  "Programming Language :: Python :: 3.12",
+  "Environment :: Console",
+  "Operating System :: OS Independent",
+]
+dependencies = [
+  "requests>=2.31,<3"
+]
+
+[project.urls]
+Homepage = "https://github.com/HansPeterRadtke/swaag"
+Repository = "https://github.com/HansPeterRadtke/swaag"
+Issues = "https://github.com/HansPeterRadtke/swaag/issues"
+
+[project.optional-dependencies]
+test = [
+  "pytest>=8,<9",
+  "pytest-testmon>=2.1,<3"
+]
+semantic-transformers = [
+  "numpy>=1.26,<3",
+  "torch>=2,<3",
+  "transformers>=4.40,<5"
+]
+official-benchmarks = [
+  "swebench>=4,<5",
+  "terminal-bench>=0.2,<0.3"
+]
+publish = [
+  "build>=1,<2",
+  "twine>=5,<6"
+]
+
+[project.scripts]
+swaag = "swaag.cli:main"
+swaag-benchmark = "swaag.benchmark.benchmark_runner:main"
+swaag-devcheck = "swaag.devcheck:main"
+swaag-finalproof = "swaag.finalproof:main"
+swaag-testlane = "swaag.testlane:main"
+
+[build-system]
+requires = ["setuptools>=68", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[tool.setuptools]
+package-dir = {"" = "src"}
+include-package-data = true
+
+[tool.setuptools.packages.find]
+where = ["src"]
+
+[tool.setuptools.package-data]
+"swaag" = [
+  "assets/*.toml",
+  "assets/prompts/*.txt",
+  "benchmark/fixtures/**/*.json",
+  "benchmark/terminal_tasks/**/*"
+]
+
+[tool.pytest.ini_options]
+pythonpath = ["src"]
+testpaths = ["tests"]
+addopts = "-m \"not integration and not live and not benchmark_heavy\""
+markers = [
+  "fast: cheap deterministic tests for the fast lane",
+  "system: broader local runtime/orchestration tests for the system lane",
+  "benchmark_heavy: large scripted benchmark tests kept out of the normal local pytest path",
+  "integration: component integration tests",
+  "live: requires the local llama.cpp server"
+]

@@ -1,0 +1,16 @@
+.swaag/
+.git_credentials
+.pytest_cache/
+.testmondata*
+__pycache__/
+*.py[cod]
+*.egg-info/
+build/
+dist/
+logs/
+gold.*.json
+*.log
+*.tmp
+download/cookies.txt
+copy_interface.window.json
+*log.txt

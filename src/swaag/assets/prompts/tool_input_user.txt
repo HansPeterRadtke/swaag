@@ -1,0 +1,4 @@
+Return only the JSON arguments for the `{tool_name}` tool.
+Do not choose another tool.
+Do not add explanation text.
+Use the current request, tool context, and active plan.

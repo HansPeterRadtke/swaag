@@ -1,0 +1,3 @@
+Return JSON only.
+If no tool is needed, set action="respond", tool_name="none", tool_input={{}}, and put the final answer in response.
+If a tool is needed, set action="call_tool", choose exactly one tool, provide valid tool_input, and set response="".

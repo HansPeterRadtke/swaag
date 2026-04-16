@@ -1,0 +1,254 @@
+# SWAAG
+
+## (S)elfhosted (W)orking (A)utonomous (AG)ent
+
+SWAAG is a local-first autonomous agent core for a direct `llama.cpp` server.
+It is built to stay inspectable, replayable, and reproducible on one machine.
+
+Core properties:
+- strict context-budget control on every model call
+- append-only canonical history with replayable state rebuild
+- explicit runtime loop with planning, tools, verification, and recovery
+- self-hosted operation against a local `llama.cpp` HTTP server
+- session persistence, control messages, checkpoints, and benchmark plumbing
+
+## What is in this repo
+
+This repository contains the full working agent project, including:
+- the main `swaag` package under `src/swaag`
+- CLI entrypoints for agent use, devcheck, lanes, benchmarks, and final proof
+- benchmark fixtures and local benchmark wrappers
+- full repo-level test suite under `tests/`
+- additional package-level smoke tests under `src/swaag/tests`
+- detailed documentation under `doc/`
+
+## Install
+
+Clone the repo and install it in editable mode:
+
+```bash
+cd /data/src/github/swaag
+python3 -m pip install -e .[test]
+```
+
+Optional benchmark dependencies:
+
+```bash
+python3 -m pip install -e .[official-benchmarks]
+```
+
+Optional packaging/publish tooling:
+
+```bash
+python3 -m pip install -e .[publish]
+```
+
+If your current Python environment is not writable for publish extras, use a
+throwaway build venv instead:
+
+```bash
+python3 -m venv /tmp/swaag-build
+/tmp/swaag-build/bin/python -m pip install build twine
+/tmp/swaag-build/bin/python -m build
+```
+
+Once the package is published, the intended install command is:
+
+```bash
+pip install swaag
+```
+
+## Local `llama.cpp` server setup
+
+SWAAG expects a local `llama.cpp` server that exposes at least:
+- `/health`
+- `/tokenize`
+- `/completion`
+
+Official `llama.cpp` repository:
+- https://github.com/ggml-org/llama.cpp
+
+A solid general-purpose example model for local testing:
+- Qwen2.5-7B-Instruct-GGUF
+- https://huggingface.co/Qwen/Qwen2.5-7B-Instruct-GGUF
+
+Example server launch:
+
+```bash
+llama-server \
+  -m /absolute/path/to/Qwen2.5-7B-Instruct-Q5_K_M.gguf \
+  --host 127.0.0.1 \
+  --port 14829 \
+  -c 2048
+```
+
+Default SWAAG config expects the server here:
+
+```toml
+[model]
+base_url = "http://127.0.0.1:14829"
+context_limit = 2048
+```
+
+If your server lives elsewhere, override it with either `config/local.toml` or env vars:
+
+```bash
+export SWAAG__MODEL__BASE_URL=http://127.0.0.1:14829
+export SWAAG__MODEL__CONTEXT_LIMIT=2048
+```
+
+## Quickstart
+
+Basic checks:
+
+```bash
+cd /data/src/github/swaag
+python3 -m swaag doctor --json
+python3 -m swaag tools
+```
+
+Single-turn ask:
+
+```bash
+python3 -m swaag ask "Use the calculator tool to compute 6 * 7. Reply with the numeric result only."
+```
+
+Interactive chat:
+
+```bash
+python3 -m swaag chat
+```
+
+Useful session commands:
+
+```bash
+python3 -m swaag sessions
+python3 -m swaag rename latest my-session
+python3 -m swaag control "Keep the current task running, but also answer with plain digits." --session latest
+python3 -m swaag checkpoint create --session latest --label before-edit
+python3 -m swaag checkpoint restore --session latest
+python3 -m swaag history detail latest "What exact command copied src.txt to dst.txt?"
+```
+
+## Config
+
+Main defaults:
+- `src/swaag/assets/defaults.toml`
+
+Example local override:
+- `config/local.example.toml`
+
+Environment override prefix:
+- `SWAAG__...`
+
+Config path override:
+- `SWAAG_CONFIG=/path/to/file.toml`
+
+Examples:
+
+```bash
+export SWAAG__MODEL__BASE_URL=http://127.0.0.1:14829
+export SWAAG__SESSIONS__ROOT=/tmp/swaag-sessions
+export SWAAG__TOOLS__READ_ROOTS='["/safe/root"]'
+export SWAAG__TOOLS__ALLOW_SIDE_EFFECT_TOOLS=true
+```
+
+## Testing
+
+Installed-package smoke test:
+
+```bash
+python3 -m swaag.tests
+```
+
+Full repo test suite:
+
+```bash
+cd /data/src/github/swaag
+python3 run_tests.py
+pytest -q
+```
+
+Changed-area developer loop:
+
+```bash
+python3 -m swaag.devcheck
+```
+
+Fast lane:
+
+```bash
+python3 -m swaag.testlane fast
+```
+
+System lane:
+
+```bash
+python3 -m swaag.testlane system
+```
+
+Integration lane:
+
+```bash
+python3 -m swaag.testlane integration
+```
+
+Live lane against a real local server:
+
+```bash
+SWAAG_RUN_LIVE=1 python3 -m swaag.testlane live
+```
+
+Final proof loop:
+
+```bash
+python3 -m swaag.finalproof
+```
+
+## Build and publish
+
+Build a source distribution and wheel:
+
+```bash
+python3 -m build
+```
+
+Or use the provided helper:
+
+```bash
+./build.sh
+```
+
+The helper builds the package, uploads it with `twine`, and cleans local build artifacts.
+
+## Benchmarks
+
+Main benchmark entrypoints:
+
+```bash
+python3 -m swaag.benchmark external list
+python3 -m swaag.benchmark external smoke --all --output /tmp/swaag-external-smoke --json
+python3 -m swaag.benchmark system --all --output /tmp/swaag-system-bench --json
+```
+
+Reproducible bounded SWE-bench fixtures live in:
+- `src/swaag/benchmark/fixtures/swebench/`
+
+Local Terminal-Bench task fixtures live in:
+- `src/swaag/benchmark/terminal_tasks/`
+
+## Documentation
+
+Start here:
+- `doc/installation.md`
+- `doc/testing.md`
+- `doc/architecture.md`
+- `doc/runtime_loop.md`
+- `doc/context_budgeting.md`
+- `doc/history_and_projections.md`
+- `doc/memory_and_editing.md`
+- `doc/live_runtime_profiles.md`
+
+## License
+
+MIT. See `LICENSE`.

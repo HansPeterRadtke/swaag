@@ -1,0 +1,16 @@
+instruction: |
+  The function `greet` in `app.py` is wrong.
+  Fix it so that `greet("Hans")` returns exactly `Hello, Hans!`.
+  Run the task tests before you finish.
+author_name: swaag
+author_email: benchmark@local.invalid
+difficulty: easy
+category: software_engineering
+tags:
+  - local
+  - real-agent
+  - python
+parser_name: pytest
+max_agent_timeout_sec: 300
+max_test_timeout_sec: 60
+run_tests_in_same_shell: false

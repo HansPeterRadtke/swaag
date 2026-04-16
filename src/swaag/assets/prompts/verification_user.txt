@@ -1,0 +1,5 @@
+Evaluate the verification criteria strictly.
+
+Use only the provided evidence.
+Do not invent missing evidence.
+Return every criterion with passed=true/false and short evidence.

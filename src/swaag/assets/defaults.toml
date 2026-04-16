@@ -1,0 +1,638 @@
+# ============================================================
+# swaag configuration defaults
+#
+# Override precedence (lowest to highest):
+#   1. this file  — packaged defaults, defines every key
+#   2. config/local.toml  — local override file, deep-merged at startup
+#   3. SWAAG_CONFIG env var  — explicit path to an additional override
+#   4. SWAAG__SECTION__KEY=value env vars  — per-key overrides (highest)
+#
+# Distinction between config types:
+#   server/model facts  — must match the running server (e.g. context_limit)
+#   user-tunable policy — safe to experiment with (ratios, limits, previews)
+#   derived allocations — computed at runtime from facts × policy; never set here
+#
+# Sections are ordered by practical tuning likelihood / risk:
+#   top  — most likely to tune, safest to change
+#   bottom — less likely to tune, riskier to get wrong
+# ============================================================
+
+# -----------------------------------------------------------
+# [model] — SERVER/MODEL FACTS
+# These must match the running llama.cpp server and loaded model.
+# context_limit in particular MUST match the server's configured value.
+# -----------------------------------------------------------
+[model]
+base_url = "http://127.0.0.1:14829"
+completion_endpoint = "/completion"
+tokenize_endpoint = "/tokenize"
+health_endpoint = "/health"
+profile_name = "small_fast"
+structured_output_mode = "post_validate"
+timeout_seconds = 120
+connect_timeout_seconds = 10
+simple_timeout_seconds = 60
+structured_timeout_seconds = 120
+verification_timeout_seconds = 150
+benchmark_timeout_seconds = 240
+progress_poll_seconds = 5.0
+max_retries = 1
+temperature = 0.0
+top_p = 1.0
+seed = 42
+context_limit = 2048
+stop = ["<|eot_id|>", "<|end_of_text|>"]
+
+# -----------------------------------------------------------
+# [runtime] — OPERATIONAL LIMITS  (most user-tunable)
+# Adjust these first when tuning agent behavior for a new task scope.
+# -----------------------------------------------------------
+[runtime]
+max_tool_steps = 4
+tool_call_budget = 6
+max_total_actions = 12
+no_progress_failure_limit = 3
+verification_confidence_threshold = 0.7
+capture_model_io = true
+lean_on_overflow = true
+strict_budget = true
+max_repeated_action_occurrences = 2
+max_reasoning_steps = 8
+tool_timeout_seconds = 10
+background_poll_seconds = 0.1
+
+# -----------------------------------------------------------
+# [tools] — TOOL EXPOSURE  (most user-tunable)
+# enabled: which tools the agent may use.
+# read_roots: filesystem roots the agent is allowed to read from.
+# allow_side_effect_tools: set true only if destructive writes are intended.
+# -----------------------------------------------------------
+[tools]
+enabled = ["echo", "time_now", "calculator", "list_files", "read_file", "read_text", "notes", "edit_text", "write_file", "run_tests", "shell_command"]
+read_roots = ["."]
+allow_stateful_tools = true
+allow_side_effect_tools = false
+
+# -----------------------------------------------------------
+# [planner] — PLANNING LIMITS  (commonly tuned)
+# max_plan_steps: cap on steps the planner may propose.
+# max_replans: how many times the runtime may replan on failure.
+# -----------------------------------------------------------
+[planner]
+max_plan_steps = 6
+max_replans = 2
+
+# -----------------------------------------------------------
+# [context] — TOKEN RESERVE POLICY  (moderate risk)
+# These are subtracted from context_limit before input budgeting.
+# Too small => model truncates its own response. Too large => wastes input space.
+# -----------------------------------------------------------
+[context]
+reserved_response_tokens = 256
+reserved_summary_tokens = 196
+safety_margin_tokens = 64
+max_recent_messages = 8
+max_compaction_rounds = 4
+note_prompt_token_cap = 256
+allow_estimate_fallback = true
+compact_on_overflow = true
+
+# -----------------------------------------------------------
+# [sessions] — SESSION STORAGE
+# Rarely changed. root: where session histories are stored.
+# -----------------------------------------------------------
+[sessions]
+root = ".swaag/sessions"
+write_projections = true
+
+# -----------------------------------------------------------
+# [environment] — SHELL / WORKSPACE SETTINGS
+# shell_executable: shell used for shell_command tool.
+# command_timeout_seconds: hard timeout per shell command.
+# -----------------------------------------------------------
+[environment]
+shell_executable = "bash"
+command_timeout_seconds = 30
+max_capture_chars = 20000
+aubro_entrypoint = ""
+aubro_src = ""
+aubro_timeout_seconds = 45
+aubro_max_text_chars = 4000
+aubro_max_results = 5
+aubro_max_links = 5
+
+# -----------------------------------------------------------
+# [logging] — LOGGING LEVEL
+# -----------------------------------------------------------
+[logging]
+level = "INFO"
+
+# -----------------------------------------------------------
+# [notes] — WORKING NOTES SUBSYSTEM LIMITS
+# -----------------------------------------------------------
+[notes]
+max_notes = 32
+max_note_chars = 2000
+max_total_chars = 16000
+compact_target_chars = 800
+
+# -----------------------------------------------------------
+# [reader] — SEQUENTIAL FILE READER LIMITS
+# -----------------------------------------------------------
+[reader]
+default_chunk_chars = 4000
+default_overlap_chars = 0
+max_chunk_chars = 12000
+
+# -----------------------------------------------------------
+# [editor] — FILE EDITOR SETTINGS
+# -----------------------------------------------------------
+[editor]
+create_backups = true
+backup_suffix = ".bak"
+allow_writes = true
+
+# -----------------------------------------------------------
+# [memory] — SEMANTIC MEMORY LIMITS
+# -----------------------------------------------------------
+[memory]
+max_semantic_items = 128
+max_retrieved_items = 6
+
+# -----------------------------------------------------------
+# [context_builder] — CONTEXT ASSEMBLY ITEM LIMITS
+# -----------------------------------------------------------
+[context_builder]
+max_history_messages = 64
+max_semantic_items = 32
+max_recent_results = 16
+max_environment_files = 16
+
+# -----------------------------------------------------------
+# [compression] — HISTORY COMPRESSION SETTINGS
+# -----------------------------------------------------------
+[compression]
+max_messages_before_compress = 12
+summary_chars = 800
+
+# -----------------------------------------------------------
+# [security] — TRUST AND INPUT SAFETY
+# -----------------------------------------------------------
+[security]
+block_untrusted_semantic = true
+max_external_text_chars = 8000
+
+# -----------------------------------------------------------
+# [retrieval] — RETRIEVAL BACKEND SELECTION
+# backend: "llm_scoring" (default), "degraded_lexical" (offline/test)
+# -----------------------------------------------------------
+[retrieval]
+backend = "llm_scoring"
+allow_degraded_fallback = true
+max_candidates_per_source = 12
+
+# -----------------------------------------------------------
+# [guidance] — AGENT GUIDANCE FILE LOADING
+# -----------------------------------------------------------
+[guidance]
+enabled = true
+global_paths = []
+filenames = ["AGENTS.md", ".agent-guidance.md", "SWAAG.md"]
+max_items = 32
+max_tokens = 4096
+
+# -----------------------------------------------------------
+# [skills] — SKILL CATALOG LOADING
+# -----------------------------------------------------------
+[skills]
+enabled = true
+max_metadata_items = 16
+max_full_instructions = 6
+metadata_only_default = true
+
+# -----------------------------------------------------------
+# [prompts] — PROMPT TEMPLATE NAMES  (internal, rarely changed)
+# -----------------------------------------------------------
+[prompts]
+standard_system_template = "system_standard.txt"
+lean_system_template = "system_lean.txt"
+analysis_template = "analysis_user.txt"
+task_decision_template = "task_decision_user.txt"
+control_template = "active_session_control_user.txt"
+expansion_template = "expansion_user.txt"
+planning_template = "planning_user.txt"
+verification_template = "verification_user.txt"
+decision_template = "decision_user.txt"
+answer_template = "answer_user.txt"
+summary_system_template = "summary_system.txt"
+summary_template = "summary_user.txt"
+
+# -----------------------------------------------------------
+# [budget_policy] — SCALE-FREE OUTPUT/SAFETY/SECTION RATIOS
+# ADVANCED TUNING — changes here affect all model calls globally.
+# All ratios are multiplied by context_limit at runtime to produce
+# absolute token allocations (derived allocations; never set directly).
+#
+# safe_input_floor_tokens: minimum input budget preserved even when
+# the context is very tight (structural safety floor, not a soft guide).
+# -----------------------------------------------------------
+[budget_policy]
+fixed_overhead_min_tokens = 160
+structured_output_json_factor_default = 1.50
+structured_output_json_floor_tokens = 24
+structured_output_grammar_factor = 1.25
+structured_output_grammar_floor_tokens = 16
+safe_input_floor_tokens = 128
+
+[budget_policy.call_classes]
+analysis = "tiny"
+task_decision = "tiny"
+control = "tiny"
+action = "tiny"
+failure = "small"
+strategy = "small"
+tool_input = "small"
+decision = "small"
+verification = "small"
+generation_decomposition = "medium"
+overflow_recovery = "medium"
+expansion = "medium"
+plan = "large"
+summary = "medium"
+answer = "large"
+
+[budget_policy.output_ratio]
+tiny = 0.04
+small = 0.07
+medium = 0.12
+large = 0.18
+
+[budget_policy.output_floor_ratio]
+tiny = 0.02
+small = 0.04
+medium = 0.07
+large = 0.10
+
+[budget_policy.output_ratio_by_kind]
+plan = 0.30
+
+[budget_policy.output_floor_ratio_by_kind]
+plan = 0.22
+
+[budget_policy.structured_output_json_factor_by_contract]
+prompt_analysis = 1.15
+task_decision = 1.15
+active_session_control = 1.10
+task_expansion = 1.15
+task_plan = 1.10
+strategy_selection = 1.10
+failure_classification = 1.10
+action_selection = 1.10
+subagent_selection = 1.10
+generation_decomposition = 1.10
+overflow_recovery = 1.10
+verification = 1.10
+
+[budget_policy.safety_ratio]
+tiny = 0.05
+small = 0.06
+medium = 0.08
+large = 0.10
+
+[budget_policy.fixed_overhead_ratio]
+tiny = 0.18
+small = 0.18
+medium = 0.16
+large = 0.14
+
+[budget_policy.section_floor_ratio]
+history = 0.08
+environment_files = 0.08
+semantic = 0.05
+guidance = 0.05
+skills = 0.05
+notes = 0.03
+
+[budget_policy.section_floor_min_tokens]
+history = 24
+environment_files = 24
+semantic = 16
+guidance = 16
+skills = 16
+notes = 12
+
+[budget_policy.section_priorities.default]
+history = 1.00
+environment_files = 0.95
+semantic = 0.70
+guidance = 0.75
+skills = 0.70
+notes = 0.55
+
+[budget_policy.section_priorities.analysis]
+history = 0.75
+environment_files = 0.50
+semantic = 0.35
+guidance = 0.70
+skills = 0.35
+notes = 0.30
+
+[budget_policy.section_priorities.task_decision]
+history = 0.80
+environment_files = 0.55
+semantic = 0.35
+guidance = 0.75
+skills = 0.35
+notes = 0.30
+
+[budget_policy.section_priorities.control]
+history = 0.70
+environment_files = 0.50
+semantic = 0.25
+guidance = 0.55
+skills = 0.20
+notes = 0.25
+
+[budget_policy.section_priorities.strategy]
+history = 0.85
+environment_files = 0.70
+semantic = 0.55
+guidance = 0.85
+skills = 0.70
+notes = 0.35
+
+[budget_policy.section_priorities.plan]
+history = 1.10
+environment_files = 1.00
+semantic = 0.80
+guidance = 0.95
+skills = 0.80
+notes = 0.45
+
+[budget_policy.section_priorities.decision]
+history = 0.95
+environment_files = 0.95
+semantic = 0.65
+guidance = 0.70
+skills = 0.75
+notes = 0.35
+
+[budget_policy.section_priorities.tool_input]
+history = 0.80
+environment_files = 1.10
+semantic = 0.50
+guidance = 0.60
+skills = 0.85
+notes = 0.25
+
+[budget_policy.section_priorities.answer]
+history = 0.90
+environment_files = 0.95
+semantic = 0.80
+guidance = 0.70
+skills = 0.60
+notes = 0.35
+
+[budget_policy.section_priorities.verification]
+history = 0.55
+environment_files = 1.20
+semantic = 0.60
+guidance = 0.35
+skills = 0.30
+notes = 0.10
+
+# -----------------------------------------------------------
+# [context_policy] — CONTEXT ASSEMBLY PRIORITIES AND TOKEN HINTS
+# ADVANCED TUNING — controls which context sections get priority
+# when the input budget is tight.
+# component_priorities: higher = more likely to be included.
+# -----------------------------------------------------------
+[context_policy]
+guidance_item_token_hint = 96
+skill_metadata_token_hint = 96
+skill_instruction_token_hint = 192
+recent_result_token_hint = 80
+retrieval_preview_items = 2
+retrieval_preview_chars = 200
+
+[context_policy.component_priorities]
+working_memory = 100.0
+plan = 96.0
+strategy = 94.0
+guidance = 92.0
+environment = 90.0
+environment_files = 88.0
+semantic_memory = 84.0
+skills = 80.0
+project_state = 72.0
+skill_metadata = 68.0
+recent_results = 62.0
+active_entities = 60.0
+notes = 54.0
+
+# -----------------------------------------------------------
+# [selection_policy] — RETRIEVAL WEIGHTS, SCORING, SKILL SELECTION
+# ADVANCED TUNING — controls the semantic retrieval pipeline.
+#
+# Structural signal weights: zero-to-one values added to candidates
+# before the LLM ranker applies its semantic relevance score.
+# Higher = stronger boost for that source type during shortlisting.
+#
+# retrieval_scoring_text_chars: how many chars of each candidate's text
+# are sent to the LLM relevance scorer per query.
+# -----------------------------------------------------------
+[selection_policy]
+retrieval_history_item_token_hint = 96
+retrieval_semantic_item_token_hint = 96
+retrieval_environment_item_token_hint = 256
+skill_nondiscriminative_delta = 0.05
+history_query_max_results = 8
+
+# Structural signal weights used when building ranking candidates.
+retrieval_structural_tool_message = 0.75
+retrieval_structural_user_message = 0.35
+retrieval_structural_failed_event = 0.20
+retrieval_structural_summary_event = 0.12
+retrieval_structural_modified_file = 0.50
+retrieval_structural_procedural_memory = 0.50
+retrieval_trust_untrusted_memory = 0.25
+
+# Ranking-text preview lengths (chars) used when building candidate text
+# for the backend ranker. Shorter = faster ranking; longer = more signal.
+retrieval_history_ranking_chars = 280
+retrieval_event_ranking_chars = 240
+retrieval_file_ranking_chars = 400
+
+# Maximum chars of candidate text sent to the LLM relevance scorer per call.
+# Should be >= the largest retrieval_*_ranking_chars value above.
+retrieval_scoring_text_chars = 400
+
+# History detail query scoring constants.
+# token_score: score added per query token found in event payload
+# exact_score: score added per quoted exact phrase found
+# type_bonus: extra score for preferred event types (tool, shell, file)
+# preview_chars: how many payload chars to include in match previews
+history_detail_token_score = 2
+history_detail_exact_score = 4
+history_detail_type_bonus = 1
+history_detail_preview_chars = 320
+
+# -----------------------------------------------------------
+# [external_benchmarks] — OPTIONAL OFFICIAL BENCHMARK HARNESSES
+# ADVANCED / INFRA TUNING — these wire the project to official
+# benchmark runners without hard-coding environment-specific paths.
+#
+# The project-owned command path stays stable:
+#   python -m swaag.benchmark external smoke|run ...
+#
+# The benchmark-specific commands below are the real commands invoked
+# by that harness. They can be overridden in local.toml or via
+# SWAAG__EXTERNAL_BENCHMARKS__TARGETS__... env overrides.
+# -----------------------------------------------------------
+[external_benchmarks]
+root = ".swaag/external_benchmarks"
+smoke_timeout_seconds = 90
+full_timeout_seconds = 1800
+
+[external_benchmarks.model_server]
+preflight_enabled = true
+healthcheck_timeout_seconds = 5
+retry_attempts = 3
+retry_sleep_seconds = 2.0
+
+[external_benchmarks.terminal_bench]
+compose_probe_timeout_seconds = 5
+compose_download_timeout_seconds = 60
+allow_compose_download = true
+
+[external_benchmarks.agent_generation]
+default_max_instances = 1
+clone_timeout_seconds = 300
+agent_timeout_seconds = 900
+agent_context_limit = 4096
+allow_stateful_tools = true
+allow_side_effect_tools = true
+# Real-agent benchmark runs still need enough room for at least
+# inspect/edit/verify/respond style plans, but large plans make local
+# structured planning much more fragile on bounded contexts.
+planner_max_plan_steps = 4
+planner_max_replans = 1
+runtime_max_reasoning_steps = 16
+runtime_max_total_actions = 40
+runtime_max_tool_steps = 24
+runtime_tool_call_budget = 24
+candidate_file_limit = 2
+file_excerpt_char_limit = 900
+issue_prompt_char_limit = 1200
+completion_max_tokens = 192
+solver_max_attempts = 2
+summary_max_chars = 120
+find_max_chars = 800
+replace_max_chars = 1600
+git_remote_base_url = "https://github.com"
+model_name_or_path = "swaag/real-agent-cli"
+prompt_template = """
+You are solving a local SWE-bench benchmark instance inside the current repository checkout.
+Task contract:
+{{"task_kind":"local_repo_code_fix","request_completeness":"complete","requires_code_changes":true,"requires_verification":true,"prefer_task_expansion":false}}
+Treat this benchmark issue as complete enough to start working immediately.
+Do not expand the task just because the prompt includes background context or hints.
+Apply code changes directly to files in the workspace.
+Aim for the smallest reasonable patch that addresses the issue.
+This is a coding task, not a reading-only task.
+You must inspect code, edit files, and verify the fix locally.
+Do not ask for clarification; use the issue text and hints.
+Keep your internal plan short and concrete: prefer read -> edit -> verify -> respond.
+Do the work in the repository instead of replying with a plan-only answer.
+Start by reading the named failing test file or files.
+If the failing test list only gives a test name, search for that exact test name first.
+Then inspect the implementation touched by those tests or by the named symbol in the issue.
+Avoid editing docs, changelogs, vendored code, generated files, or unrelated tests unless the issue explicitly targets them.
+Prefer one source change and then verify the named failing tests.
+Use repo-relative paths only when you mention paths.
+Do not restate the full issue text or large file paths in your plan.
+
+Repository: {repo}
+Instance: {instance_id}
+
+Problem statement:
+{problem_statement}
+
+Known failing tests:
+{fail_to_pass_tests}
+
+Hints:
+{hints_text}
+"""
+empty_patch_retry_prompt = """
+You have not produced any file changes yet for this SWE-bench instance.
+Make one best-effort concrete code change now in the current repository checkout.
+Do not ask for clarification.
+Repository: {repo}
+Instance: {instance_id}
+"""
+
+[external_benchmarks.targets.swebench_lite]
+enabled = true
+description = "Official SWE-bench Lite evaluation via swebench.harness.run_evaluation."
+workdir = "."
+default_variables = { dataset_name_args = "--dataset_name princeton-nlp/SWE-bench_Lite", namespace_args = "--namespace none" }
+preflight_commands = [["docker", "version"]]
+smoke_command = ["python3", "-m", "swebench.harness.run_evaluation", "--help"]
+full_command = ["python3", "-m", "swebench.harness.run_evaluation", "@args:{dataset_name_args}", "--predictions_path", "{predictions_path}", "@args:{instance_ids_args}", "@args:{namespace_args}", "@args:{cache_args}", "--max_workers", "1", "--run_id", "{run_id}", "--report_dir", "{output_dir}"]
+required_env = []
+required_paths = ["{predictions_path}"]
+allowed_path_literals = ["gold"]
+artifact_globs = ["evaluation_results/**/*", "logs/**/*"]
+
+[external_benchmarks.targets.swebench_verified]
+enabled = true
+description = "Official SWE-bench Verified evaluation via swebench.harness.run_evaluation."
+workdir = "."
+default_variables = { dataset_name_args = "--dataset_name princeton-nlp/SWE-bench_Verified", namespace_args = "--namespace none" }
+preflight_commands = [["docker", "version"]]
+smoke_command = ["python3", "-m", "swebench.harness.run_evaluation", "--help"]
+full_command = ["python3", "-m", "swebench.harness.run_evaluation", "@args:{dataset_name_args}", "--predictions_path", "{predictions_path}", "@args:{instance_ids_args}", "@args:{namespace_args}", "@args:{cache_args}", "--max_workers", "1", "--run_id", "{run_id}", "--report_dir", "{output_dir}"]
+required_env = []
+required_paths = ["{predictions_path}"]
+allowed_path_literals = ["gold"]
+artifact_globs = ["evaluation_results/**/*", "logs/**/*"]
+
+[external_benchmarks.targets.swebench_multilingual]
+enabled = true
+description = "Official SWE-bench Multilingual evaluation via swebench.harness.run_evaluation."
+workdir = "."
+default_variables = { dataset_name_args = "--dataset_name SWE-bench/SWE-bench_Multilingual", namespace_args = "--namespace none" }
+preflight_commands = [["docker", "version"]]
+smoke_command = ["python3", "-m", "swebench.harness.run_evaluation", "--help"]
+full_command = ["python3", "-m", "swebench.harness.run_evaluation", "@args:{dataset_name_args}", "--predictions_path", "{predictions_path}", "@args:{instance_ids_args}", "@args:{namespace_args}", "@args:{cache_args}", "--max_workers", "1", "--run_id", "{run_id}", "--report_dir", "{output_dir}"]
+required_env = []
+required_paths = ["{predictions_path}"]
+allowed_path_literals = ["gold"]
+artifact_globs = ["evaluation_results/**/*", "logs/**/*"]
+
+[external_benchmarks.targets.swebench_full]
+enabled = true
+description = "Official full SWE-bench evaluation via swebench.harness.run_evaluation."
+workdir = "."
+default_variables = { dataset_name_args = "--dataset_name princeton-nlp/SWE-bench", namespace_args = "--namespace none" }
+preflight_commands = [["docker", "version"]]
+smoke_command = ["python3", "-m", "swebench.harness.run_evaluation", "--help"]
+full_command = ["python3", "-m", "swebench.harness.run_evaluation", "@args:{dataset_name_args}", "--predictions_path", "{predictions_path}", "@args:{instance_ids_args}", "@args:{namespace_args}", "@args:{cache_args}", "--max_workers", "1", "--run_id", "{run_id}", "--report_dir", "{output_dir}"]
+required_env = []
+required_paths = ["{predictions_path}"]
+allowed_path_literals = ["gold"]
+artifact_globs = ["evaluation_results/**/*", "logs/**/*"]
+
+[external_benchmarks.targets.terminal_bench]
+enabled = true
+description = "Official Terminal-Bench CLI harness via the real-agent local wrapper."
+workdir = "."
+default_variables = { dataset_locator_args = "--dataset-path src/swaag/benchmark/terminal_tasks", task_selection_args = "--task-id hello-swaag" }
+preflight_commands = []
+smoke_command = ["python3", "-m", "swaag.benchmark.terminal_bench_local", "smoke"]
+full_command = ["python3", "-m", "swaag.benchmark.terminal_bench_local", "run", "@args:{dataset_locator_args}", "--output-path", "{output_dir}", "--run-id", "{run_id}", "@args:{task_selection_args}", "--n-concurrent", "1", "--no-upload-results"]
+required_env = []
+required_paths = []
+allowed_path_literals = []
+artifact_globs = ["runs/**/*", "artifacts/**/*", "logs/**/*"]
