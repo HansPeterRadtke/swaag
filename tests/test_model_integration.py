@@ -15,6 +15,7 @@ from swaag.model import LlamaCppClient, ModelClientError
 class _Handler(BaseHTTPRequestHandler):
     requests = []
     malformed = False
+    forced_error_payload: dict | None = None
 
     def log_message(self, format: str, *args):  # noqa: A003
         return
@@ -41,6 +42,9 @@ class _Handler(BaseHTTPRequestHandler):
             self._json_response({"tokens": list(range(len(body["content"].split())))})
             return
         if self.path == "/completion":
+            if type(self).forced_error_payload is not None:
+                self._json_response(type(self).forced_error_payload, status=400)
+                return
             if type(self).malformed:
                 self._json_response({"unexpected": True})
                 return
@@ -93,6 +97,29 @@ def test_llama_cpp_client_rejects_malformed_response(make_config) -> None:
             client.send_completion(client.build_completion_request("prompt", max_tokens=4, contract=yes_no_contract()))
     finally:
         _Handler.malformed = False
+        server.shutdown()
+        thread.join(timeout=5)
+
+
+@pytest.mark.integration
+def test_llama_cpp_client_surfaces_http_error_details(make_config) -> None:
+    server = HTTPServer(("127.0.0.1", 0), _Handler)
+    _Handler.forced_error_payload = {
+        "error": {
+            "code": 400,
+            "type": "exceed_context_size_error",
+            "message": "the request exceeds the available context size, try increasing it",
+        }
+    }
+    thread = threading.Thread(target=server.serve_forever, daemon=True)
+    thread.start()
+    try:
+        config = make_config(model__base_url=f"http://127.0.0.1:{server.server_port}")
+        client = LlamaCppClient(config)
+        with pytest.raises(requests.HTTPError, match="exceed_context_size_error"):
+            client.send_completion(client.build_completion_request("prompt", max_tokens=4, contract=yes_no_contract()))
+    finally:
+        _Handler.forced_error_payload = None
         server.shutdown()
         thread.join(timeout=5)
 

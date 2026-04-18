@@ -17,8 +17,93 @@ LANE_PRECEDENCE = {
     "benchmark_heavy": 4,
 }
 
+TOP_LEVEL_TEST_LANES = (
+    "deterministic_correctness",
+    "agent_loop_regression",
+    "live_agent_evaluation",
+)
+
+DETERMINISTIC_CORRECTNESS_TEST_FILES = frozenset(
+    {
+        "tests/test_benchmark_catalog.py",
+        "tests/test_agent_regression_lane.py",
+        "tests/test_benchmark_import_hygiene.py",
+        "tests/test_benchmark_metrics.py",
+        "tests/test_benchmark_report.py",
+        "tests/test_browser_integration.py",
+        "tests/test_budgeting.py",
+        "tests/test_clean_install.py",
+        "tests/test_cli.py",
+        "tests/test_config.py",
+        "tests/test_context_builder.py",
+        "tests/test_decision.py",
+        "tests/test_devcheck.py",
+        "tests/test_editing.py",
+        "tests/test_evaluation_runner.py",
+        "tests/test_evaluator.py",
+        "tests/test_expander.py",
+        "tests/test_external_benchmarks.py",
+        "tests/test_failure.py",
+        "tests/test_grammar.py",
+        "tests/test_guidance.py",
+        "tests/test_imports.py",
+        "tests/test_live_runtime_profiles.py",
+        "tests/test_live_subset_selection.py",
+        "tests/test_live_suite_structure.py",
+        "tests/test_llm_record_replay.py",
+        "tests/test_local_agent_runner.py",
+        "tests/test_model_integration.py",
+        "tests/test_notes.py",
+        "tests/test_prompt_analyzer.py",
+        "tests/test_prompts.py",
+        "tests/test_reader.py",
+        "tests/test_retrieval.py",
+        "tests/test_roles.py",
+        "tests/test_security.py",
+        "tests/test_skills.py",
+        "tests/test_strategy.py",
+        "tests/test_swebench_local.py",
+        "tests/test_system_benchmark_suite.py",
+        "tests/test_terminal_bench_local.py",
+        "tests/test_testlanes.py",
+        "tests/test_three_lane_architecture.py",
+        "tests/test_tokens.py",
+        "tests/test_tools.py",
+        "tests/test_verification.py",
+    }
+)
+
+AGENT_LOOP_REGRESSION_TEST_FILES = frozenset(
+    {
+        "tests/test_agent_loop_replay.py",
+        "tests/test_benchmark.py",
+        "tests/test_end_to_end.py",
+        "tests/test_environment.py",
+        "tests/test_false_positive_killers.py",
+        "tests/test_history.py",
+        "tests/test_long_running_tasks.py",
+        "tests/test_orchestrator.py",
+        "tests/test_planner.py",
+        "tests/test_project_state.py",
+        "tests/test_prompt_understanding_eval.py",
+        "tests/test_reasoning.py",
+        "tests/test_runtime.py",
+        "tests/test_runtime_verification_flow.py",
+        "tests/test_scaled_catalog.py",
+        "tests/test_semantic_memory.py",
+        "tests/test_session_control.py",
+        "tests/test_sessions.py",
+        "tests/test_subagents.py",
+        "tests/test_subsystems.py",
+        "tests/test_working_memory.py",
+    }
+)
+
+LIVE_AGENT_EVALUATION_TEST_FILES = frozenset({"tests/test_live_llamacpp.py"})
+
 SYSTEM_TEST_FILES = frozenset(
     {
+        "tests/test_agent_loop_replay.py",
         "tests/test_benchmark_catalog.py",
         "tests/test_benchmark_metrics.py",
         "tests/test_benchmark_report.py",
@@ -274,6 +359,52 @@ def fast_test_files(root: Path | None = None) -> tuple[str, ...]:
         | set(BENCHMARK_HEAVY_TEST_FILES)
     )
     return tuple(sorted(test_files - special))
+
+
+def top_level_lane_test_files(root: Path | None = None) -> dict[str, tuple[str, ...]]:
+    base = project_root() if root is None else root
+    known = set(all_test_files(base))
+    return {
+        "deterministic_correctness": tuple(sorted(DETERMINISTIC_CORRECTNESS_TEST_FILES & known)),
+        "agent_loop_regression": tuple(sorted(AGENT_LOOP_REGRESSION_TEST_FILES & known)),
+        "live_agent_evaluation": tuple(sorted(LIVE_AGENT_EVALUATION_TEST_FILES & known)),
+    }
+
+
+def top_level_lane_for_test_file(path: str, root: Path | None = None) -> str:
+    normalized = path.replace("\\", "/")
+    if normalized in LIVE_AGENT_EVALUATION_TEST_FILES:
+        return "live_agent_evaluation"
+    if normalized in AGENT_LOOP_REGRESSION_TEST_FILES:
+        return "agent_loop_regression"
+    if normalized in DETERMINISTIC_CORRECTNESS_TEST_FILES:
+        return "deterministic_correctness"
+    if normalized in all_test_files(root):
+        raise ValueError(f"Test file {path!r} is not classified into a top-level lane")
+    raise ValueError(f"Unknown test file: {path}")
+
+
+def validate_top_level_lane_registry(root: Path | None = None) -> None:
+    base = project_root() if root is None else root
+    known = set(all_test_files(base))
+    lane_sets = [
+        set(DETERMINISTIC_CORRECTNESS_TEST_FILES),
+        set(AGENT_LOOP_REGRESSION_TEST_FILES),
+        set(LIVE_AGENT_EVALUATION_TEST_FILES),
+    ]
+    referenced = set().union(*lane_sets)
+    missing = sorted(path for path in referenced if path not in known)
+    if missing:
+        raise RuntimeError(f"Top-level lane registry references missing test files: {missing}")
+    overlaps = set()
+    for index, first in enumerate(lane_sets):
+        for second in lane_sets[index + 1 :]:
+            overlaps.update(first & second)
+    if overlaps:
+        raise RuntimeError(f"Top-level lane registry has overlapping test files: {sorted(overlaps)}")
+    unclassified = sorted(path for path in known if path not in referenced)
+    if unclassified:
+        raise RuntimeError(f"Top-level lane registry leaves test files unclassified: {unclassified}")
 
 
 def lane_test_files(root: Path | None = None) -> dict[str, tuple[str, ...]]:

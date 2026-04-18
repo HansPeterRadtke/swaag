@@ -119,3 +119,38 @@ def test_working_memory_uses_expanded_goal_when_present() -> None:
     )
 
     assert "playable loop" in state.active_goal
+
+
+def test_working_memory_compacts_benchmark_task_contract_goal() -> None:
+    goal = (
+        "Task contract:\n"
+        "{\"task_kind\":\"local_repo_code_fix\",\"request_completeness\":\"complete\"}\n"
+        "Problem statement:\n"
+        "mathematica_code gives wrong output with Max\n"
+        "Known failing tests:\n"
+        "- test_Function\n"
+        "- test_Other\n"
+        "Hints:\n"
+        "Check mathematica.py.\n"
+    )
+    state = build_working_memory(
+        SessionState(
+            session_id="s1",
+            created_at="t0",
+            updated_at="t0",
+            config_fingerprint="cfg",
+            model_base_url="http://example.test",
+            messages=[],
+            active_plan=None,
+            expanded_task=ExpandedTask(
+                original_goal=goal,
+                expanded_goal=goal,
+                scope=[],
+                constraints=[],
+                expected_outputs=[],
+                assumptions=[],
+            ),
+        )
+    )
+
+    assert state.active_goal == "Fix the benchmark issue. mathematica_code gives wrong output with Max Verify test_Function, test_Other."

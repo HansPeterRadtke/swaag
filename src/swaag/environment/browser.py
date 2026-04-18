@@ -109,8 +109,10 @@ def run_aubro_command(
         timeout_seconds=config.environment.aubro_timeout_seconds,
         metadata={"kind": "aubro", "command_suffix": " ".join(command_suffix)},
     )
-    stdout = _trim_text(process_result.stdout, config.environment.max_capture_chars)
-    stderr = _trim_text(process_result.stderr, config.environment.max_capture_chars)
+    raw_stdout = process_result.stdout
+    raw_stderr = process_result.stderr
+    stdout = _trim_text(raw_stdout, config.environment.max_capture_chars)
+    stderr = _trim_text(raw_stderr, config.environment.max_capture_chars)
     process_result.record.stdout = stdout
     process_result.record.stderr = stderr
     if process_result.record.return_code != 0:
@@ -118,7 +120,7 @@ def run_aubro_command(
             f"aubro command failed with exit code {process_result.record.return_code}: {stderr or stdout}"
         )
     try:
-        payload = json.loads(stdout or "{}")
+        payload = json.loads(raw_stdout or "{}")
     except json.JSONDecodeError as exc:
         raise BrowserAutomationError(f"aubro returned invalid JSON: {stdout[:400]!r}") from exc
     if not isinstance(payload, dict):

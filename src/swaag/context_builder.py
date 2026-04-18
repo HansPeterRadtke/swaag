@@ -17,7 +17,8 @@ from swaag.working_memory import build_working_memory
 ContextTraceItem = RetrievalTraceItem
 
 _MINIMAL_FRONTEND_KINDS = {"analysis", "task_decision", "expansion"}
-_LIGHT_CONTEXT_KINDS = {"strategy", "failure", "subagent_selection", "control"}
+_LIGHT_CONTEXT_KINDS = {"strategy", "failure", "subagent_selection", "control", "tool_input"}
+_MINIMAL_FRONTEND_COMPONENT_NAMES = {"guidance", "environment"}
 
 
 @dataclass(slots=True)
@@ -83,7 +84,7 @@ def _render_strategy(state: SessionState) -> str:
 
 
 
-def _render_project_state(state: SessionState) -> str:
+def _render_project_state(state: SessionState, *, compact: bool = False) -> str:
     if (
         not state.project_state.files_seen
         and not state.project_state.relationships
@@ -91,29 +92,33 @@ def _render_project_state(state: SessionState) -> str:
     ):
         return ""
     lines: list[str] = []
-    if state.project_state.files_seen:
+    if state.project_state.files_seen and not compact:
         lines.append("Files seen:")
         lines.extend(f"- {path}" for path in state.project_state.files_seen)
     if state.project_state.files_modified:
         lines.append("Files modified:")
-        lines.extend(f"- {path}" for path in state.project_state.files_modified)
-    if state.project_state.relationships:
+        items = state.project_state.files_modified[:3] if compact else state.project_state.files_modified
+        lines.extend(f"- {path}" for path in items)
+    if state.project_state.relationships and not compact:
         lines.append("Relationships:")
         lines.extend(f"- {item}" for item in state.project_state.relationships)
     if state.project_state.expected_artifacts:
         lines.append("Expected artifacts:")
-        lines.extend(f"- {item}" for item in state.project_state.expected_artifacts)
+        items = state.project_state.expected_artifacts[:4] if compact else state.project_state.expected_artifacts
+        lines.extend(f"- {item}" for item in items)
     if state.project_state.pending_artifacts:
         lines.append("Pending artifacts:")
-        lines.extend(f"- {item}" for item in state.project_state.pending_artifacts)
+        items = state.project_state.pending_artifacts[:4] if compact else state.project_state.pending_artifacts
+        lines.extend(f"- {item}" for item in items)
     if state.project_state.completed_artifacts:
         lines.append("Completed artifacts:")
-        lines.extend(f"- {item}" for item in state.project_state.completed_artifacts)
+        items = state.project_state.completed_artifacts[:4] if compact else state.project_state.completed_artifacts
+        lines.extend(f"- {item}" for item in items)
     return "\n".join(lines)
 
 
 
-def _render_environment(state: SessionState) -> str:
+def _render_environment(state: SessionState, *, compact: bool = False) -> str:
     workspace = state.environment.workspace
     shell = state.environment.shell
     if not workspace.root and not shell.cwd:
@@ -126,19 +131,22 @@ def _render_environment(state: SessionState) -> str:
             lines.append(f"Workspace root: {workspace.root}")
         if workspace.cwd:
             lines.append(f"Workspace cwd: {workspace.cwd}")
-    if shell.last_command:
+    if shell.last_command and not compact:
         lines.append(f"Last shell command: {shell.last_command}")
-    if shell.last_exit_code is not None:
+    if shell.last_exit_code is not None and not compact:
         lines.append(f"Last shell exit code: {shell.last_exit_code}")
     if workspace.created_files:
         lines.append("Created files:")
-        lines.extend(f"- {item}" for item in workspace.created_files)
+        items = workspace.created_files[:3] if compact else workspace.created_files
+        lines.extend(f"- {item}" for item in items)
     if workspace.modified_files:
         lines.append("Modified files:")
-        lines.extend(f"- {item}" for item in workspace.modified_files)
+        items = workspace.modified_files[:3] if compact else workspace.modified_files
+        lines.extend(f"- {item}" for item in items)
     if workspace.deleted_files:
         lines.append("Deleted files:")
-        lines.extend(f"- {item}" for item in workspace.deleted_files)
+        items = workspace.deleted_files[:3] if compact else workspace.deleted_files
+        lines.extend(f"- {item}" for item in items)
     return "\n".join(lines)
 
 
@@ -367,10 +375,11 @@ def build_context(
     recent_results = working_memory.recent_results[-dynamic_recent_results:]
     recent_results_text = "\n".join(f"- {item}" for item in recent_results)
     active_entities_text = "\n".join(f"- {item}" for item in working_memory.active_entities)
+    compact_context = call_kind == "tool_input"
     plan_text = _render_plan(state)
     strategy_text = _render_strategy(state)
-    project_state_text = _render_project_state(state)
-    environment_text = _render_environment(state)
+    project_state_text = _render_project_state(state, compact=compact_context)
+    environment_text = _render_environment(state, compact=compact_context)
     relevant_files_text = _render_environment_files(environment_files)
     skill_metadata_text = render_skill_metadata(skill_selection.metadata_skills)
     skill_instructions_text = render_skill_instructions(skill_selection.selected_skills)
@@ -443,6 +452,12 @@ def build_context(
         (float(component_priorities["active_entities"]), "entity_context", PromptComponent(name="active_entities", category="active_entities", text=f"Active entities:\n{bundle.active_entities_text}\n\n" if bundle.active_entities_text else "")),
         (float(component_priorities["notes"]), "selected_notes", PromptComponent(name="notes", category="notes", text=f"Working notes:\n{bundle.notes_text}\n\n" if bundle.notes_text else "")),
     ]
+    if call_kind in _MINIMAL_FRONTEND_KINDS:
+        component_specs = [
+            (priority, reason, component)
+            for priority, reason, component in component_specs
+            if component.name in _MINIMAL_FRONTEND_COMPONENT_NAMES
+        ]
     packed_components: list[PromptComponent] = []
     packed_tokens = 0
     for priority, reason, component in component_specs:

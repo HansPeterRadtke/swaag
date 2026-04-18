@@ -8,7 +8,7 @@ from pathlib import Path
 from typing import Any, Iterable, Iterator
 
 from swaag.environment.state import EnvironmentState, ProcessRecord, ShellSessionState, WorkspaceState
-from swaag.events import EventSchemaError, create_event, verify_event_integrity
+from swaag.events import ALLOWED_EVENT_TYPES, EventSchemaError, create_event, verify_event_integrity
 from swaag.planner import mark_step_completed, mark_step_failed, mark_step_in_progress
 from swaag.roles import default_agent_roles
 from swaag.security import with_trust_level
@@ -37,6 +37,7 @@ from swaag.types import (
     CodeCheckpoint,
     WorkingMemory,
 )
+from swaag.fsops import append_text, ensure_dir, write_text as _fsops_write_text
 from swaag.utils import new_id, stable_json_dumps, to_jsonable, utc_now_iso
 
 
@@ -53,6 +54,61 @@ ACTIVE_RUN_FILE_NAME = "active_run.json"
 CONTROL_INBOX_DIR_NAME = "control_inbox"
 CONTROL_PROCESSED_DIR_NAME = "control_processed"
 
+_STATEFUL_REBUILD_EVENT_TYPES = frozenset(
+    {
+        "session_created",
+        "session_renamed",
+        "message_added",
+        "history_compacted",
+        "history_compressed",
+        "turn_finished",
+        "deferred_task_queued",
+        "deferred_task_consumed",
+        "code_checkpoint_created",
+        "code_checkpoint_restored",
+        "note_added",
+        "role_switched",
+        "note_replaced",
+        "notes_compacted",
+        "reader_opened",
+        "reader_chunk_read",
+        "environment_initialized",
+        "filesystem_listed",
+        "filesystem_read",
+        "workspace_snapshot",
+        "shell_command_completed",
+        "process_started",
+        "process_polled",
+        "process_completed",
+        "process_timed_out",
+        "process_killed",
+        "wait_entered",
+        "wait_resumed",
+        "file_chunk_read",
+        "file_read_for_edit",
+        "edit_previewed",
+        "edit_applied",
+        "file_write_applied",
+        "file_write_failed",
+        "plan_created",
+        "plan_updated",
+        "plan_completed",
+        "step_started",
+        "step_completed",
+        "step_failed",
+        "prompt_analyzed",
+        "decision_made",
+        "decision_adjusted",
+        "task_expanded",
+        "strategy_selected",
+        "working_memory_updated",
+        "memory_stored",
+        "project_state_updated",
+    }
+)
+
+_IGNORED_REBUILD_EVENT_TYPES = ALLOWED_EVENT_TYPES - _STATEFUL_REBUILD_EVENT_TYPES
+
 
 def _default_session_name(session_id: str) -> str:
     return f"session-{session_id.split('_')[-1][:8]}"
@@ -66,7 +122,7 @@ def _slugify_session_name(text: str, *, limit: int = 48) -> str:
 
 
 def _ensure_directory(path: Path) -> Path:
-    path.mkdir(parents=True, exist_ok=True)
+    ensure_dir(path)
     return path
 
 
@@ -546,10 +602,7 @@ class HistoryStore:
     def _append_marshaled_event(self, state: SessionState, event: HistoryEvent) -> None:
         _ensure_directory(self._session_dir(state.session_id))
         encoded = stable_json_dumps(asdict(event)) + "\n"
-        with self.history_path(state.session_id).open("a", encoding="utf-8") as handle:
-            handle.write(encoded)
-            handle.flush()
-            os.fsync(handle.fileno())
+        append_text(self.history_path(state.session_id), encoded, encoding="utf-8")
         self._apply_event(state, event)
         if self.write_projections:
             self._write_projections(state)
@@ -590,9 +643,7 @@ class HistoryStore:
         self._append_marshaled_event(state, success_event)
 
     def _atomic_write(self, path: Path, content: str, *, encoding: str) -> None:
-        tmp_path = path.with_name(f".{path.name}.tmp")
-        tmp_path.write_text(content, encoding=encoding)
-        os.replace(tmp_path, path)
+        _fsops_write_text(path, content, encoding=encoding)
 
     def _write_projections(self, state: SessionState) -> None:
         state_payload = self._state_payload(state)
@@ -635,10 +686,7 @@ class HistoryStore:
         path = self.root / relative_path
         _ensure_directory(path.parent)
         encoded = stable_json_dumps(to_jsonable(payload)) + "\n"
-        with path.open("a", encoding="utf-8") as handle:
-            handle.write(encoded)
-            handle.flush()
-            os.fsync(handle.fileno())
+        append_text(path, encoded, encoding="utf-8")
         return path
 
     def query_history_details(
@@ -864,8 +912,19 @@ class HistoryStore:
             files_payload = {str(key): str(value) for key, value in payload.get("files", {}).items()}
             state.environment.workspace.root = str(payload["workspace_root"])
             state.environment.workspace.cwd = str(payload["cwd"])
-            state.environment.workspace.known_files = files_payload
-            state.environment.workspace.listed_files = sorted(files_payload)
+            snapshot_mode = str(payload.get("snapshot_mode") or "full")
+            if snapshot_mode == "delta":
+                known_files = dict(state.environment.workspace.known_files)
+                for key, value in files_payload.items():
+                    known_files[key] = value
+                for key in payload.get("deleted_files", []):
+                    known_files.pop(str(key), None)
+                state.environment.workspace.known_files = known_files
+                listed_files = sorted(set(state.environment.workspace.listed_files) | set(known_files))
+                state.environment.workspace.listed_files = [item for item in listed_files if item not in payload.get("deleted_files", [])]
+            else:
+                state.environment.workspace.known_files = files_payload
+                state.environment.workspace.listed_files = sorted(files_payload)
             state.environment.workspace.created_files = [str(item) for item in payload.get("created_files", [])]
             state.environment.workspace.modified_files = [str(item) for item in payload.get("modified_files", [])]
             state.environment.workspace.deleted_files = [str(item) for item in payload.get("deleted_files", [])]
@@ -1076,90 +1135,7 @@ class HistoryStore:
             state.project_state = ProjectState(**payload["project_state"])
             return
 
-        if event.event_type in {
-            "summary_created",
-            "turn_started",
-            "prompt_built",
-            "budget_checked",
-            "budget_rejected",
-            "model_tokenize_requested",
-            "model_tokenize_result",
-            "model_tokenize_failed",
-            "token_estimate_used",
-            "model_request_sent",
-            "model_request_progress",
-            "model_response_received",
-            "model_retry_scheduled",
-            "model_call_failed",
-            "decision_parsed",
-            "tool_execution_context",
-            "output_decomposition_planned",
-            "output_unit_generated",
-            "output_overflow_recovery_planned",
-            "tool_called",
-            "tool_result",
-            "tool_error",
-            "duplicate_action_detected",
-            "filesystem_search",
-            "repository_searched",
-            "shell_command_started",
-            "workspace_snapshot_inspected",
-            "changes_listed",
-            "diff_inspected",
-            "state_rebuilt",
-            "notes_selected",
-            "buffer_chunk_read",
-            "file_read_requested",
-            "buffer_read_requested",
-            "doctor_health_checked",
-            "doctor_tokenize_checked",
-            "review_started",
-            "review_completed",
-            "review_skipped",
-            "subagent_spawned",
-            "subagent_reported",
-            "subagent_selection_resolved",
-            "memory_extracted",
-            "memory_retrieved",
-            "memory_flagged",
-            "memory_rejected",
-            "context_built",
-            "reasoning_started",
-            "action_selected",
-            "step_executed",
-            "reasoning_completed",
-            "answer_derived",
-            "subsystem_started",
-            "subsystem_progress",
-            "subsystem_completed",
-            "tool_chain_started",
-            "tool_chain_step",
-            "tool_chain_completed",
-            "tool_graph_planned",
-            "tool_graph_rejected",
-            "evaluation_performed",
-            "evaluation_failed",
-            "verification_started",
-            "verification_completed",
-            "verification_type_used",
-            "verification_passed",
-            "verification_failed",
-            "retry_triggered",
-            "replan_triggered",
-            "drift_detected",
-            "recovery_triggered",
-            "consistency_checked",
-            "consistency_failed",
-            "strategy_selection_resolved",
-            "failure_classification_resolved",
-            "plan_repaired",
-            "error",
-            "retry",
-            "emergency_fallback_used",
-            "fatal_system_error",
-            "control_message_processed",
-            "control_action_applied",
-        }:
+        if event.event_type in _IGNORED_REBUILD_EVENT_TYPES:
             return
 
         raise HistoryCorruptionError(f"Unknown event type during rebuild: {event.event_type}")

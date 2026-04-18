@@ -121,6 +121,15 @@ def test_budget_policy_ratios_are_read_from_config_object(make_config) -> None:
     assert budget.output_tokens == 1024
 
 
+def test_tool_input_budget_can_override_default_small_ratio(make_config) -> None:
+    config = make_config(model__context_limit=2048)
+
+    tool_input_budget = compute_call_budget(config, call_kind="tool_input")
+    decision_budget = compute_call_budget(config, call_kind="decision")
+
+    assert tool_input_budget.output_tokens > decision_budget.output_tokens
+
+
 def test_structured_output_floor_uses_budget_policy_config(make_config) -> None:
     config = make_config(model__context_limit=2048)
     config.budget_policy.structured_output_json_factor_by_contract["task_plan"] = 2.0

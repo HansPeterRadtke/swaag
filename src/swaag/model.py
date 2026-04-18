@@ -141,7 +141,15 @@ class LlamaCppClient:
             json=payload,
             timeout=(self.config.model.connect_timeout_seconds, timeout_seconds or self.config.model.timeout_seconds),
         )
-        response.raise_for_status()
+        try:
+            response.raise_for_status()
+        except requests.HTTPError as exc:
+            detail = _http_error_detail(response)
+            raise requests.HTTPError(
+                f"{exc} :: {detail}",
+                request=exc.request,
+                response=exc.response,
+            ) from exc
         body = response.json()
         if not isinstance(body, dict):
             raise ModelClientError(f"Unexpected completion response: {body!r}")
@@ -180,3 +188,22 @@ class LlamaCppClient:
             temperature=temperature,
         )
         return self.send_completion(request, timeout_seconds=policy.effective_timeout_seconds)
+
+
+def _http_error_detail(response: requests.Response) -> str:
+    text = response.text.strip()
+    if not text:
+        return f"http_status={response.status_code}"
+    try:
+        payload = response.json()
+    except ValueError:
+        payload = None
+    if isinstance(payload, dict):
+        error = payload.get("error")
+        if isinstance(error, dict):
+            error_type = str(error.get("type", "")).strip()
+            message = str(error.get("message", "")).strip()
+            parts = [part for part in (f"http_status={response.status_code}", error_type, message) if part]
+            return " | ".join(parts)
+    trimmed = text[:400].replace("\n", " ").strip()
+    return f"http_status={response.status_code} | body={trimmed}"

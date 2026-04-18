@@ -575,13 +575,38 @@ def _shell_command_checks(*, stdout_label: str) -> tuple[list[dict[str, object]]
     return checks, required, []
 
 
+def _edit_text_checks() -> tuple[list[dict[str, object]], list[str], list[str]]:
+    checks: list[dict[str, object]] = [
+        {"name": "dependencies_completed", "check_type": "dependencies_completed"},
+        {"name": "tool_result_present", "check_type": "artifact_present", "artifact": "tool_result"},
+        {"name": "tool_name_matches", "check_type": "tool_name_equals", "expected": "edit_text"},
+        {"name": "tool_output_nonempty", "check_type": "tool_output_nonempty"},
+        {"name": "tool_output_schema_valid", "check_type": "tool_output_schema_valid"},
+        {"name": "tool_files_changed", "check_type": "tool_files_changed"},
+    ]
+    required = [str(item["name"]) for item in checks]
+    return checks, required, []
+
+
+def _run_tests_checks() -> tuple[list[dict[str, object]], list[str], list[str]]:
+    checks: list[dict[str, object]] = [
+        {"name": "dependencies_completed", "check_type": "dependencies_completed"},
+        {"name": "tool_result_present", "check_type": "artifact_present", "artifact": "tool_result"},
+        {"name": "tool_name_matches", "check_type": "tool_name_equals", "expected": "run_tests"},
+        {"name": "command_exit_zero", "check_type": "exact_match", "actual_source": "tool_output.exit_code", "expected": 0},
+        {"name": "tool_output_schema_valid", "check_type": "tool_output_schema_valid"},
+    ]
+    required = [str(item["name"]) for item in checks]
+    return checks, required, []
+
+
 def create_shell_recovery_plan(goal: str) -> Plan:
     """Deterministic recovery plan for coding-style tasks when plan JSON fails.
 
     The runtime still executes through the ordinary agent loop, tool decision,
     history, and verification paths. This only supplies a structurally valid
-    read -> write -> respond skeleton so the agent can continue instead of
-    dying before any real tool work begins.
+    inspect -> edit -> verify -> respond skeleton so the agent can continue
+    instead of dying before any real tool work begins.
     """
 
     now = utc_now_iso()
@@ -593,8 +618,9 @@ def create_shell_recovery_plan(goal: str) -> Plan:
         kind="read",
         expected_tool="shell_command",
         input_text=(
-            "Use repo-local shell commands to locate the named failing tests or symbols from the goal, "
-            "inspect the most relevant source files, and print concise evidence for the likely fix."
+            "Use repo-local shell commands to search for the exact failing test name first when one is provided. "
+            "Do not broaden the search to generic issue words before you have located that exact test or named symbol. "
+            "Once located, inspect only the most relevant nearby source and print concise evidence for the likely fix."
         ),
         expected_output="Inspection evidence",
         done_condition="tool_result:shell_command",
@@ -609,29 +635,56 @@ def create_shell_recovery_plan(goal: str) -> Plan:
         status="pending",
         last_updated=now,
     )
-    patch_checks, patch_required, patch_optional = _shell_command_checks(stdout_label="verification_stdout_nonempty")
+    patch_checks, patch_required, patch_optional = _edit_text_checks()
     patch_step = PlanStep(
         step_id=new_id("step"),
-        title="Patch and verify",
-        goal="Apply the smallest code fix in the repository and run the narrowest relevant verification command.",
+        title="Patch source",
+        goal="Apply the smallest code fix in the relevant implementation file.",
         kind="write",
-        expected_tool="shell_command",
+        expected_tool="edit_text",
         input_text=(
-            "Use shell commands to apply one minimal repository change, then run the narrowest relevant "
-            "verification command before returning. Print the verification command and result."
+            "Edit the relevant implementation file identified during inspection. "
+            "Apply one minimal code change in the source file, not in docs or unrelated tests. "
+            "Prefer replace_pattern_once or replace_range over rewriting whole files."
         ),
-        expected_output="Patch and verification result",
-        done_condition="tool_result:shell_command",
-        success_criteria="The minimal fix is applied and targeted verification exits successfully.",
-        expected_outputs=["Patch and verification result"],
+        expected_output="Patched source file",
+        done_condition="tool_result:edit_text",
+        success_criteria="The minimal source fix is applied to the right file.",
+        expected_outputs=["Patched source file"],
         verification_type="composite",
         verification_checks=patch_checks,
         required_conditions=patch_required,
         optional_conditions=patch_optional,
         input_refs=["inspection"],
-        output_refs=["verification"],
-        fallback_strategy="If patching or verification fails, stop and report the exact failure.",
+        output_refs=["patched_source"],
+        fallback_strategy="If patching fails, stop and report the exact failure.",
         depends_on=[inspect_step.step_id],
+        status="pending",
+        last_updated=now,
+    )
+    verify_checks, verify_required, verify_optional = _run_tests_checks()
+    verify_step = PlanStep(
+        step_id=new_id("step"),
+        title="Verify targeted test",
+        goal="Run the narrowest relevant verification command for the patched area.",
+        kind="tool",
+        expected_tool="run_tests",
+        input_text=(
+            "Run the narrowest relevant test command for the failing test or touched file. "
+            "Prefer the exact failing test when available; otherwise run the narrowest related pytest target."
+        ),
+        expected_output="Verification result",
+        done_condition="tool_result:run_tests",
+        success_criteria="The targeted verification command exits successfully.",
+        expected_outputs=["Verification result"],
+        verification_type="composite",
+        verification_checks=verify_checks,
+        required_conditions=verify_required,
+        optional_conditions=verify_optional,
+        input_refs=["inspection", "patched_source"],
+        output_refs=["verification"],
+        fallback_strategy="If verification fails, stop and report the exact failure.",
+        depends_on=[patch_step.step_id],
         status="pending",
         last_updated=now,
     )
@@ -652,7 +705,7 @@ def create_shell_recovery_plan(goal: str) -> Plan:
         optional_conditions=[],
         input_refs=["verification"],
         fallback_strategy="If the final response cannot be produced, report the failure clearly.",
-        depends_on=[patch_step.step_id],
+        depends_on=[verify_step.step_id],
         status="pending",
         last_updated=now,
     )
@@ -672,9 +725,9 @@ def create_shell_recovery_plan(goal: str) -> Plan:
     return Plan(
         plan_id=new_id("plan"),
         goal=goal,
-        steps=[inspect_step, patch_step, answer_step],
+        steps=[inspect_step, patch_step, verify_step, answer_step],
         success_criteria="Inspect the failing area, apply the minimal fix, verify it, and report the outcome.",
-        fallback_strategy="If a shell-based recovery step fails, stop and report the exact blocker.",
+        fallback_strategy="If a recovery step fails, stop and report the exact blocker.",
         status="active",
         created_at=now,
         updated_at=now,

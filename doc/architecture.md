@@ -99,6 +99,45 @@
    - if control messages are queued, classify and apply them between model calls
 10. record final answer and turn completion
 
+## Evaluation architecture
+
+Evaluation is intentionally split into three top-level lanes.
+
+- deterministic correctness lane
+  - deterministic health checks for the repository and runtime
+  - imports, smoke coverage, harness coverage, scheduler/runtime/history checks
+  - expected to remain at `100%`
+- agent-loop regression lane
+  - runs the real runtime/orchestrator/tool loop under replayed or scripted
+    model responses
+  - uses a test-only record/replay mechanism keyed by a normalized full request
+    payload hash
+  - catches fast regressions without requiring a live model every run
+- live agent evaluation lane
+  - tasks run through the real agent runtime with the real model in the loop
+  - scored by difficulty tier with per-task rubric breakdowns
+
+Live difficulty tiers:
+
+- `extremely_easy`
+- `easy`
+- `normal`
+- `hard`
+- `extremely_hard`
+
+The three-lane evaluator in `swaag.benchmark.evaluation_runner` writes:
+
+- deterministic-correctness JSON and markdown reports
+- agent-loop regression JSON and markdown reports
+- live agent-evaluation JSON and markdown reports
+- one combined report with:
+  - deterministic correctness percent
+  - agent-loop regression percent
+  - live agent-evaluation percent
+  - live per-tier percents
+  - live per-task percentages
+  - one final overall percent
+
 ## Memory model
 
 - episodic memory

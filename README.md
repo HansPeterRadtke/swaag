@@ -205,6 +205,60 @@ Final proof loop:
 python3 -m swaag.finalproof
 ```
 
+## Evaluation
+
+SWAAG now uses an explicit three-lane evaluation architecture:
+
+- deterministic correctness
+  - imports, smoke tests, deterministic unit tests, harness checks, runtime plumbing
+  - no live LLM dependency
+  - expected to stay at `100%`
+- agent-loop regression
+  - runs through the real runtime/orchestrator/tool loop
+  - uses test-only record/replay cassettes or scripted model fixtures where appropriate
+  - catches fast regressions without paying live-model cost every run
+- live agent evaluation
+  - runs real end-to-end tasks through the live agent runtime with a real model
+  - grouped into five tiers:
+    - `extremely_easy`
+    - `easy`
+    - `normal`
+    - `hard`
+    - `extremely_hard`
+  - each task produces a percentage score plus rubric breakdown
+
+Run the explicit lane commands:
+
+```bash
+python3 -m swaag.benchmark regression --all --clean --output /tmp/swaag-regression
+python3 -m swaag.benchmark three-lane-evaluate --clean --live-subset --output /tmp/swaag-three-lane
+```
+
+`three-lane-evaluate` is the authoritative final score because it averages:
+
+- deterministic correctness percent
+- agent-loop regression percent
+- live agent evaluation percent
+
+The older `evaluate` command still exists as a fast non-live combined view for
+local iteration. Use it when you want deterministic correctness plus the
+scripted full-agent task catalog without paying live-model cost:
+
+```bash
+python3 -m swaag.benchmark evaluate --clean --output /tmp/swaag-eval
+```
+
+Artifacts written by the three-lane evaluator:
+- `three_lane_evaluation_results.json`
+- `three_lane_evaluation_report.md`
+- `deterministic_correctness/functional_correctness_results.json`
+- `deterministic_correctness/functional_correctness_report.md`
+- `agent_loop_regression/agent_loop_regression_results.json`
+- `agent_loop_regression/agent_loop_regression_report.md`
+- `live_agent_evaluation/live_agent_evaluation_results.json`
+- `live_agent_evaluation/benchmark_results.json`
+- `live_agent_evaluation/benchmark_report.md`
+
 ## Build and publish
 
 Build a source distribution and wheel:
@@ -226,10 +280,25 @@ The helper builds the package, uploads it with `twine`, and cleans local build a
 Main benchmark entrypoints:
 
 ```bash
+python3 -m swaag.benchmark evaluate --clean --output /tmp/swaag-eval --json
+python3 -m swaag.benchmark regression --all --output /tmp/swaag-regression --json
+python3 -m swaag.benchmark three-lane-evaluate --live-subset --output /tmp/swaag-three-lane --json
+python3 -m swaag.benchmark run --clean --output /tmp/swaag-benchmark --json
 python3 -m swaag.benchmark external list
 python3 -m swaag.benchmark external smoke --all --output /tmp/swaag-external-smoke --json
 python3 -m swaag.benchmark system --all --output /tmp/swaag-system-bench --json
 ```
+
+Use `three-lane-evaluate` for the authoritative scoring view:
+- deterministic correctness percent
+- agent-loop regression percent
+- live agent evaluation percent
+- live per-tier difficulty percents
+- live per-task rubric scores
+- one final overall percent as a simple arithmetic average of the three lane scores
+
+Use `evaluate` when you want a fast non-live combined run. Use `run` when you
+want only the built-in full-agent benchmark task lane.
 
 Reproducible bounded SWE-bench fixtures live in:
 - `src/swaag/benchmark/fixtures/swebench/`

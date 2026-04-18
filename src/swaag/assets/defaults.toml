@@ -113,7 +113,7 @@ write_projections = true
 [environment]
 shell_executable = "bash"
 command_timeout_seconds = 30
-max_capture_chars = 20000
+max_capture_chars = 4000
 aubro_entrypoint = ""
 aubro_src = ""
 aubro_timeout_seconds = 45
@@ -274,9 +274,11 @@ medium = 0.07
 large = 0.10
 
 [budget_policy.output_ratio_by_kind]
+tool_input = 0.12
 plan = 0.30
 
 [budget_policy.output_floor_ratio_by_kind]
+tool_input = 0.08
 plan = 0.22
 
 [budget_policy.structured_output_json_factor_by_contract]
@@ -509,7 +511,9 @@ allow_compose_download = true
 default_max_instances = 1
 clone_timeout_seconds = 300
 agent_timeout_seconds = 900
-agent_context_limit = 4096
+agent_context_limit = 2048
+model_timeout_seconds = 180
+model_structured_timeout_seconds = 240
 allow_stateful_tools = true
 allow_side_effect_tools = true
 # Real-agent benchmark runs still need enough room for at least
@@ -565,11 +569,22 @@ Hints:
 {hints_text}
 """
 empty_patch_retry_prompt = """
+Task contract:
+{"task_kind":"local_repo_code_fix","request_completeness":"complete","requires_code_changes":true,"requires_verification":true,"prefer_task_expansion":false}
 You have not produced any file changes yet for this SWE-bench instance.
 Make one best-effort concrete code change now in the current repository checkout.
 Do not ask for clarification.
+Keep the plan as short as possible: inspect -> edit -> verify -> respond.
+Prefer one concrete source-file change over wrapper scripts.
+Use real repo-relative file paths and directly executable commands only.
 Repository: {repo}
 Instance: {instance_id}
+Problem statement:
+{problem_statement}
+Known failing tests:
+{fail_to_pass_tests}
+Hints:
+{hints_text}
 """
 
 [external_benchmarks.targets.swebench_lite]

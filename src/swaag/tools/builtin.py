@@ -377,6 +377,18 @@ class EditTextTool(Tool):
                 raise ToolValidationError(f"edit_text.{field} must be a string")
             if value is not None:
                 validated[field] = value
+        if operation == "replace_range":
+            if "start" not in validated or "end" not in validated or "replacement" not in validated:
+                raise ToolValidationError("edit_text.replace_range requires start, end, and replacement")
+        elif operation == "insert_at":
+            if "position" not in validated or "insertion" not in validated:
+                raise ToolValidationError("edit_text.insert_at requires position and insertion")
+        elif operation == "delete_range":
+            if "start" not in validated or "end" not in validated:
+                raise ToolValidationError("edit_text.delete_range requires start and end")
+        elif operation in {"replace_pattern_once", "replace_pattern_all"}:
+            if "pattern" not in validated or "replacement" not in validated:
+                raise ToolValidationError(f"edit_text.{operation} requires pattern and replacement")
         return validated
 
     def effective_kind(self, validated_input: dict[str, Any]) -> str:
@@ -788,8 +800,14 @@ class ShellCommandTool(Tool):
         command = raw_input.get("command")
         if not isinstance(command, str) or not command.strip():
             raise ToolValidationError("shell_command.command must be a non-empty string")
+        stripped = command.strip()
+        lowered = stripped.lower()
+        if any(marker in stripped for marker in ("<patch_file>", "<file>", "<path>", "<command>")):
+            raise ToolValidationError("shell_command.command must not contain placeholder tokens")
+        if "/path/to/" in lowered or "todo" in lowered or "insert command here" in lowered:
+            raise ToolValidationError("shell_command.command must be directly executable without placeholder text")
         background = bool(raw_input.get("background", False))
-        return {"command": command.strip(), "background": background}
+        return {"command": stripped, "background": background}
 
     def required_generated_event_types(self, validated_input: dict[str, Any]) -> set[str]:
         if validated_input.get("background"):

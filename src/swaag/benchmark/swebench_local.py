@@ -8,18 +8,16 @@ import shutil
 import subprocess
 import sys
 import time
+import urllib.error
+import urllib.request
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Any, Sequence
 
-from datasets import load_dataset
-
+from swaag.benchmark.errors import LocalSwebenchFailure
 from swaag.config import AgentConfig
+from swaag.fsops import ensure_dir, write_text
 from swaag.utils import stable_json_dumps
-
-
-class LocalSwebenchFailure(RuntimeError):
-    pass
 
 
 _TRANSIENT_GIT_ERROR_SNIPPETS = (
@@ -54,6 +52,22 @@ class GeneratedSwebenchPredictions:
     generation_stdout_paths: list[str]
     generation_stderr_paths: list[str]
     workspace_paths: list[str]
+
+
+def _load_dataset_loader():
+    try:
+        from datasets import load_dataset
+    except ModuleNotFoundError as exc:
+        raise LocalSwebenchFailure(
+            "SWE-bench dataset loading requires the optional 'datasets' package. "
+            "Install the benchmark extras with `pip install swaag[official-benchmarks]` "
+            "or install `datasets` directly."
+        ) from exc
+    return load_dataset
+
+
+def load_dataset(*args, **kwargs):
+    return _load_dataset_loader()(*args, **kwargs)
 
 
 def _parse_value_args(raw: str, option: str) -> list[str]:
@@ -134,8 +148,8 @@ def prepare_swebench_subset(
         rows = [rows_by_id[item] for item in wanted]
     if not rows:
         raise LocalSwebenchFailure(f"No benchmark rows available for {benchmark_id}")
-    output_path.parent.mkdir(parents=True, exist_ok=True)
-    output_path.write_text(stable_json_dumps(rows, indent=2), encoding="utf-8")
+    ensure_dir(output_path.parent)
+    write_text(output_path, stable_json_dumps(rows, indent=2), encoding="utf-8")
     return PreparedSwebenchSubset(
         dataset_name=dataset_name,
         dataset_path=output_path,
@@ -176,7 +190,7 @@ def _prepare_workspace(
     workspace = workspace_root / instance_id
     if workspace.exists():
         shutil.rmtree(workspace)
-    workspace.mkdir(parents=True, exist_ok=True)
+    ensure_dir(workspace)
     remote_base = config.external_benchmarks.agent_generation.git_remote_base_url.rstrip("/")
     remote_url = f"{remote_base}/{instance['repo']}.git"
     timeout_seconds = config.external_benchmarks.agent_generation.clone_timeout_seconds
@@ -214,17 +228,62 @@ def _render_prompt(instance: dict[str, Any], template: str, *, config: AgentConf
         hint_limit = max(0, combined_limit - problem_limit)
         problem_statement = _truncate_chars(problem_statement, limit=problem_limit)
         hints_text = _truncate_chars(hints_text, limit=hint_limit)
-    return template.format(
-        repo=str(instance.get("repo", "")),
-        instance_id=str(instance.get("instance_id", "")),
-        problem_statement=problem_statement,
-        fail_to_pass_tests=fail_to_pass_text,
-        hints_text=hints_text,
-    ).strip()
+    rendered = template
+    replacements = {
+        "{repo}": str(instance.get("repo", "")),
+        "{instance_id}": str(instance.get("instance_id", "")),
+        "{problem_statement}": problem_statement,
+        "{fail_to_pass_tests}": fail_to_pass_text,
+        "{hints_text}": hints_text,
+    }
+    for placeholder, value in replacements.items():
+        rendered = rendered.replace(placeholder, value)
+    rendered = rendered.replace("{{", "{").replace("}}", "}")
+    return rendered.strip()
+
+
+def _render_empty_patch_retry_prompt(instance: dict[str, Any], template: str, *, config: AgentConfig) -> str:
+    return _render_prompt(instance, template, config=config)
 
 
 def _repo_src_root() -> Path:
     return Path(__file__).resolve().parents[3]
+
+
+def _discover_server_context_limit(config: AgentConfig) -> int | None:
+    base_url = config.model.base_url.rstrip("/")
+    probe_url = f"{base_url}/props"
+    timeout_seconds = config.external_benchmarks.model_server.healthcheck_timeout_seconds
+    request = urllib.request.Request(probe_url, headers={"Accept": "application/json"})
+    try:
+        with urllib.request.urlopen(request, timeout=timeout_seconds) as response:
+            payload = json.loads(response.read().decode("utf-8"))
+    except (OSError, TimeoutError, ValueError, urllib.error.HTTPError, urllib.error.URLError):
+        return None
+    if not isinstance(payload, dict):
+        return None
+    settings = payload.get("default_generation_settings")
+    if not isinstance(settings, dict):
+        return None
+    params = settings.get("params")
+    if not isinstance(params, dict):
+        return None
+    n_ctx = params.get("n_ctx")
+    if isinstance(n_ctx, int) and n_ctx > 0:
+        return n_ctx
+    return None
+
+
+def _resolved_agent_context_limit(
+    config: AgentConfig,
+    *,
+    discovered_context_limit: int | None = None,
+) -> int:
+    generation = config.external_benchmarks.agent_generation
+    requested_limit = min(config.model.context_limit, generation.agent_context_limit)
+    if isinstance(discovered_context_limit, int) and discovered_context_limit > 0:
+        return min(requested_limit, discovered_context_limit)
+    return requested_limit
 
 
 def _real_agent_env(
@@ -232,6 +291,7 @@ def _real_agent_env(
     workspace: Path,
     session_root: Path,
     config: AgentConfig,
+    discovered_context_limit: int | None = None,
 ) -> dict[str, str]:
     generation = config.external_benchmarks.agent_generation
     env = dict(os.environ)
@@ -239,7 +299,11 @@ def _real_agent_env(
     existing_pythonpath = env.get("PYTHONPATH", "")
     env["PYTHONPATH"] = repo_src if not existing_pythonpath else f"{repo_src}{os.pathsep}{existing_pythonpath}"
     env["SWAAG__SESSIONS__ROOT"] = str(session_root)
-    env["SWAAG__MODEL__CONTEXT_LIMIT"] = str(generation.agent_context_limit)
+    env["SWAAG__MODEL__CONTEXT_LIMIT"] = str(
+        _resolved_agent_context_limit(config, discovered_context_limit=discovered_context_limit)
+    )
+    env["SWAAG__MODEL__TIMEOUT_SECONDS"] = str(generation.model_timeout_seconds)
+    env["SWAAG__MODEL__STRUCTURED_TIMEOUT_SECONDS"] = str(generation.model_structured_timeout_seconds)
     env["SWAAG__TOOLS__READ_ROOTS"] = stable_json_dumps([str(workspace)])
     env["SWAAG__TOOLS__ALLOW_SIDE_EFFECT_TOOLS"] = (
         "true" if generation.allow_side_effect_tools else "false"
@@ -284,8 +348,14 @@ def _run_agent_turn(
     prompt_path: Path,
     timeout_seconds: int,
     config: AgentConfig,
+    discovered_context_limit: int | None = None,
 ) -> tuple[str, str, str]:
-    env = _real_agent_env(workspace=workspace, session_root=session_root, config=config)
+    env = _real_agent_env(
+        workspace=workspace,
+        session_root=session_root,
+        config=config,
+        discovered_context_limit=discovered_context_limit,
+    )
     max_attempts = max(1, config.external_benchmarks.agent_generation.solver_max_attempts)
     prompt_attempts: list[str] = []
     stdout_attempts: list[str] = []
@@ -294,10 +364,7 @@ def _run_agent_turn(
     for attempt in range(1, max_attempts + 1):
         current_prompt = prompt if attempt == 1 else _retry_prompt(prompt, attempt - 1)
         prompt_attempts.append(current_prompt)
-        prompt_path.write_text(
-            "\n\n--- attempt ---\n\n".join(prompt_attempts),
-            encoding="utf-8",
-        )
+        write_text(prompt_path, "\n\n--- attempt ---\n\n".join(prompt_attempts), encoding="utf-8")
         attempt_session_name = session_name if attempt == 1 else f"{session_name}--retry-{attempt}"
         completed = subprocess.run(
             [
@@ -340,14 +407,15 @@ def generate_agent_predictions(
     workspaces_root = output_dir / "workspaces"
     sessions_root = output_dir / "sessions"
     logs_root = output_dir / "generation_logs"
-    workspaces_root.mkdir(parents=True, exist_ok=True)
-    sessions_root.mkdir(parents=True, exist_ok=True)
-    logs_root.mkdir(parents=True, exist_ok=True)
+    ensure_dir(workspaces_root)
+    ensure_dir(sessions_root)
+    ensure_dir(logs_root)
     predictions_path = output_dir / "agent_predictions.jsonl"
     model_name = config.external_benchmarks.agent_generation.model_name_or_path
     prompt_template = config.external_benchmarks.agent_generation.prompt_template
     retry_prompt_template = config.external_benchmarks.agent_generation.empty_patch_retry_prompt
     timeout_seconds = config.external_benchmarks.agent_generation.agent_timeout_seconds
+    discovered_context_limit = _discover_server_context_limit(config)
     records: list[dict[str, Any]] = []
     stdout_paths: list[str] = []
     stderr_paths: list[str] = []
@@ -365,6 +433,7 @@ def generate_agent_predictions(
             prompt_path=prompt_path,
             timeout_seconds=timeout_seconds,
             config=config,
+            discovered_context_limit=discovered_context_limit,
         )
         diff = subprocess.run(
             ["git", "diff", "--binary", "HEAD"],
@@ -378,19 +447,17 @@ def generate_agent_predictions(
             detail = diff.stderr.strip() or diff.stdout.strip() or f"exit code {diff.returncode}"
             raise LocalSwebenchFailure(f"git diff failed for {instance_id}: {detail}")
         if not diff.stdout.strip():
-            retry_prompt = retry_prompt_template.format(
-                repo=str(instance.get("repo", "")),
-                instance_id=instance_id,
-            ).strip()
+            retry_prompt = _render_empty_patch_retry_prompt(instance, retry_prompt_template, config=config)
             retry_prompt_path = logs_root / f"{instance_id}.retry_prompt.txt"
             retry_stdout, retry_stderr, retry_prompt_text = _run_agent_turn(
                 workspace=workspace,
                 session_root=sessions_root,
-                session_name=f"{benchmark_id}-{instance_id}",
+                session_name=f"{benchmark_id}-{instance_id}--empty-patch-retry",
                 prompt=retry_prompt,
                 prompt_path=retry_prompt_path,
                 timeout_seconds=timeout_seconds,
                 config=config,
+                discovered_context_limit=discovered_context_limit,
             )
             stdout_text = "\n".join(part for part in (stdout_text, retry_stdout) if part)
             stderr_text = "\n".join(part for part in (stderr_text, retry_stderr) if part)
@@ -408,9 +475,9 @@ def generate_agent_predictions(
                 raise LocalSwebenchFailure(f"git diff failed for {instance_id}: {detail}")
         stdout_path = logs_root / f"{instance_id}.stdout.txt"
         stderr_path = logs_root / f"{instance_id}.stderr.txt"
-        stdout_path.write_text(stdout_text, encoding="utf-8")
-        stderr_path.write_text(stderr_text, encoding="utf-8")
-        prompt_path.write_text(prompt_text, encoding="utf-8")
+        write_text(stdout_path, stdout_text, encoding="utf-8")
+        write_text(stderr_path, stderr_text, encoding="utf-8")
+        write_text(prompt_path, prompt_text, encoding="utf-8")
         records.append(
             {
                 "instance_id": instance_id,
@@ -425,7 +492,7 @@ def generate_agent_predictions(
         raise LocalSwebenchFailure(
             f"Agent did not produce any non-empty patch for {benchmark_id}; benchmark proof requires a real agent-generated patch."
         )
-    predictions_path.write_text("\n".join(stable_json_dumps(item) for item in records) + "\n", encoding="utf-8")
+    write_text(predictions_path, "\n".join(stable_json_dumps(item) for item in records) + "\n", encoding="utf-8")
     return GeneratedSwebenchPredictions(
         predictions_path=predictions_path,
         generation_stdout_paths=stdout_paths,

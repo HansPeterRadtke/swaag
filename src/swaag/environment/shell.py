@@ -33,6 +33,12 @@ class ShellSession:
         self.config = config
         self.process_manager = process_manager or ProcessManager()
 
+    def _trim_text(self, text: str) -> str:
+        limit = self.config.environment.max_capture_chars
+        if len(text) <= limit:
+            return text
+        return text[:limit]
+
     def execute(self, shell_state: ShellSessionState, command: str, *, workspace_root: Path) -> tuple[ShellCommandResult, ShellSessionState]:
         cwd_before = shell_state.cwd or str(workspace_root)
         effective_env = os.environ.copy()
@@ -59,26 +65,40 @@ class ShellSession:
                 timeout_seconds=self.config.runtime.tool_timeout_seconds,
                 metadata={"kind": "shell_command"},
             )
-            cwd_after = cwd_path.read_text(encoding="utf-8").strip() or cwd_before
-            env_blob = env_path.read_bytes()
-        env_after: dict[str, str] = {}
-        for entry in env_blob.split(b"\x00"):
-            if not entry:
-                continue
-            key, _, value = entry.partition(b"=")
-            env_after[key.decode("utf-8", errors="ignore")] = value.decode("utf-8", errors="ignore")
+            stdout = self._trim_text(result.stdout)
+            stderr = self._trim_text(result.stderr)
+            result.record.stdout = stdout
+            result.record.stderr = stderr
+            cwd_after = cwd_before
+            if cwd_path.exists():
+                cwd_after = cwd_path.read_text(encoding="utf-8").strip() or cwd_before
+            env_after: dict[str, str] | None = None
+            if env_path.exists():
+                env_blob = env_path.read_bytes()
+                env_after = {}
+                for entry in env_blob.split(b"\x00"):
+                    if not entry:
+                        continue
+                    key, _, value = entry.partition(b"=")
+                    env_after[key.decode("utf-8", errors="ignore")] = value.decode("utf-8", errors="ignore")
 
-        overrides: dict[str, str] = {}
-        unset_vars: list[str] = []
-        for key, value in env_after.items():
-            if key in os.environ:
-                if os.environ[key] != value:
+        overrides: dict[str, str]
+        unset_vars: list[str]
+        if env_after is None:
+            overrides = dict(shell_state.env_overrides)
+            unset_vars = list(shell_state.unset_vars)
+        else:
+            overrides = {}
+            unset_vars = []
+            for key, value in env_after.items():
+                if key in os.environ:
+                    if os.environ[key] != value:
+                        overrides[key] = value
+                else:
                     overrides[key] = value
-            else:
-                overrides[key] = value
-        for key in shell_state.env_overrides:
-            if key not in env_after:
-                unset_vars.append(key)
+            for key in shell_state.env_overrides:
+                if key not in env_after:
+                    unset_vars.append(key)
         updated_state = ShellSessionState(
             cwd=cwd_after,
             env_overrides=overrides,
@@ -96,8 +116,8 @@ class ShellSession:
                 env_overrides=dict(updated_state.env_overrides),
                 unset_vars=list(updated_state.unset_vars),
                 exit_code=result.record.return_code or 0,
-                stdout=result.stdout,
-                stderr=result.stderr,
+                stdout=stdout,
+                stderr=stderr,
                 process_result=result,
             ),
             updated_state,

@@ -15,14 +15,9 @@ from typing import Any, Sequence
 from urllib import error as urllib_error
 from urllib import request as urllib_request
 
+from swaag.benchmark.errors import LocalSwebenchFailure
 from swaag.config import AgentConfig, ExternalBenchmarkTargetConfig, load_config
-from swaag.benchmark.swebench_local import (
-    LocalSwebenchFailure,
-    generate_agent_predictions,
-    parse_dataset_name,
-    parse_instance_ids,
-    prepare_swebench_subset,
-)
+from swaag.fsops import ensure_dir, remove_file, write_text
 from swaag.utils import stable_json_dumps
 
 
@@ -41,6 +36,28 @@ BENCHMARK_ALIASES: dict[str, str] = {
     "swebench-full": "swebench_full",
     "terminal-bench": "terminal_bench",
 }
+
+
+def _swebench_local_module():
+    from swaag.benchmark import swebench_local
+
+    return swebench_local
+
+
+def parse_dataset_name(dataset_name_args: str) -> str:
+    return _swebench_local_module().parse_dataset_name(dataset_name_args)
+
+
+def parse_instance_ids(instance_ids_args: str) -> list[str]:
+    return _swebench_local_module().parse_instance_ids(instance_ids_args)
+
+
+def prepare_swebench_subset(*args, **kwargs):
+    return _swebench_local_module().prepare_swebench_subset(*args, **kwargs)
+
+
+def generate_agent_predictions(*args, **kwargs):
+    return _swebench_local_module().generate_agent_predictions(*args, **kwargs)
 
 
 def _coerce_subprocess_text(payload: str | bytes | None) -> str:
@@ -304,9 +321,9 @@ def _capture_report_artifact(report_path: Path, *, target_output: Path) -> Path 
     destination = target_output / report_path.name
     if report_path.resolve() == destination.resolve():
         return report_path
-    destination.parent.mkdir(parents=True, exist_ok=True)
+    ensure_dir(destination.parent)
     if destination.exists():
-        destination.unlink()
+        remove_file(destination)
     shutil.move(str(report_path), str(destination))
     return destination
 
@@ -395,7 +412,7 @@ def _write_model_server_probe_report(
         "classification": probe.classification,
         "detail": probe.detail,
     }
-    report_path.write_text(stable_json_dumps(payload, indent=2), encoding="utf-8")
+    write_text(report_path, stable_json_dumps(payload, indent=2), encoding="utf-8")
     return report_path
 
 
@@ -409,7 +426,7 @@ def _reset_agent_generation_artifacts(target_output: Path) -> None:
             shutil.rmtree(path)
     predictions_path = target_output / "agent_predictions.jsonl"
     if predictions_path.exists():
-        predictions_path.unlink()
+        remove_file(predictions_path)
 
 
 def _classify_swebench_report(
@@ -498,7 +515,7 @@ def _run_target(
 ) -> ExternalBenchmarkRunResult:
     canonical, target = _resolve_target(config, benchmark_id)
     target_output = output_root / canonical / mode
-    target_output.mkdir(parents=True, exist_ok=True)
+    ensure_dir(target_output)
     stdout_path = target_output / "stdout.txt"
     stderr_path = target_output / "stderr.txt"
     values = {
@@ -566,7 +583,7 @@ def _run_target(
             workdir=str(workdir),
         ) from exc
     except subprocess.TimeoutExpired as exc:
-        stdout_path.write_text(_coerce_subprocess_text(exc.stdout), encoding="utf-8")
+        write_text(stdout_path, _coerce_subprocess_text(exc.stdout), encoding="utf-8")
         stderr_text = _coerce_subprocess_text(exc.stderr).strip()
         message = f"Benchmark command timed out after {timeout_seconds} seconds"
         if stderr_text:
@@ -576,8 +593,8 @@ def _run_target(
             command=command,
             workdir=str(workdir),
         ) from exc
-    stdout_path.write_text(completed.stdout, encoding="utf-8")
-    stderr_path.write_text(completed.stderr, encoding="utf-8")
+    write_text(stdout_path, completed.stdout, encoding="utf-8")
+    write_text(stderr_path, completed.stderr, encoding="utf-8")
     blocker_reason = None
     evaluation_summary: dict[str, int] | None = None
     environment_status = "ready"
@@ -725,7 +742,7 @@ def _run_agent_target(
             f"Agent-generated local benchmark runs are only implemented for local text SWE-bench targets; got {canonical}",
         )
     target_output = output_root / canonical / "agent"
-    target_output.mkdir(parents=True, exist_ok=True)
+    ensure_dir(target_output)
     dataset_name_args = variables.get("dataset_name_args", target.default_variables.get("dataset_name_args", ""))
     dataset_name = parse_dataset_name(dataset_name_args)
     instance_ids = parse_instance_ids(variables.get("instance_ids_args", ""))
@@ -777,7 +794,8 @@ def _run_agent_target(
                 classification = _classify_model_server_message(str(exc)) or "server_unreachable"
                 last_model_error = f"{classification}: {exc}"
                 if probe_report_path is not None:
-                    probe_report_path.write_text(
+                    write_text(
+                        probe_report_path,
                         stable_json_dumps(
                             {
                                 "attempt": attempt,
@@ -870,7 +888,7 @@ def run_external_benchmarks(
         raise ValueError(f"Unsupported external benchmark mode: {mode}")
     if clean and output_dir.exists():
         shutil.rmtree(output_dir)
-    output_dir.mkdir(parents=True, exist_ok=True)
+    ensure_dir(output_dir)
     config = load_config() if config is None else config
     variable_map = dict(variables or {})
     results: list[ExternalBenchmarkRunResult] = []
@@ -907,11 +925,11 @@ def run_external_benchmarks(
                 )
         except (ExternalBenchmarkBlocked, ExternalBenchmarkFailure) as exc:
             issue_dir = output_dir / canonical / mode
-            issue_dir.mkdir(parents=True, exist_ok=True)
+            ensure_dir(issue_dir)
             stdout_path = issue_dir / "stdout.txt"
             stderr_path = issue_dir / "stderr.txt"
-            stdout_path.write_text("", encoding="utf-8")
-            stderr_path.write_text(str(exc), encoding="utf-8")
+            write_text(stdout_path, "", encoding="utf-8")
+            write_text(stderr_path, str(exc), encoding="utf-8")
             status = "external_blocked" if isinstance(exc, ExternalBenchmarkBlocked) else "failed"
             result = ExternalBenchmarkRunResult(
                 benchmark_id=canonical,
@@ -937,11 +955,11 @@ def run_external_benchmarks(
             )
         except LocalSwebenchFailure as exc:
             issue_dir = output_dir / canonical / mode
-            issue_dir.mkdir(parents=True, exist_ok=True)
+            ensure_dir(issue_dir)
             stdout_path = issue_dir / "stdout.txt"
             stderr_path = issue_dir / "stderr.txt"
-            stdout_path.write_text("", encoding="utf-8")
-            stderr_path.write_text(str(exc), encoding="utf-8")
+            write_text(stdout_path, "", encoding="utf-8")
+            write_text(stderr_path, str(exc), encoding="utf-8")
             result = ExternalBenchmarkRunResult(
                 benchmark_id=canonical,
                 benchmark_label=BENCHMARK_LABELS.get(canonical, canonical),
@@ -979,7 +997,7 @@ def run_external_benchmarks(
     }
     json_path = output_dir / f"external_benchmark_{mode}_results.json"
     markdown_path = output_dir / f"external_benchmark_{mode}_report.md"
-    json_path.write_text(stable_json_dumps(payload, indent=2), encoding="utf-8")
+    write_text(json_path, stable_json_dumps(payload, indent=2), encoding="utf-8")
     markdown_lines = [
         f"# External benchmark {mode} report",
         "",
@@ -1000,7 +1018,7 @@ def run_external_benchmarks(
             f"| {item.benchmark_label} | {item.status} | {item.environment_status} | "
             f"{item.result_status or '-'} | {execution} | `{evidence}` |"
         )
-    markdown_path.write_text("\n".join(markdown_lines) + "\n", encoding="utf-8")
+    write_text(markdown_path, "\n".join(markdown_lines) + "\n", encoding="utf-8")
     return payload
 
 

@@ -92,9 +92,38 @@ def test_edit_tool_write_blocked_by_editor_policy(make_config, tmp_path: Path) -
 
 
 
+def test_edit_tool_replace_pattern_requires_replacement(make_config, tmp_path: Path) -> None:
+    path = tmp_path / "sample.txt"
+    path.write_text("hello", encoding="utf-8")
+    registry = ToolRegistry()
+    config = make_config(tools__allow_side_effect_tools=True)
+
+    with pytest.raises(ToolValidationError, match="requires pattern and replacement"):
+        registry.dispatch(
+            "edit_text",
+            {"path": str(path), "operation": "replace_pattern_once", "pattern": "hello"},
+            config,
+            _empty_state(),
+        )
+
+
+
 def test_malformed_arguments_raise_validation_error(make_config) -> None:
     with pytest.raises(ToolValidationError):
         ToolRegistry().dispatch("calculator", {"expression": "__import__('os')"}, make_config(), _empty_state())
+
+
+def test_shell_command_rejects_placeholder_text(make_config) -> None:
+    registry = ToolRegistry()
+    config = make_config(tools__allow_side_effect_tools=True)
+
+    with pytest.raises(ToolValidationError, match="placeholder"):
+        registry.dispatch(
+            "shell_command",
+            {"command": "git apply -v <patch_file> && git diff --cached"},
+            config,
+            _empty_state(),
+        )
 
 
 class MutatingTool(Tool):

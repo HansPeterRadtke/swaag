@@ -99,6 +99,117 @@ python3 -m swaag.testlane benchmark_heavy
 Benchmark-heavy proof tests that are intentionally kept out of the normal local
 loop.
 
+## Evaluation architecture
+
+SWAAG now treats testing and evaluation as three explicit top-level lanes.
+
+### Lane 1: deterministic correctness
+
+This is the repository health lane:
+
+- import hygiene
+- smoke tests
+- deterministic unit tests
+- parser/schema/validator checks
+- harness correctness
+- packaging and install checks
+- benchmark/report plumbing
+
+This lane should stay at `100%`. If it drops, that is a real code bug.
+
+### Lane 2: agent-loop regression
+
+This is the fast regression lane for the real runtime stack. It does not grade
+helper functions in isolation. It runs the real runtime/orchestrator/tool loop,
+but avoids live-model cost by using:
+
+- replayed model cassettes keyed by a normalized full request payload hash
+- scripted benchmark model fixtures where that is sufficient
+
+This lane is where fast regressions in planning, tool choice, waiting,
+background work, recovery, and exact-detail history behavior are caught.
+
+Run it with:
+
+```bash
+python3 -m swaag.benchmark regression --all --clean --output /tmp/swaag-regression
+```
+
+Artifacts:
+
+- `agent_loop_regression/agent_loop_regression_results.json`
+- `agent_loop_regression/agent_loop_regression_report.md`
+
+### Lane 3: live agent evaluation
+
+This is the main quality lane. It keeps the real model in the loop and runs
+full agent tasks through the actual runtime entrypoint.
+
+The live task catalog is grouped into five ordered difficulty tiers:
+
+- `extremely_easy`
+- `easy`
+- `normal`
+- `hard`
+- `extremely_hard`
+
+Every live task carries:
+
+- a `0-100%` task score
+- a rubric breakdown
+- machine-readable evidence
+
+Each tier score is the arithmetic mean of its task scores. The live lane score
+is the arithmetic mean of all live task scores.
+
+### Three-lane evaluation command
+
+Run the full three-lane evaluation with:
+
+```bash
+python3 -m swaag.benchmark three-lane-evaluate \
+  --clean \
+  --live-subset \
+  --output /tmp/swaag-three-lane
+```
+
+The final overall score is the arithmetic mean of:
+
+- deterministic correctness
+- agent-loop regression
+- live agent evaluation
+
+Artifacts:
+
+- `three_lane_evaluation_results.json`
+- `three_lane_evaluation_report.md`
+- `deterministic_correctness/functional_correctness_results.json`
+- `deterministic_correctness/functional_correctness_report.md`
+- `agent_loop_regression/agent_loop_regression_results.json`
+- `agent_loop_regression/agent_loop_regression_report.md`
+- `live_agent_evaluation/live_agent_evaluation_results.json`
+- `live_agent_evaluation/benchmark_results.json`
+- `live_agent_evaluation/benchmark_report.md`
+
+The JSON output contains:
+
+- deterministic correctness percent
+- agent-loop regression percent
+- live agent evaluation percent
+- live per-tier difficulty percents
+- live per-task scores
+- live per-task rubric breakdowns
+- final overall percent
+
+### Fast non-live combined evaluation
+
+The older combined evaluator is still useful during local iteration when you
+want deterministic correctness plus the scripted full-agent task catalog:
+
+```bash
+python3 -m swaag.benchmark evaluate --clean --output /tmp/swaag-eval
+```
+
 ## Compatibility commands
 
 ```bash
@@ -147,6 +258,7 @@ This runs the deliberate proof path:
 ## Benchmark and archive proofs
 
 ```bash
+python3 -m swaag.benchmark evaluate --clean --output /tmp/swaag-eval --json
 python3 -m swaag.benchmark run --clean --output /tmp/swaag-benchmark --json
 SWAAG_RUN_LIVE=1 python3 -m swaag.benchmark run --clean --live-subset --model-profile small_fast --structured-output-mode post_validate --timeout-seconds 180 --seeds 11,23,37 --output /tmp/swaag-live-benchmark --json
 python3 scripts/archive_proof.py

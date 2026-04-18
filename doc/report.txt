@@ -1,90 +1,125 @@
-SWAAG repository launch report
-=============================
-
-Name
-----
-SWAAG = Selfhosted Working Autonomous Agent.
+SWAAG test and evaluation report
+================================
 
 Scope of this pass
 ------------------
-This pass turned the existing local agent project into a standalone `swaag`
-repository that is ready for editable installs, package builds, and PyPI
-publication work.
+This pass fixed the currently known runtime/import regressions, cleaned the
+default non-benchmark test surface, and made the testing architecture explicit
+as three lanes:
 
-What changed
-------------
-- Migrated the project into the new repo at `/data/src/github/swaag`.
-- Renamed the Python package from the old nested path to `src/swaag`.
-- Replaced remaining package-path and repo-path references so the project is
-  internally consistent under the `swaag` name.
-- Added pip-facing packaging files in the style used by the `capov` repo:
-  - `pyproject.toml`
-  - `MANIFEST.in`
-  - `build.sh`
-  - `run_tests.py`
-  - `LICENSE`
-- Added packaged smoke tests under `src/swaag/tests` so an installed package can
-  be verified with `python3 -m swaag.tests`.
-- Rewrote `README.md` for installation, local llama.cpp setup, testing, and
-  benchmark entrypoints.
-- Added `doc/installation.md` and updated the existing `doc/` documentation to
-  use the new repo and package name.
-- Fixed repo-root discovery bugs introduced by the package move so packaged
-  benchmark helpers and lane tooling resolve the correct project root.
+1. deterministic correctness
+2. agent-loop regression
+3. live agent evaluation
 
-Important user-facing commands
-------------------------------
-- CLI:
-  - `python3 -m swaag --help`
-  - `python3 -m swaag ask "..."`
-  - `python3 -m swaag chat`
-- Packaged smoke tests:
-  - `python3 -m swaag.tests`
-- Repo tests:
-  - `python3 run_tests.py`
-  - `python3 -m pytest -q`
-- Build artifacts:
-  - `python3 -m build`
-  - `./build.sh`
-
-Local model dependency
-----------------------
-SWAAG targets a local `llama.cpp` HTTP server.
-
-Required endpoints:
-- `/health`
-- `/tokenize`
-- `/completion`
-
-Recommended references:
-- llama.cpp: `https://github.com/ggml-org/llama.cpp`
-- example general model: `https://huggingface.co/Qwen/Qwen2.5-7B-Instruct-GGUF`
-
-Verification completed in this pass
------------------------------------
-- Editable install succeeded:
-  - `python3 -m pip install -e .[test]`
-- Packaged smoke tests succeeded:
-  - `python3 -m swaag.tests`
-- Focused repo verification succeeded:
-  - `python3 -m pytest -q tests/test_imports.py tests/test_cli.py tests/test_testlanes.py tests/test_terminal_bench_local.py tests/test_runtime.py::test_runtime_continues_other_ready_work_while_background_process_runs tests/test_clean_install.py::test_package_installs_and_cli_runs_from_clean_venv -x`
-- CLI help succeeded:
-  - `python3 -m swaag --help`
-- Source and wheel build succeeded in an isolated temporary build venv:
-  - `python3 -m venv <tmp>`
-  - `<tmp>/bin/python -m pip install build twine`
-  - `<tmp>/bin/python -m build`
-
-Packaging notes
+Real bugs fixed
 ---------------
-- `pyproject.toml` now uses SPDX-style `license = "MIT"` metadata and declares
-  `license-files = ["LICENSE"]`.
-- Build outputs belong in `dist/`, which is ignored by git.
-- If the active Python environment is not writable for publish extras, build in
-  a dedicated temporary venv instead of modifying the agent runtime environment.
+1. Background/runtime lifecycle bugs are fixed under the focused failing cases:
+   - background `run_tests` completion is detected and propagated
+   - the runtime keeps working while background work runs
+   - the runtime enters an explicit wait state when only background work remains
 
-Current status
---------------
-The `swaag` repo is now in a state where it can be installed locally, tested,
-built into distribution artifacts, and prepared for a PyPI upload under the
-`swaag` name.
+2. Benchmark import hygiene is fixed:
+   - importing `swaag.benchmark` no longer eagerly requires optional official
+     benchmark dependencies such as `datasets`
+   - benchmark-specific dependencies are imported lazily only when those paths
+     are actually used
+
+3. Scripted benchmark verification for respond steps is fixed:
+   - the benchmark verification fallback now returns criterion names correctly
+   - respond-step verification no longer fails spuriously and trigger pointless
+     replans in the generated benchmark catalog
+
+4. The default source-tree write-safety policy now stays clean:
+   - benchmark/report helpers use the central `swaag.fsops` helpers instead of
+     direct `Path.write_text` / `mkdir` / `unlink` calls scattered through the
+     source tree
+
+Testing architecture now implemented
+------------------------------------
+The repository now distinguishes:
+
+1. Deterministic correctness lane
+   - imports, smoke tests, unit tests, harness checks, packaging/integration
+   - expected to stay at 100 percent
+
+2. Agent-loop regression lane
+   - real runtime/orchestrator/tool-loop behavior
+   - replayed or scripted model responses only
+   - includes a test-only record/replay client keyed by the normalized full
+     request payload plus request metadata
+
+3. Live agent evaluation lane
+   - real model in the loop
+   - full agent task execution
+   - five ordered difficulty tiers:
+     - extremely_easy
+     - easy
+     - normal
+     - hard
+     - extremely_hard
+
+4. Combined reporting
+   - machine-readable JSON
+   - human-readable markdown
+   - per-lane percentages
+   - live per-tier percentages
+   - live per-task percentages and rubric breakdowns
+   - one final overall percentage as the arithmetic mean of the three lane
+     scores
+
+Primary commands
+----------------
+Fast non-live combined view:
+
+  python3 -m swaag.benchmark evaluate --clean --output /tmp/swaag-eval
+
+Explicit agent-loop regression lane:
+
+  python3 -m swaag.benchmark regression --all --clean --output /tmp/swaag-regression
+
+Authoritative three-lane score:
+
+  python3 -m swaag.benchmark three-lane-evaluate --clean --live-subset --output /tmp/swaag-three-lane
+
+Key artifacts
+-------------
+Deterministic correctness:
+
+  deterministic_correctness/functional_correctness_results.json
+  deterministic_correctness/functional_correctness_report.md
+
+Agent-loop regression:
+
+  agent_loop_regression/agent_loop_regression_results.json
+  agent_loop_regression/agent_loop_regression_report.md
+
+Live agent evaluation:
+
+  live_agent_evaluation/live_agent_evaluation_results.json
+  live_agent_evaluation/benchmark_results.json
+  live_agent_evaluation/benchmark_report.md
+
+Combined three-lane output:
+
+  three_lane_evaluation_results.json
+  three_lane_evaluation_report.md
+
+Focused verification completed in this pass
+-------------------------------------------
+The following focused commands were run successfully:
+
+- python3 -m pytest -q tests/test_history.py::test_source_tree_has_no_direct_write_calls_outside_history_module tests/test_evaluation_runner.py tests/test_system_benchmark_suite.py tests/test_external_benchmarks.py tests/test_swebench_local.py tests/test_terminal_bench_local.py tests/test_benchmark_import_hygiene.py -x
+- python3 -m pytest -q tests/test_llm_record_replay.py tests/test_agent_loop_replay.py -x
+- python3 -m pytest -q tests/test_three_lane_architecture.py tests/test_testlanes.py tests/test_llm_record_replay.py tests/test_agent_loop_replay.py -x
+- python3 -m pytest -q tests/test_evaluation_runner.py tests/test_agent_regression_lane.py tests/test_three_lane_architecture.py tests/test_llm_record_replay.py tests/test_agent_loop_replay.py tests/test_imports.py::test_all_swaag_modules_import_cleanly tests/test_imports.py::test_all_referenced_swaag_modules_exist -x
+
+Current state
+-------------
+The repository now has:
+
+- clean import behavior for normal installs without optional benchmark extras
+- fixed background/wait/runtime finalization behavior on the known focused failures
+- a concrete three-lane testing architecture
+- a test-only LLM record/replay client for fast agent-loop regression coverage
+- percentage scoring per lane, per live difficulty tier, per live task, and overall
+- JSON and markdown reporting for deterministic correctness, regression, live evaluation, and the combined three-lane view

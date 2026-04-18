@@ -210,6 +210,45 @@ def test_composite_verification_fails_when_required_condition_fails() -> None:
     assert "wrong_result" in result.conditions_failed
 
 
+def test_tool_files_changed_accepts_edit_text_changed_path(tmp_path: Path) -> None:
+    target = tmp_path / "sample.py"
+    target.write_text("old\n", encoding="utf-8")
+    step = PlanStep(
+        step_id="step_edit",
+        title="Patch source",
+        goal="Patch source",
+        kind="write",
+        expected_tool="edit_text",
+        input_text="edit sample.py",
+        expected_output="sample.py updated",
+        done_condition="tool_result:edit_text",
+        success_criteria="sample.py updated",
+        verification_type="composite",
+        verification_checks=[
+            {"name": "dependencies_completed", "check_type": "dependencies_completed"},
+            {"name": "tool_result_present", "check_type": "artifact_present", "artifact": "tool_result"},
+            {"name": "tool_name_matches", "check_type": "tool_name_equals", "expected": "edit_text"},
+            {"name": "tool_files_changed", "check_type": "tool_files_changed"},
+        ],
+        required_conditions=["dependencies_completed", "tool_result_present", "tool_name_matches", "tool_files_changed"],
+        optional_conditions=[],
+    )
+    artifacts = VerificationArtifacts(
+        tool_results=[
+            ToolExecutionResult(
+                tool_name="edit_text",
+                output={"path": str(target), "changed": True, "operation": "replace_pattern_once", "diff": "--- before\n+++ after\n"},
+                display_text="edited",
+            )
+        ]
+    )
+
+    result = VerificationEngine().verify_step(runtime=_RuntimeStub(), state=_state(), plan=_plan(step), step=step, artifacts=artifacts)
+
+    assert result.verification_passed is True
+    assert "tool_files_changed" in result.conditions_met
+
+
 def test_value_verification_supports_numeric_tolerance_and_string_match() -> None:
     step = PlanStep(
         step_id="step_value",

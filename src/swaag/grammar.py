@@ -57,7 +57,36 @@ def tool_decision_contract(tool_names: Iterable[str]) -> ContractSpec:
 
 
 def tool_input_contract(tool_name: str, input_schema: dict[str, Any]) -> ContractSpec:
-    return ContractSpec(name=f"tool_input:{tool_name}", mode="json_schema", json_schema=input_schema)
+    schema = input_schema
+    if tool_name == "edit_text":
+        schema = {
+            **input_schema,
+            "allOf": [
+                {
+                    "if": {"properties": {"operation": {"const": "replace_range"}}},
+                    "then": {"required": ["path", "operation", "start", "end", "replacement"]},
+                },
+                {
+                    "if": {"properties": {"operation": {"const": "insert_at"}}},
+                    "then": {"required": ["path", "operation", "position", "insertion"]},
+                },
+                {
+                    "if": {"properties": {"operation": {"const": "delete_range"}}},
+                    "then": {"required": ["path", "operation", "start", "end"]},
+                },
+                {
+                    "if": {
+                        "properties": {
+                            "operation": {
+                                "enum": ["replace_pattern_once", "replace_pattern_all"]
+                            }
+                        }
+                    },
+                    "then": {"required": ["path", "operation", "pattern", "replacement"]},
+                },
+            ],
+        }
+    return ContractSpec(name=f"tool_input:{tool_name}", mode="json_schema", json_schema=schema)
 
 
 def prompt_analysis_contract() -> ContractSpec:

@@ -269,6 +269,8 @@ class ExternalBenchmarkAgentGenerationConfig:
     clone_timeout_seconds: int
     agent_timeout_seconds: int
     agent_context_limit: int
+    model_timeout_seconds: int
+    model_structured_timeout_seconds: int
     allow_stateful_tools: bool
     allow_side_effect_tools: bool
     planner_max_plan_steps: int
@@ -512,6 +514,10 @@ def _coerce_config(data: dict[str, Any]) -> AgentConfig:
             clone_timeout_seconds=int(data["external_benchmarks"]["agent_generation"]["clone_timeout_seconds"]),
             agent_timeout_seconds=int(data["external_benchmarks"]["agent_generation"]["agent_timeout_seconds"]),
             agent_context_limit=int(data["external_benchmarks"]["agent_generation"]["agent_context_limit"]),
+            model_timeout_seconds=int(data["external_benchmarks"]["agent_generation"]["model_timeout_seconds"]),
+            model_structured_timeout_seconds=int(
+                data["external_benchmarks"]["agent_generation"]["model_structured_timeout_seconds"]
+            ),
             allow_stateful_tools=bool(data["external_benchmarks"]["agent_generation"]["allow_stateful_tools"]),
             allow_side_effect_tools=bool(data["external_benchmarks"]["agent_generation"]["allow_side_effect_tools"]),
             planner_max_plan_steps=int(data["external_benchmarks"]["agent_generation"]["planner_max_plan_steps"]),
@@ -655,6 +661,14 @@ def _coerce_config(data: dict[str, Any]) -> AgentConfig:
     _validate_positive(
         "external_benchmarks.agent_generation.agent_context_limit",
         external_benchmarks.agent_generation.agent_context_limit,
+    )
+    _validate_positive(
+        "external_benchmarks.agent_generation.model_timeout_seconds",
+        external_benchmarks.agent_generation.model_timeout_seconds,
+    )
+    _validate_positive(
+        "external_benchmarks.agent_generation.model_structured_timeout_seconds",
+        external_benchmarks.agent_generation.model_structured_timeout_seconds,
     )
     _validate_positive(
         "external_benchmarks.agent_generation.runtime_max_reasoning_steps",

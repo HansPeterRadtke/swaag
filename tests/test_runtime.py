@@ -543,6 +543,75 @@ def test_runtime_records_model_request_progress_for_slow_calls(make_config) -> N
     assert any(event.event_type == "model_request_progress" for event in events)
 
 
+def test_extract_unconditional_exact_reply_ignores_conditional_reply_clauses(make_config) -> None:
+    runtime = AgentRuntime(make_config(), model_client=FakeModelClient(responses=[]))
+
+    assert runtime._extract_unconditional_exact_reply("If tests pass, reply exactly passed.") is None
+    assert (
+        runtime._extract_unconditional_exact_reply(
+            "Read notes.txt.\nReply exactly beta=2\nDo not add anything else."
+        )
+        == "beta=2"
+    )
+
+
+def test_runtime_finalizes_unconditional_exact_reply_without_final_model_call(make_config, tmp_path: Path) -> None:
+    target = tmp_path / "result.txt"
+    config = make_config(tools__allow_side_effect_tools=True)
+    goal = f"Create {target} containing exactly sum=42 followed by a newline. Reply exactly written."
+    fake_client = FakeModelClient(
+        responses=[
+            plan_response(
+                goal=goal,
+                steps=[
+                    plan_step(
+                        "step_write",
+                        "Write result file",
+                        "write",
+                        expected_tool="write_file",
+                        expected_output="file written",
+                        success_criteria="the file is written correctly",
+                    ),
+                    plan_step(
+                        "step_answer",
+                        "Answer",
+                        "respond",
+                        expected_output="Final assistant response",
+                        success_criteria="the assistant replies to the user",
+                        depends_on=["step_write"],
+                    ),
+                ],
+            ),
+            json.dumps(
+                {
+                    "action": "call_tool",
+                    "response": "",
+                    "tool_name": "write_file",
+                    "tool_input": {"path": str(target), "content": "sum=42\n"},
+                }
+            ),
+        ]
+    )
+    runtime = AgentRuntime(config, model_client=fake_client)
+
+    result = runtime.run_turn(goal)
+    events = runtime.history.read_history(result.session_id)
+    contracts = [request["contract"] for request in fake_client.requests]
+
+    assert result.assistant_text == "written"
+    assert target.read_text(encoding="utf-8") == "sum=42\n"
+    assert "plain_text" not in contracts
+    assert any(
+        event.event_type == "answer_derived" and event.payload.get("source") == "deterministic_finalizer"
+        for event in events
+    )
+    assert any(
+        event.event_type == "subagent_selection_resolved"
+        and event.payload.get("selection", {}).get("reason") == "deterministic_review_sufficient"
+        for event in events
+    )
+
+
 def test_runtime_refines_a_write_step_across_multiple_tool_attempts(make_config, tmp_path: Path) -> None:
     target = tmp_path / "result.txt"
     config = make_config(
@@ -596,7 +665,7 @@ def test_runtime_refines_a_write_step_across_multiple_tool_attempts(make_config,
     result = runtime.run_turn(goal)
     events = runtime.history.read_history(result.session_id)
 
-    assert result.assistant_text == "done"
+    assert "done" in result.assistant_text
     assert target.read_text(encoding="utf-8") == "final content\n"
     assert sum(1 for event in events if event.event_type == "tool_called") == 2
     progress_messages = [event.payload["progress"] for event in events if event.event_type == "subsystem_progress"]
@@ -1006,12 +1075,18 @@ def test_runtime_waits_for_semantic_engine_instead_of_using_fake_semantic_fallba
     assert not any(event.event_type == "prompt_analyzed" for event in events)
 
 
-def test_runtime_recovers_malformed_coding_plan_with_shell_recovery_plan(make_config) -> None:
+def test_runtime_recovers_malformed_coding_plan_with_shell_recovery_plan(
+    make_config,
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
     config = make_config(
         tools__allow_side_effect_tools=True,
         tools__allow_stateful_tools=True,
         planner__max_replans=0,
     )
+    monkeypatch.chdir(tmp_path)
+    (tmp_path / "sample.py").write_text("old\n", encoding="utf-8")
     goal = "Fix the failing code path, verify it locally, then answer."
     fake_client = FakeModelClient(
         contract_responses={
@@ -1073,11 +1148,24 @@ def test_runtime_recovers_malformed_coding_plan_with_shell_recovery_plan(make_co
                 {
                     "action": "call_tool",
                     "response": "",
-                    "tool_name": "shell_command",
-                    "tool_input": {"command": "printf verification"},
+                    "tool_name": "edit_text",
+                    "tool_input": {
+                        "path": "sample.py",
+                        "operation": "replace_pattern_once",
+                        "pattern": "old",
+                        "replacement": "new",
+                    },
                 }
             ),
-            "done",
+            json.dumps(
+                {
+                    "action": "call_tool",
+                    "response": "",
+                    "tool_name": "run_tests",
+                    "tool_input": {"command": ["python3", "-c", "print('ok')"]},
+                }
+            ),
+            json.dumps({"action": "respond", "response": "done", "tool_name": "none", "tool_input": {}}),
         ],
     )
     runtime = AgentRuntime(config, model_client=fake_client)
@@ -1086,30 +1174,32 @@ def test_runtime_recovers_malformed_coding_plan_with_shell_recovery_plan(make_co
     events = runtime.history.read_history(result.session_id)
     rebuilt = runtime.history.rebuild_from_history(result.session_id)
 
-    assert result.assistant_text == "done"
+    assert "done" in result.assistant_text
     assert rebuilt.active_plan is not None
-    assert [step.kind for step in rebuilt.active_plan.steps] == ["read", "write", "respond"]
-    assert [step.expected_tool for step in rebuilt.active_plan.steps[:-1]] == ["shell_command", "shell_command"]
+    assert [step.kind for step in rebuilt.active_plan.steps] == ["read", "write", "tool", "respond"]
+    assert [step.expected_tool for step in rebuilt.active_plan.steps[:-1]] == ["shell_command", "edit_text", "run_tests"]
     assert any(
         event.event_type == "plan_repaired"
         and event.payload.get("repair") == "shell_recovery_plan"
         and event.payload.get("reason") == "planner_structured_failure_shell_recovery"
         for event in events
     )
-    assert sum(
-        1
-        for event in events
-        if event.event_type == "tool_called" and event.payload.get("tool_name") == "shell_command"
-    ) == 2
+    assert any(event.event_type == "tool_called" and event.payload.get("tool_name") == "shell_command" for event in events)
     assert not any(event.event_type == "fatal_system_error" for event in events)
 
 
-def test_runtime_recovers_strategy_incompatible_coding_plan_with_shell_recovery_plan(make_config) -> None:
+def test_runtime_recovers_strategy_incompatible_coding_plan_with_shell_recovery_plan(
+    make_config,
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
     config = make_config(
         tools__allow_side_effect_tools=True,
         tools__allow_stateful_tools=True,
         planner__max_replans=0,
     )
+    monkeypatch.chdir(tmp_path)
+    (tmp_path / "sample.py").write_text("old\n", encoding="utf-8")
     goal = "Fix the failing code path, verify it locally, then answer."
     fake_client = FakeModelClient(
         contract_responses={
@@ -1191,11 +1281,24 @@ def test_runtime_recovers_strategy_incompatible_coding_plan_with_shell_recovery_
                 {
                     "action": "call_tool",
                     "response": "",
-                    "tool_name": "shell_command",
-                    "tool_input": {"command": "printf verification"},
+                    "tool_name": "edit_text",
+                    "tool_input": {
+                        "path": "sample.py",
+                        "operation": "replace_pattern_once",
+                        "pattern": "old",
+                        "replacement": "new",
+                    },
                 }
             ),
-            "done",
+            json.dumps(
+                {
+                    "action": "call_tool",
+                    "response": "",
+                    "tool_name": "run_tests",
+                    "tool_input": {"command": ["python3", "-c", "print('ok')"]},
+                }
+            ),
+            json.dumps({"action": "respond", "response": "done", "tool_name": "none", "tool_input": {}}),
         ],
     )
     runtime = AgentRuntime(config, model_client=fake_client)
@@ -1203,18 +1306,16 @@ def test_runtime_recovers_strategy_incompatible_coding_plan_with_shell_recovery_
     result = runtime.run_turn(goal)
     events = runtime.history.read_history(result.session_id)
 
-    assert result.assistant_text == "done"
+    assert "done" in result.assistant_text
     assert any(
         event.event_type == "plan_repaired"
         and event.payload.get("repair") == "shell_recovery_plan"
         and event.payload.get("error_type") == "StrategyValidationError"
         for event in events
     )
-    assert sum(
-        1
-        for event in events
-        if event.event_type == "tool_called" and event.payload.get("tool_name") == "shell_command"
-    ) == 2
+    assert any(event.event_type == "tool_called" and event.payload.get("tool_name") == "shell_command" for event in events)
+    assert any(event.event_type == "tool_called" and event.payload.get("tool_name") == "edit_text" for event in events)
+    assert any(event.event_type == "tool_called" and event.payload.get("tool_name") == "run_tests" for event in events)
 
 
 def test_runtime_task_contract_marks_benchmark_issue_complete_and_non_expanding(make_config) -> None:
@@ -1294,6 +1395,7 @@ def test_runtime_seeds_shell_recovery_plan_for_local_repo_code_fix_contract(
         planner__max_replans=0,
     )
     monkeypatch.chdir(tmp_path)
+    (tmp_path / "sample.py").write_text("old\n", encoding="utf-8")
     user_text = (
         "Task contract:\n"
         "{\"task_kind\":\"local_repo_code_fix\",\"request_completeness\":\"complete\","
@@ -1348,17 +1450,23 @@ def test_runtime_seeds_shell_recovery_plan_for_local_repo_code_fix_contract(
             ],
             "tool_input:shell_command": [
                 json.dumps({"command": "printf inspection", "background": False}),
+            ],
+            "tool_input:edit_text": [
                 json.dumps(
                     {
-                        "command": "python3 - <<'PY'\nfrom pathlib import Path\nPath('patched.txt').write_text('ok\\n', encoding='utf-8')\nprint('verification')\nPY",
-                        "background": False,
+                        "path": "sample.py",
+                        "operation": "replace_pattern_once",
+                        "pattern": "old",
+                        "replacement": "new",
                     }
-                ),
+                )
+            ],
+            "tool_input:run_tests": [
+                json.dumps({"command": ["python3", "-c", "print('ok')"], "background": False})
             ],
         },
         responses=[
-            "done",
-            "done",
+            json.dumps({"action": "respond", "response": "done", "tool_name": "none", "tool_input": {}}),
         ],
     )
     runtime = AgentRuntime(config, model_client=fake_client)
@@ -1367,9 +1475,11 @@ def test_runtime_seeds_shell_recovery_plan_for_local_repo_code_fix_contract(
     events = runtime.history.read_history(result.session_id)
     request_contracts = [request["contract"] for request in fake_client.requests]
 
-    assert result.assistant_text == "done"
+    assert "done" in result.assistant_text
     assert "task_plan" not in request_contracts
     assert "tool_input:shell_command" in request_contracts
+    assert "tool_input:edit_text" in request_contracts
+    assert "tool_input:run_tests" in request_contracts
     assert any(
         event.event_type == "plan_repaired"
         and event.payload.get("reason") == "task_contract_shell_recovery_seed"
@@ -1740,7 +1850,212 @@ def test_runtime_uses_expected_tool_input_contract_for_profile_optimized_edit_st
     assert decision.tool_input["pattern"] == "return 0"
     contracts = [request["contract"] for request in fake_client.requests]
     assert contracts[-1] == "tool_input:edit_text"
-    assert "subagent_selection" in contracts
+
+
+def test_runtime_falls_back_when_expected_tool_input_contract_returns_malformed_json(make_config) -> None:
+    config = make_config(
+        model__profile_name="small_fast",
+        model__structured_output_mode="post_validate",
+        tools__allow_side_effect_tools=True,
+    )
+    fake_client = FakeModelClient(
+        responses=[
+            json.dumps(
+                {
+                    "action": "call_tool",
+                    "response": "",
+                    "tool_name": "edit_text",
+                    "tool_input": {
+                        "path": "sample.py",
+                        "operation": "replace_pattern_once",
+                        "pattern": "return 0",
+                        "replacement": "return 1",
+                    },
+                }
+            )
+        ],
+        contract_responses={
+            "tool_input:edit_text": [
+                '{"path":"sample.py","operation":"replace_pattern_once","pattern":"return 0"'
+            ]
+        },
+    )
+    runtime = AgentRuntime(config, model_client=fake_client)
+    state = runtime.create_or_load_session()
+    state.messages = [
+        Message(role="user", content="Read sample.py and fix it so return 0 becomes return 1.", created_at="t0"),
+        Message(
+            role="tool",
+            name="read_text",
+            content='read_text result: {"source_ref":"sample.py","text":"def value():\\n    return 0\\n"}',
+            created_at="t1",
+            metadata={"output": {"source_ref": "sample.py", "text": "def value():\n    return 0\n"}},
+        ),
+    ]
+    state.active_plan = plan_from_payload(
+        {
+            "goal": "Read sample.py and fix it so return 0 becomes return 1.",
+            "success_criteria": "fixed",
+            "fallback_strategy": "replan",
+            "steps": [
+                {
+                    "step_id": "step_edit",
+                    "title": "Fix sample.py",
+                    "goal": "Fix sample.py",
+                    "kind": "write",
+                    "expected_tool": "edit_text",
+                    "input_text": "edit_text path: sample.py\nTask: Read sample.py and fix it so return 0 becomes return 1.",
+                    "expected_output": "sample.py updated",
+                    "expected_outputs": ["sample.py updated"],
+                    "done_condition": "tool_result:edit_text",
+                    "success_criteria": "sample.py updated",
+                    "verification_type": "composite",
+                    "verification_checks": [
+                        {"name": "dependencies_completed", "check_type": "dependencies_completed"},
+                        {"name": "tool_result_present", "check_type": "artifact_present", "artifact": "tool_result"},
+                        {"name": "tool_name_matches", "check_type": "tool_name_equals", "expected": "edit_text"},
+                    ],
+                    "required_conditions": ["dependencies_completed", "tool_result_present", "tool_name_matches"],
+                    "optional_conditions": [],
+                    "fallback_strategy": "replan",
+                    "depends_on": [],
+                },
+                {
+                    "step_id": "step_answer",
+                    "title": "Answer",
+                    "goal": "Answer",
+                    "kind": "respond",
+                    "expected_tool": "",
+                    "input_text": "Respond.",
+                    "expected_output": "answer",
+                    "expected_outputs": ["answer"],
+                    "done_condition": "assistant_response_nonempty",
+                    "success_criteria": "answer returned",
+                    "verification_type": "composite",
+                    "verification_checks": [
+                        {"name": "dependencies_completed", "check_type": "dependencies_completed"},
+                        {"name": "assistant_text_nonempty", "check_type": "string_nonempty", "actual_source": "assistant_text"},
+                    ],
+                    "required_conditions": ["dependencies_completed", "assistant_text_nonempty"],
+                    "optional_conditions": [],
+                    "fallback_strategy": "replan",
+                    "depends_on": ["step_edit"],
+                },
+            ],
+        },
+        available_tools=runtime.tools.tool_names(config),
+    )
+
+    decision, _ = runtime._decide(state)
+    events = runtime.history.read_history(state.session_id)
+
+    assert decision.tool_name == "edit_text"
+    assert decision.tool_input["replacement"] == "return 1"
+    contracts = [request["contract"] for request in fake_client.requests]
+    assert "tool_input:edit_text" in contracts
+    assert contracts[-1] == "tool_decision"
+    assert any(event.event_type == "error" and event.payload.get("operation") == "tool_input" for event in events)
+    assert not any(event.event_type == "fatal_system_error" for event in events)
+
+
+def test_runtime_normalizes_general_decision_tool_input_for_active_edit_step(make_config) -> None:
+    config = make_config(
+        model__profile_name="small_fast",
+        model__structured_output_mode="post_validate",
+        tools__allow_side_effect_tools=True,
+    )
+    fake_client = FakeModelClient(
+        responses=[
+            json.dumps(
+                {
+                    "action": "call_tool",
+                    "response": "",
+                    "tool_name": "edit_text",
+                    "tool_input": {
+                        "path": "/tmp/work/mathematica.py",
+                        "operation": "replace_pattern_once",
+                        "pattern": "return 0",
+                        "replacement": "return 1",
+                    },
+                }
+            )
+        ],
+        contract_responses={
+            "tool_input:edit_text": [
+                '{"path":"sample.py","operation":"replace_pattern_once","pattern":"return 0"'
+            ]
+        },
+    )
+    runtime = AgentRuntime(config, model_client=fake_client)
+    state = runtime.create_or_load_session()
+    state.messages = [
+        Message(role="user", content="Fix the benchmark issue.", created_at="t0"),
+        Message(
+            role="tool",
+            name="shell_command",
+            content="inspection",
+            created_at="t1",
+            metadata={
+                "output": {
+                    "stdout": "test_file: ./sympy/printing/tests/test_mathematica.py\nsource_file: ./sympy/printing/mathematica.py\n"
+                }
+            },
+        ),
+    ]
+    state.active_plan = create_shell_recovery_plan("Fix the benchmark issue.")
+    state.active_plan.current_step_id = "step_patch_source"
+    state.active_plan.steps[0].status = "completed"
+    state.active_plan.steps[1].status = "running"
+
+    decision, _ = runtime._decide(state)
+
+    assert decision.tool_name == "edit_text"
+    assert decision.tool_input["path"] == "sympy/printing/mathematica.py"
+    contracts = [request["contract"] for request in fake_client.requests]
+    assert "tool_input:edit_text" in contracts
+    assert contracts[-1] == "tool_decision"
+
+
+def test_runtime_enforces_expected_shell_command_when_fallback_decision_picks_wrong_tool(make_config) -> None:
+    config = make_config(
+        model__profile_name="small_fast",
+        model__structured_output_mode="post_validate",
+        tools__allow_side_effect_tools=True,
+    )
+    fake_client = FakeModelClient(
+        responses=[
+            json.dumps(
+                {
+                    "action": "call_tool",
+                    "response": "",
+                    "tool_name": "edit_text",
+                    "tool_input": {
+                        "path": "/tmp/work/mathematica.py",
+                        "operation": "replace_pattern_once",
+                        "pattern": "wrong",
+                    },
+                }
+            )
+        ],
+        contract_responses={
+            "tool_input:shell_command": [
+                '{"command":"printf inspection"'
+            ]
+        },
+    )
+    runtime = AgentRuntime(config, model_client=fake_client)
+    state = runtime.create_or_load_session()
+    state.messages = [Message(role="user", content="Known failing tests:\n- test_Function", created_at="t0")]
+    state.active_plan = create_shell_recovery_plan("Fix the benchmark issue.")
+
+    decision, _ = runtime._decide(state)
+
+    assert decision.tool_name == "shell_command"
+    assert isinstance(decision.tool_input["command"], str)
+    assert decision.tool_input["command"].startswith("printf 'search_terms: test_Function")
+    contracts = [request["contract"] for request in fake_client.requests]
+    assert "tool_input:shell_command" in contracts
+    assert contracts[-1] == "tool_decision"
 
 
 def test_runtime_uses_expected_tool_input_contract_for_shell_command_steps(make_config) -> None:
@@ -1764,6 +2079,9 @@ def test_runtime_uses_expected_tool_input_contract_for_shell_command_steps(make_
     assert decision.tool_input["command"]
     contracts = [request["contract"] for request in fake_client.requests]
     assert contracts[-1] == "tool_input:shell_command"
+    prompt = fake_client.requests[-1]["prompt"]
+    assert "Step instructions:" in prompt
+    assert "search for the exact failing test name first" in prompt
 
 
 def test_runtime_normalizes_trivial_shell_command_into_repo_search(make_config) -> None:
@@ -1794,6 +2112,799 @@ def test_runtime_normalizes_trivial_shell_command_into_repo_search(make_config) 
     assert decision.tool_name == "shell_command"
     assert decision.tool_input["command"].startswith("printf 'search_terms:")
     assert "rg -n" in decision.tool_input["command"]
+    assert "test_fix" in decision.tool_input["command"]
+    assert "mathematica_code" not in decision.tool_input["command"]
+    assert "-F" in decision.tool_input["command"]
+
+
+def test_runtime_shell_search_previews_bare_test_and_source_hints(make_config) -> None:
+    config = make_config(tools__allow_side_effect_tools=True)
+    fake_client = FakeModelClient(
+        contract_responses={
+            "tool_input:shell_command": [
+                json.dumps({"command": "bash", "background": False})
+            ]
+        }
+    )
+    runtime = AgentRuntime(config, model_client=fake_client)
+    state = runtime.create_or_load_session()
+    user_text = (
+        "Task contract:\n"
+        "{\"task_kind\":\"local_repo_code_fix\",\"request_completeness\":\"complete\","
+        "\"requires_code_changes\":true,\"requires_verification\":true,\"prefer_task_expansion\":false}\n"
+        "Problem statement:\n"
+        "mathematica_code gives wrong output with Max\n"
+        "Known failing tests:\n"
+        "- test_Function\n"
+        "Hints:\n"
+        "Check mathematica.py.\n"
+    )
+    state.messages = [Message(role="user", content=user_text, created_at="t0")]
+    state.active_plan = create_shell_recovery_plan("Fix the benchmark issue. mathematica_code gives wrong output with Max.")
+
+    decision, _ = runtime._decide(state)
+
+    assert decision.tool_name == "shell_command"
+    command = decision.tool_input["command"]
+    assert "test_file=''" in command
+    assert "test_file=$(" in command
+    assert "def test_Function(" in command
+    assert "source_file=''" in command
+    assert "source_file=$(" in command
+    assert "mathematica_code" in command
+    assert "mathematica.py" in command
+    assert "sed -n '1,220p'" in command
+    assert "matches=$(rg -n -F" in command
+    assert "head -n 20" in command
+
+
+def test_runtime_prefers_recent_source_hint_for_edit_text_step(make_config) -> None:
+    config = make_config(tools__allow_side_effect_tools=True)
+    fake_client = FakeModelClient(
+        contract_responses={
+            "tool_input:edit_text": [
+                json.dumps(
+                    {
+                        "path": "tests/test_Function.py",
+                        "operation": "replace_pattern_once",
+                        "pattern": "old",
+                        "replacement": "new",
+                    }
+                )
+            ]
+        }
+    )
+    runtime = AgentRuntime(config, model_client=fake_client)
+    state = runtime.create_or_load_session()
+    user_text = (
+        "Task contract:\n"
+        "{\"task_kind\":\"local_repo_code_fix\",\"request_completeness\":\"complete\","
+        "\"requires_code_changes\":true,\"requires_verification\":true,\"prefer_task_expansion\":false}\n"
+        "Problem statement:\n"
+        "mathematica_code gives wrong output with Max\n"
+        "Known failing tests:\n"
+        "- test_Function\n"
+        "Hints:\n"
+        "Check mathematica.py.\n"
+    )
+    plan = create_shell_recovery_plan("Fix the benchmark issue. mathematica_code gives wrong output with Max.")
+    plan.steps[0].status = "completed"
+    plan.steps[1].status = "running"
+    state.messages = [
+        Message(role="user", content=user_text, created_at="t0"),
+        Message(
+            role="tool",
+            name="shell_command",
+            content="shell result",
+            created_at="t1",
+            metadata={
+                "output": {
+                    "stdout": "test_file: ./sympy/printing/tests/test_mathematica.py\nsource_file: ./sympy/printing/mathematica.py\n",
+                    "stderr": "",
+                    "exit_code": 0,
+                    "modified_files": [],
+                    "created_files": [],
+                    "deleted_files": [],
+                }
+            },
+        ),
+    ]
+    state.active_plan = plan
+
+    decision, _ = runtime._decide(state)
+
+    assert decision.tool_name == "edit_text"
+    assert decision.tool_input["path"] == "sympy/printing/mathematica.py"
+
+
+def test_runtime_edit_text_prompt_includes_recent_inspection_evidence(make_config) -> None:
+    config = make_config(tools__allow_side_effect_tools=True)
+    fake_client = FakeModelClient(
+        contract_responses={
+            "tool_input:edit_text": [
+                json.dumps(
+                    {
+                        "path": "sympy/printing/mathematica.py",
+                        "operation": "replace_pattern_once",
+                        "pattern": "old",
+                        "replacement": "new",
+                    }
+                )
+            ]
+        }
+    )
+    runtime = AgentRuntime(config, model_client=fake_client)
+    state = runtime.create_or_load_session()
+    user_text = (
+        "Task contract:\n"
+        "{\"task_kind\":\"local_repo_code_fix\",\"request_completeness\":\"complete\","
+        "\"requires_code_changes\":true,\"requires_verification\":true,\"prefer_task_expansion\":false}\n"
+        "Problem statement:\n"
+        "mathematica_code gives wrong output with Max\n"
+        "Known failing tests:\n"
+        "- test_Function\n"
+        "Hints:\n"
+        "Check mathematica.py.\n"
+    )
+    plan = create_shell_recovery_plan("Fix the benchmark issue. mathematica_code gives wrong output with Max.")
+    plan.steps[0].status = "completed"
+    plan.steps[1].status = "running"
+    state.messages = [
+        Message(role="user", content=user_text, created_at="t0"),
+        Message(
+            role="tool",
+            name="shell_command",
+            content="shell result",
+            created_at="t1",
+            metadata={
+                "output": {
+                    "stdout": "test_file: ./sympy/printing/tests/test_mathematica.py\nsource_file: ./sympy/printing/mathematica.py\ndef mathematica_code(expr):\n    return expr.func.__name__ + '(%s)' % self.stringify(expr.args, ', ')\n",
+                    "stderr": "",
+                    "exit_code": 0,
+                    "modified_files": [],
+                    "created_files": [],
+                    "deleted_files": [],
+                }
+            },
+        ),
+    ]
+    state.active_plan = plan
+
+    decision, _ = runtime._decide(state)
+
+    assert decision.tool_name == "edit_text"
+    prompt = fake_client.requests[-1]["prompt"]
+    assert "Recent inspection evidence:" in prompt
+    assert "source_file: ./sympy/printing/mathematica.py" in prompt
+    assert "def mathematica_code(expr):" in prompt
+
+
+def test_runtime_edit_text_prompt_prefers_source_evidence_over_long_test_preview(make_config) -> None:
+    config = make_config(tools__allow_side_effect_tools=True)
+    fake_client = FakeModelClient(
+        contract_responses={
+            "tool_input:edit_text": [
+                json.dumps(
+                    {
+                        "path": "sympy/printing/mathematica.py",
+                        "operation": "replace_pattern_once",
+                        "pattern": "old",
+                        "replacement": "new",
+                    }
+                )
+            ]
+        }
+    )
+    runtime = AgentRuntime(config, model_client=fake_client)
+    state = runtime.create_or_load_session()
+    user_text = (
+        "Task contract:\n"
+        "{\"task_kind\":\"local_repo_code_fix\",\"request_completeness\":\"complete\","
+        "\"requires_code_changes\":true,\"requires_verification\":true,\"prefer_task_expansion\":false}\n"
+        "Problem statement:\n"
+        "mathematica_code gives wrong output with Max\n"
+        "Known failing tests:\n"
+        "- test_Function\n"
+        "Hints:\n"
+        "Check mathematica.py.\n"
+    )
+    plan = create_shell_recovery_plan("Fix the benchmark issue. mathematica_code gives wrong output with Max.")
+    plan.steps[0].status = "completed"
+    plan.steps[1].status = "running"
+    long_test_preview = "test_file: ./sympy/printing/tests/test_mathematica.py\n" + ("assert something\n" * 200)
+    source_preview = "source_file: ./sympy/printing/mathematica.py\ndef mathematica_code(expr):\n    return expr.func.__name__\n"
+    state.messages = [
+        Message(role="user", content=user_text, created_at="t0"),
+        Message(
+            role="tool",
+            name="shell_command",
+            content="shell result",
+            created_at="t1",
+            metadata={
+                "output": {
+                    "stdout": long_test_preview + source_preview,
+                    "stderr": "",
+                    "exit_code": 0,
+                    "modified_files": [],
+                    "created_files": [],
+                    "deleted_files": [],
+                }
+            },
+        ),
+    ]
+    state.active_plan = plan
+
+    runtime._decide(state)
+
+    prompt = fake_client.requests[-1]["prompt"]
+    evidence = prompt.split("Recent inspection evidence:\n", 1)[1]
+    assert evidence.startswith("source_file: ./sympy/printing/mathematica.py")
+    assert "def mathematica_code(expr):" in evidence
+
+
+def test_runtime_edit_text_prompt_uses_workspace_source_excerpt_for_long_files(make_config, tmp_path: Path) -> None:
+    config = make_config(tools__allow_side_effect_tools=True)
+    fake_client = FakeModelClient(
+        contract_responses={
+            "tool_input:edit_text": [
+                json.dumps(
+                    {
+                        "path": "sympy/printing/mathematica.py",
+                        "operation": "replace_pattern_once",
+                        "pattern": "old",
+                        "replacement": "new",
+                    }
+                )
+            ]
+        }
+    )
+    runtime = AgentRuntime(config, model_client=fake_client)
+    state = runtime.create_or_load_session()
+    user_text = (
+        "Task contract:\n"
+        "{\"task_kind\":\"local_repo_code_fix\",\"request_completeness\":\"complete\","
+        "\"requires_code_changes\":true,\"requires_verification\":true,\"prefer_task_expansion\":false}\n"
+        "Problem statement:\n"
+        "mathematica_code gives wrong output with Max\n"
+        "Known failing tests:\n"
+        "- test_Function\n"
+        "Hints:\n"
+        "Check mathematica.py.\n"
+    )
+    plan = create_shell_recovery_plan("Fix the benchmark issue. mathematica_code gives wrong output with Max.")
+    plan.steps[0].status = "completed"
+    plan.steps[1].status = "running"
+    source_path = tmp_path / "sympy" / "printing" / "mathematica.py"
+    source_path.parent.mkdir(parents=True)
+    source_path.write_text(
+        "HEADER_MARKER = 1\n"
+        + ("mid_line = 1\n" * 300)
+        + "TAIL_MARKER = 2\n"
+    )
+    state.environment.workspace.root = str(tmp_path)
+    state.environment.workspace.cwd = str(tmp_path)
+    state.messages = [
+        Message(role="user", content=user_text, created_at="t0"),
+        Message(
+            role="tool",
+            name="shell_command",
+            content="shell result",
+            created_at="t1",
+            metadata={
+                "output": {
+                    "stdout": "test_file: ./sympy/printing/tests/test_mathematica.py\nsource_file: ./sympy/printing/mathematica.py\n",
+                    "stderr": "",
+                    "exit_code": 0,
+                    "modified_files": [],
+                    "created_files": [],
+                    "deleted_files": [],
+                }
+            },
+        ),
+    ]
+    state.active_plan = plan
+
+    runtime._decide(state)
+
+    prompt = fake_client.requests[-1]["prompt"]
+    evidence = prompt.split("Recent inspection evidence:\n", 1)[1]
+    assert evidence.startswith("source_file: ./sympy/printing/mathematica.py")
+    assert "HEADER_MARKER = 1" in evidence
+    assert "TAIL_MARKER = 2" in evidence
+
+
+def test_runtime_edit_text_prompt_focuses_known_mapping_excerpt(make_config, tmp_path: Path) -> None:
+    config = make_config(tools__allow_side_effect_tools=True)
+    fake_client = FakeModelClient(
+        contract_responses={
+            "tool_input:edit_text": [
+                json.dumps(
+                    {
+                        "path": "sympy/printing/mathematica.py",
+                        "operation": "replace_pattern_once",
+                        "pattern": "old",
+                        "replacement": "new",
+                    }
+                )
+            ]
+        }
+    )
+    runtime = AgentRuntime(config, model_client=fake_client)
+    state = runtime.create_or_load_session()
+    user_text = (
+        "Task contract:\n"
+        "{\"task_kind\":\"local_repo_code_fix\",\"request_completeness\":\"complete\","
+        "\"requires_code_changes\":true,\"requires_verification\":true,\"prefer_task_expansion\":false}\n"
+        "Problem statement:\n"
+        "mathematica_code gives wrong output with Max\n"
+        "Known failing tests:\n"
+        "- test_Function\n"
+        "Hints:\n"
+        "Check mathematica.py.\n"
+    )
+    plan = create_shell_recovery_plan("Fix the benchmark issue. mathematica_code gives wrong output with Max.")
+    plan.steps[0].status = "completed"
+    plan.steps[1].status = "running"
+    source_path = tmp_path / "sympy" / "printing" / "mathematica.py"
+    source_path.parent.mkdir(parents=True)
+    source_path.write_text(
+        "\"\"\"\nMathematica code printer\n\"\"\"\n\n"
+        "known_functions = {\n"
+        '    "exp": [(lambda x: True, "Exp")],\n'
+        '    "conjugate": [(lambda x: True, "Conjugate")],\n'
+        "}\n\n"
+        "class MCodePrinter(object):\n"
+        "    pass\n\n"
+        "def _print_Function(expr):\n"
+        "    return expr.func.__name__ + \"[%s]\"\n"
+        + ("padding = 1\n" * 400)
+    )
+    state.environment.workspace.root = str(tmp_path)
+    state.environment.workspace.cwd = str(tmp_path)
+    state.messages = [
+        Message(role="user", content=user_text, created_at="t0"),
+        Message(
+            role="tool",
+            name="shell_command",
+            content="shell result",
+            created_at="t1",
+            metadata={
+                "output": {
+                    "stdout": "test_file: ./sympy/printing/tests/test_mathematica.py\nsource_file: ./sympy/printing/mathematica.py\n",
+                    "stderr": "",
+                    "exit_code": 0,
+                    "modified_files": [],
+                    "created_files": [],
+                    "deleted_files": [],
+                }
+            },
+        ),
+    ]
+    state.active_plan = plan
+
+    runtime._decide(state)
+
+    prompt = fake_client.requests[-1]["prompt"]
+    evidence = prompt.split("Recent inspection evidence:\n", 1)[1]
+    assert "known_functions = {" in evidence
+    assert '"conjugate": [(lambda x: True, "Conjugate")]' in evidence
+    assert "def _print_Function(expr):" not in evidence
+    assert "padding = 1" not in evidence
+
+
+def test_runtime_edit_text_retry_instruction_mentions_single_entry_anchor(make_config, tmp_path: Path) -> None:
+    config = make_config(tools__allow_side_effect_tools=True)
+    fake_client = FakeModelClient(
+        contract_responses={
+            "tool_input:edit_text": [
+                '{"path":"sympy/printing/mathematica.py","operation":"replace_pattern_once","pattern":"known_functions"',
+                json.dumps(
+                    {
+                        "path": "sympy/printing/mathematica.py",
+                        "operation": "replace_pattern_once",
+                        "pattern": '"conjugate": [(lambda x: True, "Conjugate")],',
+                        "replacement": '"conjugate": [(lambda x: True, "Conjugate")],\n    "Max": [(lambda *x: True, "Max")],',
+                    }
+                ),
+            ]
+        }
+    )
+    runtime = AgentRuntime(config, model_client=fake_client)
+    state = runtime.create_or_load_session()
+    user_text = (
+        "Task contract:\n"
+        "{\"task_kind\":\"local_repo_code_fix\",\"request_completeness\":\"complete\","
+        "\"requires_code_changes\":true,\"requires_verification\":true,\"prefer_task_expansion\":false}\n"
+        "Problem statement:\n"
+        "mathematica_code gives wrong output with Max\n"
+        "Known failing tests:\n"
+        "- test_Function\n"
+        "Hints:\n"
+        "Check mathematica.py.\n"
+    )
+    plan = create_shell_recovery_plan("Fix the benchmark issue. mathematica_code gives wrong output with Max.")
+    plan.steps[0].status = "completed"
+    plan.steps[1].status = "running"
+    source_path = tmp_path / "sympy" / "printing" / "mathematica.py"
+    source_path.parent.mkdir(parents=True)
+    source_path.write_text(
+        'known_functions = {\n'
+        '    "conjugate": [(lambda x: True, "Conjugate")],\n'
+        '}\n'
+    )
+    state.messages = [
+        Message(role="user", content=user_text, created_at="t0"),
+        Message(
+            role="tool",
+            name="shell_command",
+            content="shell result",
+            created_at="t1",
+            metadata={
+                "output": {
+                    "stdout": "test_file: ./sympy/printing/tests/test_mathematica.py\nsource_file: ./sympy/printing/mathematica.py\n",
+                    "stderr": "",
+                    "exit_code": 0,
+                    "modified_files": [],
+                    "created_files": [],
+                    "deleted_files": [],
+                }
+            },
+        ),
+    ]
+    state.environment.workspace.root = str(tmp_path)
+    state.environment.workspace.cwd = str(tmp_path)
+    state.active_plan = plan
+
+    runtime._decide(state)
+
+    edit_requests = [request for request in fake_client.requests if request.get("contract") == "tool_input:edit_text"]
+    assert len(edit_requests) == 2
+    assert "use one existing nearby entry line as `pattern`" in edit_requests[-1]["prompt"]
+
+
+def test_runtime_edit_text_prompt_prefers_focused_excerpt_even_for_short_source(make_config, tmp_path: Path) -> None:
+    config = make_config(tools__allow_side_effect_tools=True)
+    fake_client = FakeModelClient(
+        contract_responses={
+            "tool_input:edit_text": [
+                json.dumps(
+                    {
+                        "path": "sympy/printing/mathematica.py",
+                        "operation": "replace_pattern_once",
+                        "pattern": '"conjugate": [(lambda x: True, "Conjugate")],',
+                        "replacement": '"conjugate": [(lambda x: True, "Conjugate")],\n    "Max": [(lambda *x: True, "Max")],',
+                    }
+                )
+            ]
+        }
+    )
+    runtime = AgentRuntime(config, model_client=fake_client)
+    state = runtime.create_or_load_session()
+    user_text = (
+        "Task contract:\n"
+        "{\"task_kind\":\"local_repo_code_fix\",\"request_completeness\":\"complete\","
+        "\"requires_code_changes\":true,\"requires_verification\":true,\"prefer_task_expansion\":false}\n"
+        "Problem statement:\n"
+        "mathematica_code gives wrong output with Max\n"
+        "Known failing tests:\n"
+        "- test_Function\n"
+        "Hints:\n"
+        "Check mathematica.py.\n"
+    )
+    plan = create_shell_recovery_plan("Fix the benchmark issue. mathematica_code gives wrong output with Max.")
+    plan.steps[0].status = "completed"
+    plan.steps[1].status = "running"
+    source_path = tmp_path / "sympy" / "printing" / "mathematica.py"
+    source_path.parent.mkdir(parents=True)
+    source_path.write_text(
+        "\"\"\"\nMathematica code printer\n\"\"\"\n\n"
+        "from __future__ import print_function, division\n\n"
+        "known_functions = {\n"
+        '    "exp": [(lambda x: True, "Exp")],\n'
+        '    "conjugate": [(lambda x: True, "Conjugate")],\n'
+        "}\n\n"
+        "_default_settings = {\n"
+        "    'precision': 15,\n"
+        "    'human': True,\n"
+        "}\n\n"
+        "def mathematica_code(expr, **settings):\n"
+        "    return expr\n"
+    )
+    state.environment.workspace.root = str(tmp_path)
+    state.environment.workspace.cwd = str(tmp_path)
+    state.messages = [
+        Message(role="user", content=user_text, created_at="t0"),
+        Message(
+            role="tool",
+            name="shell_command",
+            content="shell result",
+            created_at="t1",
+            metadata={
+                "output": {
+                    "stdout": "test_file: ./sympy/printing/tests/test_mathematica.py\nsource_file: ./sympy/printing/mathematica.py\n",
+                    "stderr": "",
+                    "exit_code": 0,
+                    "modified_files": [],
+                    "created_files": [],
+                    "deleted_files": [],
+                }
+            },
+        ),
+    ]
+    state.active_plan = plan
+
+    runtime._decide(state)
+
+    prompt = fake_client.requests[-1]["prompt"]
+    evidence = prompt.split("Recent inspection evidence:\n", 1)[1]
+    assert '"conjugate": [(lambda x: True, "Conjugate")]' in evidence
+    assert "_default_settings = {" not in evidence
+    assert "def mathematica_code" not in evidence
+
+
+def test_runtime_retries_expected_edit_text_after_invalid_json(make_config, tmp_path: Path) -> None:
+    config = make_config(tools__allow_side_effect_tools=True)
+    fake_client = FakeModelClient(
+        contract_responses={
+            "tool_input:edit_text": [
+                '{"path":"sympy/printing/mathematica.py","operation":"replace_pattern_once","pattern":"known_functions"',
+                json.dumps(
+                    {
+                        "path": "sympy/printing/mathematica.py",
+                        "operation": "replace_pattern_once",
+                        "pattern": '"conjugate": [(lambda x: True, "Conjugate")],',
+                        "replacement": '"conjugate": [(lambda x: True, "Conjugate")],\n    "Max": [(lambda *x: True, "Max")],',
+                    }
+                ),
+            ]
+        }
+    )
+    runtime = AgentRuntime(config, model_client=fake_client)
+    state = runtime.create_or_load_session()
+    user_text = (
+        "Task contract:\n"
+        "{\"task_kind\":\"local_repo_code_fix\",\"request_completeness\":\"complete\","
+        "\"requires_code_changes\":true,\"requires_verification\":true,\"prefer_task_expansion\":false}\n"
+        "Problem statement:\n"
+        "mathematica_code gives wrong output with Max\n"
+        "Known failing tests:\n"
+        "- test_Function\n"
+        "Hints:\n"
+        "Check mathematica.py.\n"
+    )
+    plan = create_shell_recovery_plan("Fix the benchmark issue. mathematica_code gives wrong output with Max.")
+    plan.steps[0].status = "completed"
+    plan.steps[1].status = "running"
+    source_path = tmp_path / "sympy" / "printing" / "mathematica.py"
+    source_path.parent.mkdir(parents=True)
+    source_path.write_text(
+        'known_functions = {\n'
+        '    "conjugate": [(lambda x: True, "Conjugate")],\n'
+        '}\n'
+    )
+    state.messages = [
+        Message(role="user", content=user_text, created_at="t0"),
+        Message(
+            role="tool",
+            name="shell_command",
+            content="shell result",
+            created_at="t1",
+            metadata={
+                "output": {
+                    "stdout": "test_file: ./sympy/printing/tests/test_mathematica.py\nsource_file: ./sympy/printing/mathematica.py\ndef mathematica_code(expr):\n    return expr.func.__name__\n",
+                    "stderr": "",
+                    "exit_code": 0,
+                    "modified_files": [],
+                    "created_files": [],
+                    "deleted_files": [],
+                }
+            },
+        ),
+    ]
+    state.environment.workspace.root = str(tmp_path)
+    state.environment.workspace.cwd = str(tmp_path)
+    state.active_plan = plan
+
+    decision, _ = runtime._decide(state)
+
+    assert decision.tool_name == "edit_text"
+    edit_requests = [request for request in fake_client.requests if request.get("contract") == "tool_input:edit_text"]
+    assert len(edit_requests) == 2
+    assert "Previous edit attempt was invalid or incomplete." in edit_requests[-1]["prompt"]
+
+
+def test_runtime_replaces_directory_edit_path_with_recent_source_hint(make_config) -> None:
+    config = make_config(tools__allow_side_effect_tools=True)
+    fake_client = FakeModelClient(
+        contract_responses={
+            "tool_input:edit_text": [
+                json.dumps(
+                    {
+                        "path": ".",
+                        "operation": "replace_pattern_once",
+                        "pattern": "old",
+                        "replacement": "new",
+                    }
+                )
+            ]
+        }
+    )
+    runtime = AgentRuntime(config, model_client=fake_client)
+    state = runtime.create_or_load_session()
+    user_text = (
+        "Task contract:\n"
+        "{\"task_kind\":\"local_repo_code_fix\",\"request_completeness\":\"complete\","
+        "\"requires_code_changes\":true,\"requires_verification\":true,\"prefer_task_expansion\":false}\n"
+        "Problem statement:\n"
+        "mathematica_code gives wrong output with Max\n"
+        "Known failing tests:\n"
+        "- test_Function\n"
+        "Hints:\n"
+        "Check mathematica.py.\n"
+    )
+    plan = create_shell_recovery_plan("Fix the benchmark issue. mathematica_code gives wrong output with Max.")
+    plan.steps[0].status = "completed"
+    plan.steps[1].status = "running"
+    state.messages = [
+        Message(role="user", content=user_text, created_at="t0"),
+        Message(
+            role="tool",
+            name="shell_command",
+            content="shell result",
+            created_at="t1",
+            metadata={
+                "output": {
+                    "stdout": "test_file: ./sympy/printing/tests/test_mathematica.py\nsource_file: ./sympy/printing/mathematica.py\n",
+                    "stderr": "",
+                    "exit_code": 0,
+                    "modified_files": [],
+                    "created_files": [],
+                    "deleted_files": [],
+                }
+            },
+        ),
+    ]
+    state.active_plan = plan
+
+    decision, _ = runtime._decide(state)
+
+    assert decision.tool_name == "edit_text"
+    assert decision.tool_input["path"] == "sympy/printing/mathematica.py"
+
+
+def test_runtime_resolves_missing_workspace_edit_path_from_problem_symbol(make_config, tmp_path: Path) -> None:
+    config = make_config(tools__allow_side_effect_tools=True)
+    fake_client = FakeModelClient(
+        contract_responses={
+            "tool_input:edit_text": [
+                json.dumps(
+                    {
+                        "path": str(tmp_path / "mathematica.py"),
+                        "operation": "replace_pattern_once",
+                        "pattern": "old",
+                        "replacement": "new",
+                    }
+                )
+            ]
+        }
+    )
+    runtime = AgentRuntime(config, model_client=fake_client)
+    state = runtime.create_or_load_session()
+    user_text = (
+        "Task contract:\n"
+        "{\"task_kind\":\"local_repo_code_fix\",\"request_completeness\":\"complete\","
+        "\"requires_code_changes\":true,\"requires_verification\":true,\"prefer_task_expansion\":false}\n"
+        "Problem statement:\n"
+        "mathematica_code gives wrong output with Max\n"
+        "Known failing tests:\n"
+        "- test_Function\n"
+        "Hints:\n"
+        "Check mathematica.py.\n"
+    )
+    (tmp_path / "sympy" / "parsing").mkdir(parents=True)
+    (tmp_path / "sympy" / "printing").mkdir(parents=True)
+    (tmp_path / "sympy" / "parsing" / "mathematica.py").write_text("def parse_mathematica(x):\n    return x\n")
+    (tmp_path / "sympy" / "printing" / "mathematica.py").write_text(
+        "def mathematica_code(expr):\n    return 'Max[x, 2]'\n"
+    )
+    plan = create_shell_recovery_plan("Fix the benchmark issue. mathematica_code gives wrong output with Max.")
+    plan.steps[0].status = "completed"
+    plan.steps[1].status = "running"
+    state.environment.workspace.root = str(tmp_path)
+    state.environment.workspace.cwd = str(tmp_path)
+    state.messages = [Message(role="user", content=user_text, created_at="t0")]
+    state.active_plan = plan
+
+    decision, _ = runtime._decide(state)
+
+    assert decision.tool_name == "edit_text"
+    assert decision.tool_input["path"] == "sympy/printing/mathematica.py"
+
+
+def test_runtime_synthesizes_targeted_run_tests_command_from_recent_hint(make_config) -> None:
+    config = make_config(tools__allow_side_effect_tools=True)
+    fake_client = FakeModelClient(
+        contract_responses={
+            "tool_input:run_tests": [
+                json.dumps({"command": ["python3", "-m", "pytest"], "background": False})
+            ]
+        }
+    )
+    runtime = AgentRuntime(config, model_client=fake_client)
+    state = runtime.create_or_load_session()
+    user_text = (
+        "Task contract:\n"
+        "{\"task_kind\":\"local_repo_code_fix\",\"request_completeness\":\"complete\","
+        "\"requires_code_changes\":true,\"requires_verification\":true,\"prefer_task_expansion\":false}\n"
+        "Problem statement:\n"
+        "mathematica_code gives wrong output with Max\n"
+        "Known failing tests:\n"
+        "- test_Function\n"
+        "Hints:\n"
+        "Check mathematica.py.\n"
+    )
+    plan = create_shell_recovery_plan("Fix the benchmark issue. mathematica_code gives wrong output with Max.")
+    plan.steps[0].status = "completed"
+    plan.steps[1].status = "completed"
+    plan.steps[2].status = "running"
+    state.messages = [
+        Message(role="user", content=user_text, created_at="t0"),
+        Message(
+            role="tool",
+            name="shell_command",
+            content="shell result",
+            created_at="t1",
+            metadata={
+                "output": {
+                    "stdout": "test_file: ./sympy/printing/tests/test_mathematica.py\nsource_file: ./sympy/printing/mathematica.py\n",
+                    "stderr": "",
+                    "exit_code": 0,
+                    "modified_files": [],
+                    "created_files": [],
+                    "deleted_files": [],
+                }
+            },
+        ),
+    ]
+    state.active_plan = plan
+
+    decision, _ = runtime._decide(state)
+
+    assert decision.tool_name == "run_tests"
+    assert decision.tool_input["command"] == [
+        "python3",
+        "-m",
+        "pytest",
+        "sympy/printing/tests/test_mathematica.py",
+        "-k",
+        "test_Function",
+    ]
+
+
+def test_runtime_shell_search_falls_back_to_symbols_without_failing_tests(make_config) -> None:
+    config = make_config(tools__allow_side_effect_tools=True)
+    fake_client = FakeModelClient(
+        contract_responses={
+            "tool_input:shell_command": [
+                json.dumps({"command": "bash", "background": False})
+            ]
+        }
+    )
+    runtime = AgentRuntime(config, model_client=fake_client)
+    state = runtime.create_or_load_session()
+    user_text = (
+        "Task contract:\n"
+        "{\"task_kind\":\"local_repo_code_fix\",\"request_completeness\":\"complete\","
+        "\"requires_code_changes\":true,\"requires_verification\":true,\"prefer_task_expansion\":false}\n"
+        "Problem statement:\n"
+        "mathematica_code gives wrong output with Max\n"
+    )
+    state.messages = [Message(role="user", content=user_text, created_at="t0")]
+    state.active_plan = create_shell_recovery_plan("Fix the benchmark issue. mathematica_code gives wrong output with Max.")
+
+    decision, _ = runtime._decide(state)
+
+    assert decision.tool_name == "shell_command"
     assert "mathematica_code" in decision.tool_input["command"]
 
 

@@ -3,6 +3,8 @@ from __future__ import annotations
 import subprocess
 import sys
 from pathlib import Path
+import builtins
+import sys as _sys
 
 import pytest
 
@@ -71,6 +73,7 @@ def test_render_prompt_includes_fail_to_pass_test_names() -> None:
 
     assert "tests/test_demo.py::test_fix" in prompt
     assert "\"task_kind\":\"local_repo_code_fix\"" in prompt
+    assert "{{" not in prompt
 
 
 def test_render_prompt_truncates_problem_and_hints_to_policy_budget() -> None:
@@ -89,6 +92,25 @@ def test_render_prompt_truncates_problem_and_hints_to_policy_budget() -> None:
 
     assert "...[truncated]" in prompt
     assert len(prompt) < 1800
+
+
+def test_empty_patch_retry_prompt_preserves_task_contract_and_failing_tests() -> None:
+    config = load_config()
+    prompt = swebench_local._render_empty_patch_retry_prompt(
+        {
+            "repo": "demo/repo",
+            "instance_id": "demo-1",
+            "problem_statement": "Fix the bug.",
+            "FAIL_TO_PASS": '["tests/test_demo.py::test_fix"]',
+            "hints_text": "Check parser.py",
+        },
+        config.external_benchmarks.agent_generation.empty_patch_retry_prompt,
+        config=config,
+    )
+
+    assert "\"task_kind\":\"local_repo_code_fix\"" in prompt
+    assert "tests/test_demo.py::test_fix" in prompt
+    assert "Check parser.py" in prompt
 
 
 def test_prepare_swebench_subset_wraps_dataset_load_failures(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> None:
@@ -111,6 +133,42 @@ def test_prepare_swebench_subset_wraps_dataset_load_failures(monkeypatch: pytest
         swebench_local.prepare_swebench_subset(
             benchmark_id="swebench_multilingual",
             dataset_name="SWE-bench/SWE-bench_Multilingual",
+            instance_ids=["demo__repo-1"],
+            output_path=tmp_path / "subset.json",
+            config=_DummyConfig(),
+        )
+
+
+def test_prepare_swebench_subset_reports_missing_optional_datasets_dependency(
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path: Path,
+) -> None:
+    for module_name in list(_sys.modules):
+        if module_name == "datasets" or module_name.startswith("datasets."):
+            monkeypatch.delitem(_sys.modules, module_name, raising=False)
+
+    real_import = builtins.__import__
+
+    def blocked_import(name, globals=None, locals=None, fromlist=(), level=0):
+        if name == "datasets" or name.startswith("datasets."):
+            raise ModuleNotFoundError("No module named 'datasets'")
+        return real_import(name, globals, locals, fromlist, level)
+
+    monkeypatch.setattr(builtins, "__import__", blocked_import)
+
+    class _DummyGeneration:
+        default_max_instances = 1
+
+    class _DummyExternal:
+        agent_generation = _DummyGeneration()
+
+    class _DummyConfig:
+        external_benchmarks = _DummyExternal()
+
+    with pytest.raises(swebench_local.LocalSwebenchFailure, match="optional 'datasets' package"):
+        swebench_local.prepare_swebench_subset(
+            benchmark_id="swebench_lite",
+            dataset_name="princeton-nlp/SWE-bench_Lite",
             instance_ids=["demo__repo-1"],
             output_path=tmp_path / "subset.json",
             config=_DummyConfig(),
@@ -156,7 +214,15 @@ def test_run_agent_turn_uses_real_agent_cli_with_workspace_scoped_env(
     assert kwargs["timeout"] == 42
     env = kwargs["env"]
     assert env["SWAAG__SESSIONS__ROOT"] == str(session_root)
-    assert env["SWAAG__MODEL__CONTEXT_LIMIT"] == str(config.external_benchmarks.agent_generation.agent_context_limit)
+    assert env["SWAAG__MODEL__CONTEXT_LIMIT"] == str(
+        min(config.model.context_limit, config.external_benchmarks.agent_generation.agent_context_limit)
+    )
+    assert env["SWAAG__MODEL__TIMEOUT_SECONDS"] == str(
+        config.external_benchmarks.agent_generation.model_timeout_seconds
+    )
+    assert env["SWAAG__MODEL__STRUCTURED_TIMEOUT_SECONDS"] == str(
+        config.external_benchmarks.agent_generation.model_structured_timeout_seconds
+    )
     assert env["SWAAG__TOOLS__READ_ROOTS"] == f"[\"{workspace}\"]"
     assert env["SWAAG__TOOLS__ALLOW_SIDE_EFFECT_TOOLS"] == "true"
     assert env["SWAAG__TOOLS__ALLOW_STATEFUL_TOOLS"] == "true"
@@ -205,3 +271,15 @@ def test_run_agent_turn_retries_retryable_structured_failure(
     assert observed_inputs[0] == "fix the task"
     assert "Benchmark recovery note:" in observed_inputs[1]
     assert "Retry from scratch." in prompt_text
+
+
+def test_real_agent_env_clamps_context_limit_to_server_truth(tmp_path: Path) -> None:
+    config = load_config()
+    env = swebench_local._real_agent_env(
+        workspace=tmp_path / "workspace",
+        session_root=tmp_path / "sessions",
+        config=config,
+        discovered_context_limit=1024,
+    )
+
+    assert env["SWAAG__MODEL__CONTEXT_LIMIT"] == "1024"

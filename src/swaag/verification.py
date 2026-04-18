@@ -211,7 +211,11 @@ class VerificationEngine:
         # perspective still runs for traceability, but it is advisory rather
         # than gating so generic expected_output placeholders do not create a
         # second contradictory semantic judge.
-        if step.kind in {"respond", "reasoning"} and step.verification_type != "llm_fallback":
+        if (
+            step.kind in {"respond", "reasoning"}
+            and step.verification_type != "llm_fallback"
+            and not self._uses_exact_assistant_match(step)
+        ):
             required.add("reviewer")
         return required
 
@@ -227,9 +231,23 @@ class VerificationEngine:
         latest = artifacts.latest_tool_result
         if latest is not None and latest.tool_name in {"read_file", "write_file", "read_text", "edit_text", "run_tests", "shell_command"}:
             perspectives.append(self._run_structural_perspective(state=state, artifacts=artifacts))
-        if step.kind in {"respond", "reasoning"} and artifacts.assistant_text.strip():
+        if (
+            step.kind in {"respond", "reasoning"}
+            and artifacts.assistant_text.strip()
+            and not self._uses_exact_assistant_match(step)
+        ):
             perspectives.append(self._run_reviewer_perspective(step=step, artifacts=artifacts))
         return perspectives
+
+    def _uses_exact_assistant_match(self, step: PlanStep) -> bool:
+        if step.kind not in {"respond", "reasoning"}:
+            return False
+        for check in step.verification_checks:
+            check_type = str(check.get("check_type", "")).strip()
+            actual_source = str(check.get("actual_source", "")).strip()
+            if check_type in {"exact_match", "string_match"} and actual_source == "assistant_text":
+                return bool(str(check.get("expected", "")).strip())
+        return False
 
     def _run_reviewer_perspective(
         self,
@@ -592,6 +610,15 @@ class VerificationEngine:
                 value = output.get(key)
                 if isinstance(value, list):
                     changed.extend(str(item) for item in value if str(item))
+            if not changed and latest is not None:
+                if latest.tool_name == "edit_text" and bool(output.get("changed")):
+                    path = output.get("path")
+                    if isinstance(path, str) and path.strip():
+                        changed.append(path)
+                if latest.tool_name == "write_file" and bool(output.get("written")):
+                    path = output.get("path")
+                    if isinstance(path, str) and path.strip():
+                        changed.append(path)
             return bool(changed), {"changed_files": changed}
         if check_type == "string_nonempty":
             actual = self._resolve_actual(check, artifacts=artifacts)

@@ -984,7 +984,11 @@ def _live_coding_definition(index: int) -> BenchmarkTaskDefinition:
         description="Live benchmark coding fix with deterministic unittest verification.",
         build=lambda workspace: _scenario(workspace, scripted=True),
         build_live=lambda workspace: _scenario(workspace, scripted=False),
-        difficulty="easy" if index == 1 else ("medium" if index in {2, 3} else "hard"),
+        difficulty=(
+            "easy"
+            if index == 1
+            else ("normal" if index == 2 else ("hard" if index == 3 else "extremely_hard"))
+        ),
         tags=[
             "live-subset",
             "coding",
@@ -1091,7 +1095,11 @@ def _live_file_edit_definition(index: int) -> BenchmarkTaskDefinition:
         description="Live benchmark exact file edit with deterministic content verification.",
         build=lambda workspace: _scenario(workspace, scripted=True),
         build_live=lambda workspace: _scenario(workspace, scripted=False),
-        difficulty="easy" if index == 1 else ("medium" if index in {2, 3} else "hard"),
+        difficulty=(
+            "extremely_easy"
+            if index == 1
+            else ("easy" if index == 2 else ("normal" if index == 3 else "hard"))
+        ),
         tags=[
             "live-subset",
             "file-edit",
@@ -1211,7 +1219,11 @@ def _live_reading_definition(index: int) -> BenchmarkTaskDefinition:
         description="Live benchmark exact file-reading extraction.",
         build=lambda workspace: _scenario(workspace, scripted=True),
         build_live=lambda workspace: _scenario(workspace, scripted=False),
-        difficulty="easy" if index == 1 else ("medium" if index in {2, 3} else "hard"),
+        difficulty=(
+            "extremely_easy"
+            if index == 1
+            else ("easy" if index == 2 else ("normal" if index == 3 else "hard"))
+        ),
         tags=[
             "live-subset",
             "reading",
@@ -1347,7 +1359,11 @@ def _live_multi_step_definition(index: int) -> BenchmarkTaskDefinition:
         description="Live benchmark read-compute-write task with deterministic file verification.",
         build=lambda workspace: _scenario(workspace, scripted=True),
         build_live=lambda workspace: _scenario(workspace, scripted=False),
-        difficulty="medium" if index in {1, 2} else "hard",
+        difficulty=(
+            "easy"
+            if index == 1
+            else ("normal" if index == 2 else ("hard" if index == 3 else "extremely_hard"))
+        ),
         tags=[
             "live-subset",
             "multi-step",
@@ -1416,7 +1432,11 @@ def _live_failure_definition(index: int) -> BenchmarkTaskDefinition:
         description="Live benchmark safe failure / not-done task.",
         build=lambda workspace: _scenario(workspace, scripted=True),
         build_live=lambda workspace: _scenario(workspace, scripted=False),
-        difficulty="easy" if index in {1, 2} else ("medium" if index == 3 else "hard"),
+        difficulty=(
+            "easy"
+            if index in {1, 2}
+            else ("normal" if index == 3 else ("hard" if index == 4 else "extremely_hard"))
+        ),
         tags=[
             "live-subset",
             "failure",
@@ -1505,7 +1525,11 @@ def _live_quality_definition(index: int) -> BenchmarkTaskDefinition:
         description="Live benchmark prompt-understanding / quality task.",
         build=lambda workspace: _scenario(workspace, scripted=True),
         build_live=lambda workspace: _scenario(workspace, scripted=False),
-        difficulty="easy" if index == 1 else ("medium" if index in {2, 4, 5} else "hard"),
+        difficulty=(
+            "extremely_easy"
+            if index == 1
+            else ("easy" if index == 2 else ("normal" if index == 3 else "hard"))
+        ),
         tags=[
             "live-subset",
             "quality",
@@ -1542,9 +1566,11 @@ LIVE_SUBSET_TASK_TYPE_MINIMUMS: dict[str, int] = {
 }
 
 LIVE_SUBSET_DIFFICULTY_MINIMUMS: dict[str, int] = {
-    "easy": 6,
-    "medium": 12,
-    "hard": 12,
+    "extremely_easy": 5,
+    "easy": 5,
+    "normal": 6,
+    "hard": 2,
+    "extremely_hard": 12,
 }
 
 LIVE_SUBSET_STRUCTURAL_MINIMUMS: dict[str, int] = {

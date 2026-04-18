@@ -6,7 +6,16 @@ from typing import Any
 import pytest
 
 from swaag.config import AgentConfig, load_config
-from swaag.testlanes import BENCHMARK_HEAVY_TEST_FILES, INTEGRATION_TEST_FILES, LIVE_TEST_FILES, SYSTEM_TEST_FILES, project_root
+from swaag.testlanes import (
+    AGENT_LOOP_REGRESSION_TEST_FILES,
+    BENCHMARK_HEAVY_TEST_FILES,
+    DETERMINISTIC_CORRECTNESS_TEST_FILES,
+    INTEGRATION_TEST_FILES,
+    LIVE_AGENT_EVALUATION_TEST_FILES,
+    LIVE_TEST_FILES,
+    SYSTEM_TEST_FILES,
+    project_root,
+)
 
 
 @pytest.fixture(autouse=True)
@@ -53,6 +62,12 @@ def pytest_collection_modifyitems(items: list[pytest.Item]) -> None:
         if item.get_closest_marker("integration"):
             item.add_marker(pytest.mark.integration)
             continue
+        if relative in LIVE_AGENT_EVALUATION_TEST_FILES:
+            item.add_marker(pytest.mark.live_agent_evaluation)
+        elif relative in AGENT_LOOP_REGRESSION_TEST_FILES:
+            item.add_marker(pytest.mark.agent_loop_regression)
+        elif relative in DETERMINISTIC_CORRECTNESS_TEST_FILES:
+            item.add_marker(pytest.mark.deterministic_correctness)
         if relative in BENCHMARK_HEAVY_TEST_FILES:
             item.add_marker(pytest.mark.benchmark_heavy)
             continue

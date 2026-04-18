@@ -10,6 +10,7 @@ from dataclasses import dataclass
 from pathlib import Path
 
 from swaag.config import load_config
+from swaag.fsops import write_text
 from swaag.model import LlamaCppClient, ModelClientError
 from swaag.types import ContractSpec
 from swaag.utils import stable_json_dumps
@@ -396,7 +397,7 @@ def _apply_edit(workspace: Path, *, relative_path: str, find: str, replace: str)
         updated = original.rstrip("\n") + "\n\n" + replace.rstrip("\n") + "\n"
     if updated == original:
         updated = original.rstrip("\n") + "\n\n" + replace.rstrip("\n") + "\n"
-    candidate.write_text(updated, encoding="utf-8")
+    write_text(candidate, updated, encoding="utf-8")
     return candidate
 
 

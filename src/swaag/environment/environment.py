@@ -18,6 +18,7 @@ from swaag.environment.workspace import WorkspaceManager
 from swaag.reader import SequentialReader
 from swaag.tools.base import ToolValidationError
 from swaag.types import DerivedFileWrite, SessionState, ToolExecutionResult, ToolGeneratedEvent
+from swaag.fsops import ensure_dir, write_text as _fsops_write_text
 from swaag.utils import stable_json_dumps, utc_now_iso
 
 if TYPE_CHECKING:
@@ -428,6 +429,7 @@ class AgentEnvironment:
                 {
                     "workspace_root": snapshot.root,
                     "cwd": snapshot.cwd,
+                    "snapshot_mode": "delta",
                     "files": snapshot.files,
                     "created_files": snapshot.created_files,
                     "modified_files": snapshot.modified_files,
@@ -522,7 +524,7 @@ class AgentEnvironment:
             },
         )
         before_snapshot_path = Path(self._process_artifacts_root()) / record.process_id / "before_snapshot.json"
-        before_snapshot_path.write_text(json.dumps(before), encoding="utf-8")
+        _fsops_write_text(before_snapshot_path, json.dumps(before), encoding="utf-8")
         record.metadata["before_snapshot_path"] = str(before_snapshot_path)
         record_payload = asdict(record)
         output = {
@@ -583,6 +585,7 @@ class AgentEnvironment:
                 {
                     "workspace_root": snapshot.root,
                     "cwd": snapshot.cwd,
+                    "snapshot_mode": "delta",
                     "files": snapshot.files,
                     "created_files": snapshot.created_files,
                     "modified_files": snapshot.modified_files,
@@ -797,5 +800,5 @@ class AgentEnvironment:
         if not root.is_absolute():
             root = (self.filesystem.workspace_root / root).resolve()
         target = root / self.session_state.session_id / "processes"
-        target.mkdir(parents=True, exist_ok=True)
+        ensure_dir(target)
         return target

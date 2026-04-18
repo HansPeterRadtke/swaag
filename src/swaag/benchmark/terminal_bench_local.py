@@ -15,6 +15,7 @@ from pathlib import Path
 from typing import Sequence
 
 from swaag.config import load_config
+from swaag.fsops import ensure_dir, write_bytes, write_text
 from swaag.utils import stable_json_dumps
 
 
@@ -58,17 +59,18 @@ def _ensure_compose_binary(cache_root: Path, *, timeout_seconds: int) -> Path:
     compose_binary = cache_root / "docker-compose"
     if compose_binary.exists():
         return compose_binary
-    cache_root.mkdir(parents=True, exist_ok=True)
+    ensure_dir(cache_root)
     with urllib.request.urlopen(_compose_download_url(), timeout=timeout_seconds) as response:
-        compose_binary.write_bytes(response.read())
+        write_bytes(compose_binary, response.read())
     compose_binary.chmod(compose_binary.stat().st_mode | stat.S_IXUSR | stat.S_IXGRP | stat.S_IXOTH)
     return compose_binary
 
 
 def _write_docker_wrapper(wrapper_dir: Path, compose_binary: Path) -> Path:
-    wrapper_dir.mkdir(parents=True, exist_ok=True)
+    ensure_dir(wrapper_dir)
     docker_wrapper = wrapper_dir / "docker"
-    docker_wrapper.write_text(
+    write_text(
+        docker_wrapper,
         "\n".join(
             [
                 "#!/usr/bin/env bash",
@@ -83,7 +85,6 @@ def _write_docker_wrapper(wrapper_dir: Path, compose_binary: Path) -> Path:
                 "",
             ]
         ),
-        encoding="utf-8",
     )
     docker_wrapper.chmod(docker_wrapper.stat().st_mode | stat.S_IXUSR | stat.S_IXGRP | stat.S_IXOTH)
     return docker_wrapper
@@ -203,7 +204,7 @@ def _write_report(output_path: Path, *, command: list[str], compose_mode: str, e
         },
     }
     report_path = output_path / "terminal_bench_real_agent.json"
-    report_path.write_text(stable_json_dumps(payload, indent=2), encoding="utf-8")
+    write_text(report_path, stable_json_dumps(payload, indent=2), encoding="utf-8")
     print(f"Report written to {report_path.name}")
 
 
@@ -220,7 +221,7 @@ def _run_tb(tb_args: Sequence[str]) -> int:
             output_path = Path(tb_args[index + 1]).expanduser().resolve()
             break
     if output_path is not None:
-        output_path.mkdir(parents=True, exist_ok=True)
+        ensure_dir(output_path)
         _write_report(output_path, command=command, compose_mode=compose_mode, exit_code=completed.returncode)
     return completed.returncode
 

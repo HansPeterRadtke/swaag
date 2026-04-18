@@ -120,3 +120,69 @@ def test_context_builder_compacts_duplicate_workspace_root_and_cwd(make_config) 
     assert "Workspace: /tmp/workspace" in environment_component.text
     assert "Workspace root:" not in environment_component.text
     assert "Workspace cwd:" not in environment_component.text
+
+
+def test_minimal_frontend_context_omits_heavy_sections(make_config) -> None:
+    config = make_config()
+    state = SessionState(
+        session_id="s1",
+        created_at="t0",
+        updated_at="t0",
+        config_fingerprint="cfg",
+        model_base_url="http://example.test",
+        messages=[Message(role="user", content="Fix the benchmark task with detailed context.", created_at="t1")],
+    )
+    state.project_state = ProjectState(
+        expected_artifacts=["artifact-a"],
+        pending_artifacts=["artifact-b"],
+        completed_artifacts=["artifact-c"],
+    )
+    state.environment = EnvironmentState(workspace=WorkspaceState(root="/tmp/workspace", cwd="/tmp/workspace"))
+    bundle = build_context(config, state, ConservativeEstimator(), goal="Fix the benchmark task", call_kind="task_decision")
+
+    component_names = [component.name for component in bundle.components if component.text]
+    assert component_names
+    assert "environment" in component_names
+    assert "working_memory" not in component_names
+    assert "project_state" not in component_names
+    assert "recent_results" not in component_names
+
+
+def test_tool_input_context_uses_lightweight_bundle(make_config) -> None:
+    config = make_config()
+    state = SessionState(
+        session_id="s1",
+        created_at="t0",
+        updated_at="t0",
+        config_fingerprint="cfg",
+        model_base_url="http://example.test",
+        messages=[Message(role="user", content="Fix the file.", created_at="t1")],
+    )
+    state.project_state = ProjectState(expected_artifacts=["artifact-a"])
+    bundle = build_context(config, state, ConservativeEstimator(), goal="Fix the file", call_kind="tool_input")
+
+    assert bundle.history_messages == []
+    component_names = [component.name for component in bundle.components if component.text]
+    assert "project_state" in component_names
+    assert "working_memory" in component_names
+    assert "recent_results" not in component_names
+
+
+def test_tool_input_context_omits_last_shell_command_from_environment(make_config) -> None:
+    config = make_config()
+    state = SessionState(
+        session_id="s1",
+        created_at="t0",
+        updated_at="t0",
+        config_fingerprint="cfg",
+        model_base_url="http://example.test",
+        messages=[Message(role="user", content="Fix the file.", created_at="t1")],
+    )
+    state.environment.workspace.root = "/tmp/workspace"
+    state.environment.workspace.cwd = "/tmp/workspace"
+    state.environment.shell.last_command = "python3 - <<'PY' ... very long command ..."
+    bundle = build_context(config, state, ConservativeEstimator(), goal="Fix the file", call_kind="tool_input")
+
+    environment = next(component for component in bundle.components if component.name == "environment")
+    assert "Workspace: /tmp/workspace" in environment.text
+    assert "Last shell command:" not in environment.text

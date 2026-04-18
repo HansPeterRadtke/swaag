@@ -26,4 +26,10 @@ def test_benchmark_catalog_is_large_diverse_and_valid() -> None:
     assert len(ids) == len(set(ids))
     assert all(task.setup_instructions for task in tasks)
     assert all(task.tags for task in tasks)
-    assert {task.difficulty for task in tasks} == {"easy", "medium", "hard"}
+    assert {task.difficulty for task in tasks} == {
+        "extremely_easy",
+        "easy",
+        "normal",
+        "hard",
+        "extremely_hard",
+    }

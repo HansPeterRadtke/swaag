@@ -131,11 +131,27 @@ class PromptBuilder:
                 "Return a single non-interactive shell command.\n"
                 "Do not return `bash`, `sh`, `python`, or `python3` by themselves.\n"
                 "The command must perform the current step and print concise stdout evidence.\n"
+                "The command must be directly executable now with no manual substitution.\n"
+                "Do not use placeholders such as `<file>`, `<patch_file>`, `/path/to/...`, `...`, or TODO markers.\n"
+                "When editing code, prefer a concrete `python3 - <<'PY'` script that opens a real repo-relative path and writes the change.\n"
+                "If you use a heredoc, put the script body on following lines and end with `PY` on its own line.\n"
             )
         elif tool_name == "run_tests":
             extra_instruction = (
                 "Return a single non-interactive test command.\n"
                 "Prefer the narrowest relevant test invocation.\n"
+            )
+        elif tool_name == "edit_text":
+            extra_instruction = (
+                "\n"
+                "Return arguments for one concrete source-file edit.\n"
+                "Set `path` to a real file path, never `.` or a directory.\n"
+                "Base `pattern` and `replacement` on the actual source preview in the context, not on the issue text.\n"
+                "For `replace_pattern_once` or `replace_pattern_all`, include both `pattern` and `replacement`.\n"
+                "If one nearby source line can anchor the fix, replace that short anchor and insert the new code around it instead of replacing a large block.\n"
+                "When adding one missing mapping or handler, use one existing nearby entry line as the full `pattern`, and set `replacement` to that same line plus the new adjacent line.\n"
+                "If the preview shows a mapping table or dispatch table, patch that table directly instead of unrelated fallback return code.\n"
+                "Prefer the smallest exact source change that fixes the bug.\n"
             )
         user_components = [
             PromptComponent(name="history", category="history", text=f"Conversation history:\n{history_block}\n\n"),

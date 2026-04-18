@@ -12,7 +12,7 @@ import pytest
 
 from swaag.events import EventSchemaError
 from swaag.environment.environment import AgentEnvironment
-from swaag.history import HistoryCorruptionError, replay_history
+from swaag.history import HistoryCorruptionError, _IGNORED_REBUILD_EVENT_TYPES, _STATEFUL_REBUILD_EVENT_TYPES, replay_history
 from swaag.runtime import AgentRuntime
 
 from tests.helpers import FakeModelClient, plan_response, plan_step
@@ -193,6 +193,34 @@ def test_replay_history_function_uses_history_file_only(make_config, tmp_path: P
     history_file = runtime.history.history_path(result.session_id)
     rebuilt = replay_history(history_file)
     assert asdict(rebuilt) == asdict(state_before)
+
+
+def test_rebuild_ignores_action_selection_resolution_event(make_config) -> None:
+    config = make_config()
+    runtime = AgentRuntime(config, model_client=FakeModelClient(responses=[]))
+    state = runtime.create_or_load_session()
+
+    runtime.history.record_event(
+        state,
+        "action_selection_resolved",
+        {
+            "selected_action": "execute_step",
+            "candidates": ["retry_step", "execute_step"],
+            "source": "model",
+        },
+    )
+
+    rebuilt = runtime.history.rebuild_from_history(state.session_id)
+
+    assert rebuilt.event_count == state.event_count
+    assert rebuilt.session_id == state.session_id
+
+
+def test_rebuild_event_sets_cover_allowed_event_types() -> None:
+    from swaag.events import ALLOWED_EVENT_TYPES
+
+    assert _STATEFUL_REBUILD_EVENT_TYPES.isdisjoint(_IGNORED_REBUILD_EVENT_TYPES)
+    assert _STATEFUL_REBUILD_EVENT_TYPES | _IGNORED_REBUILD_EVENT_TYPES == ALLOWED_EVENT_TYPES
 
 
 def test_history_store_does_not_create_root_until_first_event(tmp_path: Path) -> None:

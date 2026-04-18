@@ -376,6 +376,40 @@ def test_scripted_benchmark_client_skips_tool_decision_payload_for_plain_text_an
     assert completion.text == "4"
 
 
+def test_scripted_benchmark_client_auto_verification_uses_criterion_names() -> None:
+    client = ScriptedBenchmarkClient()
+
+    completion = client.send_completion(
+        {
+            "contract": "verification",
+            "prompt": (
+                "Candidate result:\nfixed-01\n\n"
+                "Criteria:\n"
+                '[{"name":"satisfies_done_condition","criterion":"assistant_response_nonempty"},'
+                '{"name":"meets_success_criteria","criterion":"The assistant replies fixed-01."}]\n\n'
+            ),
+        },
+        timeout_seconds=5,
+    )
+
+    payload = json.loads(completion.text)
+
+    assert payload == {
+        "criteria": [
+            {
+                "name": "satisfies_done_condition",
+                "passed": True,
+                "evidence": "candidate result is non-empty",
+            },
+            {
+                "name": "meets_success_criteria",
+                "passed": True,
+                "evidence": "candidate result is non-empty",
+            },
+        ]
+    }
+
+
 def test_scripted_benchmark_runs_do_not_use_profile_optimized_tool_input_calls(tmp_path: Path) -> None:
     output_dir = tmp_path / "benchmark"
     report = run_benchmarks(

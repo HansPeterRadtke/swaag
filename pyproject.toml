@@ -74,6 +74,9 @@ pythonpath = ["src"]
 testpaths = ["tests"]
 addopts = "-m \"not integration and not live and not benchmark_heavy\""
 markers = [
+  "deterministic_correctness: mechanical correctness lane with no live LLM dependency",
+  "agent_loop_regression: replayed or scripted full-agent loop regression lane",
+  "live_agent_evaluation: live full-agent quality lane with a real LLM in the loop",
   "fast: cheap deterministic tests for the fast lane",
   "system: broader local runtime/orchestration tests for the system lane",
   "benchmark_heavy: large scripted benchmark tests kept out of the normal local pytest path",

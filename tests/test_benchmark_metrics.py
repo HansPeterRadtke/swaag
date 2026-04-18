@@ -49,7 +49,7 @@ def test_compute_benchmark_metrics_tracks_false_positives_and_understanding() ->
     metrics = compute_benchmark_metrics(
         [
             _result(task_id="coding_ok", task_type="coding", difficulty="easy", success=True, false_positive=False, expected_outcome="success"),
-            _result(task_id="reading_fp", task_type="reading", difficulty="medium", success=False, false_positive=True, expected_outcome="success", failure_category="evaluator_mistake", verification_failures=0),
+            _result(task_id="reading_fp", task_type="reading", difficulty="normal", success=False, false_positive=True, expected_outcome="success", failure_category="evaluator_mistake", verification_failures=0),
             _result(task_id="failure_ok", task_type="failure", difficulty="hard", success=True, false_positive=False, expected_outcome="expected_failure", failure_category=None),
         ]
     )

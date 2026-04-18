@@ -50,10 +50,14 @@ class WorkspaceManager:
 
     def snapshot(self, *, before: dict[str, str], after: dict[str, str], cwd: str) -> WorkspaceSnapshot:
         delta = self.filesystem.compute_delta(before, after)
+        changed_files = {
+            **delta["created"],
+            **delta["modified"],
+        }
         return WorkspaceSnapshot(
             root=str(self.filesystem.workspace_root),
             cwd=cwd,
-            files=after,
+            files=changed_files,
             created_files=list(delta["created_files"]),
             modified_files=list(delta["modified_files"]),
             deleted_files=list(delta["deleted_files"]),

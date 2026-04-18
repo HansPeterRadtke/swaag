@@ -9,6 +9,7 @@ from dataclasses import dataclass
 from pathlib import Path
 
 from swaag.environment.state import ProcessRecord
+from swaag.fsops import ensure_dir, write_text as _fsops_write_text
 from swaag.utils import new_id, utc_now_iso
 
 
@@ -167,7 +168,7 @@ class ProcessManager:
     ) -> ProcessRecord:
         process_id = new_id("proc")
         process_dir = artifacts_dir / process_id
-        process_dir.mkdir(parents=True, exist_ok=True)
+        ensure_dir(process_dir)
         stdout_path = process_dir / "stdout.txt"
         stderr_path = process_dir / "stderr.txt"
         status_path = process_dir / "status.json"
@@ -181,7 +182,7 @@ class ProcessManager:
             "stderr_path": str(stderr_path),
             "status_path": str(status_path),
         }
-        control_path.write_text(json.dumps(control), encoding="utf-8")
+        _fsops_write_text(control_path, json.dumps(control), encoding="utf-8")
         started_at = utc_now_iso()
         proc = subprocess.Popen(
             [self._python_executable, "-c", _BACKGROUND_WRAPPER, str(control_path)],
@@ -296,7 +297,7 @@ class ProcessManager:
     def _write_status_payload(self, record: ProcessRecord, payload: dict[str, object]) -> None:
         if not record.status_path:
             return
-        Path(record.status_path).write_text(json.dumps(payload), encoding="utf-8")
+        _fsops_write_text(record.status_path, json.dumps(payload), encoding="utf-8")
 
     def _pid_alive(self, pid: int | None) -> bool:
         if pid is None:

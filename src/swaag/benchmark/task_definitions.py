@@ -17,8 +17,52 @@ from swaag.types import CompletionResult, ContractSpec, DecisionOutcome, PromptA
 from swaag.utils import stable_json_dumps
 
 BenchmarkTaskType = Literal["coding", "file_edit", "reading", "multi_step", "failure", "quality"]
-BenchmarkDifficulty = Literal["easy", "medium", "hard"]
+BenchmarkDifficulty = Literal["extremely_easy", "easy", "normal", "hard", "extremely_hard"]
 ExpectedOutcome = Literal["success", "expected_failure"]
+
+BENCHMARK_DIFFICULTY_ORDER: tuple[BenchmarkDifficulty, ...] = (
+    "extremely_easy",
+    "easy",
+    "normal",
+    "hard",
+    "extremely_hard",
+)
+_EXPLICIT_BENCHMARK_DIFFICULTIES: frozenset[str] = frozenset({"extremely_easy", "normal", "extremely_hard"})
+
+
+def normalize_benchmark_difficulty(
+    raw: str,
+    *,
+    task_type: BenchmarkTaskType,
+    tags: list[str] | tuple[str, ...] | set[str],
+) -> BenchmarkDifficulty:
+    value = str(raw).strip()
+    if value in _EXPLICIT_BENCHMARK_DIFFICULTIES:
+        return value  # type: ignore[return-value]
+    tag_set = {str(item) for item in tags}
+    if value == "easy":
+        if task_type in {"reading", "quality"} or {"prompt-understanding", "structured", "exact"} & tag_set:
+            return "extremely_easy"
+        return "easy"
+    if value == "medium":
+        if task_type in {"failure"} or {"environment", "verification-edge", "ambiguity", "long-run", "recovery"} & tag_set:
+            return "hard"
+        if task_type in {"reading", "quality"} and {"reread", "structured", "exact"} & tag_set:
+            return "easy"
+        return "normal"
+    if value == "hard":
+        if task_type in {"multi_step", "failure"} or {
+            "environment",
+            "run-tests",
+            "multifile",
+            "long-run",
+            "recovery",
+            "repeated_action",
+            "repeated-action",
+        } & tag_set:
+            return "extremely_hard"
+        return "hard"
+    raise ValueError(f"Unsupported benchmark difficulty {raw!r}")
 
 
 @dataclass(slots=True)
@@ -86,10 +130,17 @@ class BenchmarkTaskDefinition:
     description: str
     build: Callable[[Path], TaskScenario]
     build_live: Callable[[Path], TaskScenario] | None = None
-    difficulty: BenchmarkDifficulty = "medium"
+    difficulty: str = "normal"
     tags: list[str] = field(default_factory=list)
     setup_instructions: list[str] = field(default_factory=list)
     config_overrides: dict[str, Any] = field(default_factory=dict)
+
+    def __post_init__(self) -> None:
+        self.difficulty = normalize_benchmark_difficulty(
+            self.difficulty,
+            task_type=self.task_type,
+            tags=self.tags,
+        )
 
     def create(self, output_root: Path, *, live_mode: bool = False) -> TaskScenario:
         workspace = output_root / self.task_id
@@ -308,7 +359,7 @@ class ScriptedBenchmarkClient:
                 {
                     "criteria": [
                         {
-                            "name": criterion,
+                            "name": str(criterion.get("name", "")).strip() if isinstance(criterion, dict) else str(criterion),
                             "passed": bool(candidate.strip()),
                             "evidence": "candidate result is non-empty",
                         }
@@ -1849,6 +1900,10 @@ def validate_benchmark_catalog(tasks: list[BenchmarkTaskDefinition]) -> None:
     realistic_multifile = [task for task in tasks if {"realistic-code", "multifile"}.issubset(set(task.tags))]
     if len(realistic_multifile) < 50:
         raise ValueError(f"Benchmark catalog must include at least 50 realistic multi-file tasks, found {len(realistic_multifile)}")
+    difficulty_counts = Counter(task.difficulty for task in tasks)
+    missing_difficulties = [difficulty for difficulty in BENCHMARK_DIFFICULTY_ORDER if difficulty_counts.get(difficulty, 0) == 0]
+    if missing_difficulties:
+        raise ValueError(f"Benchmark catalog must cover all difficulty tiers, missing: {missing_difficulties}")
 
     for task in tasks:
         if not task.description.strip():

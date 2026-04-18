@@ -55,6 +55,50 @@ def test_environment_shell_session_persists_cwd_and_env(make_config, tmp_path: P
     assert [event.event_type for event in events].count("process_completed") == 2
 
 
+def test_shell_command_output_is_trimmed_to_capture_limit(make_config) -> None:
+    config = make_config(
+        tools__allow_side_effect_tools=True,
+        tools__allow_stateful_tools=True,
+        environment__max_capture_chars=16,
+    )
+    runtime = AgentRuntime(config, model_client=FakeModelClient())
+
+    run = runtime.execute_tool_once(
+        "shell_command",
+        {"command": "python3 - <<'PY'\nimport string\nprint(string.ascii_lowercase)\nPY"},
+    )
+
+    assert run.tool_result is not None
+    assert run.tool_result.output["stdout"] == "abcdefghijklmnop"
+    assert "abcdefghijklmnop" in run.tool_result.display_text
+    assert "qrstuvwxyz" not in run.tool_result.display_text
+
+
+def test_shell_command_invalid_syntax_preserves_session_state(make_config, tmp_path: Path) -> None:
+    config = make_config(
+        tools__allow_side_effect_tools=True,
+        tools__allow_stateful_tools=True,
+    )
+    runtime = AgentRuntime(config, model_client=FakeModelClient())
+
+    run = runtime.execute_tool_once(
+        "shell_command",
+        {"command": "git apply -v <patch_file> && git diff --cached"},
+    )
+
+    assert run.tool_result is None
+    events = runtime.history.read_history(run.session_id)
+    error_event = next(
+        event
+        for event in events
+        if event.event_type == "tool_error" and event.payload.get("tool_name") == "shell_command"
+    )
+    assert "placeholder" in error_event.payload["error"]
+
+    rebuilt = runtime.history.rebuild_from_history(run.session_id)
+    assert rebuilt.environment.shell.cwd == runtime.create_or_load_session(run.session_id).environment.shell.cwd
+
+
 def test_environment_file_changes_are_visible_across_steps_and_replay(make_config, tmp_path: Path) -> None:
     config = make_config(
         tools__allow_side_effect_tools=True,
@@ -78,6 +122,35 @@ def test_environment_file_changes_are_visible_across_steps_and_replay(make_confi
     rebuilt = runtime.history.rebuild_from_history(write_run.session_id)
     assert rebuilt.environment.workspace.known_files["notes/result.txt"] == "ready\n"
     assert "notes/result.txt" in rebuilt.environment.workspace.listed_files
+
+
+def test_shell_command_workspace_snapshot_records_only_delta(make_config, tmp_path: Path) -> None:
+    workspace = tmp_path / "workspace"
+    workspace.mkdir()
+    untouched = workspace / "untouched.txt"
+    touched = workspace / "touched.txt"
+    untouched.write_text("keep\n", encoding="utf-8")
+    touched.write_text("before\n", encoding="utf-8")
+    config = make_config(
+        tools__allow_side_effect_tools=True,
+        tools__allow_stateful_tools=True,
+        tools__read_roots=[workspace],
+    )
+    runtime = AgentRuntime(config, model_client=FakeModelClient())
+
+    run = runtime.execute_tool_once(
+        "shell_command",
+        {"command": "python3 - <<'PY'\nfrom pathlib import Path\nPath('touched.txt').write_text('after\\n', encoding='utf-8')\nPY"},
+    )
+
+    events = runtime.history.read_history(run.session_id)
+    snapshot_event = next(event for event in events if event.event_type == "workspace_snapshot")
+
+    assert snapshot_event.payload["snapshot_mode"] == "delta"
+    assert snapshot_event.payload["files"] == {"touched.txt": "after\n"}
+    rebuilt = runtime.history.rebuild_from_history(run.session_id)
+    assert rebuilt.environment.workspace.known_files["touched.txt"] == "after\n"
+    assert "untouched.txt" not in rebuilt.environment.workspace.known_files
 
 
 def test_context_builder_selects_relevant_environment_files(make_config, tmp_path: Path) -> None:

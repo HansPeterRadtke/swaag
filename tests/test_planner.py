@@ -71,13 +71,17 @@ def test_plan_from_payload_rejects_invalid_tool(make_config) -> None:
 def test_create_shell_recovery_plan_builds_read_write_respond_flow() -> None:
     plan = create_shell_recovery_plan("Fix the failing repository test.")
 
-    assert [step.kind for step in plan.steps] == ["read", "write", "respond"]
-    assert [step.expected_tool for step in plan.steps[:-1]] == ["shell_command", "shell_command"]
+    assert [step.kind for step in plan.steps] == ["read", "write", "tool", "respond"]
+    assert [step.expected_tool for step in plan.steps[:-1]] == ["shell_command", "edit_text", "run_tests"]
     assert plan.steps[-1].expected_tool is None
     assert plan.steps[1].depends_on == [plan.steps[0].step_id]
     assert plan.steps[2].depends_on == [plan.steps[1].step_id]
+    assert plan.steps[3].depends_on == [plan.steps[2].step_id]
     assert any(check["name"] == "command_exit_zero" for check in plan.steps[0].verification_checks)
-    assert any(check["name"] == "verification_stdout_nonempty" for check in plan.steps[1].verification_checks)
+    assert any(check["name"] == "tool_files_changed" for check in plan.steps[1].verification_checks)
+    assert any(check["name"] == "command_exit_zero" for check in plan.steps[2].verification_checks)
+    assert "exact failing test name first" in plan.steps[0].input_text
+    assert "Prefer replace_pattern_once or replace_range" in plan.steps[1].input_text
 
 
 def test_plan_from_payload_derives_missing_verification_contract() -> None:

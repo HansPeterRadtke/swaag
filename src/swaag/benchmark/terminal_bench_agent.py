@@ -16,6 +16,7 @@ from terminal_bench.agents.base_agent import AgentResult, BaseAgent
 from terminal_bench.agents.failure_mode import FailureMode
 
 from swaag.config import load_config
+from swaag.fsops import ensure_dir, write_text
 
 
 class RealAgentTerminalBenchAgent(BaseAgent):
@@ -32,7 +33,7 @@ class RealAgentTerminalBenchAgent(BaseAgent):
         if source.is_dir():
             shutil.copytree(source, destination, dirs_exist_ok=True)
         else:
-            destination.parent.mkdir(parents=True, exist_ok=True)
+            ensure_dir(destination.parent)
             shutil.copy2(source, destination)
 
     @staticmethod
@@ -75,7 +76,8 @@ class RealAgentTerminalBenchAgent(BaseAgent):
             source = module_path.parent if module_path.name == "__init__.py" else module_path
             target = site_root / source.name
             self._copy_tree(source, target)
-        (bundle_root / "instruction.txt").write_text(
+        write_text(
+            bundle_root / "instruction.txt",
             self._render_instruction(
                 "You are running inside a local Terminal-Bench task container.\n"
                 "Complete the task in the current workspace.\n"
@@ -83,9 +85,9 @@ class RealAgentTerminalBenchAgent(BaseAgent):
                 "Do not ask for clarification.\n\n"
                 f"Task instruction:\n{instruction.strip()}\n"
             ),
-            encoding="utf-8",
         )
-        (bundle_root / "run_swaag.sh").write_text(
+        write_text(
+            bundle_root / "run_swaag.sh",
             "\n".join(
                 [
                     "#!/usr/bin/env bash",
@@ -108,7 +110,6 @@ class RealAgentTerminalBenchAgent(BaseAgent):
                     "",
                 ]
             ),
-            encoding="utf-8",
         )
         (bundle_root / "run_swaag.sh").chmod(0o755)
         return bundle_root

@@ -41,6 +41,7 @@ def render_benchmark_report(report) -> str:
             f"- Successful tasks: `{summary.successful_tasks}`",
             f"- Failed tasks: `{summary.failed_tasks}`",
             f"- False positives: `{summary.false_positives}`",
+            f"- Average task score: `{summary.average_task_score_percent:.2f}%`",
             "",
             "## Success Rates By Task Type",
             "",
@@ -48,6 +49,17 @@ def render_benchmark_report(report) -> str:
     )
     for task_type, rate in summary.success_rate_by_type.items():
         lines.append(f"- `{task_type}`: `{rate:.2%}`")
+    lines.append("")
+    lines.extend(["## Score By Difficulty Tier", ""])
+    if summary.score_by_difficulty:
+        for difficulty, percent in summary.score_by_difficulty.items():
+            lines.append(f"- `{difficulty}`: `{percent:.2f}%`")
+    else:
+        lines.append("- none")
+    lines.append("")
+    lines.extend(["## Task Score Weights", ""])
+    for key, value in getattr(report, "score_weights", {}).items():
+        lines.append(f"- `{key}`: `{value:.1f}`")
     lines.append("")
     lines.extend(_kv_lines("Success Rates By Difficulty", metrics.success_by_difficulty))
     lines.extend(_kv_lines("Primary Metrics", metrics.primary))
@@ -129,6 +141,30 @@ def render_benchmark_report(report) -> str:
                     "",
                 ]
             )
+    else:
+        lines.append("- none")
+        lines.append("")
+
+    lines.extend(["## Per-Task Scores", ""])
+    if report.tasks:
+        for item in report.tasks:
+            lines.extend(
+                [
+                    f"### {item.task_id}",
+                    f"- Type: `{item.task_type}`",
+                    f"- Difficulty: `{item.difficulty}`",
+                    f"- Score: `{item.score_percent:.2f}%`",
+                    f"- Success: `{item.success}`",
+                ]
+            )
+            if item.rubric_breakdown:
+                lines.append("- Rubric:")
+                for rubric_name, rubric in item.rubric_breakdown.items():
+                    lines.append(
+                        f"  - `{rubric_name}`: `{float(rubric.get('earned', 0.0)):.2f}/{float(rubric.get('weight', 0.0)):.2f}` "
+                        f"(`{float(rubric.get('percent', 0.0)):.2f}%`)"
+                    )
+            lines.append("")
     else:
         lines.append("- none")
         lines.append("")
