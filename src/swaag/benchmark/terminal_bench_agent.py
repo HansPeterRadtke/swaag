@@ -12,11 +12,51 @@ import charset_normalizer
 import idna
 import requests
 import urllib3
-from terminal_bench.agents.base_agent import AgentResult, BaseAgent
-from terminal_bench.agents.failure_mode import FailureMode
+
+try:
+    from terminal_bench.agents.base_agent import AgentResult, BaseAgent
+    from terminal_bench.agents.failure_mode import FailureMode
+
+    _TERMINAL_BENCH_AVAILABLE = True
+    _TERMINAL_BENCH_IMPORT_ERROR: Exception | None = None
+except ModuleNotFoundError as _tb_err:
+    _TERMINAL_BENCH_AVAILABLE = False
+    _TERMINAL_BENCH_IMPORT_ERROR = _tb_err
+
+    # Minimal placeholders so this module can be imported without terminal_bench.
+    class BaseAgent:  # type: ignore[no-redef]
+        pass
+
+    class AgentResult:  # type: ignore[no-redef]
+        def __init__(
+            self,
+            *,
+            total_input_tokens: int = 0,
+            total_output_tokens: int = 0,
+            failure_mode: object = None,
+        ) -> None:
+            self.total_input_tokens = total_input_tokens
+            self.total_output_tokens = total_output_tokens
+            self.failure_mode = failure_mode
+
+    class FailureMode:  # type: ignore[no-redef]
+        NONE = "none"
+        AGENT_TIMEOUT = "agent_timeout"
+        UNKNOWN_AGENT_ERROR = "unknown_agent_error"
+
 
 from swaag.config import load_config
 from swaag.fsops import ensure_dir, write_text
+
+
+def _require_terminal_bench() -> None:
+    """Raise a clear error if terminal_bench optional dependency is not installed."""
+    if not _TERMINAL_BENCH_AVAILABLE:
+        raise RuntimeError(
+            "terminal_bench is an optional dependency required for Terminal-Bench execution. "
+            "Install it with: pip install 'swaag[official-benchmarks]'\n"
+            f"Original import error: {_TERMINAL_BENCH_IMPORT_ERROR}"
+        )
 
 
 class RealAgentTerminalBenchAgent(BaseAgent):
@@ -115,6 +155,7 @@ class RealAgentTerminalBenchAgent(BaseAgent):
         return bundle_root
 
     def perform_task(self, instruction: str, session, logging_dir: Path | None = None) -> AgentResult:
+        _require_terminal_bench()
         bundle_root = self._build_bundle(instruction)
         try:
             session.copy_to_container(bundle_root, container_dir="/opt")

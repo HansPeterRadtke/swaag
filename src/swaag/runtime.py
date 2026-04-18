@@ -5349,9 +5349,27 @@ class AgentRuntime:
             candidate = match.group(1).strip()
             if len(candidate) >= 2 and candidate[0] == candidate[-1] and candidate[0] in {"'", '"', "`"}:
                 candidate = candidate[1:-1].strip()
-            if candidate:
+            if self._looks_like_literal_exact_reply(candidate):
                 return candidate
         return None
+
+    def _looks_like_literal_exact_reply(self, candidate: str) -> bool:
+        value = candidate.strip()
+        if not value:
+            return False
+        lowered = value.lower()
+        if lowered.startswith(("the ", "a ", "an ", "this ", "that ", "these ", "those ")):
+            return False
+        if "..." in value:
+            return False
+        if any(fragment in lowered for fragment in ("full text", "json shape", "line ", "only the ", "with keys")):
+            return False
+        if value.startswith("{") or value.startswith("["):
+            return True
+        tokens = value.split()
+        if len(tokens) > 4:
+            return False
+        return True
 
     def _apply_exact_reply_requirement_to_plan(self, plan: Plan, *, goal: str) -> Plan:
         exact_reply = self._extract_unconditional_exact_reply(goal)

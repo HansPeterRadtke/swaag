@@ -37,6 +37,7 @@ _BACKGROUND_WRAPPER = r"""
 import json
 import subprocess
 import sys
+import traceback
 from datetime import datetime, timezone
 from pathlib import Path
 
@@ -46,24 +47,40 @@ def _now() -> str:
 
 
 def _write_status(path: Path, payload: dict) -> None:
-    path.write_text(json.dumps(payload), encoding="utf-8")
+    tmp = Path(str(path) + ".tmp")
+    tmp.write_text(json.dumps(payload), encoding="utf-8")
+    tmp.replace(path)
 
 
-control_path = Path(sys.argv[1])
-control = json.loads(control_path.read_text(encoding="utf-8"))
-stdout_path = Path(control["stdout_path"])
-stderr_path = Path(control["stderr_path"])
-status_path = Path(control["status_path"])
+# Top-level bootstrap guard: catch any failure before or during subprocess.run.
+status_path = None
+stderr_path = None
 started_at = _now()
-timeout_seconds = int(control["timeout_seconds"])
 status_payload = {
     "status": "failed",
     "return_code": None,
     "started_at": started_at,
     "ended_at": _now(),
 }
+
 try:
-    with stdout_path.open("w", encoding="utf-8") as stdout_handle, stderr_path.open("w", encoding="utf-8") as stderr_handle:
+    control_path = Path(sys.argv[1])
+    control = json.loads(control_path.read_text(encoding="utf-8"))
+    stdout_path = Path(control["stdout_path"])
+    stderr_path = Path(control["stderr_path"])
+    status_path = Path(control["status_path"])
+    timeout_seconds = int(control["timeout_seconds"])
+
+    # Write initial "running" status so polling can tell bootstrap succeeded.
+    _write_status(status_path, {
+        "status": "running",
+        "return_code": None,
+        "started_at": started_at,
+        "ended_at": "",
+    })
+
+    with stdout_path.open("w", encoding="utf-8") as stdout_handle, \
+         stderr_path.open("w", encoding="utf-8") as stderr_handle:
         try:
             completed = subprocess.run(
                 control["command"],
@@ -91,14 +108,36 @@ try:
             }
         except BaseException as exc:
             stderr_handle.write(f"{exc.__class__.__name__}: {exc}\n")
+            stderr_handle.write(traceback.format_exc())
             status_payload = {
                 "status": "failed",
                 "return_code": None,
                 "started_at": started_at,
                 "ended_at": _now(),
             }
+
+except BaseException as bootstrap_exc:
+    # Bootstrap failed before or during file setup.
+    # Try to write a failure status and error text to known paths.
+    status_payload = {
+        "status": "failed",
+        "return_code": None,
+        "started_at": started_at,
+        "ended_at": _now(),
+    }
+    err_text = f"bootstrap error: {bootstrap_exc.__class__.__name__}: {bootstrap_exc}\n{traceback.format_exc()}"
+    if stderr_path is not None:
+        try:
+            stderr_path.write_text(err_text, encoding="utf-8")
+        except Exception:
+            pass
+
 finally:
-    _write_status(status_path, status_payload)
+    if status_path is not None:
+        try:
+            _write_status(status_path, status_payload)
+        except Exception:
+            pass
 """
 
 
@@ -173,6 +212,8 @@ class ProcessManager:
         stderr_path = process_dir / "stderr.txt"
         status_path = process_dir / "status.json"
         control_path = process_dir / "control.json"
+        wrapper_stdout_path = process_dir / "wrapper_stdout.log"
+        wrapper_stderr_path = process_dir / "wrapper_stderr.log"
         control = {
             "command": list(command),
             "cwd": str(cwd),
@@ -184,15 +225,19 @@ class ProcessManager:
         }
         _fsops_write_text(control_path, json.dumps(control), encoding="utf-8")
         started_at = utc_now_iso()
-        proc = subprocess.Popen(
-            [self._python_executable, "-c", _BACKGROUND_WRAPPER, str(control_path)],
-            cwd=str(cwd),
-            env=os.environ.copy(),
-            stdout=subprocess.DEVNULL,
-            stderr=subprocess.DEVNULL,
-            text=True,
-            start_new_session=True,
-        )
+        meta = {} if metadata is None else dict(metadata)
+        meta["wrapper_stdout_path"] = str(wrapper_stdout_path)
+        meta["wrapper_stderr_path"] = str(wrapper_stderr_path)
+        with wrapper_stdout_path.open("w") as wout, wrapper_stderr_path.open("w") as werr:
+            proc = subprocess.Popen(
+                [self._python_executable, "-c", _BACKGROUND_WRAPPER, str(control_path)],
+                cwd=str(cwd),
+                env=os.environ.copy(),
+                stdout=wout,
+                stderr=werr,
+                text=True,
+                start_new_session=True,
+            )
         return ProcessRecord(
             process_id=process_id,
             command=list(command),
@@ -203,7 +248,7 @@ class ProcessManager:
             stderr_path=str(stderr_path),
             status_path=str(status_path),
             started_at=started_at,
-            metadata={} if metadata is None else dict(metadata),
+            metadata=meta,
         )
 
     def poll(self, record: ProcessRecord) -> ProcessPollResult:
@@ -211,16 +256,50 @@ class ProcessManager:
         previous_status = record.status
         status_payload = self._read_status_payload(updated)
         if updated.status == "running" and status_payload is not None:
-            updated.status = str(status_payload.get("status", updated.status))  # type: ignore[assignment]
-            updated.return_code = status_payload.get("return_code")
-            updated.started_at = str(status_payload.get("started_at", updated.started_at))
-            updated.ended_at = str(status_payload.get("ended_at", updated.ended_at))
-            updated = self._with_outputs(updated)
+            new_status = str(status_payload.get("status", updated.status))
+            # If the status file still says "running" but the pid is gone, treat
+            # it as dead so we don't spin forever on a zombie or reaped wrapper.
+            if new_status == "running" and not self._pid_alive(updated.pid):
+                updated.status = "failed"
+                updated.ended_at = utc_now_iso()
+                updated = self._with_outputs(updated)
+                if not updated.stderr:
+                    updated.stderr = self._read_wrapper_stderr(updated)
+                if not updated.stderr:
+                    updated.stderr = "background wrapper exited before completing"
+                self._write_status_payload(
+                    updated,
+                    {
+                        "status": "failed",
+                        "return_code": None,
+                        "started_at": updated.started_at,
+                        "ended_at": updated.ended_at,
+                    },
+                )
+            else:
+                updated.status = new_status  # type: ignore[assignment]
+                updated.return_code = status_payload.get("return_code")
+                updated.started_at = str(status_payload.get("started_at", updated.started_at))
+                updated.ended_at = str(status_payload.get("ended_at", updated.ended_at))
+                updated = self._with_outputs(updated)
         elif updated.status == "running" and not self._pid_alive(updated.pid):
+            # No status file and the wrapper pid is gone — dead without status.
             updated.status = "failed"
             updated.ended_at = utc_now_iso()
+            updated = self._with_outputs(updated)
             if not updated.stderr:
-                updated.stderr = "background process exited without a status file"
+                updated.stderr = self._read_wrapper_stderr(updated)
+            if not updated.stderr:
+                updated.stderr = "background wrapper exited before writing status"
+            self._write_status_payload(
+                updated,
+                {
+                    "status": "failed",
+                    "return_code": None,
+                    "started_at": updated.started_at,
+                    "ended_at": updated.ended_at,
+                },
+            )
         return ProcessPollResult(
             record=updated,
             completed=updated.status != "running",
@@ -283,6 +362,10 @@ class ProcessManager:
             return ""
         return path.read_text(encoding="utf-8")
 
+    def _read_wrapper_stderr(self, record: ProcessRecord) -> str:
+        path_text = record.metadata.get("wrapper_stderr_path", "")
+        return self._read_text(str(path_text))
+
     def _read_status_payload(self, record: ProcessRecord) -> dict | None:
         if not record.status_path:
             return None
@@ -299,9 +382,36 @@ class ProcessManager:
             return
         _fsops_write_text(record.status_path, json.dumps(payload), encoding="utf-8")
 
+    def _pid_state(self, pid: int | None) -> str | None:
+        """Return the single-char Linux process state, or None if the process
+        does not exist or the platform is not Linux."""
+        if pid is None:
+            return None
+        stat_path = Path(f"/proc/{pid}/stat")
+        if not stat_path.exists():
+            return None
+        try:
+            content = stat_path.read_text(encoding="utf-8")
+            # Format: pid (comm) state ...
+            # comm can contain spaces and parentheses, so find the last ')'.
+            rp = content.rfind(")")
+            if rp == -1:
+                return None
+            fields = content[rp + 1 :].split()
+            if not fields:
+                return None
+            return fields[0]  # state letter: R, S, D, Z, T, ...
+        except OSError:
+            return None
+
     def _pid_alive(self, pid: int | None) -> bool:
         if pid is None:
             return False
+        state = self._pid_state(int(pid))
+        if state is not None:
+            # Zombie processes satisfy os.kill(pid, 0) but are effectively dead.
+            return state != "Z"
+        # Fall back to signal-0 check for non-Linux platforms.
         try:
             os.kill(int(pid), 0)
         except OSError:

@@ -187,24 +187,69 @@ def run_live_agent_evaluation_lane(
 
 
 def render_three_lane_evaluation_report(payload: dict[str, Any]) -> str:
+    deterministic_lane = payload["deterministic_correctness"]
+    regression_lane = payload["agent_loop_regression"]
     live_lane = payload["live_agent_evaluation"]
     lines = [
         "# SWAAG three-lane evaluation report",
         "",
         f"- final_overall_percent: `{payload['overall_percent']:.2f}%`",
-        f"- deterministic_correctness_percent: `{payload['deterministic_correctness']['summary']['percent']:.2f}%`",
-        f"- agent_loop_regression_percent: `{payload['agent_loop_regression']['summary']['percent']:.2f}%`",
+        f"- deterministic_correctness_percent: `{deterministic_lane['summary']['percent']:.2f}%`",
+        f"- agent_loop_regression_percent: `{regression_lane['summary']['percent']:.2f}%`",
         f"- live_agent_evaluation_percent: `{float(live_lane['percent']):.2f}%`",
+        "",
+        "## Lane summaries",
+        "",
+        f"- deterministic_correctness: `{deterministic_lane['summary']['passed_tests']}` passed / `{deterministic_lane['summary']['failed_tests']}` failed / `{deterministic_lane['summary']['skipped_tests']}` skipped",
+        f"- agent_loop_regression: `{regression_lane['summary'].get('passed_tests', 0)}` passed / `{regression_lane['summary'].get('failed_tests', 0)}` failed across `{regression_lane['summary'].get('total_families', len(regression_lane.get('results', [])))}` families",
+        f"- live_agent_evaluation: `{len(live_lane.get('tasks', []))}` tasks / `{float(live_lane.get('summary', {}).get('average_task_score_percent', live_lane['percent'])):.2f}%` average",
         "",
         "## Live difficulty tiers",
         "",
     ]
     for difficulty in BENCHMARK_DIFFICULTY_ORDER:
         lines.append(f"- `{difficulty}`: `{float(live_lane['difficulty_tier_scores'].get(difficulty, 0.0)):.2f}%`")
+    lines.extend(["", "## Agent-loop regression families", ""])
+    for family in regression_lane.get("results", []):
+        lines.append(
+            f"- `{family['family_id']}`: `{float(family['score_percent']):.2f}%` / `{family['status']}` / `{family['passed_tests']}` passed / `{family['failed_tests']}` failed"
+        )
     lines.extend(["", "## Lowest-scoring live tasks", ""])
     tasks = sorted(live_lane.get("tasks", []), key=lambda item: (float(item.get("score_percent", 0.0)), item["task_id"]))
     for item in tasks[:10]:
-        lines.append(f"- `{item['task_id']}` / `{item['difficulty']}`: `{float(item.get('score_percent', 0.0)):.2f}%`")
+        lines.extend(
+            [
+                f"- `{item['task_id']}` / `{item['difficulty']}` / `{item.get('task_type', 'unknown')}`: `{float(item.get('score_percent', 0.0)):.2f}%`",
+                f"  - success: `{item.get('success', False)}` / failure_category: `{item.get('failure_category', '')}` / reason: `{item.get('failure_reason', '')}`",
+            ]
+        )
+        rubric = item.get("rubric_breakdown", {})
+        if isinstance(rubric, dict) and rubric:
+            weakest = sorted(
+                rubric.items(),
+                key=lambda kv: float(kv[1].get("percent", 0.0)),
+            )[:3]
+            for rubric_name, rubric_payload in weakest:
+                lines.append(
+                    f"  - rubric `{rubric_name}`: `{float(rubric_payload.get('earned', 0.0)):.2f}/{float(rubric_payload.get('weight', 0.0)):.2f}` (`{float(rubric_payload.get('percent', 0.0)):.2f}%`)"
+                )
+    lines.extend(
+        [
+            "",
+            "## Artifact paths",
+            "",
+            "- deterministic_correctness:",
+            "  - `deterministic_correctness/functional_correctness_results.json`",
+            "  - `deterministic_correctness/functional_correctness_report.md`",
+            "- agent_loop_regression:",
+            "  - `agent_loop_regression/agent_loop_regression_results.json`",
+            "  - `agent_loop_regression/agent_loop_regression_report.md`",
+            "- live_agent_evaluation:",
+            "  - `live_agent_evaluation/live_agent_evaluation_results.json`",
+            "  - `live_agent_evaluation/benchmark_results.json`",
+            "  - `live_agent_evaluation/benchmark_report.md`",
+        ]
+    )
     return "\n".join(lines) + "\n"
 
 

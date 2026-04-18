@@ -225,6 +225,7 @@ SWAAG now uses an explicit three-lane evaluation architecture:
     - `normal`
     - `hard`
     - `extremely_hard`
+  - the curated live subset currently keeps at least `10` distinct tasks in each tier
   - each task produces a percentage score plus rubric breakdown
 
 Run the explicit lane commands:
@@ -258,6 +259,13 @@ Artifacts written by the three-lane evaluator:
 - `live_agent_evaluation/live_agent_evaluation_results.json`
 - `live_agent_evaluation/benchmark_results.json`
 - `live_agent_evaluation/benchmark_report.md`
+
+The human-readable three-lane report now includes:
+- per-lane summaries
+- per-regression-family scores and evidence paths
+- per-tier live scores
+- lowest-scoring live tasks with rubric excerpts
+- artifact paths for each lane
 
 ## Build and publish
 

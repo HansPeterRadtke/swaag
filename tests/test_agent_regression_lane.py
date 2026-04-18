@@ -10,6 +10,10 @@ def test_agent_regression_families_cover_replay_and_runtime_regressions() -> Non
     families = {item.family_id: item for item in get_agent_regression_families()}
 
     assert "continuation_background" in families
+    assert "runtime_recovery_contracts" in families
+    assert "direct_response_guardrails" in families
+    assert "tool_routing_context_focus" in families
+    assert "subagent_traceability" in families
     assert "record_replay_runtime" in families
     assert "scripted_benchmark_runtime" in families
     assert families["record_replay_runtime"].nodeids == (

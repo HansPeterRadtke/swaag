@@ -3,7 +3,10 @@ from __future__ import annotations
 import subprocess
 from pathlib import Path
 
-from terminal_bench.agents.failure_mode import FailureMode
+import pytest
+
+terminal_bench_fm = pytest.importorskip("terminal_bench.agents.failure_mode")
+FailureMode = terminal_bench_fm.FailureMode
 
 from swaag.benchmark import terminal_bench_local
 from swaag.benchmark import terminal_bench_agent

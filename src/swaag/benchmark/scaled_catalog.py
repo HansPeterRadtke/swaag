@@ -1542,7 +1542,68 @@ def _live_quality_definition(index: int) -> BenchmarkTaskDefinition:
     )
 
 
+LIVE_SUBSET_CURATED_TASK_IDS: tuple[str, ...] = (
+    "file_edit_exact",
+    "reading_extract_structured",
+    "reading_debug_log_summary",
+    "quality_vague_expansion",
+    "quality_incomplete_clarification",
+    "coding_implement_function",
+    "coding_no_unnecessary_tool",
+    "file_edit_multi_location",
+    "file_edit_generated_replace_all_09",
+    "file_edit_generated_replace_all_10",
+    "coding_multifile_fix",
+    "coding_refactor_keep_tests_green",
+    "coding_optional_calculator",
+    "file_edit_noop_detection",
+    "coding_run_tests_environment",
+    "multi_step_environment_shell_persistence",
+    "multi_step_environment_list_read_write",
+    "failure_wrong_tool_usage",
+    "failure_bad_planning",
+    "failure_generated_wrong_tool_01",
+    "failure_generated_wrong_tool_02",
+    "failure_generated_wrong_tool_03",
+    "failure_generated_wrong_tool_04",
+    "failure_generated_wrong_tool_05",
+)
+
+
+def _clone_live_capable_task(task: BenchmarkTaskDefinition) -> BenchmarkTaskDefinition:
+    def _build_live(workspace: Path) -> TaskScenario:
+        scenario = task.build(workspace)
+        return TaskScenario(
+            prompt=scenario.prompt,
+            workspace=scenario.workspace,
+            model_client=None,
+            verification_contract=scenario.verification_contract,
+            expected_outcome=scenario.expected_outcome,
+            expected_failure_category=scenario.expected_failure_category,
+            oracle=scenario.oracle,
+        )
+
+    tags = list(task.tags)
+    if "live-subset" not in tags:
+        tags.insert(0, "live-subset")
+    cloned = BenchmarkTaskDefinition(
+        task_id=task.task_id,
+        task_type=task.task_type,
+        description=task.description,
+        build=task.build,
+        build_live=_build_live,
+        difficulty=task.difficulty,
+        tags=tags,
+        setup_instructions=list(task.setup_instructions),
+        config_overrides=dict(task.config_overrides),
+    )
+    cloned.difficulty = task.difficulty
+    return cloned
+
+
 def generated_live_subset_tasks() -> list[BenchmarkTaskDefinition]:
+    from swaag.benchmark.task_definitions import get_benchmark_tasks
+
     tasks: list[BenchmarkTaskDefinition] = []
     tasks.extend(_live_coding_definition(index) for index in range(1, 6))
     tasks.extend(_live_file_edit_definition(index) for index in range(1, 6))
@@ -1550,6 +1611,11 @@ def generated_live_subset_tasks() -> list[BenchmarkTaskDefinition]:
     tasks.extend(_live_multi_step_definition(index) for index in range(1, 6))
     tasks.extend(_live_failure_definition(index) for index in range(1, 6))
     tasks.extend(_live_quality_definition(index) for index in range(1, 6))
+    by_id = {task.task_id: task for task in get_benchmark_tasks()}
+    missing = [task_id for task_id in LIVE_SUBSET_CURATED_TASK_IDS if task_id not in by_id]
+    if missing:
+        raise ValueError(f"Live benchmark subset references unknown task ids: {missing}")
+    tasks.extend(_clone_live_capable_task(by_id[task_id]) for task_id in LIVE_SUBSET_CURATED_TASK_IDS)
     validate_live_subset_catalog(tasks)
     return tasks
 
@@ -1566,11 +1632,11 @@ LIVE_SUBSET_TASK_TYPE_MINIMUMS: dict[str, int] = {
 }
 
 LIVE_SUBSET_DIFFICULTY_MINIMUMS: dict[str, int] = {
-    "extremely_easy": 5,
-    "easy": 5,
-    "normal": 6,
-    "hard": 2,
-    "extremely_hard": 12,
+    "extremely_easy": 10,
+    "easy": 10,
+    "normal": 10,
+    "hard": 10,
+    "extremely_hard": 10,
 }
 
 LIVE_SUBSET_STRUCTURAL_MINIMUMS: dict[str, int] = {

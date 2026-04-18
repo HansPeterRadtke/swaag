@@ -125,6 +125,9 @@ Live difficulty tiers:
 - `hard`
 - `extremely_hard`
 
+The curated live subset is intentionally balanced: each tier must keep at
+least `10` distinct tasks, and validation fails if that floor regresses.
+
 The three-lane evaluator in `swaag.benchmark.evaluation_runner` writes:
 
 - deterministic-correctness JSON and markdown reports
@@ -133,9 +136,11 @@ The three-lane evaluator in `swaag.benchmark.evaluation_runner` writes:
 - one combined report with:
   - deterministic correctness percent
   - agent-loop regression percent
+  - per-regression-family percentages
   - live agent-evaluation percent
   - live per-tier percents
   - live per-task percentages
+  - live rubric excerpts for the weakest tasks
   - one final overall percent
 
 ## Memory model

@@ -65,7 +65,7 @@ def test_live_subset_catalog_imports_and_meets_distribution_requirements() -> No
     counts = Counter(task.task_type for task in tasks)
     difficulty_counts = Counter(task.difficulty for task in tasks)
 
-    assert len(tasks) >= 30
+    assert len(tasks) >= 50
     for task_type, minimum in LIVE_SUBSET_TASK_TYPE_MINIMUMS.items():
         assert counts[task_type] >= minimum
     for difficulty, minimum in LIVE_SUBSET_DIFFICULTY_MINIMUMS.items():
@@ -79,6 +79,14 @@ def test_live_subset_catalog_imports_and_meets_distribution_requirements() -> No
     assert len({task.task_id for task in tasks}) == len(tasks)
     assert all(task.build_live is not None for task in tasks)
     validate_live_subset_catalog(tasks)
+
+
+def test_live_subset_catalog_keeps_at_least_ten_tasks_per_difficulty_tier() -> None:
+    tasks = generated_live_subset_tasks()
+    difficulty_counts = Counter(task.difficulty for task in tasks)
+
+    assert set(difficulty_counts) == set(LIVE_SUBSET_DIFFICULTY_MINIMUMS)
+    assert all(count >= 10 for count in difficulty_counts.values())
 
 
 def test_live_subset_tasks_run_through_benchmark_runner_in_scripted_mode(tmp_path: Path) -> None:

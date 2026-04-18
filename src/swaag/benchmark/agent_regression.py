@@ -122,6 +122,48 @@ def get_agent_regression_families() -> list[AgentRegressionFamily]:
             ),
         ),
         AgentRegressionFamily(
+            family_id="runtime_recovery_contracts",
+            description="Runtime recovery, retry, and contract repair paths stay stable under replay.",
+            nodeids=(
+                "tests/test_runtime.py::test_runtime_retries_failed_model_request",
+                "tests/test_runtime.py::test_runtime_retries_after_verification_failure",
+                "tests/test_runtime.py::test_runtime_recovers_malformed_coding_plan_with_shell_recovery_plan",
+                "tests/test_runtime.py::test_runtime_recovers_strategy_incompatible_coding_plan_with_shell_recovery_plan",
+            ),
+        ),
+        AgentRegressionFamily(
+            family_id="direct_response_guardrails",
+            description="Direct-answer shortcuts stay bounded by explicit-tool and exact-reply guardrails.",
+            nodeids=(
+                "tests/test_runtime.py::test_extract_unconditional_exact_reply_ignores_conditional_reply_clauses",
+                "tests/test_runtime.py::test_runtime_finalizes_unconditional_exact_reply_without_final_model_call",
+                "tests/test_runtime.py::test_runtime_bypasses_llm_plan_generation_for_semantic_direct_response",
+                "tests/test_runtime.py::test_runtime_blocks_direct_response_when_prompt_explicitly_requires_named_tool",
+                "tests/test_runtime.py::test_runtime_blocks_direct_response_when_strategy_requires_write_steps",
+            ),
+        ),
+        AgentRegressionFamily(
+            family_id="tool_routing_context_focus",
+            description="Tool routing, targeted shell recovery, and edit-context focus remain anchored in real evidence.",
+            nodeids=(
+                "tests/test_runtime.py::test_runtime_uses_expected_tool_input_contract_for_shell_command_steps",
+                "tests/test_runtime.py::test_runtime_normalizes_trivial_shell_command_into_repo_search",
+                "tests/test_runtime.py::test_runtime_prefers_recent_source_hint_for_edit_text_step",
+                "tests/test_runtime.py::test_runtime_edit_text_prompt_includes_recent_inspection_evidence",
+                "tests/test_runtime.py::test_runtime_uses_expected_tool_input_contract_for_profile_optimized_edit_steps",
+            ),
+        ),
+        AgentRegressionFamily(
+            family_id="subagent_traceability",
+            description="Retriever, reviewer, and planner subagents emit auditable runtime artifacts and events.",
+            nodeids=(
+                "tests/test_subagents.py::test_runtime_records_subagent_events_during_review",
+                "tests/test_subagents.py::test_runtime_records_retriever_subagent_events_during_context_build",
+                "tests/test_subagents.py::test_retriever_subagent_produces_focused_artifact",
+                "tests/test_subagents.py::test_planner_subagent_replan_artifact_is_explicit",
+            ),
+        ),
+        AgentRegressionFamily(
             family_id="record_replay_runtime",
             description="Replay-backed runtime regression using recorded full-request payload keys.",
             nodeids=("tests/test_agent_loop_replay.py::test_record_replay_client_replays_runtime_tool_flow",),
@@ -226,5 +268,23 @@ def run_agent_loop_regression_lane(
         report_lines.append(
             f"| {result.family_id} | {result.score_percent:.2f}% | {result.status} | `{result.stdout_path}` |"
         )
+    report_lines.extend(["", "## Family details", ""])
+    for result in results:
+        report_lines.extend(
+            [
+                f"### {result.family_id}",
+                f"- Description: {next(item.description for item in families if item.family_id == result.family_id)}",
+                f"- Score: `{result.score_percent:.2f}%`",
+                f"- Status: `{result.status}`",
+                f"- Tests: `{result.passed_tests}` passed / `{result.failed_tests}` failed / `{result.skipped_tests}` skipped / `{result.total_tests}` total",
+                f"- Command: `{' '.join(result.command)}`",
+                f"- Stdout: `{result.stdout_path}`",
+                f"- Stderr: `{result.stderr_path}`",
+                f"- JUnit: `{result.junit_path}`",
+                "- Nodeids:",
+            ]
+        )
+        report_lines.extend(f"  - `{nodeid}`" for nodeid in result.nodeids)
+        report_lines.append("")
     write_text(output_dir / "agent_loop_regression_report.md", "\n".join(report_lines) + "\n", encoding="utf-8")
     return payload

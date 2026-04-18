@@ -547,6 +547,10 @@ def test_extract_unconditional_exact_reply_ignores_conditional_reply_clauses(mak
     runtime = AgentRuntime(make_config(), model_client=FakeModelClient(responses=[]))
 
     assert runtime._extract_unconditional_exact_reply("If tests pass, reply exactly passed.") is None
+    assert runtime._extract_unconditional_exact_reply("Read notes.txt and return exactly the full text on line 3.") is None
+    assert runtime._extract_unconditional_exact_reply(
+        'Read profile.txt. Return exactly this JSON shape with no extra fields: {"name":"...","team":"...","city":"..."}'
+    ) is None
     assert (
         runtime._extract_unconditional_exact_reply(
             "Read notes.txt.\nReply exactly beta=2\nDo not add anything else."

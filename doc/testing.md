@@ -153,6 +153,9 @@ The live task catalog is grouped into five ordered difficulty tiers:
 - `hard`
 - `extremely_hard`
 
+The curated live subset keeps at least `10` distinct tasks in each tier so the
+lane cannot silently collapse into only the easiest cases.
+
 Every live task carries:
 
 - a `0-100%` task score
@@ -190,6 +193,13 @@ Artifacts:
 - `live_agent_evaluation/live_agent_evaluation_results.json`
 - `live_agent_evaluation/benchmark_results.json`
 - `live_agent_evaluation/benchmark_report.md`
+
+The combined markdown report also includes:
+
+- lane-level summaries
+- agent-loop regression family scores and evidence paths
+- live lowest-scoring tasks with rubric excerpts
+- explicit artifact locations for each lane
 
 The JSON output contains:
 

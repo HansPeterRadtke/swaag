@@ -121,5 +121,7 @@ The repository now has:
 - fixed background/wait/runtime finalization behavior on the known focused failures
 - a concrete three-lane testing architecture
 - a test-only LLM record/replay client for fast agent-loop regression coverage
+- a curated live subset with at least ten distinct tasks per difficulty tier
 - percentage scoring per lane, per live difficulty tier, per live task, and overall
 - JSON and markdown reporting for deterministic correctness, regression, live evaluation, and the combined three-lane view
+- detailed regression-family output and richer weakest-task live reporting for tuning work
