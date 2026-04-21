@@ -21,8 +21,8 @@ def build_finalproof_commands(*, benchmark_output: Path, live_benchmark_output: 
         [sys.executable, "-m", "pytest", "-q", "tests/test_runtime_verification_flow.py"],
         [sys.executable, "-m", "pytest", "-q", "tests/test_end_to_end.py"],
         [sys.executable, "-m", "pytest", "-q"],
-        [sys.executable, "-m", "swaag.testlane", "integration"],
-        [sys.executable, "-m", "swaag.testlane", "live"],
+        [sys.executable, "-m", "swaag.testprofile", "integration"],
+        [sys.executable, "-m", "swaag.testprofile", "live"],
         [sys.executable, "-m", "swaag.benchmark", "run", "--clean", "--output", str(benchmark_output), "--json"],
         [
             sys.executable,
@@ -30,7 +30,7 @@ def build_finalproof_commands(*, benchmark_output: Path, live_benchmark_output: 
             "swaag.benchmark",
             "run",
             "--clean",
-            "--live-subset",
+            "--validation-subset",
             "--model-profile",
             live.model_profile,
             "--structured-output-mode",
@@ -63,7 +63,7 @@ def build_finalproof_environment() -> dict[str, str]:
 def main(argv: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser(description="Run the full final proof loop.")
     parser.add_argument("--benchmark-output", default="/tmp/swaag-benchmark-finalproof", help="Output directory for the large benchmark.")
-    parser.add_argument("--live-benchmark-output", default="/tmp/swaag-live-benchmark-finalproof", help="Output directory for the live benchmark subset.")
+    parser.add_argument("--live-benchmark-output", default="/tmp/swaag-live-benchmark-finalproof", help="Output directory for the no-cache validation benchmark subset.")
     parser.add_argument("--dry-run", action="store_true", help="Only print the commands.")
     args = parser.parse_args(argv)
 

@@ -152,6 +152,20 @@ def test_local_agent_runner_retries_when_model_returns_invalid_json(tmp_path: Pa
     assert "Previous attempt failed" in client.prompts[1]
 
 
+def test_local_agent_runner_solver_prompt_names_structured_edit_keys() -> None:
+    prompt = local_agent_runner._build_solver_prompt(
+        "Fix worker.py.",
+        [("worker.py", "def handle(value):\n    return value + 1\n")],
+        policy=local_agent_runner.LocalRunnerPolicy(),
+    )
+
+    assert "keys summary, path, find, and replace" in prompt
+    assert "summary is one short description" in prompt
+    assert "path is the single file to edit" in prompt
+    assert "find is the exact text snippet" in prompt
+    assert "replace is the exact replacement text" in prompt
+
+
 def test_local_agent_runner_falls_back_to_matching_exact_line_when_full_snippet_misses(tmp_path: Path) -> None:
     workspace = tmp_path
     target = workspace / "worker.py"

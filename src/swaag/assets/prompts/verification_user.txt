@@ -2,4 +2,8 @@ Evaluate the verification criteria strictly.
 
 Use only the provided evidence.
 Do not invent missing evidence.
-Return every criterion with passed=true/false and short evidence.
+Return one JSON object with the top-level key `criteria`.
+`criteria` is a JSON array; each item must contain:
+  `name` (string): the criterion name matching the input.
+  `passed` (boolean): true if the criterion is met, false otherwise.
+  `evidence` (string): a short concrete justification drawn only from the provided evidence.

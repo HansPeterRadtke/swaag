@@ -1153,7 +1153,7 @@ def _live_reading_definition(index: int) -> BenchmarkTaskDefinition:
                 "Do not invent missing fields. If city is missing, use an empty string and list city under unsupported."
             )
             read_paths = [path]
-        else:
+        elif index == 5:
             a = workspace / "facts_a.txt"
             b = workspace / "facts_b.txt"
             _write(a, "alpha=1\nbeta=2\n")
@@ -1161,6 +1161,21 @@ def _live_reading_definition(index: int) -> BenchmarkTaskDefinition:
             answer = '{"alpha":"1","beta_conflict":true}'
             prompt = f"Read {a.name} and {b.name}. Return exact JSON {{\"alpha\":\"1\",\"beta_conflict\":true}} if alpha matches and beta disagrees."
             read_paths = [a, b]
+            min_tool_calls = 2
+        elif index == 6:
+            path = workspace / "config_06.json"
+            _write(path, json.dumps({"host": "db-06.internal", "port": 5432}) + "\n")
+            answer = "db-06.internal"
+            prompt = f"Read {path.name}. Return exactly the value of the host field and nothing else."
+            read_paths = [path]
+        else:
+            src = workspace / "source_07.txt"
+            tgt = workspace / "target_07.txt"
+            _write(src, "ref=qux-07\n")
+            _write(tgt, "ref=qux-07\n")
+            answer = "match=qux-07"
+            prompt = f"Read {src.name} and {tgt.name}. If both ref values are identical, reply exactly match=qux-07. No extra words."
+            read_paths = [src, tgt]
             min_tool_calls = 2
 
         contract = BenchmarkVerificationContract(
@@ -1222,19 +1237,19 @@ def _live_reading_definition(index: int) -> BenchmarkTaskDefinition:
         difficulty=(
             "extremely_easy"
             if index == 1
-            else ("easy" if index == 2 else ("normal" if index == 3 else "hard"))
+            else ("easy" if index == 2 else ("normal" if index == 3 else ("extremely_hard" if index == 7 else "hard")))
         ),
         tags=[
             "live-subset",
             "reading",
             "environment",
             "filesystem",
-            *(["verification-edge"] if index in {4, 5} else []),
-            *(["false-positive-killer"] if index in {4, 5} else []),
+            *(["verification-edge"] if index in {4, 5, 6} else []),
+            *(["false-positive-killer"] if index in {4, 5, 7} else []),
         ],
         setup_instructions=[
             "Create a short file-reading task with mechanically checkable extraction.",
-            *(["Use more than one file for harder contradiction and guard tasks."] if index in {3, 5} else []),
+            *(["Use more than one file for harder contradiction and guard tasks."] if index in {3, 5, 7} else []),
         ],
         config_overrides={},
     )
@@ -1283,14 +1298,14 @@ def _live_multi_step_definition(index: int) -> BenchmarkTaskDefinition:
             ]
             scripted_calls = [_tool_call("write_file", {"path": str(audit), "content": "status=verified\n"})]
             min_tool_calls = 4
-        else:
-            expected_files = workspace / "expected_sum.txt"
-            _write(expected_files, f"sum={total}\n")
+        elif index == 5:
+            expected_files_path = workspace / "expected_sum.txt"
+            _write(expected_files_path, f"sum={total}\n")
             test_file = workspace / "test_result_match.py"
             prompt = (
                 f"Read {numbers.name}. Use the calculator tool to add the two numbers. "
                 f"Create {result_file.name} containing exactly sum={total} followed by a newline. "
-                f"Then run tests in {test_file.name} that compare {result_file.name} with {expected_files.name}. Reply exactly {answer}."
+                f"Then run tests in {test_file.name} that compare {result_file.name} with {expected_files_path.name}. Reply exactly {answer}."
             )
             required_tools = ["read_text", "calculator", "write_file", "run_tests"]
             extra_steps = [
@@ -1303,7 +1318,47 @@ def _live_multi_step_definition(index: int) -> BenchmarkTaskDefinition:
                     "from pathlib import Path\n\n\n"
                     "class ResultMatchTests(unittest.TestCase):\n"
                     "    def test_result_matches_expected(self) -> None:\n"
-                    f"        self.assertEqual(Path({result_file.name!r}).read_text(encoding='utf-8'), Path({expected_files.name!r}).read_text(encoding='utf-8'))\n\n\n"
+                    f"        self.assertEqual(Path({result_file.name!r}).read_text(encoding='utf-8'), Path({expected_files_path.name!r}).read_text(encoding='utf-8'))\n\n\n"
+                    "if __name__ == '__main__':\n"
+                    "    unittest.main()\n"
+                ),
+            )
+            scripted_calls = [_tool_call("run_tests", {"command": ["python3", "-m", "unittest", "-q", str(test_file.name)]})]
+            min_tool_calls = 4
+        elif index == 6:
+            audit = workspace / f"audit_{index:02d}.txt"
+            _write(audit, "status=pending\n")
+            prompt = (
+                f"Read {numbers.name}. Use the calculator tool to add the two numbers. "
+                f"Create {result_file.name} containing exactly sum={total} followed by a newline. "
+                f"Then update {audit.name} so it becomes exactly status=verified followed by a newline. Reply exactly {answer}."
+            )
+            extra_steps = [
+                _plan_step("step_audit", "Update audit", "write", expected_tool="write_file", expected_output="audit file", success_criteria="audit updated", depends_on=["step_write"]),
+            ]
+            scripted_calls = [_tool_call("write_file", {"path": str(audit), "content": "status=verified\n"})]
+            min_tool_calls = 4
+        else:
+            expected_proof = workspace / f"expected_sum_{index:02d}.txt"
+            _write(expected_proof, f"sum={total}\n")
+            test_file = workspace / f"test_result_match_{index:02d}.py"
+            prompt = (
+                f"Read {numbers.name}. Use the calculator tool to add the two numbers. "
+                f"Create {result_file.name} containing exactly sum={total} followed by a newline. "
+                f"Then run tests in {test_file.name} that compare {result_file.name} with {expected_proof.name}. Reply exactly {answer}."
+            )
+            required_tools = ["read_text", "calculator", "write_file", "run_tests"]
+            extra_steps = [
+                _plan_step("step_tests", "Run verification test", "tool", expected_tool="run_tests", expected_output="passing verification", success_criteria="verification passes", depends_on=["step_write"]),
+            ]
+            _write(
+                test_file,
+                (
+                    "import unittest\n\n"
+                    "from pathlib import Path\n\n\n"
+                    "class ResultMatchTests(unittest.TestCase):\n"
+                    "    def test_result_matches_expected(self) -> None:\n"
+                    f"        self.assertEqual(Path({result_file.name!r}).read_text(encoding='utf-8'), Path({expected_proof.name!r}).read_text(encoding='utf-8'))\n\n\n"
                     "if __name__ == '__main__':\n"
                     "    unittest.main()\n"
                 ),
@@ -1312,7 +1367,7 @@ def _live_multi_step_definition(index: int) -> BenchmarkTaskDefinition:
             min_tool_calls = 4
 
         expected_files = {result_file: f"sum={total}\n"}
-        if index == 4:
+        if index in {4, 6}:
             expected_files[audit] = "status=verified\n"
         contract = BenchmarkVerificationContract(
             task_type="multi_step",
@@ -1369,12 +1424,12 @@ def _live_multi_step_definition(index: int) -> BenchmarkTaskDefinition:
             "multi-step",
             "environment",
             "calculator",
-            *(["long-run", "recovery"] if index in {3, 4, 5} else []),
-            *(["verification-edge"] if index == 5 else []),
+            *(["long-run", "recovery"] if index in {3, 4, 5, 6, 7} else []),
+            *(["verification-edge"] if index in {5, 7} else []),
         ],
         setup_instructions=[
             "Create a multi-step read-compute-write task with deterministic output verification.",
-            *(["Require at least one extra verification or correction step for the harder live tasks."] if index in {3, 4, 5} else []),
+            *(["Require at least one extra verification or correction step for the harder live tasks."] if index in {3, 4, 5, 6, 7} else []),
         ],
         config_overrides={"tools_allow_side_effect_tools": True, "runtime_max_tool_steps": 8, "runtime_tool_call_budget": 8},
     )
@@ -1484,12 +1539,24 @@ def _live_quality_definition(index: int) -> BenchmarkTaskDefinition:
             prompt = f"1. Read {values.name}\n2. Use the calculator tool to add the numbers on lines 1 and 2\n3. Reply with only the number."
             answer = "42"
             oracle = PromptUnderstandingOracle(task_type="already_decomposed", completeness="complete", requires_expansion=False, requires_decomposition=True, expand_task=False, split_task=True, ask_user=False, strategy_profile="reading", detected_entities_contains=["values.txt"], detected_goals_contains=["read"])
-        else:
+        elif index == 5:
             status = workspace / "ready.txt"
             _write(status, "flag=1\n")
             prompt = f"1. Read {status.name}\n2. Reply exactly flag=1\nDo not add anything else."
             answer = "flag=1"
             oracle = PromptUnderstandingOracle(task_type="already_decomposed", completeness="complete", requires_expansion=False, requires_decomposition=True, expand_task=False, split_task=True, ask_user=False, strategy_profile="reading", detected_entities_contains=["ready.txt"], detected_goals_contains=["read"])
+        elif index == 6:
+            counts = workspace / f"counts_{index:02d}.txt"
+            _write(counts, "errors=3\nwarnings=5\n")
+            prompt = f"Read {counts.name}. Return exactly the number of errors and warnings as: errors=3 warnings=5. No extra words."
+            answer = "errors=3 warnings=5"
+            oracle = PromptUnderstandingOracle(task_type="structured", completeness="complete", expand_task=False, split_task=True, strategy_profile="reading", detected_entities_contains=[f"counts_{index:02d}.txt"], detected_goals_contains=["read"])
+        else:
+            nums = workspace / f"nums_{index:02d}.txt"
+            _write(nums, "p=7\nq=8\n")
+            prompt = f"1. Read {nums.name}\n2. Use the calculator tool to multiply p by q\n3. Reply with only the product."
+            answer = "56"
+            oracle = PromptUnderstandingOracle(task_type="already_decomposed", completeness="complete", requires_expansion=False, requires_decomposition=True, expand_task=False, split_task=True, ask_user=False, strategy_profile="reading", detected_entities_contains=[f"nums_{index:02d}.txt"], detected_goals_contains=["read"])
         contract = BenchmarkVerificationContract(
             task_type="quality",
             expected_answer=answer,
@@ -1506,12 +1573,21 @@ def _live_quality_definition(index: int) -> BenchmarkTaskDefinition:
                     answer,
                 ]
             )
-        elif index in {1, 2, 5}:
-            target = debug_log if index == 1 else facts if index == 2 else status
+        elif index in {1, 2, 5, 6}:
+            target = debug_log if index == 1 else facts if index == 2 else status if index == 5 else counts
             client = ScriptedBenchmarkClient(
                 responses=[
                     _plan_response(goal=prompt, steps=[_plan_step("step_read", "Read file", "read", expected_tool="read_text", expected_output="file", success_criteria="file read"), _plan_step("step_answer", "Answer", "respond", expected_output=answer, success_criteria="reply exact answer", depends_on=["step_read"])]),
                     _tool_call("read_text", {"path": str(target)}),
+                    answer,
+                ]
+            )
+        elif index == 7:
+            client = ScriptedBenchmarkClient(
+                responses=[
+                    _plan_response(goal=prompt, steps=[_plan_step("step_read", "Read nums", "read", expected_tool="read_text", expected_output="nums", success_criteria="nums read"), _plan_step("step_calc", "Multiply", "tool", expected_tool="calculator", expected_output="product", success_criteria="product computed", depends_on=["step_read"]), _plan_step("step_answer", "Answer", "respond", expected_output=answer, success_criteria="reply exact product", depends_on=["step_calc"])]),
+                    _tool_call("read_text", {"path": str(nums)}),
+                    _tool_call("calculator", {"expression": "7 * 8"}),
                     answer,
                 ]
             )
@@ -1536,6 +1612,7 @@ def _live_quality_definition(index: int) -> BenchmarkTaskDefinition:
             "prompt-understanding",
             *(["ambiguity"] if index in {2, 3, 5} else []),
             *(["false-positive-killer", "verification-edge"] if index in {3, 4} else []),
+            *(["calculator"] if index == 7 else []),
         ],
         setup_instructions=["Prepare a prompt-understanding task that must not be over-expanded or accepted without sufficient evidence."],
         config_overrides={"tools_allow_side_effect_tools": True},
@@ -1607,10 +1684,10 @@ def generated_live_subset_tasks() -> list[BenchmarkTaskDefinition]:
     tasks: list[BenchmarkTaskDefinition] = []
     tasks.extend(_live_coding_definition(index) for index in range(1, 6))
     tasks.extend(_live_file_edit_definition(index) for index in range(1, 6))
-    tasks.extend(_live_reading_definition(index) for index in range(1, 6))
-    tasks.extend(_live_multi_step_definition(index) for index in range(1, 6))
+    tasks.extend(_live_reading_definition(index) for index in range(1, 8))
+    tasks.extend(_live_multi_step_definition(index) for index in range(1, 8))
     tasks.extend(_live_failure_definition(index) for index in range(1, 6))
-    tasks.extend(_live_quality_definition(index) for index in range(1, 6))
+    tasks.extend(_live_quality_definition(index) for index in range(1, 8))
     by_id = {task.task_id: task for task in get_benchmark_tasks()}
     missing = [task_id for task_id in LIVE_SUBSET_CURATED_TASK_IDS if task_id not in by_id]
     if missing:
@@ -1620,7 +1697,7 @@ def generated_live_subset_tasks() -> list[BenchmarkTaskDefinition]:
     return tasks
 
 
-# The live subset is a fixed-size representative slice of the full benchmark.
+# The validation subset is a fixed-size representative slice of the full benchmark.
 # These quotas prevent silent drift toward only the easiest live-capable tasks.
 LIVE_SUBSET_TASK_TYPE_MINIMUMS: dict[str, int] = {
     "coding": 5,

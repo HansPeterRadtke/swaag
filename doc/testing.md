@@ -15,10 +15,10 @@ It uses a two-stage selector:
 
 It prints:
 - changed files
-- chosen lane
+- chosen test profile
 - candidate tests
 - `pytest-testmon` mode
-- explicit follow-up lanes when a change requires `live` or `benchmark_heavy`
+- explicit follow-up profiles when a change requires `live` or `benchmark_heavy` execution
 
 If `pytest-testmon` is installed but no baseline exists yet, `devcheck` uses
 `--testmon-noselect` once to populate `.testmondata` while still limiting the
@@ -33,22 +33,101 @@ set runs without incremental deselection.
 python3 -m swaag.devcheck --baseline
 ```
 
-or explicitly per lane:
+or explicitly per profile:
 
 ```bash
-python3 -m swaag.testlane fast --baseline
-python3 -m swaag.testlane system --baseline
+python3 -m swaag.testprofile fast --baseline
+python3 -m swaag.testprofile system --baseline
 ```
 
-A baseline is only needed once per lane unless the `.testmondata*` files are
+A baseline is only needed once per profile unless the `.testmondata*` files are
 removed.
 
-## Test lanes
+## Authoritative two-category commands
 
-### Fast lane
+There are exactly two test categories. Use these as the authoritative entry points:
+
+### Code-correctness tests
 
 ```bash
-python3 -m swaag.testlane fast
+python3 -m swaag.testprofile code-correctness
+```
+
+Runs exactly the code-correctness file list — no marker-based deselection. This is
+the authoritative command for the deterministic correctness category. Should stay
+at 100%. If it drops, that is a real code bug.
+
+### Agent tests
+
+```bash
+python3 -m swaag.testprofile agent-tests
+```
+
+Runs exactly the agent-test file list. Tests that require a live model
+(`test_live_llamacpp.py`) skip gracefully unless `SWAAG_RUN_LIVE=1` is set.
+
+### Combined (fail-fast)
+
+```bash
+python3 -m swaag.testprofile combined
+```
+
+Runs code-correctness first. Runs agent-tests only if code-correctness is fully
+green. This is the authoritative combined entry point.
+
+## Devcheck inner loop and testprofile incremental profiles
+
+`devcheck` is the normal developer incremental command. It runs the smallest
+correct candidate set from the changed area:
+
+```bash
+python3 -m swaag.devcheck
+```
+
+It uses a two-stage selector:
+- deterministic changed-area mapping to build the smallest correct candidate set
+- `pytest-testmon` inside that candidate set to run only affected tests when a baseline exists
+
+It prints:
+- changed files
+- chosen test profile
+- candidate tests
+- `pytest-testmon` mode
+- explicit follow-up profiles when a change requires live or benchmark-heavy execution
+
+If `pytest-testmon` is installed but no baseline exists yet, `devcheck` uses
+`--testmon-noselect` once to populate `.testmondata` while still limiting the
+run to the selected candidate tests.
+
+If `pytest-testmon` is unavailable, the fallback is explicit: the same candidate
+set runs without incremental deselection.
+
+### Build the pytest-testmon baseline
+
+```bash
+python3 -m swaag.devcheck --baseline
+```
+
+or explicitly per internal profile:
+
+```bash
+python3 -m swaag.testprofile fast --baseline
+python3 -m swaag.testprofile system --baseline
+```
+
+A baseline is only needed once per profile unless the `.testmondata*` files are
+removed.
+
+### Internal devcheck profiles
+
+These are used by the devcheck inner loop and are not the authoritative user-facing
+test interface. The authoritative commands are `code-correctness`, `agent-tests`,
+and `combined` above.
+
+#### Fast profile
+
+```bash
+python3 -m swaag.testprofile fast
 ```
 
 Cheap deterministic tests only:
@@ -57,10 +136,10 @@ Cheap deterministic tests only:
 - no heavy benchmark execution
 - no broad runtime smoke coverage
 
-### System lane
+#### System profile
 
 ```bash
-python3 -m swaag.testlane system
+python3 -m swaag.testprofile system
 ```
 
 Broader local system coverage:
@@ -70,42 +149,31 @@ Broader local system coverage:
 - planner / reasoning / subagents
 - benchmark-structure and report logic
 
-### Integration lane
+## Agent behavior tests
 
-```bash
-python3 -m swaag.testlane integration
-```
+Agent behavior tests run in two modes:
 
-Packaging, install, and model-client integration:
-- clean-room install
-- model HTTP contract tests
-- command-surface / packaging wiring
+- cached mode (the normal path; uses record/replay cassettes)
+- no-cache validation mode (manual real-model validation)
 
-### Live lane
-
-```bash
-python3 -m swaag.testlane live
-```
-
-Real llama.cpp tests only. This lane uses the fixed live policy documented in
-`doc/live_runtime_profiles.md`.
-
-### Heavy benchmark lane
-
-```bash
-python3 -m swaag.testlane benchmark_heavy
-```
-
-Benchmark-heavy proof tests that are intentionally kept out of the normal local
-loop.
+**Cache policy:** All tests run with LLM calls cached. Real uncached execution is
+real usage mode or manual validation mode, not a test category.
 
 ## Evaluation architecture
 
-SWAAG now treats testing and evaluation as three explicit top-level lanes.
+SWAAG exposes two user-facing evaluation categories:
 
-### Lane 1: deterministic correctness
+- deterministic correctness tests
+- agent behavior tests
 
-This is the repository health lane:
+Agent behavior tests run in two modes:
+
+- cached mode
+- no-cache validation mode
+
+### Category 1: deterministic correctness tests
+
+This is the repository health category:
 
 - import hygiene
 - smoke tests
@@ -115,37 +183,68 @@ This is the repository health lane:
 - packaging and install checks
 - benchmark/report plumbing
 
-This lane should stay at `100%`. If it drops, that is a real code bug.
+This category should stay at `100%`. If it drops, that is a real code bug.
 
-### Lane 2: agent-loop regression
+### Category 2: agent behavior tests
 
-This is the fast regression lane for the real runtime stack. It does not grade
-helper functions in isolation. It runs the real runtime/orchestrator/tool loop,
-but avoids live-model cost by using:
+This category covers the real runtime stack. It does not grade helper functions
+in isolation. It runs the real runtime/orchestrator/tool loop.
 
-- replayed model cassettes keyed by a normalized full request payload hash
-- scripted benchmark model fixtures where that is sufficient
+Cached mode is the normal fast path:
 
-This lane is where fast regressions in planning, tool choice, waiting,
-background work, recovery, and exact-detail history behavior are caught.
+- record/replay cassettes are used by default for model-backed task execution
+- cassette keys are based on normalized request payload plus request metadata
+- reruns avoid real delegate model calls once a cassette exists
+- focused scripted support-check families still exist for tightly controlled failure
+  and recovery scenarios
+- the cassette hash includes request metadata such as base URL, completion endpoint,
+  model profile, structured output mode, and seed
+- `timeout_seconds` is stored for observability but excluded from the hash because
+  it is a transport setting rather than semantic model input
 
-Run it with:
+No-cache validation mode is the occasional real-model confirmation path:
+
+- uses the same real agent runtime
+- keeps direct `llama.cpp` calls enabled
+- uses the curated validation subset with at least `10` distinct tasks in each
+  difficulty tier
+
+Run cached mode with:
 
 ```bash
-python3 -m swaag.benchmark regression --all --clean --output /tmp/swaag-regression
+python3 -m swaag.benchmark agent-tests --mode cached --clean --validation-subset --output /tmp/swaag-agent-tests-cached
 ```
 
-Artifacts:
+Cached-mode artifacts:
 
-- `agent_loop_regression/agent_loop_regression_results.json`
-- `agent_loop_regression/agent_loop_regression_report.md`
+- `agent_behavior_cached_results.json`
+- `agent_behavior_cached_report.md`
+- `agent_behavior_cached/agent_behavior_cached_results.json`
+- `agent_behavior_cached/agent_behavior_cached_report.md`
+- `agent_behavior_cached/replay_cache/`
 
-### Lane 3: live agent evaluation
+Focused cached-mode agent behavior support checks:
 
-This is the main quality lane. It keeps the real model in the loop and runs
-full agent tasks through the actual runtime entrypoint.
+```bash
+python3 -m swaag.benchmark agent-support --all --clean --output /tmp/swaag-agent-support
+```
 
-The live task catalog is grouped into five ordered difficulty tiers:
+Run no-cache validation mode with:
+
+```bash
+python3 -m swaag.benchmark agent-tests --mode no-cache-validation --clean --validation-subset --output /tmp/swaag-agent-tests-validation
+```
+
+No-cache validation artifacts:
+
+- `agent_behavior_validation_results.json`
+- `agent_behavior_validation_report.md`
+- `agent_behavior_validation/agent_behavior_validation_results.json`
+- `agent_behavior_validation/agent_behavior_validation_report.md`
+- `agent_behavior_validation/benchmark_results.json`
+- `agent_behavior_validation/benchmark_report.md`
+
+The no-cache validation task catalog is grouped into five ordered difficulty tiers:
 
 - `extremely_easy`
 - `easy`
@@ -153,62 +252,65 @@ The live task catalog is grouped into five ordered difficulty tiers:
 - `hard`
 - `extremely_hard`
 
-The curated live subset keeps at least `10` distinct tasks in each tier so the
-lane cannot silently collapse into only the easiest cases.
+The curated validation subset keeps at least `10` distinct tasks in each tier so the
+category cannot silently collapse into only the easiest cases.
 
-Every live task carries:
+Every no-cache validation task carries:
 
 - a `0-100%` task score
 - a rubric breakdown
 - machine-readable evidence
 
-Each tier score is the arithmetic mean of its task scores. The live lane score
-is the arithmetic mean of all live task scores.
+Each tier score is the arithmetic mean of its task scores. The no-cache validation score
+is the arithmetic mean of all no-cache validation task scores.
 
-### Three-lane evaluation command
+### Combined evaluation command
 
-Run the full three-lane evaluation with:
+Run the full combined evaluation with:
 
 ```bash
-python3 -m swaag.benchmark three-lane-evaluate \
+python3 -m swaag.benchmark test-categories \
   --clean \
-  --live-subset \
-  --output /tmp/swaag-three-lane
+  --validation-subset \
+  --output /tmp/swaag-test-categories
 ```
 
 The final overall score is the arithmetic mean of:
 
-- deterministic correctness
-- agent-loop regression
-- live agent evaluation
+- deterministic correctness tests percent
+- agent behavior tests (cached mode) percent
+- agent behavior tests (no-cache validation mode) percent
 
 Artifacts:
 
-- `three_lane_evaluation_results.json`
-- `three_lane_evaluation_report.md`
+- `test_categories_results.json`
+- `test_categories_report.md`
 - `deterministic_correctness/functional_correctness_results.json`
 - `deterministic_correctness/functional_correctness_report.md`
-- `agent_loop_regression/agent_loop_regression_results.json`
-- `agent_loop_regression/agent_loop_regression_report.md`
-- `live_agent_evaluation/live_agent_evaluation_results.json`
-- `live_agent_evaluation/benchmark_results.json`
-- `live_agent_evaluation/benchmark_report.md`
+- `agent_behavior_cached_results.json`
+- `agent_behavior_cached_report.md`
+- `agent_behavior_cached/agent_behavior_cached_results.json`
+- `agent_behavior_cached/agent_behavior_cached_report.md`
+- `agent_behavior_cached/replay_cache/`
+- `agent_behavior_validation_results.json`
+- `agent_behavior_validation_report.md`
+- `agent_behavior_validation/agent_behavior_validation_results.json`
+- `agent_behavior_validation/agent_behavior_validation_report.md`
 
 The combined markdown report also includes:
 
-- lane-level summaries
-- agent-loop regression family scores and evidence paths
-- live lowest-scoring tasks with rubric excerpts
-- explicit artifact locations for each lane
+- per-category summaries
+- no-cache validation lowest-scoring tasks with rubric excerpts
+- explicit artifact locations for each category
 
 The JSON output contains:
 
 - deterministic correctness percent
-- agent-loop regression percent
-- live agent evaluation percent
-- live per-tier difficulty percents
-- live per-task scores
-- live per-task rubric breakdowns
+- agent behavior tests (cached mode) percent
+- agent behavior tests (no-cache validation mode) percent
+- no-cache validation per-tier difficulty percents
+- no-cache validation per-task scores
+- no-cache validation per-task rubric breakdowns
 - final overall percent
 
 ### Fast non-live combined evaluation
@@ -220,16 +322,29 @@ want deterministic correctness plus the scripted full-agent task catalog:
 python3 -m swaag.benchmark evaluate --clean --output /tmp/swaag-eval
 ```
 
-## Compatibility commands
+## Test categories
+
+There are exactly two test categories:
+
+- **code-correctness tests** — deterministic software-correctness checks with no model dependency.
+  Authoritative command: `python3 -m swaag.testprofile code-correctness`
+- **agent tests** — agent behavior tests that depend on LLM output (cached or uncached).
+  Authoritative command: `python3 -m swaag.testprofile agent-tests`
+
+Both commands use explicit file lists — no marker-based deselection.
+
+**Execution order rule:** Agent tests must not start if code-correctness tests are not 100% green.
+Use `python3 -m swaag.testprofile combined` to enforce this automatically.
+
+To run agent tests explicitly:
 
 ```bash
-pytest -q
-pytest -q -m integration
-SWAAG_RUN_LIVE=1 pytest -q -m live
-```
+# Cached mode (replay, no live model needed)
+python3 -m swaag.benchmark agent-tests --mode cached --clean --validation-subset --output /tmp/swaag-agent-tests-cached
 
-`pytest -q` excludes `integration`, `live`, and `benchmark_heavy` by default.
-Use the lane commands above for the intended developer workflow.
+# Validation mode (real model, no cache)
+SWAAG_RUN_LIVE=1 python3 -m swaag.benchmark agent-tests --mode no-cache-validation --clean --validation-subset --output /tmp/swaag-agent-tests-validation
+```
 
 Installation and local server setup are documented in:
 
@@ -238,11 +353,15 @@ Installation and local server setup are documented in:
 ## Changed-area invalidation rules
 
 The deterministic selector broadens when changes touch:
-- `pyproject.toml`, scripts, CLI wrappers, or lane/proof commands -> `integration`
-- runtime/core prompt/model/orchestrator files -> `system`
-- environment / retrieval / guidance / skills / subagents / tools -> `system`
-- benchmark catalog/runner/report files -> benchmark-structure tests in `system`
+- `pyproject.toml`, scripts, CLI wrappers, or packaging files -> `integration` profile
+- runtime/core prompt/model/orchestrator files -> `system` profile
+- environment / retrieval / guidance / skills / subagents / tools -> `system` profile
+- benchmark catalog/runner/report files -> benchmark-structure tests in `system` profile
 - live runtime profile docs/config -> dedicated live-structure consistency tests
+
+Devcheck always runs only code-correctness tests (filtered via `-m not agent_test`).
+Agent tests in the candidate set are filtered out and must be run separately via
+`python3 -m swaag.testprofile agent-tests`.
 
 Docs that are not runtime inputs do not trigger unrelated code tests.
 Docs with dedicated consistency checks map only to those tests.
@@ -259,10 +378,10 @@ This runs the deliberate proof path:
 - runtime verification flow
 - end-to-end smoke
 - local non-live pytest path
-- integration lane
-- live lane
+- integration tests
+- no-cache validation tests
 - large benchmark CLI
-- live benchmark subset CLI
+- no-cache validation subset CLI
 - archive proof
 
 ## Benchmark and archive proofs
@@ -270,7 +389,7 @@ This runs the deliberate proof path:
 ```bash
 python3 -m swaag.benchmark evaluate --clean --output /tmp/swaag-eval --json
 python3 -m swaag.benchmark run --clean --output /tmp/swaag-benchmark --json
-SWAAG_RUN_LIVE=1 python3 -m swaag.benchmark run --clean --live-subset --model-profile small_fast --structured-output-mode post_validate --timeout-seconds 180 --seeds 11,23,37 --output /tmp/swaag-live-benchmark --json
+SWAAG_RUN_LIVE=1 python3 -m swaag.benchmark run --clean --validation-subset --model-profile small_fast --structured-output-mode post_validate --timeout-seconds 180 --seeds 11,23,37 --output /tmp/swaag-live-benchmark --json
 python3 scripts/archive_proof.py
 ```
 
@@ -427,5 +546,5 @@ complexity on the current hardware.
 
 ## Speed report
 
-See `doc/test_execution_report.md` for measured lane-selection examples and
+See `doc/test_execution_report.md` for measured test-subset-selection examples and
 inner-loop timing comparisons.

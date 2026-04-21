@@ -5,8 +5,7 @@ description = "SWAAG: a selfhosted working autonomous agent for a local llama.cp
 readme = "README.md"
 requires-python = ">=3.11"
 authors = [{ name = "Hans-Peter Radtke" }]
-license = "MIT"
-license-files = ["LICENSE"]
+license = {text = "MIT"}
 classifiers = [
   "Programming Language :: Python :: 3",
   "Programming Language :: Python :: 3 :: Only",
@@ -48,7 +47,7 @@ swaag = "swaag.cli:main"
 swaag-benchmark = "swaag.benchmark.benchmark_runner:main"
 swaag-devcheck = "swaag.devcheck:main"
 swaag-finalproof = "swaag.finalproof:main"
-swaag-testlane = "swaag.testlane:main"
+swaag-testprofile = "swaag.testprofile:main"
 
 [build-system]
 requires = ["setuptools>=68", "wheel"]
@@ -72,14 +71,9 @@ where = ["src"]
 [tool.pytest.ini_options]
 pythonpath = ["src"]
 testpaths = ["tests"]
-addopts = "-m \"not integration and not live and not benchmark_heavy\""
 markers = [
-  "deterministic_correctness: mechanical correctness lane with no live LLM dependency",
-  "agent_loop_regression: replayed or scripted full-agent loop regression lane",
-  "live_agent_evaluation: live full-agent quality lane with a real LLM in the loop",
-  "fast: cheap deterministic tests for the fast lane",
-  "system: broader local runtime/orchestration tests for the system lane",
-  "benchmark_heavy: large scripted benchmark tests kept out of the normal local pytest path",
-  "integration: component integration tests",
-  "live: requires the local llama.cpp server"
+  "code_correctness: deterministic software-correctness tests with no model dependency",
+  "agent_test: agent behavior tests that depend on LLM output, cached or uncached",
+  "fast: fast devcheck subset — cheap unit-level checks (internal routing only)",
+  "system: system devcheck subset — runtime and orchestration checks (internal routing only)",
 ]

@@ -22,7 +22,9 @@ from swaag.benchmark.task_definitions import (
 )
 from swaag.config import AgentConfig, load_config
 from swaag.live_runtime_profiles import get_documented_final_live_benchmark_recommendation
+from swaag.model import LlamaCppClient
 from swaag.runtime import AgentRuntime
+from swaag.testing.llm_record_replay import RecordReplayModelClient
 from swaag.utils import stable_json_dumps
 from swaag.verification import verify_benchmark_contract
 
@@ -199,6 +201,56 @@ def _resolve_live_model_settings(
     }
 
 
+def _normalize_agent_behavior_mode(raw: str | None) -> str | None:
+    if raw is None:
+        return None
+    value = str(raw).strip().lower()
+    if not value:
+        return None
+    if value not in {"cached", "no-cache-validation"}:
+        raise SystemExit(f"Unsupported agent behavior mode: {raw}")
+    return value
+
+
+def _build_agent_behavior_model_client(
+    *,
+    config: AgentConfig,
+    scenario,
+    task: BenchmarkTaskDefinition,
+    output_dir: Path,
+    seed: int,
+    agent_behavior_mode: str | None,
+    live_subset: bool,
+):
+    delegate = scenario.model_client
+    if agent_behavior_mode != "cached":
+        if delegate is None and live_subset:
+            return LlamaCppClient(config), None
+        return delegate, None
+    if delegate is not None:
+        if getattr(delegate, "is_record_replay_client", False) or getattr(delegate, "is_scripted_benchmark_client", False):
+            return delegate, None
+    else:
+        delegate = LlamaCppClient(config)
+    replay_cache_root = output_dir / "replay_cache" / task.task_id
+    os.makedirs(replay_cache_root, exist_ok=True)
+    cassette_path = replay_cache_root / f"seed_{seed}.json"
+    replay_mode = "replay" if cassette_path.exists() else "record"
+    wrapped = RecordReplayModelClient(
+        cassette_path=cassette_path,
+        mode=replay_mode,
+        delegate=delegate,
+        request_metadata={
+            "agent_behavior_mode": "cached",
+            "benchmark_scope": "validation_subset" if live_subset else "benchmark_catalog",
+            "task_id": task.task_id,
+            "task_type": task.task_type,
+            "difficulty": task.difficulty,
+        },
+    )
+    return wrapped, {"cassette_path": str(cassette_path), "cache_mode": replay_mode}
+
+
 def _snapshot_workspace(root: Path) -> dict[str, str]:
     snapshot: dict[str, str] = {}
     if not root.exists():
@@ -293,6 +345,7 @@ def run_benchmarks(
     structured_output_mode: str | None = None,
     progress_poll_seconds: float | None = None,
     seeds: list[int] | None = None,
+    agent_behavior_mode: str | None = None,
 ) -> dict[str, object]:
     if clean and output_dir.exists():
         shutil.rmtree(output_dir)
@@ -304,6 +357,7 @@ def run_benchmarks(
     analyzer = FailureAnalyzer()
     collector = ResultCollector()
     selected_tasks = _load_tasks(task_ids, live_subset=live_subset)
+    resolved_agent_behavior_mode = _normalize_agent_behavior_mode(agent_behavior_mode)
     benchmark_started = time.monotonic()
     live_settings = _resolve_live_model_settings(
         use_live_model=use_live_model,
@@ -366,7 +420,16 @@ def run_benchmarks(
                 seed=seed,
                 retrieval_backend=scenario_retrieval_backend,
             )
-            runtime = AgentRuntime(config, model_client=scenario.model_client)
+            runtime_model_client, replay_cache_info = _build_agent_behavior_model_client(
+                config=config,
+                scenario=scenario,
+                task=task,
+                output_dir=output_dir,
+                seed=seed,
+                agent_behavior_mode=resolved_agent_behavior_mode,
+                live_subset=live_subset,
+            )
+            runtime = AgentRuntime(config, model_client=runtime_model_client)
             state = runtime.create_or_load_session()
             runtime_error: Exception | None = None
             assistant_text = ""
@@ -420,6 +483,7 @@ def run_benchmarks(
                     "failure_reason": failure.reason if failure is not None else None,
                     "failure_subsystem": failure.subsystem if failure is not None else None,
                     "wall_clock_seconds": task_elapsed,
+                    "replay_cache": replay_cache_info or {},
                 }
             )
             aggregate_success = aggregate_success and success
@@ -465,14 +529,27 @@ def run_benchmarks(
                 workspace=aggregate_workspace_paths[0] if aggregate_workspace_paths else "",
             )
         )
-    artifact_prefix = "live_benchmark" if live_subset and use_live_model else "benchmark"
+    if resolved_agent_behavior_mode == "cached":
+        artifact_prefix = "agent_behavior_cached"
+    elif resolved_agent_behavior_mode == "no-cache-validation":
+        artifact_prefix = "agent_behavior_validation"
+    else:
+        artifact_prefix = "live_benchmark" if live_subset and use_live_model else "benchmark"
     report = collector.write(
         output_dir,
         prefix=artifact_prefix,
         run_metadata={
             "mode": "live_subset" if live_subset else "full",
             "use_live_model": use_live_model,
-            "request_observability_mode": "progress_polling" if use_live_model else "scripted_immediate",
+            "agent_behavior_mode": resolved_agent_behavior_mode or "",
+            "replay_cache_enabled": resolved_agent_behavior_mode == "cached",
+            "replay_cache_root": str(output_dir / "replay_cache") if resolved_agent_behavior_mode == "cached" else "",
+            "replay_cache_policy": "replay_if_present_record_if_missing" if resolved_agent_behavior_mode == "cached" else "",
+            "request_observability_mode": (
+                "replay_cache_or_progress_polling"
+                if resolved_agent_behavior_mode == "cached"
+                else ("progress_polling" if use_live_model else "scripted_immediate")
+            ),
             "model_base_url": effective_base_url,
             "model_profile": effective_profile or "",
             "profile_use_case": effective_profile_use_case or "",
@@ -497,59 +574,107 @@ def _build_parser() -> argparse.ArgumentParser:
     run_parser.add_argument("--output", default="benchmark_output", help="Output directory for benchmark results and session histories.")
     run_parser.add_argument("--task", action="append", default=[], help="Run only the named task id. Can be passed multiple times.")
     run_parser.add_argument("--clean", action="store_true", help="Delete the output directory before running.")
-    run_parser.add_argument("--live-subset", action="store_true", help="Run the 30-task real llama.cpp live benchmark subset.")
-    run_parser.add_argument("--model-base-url", help="Override the llama.cpp base URL for live subset runs.")
+    run_parser.add_argument("--validation-subset", dest="live_subset", action="store_true", help="Run the curated no-cache validation subset against the real llama.cpp server.")
+    run_parser.add_argument("--model-base-url", help="Override the llama.cpp base URL for no-cache validation runs.")
     run_parser.add_argument("--timeout-seconds", type=int, help="Override the model read timeout for benchmark requests.")
     run_parser.add_argument("--connect-timeout-seconds", type=int, help="Override the model connect timeout for benchmark requests.")
     run_parser.add_argument("--model-profile", help="Record the llama.cpp profile used for this run.")
     run_parser.add_argument("--structured-output-mode", choices=["server_schema", "post_validate", "auto"], help="Override structured output mode.")
     run_parser.add_argument("--progress-poll-seconds", type=float, help="Override model progress polling interval.")
-    run_parser.add_argument("--seeds", help="Comma-separated fixed seeds for live-model runs.")
+    run_parser.add_argument("--seeds", help="Comma-separated fixed seeds for model-backed runs.")
     run_parser.add_argument("--json", action="store_true", help="Print the full result JSON.")
     evaluate_parser = subparsers.add_parser(
         "evaluate",
-        help="Run the default functional-correctness lane and the full-agent task evaluation lane.",
+        help="Run deterministic correctness tests and the full-agent task evaluation.",
     )
     evaluate_parser.add_argument("--output", default="evaluation_output", help="Output directory for evaluation results.")
     evaluate_parser.add_argument("--clean", action="store_true", help="Delete the output directory before running.")
     evaluate_parser.add_argument("--task", action="append", default=[], help="Run only the named agent-evaluation task id. Can be passed multiple times.")
-    evaluate_parser.add_argument("--live-subset", action="store_true", help="Run the live subset task definitions for the agent-evaluation lane.")
-    evaluate_parser.add_argument("--model-base-url", help="Override the llama.cpp base URL for live subset runs.")
+    evaluate_parser.add_argument("--validation-subset", dest="live_subset", action="store_true", help="Run the curated no-cache validation subset for agent behavior scoring.")
+    evaluate_parser.add_argument("--model-base-url", help="Override the llama.cpp base URL for validation-subset runs.")
     evaluate_parser.add_argument("--timeout-seconds", type=int, help="Override the model read timeout for agent-evaluation requests.")
     evaluate_parser.add_argument("--connect-timeout-seconds", type=int, help="Override the model connect timeout for agent-evaluation requests.")
     evaluate_parser.add_argument("--model-profile", help="Record the llama.cpp profile used for this evaluation.")
     evaluate_parser.add_argument("--structured-output-mode", choices=["server_schema", "post_validate", "auto"], help="Override structured output mode.")
     evaluate_parser.add_argument("--progress-poll-seconds", type=float, help="Override model progress polling interval.")
-    evaluate_parser.add_argument("--seeds", help="Comma-separated fixed seeds for live-model runs.")
+    evaluate_parser.add_argument("--seeds", help="Comma-separated fixed seeds for model-backed runs.")
     evaluate_parser.add_argument("--pytest-arg", action="append", default=[], help="Additional argument forwarded to the functional-correctness pytest command.")
     evaluate_parser.add_argument("--json", action="store_true", help="Print the full combined evaluation JSON.")
-    regression_parser = subparsers.add_parser(
-        "regression",
-        help="Run the replay/scripted agent-loop regression lane against the real runtime stack.",
+    def _add_agent_support_parser(name: str, *, help_text: str | None, default_output: str) -> argparse.ArgumentParser:
+        agent_support_parser = subparsers.add_parser(name, help=help_text)
+        agent_support_parser.add_argument("--family", action="append", default=[], help="Agent behavior support family id to run. Repeat to narrow the run.")
+        agent_support_parser.add_argument("--all", action="store_true", help="Run every configured agent behavior support family.")
+        agent_support_parser.add_argument("--output", default=default_output, help="Output directory for focused cached-mode agent behavior support reports.")
+        agent_support_parser.add_argument("--clean", action="store_true", help="Delete the output directory before running.")
+        agent_support_parser.add_argument("--json", action="store_true", help="Print the full focused cached-mode agent behavior support JSON.")
+        return agent_support_parser
+
+    _add_agent_support_parser(
+        "agent-support",
+        help_text="Run focused cached-mode agent behavior support checks against the real runtime stack.",
+        default_output="agent_behavior_support_output",
     )
-    regression_parser.add_argument("--family", action="append", default=[], help="Regression family id to run. Repeat to narrow the run.")
-    regression_parser.add_argument("--all", action="store_true", help="Run every configured regression family.")
-    regression_parser.add_argument("--output", default="agent_regression_output", help="Output directory for regression lane reports.")
-    regression_parser.add_argument("--clean", action="store_true", help="Delete the output directory before running.")
-    regression_parser.add_argument("--json", action="store_true", help="Print the full regression lane JSON.")
-    three_lane_parser = subparsers.add_parser(
-        "three-lane-evaluate",
-        help="Run deterministic correctness, agent-loop regression, and live agent evaluation together.",
+    agent_tests_parser = subparsers.add_parser(
+        "agent-tests",
+        help="Run agent behavior tests in cached mode or no-cache validation mode.",
     )
-    three_lane_parser.add_argument("--output", default="three_lane_evaluation_output", help="Output directory for three-lane evaluation results.")
-    three_lane_parser.add_argument("--clean", action="store_true", help="Delete the output directory before running.")
-    three_lane_parser.add_argument("--family", action="append", default=[], help="Regression family id to run. Repeat to narrow lane two.")
-    three_lane_parser.add_argument("--task", action="append", default=[], help="Run only the named live agent-evaluation task id. Can be passed multiple times.")
-    three_lane_parser.add_argument("--live-subset", action="store_true", help="Run the bounded live subset for the live agent-evaluation lane.")
-    three_lane_parser.add_argument("--model-base-url", help="Override the llama.cpp base URL for the live agent-evaluation lane.")
-    three_lane_parser.add_argument("--timeout-seconds", type=int, help="Override the model read timeout for live agent-evaluation requests.")
-    three_lane_parser.add_argument("--connect-timeout-seconds", type=int, help="Override the model connect timeout for live agent-evaluation requests.")
-    three_lane_parser.add_argument("--model-profile", help="Record the llama.cpp profile used for the three-lane evaluation.")
-    three_lane_parser.add_argument("--structured-output-mode", choices=["server_schema", "post_validate", "auto"], help="Override structured output mode.")
-    three_lane_parser.add_argument("--progress-poll-seconds", type=float, help="Override model progress polling interval.")
-    three_lane_parser.add_argument("--seeds", help="Comma-separated fixed seeds for live-model runs.")
-    three_lane_parser.add_argument("--pytest-arg", action="append", default=[], help="Additional argument forwarded to the deterministic correctness pytest command.")
-    three_lane_parser.add_argument("--json", action="store_true", help="Print the full three-lane evaluation JSON.")
+    agent_tests_parser.set_defaults(live_subset=True)
+    agent_tests_parser.add_argument("--mode", choices=["cached", "no-cache-validation"], default="cached", help="Execution mode. Cached mode is the normal fast path; no-cache validation mode uses real model calls directly.")
+    agent_tests_parser.add_argument("--output", default="agent_behavior_output", help="Output directory for agent behavior reports, task results, and any cached cassettes.")
+    agent_tests_parser.add_argument("--clean", action="store_true", help="Delete the output directory before running.")
+    agent_tests_parser.add_argument("--task", action="append", default=[], help="Run only the named agent behavior task id. Can be passed multiple times.")
+    agent_tests_parser.add_argument("--validation-subset", dest="live_subset", action="store_true", help="Run the curated validation subset with at least ten tasks per difficulty tier.")
+    agent_tests_parser.add_argument("--full-catalog", dest="live_subset", action="store_false", help="Run the full benchmark catalog instead of the curated validation subset.")
+    agent_tests_parser.add_argument("--model-base-url", help="Override the llama.cpp base URL for agent behavior model calls.")
+    agent_tests_parser.add_argument("--timeout-seconds", type=int, help="Override the model read timeout for agent behavior requests.")
+    agent_tests_parser.add_argument("--connect-timeout-seconds", type=int, help="Override the model connect timeout for agent behavior requests.")
+    agent_tests_parser.add_argument("--model-profile", help="Record the llama.cpp profile used for this run.")
+    agent_tests_parser.add_argument("--structured-output-mode", choices=["server_schema", "post_validate", "auto"], help="Override structured output mode.")
+    agent_tests_parser.add_argument("--progress-poll-seconds", type=float, help="Override model progress polling interval.")
+    agent_tests_parser.add_argument("--seeds", help="Comma-separated fixed seeds for model-backed runs.")
+    agent_tests_parser.add_argument("--json", action="store_true", help="Print the full agent behavior JSON.")
+    test_categories_parser = subparsers.add_parser(
+        "test-categories",
+        help="Run deterministic correctness tests plus agent behavior tests in cached and no-cache validation modes.",
+    )
+    test_categories_parser.set_defaults(live_subset=True)
+    test_categories_parser.add_argument("--output", default="test_categories_output", help="Output directory for category results and reports.")
+    test_categories_parser.add_argument("--clean", action="store_true", help="Delete the output directory before running.")
+    test_categories_parser.add_argument("--task", action="append", default=[], help="Run only the named agent behavior task id in both cached and validation modes.")
+    test_categories_parser.add_argument("--validation-subset", dest="live_subset", action="store_true", help="Run the curated validation subset for both cached and no-cache validation modes.")
+    test_categories_parser.add_argument("--full-catalog", dest="live_subset", action="store_false", help="Run the full benchmark catalog instead of the curated validation subset.")
+    test_categories_parser.add_argument("--model-base-url", help="Override the llama.cpp base URL for no-cache validation mode.")
+    test_categories_parser.add_argument("--timeout-seconds", type=int, help="Override the model read timeout for agent behavior requests.")
+    test_categories_parser.add_argument("--connect-timeout-seconds", type=int, help="Override the model connect timeout for agent behavior requests.")
+    test_categories_parser.add_argument("--model-profile", help="Record the llama.cpp profile used for this evaluation.")
+    test_categories_parser.add_argument("--structured-output-mode", choices=["server_schema", "post_validate", "auto"], help="Override structured output mode.")
+    test_categories_parser.add_argument("--progress-poll-seconds", type=float, help="Override model progress polling interval.")
+    test_categories_parser.add_argument("--seeds", help="Comma-separated fixed seeds for model-backed runs.")
+    test_categories_parser.add_argument("--pytest-arg", action="append", default=[], help="Additional argument forwarded to the deterministic correctness pytest command.")
+    test_categories_parser.add_argument("--json", action="store_true", help="Print the full category JSON.")
+    def _add_full_evaluation_parser(name: str, *, help_text: str | None, default_output: str) -> argparse.ArgumentParser:
+        full_parser = subparsers.add_parser(name, help=help_text)
+        full_parser.add_argument("--output", default=default_output, help="Output directory for combined evaluation results.")
+        full_parser.add_argument("--clean", action="store_true", help="Delete the output directory before running.")
+        full_parser.add_argument("--family", action="append", default=[], help="Focused cached-mode agent behavior support family id to run. Repeat to narrow the run.")
+        full_parser.add_argument("--task", action="append", default=[], help="Run only the named no-cache validation task id. Can be passed multiple times.")
+        full_parser.add_argument("--validation-subset", dest="live_subset", action="store_true", help="Run the bounded no-cache validation subset.")
+        full_parser.add_argument("--model-base-url", help="Override the llama.cpp base URL for no-cache validation requests.")
+        full_parser.add_argument("--timeout-seconds", type=int, help="Override the model read timeout for no-cache validation requests.")
+        full_parser.add_argument("--connect-timeout-seconds", type=int, help="Override the model connect timeout for no-cache validation requests.")
+        full_parser.add_argument("--model-profile", help="Record the llama.cpp profile used for this evaluation.")
+        full_parser.add_argument("--structured-output-mode", choices=["server_schema", "post_validate", "auto"], help="Override structured output mode.")
+        full_parser.add_argument("--progress-poll-seconds", type=float, help="Override model progress polling interval.")
+        full_parser.add_argument("--seeds", help="Comma-separated fixed seeds for model-backed runs.")
+        full_parser.add_argument("--pytest-arg", action="append", default=[], help="Additional argument forwarded to the deterministic correctness pytest command.")
+        full_parser.add_argument("--json", action="store_true", help="Print the full combined evaluation JSON.")
+        return full_parser
+
+    _add_full_evaluation_parser(
+        "full-evaluate",
+        help_text="Run deterministic correctness plus cached and no-cache agent behavior scoring.",
+        default_output="full_evaluation_output",
+    )
 
     subparsers.add_parser("list", help="List available benchmark task ids.")
     system_parser = subparsers.add_parser(
@@ -625,13 +750,13 @@ def main(argv: Sequence[str] | None = None) -> int:
             for difficulty, score in report["agent_evaluation"]["difficulty_tier_scores"].items():
                 print(f"{difficulty}_percent={score}")
         return 0 if report["overall_percent"] == 100.0 else 1
-    if args.command == "regression":
-        from swaag.benchmark.agent_regression import get_agent_regression_families, run_agent_loop_regression_lane
+    if args.command == "agent-support":
+        from swaag.benchmark.agent_support import get_agent_support_families, run_agent_behavior_support_checks
 
         selected_families = list(args.family)
         if args.all:
-            selected_families = [family.family_id for family in get_agent_regression_families()]
-        report = run_agent_loop_regression_lane(
+            selected_families = [family.family_id for family in get_agent_support_families()]
+        report = run_agent_behavior_support_checks(
             output_dir=Path(args.output),
             family_ids=selected_families or None,
             clean=bool(args.clean),
@@ -645,14 +770,65 @@ def main(argv: Sequence[str] | None = None) -> int:
             print(f"failed_families={summary['failed_families']}")
             print(f"percent={summary['percent']}")
         return 0 if report["summary"]["failed_families"] == 0 else 1
-    if args.command == "three-lane-evaluate":
-        from swaag.benchmark.evaluation_runner import run_three_lane_evaluation
+    if args.command == "agent-tests":
+        from swaag.benchmark.evaluation_runner import run_agent_behavior_tests
 
-        report = run_three_lane_evaluation(
+        report = run_agent_behavior_tests(
+            output_dir=Path(args.output),
+            mode=str(args.mode),
+            benchmark_task_ids=list(args.task),
+            live_subset=bool(args.live_subset),
+            model_base_url=args.model_base_url,
+            timeout_seconds=args.timeout_seconds,
+            connect_timeout_seconds=args.connect_timeout_seconds,
+            model_profile=args.model_profile,
+            structured_output_mode=args.structured_output_mode,
+            progress_poll_seconds=args.progress_poll_seconds,
+            seeds=_parse_seed_list(args.seeds, default=get_documented_final_live_benchmark_recommendation().seeds) if args.seeds else None,
+        )
+        if args.json:
+            print(stable_json_dumps(report, indent=2))
+        else:
+            print(f"mode={report['mode']}")
+            print(f"percent={report['percent']}")
+            print(f"task_count={report['summary']['total_tasks']}")
+            print(f"successful_tasks={report['summary']['successful_tasks']}")
+            print(f"failed_tasks={report['summary']['failed_tasks']}")
+            if report["mode"] == "cached":
+                print(f"replay_cache_root={report['run_metadata'].get('replay_cache_root', '')}")
+        return 0 if report["summary"]["failed_tasks"] == 0 and report["summary"]["false_positives"] == 0 else 1
+    if args.command == "test-categories":
+        from swaag.benchmark.evaluation_runner import run_test_category_evaluation
+
+        report = run_test_category_evaluation(
             output_dir=Path(args.output),
             clean=bool(args.clean),
             functional_pytest_args=list(args.pytest_arg),
-            regression_family_ids=list(args.family),
+            benchmark_task_ids=list(args.task),
+            validation_subset=bool(args.live_subset),
+            model_base_url=args.model_base_url,
+            timeout_seconds=args.timeout_seconds,
+            connect_timeout_seconds=args.connect_timeout_seconds,
+            model_profile=args.model_profile,
+            structured_output_mode=args.structured_output_mode,
+            progress_poll_seconds=args.progress_poll_seconds,
+            seeds=_parse_seed_list(args.seeds, default=get_documented_final_live_benchmark_recommendation().seeds) if args.seeds else None,
+        )
+        if args.json:
+            print(stable_json_dumps(report, indent=2))
+        else:
+            print(f"overall_percent={report['overall_percent']}")
+            for category_name, score in report["category_scores"].items():
+                print(f"{category_name}_percent={score}")
+        return 0 if report["overall_percent"] == 100.0 else 1
+    if args.command == "full-evaluate":
+        from swaag.benchmark.evaluation_runner import run_combined_test_evaluation
+
+        report = run_combined_test_evaluation(
+            output_dir=Path(args.output),
+            clean=bool(args.clean),
+            functional_pytest_args=list(args.pytest_arg),
+            support_family_ids=list(args.family),
             benchmark_task_ids=list(args.task),
             live_subset=bool(args.live_subset),
             model_base_url=args.model_base_url,
@@ -667,8 +843,10 @@ def main(argv: Sequence[str] | None = None) -> int:
             print(stable_json_dumps(report, indent=2))
         else:
             print(f"overall_percent={report['overall_percent']}")
-            for lane_name, score in report["lane_scores"].items():
-                print(f"{lane_name}_percent={score}")
+            scores = report["category_scores"]
+            print(f"deterministic_correctness_percent={scores['deterministic_correctness']}")
+            print(f"agent_behavior_cached_support_percent={scores['agent_behavior_cached_support']}")
+            print(f"agent_behavior_validation_percent={scores['agent_behavior_validation']}")
         return 0 if report["overall_percent"] == 100.0 else 1
     if args.command == "system":
         selected_families = list(args.family)

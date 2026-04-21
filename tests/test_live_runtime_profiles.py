@@ -78,7 +78,7 @@ def test_live_runtime_profiles_doc_matches_the_documented_final_recommendation()
     assert f"structured mode: `{recommendation.structured_output_mode}`" in text
     assert f"fixed seeds: `{','.join(str(seed) for seed in recommendation.seeds)}`" in text
     assert f"profile: `{fast.model_profile}`" in text
-    assert "Measured live subset proof" in text
+    assert "Measured validation subset proof" in text
     assert "does not restart or switch llama.cpp profiles inside the runtime loop" in text
 
 

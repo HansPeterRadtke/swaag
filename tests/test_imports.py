@@ -23,6 +23,7 @@ MANDATORY_MODULES = {
     "swaag.context_builder",
     "swaag.decision",
     "swaag.devcheck",
+    "swaag.test_categories",
     "swaag.testlane",
     "swaag.testlanes",
     "swaag.evaluator",

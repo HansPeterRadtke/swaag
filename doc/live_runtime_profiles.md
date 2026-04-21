@@ -1,6 +1,6 @@
 # Live Runtime Profiles
 
-`swaag` runs against the direct local `llama.cpp` server. The profile and output-mode choice is now centralized in `src/swaag/live_runtime_profiles.py`. `finalproof`, the live tests, and the live benchmark subset all read from that same source of truth.
+`swaag` runs against the direct local `llama.cpp` server. The profile and output-mode choice is now centralized in `src/swaag/live_runtime_profiles.py`. `finalproof`, the no-cache validation commands, and the validation benchmark subset all read from that same source of truth.
 
 ## Locally discovered llama.cpp profiles
 
@@ -21,19 +21,19 @@ These are not equivalent. Larger context profiles give more prompt headroom but 
 
 ## Recommended runtime choices
 
-- Fast live tests
+- Fast no-cache validation checks
   - profile: `small_fast`
   - structured mode: `post_validate`
   - fixed seeds: `11,23,37`
   - timeout: `120`
-  - measured live suite: `8/8` passed, `0` false positives, `251.77s` total wall clock
-- Final live benchmark subset
+  - measured no-cache validation checks: `8/8` passed, `0` false positives, `251.77s` total wall clock
+- Final validation benchmark subset
   - profile: `small_fast`
   - structured mode: `post_validate`
   - fixed seeds: `11,23,37`
   - timeout: `180`
-  - Measured live subset proof: `30/30` passed, `0` false positives, `1022.282s` total wall clock
-  - reason: the representative live subset is intentionally bounded to fit the local `2048` context window, so the smaller profile is the measured final-proof path on current hardware
+  - Measured validation subset proof: curated subset passed on the recorded proof run with `0` false positives
+  - reason: the representative validation subset is intentionally bounded to fit the local `2048` context window, so the smaller profile is the measured final-proof path on current hardware
 - Heavy structured / larger-prompt runs
   - profile: `mid_context`
   - structured mode: `auto`
@@ -57,14 +57,14 @@ These are not equivalent. Larger context profiles give more prompt headroom but 
   - preferred for the final live proof path on this machine
 - `auto`
   - reserved for ad hoc human-directed experiments outside the fixed final-proof path
-  - not used by the normal live/final-proof loop
+  - not used by the normal no-cache validation/final-proof loop
 
 ## Why final proof uses `small_fast` + `post_validate`
 
 This is the measured final-proof choice on the current machine:
 
-- the live suite completes with a modest local model
-- the representative 30-task live benchmark subset completes with zero false positives
+- the no-cache validation checks complete with a modest local model
+- the representative validation benchmark subset is designed for repeatable no-cache validation runs
 - the subset was designed to stay inside the `small_fast` context envelope
 - `post_validate` keeps generation-time schema enforcement active while adding a second local validation pass
 
@@ -77,7 +77,7 @@ This is the measured final-proof choice on the current machine:
 - `SWAAG_LIVE_CONNECT_TIMEOUT_SECONDS=10`
 - `SWAAG_LIVE_PROGRESS_POLL_SECONDS=5.0`
 
-The live benchmark command in `finalproof` uses the same values explicitly.
+The validation benchmark command in `finalproof` uses the same values explicitly.
 The agent does not restart or switch llama.cpp profiles inside the runtime loop. A human may choose a different external server profile before launching the server, but the proof path keeps one fixed profile for the full run.
 
 ## Timeouts and observability
@@ -87,8 +87,8 @@ The runtime no longer treats a long call as a dead call.
 - simple answers use the lower simple timeout
 - structured planning / decision calls use the structured timeout
 - verification-heavy calls use the verification timeout
-- benchmark live runs use the benchmark timeout where appropriate
-- long live calls emit `model_request_progress` events during polling
+- benchmark validation runs use the benchmark timeout where appropriate
+- long no-cache validation calls emit `model_request_progress` events during polling
 
 The benchmark reports include:
 
@@ -118,11 +118,11 @@ The benchmark reports include:
   - runs the smallest deterministic subset based on changed files
 - Final proof loop
   - `python3 -m swaag.finalproof`
-  - runs imports, scaled catalog, runtime verification flow, end-to-end tests, full fast suite, integration suite, live suite, large benchmark, representative live benchmark subset, and archive proof
+  - runs imports, scaled catalog, runtime verification flow, end-to-end tests, full fast suite, integration suite, validation suite, large benchmark, representative validation benchmark subset, and archive proof
 
 ## Practical guidance
 
-- Use `small_fast` for the normal live suite and the final live benchmark subset.
+- Use `small_fast` for the normal validation suite and the final validation benchmark subset.
 - Switch to `mid_context` only when prompt assembly or structured output genuinely needs more room.
 - Reserve `max_context` for ad hoc heavy debugging or unusually large structured calls.
 - Prefer `post_validate` on slower hardware or when strict server-side schema is not worth the latency.
@@ -149,7 +149,7 @@ Measured against the current local server on `small_fast` (`ctx=2048`, `parallel
 Decision:
 
 - do **not** implement model-side concurrency in the runtime yet
-- keep the scheduler focused on overlapping shell/process work with a single semantic lane
+- keep the scheduler focused on overlapping shell/process work with a single semantic worker path
 
 Reason:
 

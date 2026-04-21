@@ -19,7 +19,6 @@ from swaag.benchmark.task_definitions import (
 )
 
 
-@pytest.mark.benchmark_heavy
 def test_benchmark_runner_executes_all_real_tasks_and_writes_reports(tmp_path: Path) -> None:
     output_dir = tmp_path / "benchmark"
     report = run_benchmarks(output_dir=output_dir, clean=True)

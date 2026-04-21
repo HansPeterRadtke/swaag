@@ -1,2 +1,4 @@
 Summarize this transcript for future continuation:
 {history_block}
+
+Return one JSON object with the key `summary`.

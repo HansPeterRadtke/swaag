@@ -56,7 +56,6 @@ class _Handler(BaseHTTPRequestHandler):
         self._json_response({"error": "not found"}, status=404)
 
 
-@pytest.mark.integration
 def test_llama_cpp_client_request_construction(make_config) -> None:
     server = HTTPServer(("127.0.0.1", 0), _Handler)
     thread = threading.Thread(target=server.serve_forever, daemon=True)
@@ -84,7 +83,6 @@ def test_llama_cpp_client_request_construction(make_config) -> None:
         thread.join(timeout=5)
 
 
-@pytest.mark.integration
 def test_llama_cpp_client_rejects_malformed_response(make_config) -> None:
     server = HTTPServer(("127.0.0.1", 0), _Handler)
     _Handler.malformed = True
@@ -101,7 +99,6 @@ def test_llama_cpp_client_rejects_malformed_response(make_config) -> None:
         thread.join(timeout=5)
 
 
-@pytest.mark.integration
 def test_llama_cpp_client_surfaces_http_error_details(make_config) -> None:
     server = HTTPServer(("127.0.0.1", 0), _Handler)
     _Handler.forced_error_payload = {

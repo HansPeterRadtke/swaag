@@ -12,7 +12,7 @@ from swaag.model import LlamaCppClient
 from swaag.runtime import AgentRuntime, TurnResult
 
 
-pytestmark = pytest.mark.live
+pytestmark = pytest.mark.agent_test
 
 _FAST_LIVE = get_live_runtime_recommendation("fast_live_tests")
 

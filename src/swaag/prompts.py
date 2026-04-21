@@ -146,12 +146,25 @@ class PromptBuilder:
                 "\n"
                 "Return arguments for one concrete source-file edit.\n"
                 "Set `path` to a real file path, never `.` or a directory.\n"
+                "Set `operation` to one of: replace_pattern_once, replace_pattern_all, replace_range, insert_at, delete_range.\n"
+                "For ordinary line replacements, prefer `replace_pattern_once`.\n"
                 "Base `pattern` and `replacement` on the actual source preview in the context, not on the issue text.\n"
                 "For `replace_pattern_once` or `replace_pattern_all`, include both `pattern` and `replacement`.\n"
                 "If one nearby source line can anchor the fix, replace that short anchor and insert the new code around it instead of replacing a large block.\n"
                 "When adding one missing mapping or handler, use one existing nearby entry line as the full `pattern`, and set `replacement` to that same line plus the new adjacent line.\n"
                 "If the preview shows a mapping table or dispatch table, patch that table directly instead of unrelated fallback return code.\n"
                 "Prefer the smallest exact source change that fixes the bug.\n"
+            )
+        elif tool_name == "write_file":
+            extra_instruction = (
+                "\n"
+                "Return arguments for one concrete file write.\n"
+                "Required fields: path (string), content (string), create (boolean).\n"
+                "Set `path` to the exact repo-relative or absolute file path to write.\n"
+                "Set `content` to the complete final file contents — not a diff, not a patch, not a summary.\n"
+                "Set `create` to true only when the file should be created if it does not already exist.\n"
+                "Use write_file only when replacing the entire file is the correct action.\n"
+                "If only a portion of a file needs editing, use edit_text instead.\n"
             )
         user_components = [
             PromptComponent(name="history", category="history", text=f"Conversation history:\n{history_block}\n\n"),

@@ -101,23 +101,29 @@
 
 ## Evaluation architecture
 
-Evaluation is intentionally split into three top-level lanes.
+Evaluation exposes two user-facing categories:
 
-- deterministic correctness lane
+- deterministic correctness tests
+- agent behavior tests
+
+Agent behavior tests run in two modes:
+
+- cached mode
+- no-cache validation mode
+
+- deterministic correctness tests
   - deterministic health checks for the repository and runtime
   - imports, smoke coverage, harness coverage, scheduler/runtime/history checks
   - expected to remain at `100%`
-- agent-loop regression lane
-  - runs the real runtime/orchestrator/tool loop under replayed or scripted
-    model responses
-  - uses a test-only record/replay mechanism keyed by a normalized full request
-    payload hash
-  - catches fast regressions without requiring a live model every run
-- live agent evaluation lane
-  - tasks run through the real agent runtime with the real model in the loop
+- agent behavior tests (cached mode)
+  - runs the real runtime/orchestrator/tool loop with cassette-backed record/replay by default
+  - keeps reruns fast once the cache exists
+  - still allows tightly controlled scripted fixtures for focused support-check families
+- agent behavior tests (no-cache validation mode)
+  - tasks run through the real agent runtime with direct model calls enabled
   - scored by difficulty tier with per-task rubric breakdowns
 
-Live difficulty tiers:
+Validation difficulty tiers:
 
 - `extremely_easy`
 - `easy`
@@ -125,22 +131,21 @@ Live difficulty tiers:
 - `hard`
 - `extremely_hard`
 
-The curated live subset is intentionally balanced: each tier must keep at
+The curated validation subset is intentionally balanced: each tier must keep at
 least `10` distinct tasks, and validation fails if that floor regresses.
 
-The three-lane evaluator in `swaag.benchmark.evaluation_runner` writes:
+The category evaluator in `swaag.benchmark.evaluation_runner` writes:
 
-- deterministic-correctness JSON and markdown reports
-- agent-loop regression JSON and markdown reports
-- live agent-evaluation JSON and markdown reports
+- deterministic correctness JSON and markdown reports
+- agent behavior tests (cached mode) JSON and markdown reports
+- agent behavior tests (no-cache validation mode) JSON and markdown reports
 - one combined report with:
   - deterministic correctness percent
-  - agent-loop regression percent
-  - per-regression-family percentages
-  - live agent-evaluation percent
-  - live per-tier percents
-  - live per-task percentages
-  - live rubric excerpts for the weakest tasks
+  - agent behavior tests (cached mode) percent
+  - agent behavior tests (no-cache validation mode) percent
+  - no-cache validation per-tier percents
+  - no-cache validation per-task percentages
+  - no-cache validation rubric excerpts for the weakest tasks
   - one final overall percent
 
 ## Memory model

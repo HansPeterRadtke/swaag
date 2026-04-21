@@ -5,6 +5,7 @@ import random
 import time
 from dataclasses import asdict
 from pathlib import Path
+from typing import Any
 
 import pytest
 import requests
@@ -14,9 +15,40 @@ from swaag.model import ModelClientError
 from swaag.planner import create_shell_recovery_plan, plan_from_payload
 from swaag.retrieval.embeddings import SemanticBackendProtocolError
 from swaag.runtime import AgentRuntime, BudgetExceededError, FatalSemanticEngineError
-from swaag.types import CompletionResult, Message
+from swaag.types import CompletionResult, DecisionOutcome, Message, PromptAnalysis
 
 from tests.helpers import FakeModelClient, plan_response, plan_step
+
+
+class HangingStructuredModelClient(FakeModelClient):
+    def select_request_policy(
+        self,
+        *,
+        contract,
+        kind: str,
+        prompt: str,
+        max_tokens: int,
+        live_mode: bool = False,
+    ):
+        policy = super().select_request_policy(
+            contract=contract,
+            kind=kind,
+            prompt=prompt,
+            max_tokens=max_tokens,
+            live_mode=live_mode,
+        )
+        return policy.__class__(
+            profile_name=policy.profile_name,
+            structured_output_mode=policy.structured_output_mode,
+            effective_contract_mode=policy.effective_contract_mode,
+            effective_timeout_seconds=1,
+            progress_poll_seconds=0.01,
+        )
+
+    def send_completion(self, payload: dict[str, Any], *, timeout_seconds: int | None = None) -> CompletionResult:
+        del payload, timeout_seconds
+        time.sleep(5)
+        raise AssertionError("unreachable")
 
 
 def test_runtime_tool_flow_records_budget_reports(make_config) -> None:
@@ -1079,6 +1111,22 @@ def test_runtime_waits_for_semantic_engine_instead_of_using_fake_semantic_fallba
     assert not any(event.event_type == "prompt_analyzed" for event in events)
 
 
+def test_runtime_progress_polling_enforces_request_timeout(make_config) -> None:
+    runtime = AgentRuntime(
+        make_config(),
+        model_client=HangingStructuredModelClient(),
+    )
+    runtime._max_model_unavailable_attempts = 0
+    state = runtime.create_or_load_session()
+
+    with pytest.raises(ModelClientError, match="semantic_engine_unavailable"):
+        runtime._analyze_prompt_frontend(state, "Fix app.py")
+
+    events = runtime.history.read_history(state.session_id)
+    assert any(event.event_type == "model_request_progress" for event in events)
+    assert not any(event.event_type == "prompt_analyzed" for event in events)
+
+
 def test_runtime_recovers_malformed_coding_plan_with_shell_recovery_plan(
     make_config,
     tmp_path: Path,
@@ -1581,6 +1629,190 @@ def test_runtime_deterministically_extracts_requested_line_from_file_read(make_c
     )
 
     assert runtime._deterministic_answer(state) == "owner=carol"
+
+
+def test_runtime_strategy_selection_prompt_names_required_fields_and_prefers_standard_mode(make_config) -> None:
+    runtime = AgentRuntime(
+        make_config(),
+        model_client=FakeModelClient(
+            contract_responses={
+                "strategy_selection": [
+                    json.dumps(
+                        {
+                            "task_profile": "coding",
+                            "strategy_name": "conservative",
+                            "explore_before_commit": True,
+                            "tool_chain_depth": 2,
+                            "verification_intensity": 1.0,
+                            "reason": "editing task",
+                        }
+                    )
+                ]
+            }
+        ),
+    )
+    state = runtime.create_or_load_session()
+
+    runtime._select_strategy_frontend(
+        state,
+        "Fix app.py",
+        PromptAnalysis(
+            task_type="structured",
+            completeness="complete",
+            requires_expansion=False,
+            requires_decomposition=False,
+            confidence=1.0,
+            detected_entities=["app.py"],
+            detected_goals=["fix"],
+        ),
+        DecisionOutcome(
+            split_task=False,
+            expand_task=False,
+            ask_user=False,
+            assume_missing=False,
+            generate_ideas=False,
+            confidence=1.0,
+            reason="planning required",
+            direct_response=False,
+            execution_mode="full_plan",
+            preferred_tool_name="",
+        ),
+    )
+
+    events = [
+        event for event in runtime.history.read_history(state.session_id)
+        if event.event_type == "prompt_built" and event.payload.get("kind") == "strategy"
+    ]
+
+    assert events[0].payload["prompt_mode"] == "standard"
+    prompt = events[0].payload["prompt"]
+    assert "keys task_profile, strategy_name, explore_before_commit, tool_chain_depth, verification_intensity, and reason" in prompt
+    assert "explore_before_commit means inspect/research before editing or committing to a fix" in prompt
+    assert "verification_intensity is the amount of checking to do" in prompt
+
+
+def test_runtime_subagent_selection_prompt_names_required_fields_and_prefers_standard_mode(make_config) -> None:
+    runtime = AgentRuntime(
+        make_config(),
+        model_client=FakeModelClient(
+            contract_responses={
+                "subagent_selection": [
+                    json.dumps(
+                        {
+                            "spawn": False,
+                            "subagent_type": "none",
+                            "reason": "main agent is sufficient",
+                            "focus": "",
+                        }
+                    )
+                ]
+            }
+        ),
+    )
+    state = runtime.create_or_load_session()
+
+    runtime._select_subagent_frontend(
+        state,
+        goal="Fix app.py",
+        purpose="Inspect whether a coding specialist is needed.",
+        candidate_types=["code", "verification"],
+        detail_lines=["step=inspect"],
+    )
+
+    events = [
+        event for event in runtime.history.read_history(state.session_id)
+        if event.event_type == "prompt_built" and event.payload.get("kind") == "subagent_selection"
+    ]
+
+    assert events[0].payload["prompt_mode"] == "standard"
+    prompt = events[0].payload["prompt"]
+    assert "keys spawn, subagent_type, reason, and focus" in prompt
+    assert "subagent_type must be one available specialist or 'none'" in prompt
+    assert "focus is the short specialist brief" in prompt
+
+
+def test_runtime_generation_decomposition_prompt_names_required_fields_and_prefers_standard_mode(make_config) -> None:
+    runtime = AgentRuntime(
+        make_config(),
+        model_client=FakeModelClient(
+            contract_responses={
+                "generation_decomposition": [
+                    json.dumps(
+                        {
+                            "output_class": "open_ended",
+                            "reason": "split long answer",
+                            "units": [
+                                {
+                                    "unit_id": "u1",
+                                    "title": "Part 1",
+                                    "instruction": "Write the first section.",
+                                }
+                            ],
+                        }
+                    )
+                ]
+            }
+        ),
+    )
+    state = runtime.create_or_load_session()
+    runtime._record_message(state, Message(role="user", content="Write a long answer", created_at="t1"))
+
+    runtime._plan_answer_generation_units(state)
+
+    events = [
+        event for event in runtime.history.read_history(state.session_id)
+        if event.event_type == "prompt_built" and event.payload.get("kind") == "generation_decomposition"
+    ]
+
+    assert events[0].payload["prompt_mode"] == "standard"
+    prompt = events[0].payload["prompt"]
+    assert "keys output_class, reason, and units" in prompt
+    assert "units is an array of generation units" in prompt
+    assert "unit_id, title, and instruction" in prompt
+
+
+def test_runtime_overflow_recovery_prompt_names_required_fields_and_prefers_standard_mode(make_config) -> None:
+    runtime = AgentRuntime(
+        make_config(),
+        model_client=FakeModelClient(
+            contract_responses={
+                "overflow_recovery": [
+                    json.dumps(
+                        {
+                            "keep_partial": True,
+                            "reason": "partial text is safe",
+                            "next_units": [
+                                {
+                                    "unit_id": "u2",
+                                    "title": "Part 2",
+                                    "instruction": "Finish the answer.",
+                                }
+                            ],
+                        }
+                    )
+                ]
+            }
+        ),
+    )
+    state = runtime.create_or_load_session()
+    runtime._record_message(state, Message(role="user", content="Write a long answer", created_at="t1"))
+
+    runtime._recover_overflow_unit(
+        state,
+        unit={"unit_id": "u1", "title": "Part 1", "instruction": "Write the first section."},
+        partial_text="Partial answer",
+    )
+
+    events = [
+        event for event in runtime.history.read_history(state.session_id)
+        if event.event_type == "prompt_built" and event.payload.get("kind") == "overflow_recovery"
+    ]
+
+    assert events[0].payload["prompt_mode"] == "standard"
+    prompt = events[0].payload["prompt"]
+    assert "keys keep_partial, reason, and next_units" in prompt
+    assert "keep_partial tells whether the existing partial text is safe to keep verbatim" in prompt
+    assert "next_units is the remaining work split into smaller unit objects" in prompt
 
 
 def test_runtime_logs_fatal_error_when_hard_enforced_structured_output_is_malformed(make_config) -> None:

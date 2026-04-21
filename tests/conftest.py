@@ -6,14 +6,10 @@ from typing import Any
 import pytest
 
 from swaag.config import AgentConfig, load_config
-from swaag.testlanes import (
-    AGENT_LOOP_REGRESSION_TEST_FILES,
-    BENCHMARK_HEAVY_TEST_FILES,
-    DETERMINISTIC_CORRECTNESS_TEST_FILES,
-    INTEGRATION_TEST_FILES,
-    LIVE_AGENT_EVALUATION_TEST_FILES,
-    LIVE_TEST_FILES,
-    SYSTEM_TEST_FILES,
+from swaag.test_categories import (
+    AGENT_TEST_FILES,
+    CODE_CORRECTNESS_TEST_FILES,
+    _SYSTEM_TEST_FILES,
     project_root,
 )
 
@@ -53,31 +49,13 @@ def pytest_collection_modifyitems(items: list[pytest.Item]) -> None:
             relative = str(path.relative_to(root)).replace("\\", "/")
         except ValueError:
             continue
-        if item.get_closest_marker("benchmark_heavy"):
-            item.add_marker(pytest.mark.benchmark_heavy)
-            continue
-        if item.get_closest_marker("live"):
-            item.add_marker(pytest.mark.live)
-            continue
-        if item.get_closest_marker("integration"):
-            item.add_marker(pytest.mark.integration)
-            continue
-        if relative in LIVE_AGENT_EVALUATION_TEST_FILES:
-            item.add_marker(pytest.mark.live_agent_evaluation)
-        elif relative in AGENT_LOOP_REGRESSION_TEST_FILES:
-            item.add_marker(pytest.mark.agent_loop_regression)
-        elif relative in DETERMINISTIC_CORRECTNESS_TEST_FILES:
-            item.add_marker(pytest.mark.deterministic_correctness)
-        if relative in BENCHMARK_HEAVY_TEST_FILES:
-            item.add_marker(pytest.mark.benchmark_heavy)
-            continue
-        if relative in LIVE_TEST_FILES:
-            item.add_marker(pytest.mark.live)
-            continue
-        if relative in INTEGRATION_TEST_FILES:
-            item.add_marker(pytest.mark.integration)
-            continue
-        if relative in SYSTEM_TEST_FILES:
+        # Primary two-category markers: code_correctness or agent_test.
+        if relative in AGENT_TEST_FILES:
+            item.add_marker(pytest.mark.agent_test)
+        elif relative in CODE_CORRECTNESS_TEST_FILES:
+            item.add_marker(pytest.mark.code_correctness)
+        # Devcheck subset markers (internal routing only — not for deselection).
+        if relative in _SYSTEM_TEST_FILES or relative in AGENT_TEST_FILES:
             item.add_marker(pytest.mark.system)
         else:
             item.add_marker(pytest.mark.fast)

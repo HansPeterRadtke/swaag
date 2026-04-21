@@ -48,7 +48,7 @@ def test_record_replay_client_replays_runtime_tool_flow(make_config, tmp_path: P
         cassette_path=cassette_path,
         mode="record",
         delegate=recording_delegate,
-        request_metadata={"lane": "agent_loop_regression", "fixture": "runtime_tool_flow"},
+        request_metadata={"test_category": "agent_behavior_replay", "fixture": "runtime_tool_flow"},
     )
     recording_runtime = AgentRuntime(config, model_client=recording_client)
     recorded_turn = recording_runtime.run_turn(prompt)
@@ -60,7 +60,7 @@ def test_record_replay_client_replays_runtime_tool_flow(make_config, tmp_path: P
         cassette_path=cassette_path,
         mode="replay",
         delegate=FakeModelClient(),
-        request_metadata={"lane": "agent_loop_regression", "fixture": "runtime_tool_flow"},
+        request_metadata={"test_category": "agent_behavior_replay", "fixture": "runtime_tool_flow"},
     )
     replay_runtime = AgentRuntime(config, model_client=replay_client)
     replayed_turn = replay_runtime.run_turn(prompt)

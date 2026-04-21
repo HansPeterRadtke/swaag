@@ -412,7 +412,11 @@ def _build_solver_prompt(
     if len(trimmed_prompt) > policy.issue_prompt_char_limit:
         trimmed_prompt = trimmed_prompt[: policy.issue_prompt_char_limit].rstrip() + "\n...[truncated]"
     sections = [
-        "Return JSON only matching the provided schema.",
+        "Return one JSON object with the keys summary, path, find, and replace.",
+        "summary is one short description of the chosen edit.",
+        "path is the single file to edit and must match one listed candidate path exactly.",
+        "find is the exact text snippet to replace from the chosen file excerpt.",
+        "replace is the exact replacement text that should be written in place of find.",
         "Make exactly one best-effort concrete code edit in one listed file.",
         "Choose the smallest plausible change that addresses the issue.",
         "Prefer source files over docs or config files unless the issue explicitly targets docs/configuration.",

@@ -7,10 +7,10 @@ import pytest
 from swaag.devcheck import build_pytest_command, main
 from swaag.finalproof import build_finalproof_commands, build_finalproof_environment
 from swaag.live_runtime_profiles import get_documented_final_live_benchmark_recommendation
-from swaag.testlanes import DevcheckPlan, TestmonStatus
+from swaag.test_categories import DevcheckPlan, TestmonStatus
 
 
-def _plan(*, lane: str = "fast", marker_expression: str = "not integration and not live and not benchmark_heavy", candidate_tests: tuple[str, ...] = ("tests/test_imports.py",), testmon: TestmonStatus | None = None) -> DevcheckPlan:
+def _plan(*, lane: str = "fast", marker_expression: str = "not agent_test", candidate_tests: tuple[str, ...] = ("tests/test_imports.py",), testmon: TestmonStatus | None = None) -> DevcheckPlan:
     return DevcheckPlan(
         changed_files=("src/swaag/runtime.py",),
         lane=lane,
@@ -53,8 +53,8 @@ def test_devcheck_requires_explicit_live_lane(capsys: pytest.CaptureFixture[str]
     captured = capsys.readouterr()
 
     assert exit_code == 2
-    assert "followup_lanes=['live']" in captured.out
-    assert "python3 -m swaag.testlane live" in captured.out
+    assert "followup_profiles=['live']" in captured.out
+    assert "swaag.testprofile agent-tests" in captured.out
 
 
 def test_finalproof_builds_required_commands() -> None:
@@ -67,7 +67,7 @@ def test_finalproof_builds_required_commands() -> None:
 
     flattened = [" ".join(command) for command in commands]
     assert any("tests/test_imports.py" in command for command in flattened)
-    assert any("--live-subset" in command for command in flattened)
+    assert any("--validation-subset" in command for command in flattened)
     assert any(f"--structured-output-mode {recommendation.structured_output_mode}" in command for command in flattened)
     assert any(f"--model-profile {recommendation.model_profile}" in command for command in flattened)
     assert any(f"--seeds {','.join(str(seed) for seed in recommendation.seeds)}" in command for command in flattened)
@@ -81,7 +81,7 @@ def test_testing_doc_describes_incremental_lanes() -> None:
     text = (Path(__file__).resolve().parents[1] / "doc" / "testing.md").read_text(encoding="utf-8")
 
     assert "python3 -m swaag.devcheck" in text
-    assert "python3 -m swaag.testlane fast" in text
-    assert "python3 -m swaag.testlane system" in text
+    assert "python3 -m swaag.testprofile fast" in text
+    assert "python3 -m swaag.testprofile system" in text
     assert "pytest-testmon baseline" in text
     assert "candidate tests" in text

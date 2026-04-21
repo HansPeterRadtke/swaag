@@ -14,14 +14,14 @@ from swaag.utils import stable_json_dumps
 
 
 @dataclass(frozen=True, slots=True)
-class AgentRegressionFamily:
+class AgentSupportFamily:
     family_id: str
     description: str
     nodeids: tuple[str, ...]
 
 
 @dataclass(slots=True)
-class AgentRegressionFamilyResult:
+class AgentSupportFamilyResult:
     family_id: str
     description: str
     command: list[str]
@@ -79,9 +79,9 @@ def _parse_junit_results(xml_path: Path) -> dict[str, Any]:
     }
 
 
-def get_agent_regression_families() -> list[AgentRegressionFamily]:
+def get_agent_support_families() -> list[AgentSupportFamily]:
     return [
-        AgentRegressionFamily(
+        AgentSupportFamily(
             family_id="continuation_background",
             description="Background job overlap, wait/resume, and recovered finalization.",
             nodeids=(
@@ -90,7 +90,7 @@ def get_agent_regression_families() -> list[AgentRegressionFamily]:
                 "tests/test_history.py::test_history_rebuild_tracks_wait_events_and_background_process_completion",
             ),
         ),
-        AgentRegressionFamily(
+        AgentSupportFamily(
             family_id="session_control",
             description="Active-session control queuing, non-destructive continuation, and deferred work.",
             nodeids=(
@@ -100,7 +100,7 @@ def get_agent_regression_families() -> list[AgentRegressionFamily]:
                 "tests/test_session_control.py::test_continue_with_note_adds_note_without_forcing_replan",
             ),
         ),
-        AgentRegressionFamily(
+        AgentSupportFamily(
             family_id="session_history_checkpoint",
             description="Human-readable session UX, exact-detail history retrieval, and checkpoints.",
             nodeids=(
@@ -111,7 +111,7 @@ def get_agent_regression_families() -> list[AgentRegressionFamily]:
                 "tests/test_session_control.py::test_code_checkpoint_create_and_restore",
             ),
         ),
-        AgentRegressionFamily(
+        AgentSupportFamily(
             family_id="artifact_recovery",
             description="Artifact-first state tracking and bounded recovery after replans.",
             nodeids=(
@@ -121,7 +121,7 @@ def get_agent_regression_families() -> list[AgentRegressionFamily]:
                 "tests/test_long_running_tasks.py::test_runtime_recovers_after_multiple_replans_and_remains_bounded",
             ),
         ),
-        AgentRegressionFamily(
+        AgentSupportFamily(
             family_id="runtime_recovery_contracts",
             description="Runtime recovery, retry, and contract repair paths stay stable under replay.",
             nodeids=(
@@ -131,7 +131,7 @@ def get_agent_regression_families() -> list[AgentRegressionFamily]:
                 "tests/test_runtime.py::test_runtime_recovers_strategy_incompatible_coding_plan_with_shell_recovery_plan",
             ),
         ),
-        AgentRegressionFamily(
+        AgentSupportFamily(
             family_id="direct_response_guardrails",
             description="Direct-answer shortcuts stay bounded by explicit-tool and exact-reply guardrails.",
             nodeids=(
@@ -142,7 +142,7 @@ def get_agent_regression_families() -> list[AgentRegressionFamily]:
                 "tests/test_runtime.py::test_runtime_blocks_direct_response_when_strategy_requires_write_steps",
             ),
         ),
-        AgentRegressionFamily(
+        AgentSupportFamily(
             family_id="tool_routing_context_focus",
             description="Tool routing, targeted shell recovery, and edit-context focus remain anchored in real evidence.",
             nodeids=(
@@ -153,7 +153,7 @@ def get_agent_regression_families() -> list[AgentRegressionFamily]:
                 "tests/test_runtime.py::test_runtime_uses_expected_tool_input_contract_for_profile_optimized_edit_steps",
             ),
         ),
-        AgentRegressionFamily(
+        AgentSupportFamily(
             family_id="subagent_traceability",
             description="Retriever, reviewer, and planner subagents emit auditable runtime artifacts and events.",
             nodeids=(
@@ -163,12 +163,12 @@ def get_agent_regression_families() -> list[AgentRegressionFamily]:
                 "tests/test_subagents.py::test_planner_subagent_replan_artifact_is_explicit",
             ),
         ),
-        AgentRegressionFamily(
+        AgentSupportFamily(
             family_id="record_replay_runtime",
-            description="Replay-backed runtime regression using recorded full-request payload keys.",
+            description="Replay-backed runtime behavior check using recorded full-request payload keys.",
             nodeids=("tests/test_agent_loop_replay.py::test_record_replay_client_replays_runtime_tool_flow",),
         ),
-        AgentRegressionFamily(
+        AgentSupportFamily(
             family_id="scripted_benchmark_runtime",
             description="Scripted benchmark tasks still exercise the real agent loop and reject false positives.",
             nodeids=(
@@ -179,23 +179,44 @@ def get_agent_regression_families() -> list[AgentRegressionFamily]:
     ]
 
 
-def run_agent_loop_regression_lane(
+def run_agent_behavior_support_checks(
     *,
     output_dir: Path,
     family_ids: Sequence[str] | None = None,
     clean: bool = False,
 ) -> dict[str, Any]:
+    """Run focused cached-mode agent behavior support-check families.
+
+    Each test family runs the real agent runtime/orchestrator/tool loop without
+    no-cache validation traffic. Model calls are handled by one of these
+    mechanisms, depending on the family:
+
+    - FakeModelClient: scripted test fixture returning exact pre-specified
+      responses in sequence. Used for runtime-behavior and recovery families
+      where precise control over model output is required.
+    - ScriptedBenchmarkClient: scripted fixture for full benchmark pipeline
+      tests. Covers task-catalog and false-positive-killer families.
+    - RecordReplayModelClient: replay-cached responses keyed by normalized
+      full request payload hash. Used for the ``record_replay_runtime`` family
+      to demonstrate that the replay mechanism itself works correctly.
+
+    All three are "cached mode" support mechanisms in the sense that none make
+    no-cache validation model calls. The RecordReplayModelClient is the
+    authoritative cassette-backed replay path.
+    FakeModelClient and ScriptedBenchmarkClient are deterministic scripted fixtures
+    appropriate for tests that need precise control over the agent's decision path.
+    """
     if clean and output_dir.exists():
         shutil.rmtree(output_dir)
     ensure_dir(output_dir)
-    families = get_agent_regression_families()
+    families = get_agent_support_families()
     if family_ids:
         selected_map = {item.family_id: item for item in families}
         missing = [family_id for family_id in family_ids if family_id not in selected_map]
         if missing:
-            raise SystemExit(f"Unknown agent regression families: {', '.join(missing)}")
+            raise SystemExit(f"Unknown agent behavior support families: {', '.join(missing)}")
         families = [selected_map[item] for item in family_ids]
-    results: list[AgentRegressionFamilyResult] = []
+    results: list[AgentSupportFamilyResult] = []
     started = time.monotonic()
     repo_root = _repo_root()
     for family in families:
@@ -217,7 +238,7 @@ def run_agent_loop_regression_lane(
         write_text(stderr_path, completed.stderr, encoding="utf-8")
         parsed = _parse_junit_results(junit_path)["summary"]
         results.append(
-            AgentRegressionFamilyResult(
+            AgentSupportFamilyResult(
                 family_id=family.family_id,
                 description=family.description,
                 command=command,
@@ -251,9 +272,10 @@ def run_agent_loop_regression_lane(
         },
         "results": [asdict(item) for item in results],
     }
-    write_text(output_dir / "agent_loop_regression_results.json", stable_json_dumps(payload, indent=2) + "\n", encoding="utf-8")
+    results_json = stable_json_dumps(payload, indent=2) + "\n"
+    write_text(output_dir / "agent_behavior_cached_support_results.json", results_json, encoding="utf-8")
     report_lines = [
-        "# Agent-loop regression lane",
+        "# Agent behavior tests (cached mode)",
         "",
         f"- Percent: `{payload['summary']['percent']:.2f}%`",
         f"- Passed families: `{payload['summary']['passed_families']}`",
@@ -286,5 +308,6 @@ def run_agent_loop_regression_lane(
         )
         report_lines.extend(f"  - `{nodeid}`" for nodeid in result.nodeids)
         report_lines.append("")
-    write_text(output_dir / "agent_loop_regression_report.md", "\n".join(report_lines) + "\n", encoding="utf-8")
+    report_text = "\n".join(report_lines) + "\n"
+    write_text(output_dir / "agent_behavior_cached_support_report.md", report_text, encoding="utf-8")
     return payload

@@ -70,6 +70,7 @@ class RecordReplayModelClient:
         model = getattr(config, "model", None)
         if model is not None:
             metadata["model_base_url"] = getattr(model, "base_url", "")
+            metadata["completion_endpoint"] = getattr(model, "completion_endpoint", "")
             metadata["model_profile"] = getattr(model, "profile_name", "")
             metadata["structured_output_mode"] = getattr(model, "structured_output_mode", "")
             metadata["seed"] = getattr(model, "seed", None)
@@ -99,20 +100,35 @@ class RecordReplayModelClient:
         payload = {
             "mode": "record_replay",
             "request_metadata": _normalize_json(self.request_metadata),
+            "hash_basis": "request_metadata_plus_payload",
+            "transport_metadata_not_in_hash": ["timeout_seconds"],
             "entries": [asdict(entry) for entry in sorted(self._entries.values(), key=lambda item: item.request_hash)],
         }
         write_text(self.cassette_path, stable_json_dumps(payload, indent=2) + "\n", encoding="utf-8")
 
     def _request_envelope(self, payload: dict[str, Any], *, timeout_seconds: int | None = None) -> dict[str, Any]:
+        # timeout_seconds is stored for reference only and is NOT part of the hash.
+        # Hash key = request_metadata + payload (transport-layer timeout does not affect output).
         return {
             "request_metadata": _normalize_json(self.request_metadata),
             "timeout_seconds": timeout_seconds,
             "payload": _normalize_json(payload),
         }
 
+    def _hash_envelope(self, payload: dict[str, Any]) -> dict[str, Any]:
+        # Hash key covers only request_metadata + payload.
+        # timeout_seconds is excluded because it is a transport parameter and
+        # does not affect what the model produces; including it would make cassettes
+        # unnecessarily brittle across environments with different timeout configs.
+        return {
+            "request_metadata": _normalize_json(self.request_metadata),
+            "payload": _normalize_json(payload),
+        }
+
     def _request_hash(self, payload: dict[str, Any], *, timeout_seconds: int | None = None) -> tuple[str, dict[str, Any]]:
         envelope = self._request_envelope(payload, timeout_seconds=timeout_seconds)
-        request_hash = sha256_text(stable_json_dumps(envelope, indent=None))
+        hash_input = self._hash_envelope(payload)
+        request_hash = sha256_text(stable_json_dumps(hash_input, indent=None))
         return request_hash, envelope
 
     def health(self) -> dict[str, Any]:

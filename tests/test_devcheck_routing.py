@@ -6,9 +6,15 @@ from pathlib import Path
 
 import pytest
 
-import swaag.testlanes as testlanes
+import swaag.test_categories as test_categories
 import tests.conftest as test_conftest
-from swaag.testlanes import build_devcheck_plan, build_lane_command, detect_testmon, validate_candidate_tests, validate_lane_registry
+from swaag.test_categories import (
+    build_devcheck_plan,
+    build_lane_command,
+    detect_testmon,
+    validate_candidate_tests,
+    validate_lane_registry,
+)
 
 
 def test_validate_lane_registry_passes_for_current_tree() -> None:
@@ -28,7 +34,7 @@ def test_runtime_change_selects_local_nonlive_runtime_candidates() -> None:
     assert "tests/test_runtime_verification_flow.py" in plan.candidate_tests
     assert "tests/test_live_llamacpp.py" not in plan.candidate_tests
     assert plan.explicit_followup_lanes == ()
-    assert plan.marker_expression == "not integration and not live and not benchmark_heavy"
+    assert plan.marker_expression == "not agent_test"
 
 
 def test_tiny_source_change_stays_in_fast_lane() -> None:
@@ -140,18 +146,18 @@ def test_project_root_uses_direct_url_repo_source_when_installed(monkeypatch: py
     )
 
     monkeypatch.delenv("SWAAG_PROJECT_ROOT", raising=False)
-    monkeypatch.setattr(testlanes, "__file__", str(tmp_path / "site-packages" / "swaag" / "testlanes.py"))
+    monkeypatch.setattr(test_categories, "__file__", str(tmp_path / "site-packages" / "swaag" / "test_categories.py"))
     monkeypatch.setattr(Path, "cwd", classmethod(lambda cls: tmp_path / "workspace"))
     monkeypatch.setattr(importlib.util, "find_spec", lambda name: None)
     monkeypatch.setattr("importlib.metadata.distribution", lambda name: _FakeDistribution())
 
-    root = testlanes._discover_project_root()
+    root = test_categories._discover_project_root()
 
     assert root == repo
 
 
 def test_build_lane_command_uses_explicit_file_lists_for_fast_lane(monkeypatch: pytest.MonkeyPatch) -> None:
-    monkeypatch.setattr(testlanes, "detect_testmon", lambda root=None: testlanes.TestmonStatus(True, True, "forceselect", "ready"))
+    monkeypatch.setattr(test_categories, "detect_testmon", lambda root=None: test_categories.TestmonStatus(True, True, "forceselect", "ready"))
 
     command = build_lane_command("fast", use_testmon=True)
 
@@ -160,32 +166,32 @@ def test_build_lane_command_uses_explicit_file_lists_for_fast_lane(monkeypatch: 
     assert "tests/test_runtime.py" not in command
 
 
-def test_build_lane_command_filters_integration_lane() -> None:
+def test_build_lane_command_lists_integration_files_without_marker_filter() -> None:
     command = build_lane_command("integration")
 
-    assert command[:4] == [command[0], "-m", "pytest", "-q"]
-    assert "integration" in command
+    assert command[:3] == [command[0], "-m", "pytest"]
     assert "tests/test_clean_install.py" in command
+    assert "-m" not in command[3:]
 
 
-def test_collection_marker_precedence_keeps_benchmark_heavy_test_out_of_integration_lane() -> None:
+def test_collection_marks_code_correctness_tests_with_correct_category() -> None:
     class _FakeItem:
-        def __init__(self, path: Path, explicit_markers: set[str]):
+        def __init__(self, path: Path):
             self.fspath = str(path)
-            self._explicit_markers = explicit_markers
             self.recorded: list[str] = []
 
         def get_closest_marker(self, name: str):
-            return object() if name in self._explicit_markers else None
+            return None
 
         def add_marker(self, mark) -> None:  # noqa: ANN001
             self.recorded.append(mark.name)
 
-    item = _FakeItem(testlanes.project_root() / "tests" / "test_clean_install.py", {"benchmark_heavy"})
+    item = _FakeItem(test_categories.project_root() / "tests" / "test_clean_install.py")
 
     test_conftest.pytest_collection_modifyitems([item])
 
-    assert item.recorded == ["benchmark_heavy"]
+    assert "code_correctness" in item.recorded
+    assert "agent_test" not in item.recorded
 
 
 def test_unmapped_file_outside_agent_tree_adds_no_tests() -> None:

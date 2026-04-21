@@ -1,12 +1,13 @@
 from __future__ import annotations
 
-import concurrent.futures
 import copy
 import json
 import os
+import queue
 import re
 import shlex
 import shutil
+import threading
 import time
 from dataclasses import asdict, dataclass, field, fields, replace
 from pathlib import Path
@@ -1908,10 +1909,22 @@ class AgentRuntime:
         contract = strategy_selection_contract()
         instruction_text = (
             "Pick the execution strategy profile that best fits the task.\n"
-            "Respond with JSON only matching the schema. Choose task_profile from\n"
-            "[coding, file_edit, reading, multi_step, generic]. Choose strategy_name\n"
-            "from [conservative, exploratory]. tool_chain_depth must be 1..3.\n"
-            "Use reading only for information-gathering tasks that do not require repository changes.\n"
+            "Return one JSON object with keys task_profile, strategy_name, explore_before_commit, "
+            "tool_chain_depth, verification_intensity, and reason.\n"
+            "task_profile must be one of [coding, file_edit, reading, multi_step, generic].\n"
+            "  coding: task requires writing or changing code.\n"
+            "  file_edit: task edits non-code files or configs.\n"
+            "  reading: information-gathering only, no repo changes.\n"
+            "  multi_step: several dependent steps across tool kinds.\n"
+            "  generic: does not fit the others.\n"
+            "strategy_name must be one of [conservative, exploratory].\n"
+            "  conservative: proceed directly with the known approach.\n"
+            "  exploratory: inspect or research before committing to a solution.\n"
+            "explore_before_commit means inspect/research before editing or committing to a fix; return it as a boolean.\n"
+            "tool_chain_depth is the expected number of dependent tool steps (integer 1 to 3).\n"
+            "verification_intensity is the amount of checking to do (float 0.0 to 2.0; 1.0 is normal).\n"
+            "reason is one short justification.\n"
+            "Use reading only for tasks that do not require repository changes.\n"
             "If the goal explicitly requires code edits, file writes, patches, or running tests, prefer coding or file_edit.\n"
         )
 
@@ -1946,7 +1959,7 @@ class AgentRuntime:
             kind="strategy",
             build_prompt=_build,
             contract=contract,
-            prompt_modes=["lean", *self._interactive_prompt_modes()],
+            prompt_modes=self._interactive_prompt_modes(),
             goal=effective_goal,
         )
         _completion, strategy = self._execute_structured_call(
@@ -1980,9 +1993,13 @@ class AgentRuntime:
         instruction_text = (
             "Decide whether an isolated specialist subagent should be spawned for this stage.\n"
             f"Available subagents: {candidate_text}.\n"
+            "Return one JSON object with keys spawn, subagent_type, reason, and focus.\n"
+            "spawn is a boolean (true/false): true means spawn the named specialist.\n"
             "Choose spawn=true only when a specialist would materially improve the current decision.\n"
-            "Choose subagent_type='none' when no specialist is needed.\n"
-            "Respond with JSON only matching the schema.\n"
+            "subagent_type must be one available specialist or 'none'.\n"
+            "reason is one short justification.\n"
+            "focus is the short specialist brief to pass if a subagent is spawned; use an empty string otherwise.\n"
+            "Set subagent_type='none' and spawn=false when no specialist is needed.\n"
         )
 
         def _build(prompt_mode: str, bundle: ContextBundle) -> PromptAssembly:
@@ -2021,7 +2038,7 @@ class AgentRuntime:
             kind="subagent_selection",
             build_prompt=_build,
             contract=contract,
-            prompt_modes=["lean", *self._interactive_prompt_modes()],
+            prompt_modes=self._interactive_prompt_modes(),
             goal=goal,
         )
 
@@ -2073,15 +2090,18 @@ class AgentRuntime:
         normalized_error_type = error_type or (error.__class__.__name__ if error is not None else "")
         instruction_text = (
             "Classify the failure that occurred. Respond with JSON only.\n"
+            "Return one JSON object with keys kind, retryable, requires_replan, suggested_strategy_mode, wait_seconds, and reason.\n"
             "kind must be one of [tool_failure, reasoning_failure, planning_failure,\n"
             "missing_information, verification_failure, budget_failure, state_inconsistency,\n"
             "transient_external_wait, retry_now, retry_later_backoff, deterministic_permanent,\n"
             "side_effect_unsafe, needs_replan, needs_clarification, blocked_external,\n"
             "continue_other].\n"
+            "requires_replan should be true only when the current plan shape is no longer usable.\n"
             "suggested_strategy_mode must be one of [conservative, recovery, verification_heavy].\n"
             "Set retryable=true only if a simple retry of the same action is likely to help.\n"
             "Set wait_seconds to the number of seconds to wait before retrying when the kind\n"
             "is transient_external_wait or retry_later_backoff; otherwise 0.\n"
+            "reason is one short justification.\n"
         )
         step_payload = "(no step)"
         if step is not None:
@@ -2154,11 +2174,13 @@ class AgentRuntime:
         candidates = list(orchestration.candidate_actions)
         instruction_text = (
             "Pick the next execution action. Respond with JSON only.\n"
+            "Return one JSON object with keys action and reason.\n"
             f"action must be one of {candidates}.\n"
             "Use 'execute_step' to run the next ready step, 'retry_step' to retry the\n"
             "same step, 'replan' to rebuild the plan, 'wait' to wait for background work,\n"
             "'stop' to halt, or 'answer_directly' if the user can be answered without\n"
             "further tool use.\n"
+            "reason is one short justification.\n"
         )
         step_payload = "(no step)"
         if orchestration.step is not None:
@@ -3734,7 +3756,7 @@ class AgentRuntime:
         if getattr(self.client, "is_scripted_benchmark_client", False):
             # Scripted benchmark/replay clients deliberately exercise wrong-tool
             # and repeated-action paths. Rewriting those decisions into the
-            # expected tool hides real agent-loop regressions and breaks the
+            # expected tool hides real agent behavior failures and breaks the
             # failure-task catalog.
             return decision
         step = self._current_or_next_plan_step(state)
@@ -4426,9 +4448,15 @@ class AgentRuntime:
                     category="instruction",
                     text=(
                         "Plan answer generation units.\n"
-                        "Classify the output as bounded_structured, schema_bounded, or open_ended.\n"
-                        "For open_ended outputs, split the response into the smallest coherent semantic units that can be generated safely.\n"
-                        "Use one unit when a single response is sufficient.\n"
+                        "Return one JSON object with keys output_class, reason, and units.\n"
+                        "output_class must be one of [bounded_structured, schema_bounded, open_ended].\n"
+                        "  bounded_structured: one short constrained response fits within the budget.\n"
+                        "  schema_bounded: response follows a known schema but may be moderately long.\n"
+                        "  open_ended: free-form text that may need splitting into multiple units.\n"
+                        "reason is one short justification.\n"
+                        "units is an array of generation units; each unit object must have unit_id, title, and instruction.\n"
+                        "For open_ended output, split into the smallest coherent semantic units that can each be generated safely within budget.\n"
+                        "Use one unit when a single bounded response is sufficient.\n"
                         f"Details:\n{chr(10).join(detail_lines)}\n"
                     ),
                 ),
@@ -4440,7 +4468,7 @@ class AgentRuntime:
             kind="generation_decomposition",
             build_prompt=_build,
             contract=contract,
-            prompt_modes=["lean", *self._interactive_prompt_modes()],
+            prompt_modes=self._interactive_prompt_modes(),
             goal=self._goal_text(state),
         )
         _completion, payload = self._execute_structured_call(
@@ -4562,9 +4590,14 @@ class AgentRuntime:
                     name="overflow_instruction",
                     category="instruction",
                     text=(
-                        "The previous generation unit overflowed its budget.\n"
-                        "Decide whether the partial text is safe to keep, and if needed split the remaining work into smaller semantic units.\n"
-                        "Do not ask to continue the same text blindly.\n"
+                        "The previous generation unit overflowed its token budget.\n"
+                        "Return one JSON object with keys keep_partial, reason, and next_units.\n"
+                        "keep_partial tells whether the existing partial text is safe to keep verbatim; return it as a boolean.\n"
+                        "reason is one short justification.\n"
+                        "next_units is the remaining work split into smaller unit objects; each object must have unit_id, title, and instruction.\n"
+                        "If partial text is truncated mid-sentence or missing critical content, set keep_partial=false.\n"
+                        "Split remaining work into the smallest coherent units that each fit within a normal budget.\n"
+                        "Do not return a unit that merely says 'continue' — each unit must have a concrete, bounded instruction.\n"
                     ),
                 ),
             ]
@@ -4575,7 +4608,7 @@ class AgentRuntime:
             kind="overflow_recovery",
             build_prompt=_build,
             contract=contract,
-            prompt_modes=["lean", *self._interactive_prompt_modes()],
+            prompt_modes=self._interactive_prompt_modes(),
             goal=self._goal_text(state),
         )
         _completion, payload = self._execute_structured_call(
@@ -5094,29 +5127,50 @@ class AgentRuntime:
             )
             started = time.monotonic()
             try:
-                with concurrent.futures.ThreadPoolExecutor(max_workers=1) as executor:
-                    future = executor.submit(
-                        self.client.send_completion,
-                        request,
-                        timeout_seconds=request_policy.effective_timeout_seconds,
-                    )
-                    while True:
-                        try:
-                            completion = future.result(timeout=request_policy.progress_poll_seconds)
-                            break
-                        except concurrent.futures.TimeoutError:
-                            elapsed = round(time.monotonic() - started, 3)
-                            guard.record(
-                                "model_request_progress",
-                                {
-                                    "kind": prepared.assembly.kind,
-                                    "prompt_mode": prepared.prompt_mode,
-                                    "attempt": attempt + 1,
-                                    "elapsed_seconds": elapsed,
-                                    "timeout_seconds": request_policy.effective_timeout_seconds,
-                                    "policy": asdict(request_policy),
-                                },
-                            )
+                completion_queue: queue.Queue[tuple[str, Any]] = queue.Queue(maxsize=1)
+
+                def _worker() -> None:
+                    try:
+                        result = self.client.send_completion(
+                            request,
+                            timeout_seconds=request_policy.effective_timeout_seconds,
+                        )
+                    except Exception as exc:  # pragma: no cover - exercised through queue handoff
+                        completion_queue.put(("error", exc))
+                        return
+                    completion_queue.put(("result", result))
+
+                worker = threading.Thread(
+                    target=_worker,
+                    name=f"swaag-model-call-{prepared.assembly.kind}",
+                    daemon=True,
+                )
+                worker.start()
+                while True:
+                    elapsed = round(time.monotonic() - started, 3)
+                    if elapsed >= float(request_policy.effective_timeout_seconds):
+                        raise requests.Timeout(
+                            f"llama.cpp request exceeded timeout_seconds={request_policy.effective_timeout_seconds}"
+                        )
+                    try:
+                        outcome, payload = completion_queue.get(timeout=request_policy.progress_poll_seconds)
+                    except queue.Empty:
+                        guard.record(
+                            "model_request_progress",
+                            {
+                                "kind": prepared.assembly.kind,
+                                "prompt_mode": prepared.prompt_mode,
+                                "attempt": attempt + 1,
+                                "elapsed_seconds": elapsed,
+                                "timeout_seconds": request_policy.effective_timeout_seconds,
+                                "policy": asdict(request_policy),
+                            },
+                        )
+                        continue
+                    if outcome == "error":
+                        raise payload
+                    completion = payload
+                    break
             except Exception as exc:
                 if self._is_model_server_unavailable(exc):
                     if (

@@ -248,7 +248,6 @@ def _create_clean_room(tmp_path: Path) -> tuple[Path, Path, dict[str, str], HTTP
     return python, workspace, env, server, thread
 
 
-@pytest.mark.integration
 def test_package_installs_and_cli_runs_from_clean_venv(tmp_path: Path) -> None:
     python, workspace, env, server, thread = _create_clean_room(tmp_path)
     try:
@@ -329,7 +328,7 @@ def test_package_installs_and_cli_runs_from_clean_venv(tmp_path: Path) -> None:
             capture_output=True,
         )
         assert "tests/test_runtime_verification_flow.py" in devcheck.stdout
-        assert "lane=system" in devcheck.stdout
+        assert "test_profile=system" in devcheck.stdout
         assert "testmon=available:False" in devcheck.stdout
 
         finalproof = subprocess.run(
@@ -341,7 +340,7 @@ def test_package_installs_and_cli_runs_from_clean_venv(tmp_path: Path) -> None:
             capture_output=True,
         )
         assert "tests/test_scaled_catalog.py" in finalproof.stdout
-        assert "--live-subset" in finalproof.stdout
+        assert "--validation-subset" in finalproof.stdout
         assert "--model-profile small_fast" in finalproof.stdout
         assert "--structured-output-mode post_validate" in finalproof.stdout
         assert "--seeds 11,23,37" in finalproof.stdout
@@ -370,7 +369,7 @@ def test_package_installs_and_cli_runs_from_clean_venv(tmp_path: Path) -> None:
         thread.join(timeout=5)
 
 
-@pytest.mark.benchmark_heavy
+@pytest.mark.agent_test
 def test_package_runs_full_benchmark_from_clean_venv(tmp_path: Path) -> None:
     python, workspace, env, server, thread = _create_clean_room(tmp_path)
     try:

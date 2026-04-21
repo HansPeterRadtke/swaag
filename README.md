@@ -16,7 +16,7 @@ Core properties:
 
 This repository contains the full working agent project, including:
 - the main `swaag` package under `src/swaag`
-- CLI entrypoints for agent use, devcheck, lanes, benchmarks, and final proof
+- CLI entrypoints for agent use, devcheck, test profiles, benchmarks, and final proof
 - benchmark fixtures and local benchmark wrappers
 - full repo-level test suite under `tests/`
 - additional package-level smoke tests under `src/swaag/tests`
@@ -175,28 +175,28 @@ Changed-area developer loop:
 python3 -m swaag.devcheck
 ```
 
-Fast lane:
+Fast tests:
 
 ```bash
-python3 -m swaag.testlane fast
+python3 -m swaag.testprofile fast
 ```
 
-System lane:
+System tests:
 
 ```bash
-python3 -m swaag.testlane system
+python3 -m swaag.testprofile system
 ```
 
-Integration lane:
+Integration tests:
 
 ```bash
-python3 -m swaag.testlane integration
+python3 -m swaag.testprofile integration
 ```
 
-Live lane against a real local server:
+No-cache validation against a real local server:
 
 ```bash
-SWAAG_RUN_LIVE=1 python3 -m swaag.testlane live
+SWAAG_RUN_LIVE=1 python3 -m swaag.testprofile live
 ```
 
 Final proof loop:
@@ -207,65 +207,69 @@ python3 -m swaag.finalproof
 
 ## Evaluation
 
-SWAAG now uses an explicit three-lane evaluation architecture:
+SWAAG presents testing in two user-facing categories:
 
-- deterministic correctness
+- deterministic correctness tests
   - imports, smoke tests, deterministic unit tests, harness checks, runtime plumbing
-  - no live LLM dependency
+  - no model traffic
   - expected to stay at `100%`
-- agent-loop regression
-  - runs through the real runtime/orchestrator/tool loop
-  - uses test-only record/replay cassettes or scripted model fixtures where appropriate
-  - catches fast regressions without paying live-model cost every run
-- live agent evaluation
-  - runs real end-to-end tasks through the live agent runtime with a real model
-  - grouped into five tiers:
-    - `extremely_easy`
-    - `easy`
-    - `normal`
-    - `hard`
-    - `extremely_hard`
-  - the curated live subset currently keeps at least `10` distinct tasks in each tier
-  - each task produces a percentage score plus rubric breakdown
+- agent behavior tests
+  - cached mode is the normal fast path
+    - uses cassette-backed record/replay by default when model-backed task execution is needed
+    - keeps reruns fast once the cache exists
+  - no-cache validation mode is the occasional real-model confirmation path
+    - uses the same real agent runtime with direct `llama.cpp` calls
+    - grouped into five difficulty tiers:
+      - `extremely_easy`
+      - `easy`
+      - `normal`
+      - `hard`
+      - `extremely_hard`
+    - the curated validation subset keeps at least `10` distinct tasks in each tier
+    - each task produces a percentage score plus rubric breakdown
 
-Run the explicit lane commands:
+Recommended commands:
 
 ```bash
-python3 -m swaag.benchmark regression --all --clean --output /tmp/swaag-regression
-python3 -m swaag.benchmark three-lane-evaluate --clean --live-subset --output /tmp/swaag-three-lane
+python3 -m pytest -q -x
+python3 -m swaag.benchmark agent-tests --mode cached --clean --validation-subset --output /tmp/swaag-agent-tests-cached
+python3 -m swaag.benchmark agent-tests --mode no-cache-validation --clean --validation-subset --output /tmp/swaag-agent-tests-validation
+python3 -m swaag.benchmark test-categories --clean --validation-subset --output /tmp/swaag-test-categories
 ```
 
-`three-lane-evaluate` is the authoritative final score because it averages:
+`test-categories` is the authoritative combined score command. It averages:
 
 - deterministic correctness percent
-- agent-loop regression percent
-- live agent evaluation percent
+- agent behavior tests (cached mode) percent
+- agent behavior tests (no-cache validation mode) percent
 
-The older `evaluate` command still exists as a fast non-live combined view for
-local iteration. Use it when you want deterministic correctness plus the
-scripted full-agent task catalog without paying live-model cost:
-
-```bash
-python3 -m swaag.benchmark evaluate --clean --output /tmp/swaag-eval
-```
-
-Artifacts written by the three-lane evaluator:
-- `three_lane_evaluation_results.json`
-- `three_lane_evaluation_report.md`
+Artifacts written by the combined evaluator:
+- `test_categories_results.json`
+- `test_categories_report.md`
 - `deterministic_correctness/functional_correctness_results.json`
 - `deterministic_correctness/functional_correctness_report.md`
-- `agent_loop_regression/agent_loop_regression_results.json`
-- `agent_loop_regression/agent_loop_regression_report.md`
-- `live_agent_evaluation/live_agent_evaluation_results.json`
-- `live_agent_evaluation/benchmark_results.json`
-- `live_agent_evaluation/benchmark_report.md`
+- `agent_behavior_cached_results.json`
+- `agent_behavior_cached_report.md`
+- `agent_behavior_cached/agent_behavior_cached_results.json`
+- `agent_behavior_cached/agent_behavior_cached_report.md`
+- `agent_behavior_cached/replay_cache/`
+- `agent_behavior_validation_results.json`
+- `agent_behavior_validation_report.md`
+- `agent_behavior_validation/agent_behavior_validation_results.json`
+- `agent_behavior_validation/agent_behavior_validation_report.md`
 
-The human-readable three-lane report now includes:
-- per-lane summaries
-- per-regression-family scores and evidence paths
-- per-tier live scores
-- lowest-scoring live tasks with rubric excerpts
-- artifact paths for each lane
+The human-readable combined report includes:
+- per-category summaries
+- per-tier no-cache validation scores
+- lowest-scoring no-cache validation tasks with rubric excerpts
+- artifact paths for each category and mode
+- replay-cache location for cached mode
+
+Focused cached-mode agent behavior support checks:
+
+```bash
+python3 -m swaag.benchmark agent-support --all --clean --output /tmp/swaag-agent-support
+```
 
 ## Build and publish
 
@@ -289,24 +293,26 @@ Main benchmark entrypoints:
 
 ```bash
 python3 -m swaag.benchmark evaluate --clean --output /tmp/swaag-eval --json
-python3 -m swaag.benchmark regression --all --output /tmp/swaag-regression --json
-python3 -m swaag.benchmark three-lane-evaluate --live-subset --output /tmp/swaag-three-lane --json
+python3 -m swaag.benchmark agent-support --all --output /tmp/swaag-agent-support --json
+python3 -m swaag.benchmark agent-tests --mode cached --validation-subset --output /tmp/swaag-agent-tests-cached --json
+python3 -m swaag.benchmark agent-tests --mode no-cache-validation --validation-subset --output /tmp/swaag-agent-tests-validation --json
+python3 -m swaag.benchmark test-categories --validation-subset --output /tmp/swaag-test-categories --json
 python3 -m swaag.benchmark run --clean --output /tmp/swaag-benchmark --json
 python3 -m swaag.benchmark external list
 python3 -m swaag.benchmark external smoke --all --output /tmp/swaag-external-smoke --json
 python3 -m swaag.benchmark system --all --output /tmp/swaag-system-bench --json
 ```
 
-Use `three-lane-evaluate` for the authoritative scoring view:
+Use `test-categories` for the authoritative combined scoring view:
 - deterministic correctness percent
-- agent-loop regression percent
-- live agent evaluation percent
-- live per-tier difficulty percents
-- live per-task rubric scores
-- one final overall percent as a simple arithmetic average of the three lane scores
+- agent behavior tests (cached mode) percent
+- agent behavior tests (no-cache validation mode) percent
+- no-cache validation per-tier difficulty percents
+- no-cache validation per-task rubric scores
+- one final overall percent as a simple arithmetic average of the three category scores
 
 Use `evaluate` when you want a fast non-live combined run. Use `run` when you
-want only the built-in full-agent benchmark task lane.
+want only the built-in full-agent benchmark task set.
 
 Reproducible bounded SWE-bench fixtures live in:
 - `src/swaag/benchmark/fixtures/swebench/`
