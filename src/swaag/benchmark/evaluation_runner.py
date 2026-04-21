@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import os
+import shutil
 import subprocess
 import sys
 import xml.etree.ElementTree as ET
@@ -10,22 +11,6 @@ from typing import Any, Sequence
 from swaag.benchmark.task_definitions import BENCHMARK_DIFFICULTY_ORDER
 from swaag.fsops import ensure_dir, write_text
 from swaag.utils import stable_json_dumps
-
-
-def _agent_behavior_mode_suffix(mode: str) -> str:
-    if mode == "cached":
-        return "cached"
-    if mode == "no-cache-validation":
-        return "validation"
-    raise ValueError(f"Unsupported agent behavior mode: {mode}")
-
-
-def _agent_behavior_mode_label(mode: str) -> str:
-    if mode == "cached":
-        return "agent behavior tests (cached mode)"
-    if mode == "no-cache-validation":
-        return "agent behavior tests (no-cache validation mode)"
-    raise ValueError(f"Unsupported agent behavior mode: {mode}")
 
 
 def _parse_junit_results(xml_path: Path) -> dict[str, Any]:
@@ -90,33 +75,18 @@ def _parse_junit_results(xml_path: Path) -> dict[str, Any]:
     }
 
 
-def run_functional_correctness_lane(
-    *,
-    output_dir: Path,
-    pytest_args: Sequence[str] | None = None,
-    env: dict[str, str] | None = None,
-) -> dict[str, Any]:
+def _run_pytest_category(*, output_dir: Path, category_name: str, pytest_args: Sequence[str], env: dict[str, str] | None = None) -> dict[str, Any]:
     ensure_dir(output_dir)
-    junit_path = output_dir / "functional_correctness.junit.xml"
-    stdout_path = output_dir / "functional_correctness.stdout.txt"
-    stderr_path = output_dir / "functional_correctness.stderr.txt"
-    if pytest_args is None:
-        from swaag.test_categories import CODE_CORRECTNESS_TEST_FILES, project_root as _project_root
-
-        base = _project_root()
-        pytest_args = sorted(str(base / f) for f in CODE_CORRECTNESS_TEST_FILES)
+    junit_path = output_dir / f"{category_name}.junit.xml"
+    stdout_path = output_dir / f"{category_name}.stdout.txt"
+    stderr_path = output_dir / f"{category_name}.stderr.txt"
     command = [sys.executable, "-m", "pytest", "-q", f"--junitxml={junit_path}", *pytest_args]
-    completed = subprocess.run(
-        command,
-        check=False,
-        text=True,
-        capture_output=True,
-        env=env or os.environ.copy(),
-    )
+    completed = subprocess.run(command, check=False, text=True, capture_output=True, env=env or os.environ.copy())
     write_text(stdout_path, completed.stdout, encoding="utf-8")
     write_text(stderr_path, completed.stderr, encoding="utf-8")
     parsed = _parse_junit_results(junit_path)
     payload = {
+        "category": category_name,
         "command": command,
         "exit_code": completed.returncode,
         "stdout_path": str(stdout_path),
@@ -124,388 +94,91 @@ def run_functional_correctness_lane(
         "junit_path": str(junit_path),
         **parsed,
     }
-    write_text(output_dir / "functional_correctness_results.json", stable_json_dumps(payload, indent=2) + "\n", encoding="utf-8")
-    report_lines = [
-        "# Deterministic correctness tests",
+    write_text(output_dir / f"{category_name}_results.json", stable_json_dumps(payload, indent=2) + "\n", encoding="utf-8")
+    write_text(output_dir / f"{category_name}_report.md", _render_pytest_category_report(payload), encoding="utf-8")
+    return payload
+
+
+def _render_pytest_category_report(payload: dict[str, Any]) -> str:
+    title = "Deterministic code-correctness tests" if payload["category"] == "code_correctness" else "Cached agent tests"
+    lines = [
+        f"# {title}",
         "",
-        f"- Percent: `{payload['summary']['percent']:.2f}%`",
-        f"- Passed: `{payload['summary']['passed_tests']}`",
-        f"- Failed: `{payload['summary']['failed_tests']}`",
-        f"- Skipped: `{payload['summary']['skipped_tests']}`",
+        f"- percent: `{payload['summary']['percent']:.2f}%`",
+        f"- passed: `{payload['summary']['passed_tests']}`",
+        f"- failed: `{payload['summary']['failed_tests']}`",
+        f"- skipped: `{payload['summary']['skipped_tests']}`",
+        "",
+        "## Per-test results",
         "",
     ]
     for test in payload["tests"]:
         score_text = "n/a" if test["score_percent"] is None else f"{float(test['score_percent']):.2f}%"
-        report_lines.append(f"- `{test['nodeid']}`: `{test['status']}` / `{score_text}`")
-    write_text(output_dir / "functional_correctness_report.md", "\n".join(report_lines) + "\n", encoding="utf-8")
-    return payload
-
-
-def render_evaluation_report(payload: dict[str, Any]) -> str:
-    lines = [
-        "# SWAAG evaluation report",
-        "",
-        f"- overall_percent: `{payload['overall_percent']:.2f}%`",
-        f"- functional_correctness_percent: `{payload['functional_correctness']['summary']['percent']:.2f}%`",
-        "",
-        "## Difficulty tier scores",
-        "",
-    ]
-    for difficulty in BENCHMARK_DIFFICULTY_ORDER:
-        score = float(payload["agent_evaluation"]["difficulty_tier_scores"].get(difficulty, 0.0))
-        lines.append(f"- `{difficulty}`: `{score:.2f}%`")
-    lines.extend(["", "## Group scores", ""])
-    for group_name, score in payload["group_scores"].items():
-        lines.append(f"- `{group_name}`: `{float(score):.2f}%`")
-    lines.extend(["", "## Lowest-scoring agent tasks", ""])
-    tasks = sorted(payload["agent_evaluation"]["tasks"], key=lambda item: (float(item.get("score_percent", 0.0)), item["task_id"]))
-    for item in tasks[:10]:
-        lines.append(f"- `{item['task_id']}` / `{item['difficulty']}`: `{float(item.get('score_percent', 0.0)):.2f}%`")
+        lines.append(f"- `{test['nodeid']}`: `{test['status']}` / `{score_text}`")
     return "\n".join(lines) + "\n"
 
 
-def render_agent_behavior_tests_report(payload: dict[str, Any]) -> str:
-    mode = str(payload.get("mode", "cached"))
-    label = _agent_behavior_mode_label(mode)
-    summary = payload.get("summary", {})
-    lines = [
-        f"# {label[0].upper()}{label[1:]}",
-        "",
-        f"- percent: `{float(payload.get('percent', 0.0)):.2f}%`",
-        f"- task_count: `{int(summary.get('total_tasks', len(payload.get('tasks', []))))}`",
-        f"- successful_tasks: `{int(summary.get('successful_tasks', 0))}`",
-        f"- failed_tasks: `{int(summary.get('failed_tasks', 0))}`",
-        "",
-        "## Difficulty tier scores",
-        "",
-    ]
-    for difficulty in BENCHMARK_DIFFICULTY_ORDER:
-        lines.append(f"- `{difficulty}`: `{float(payload['difficulty_tier_scores'].get(difficulty, 0.0)):.2f}%`")
-    lines.extend(["", "## Lowest-scoring tasks", ""])
-    tasks = sorted(payload.get("tasks", []), key=lambda item: (float(item.get("score_percent", 0.0)), item["task_id"]))
-    for item in tasks[:10]:
-        lines.append(
-            f"- `{item['task_id']}` / `{item['difficulty']}` / `{item.get('task_type', 'unknown')}`: `{float(item.get('score_percent', 0.0)):.2f}%`"
-        )
-        rubric = item.get("rubric_breakdown", {})
-        if isinstance(rubric, dict) and rubric:
-            weakest = sorted(
-                rubric.items(),
-                key=lambda kv: float(kv[1].get("percent", 0.0)),
-            )[:2]
-            for rubric_name, rubric_payload in weakest:
-                lines.append(
-                    f"  - rubric `{rubric_name}`: `{float(rubric_payload.get('earned', 0.0)):.2f}/{float(rubric_payload.get('weight', 0.0)):.2f}` (`{float(rubric_payload.get('percent', 0.0)):.2f}%`)"
-                )
-    lines.extend(["", "## Artifact paths", ""])
-    suffix = _agent_behavior_mode_suffix(mode)
-    lines.extend(
-        [
-            f"- `{suffix}` results JSON: `agent_behavior_{suffix}_results.json`",
-            f"- `{suffix}` report markdown: `agent_behavior_{suffix}_report.md`",
-            f"- benchmark task JSON: `agent_behavior_{suffix}/agent_behavior_{suffix}_results.json`",
-            f"- benchmark task report: `agent_behavior_{suffix}/agent_behavior_{suffix}_report.md`",
-        ]
+def run_code_correctness_category(*, output_dir: Path, pytest_args: Sequence[str] | None = None, env: dict[str, str] | None = None) -> dict[str, Any]:
+    if pytest_args is None:
+        from swaag.test_categories import CODE_CORRECTNESS_TEST_FILES, project_root as _project_root
+
+        base = _project_root()
+        pytest_args = sorted(str(base / f) for f in CODE_CORRECTNESS_TEST_FILES)
+    return _run_pytest_category(output_dir=output_dir, category_name="code_correctness", pytest_args=pytest_args, env=env)
+
+
+# Backward-compatible internal alias for old imports; reports use code_correctness names.
+def run_functional_correctness_lane(*, output_dir: Path, pytest_args: Sequence[str] | None = None, env: dict[str, str] | None = None) -> dict[str, Any]:
+    return run_code_correctness_category(output_dir=output_dir, pytest_args=pytest_args, env=env)
+
+
+def run_agent_test_category(*, output_dir: Path, pytest_args: Sequence[str] | None = None, env: dict[str, str] | None = None) -> dict[str, Any]:
+    if pytest_args is None:
+        from swaag.test_categories import AGENT_TEST_FILES, project_root as _project_root
+
+        base = _project_root()
+        pytest_args = sorted(str(base / f) for f in AGENT_TEST_FILES)
+    return _run_pytest_category(output_dir=output_dir, category_name="agent_test", pytest_args=pytest_args, env=env)
+
+
+def _deterministic_failed(payload: dict[str, Any]) -> bool:
+    return (
+        float(payload["summary"].get("percent", 0.0)) < 100.0
+        or int(payload["summary"].get("failed_tests", 0)) > 0
+        or int(payload.get("exit_code", 0)) != 0
     )
-    if mode == "cached":
-        lines.append("- replay cache root: `agent_behavior_cached/replay_cache/`")
-    else:
-        lines.append("- compatibility JSON alias: `agent_behavior_validation/benchmark_results.json`")
-        lines.append("- compatibility report alias: `agent_behavior_validation/benchmark_report.md`")
-    return "\n".join(lines) + "\n"
-
-
-def run_agent_behavior_tests(
-    *,
-    output_dir: Path,
-    mode: str,
-    benchmark_task_ids: list[str] | None = None,
-    live_subset: bool = True,
-    model_base_url: str | None = None,
-    timeout_seconds: int | None = None,
-    connect_timeout_seconds: int | None = None,
-    model_profile: str | None = None,
-    structured_output_mode: str | None = None,
-    progress_poll_seconds: float | None = None,
-    seeds: list[int] | None = None,
-) -> dict[str, Any]:
-    from swaag.benchmark.benchmark_runner import run_benchmarks
-
-    ensure_dir(output_dir)
-    normalized_mode = str(mode).strip().lower()
-    suffix = _agent_behavior_mode_suffix(normalized_mode)
-    report = run_benchmarks(
-        output_dir=output_dir / f"agent_behavior_{suffix}",
-        task_ids=benchmark_task_ids,
-        clean=True,
-        live_subset=live_subset,
-        use_live_model=True,
-        model_base_url=model_base_url,
-        timeout_seconds=timeout_seconds,
-        connect_timeout_seconds=connect_timeout_seconds,
-        model_profile=model_profile,
-        structured_output_mode=structured_output_mode,
-        progress_poll_seconds=progress_poll_seconds,
-        seeds=seeds,
-        agent_behavior_mode=normalized_mode,
-    )
-    difficulty_scores = {
-        difficulty: float(report["summary"]["score_by_difficulty"].get(difficulty, 0.0))
-        for difficulty in BENCHMARK_DIFFICULTY_ORDER
-    }
-    payload = {
-        **report,
-        "mode": normalized_mode,
-        "mode_label": _agent_behavior_mode_label(normalized_mode),
-        "difficulty_tier_scores": difficulty_scores,
-        "percent": float(report["summary"].get("average_task_score_percent", 0.0)),
-    }
-    write_text(output_dir / f"agent_behavior_{suffix}_results.json", stable_json_dumps(payload, indent=2) + "\n", encoding="utf-8")
-    write_text(output_dir / f"agent_behavior_{suffix}_report.md", render_agent_behavior_tests_report(payload), encoding="utf-8")
-    if normalized_mode == "no-cache-validation":
-        benchmark_dir = output_dir / "agent_behavior_validation"
-        write_text(benchmark_dir / "benchmark_results.json", stable_json_dumps(report, indent=2) + "\n", encoding="utf-8")
-        benchmark_report = benchmark_dir / "agent_behavior_validation_report.md"
-        if benchmark_report.exists():
-            write_text(benchmark_dir / "benchmark_report.md", benchmark_report.read_text(encoding="utf-8"), encoding="utf-8")
-    return payload
-
-
-def run_agent_behavior_validation(
-    *,
-    output_dir: Path,
-    benchmark_task_ids: list[str] | None = None,
-    live_subset: bool = True,
-    model_base_url: str | None = None,
-    timeout_seconds: int | None = None,
-    connect_timeout_seconds: int | None = None,
-    model_profile: str | None = None,
-    structured_output_mode: str | None = None,
-    progress_poll_seconds: float | None = None,
-    seeds: list[int] | None = None,
-) -> dict[str, Any]:
-    payload = run_agent_behavior_tests(
-        output_dir=output_dir,
-        mode="no-cache-validation",
-        benchmark_task_ids=benchmark_task_ids,
-        live_subset=live_subset,
-        model_base_url=model_base_url,
-        timeout_seconds=timeout_seconds,
-        connect_timeout_seconds=connect_timeout_seconds,
-        model_profile=model_profile,
-        structured_output_mode=structured_output_mode,
-        progress_poll_seconds=progress_poll_seconds,
-        seeds=seeds,
-    )
-    write_text(output_dir / "agent_behavior_validation_results.json", stable_json_dumps(payload, indent=2) + "\n", encoding="utf-8")
-    return payload
-
-
-def render_combined_test_evaluation_report(payload: dict[str, Any]) -> str:
-    deterministic_results = payload["deterministic_correctness"]
-    cached_support = payload.get("agent_behavior_cached_support")
-    validation_results = payload.get("agent_behavior_validation")
-    if cached_support is None or validation_results is None:
-        raise KeyError("combined evaluation payload is missing agent behavior results")
-    lines = [
-        "# SWAAG evaluation report",
-        "",
-        f"- final_overall_percent: `{payload['overall_percent']:.2f}%`",
-        f"- deterministic_correctness_percent: `{deterministic_results['summary']['percent']:.2f}%`",
-        f"- agent_behavior_cached_support_percent: `{cached_support['summary']['percent']:.2f}%`",
-        f"- agent_behavior_validation_percent: `{float(validation_results['percent']):.2f}%`",
-        "",
-        "## Test category summaries",
-        "",
-        f"- deterministic correctness tests: `{deterministic_results['summary']['passed_tests']}` passed / `{deterministic_results['summary']['failed_tests']}` failed / `{deterministic_results['summary']['skipped_tests']}` skipped",
-        f"- agent behavior tests (cached mode): `{cached_support['summary'].get('passed_tests', 0)}` passed / `{cached_support['summary'].get('failed_tests', 0)}` failed across `{cached_support['summary'].get('total_families', len(cached_support.get('results', [])))}` focused support-check families",
-        f"- agent behavior tests (no-cache validation mode): `{len(validation_results.get('tasks', []))}` tasks / `{float(validation_results.get('summary', {}).get('average_task_score_percent', validation_results['percent'])):.2f}%` average",
-        "",
-        "## Validation difficulty tiers",
-        "",
-    ]
-    for difficulty in BENCHMARK_DIFFICULTY_ORDER:
-        lines.append(f"- `{difficulty}`: `{float(validation_results['difficulty_tier_scores'].get(difficulty, 0.0)):.2f}%`")
-    lines.extend(["", "## Agent behavior support checks (cached mode)", ""])
-    for family in cached_support.get("results", []):
-        lines.append(
-            f"- `{family['family_id']}`: `{float(family['score_percent']):.2f}%` / `{family['status']}` / `{family['passed_tests']}` passed / `{family['failed_tests']}` failed"
-        )
-    lines.extend(["", "## Lowest-scoring agent behavior tasks (no-cache validation mode)", ""])
-    tasks = sorted(validation_results.get("tasks", []), key=lambda item: (float(item.get("score_percent", 0.0)), item["task_id"]))
-    for item in tasks[:10]:
-        lines.extend(
-            [
-                f"- `{item['task_id']}` / `{item['difficulty']}` / `{item.get('task_type', 'unknown')}`: `{float(item.get('score_percent', 0.0)):.2f}%`",
-                f"  - success: `{item.get('success', False)}` / failure_category: `{item.get('failure_category', '')}` / reason: `{item.get('failure_reason', '')}`",
-            ]
-        )
-        rubric = item.get("rubric_breakdown", {})
-        if isinstance(rubric, dict) and rubric:
-            weakest = sorted(
-                rubric.items(),
-                key=lambda kv: float(kv[1].get("percent", 0.0)),
-            )[:3]
-            for rubric_name, rubric_payload in weakest:
-                lines.append(
-                    f"  - rubric `{rubric_name}`: `{float(rubric_payload.get('earned', 0.0)):.2f}/{float(rubric_payload.get('weight', 0.0)):.2f}` (`{float(rubric_payload.get('percent', 0.0)):.2f}%`)"
-                )
-    lines.extend(
-        [
-            "",
-            "## Artifact paths",
-            "",
-            "- deterministic_correctness:",
-            "  - `deterministic_correctness/functional_correctness_results.json`",
-            "  - `deterministic_correctness/functional_correctness_report.md`",
-            "- agent_behavior_cached_support:",
-            "  - `agent_behavior_cached_support/agent_behavior_cached_support_results.json`",
-            "  - `agent_behavior_cached_support/agent_behavior_cached_support_report.md`",
-            "- agent_behavior_validation:",
-            "  - `agent_behavior_validation/agent_behavior_validation_results.json`",
-            "  - `agent_behavior_validation/benchmark_results.json`",
-            "  - `agent_behavior_validation/benchmark_report.md`",
-        ]
-    )
-    return "\n".join(lines) + "\n"
-
-
-def run_combined_test_evaluation(
-    *,
-    output_dir: Path,
-    clean: bool = False,
-    functional_pytest_args: Sequence[str] | None = None,
-    support_family_ids: Sequence[str] | None = None,
-    benchmark_task_ids: list[str] | None = None,
-    live_subset: bool = True,
-    model_base_url: str | None = None,
-    timeout_seconds: int | None = None,
-    connect_timeout_seconds: int | None = None,
-    model_profile: str | None = None,
-    structured_output_mode: str | None = None,
-    progress_poll_seconds: float | None = None,
-    seeds: list[int] | None = None,
-) -> dict[str, Any]:
-    from swaag.benchmark.agent_support import run_agent_behavior_support_checks
-
-    if clean and output_dir.exists():
-        import shutil
-
-        shutil.rmtree(output_dir)
-    ensure_dir(output_dir)
-    deterministic = run_functional_correctness_lane(
-        output_dir=output_dir / "deterministic_correctness",
-        pytest_args=functional_pytest_args,
-    )
-    cached_support = run_agent_behavior_support_checks(
-        output_dir=output_dir / "agent_behavior_cached_support",
-        family_ids=support_family_ids,
-        clean=True,
-    )
-    live = run_agent_behavior_validation(
-        output_dir=output_dir / "agent_behavior_validation",
-        benchmark_task_ids=benchmark_task_ids,
-        live_subset=live_subset,
-        model_base_url=model_base_url,
-        timeout_seconds=timeout_seconds,
-        connect_timeout_seconds=connect_timeout_seconds,
-        model_profile=model_profile,
-        structured_output_mode=structured_output_mode,
-        progress_poll_seconds=progress_poll_seconds,
-        seeds=seeds,
-    )
-    category_scores = {
-        "deterministic_correctness": float(deterministic["summary"]["percent"]),
-        "agent_behavior_cached_support": float(cached_support["summary"]["percent"]),
-        "agent_behavior_validation": float(live["percent"]),
-    }
-    overall_percent = round(sum(category_scores.values()) / len(category_scores), 2) if category_scores else 0.0
-    payload = {
-        "deterministic_correctness": deterministic,
-        "agent_behavior_cached_support": cached_support,
-        "agent_behavior_validation": live,
-        "category_scores": category_scores,
-        "overall_percent": overall_percent,
-    }
-    write_text(output_dir / "full_evaluation_results.json", stable_json_dumps(payload, indent=2) + "\n", encoding="utf-8")
-    write_text(output_dir / "full_evaluation_report.md", render_combined_test_evaluation_report(payload), encoding="utf-8")
-    return payload
 
 
 def render_test_category_report(payload: dict[str, Any]) -> str:
-    deterministic = payload["deterministic_correctness"]
-    cached = payload.get("agent_behavior_cached")
-    validation = payload.get("agent_behavior_validation")
+    code = payload["code_correctness"]
+    agent = payload.get("agent_test")
     lines = [
-        "# SWAAG test category report",
+        "# SWAAG test-category report",
         "",
         f"- overall_percent: `{payload['overall_percent']:.2f}%`",
-        f"- deterministic_correctness_percent: `{deterministic['summary']['percent']:.2f}%`",
-        f"- agent_behavior_cached_percent: `{float(cached['percent']) if isinstance(cached, dict) else 0.0:.2f}%`",
-        f"- agent_behavior_validation_percent: `{float(validation['percent']) if isinstance(validation, dict) else 0.0:.2f}%`",
+        f"- code_correctness_percent: `{code['summary']['percent']:.2f}%`",
+        f"- agent_test_percent: `{float(agent['summary']['percent']) if isinstance(agent, dict) else 0.0:.2f}%`",
+        f"- status: `{payload.get('status', 'complete')}`",
+        f"- skip_reason: `{payload.get('skip_reason', '')}`" if payload.get("skip_reason") else "",
         "",
         "## Category summaries",
         "",
-        f"- deterministic correctness tests: `{deterministic['summary']['passed_tests']}` passed / `{deterministic['summary']['failed_tests']}` failed / `{deterministic['summary']['skipped_tests']}` skipped",
+        f"- code_correctness: `{code['summary']['passed_tests']}` passed / `{code['summary']['failed_tests']}` failed / `{code['summary']['skipped_tests']}` skipped",
         (
-            f"- agent behavior tests (cached mode): `{cached['summary'].get('successful_tasks', 0)}` succeeded / `{cached['summary'].get('failed_tasks', 0)}` failed / replay cache at `agent_behavior_cached/replay_cache/`"
-            if isinstance(cached, dict)
-            else "- agent behavior tests (cached mode): not run because deterministic correctness failed"
-        ),
-        (
-            f"- agent behavior tests (no-cache validation mode): `{validation['summary'].get('successful_tasks', 0)}` succeeded / `{validation['summary'].get('failed_tasks', 0)}` failed"
-            if isinstance(validation, dict)
-            else "- agent behavior tests (no-cache validation mode): not run because deterministic correctness failed"
+            f"- agent_test: `{agent['summary']['passed_tests']}` passed / `{agent['summary']['failed_tests']}` failed / `{agent['summary']['skipped_tests']}` skipped"
+            if isinstance(agent, dict)
+            else "- agent_test: not run because code_correctness was not 100% green"
         ),
         "",
-        "## Validation difficulty tiers",
+        "## Artifact paths",
         "",
+        "- code_correctness:",
+        "  - `code_correctness/code_correctness_results.json`",
+        "  - `code_correctness/code_correctness_report.md`",
+        "- agent_test:",
+        "  - `agent_test/agent_test_results.json`",
+        "  - `agent_test/agent_test_report.md`",
     ]
-    for difficulty in BENCHMARK_DIFFICULTY_ORDER:
-        score = float(validation["difficulty_tier_scores"].get(difficulty, 0.0)) if isinstance(validation, dict) else 0.0
-        lines.append(f"- `{difficulty}`: `{score:.2f}%`")
-    lines.extend(["", "## Lowest-scoring validation tasks", ""])
-    tasks = sorted(validation.get("tasks", []) if isinstance(validation, dict) else [], key=lambda item: (float(item.get("score_percent", 0.0)), item["task_id"]))
-    for item in tasks[:10]:
-        lines.extend(
-            [
-                f"- `{item['task_id']}` / `{item['difficulty']}` / `{item.get('task_type', 'unknown')}`: `{float(item.get('score_percent', 0.0)):.2f}%`",
-                f"  - success: `{item.get('success', False)}` / failure_category: `{item.get('failure_category', '')}` / reason: `{item.get('failure_reason', '')}`",
-            ]
-        )
-        rubric = item.get("rubric_breakdown", {})
-        if isinstance(rubric, dict) and rubric:
-            weakest = sorted(
-                rubric.items(),
-                key=lambda kv: float(kv[1].get("percent", 0.0)),
-            )[:3]
-            for rubric_name, rubric_payload in weakest:
-                lines.append(
-                    f"  - rubric `{rubric_name}`: `{float(rubric_payload.get('earned', 0.0)):.2f}/{float(rubric_payload.get('weight', 0.0)):.2f}` (`{float(rubric_payload.get('percent', 0.0)):.2f}%`)"
-                )
-    lines.extend(
-        [
-            "",
-            "## Artifact paths",
-            "",
-            "- deterministic correctness tests:",
-            "  - `deterministic_correctness/functional_correctness_results.json`",
-            "  - `deterministic_correctness/functional_correctness_report.md`",
-            "- agent behavior tests (cached mode):",
-            "  - `agent_behavior_cached_results.json`",
-            "  - `agent_behavior_cached_report.md`",
-            "  - `agent_behavior_cached/agent_behavior_cached_results.json`",
-            "  - `agent_behavior_cached/agent_behavior_cached_report.md`",
-            "  - `agent_behavior_cached/replay_cache/`",
-            "- agent behavior tests (no-cache validation mode):",
-            "  - `agent_behavior_validation_results.json`",
-            "  - `agent_behavior_validation_report.md`",
-            "  - `agent_behavior_validation/agent_behavior_validation_results.json`",
-            "  - `agent_behavior_validation/agent_behavior_validation_report.md`",
-            "  - `agent_behavior_validation/benchmark_results.json`",
-            "  - `agent_behavior_validation/benchmark_report.md`",
-        ]
-    )
     return "\n".join(lines) + "\n"
 
 
@@ -514,6 +187,46 @@ def run_test_category_evaluation(
     output_dir: Path,
     clean: bool = False,
     functional_pytest_args: Sequence[str] | None = None,
+    agent_pytest_args: Sequence[str] | None = None,
+    **_: Any,
+) -> dict[str, Any]:
+    if clean and output_dir.exists():
+        shutil.rmtree(output_dir)
+    ensure_dir(output_dir)
+    code = run_code_correctness_category(output_dir=output_dir / "code_correctness", pytest_args=functional_pytest_args)
+    if _deterministic_failed(code):
+        code_percent = float(code["summary"].get("percent", 0.0))
+        payload = {
+            "code_correctness": code,
+            "agent_test": None,
+            "category_scores": {"code_correctness": code_percent, "agent_test": 0.0},
+            "overall_percent": round(code_percent / 2.0, 2),
+            "status": "code_correctness_failed",
+            "skipped_categories": ["agent_test"],
+            "skip_reason": "code_correctness must be 100% before agent_test can run",
+        }
+        write_text(output_dir / "test_categories_results.json", stable_json_dumps(payload, indent=2) + "\n", encoding="utf-8")
+        write_text(output_dir / "test_categories_report.md", render_test_category_report(payload), encoding="utf-8")
+        return payload
+    agent = run_agent_test_category(output_dir=output_dir / "agent_test", pytest_args=agent_pytest_args)
+    category_scores = {"code_correctness": float(code["summary"]["percent"]), "agent_test": float(agent["summary"]["percent"])}
+    overall_percent = round(sum(category_scores.values()) / len(category_scores), 2)
+    payload = {
+        "code_correctness": code,
+        "agent_test": agent,
+        "category_scores": category_scores,
+        "overall_percent": overall_percent,
+        "status": "complete",
+        "skipped_categories": [],
+    }
+    write_text(output_dir / "test_categories_results.json", stable_json_dumps(payload, indent=2) + "\n", encoding="utf-8")
+    write_text(output_dir / "test_categories_report.md", render_test_category_report(payload), encoding="utf-8")
+    return payload
+
+
+def run_manual_validation(
+    *,
+    output_dir: Path,
     benchmark_task_ids: list[str] | None = None,
     validation_subset: bool = True,
     model_base_url: str | None = None,
@@ -523,44 +236,19 @@ def run_test_category_evaluation(
     structured_output_mode: str | None = None,
     progress_poll_seconds: float | None = None,
     seeds: list[int] | None = None,
+    clean: bool = False,
 ) -> dict[str, Any]:
-    if clean and output_dir.exists():
-        import shutil
+    from swaag.benchmark.benchmark_runner import run_benchmarks
 
+    if clean and output_dir.exists():
         shutil.rmtree(output_dir)
     ensure_dir(output_dir)
-    deterministic = run_functional_correctness_lane(
-        output_dir=output_dir / "deterministic_correctness",
-        pytest_args=functional_pytest_args,
-    )
-    deterministic_failed = (
-        float(deterministic["summary"].get("percent", 0.0)) < 100.0
-        or int(deterministic["summary"].get("failed_tests", 0)) > 0
-        or int(deterministic.get("exit_code", 0)) != 0
-    )
-    if deterministic_failed:
-        payload = {
-            "deterministic_correctness": deterministic,
-            "agent_behavior_cached": None,
-            "agent_behavior_validation": None,
-            "category_scores": {
-                "deterministic_correctness": float(deterministic["summary"].get("percent", 0.0)),
-                "agent_behavior_cached": 0.0,
-                "agent_behavior_validation": 0.0,
-            },
-            "overall_percent": round(float(deterministic["summary"].get("percent", 0.0)) / 3.0, 2),
-            "status": "deterministic_correctness_failed",
-            "skipped_categories": ["agent_behavior_cached", "agent_behavior_validation"],
-            "skip_reason": "deterministic correctness must be 100% before agent behavior tests can run",
-        }
-        write_text(output_dir / "test_categories_results.json", stable_json_dumps(payload, indent=2) + "\n", encoding="utf-8")
-        write_text(output_dir / "test_categories_report.md", render_test_category_report(payload), encoding="utf-8")
-        return payload
-    cached = run_agent_behavior_tests(
-        output_dir=output_dir,
-        mode="cached",
-        benchmark_task_ids=benchmark_task_ids,
+    report = run_benchmarks(
+        output_dir=output_dir / "manual_validation",
+        task_ids=benchmark_task_ids,
+        clean=True,
         live_subset=validation_subset,
+        use_live_model=True,
         model_base_url=model_base_url,
         timeout_seconds=timeout_seconds,
         connect_timeout_seconds=connect_timeout_seconds,
@@ -568,36 +256,43 @@ def run_test_category_evaluation(
         structured_output_mode=structured_output_mode,
         progress_poll_seconds=progress_poll_seconds,
         seeds=seeds,
+        agent_behavior_mode=None,
     )
-    validation = run_agent_behavior_tests(
-        output_dir=output_dir,
-        mode="no-cache-validation",
-        benchmark_task_ids=benchmark_task_ids,
-        live_subset=validation_subset,
-        model_base_url=model_base_url,
-        timeout_seconds=timeout_seconds,
-        connect_timeout_seconds=connect_timeout_seconds,
-        model_profile=model_profile,
-        structured_output_mode=structured_output_mode,
-        progress_poll_seconds=progress_poll_seconds,
-        seeds=seeds,
-    )
-    category_scores = {
-        "deterministic_correctness": float(deterministic["summary"]["percent"]),
-        "agent_behavior_cached": float(cached["percent"]),
-        "agent_behavior_validation": float(validation["percent"]),
+    difficulty_scores = {
+        difficulty: float(report["summary"].get("score_by_difficulty", {}).get(difficulty, 0.0))
+        for difficulty in BENCHMARK_DIFFICULTY_ORDER
     }
-    overall_percent = round(sum(category_scores.values()) / len(category_scores), 2) if category_scores else 0.0
     payload = {
-        "deterministic_correctness": deterministic,
-        "agent_behavior_cached": cached,
-        "agent_behavior_validation": validation,
-        "category_scores": category_scores,
-        "overall_percent": overall_percent,
+        **report,
+        "category": "manual_validation",
+        "is_test_category": False,
+        "difficulty_tier_scores": difficulty_scores,
+        "percent": float(report["summary"].get("average_task_score_percent", 0.0)),
     }
-    write_text(output_dir / "test_categories_results.json", stable_json_dumps(payload, indent=2) + "\n", encoding="utf-8")
-    write_text(output_dir / "test_categories_report.md", render_test_category_report(payload), encoding="utf-8")
+    write_text(output_dir / "manual_validation_results.json", stable_json_dumps(payload, indent=2) + "\n", encoding="utf-8")
+    write_text(output_dir / "manual_validation_report.md", render_manual_validation_report(payload), encoding="utf-8")
     return payload
+
+
+def render_manual_validation_report(payload: dict[str, Any]) -> str:
+    lines = [
+        "# Manual real-model validation",
+        "",
+        "This is explicit real usage, not a test category.",
+        "",
+        f"- percent: `{float(payload.get('percent', 0.0)):.2f}%`",
+        f"- task_count: `{int(payload.get('summary', {}).get('total_tasks', len(payload.get('tasks', []))))}`",
+        "",
+        "## Difficulty tier scores",
+        "",
+    ]
+    for difficulty in BENCHMARK_DIFFICULTY_ORDER:
+        lines.append(f"- `{difficulty}`: `{float(payload['difficulty_tier_scores'].get(difficulty, 0.0)):.2f}%`")
+    lines.extend(["", "## Lowest-scoring tasks", ""])
+    tasks = sorted(payload.get("tasks", []), key=lambda item: (float(item.get("score_percent", 0.0)), item.get("task_id", "")))
+    for item in tasks[:10]:
+        lines.append(f"- `{item.get('task_id', '')}` / `{item.get('difficulty', '')}`: `{float(item.get('score_percent', 0.0)):.2f}%`")
+    return "\n".join(lines) + "\n"
 
 
 def run_full_evaluation(
@@ -616,17 +311,13 @@ def run_full_evaluation(
     progress_poll_seconds: float | None = None,
     seeds: list[int] | None = None,
 ) -> dict[str, Any]:
+    """Legacy benchmark evaluator retained for explicit benchmark runs, not test categories."""
     from swaag.benchmark.benchmark_runner import run_benchmarks
 
     if clean and output_dir.exists():
-        import shutil
-
         shutil.rmtree(output_dir)
     ensure_dir(output_dir)
-    functional = run_functional_correctness_lane(
-        output_dir=output_dir / "functional_correctness",
-        pytest_args=functional_pytest_args,
-    )
+    code = run_code_correctness_category(output_dir=output_dir / "code_correctness", pytest_args=functional_pytest_args)
     agent_report = run_benchmarks(
         output_dir=output_dir / "agent_evaluation",
         task_ids=benchmark_task_ids,
@@ -642,23 +333,28 @@ def run_full_evaluation(
         seeds=seeds,
     )
     difficulty_scores = {
-        difficulty: float(agent_report["summary"]["score_by_difficulty"].get(difficulty, 0.0))
+        difficulty: float(agent_report["summary"].get("score_by_difficulty", {}).get(difficulty, 0.0))
         for difficulty in BENCHMARK_DIFFICULTY_ORDER
     }
-    group_scores = {
-        "functional_correctness": float(functional["summary"]["percent"]),
-        **difficulty_scores,
-    }
+    group_scores = {"code_correctness": float(code["summary"]["percent"]), **difficulty_scores}
     overall_percent = round(sum(group_scores.values()) / len(group_scores), 2) if group_scores else 0.0
-    payload = {
-        "functional_correctness": functional,
-        "agent_evaluation": {
-            **agent_report,
-            "difficulty_tier_scores": difficulty_scores,
-        },
-        "group_scores": group_scores,
-        "overall_percent": overall_percent,
-    }
+    payload = {"code_correctness": code, "agent_evaluation": {**agent_report, "difficulty_tier_scores": difficulty_scores}, "group_scores": group_scores, "overall_percent": overall_percent}
     write_text(output_dir / "evaluation_results.json", stable_json_dumps(payload, indent=2) + "\n", encoding="utf-8")
     write_text(output_dir / "evaluation_report.md", render_evaluation_report(payload), encoding="utf-8")
     return payload
+
+
+def render_evaluation_report(payload: dict[str, Any]) -> str:
+    lines = [
+        "# SWAAG benchmark evaluation report",
+        "",
+        f"- overall_percent: `{payload['overall_percent']:.2f}%`",
+        f"- code_correctness_percent: `{payload['code_correctness']['summary']['percent']:.2f}%`",
+        "",
+        "## Difficulty tier scores",
+        "",
+    ]
+    for difficulty in BENCHMARK_DIFFICULTY_ORDER:
+        score = float(payload["agent_evaluation"].get("difficulty_tier_scores", {}).get(difficulty, 0.0))
+        lines.append(f"- `{difficulty}`: `{score:.2f}%`")
+    return "\n".join(lines) + "\n"

@@ -1,25 +1,2 @@
-"""Backward-compatibility shim — canonical module is swaag.test_categories."""
+"""Compatibility shim; canonical test-category definitions live in swaag.test_categories."""
 from swaag.test_categories import *  # noqa: F401, F403
-from swaag.test_categories import (  # noqa: F401
-    _DOC_RUNTIME_TESTS as DOC_RUNTIME_TESTS,
-    _SYSTEM_TEST_FILES as SYSTEM_TEST_FILES,
-    _INTEGRATION_TEST_FILES as INTEGRATION_TEST_FILES,
-    _LIVE_TEST_FILES as LIVE_TEST_FILES,
-    _BENCHMARK_HEAVY_TEST_FILES as BENCHMARK_HEAVY_TEST_FILES,
-    _BENCHMARK_STRUCTURE_TESTS as BENCHMARK_STRUCTURE_TESTS,
-    _RUNTIME_FAST_TESTS as RUNTIME_FAST_TESTS,
-    _RUNTIME_SYSTEM_TESTS as RUNTIME_SYSTEM_TESTS,
-    _CONTEXT_FAST_TESTS as CONTEXT_FAST_TESTS,
-    _CONTEXT_SYSTEM_TESTS as CONTEXT_SYSTEM_TESTS,
-    _PACKAGING_TESTS as PACKAGING_TESTS,
-    _LIVE_PROFILE_TESTS as LIVE_PROFILE_TESTS,
-    _FAST_SOURCE_TO_TESTS as FAST_SOURCE_TO_TESTS,
-    _LANE_PRECEDENCE as LANE_PRECEDENCE,
-    _discover_project_root,
-)
-
-# Legacy aliases for code that still imports old names
-DETERMINISTIC_CORRECTNESS_TEST_FILES = CODE_CORRECTNESS_TEST_FILES  # noqa: F405
-AGENT_LOOP_REGRESSION_TEST_FILES = frozenset(AGENT_TEST_FILES - frozenset({"tests/test_live_llamacpp.py"}))  # noqa: F405
-LIVE_AGENT_EVALUATION_TEST_FILES = frozenset({"tests/test_live_llamacpp.py"})
-TOP_LEVEL_TEST_LANES = TOP_LEVEL_TEST_CATEGORIES  # noqa: F405

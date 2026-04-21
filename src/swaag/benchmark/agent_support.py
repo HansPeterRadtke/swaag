@@ -201,7 +201,7 @@ def run_agent_behavior_support_checks(
       to demonstrate that the replay mechanism itself works correctly.
 
     All three are "cached mode" support mechanisms in the sense that none make
-    no-cache validation model calls. The RecordReplayModelClient is the
+    manual-validation model calls. The RecordReplayModelClient is the
     authoritative cassette-backed replay path.
     FakeModelClient and ScriptedBenchmarkClient are deterministic scripted fixtures
     appropriate for tests that need precise control over the agent's decision path.
@@ -273,7 +273,7 @@ def run_agent_behavior_support_checks(
         "results": [asdict(item) for item in results],
     }
     results_json = stable_json_dumps(payload, indent=2) + "\n"
-    write_text(output_dir / "agent_behavior_cached_support_results.json", results_json, encoding="utf-8")
+    write_text(output_dir / "agent_test_support_results.json", results_json, encoding="utf-8")
     report_lines = [
         "# Agent behavior tests (cached mode)",
         "",
@@ -309,5 +309,5 @@ def run_agent_behavior_support_checks(
         report_lines.extend(f"  - `{nodeid}`" for nodeid in result.nodeids)
         report_lines.append("")
     report_text = "\n".join(report_lines) + "\n"
-    write_text(output_dir / "agent_behavior_cached_support_report.md", report_text, encoding="utf-8")
+    write_text(output_dir / "agent_test_support_report.md", report_text, encoding="utf-8")
     return payload

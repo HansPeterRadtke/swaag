@@ -59,7 +59,7 @@ def build_pytest_command(plan: DevcheckPlan, *, require_testmon: bool = False) -
 
 
 def _print_plan(plan: DevcheckPlan) -> None:
-    print(f"test_profile={plan.lane}")
+    print(f"test_profile={plan.profile}")
     print(f"marker_expression={plan.marker_expression}")
     print(f"changed_files={list(plan.changed_files)}")
     print(f"candidate_tests={list(plan.candidate_tests)}")
@@ -74,8 +74,8 @@ def _print_plan(plan: DevcheckPlan) -> None:
         print("selection_reasons=")
         for reason in plan.reasons:
             print(f"  - {reason}")
-    if plan.explicit_followup_lanes:
-        print(f"followup_profiles={list(plan.explicit_followup_lanes)}")
+    if plan.explicit_followup_profiles:
+        print(f"followup_profiles={list(plan.explicit_followup_profiles)}")
 
 
 def main(argv: list[str] | None = None) -> int:
@@ -85,11 +85,11 @@ def main(argv: list[str] | None = None) -> int:
     parser.add_argument("--changed-file", action="append", default=[], help="Override changed-file detection with explicit repo-relative paths.")
     parser.add_argument("--dry-run", action="store_true", help="Only print the selected pytest command.")
     parser.add_argument("--baseline", action="store_true", help="Build the pytest-testmon baseline for the selected profile instead of selecting only affected tests.")
-    parser.add_argument("--allow-live", action="store_true", help="Allow live-only changed files to route into the explicit live profile.")
+    parser.add_argument("--allow-manual-validation", action="store_true", help="Allow manual-validation files to route into explicit real-model validation.")
     parser.add_argument(
-        "--allow-benchmark-heavy",
+        "--allow-heavy-agent",
         action="store_true",
-        help="Allow benchmark-heavy changed files to route into the heavy benchmark profile.",
+        help="Allow expensive agent files to route into explicit heavy-agent execution.",
     )
     parser.add_argument(
         "--require-testmon",
@@ -101,22 +101,22 @@ def main(argv: list[str] | None = None) -> int:
     changed = list(args.changed_file) if args.changed_file else discover_changed_files()
     plan = build_devcheck_plan(
         changed,
-        allow_live=args.allow_live,
-        allow_benchmark_heavy=args.allow_benchmark_heavy,
+        allow_manual_validation=args.allow_manual_validation,
+        allow_heavy_agent=args.allow_heavy_agent,
     )
 
-    if plan.explicit_followup_lanes and not args.allow_live and "live" in plan.explicit_followup_lanes:
+    if plan.explicit_followup_profiles and not args.allow_manual_validation and "manual_validation" in plan.explicit_followup_profiles:
         _print_plan(plan)
         print(
-            "error=live-only changes require explicit live execution with SWAAG_RUN_LIVE=1; "
-            "rerun with --allow-live or use SWAAG_RUN_LIVE=1 python3 -m swaag.testprofile agent-tests"
+            "error=manual-validation changes require explicit real-model execution; "
+            "rerun with --allow-manual-validation or use python3 -m swaag.benchmark manual-validation"
         )
         return 2
-    if plan.explicit_followup_lanes and not args.allow_benchmark_heavy and "benchmark_heavy" in plan.explicit_followup_lanes:
+    if plan.explicit_followup_profiles and not args.allow_heavy_agent and "heavy_agent" in plan.explicit_followup_profiles:
         _print_plan(plan)
         print(
-            "error=benchmark-heavy-only changes require explicit heavy execution; "
-            "rerun with --allow-benchmark-heavy or use python3 -m swaag.testprofile agent-tests"
+            "error=expensive agent changes require explicit heavy-agent execution; "
+            "rerun with --allow-heavy-agent or use python3 -m swaag.testprofile agent-tests"
         )
         return 2
 
@@ -128,14 +128,14 @@ def main(argv: list[str] | None = None) -> int:
             raise RuntimeError("Cannot build an incremental baseline without pytest-testmon")
         # Baselines always rebuild the selected profile rather than selecting only
         # affected tests.
-        from swaag.test_categories import build_lane_command
+        from swaag.test_categories import build_devcheck_profile_command
 
-        command = build_lane_command(plan.lane, root=project_root(), use_testmon=True, baseline_only=True)
+        command = build_devcheck_profile_command(plan.profile, root=project_root(), use_testmon=True, baseline_only=True)
     else:
         command = build_pytest_command(plan, require_testmon=args.require_testmon)
 
     _print_plan(plan)
-    if not plan.candidate_tests and not plan.explicit_followup_lanes:
+    if not plan.candidate_tests and not plan.explicit_followup_profiles:
         print("$ no tests selected")
         return 0
     print("$", " ".join(command))

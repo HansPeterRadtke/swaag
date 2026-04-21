@@ -13,7 +13,7 @@ def _project_root() -> Path:
     return Path(__file__).resolve().parents[2]
 
 
-def build_finalproof_commands(*, benchmark_output: Path, live_benchmark_output: Path) -> list[list[str]]:
+def build_finalproof_commands(*, benchmark_output: Path, manual_validation_output: Path) -> list[list[str]]:
     live = get_documented_final_live_benchmark_recommendation()
     return [
         [sys.executable, "-m", "pytest", "-q", "tests/test_imports.py"],
@@ -21,14 +21,13 @@ def build_finalproof_commands(*, benchmark_output: Path, live_benchmark_output: 
         [sys.executable, "-m", "pytest", "-q", "tests/test_runtime_verification_flow.py"],
         [sys.executable, "-m", "pytest", "-q", "tests/test_end_to_end.py"],
         [sys.executable, "-m", "pytest", "-q"],
-        [sys.executable, "-m", "swaag.testprofile", "integration"],
-        [sys.executable, "-m", "swaag.testprofile", "live"],
+        [sys.executable, "-m", "swaag.testprofile", "combined"],
         [sys.executable, "-m", "swaag.benchmark", "run", "--clean", "--output", str(benchmark_output), "--json"],
         [
             sys.executable,
             "-m",
             "swaag.benchmark",
-            "run",
+            "manual-validation",
             "--clean",
             "--validation-subset",
             "--model-profile",
@@ -40,7 +39,7 @@ def build_finalproof_commands(*, benchmark_output: Path, live_benchmark_output: 
             "--timeout-seconds",
             str(live.timeout_seconds),
             "--output",
-            str(live_benchmark_output),
+            str(manual_validation_output),
             "--json",
         ],
         [sys.executable, "scripts/archive_proof.py"],
@@ -63,13 +62,13 @@ def build_finalproof_environment() -> dict[str, str]:
 def main(argv: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser(description="Run the full final proof loop.")
     parser.add_argument("--benchmark-output", default="/tmp/swaag-benchmark-finalproof", help="Output directory for the large benchmark.")
-    parser.add_argument("--live-benchmark-output", default="/tmp/swaag-live-benchmark-finalproof", help="Output directory for the no-cache validation benchmark subset.")
+    parser.add_argument("--manual-validation-output", default="/tmp/swaag-manual-validation-finalproof", help="Output directory for explicit real-model manual validation.")
     parser.add_argument("--dry-run", action="store_true", help="Only print the commands.")
     args = parser.parse_args(argv)
 
     commands = build_finalproof_commands(
         benchmark_output=Path(args.benchmark_output),
-        live_benchmark_output=Path(args.live_benchmark_output),
+        manual_validation_output=Path(args.manual_validation_output),
     )
     env = os.environ.copy()
     live_env = build_finalproof_environment()
@@ -77,7 +76,7 @@ def main(argv: list[str] | None = None) -> int:
         env.setdefault(key, value)
     live = get_documented_final_live_benchmark_recommendation()
     print(
-        "# finalproof_live_settings",
+        "# finalproof_manual_validation_settings",
         f"profile={live.model_profile}",
         f"structured_output_mode={live.structured_output_mode}",
         f"seeds={','.join(str(seed) for seed in live.seeds)}",

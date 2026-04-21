@@ -1306,7 +1306,7 @@ class AgentRuntime:
                 context_components=bundle.components,
             ),
             contract=contract,
-            prompt_modes=["lean", *self._interactive_prompt_modes()],
+            prompt_modes=self._interactive_prompt_modes(),
             goal=effective_goal,
         )
 
@@ -1825,7 +1825,7 @@ class AgentRuntime:
                 context_components=bundle.components,
             ),
             contract=contract,
-            prompt_modes=["lean", *self._interactive_prompt_modes()],
+            prompt_modes=self._interactive_prompt_modes(),
             goal=user_text,
         )
         _completion, analysis = self._execute_structured_call(
@@ -1851,7 +1851,7 @@ class AgentRuntime:
                 context_components=bundle.components,
             ),
             contract=contract,
-            prompt_modes=["lean", *self._interactive_prompt_modes()],
+            prompt_modes=self._interactive_prompt_modes(),
             goal=user_text,
         )
         _completion, decision = self._execute_structured_call(
@@ -1884,7 +1884,7 @@ class AgentRuntime:
                 context_components=bundle.components,
             ),
             contract=contract,
-            prompt_modes=["lean", *self._interactive_prompt_modes()],
+            prompt_modes=self._interactive_prompt_modes(),
             goal=user_text,
         )
         _completion, expanded = self._execute_structured_call(

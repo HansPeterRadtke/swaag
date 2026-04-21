@@ -155,121 +155,82 @@ export SWAAG__TOOLS__ALLOW_SIDE_EFFECT_TOOLS=true
 
 ## Testing
 
-Installed-package smoke test:
+SWAAG has exactly two authoritative test categories:
+
+- `code_correctness`: deterministic software-correctness checks.
+- `agent_test`: cached agent behavior tests.
+
+Uncached llama.cpp execution is explicit manual validation / real usage, not a test category.
+
+Run deterministic code-correctness tests:
 
 ```bash
-python3 -m swaag.tests
+python3 -m swaag.testprofile code-correctness
 ```
 
-Full repo test suite:
+Run cached agent tests:
 
 ```bash
-cd /data/src/github/swaag
-python3 run_tests.py
-pytest -q
+python3 -m swaag.testprofile agent-tests
 ```
 
-Changed-area developer loop:
+Run both with fail-fast ordering:
 
 ```bash
-python3 -m swaag.devcheck
+python3 -m swaag.testprofile combined
 ```
 
-Fast tests:
+Generate JSON and markdown reports:
 
 ```bash
-python3 -m swaag.testprofile fast
+python3 -m swaag.benchmark test-categories --clean --output /tmp/swaag-test-categories
 ```
 
-System tests:
+Manual real-model validation, not tests:
 
 ```bash
-python3 -m swaag.testprofile system
+python3 -m swaag.benchmark manual-validation --clean --validation-subset --output /tmp/swaag-manual-validation
 ```
 
-Integration tests:
+Report artifacts appear at:
 
-```bash
-python3 -m swaag.testprofile integration
-```
+- `/tmp/swaag-test-categories/test_categories_results.json`
+- `/tmp/swaag-test-categories/test_categories_report.md`
+- `/tmp/swaag-test-categories/code_correctness/code_correctness_results.json`
+- `/tmp/swaag-test-categories/code_correctness/code_correctness_report.md`
+- `/tmp/swaag-test-categories/agent_test/agent_test_results.json`
+- `/tmp/swaag-test-categories/agent_test/agent_test_report.md`
+- `/tmp/swaag-manual-validation/manual_validation_results.json`
+- `/tmp/swaag-manual-validation/manual_validation_report.md`
 
-No-cache validation against a real local server:
-
-```bash
-SWAAG_RUN_LIVE=1 python3 -m swaag.testprofile live
-```
-
-Final proof loop:
-
-```bash
-python3 -m swaag.finalproof
-```
 
 ## Evaluation
 
-SWAAG presents testing in two user-facing categories:
+SWAAG exposes exactly two authoritative test categories:
 
-- deterministic correctness tests
-  - imports, smoke tests, deterministic unit tests, harness checks, runtime plumbing
-  - no model traffic
-  - expected to stay at `100%`
-- agent behavior tests
-  - cached mode is the normal fast path
-    - uses cassette-backed record/replay by default when model-backed task execution is needed
-    - keeps reruns fast once the cache exists
-  - no-cache validation mode is the occasional real-model confirmation path
-    - uses the same real agent runtime with direct `llama.cpp` calls
-    - grouped into five difficulty tiers:
-      - `extremely_easy`
-      - `easy`
-      - `normal`
-      - `hard`
-      - `extremely_hard`
-    - the curated validation subset keeps at least `10` distinct tasks in each tier
-    - each task produces a percentage score plus rubric breakdown
+- `code_correctness`: deterministic software-correctness checks with no model traffic.
+- `agent_test`: cached agent behavior checks.
+
+Uncached llama.cpp execution is explicit manual validation / real usage, not a test category.
 
 Recommended commands:
 
 ```bash
-python3 -m pytest -q -x
-python3 -m swaag.benchmark agent-tests --mode cached --clean --validation-subset --output /tmp/swaag-agent-tests-cached
-python3 -m swaag.benchmark agent-tests --mode no-cache-validation --clean --validation-subset --output /tmp/swaag-agent-tests-validation
-python3 -m swaag.benchmark test-categories --clean --validation-subset --output /tmp/swaag-test-categories
+python3 -m swaag.testprofile code-correctness
+python3 -m swaag.testprofile agent-tests
+python3 -m swaag.testprofile combined
+python3 -m swaag.benchmark test-categories --clean --output /tmp/swaag-test-categories
 ```
 
-`test-categories` is the authoritative combined score command. It averages:
-
-- deterministic correctness percent
-- agent behavior tests (cached mode) percent
-- agent behavior tests (no-cache validation mode) percent
-
-Artifacts written by the combined evaluator:
-- `test_categories_results.json`
-- `test_categories_report.md`
-- `deterministic_correctness/functional_correctness_results.json`
-- `deterministic_correctness/functional_correctness_report.md`
-- `agent_behavior_cached_results.json`
-- `agent_behavior_cached_report.md`
-- `agent_behavior_cached/agent_behavior_cached_results.json`
-- `agent_behavior_cached/agent_behavior_cached_report.md`
-- `agent_behavior_cached/replay_cache/`
-- `agent_behavior_validation_results.json`
-- `agent_behavior_validation_report.md`
-- `agent_behavior_validation/agent_behavior_validation_results.json`
-- `agent_behavior_validation/agent_behavior_validation_report.md`
-
-The human-readable combined report includes:
-- per-category summaries
-- per-tier no-cache validation scores
-- lowest-scoring no-cache validation tasks with rubric excerpts
-- artifact paths for each category and mode
-- replay-cache location for cached mode
-
-Focused cached-mode agent behavior support checks:
+Manual validation, not tests:
 
 ```bash
-python3 -m swaag.benchmark agent-support --all --clean --output /tmp/swaag-agent-support
+python3 -m swaag.benchmark manual-validation --clean --validation-subset --output /tmp/swaag-manual-validation
 ```
+
+The `test-categories` command writes JSON and markdown reports and stops before
+`agent_test` if `code_correctness` is not 100% green.
+
 
 ## Build and publish
 
@@ -293,32 +254,24 @@ Main benchmark entrypoints:
 
 ```bash
 python3 -m swaag.benchmark evaluate --clean --output /tmp/swaag-eval --json
-python3 -m swaag.benchmark agent-support --all --output /tmp/swaag-agent-support --json
-python3 -m swaag.benchmark agent-tests --mode cached --validation-subset --output /tmp/swaag-agent-tests-cached --json
-python3 -m swaag.benchmark agent-tests --mode no-cache-validation --validation-subset --output /tmp/swaag-agent-tests-validation --json
-python3 -m swaag.benchmark test-categories --validation-subset --output /tmp/swaag-test-categories --json
+python3 -m swaag.benchmark agent-tests --output /tmp/swaag-agent-tests --json
+python3 -m swaag.benchmark test-categories --output /tmp/swaag-test-categories --json
+python3 -m swaag.benchmark manual-validation --validation-subset --output /tmp/swaag-manual-validation --json
 python3 -m swaag.benchmark run --clean --output /tmp/swaag-benchmark --json
 python3 -m swaag.benchmark external list
 python3 -m swaag.benchmark external smoke --all --output /tmp/swaag-external-smoke --json
 python3 -m swaag.benchmark system --all --output /tmp/swaag-system-bench --json
 ```
 
-Use `test-categories` for the authoritative combined scoring view:
-- deterministic correctness percent
-- agent behavior tests (cached mode) percent
-- agent behavior tests (no-cache validation mode) percent
-- no-cache validation per-tier difficulty percents
-- no-cache validation per-task rubric scores
-- one final overall percent as a simple arithmetic average of the three category scores
-
-Use `evaluate` when you want a fast non-live combined run. Use `run` when you
-want only the built-in full-agent benchmark task set.
+Use `test-categories` for the authoritative combined test report. Use
+`manual-validation` only when you intentionally want uncached real-model usage.
 
 Reproducible bounded SWE-bench fixtures live in:
 - `src/swaag/benchmark/fixtures/swebench/`
 
 Local Terminal-Bench task fixtures live in:
 - `src/swaag/benchmark/terminal_tasks/`
+
 
 ## Documentation
 

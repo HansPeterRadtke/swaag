@@ -73,6 +73,7 @@ AGENT_TEST_FILES = frozenset(
         # Scripted and cached agent behavior tests (LLM calls via FakeModelClient or replay cassettes)
         "tests/test_agent_loop_replay.py",
         "tests/test_benchmark.py",
+        "tests/test_clean_install_agent.py",
         "tests/test_end_to_end.py",
         "tests/test_environment.py",
         "tests/test_false_positive_killers.py",
@@ -92,8 +93,6 @@ AGENT_TEST_FILES = frozenset(
         "tests/test_subagents.py",
         "tests/test_subsystems.py",
         "tests/test_working_memory.py",
-        # Live validation tests — skip gracefully unless SWAAG_RUN_LIVE=1
-        "tests/test_live_llamacpp.py",
     }
 )
 
@@ -101,15 +100,15 @@ AGENT_TEST_FILES = frozenset(
 # Private: internal devcheck routing sets (not part of the public API)
 # ---------------------------------------------------------------------------
 
-_LANE_PRECEDENCE = {
+_DEVCHECK_PROFILE_PRECEDENCE = {
     "fast": 0,
     "system": 1,
-    "integration": 2,
-    "live": 3,
-    "benchmark_heavy": 4,
+    "packaging": 2,
+    "manual_validation": 3,
+    "heavy_agent": 4,
 }
 
-_SYSTEM_TEST_FILES = frozenset(
+_DEVCHECK_SYSTEM_PROFILE_FILES = frozenset(
     {
         "tests/test_agent_loop_replay.py",
         "tests/test_benchmark_catalog.py",
@@ -138,16 +137,16 @@ _SYSTEM_TEST_FILES = frozenset(
     }
 )
 
-_INTEGRATION_TEST_FILES = frozenset(
+_DEVCHECK_PACKAGING_PROFILE_FILES = frozenset(
     {
         "tests/test_clean_install.py",
         "tests/test_model_integration.py",
     }
 )
 
-_LIVE_TEST_FILES = frozenset({"tests/test_live_llamacpp.py"})
+MANUAL_VALIDATION_FILES = frozenset({"tests/test_live_llamacpp.py"})
 
-_BENCHMARK_HEAVY_TEST_FILES = frozenset({"tests/test_benchmark.py"})
+_DEVCHECK_HEAVY_AGENT_PROFILE_FILES = frozenset({"tests/test_benchmark.py"})
 
 _BENCHMARK_STRUCTURE_TESTS = (
     "tests/test_benchmark_catalog.py",
@@ -207,7 +206,7 @@ _PACKAGING_TESTS = (
     "tests/test_model_integration.py",
 )
 
-_LIVE_PROFILE_TESTS = (
+_MANUAL_VALIDATION_PROFILE_TESTS = (
     "tests/test_live_runtime_profiles.py",
     "tests/test_live_suite_structure.py",
     "tests/test_devcheck.py",
@@ -228,17 +227,17 @@ _FAST_SOURCE_TO_TESTS: dict[str, tuple[str, ...]] = {
 
 _DOC_RUNTIME_TESTS = {
     "doc/context_budgeting.md": ("tests/test_budgeting.py", "tests/test_context_builder.py"),
-    "doc/live_runtime_profiles.md": _LIVE_PROFILE_TESTS,
+    "doc/live_runtime_profiles.md": _MANUAL_VALIDATION_PROFILE_TESTS,
     "doc/testing.md": ("tests/test_devcheck.py",),
 }
 
 # ---------------------------------------------------------------------------
-# Internal devcheck lane specs
+# Internal devcheck profile specs
 # ---------------------------------------------------------------------------
 
 
 @dataclass(frozen=True, slots=True)
-class LaneSpec:
+class DevcheckProfileSpec:
     name: str
     marker_expression: str
     description: str
@@ -257,39 +256,39 @@ class TestmonStatus:
 @dataclass(frozen=True, slots=True)
 class DevcheckPlan:
     changed_files: tuple[str, ...]
-    lane: str
+    profile: str
     candidate_tests: tuple[str, ...]
     reasons: tuple[str, ...]
     marker_expression: str
     testmon: TestmonStatus
-    explicit_followup_lanes: tuple[str, ...] = ()
+    explicit_followup_profiles: tuple[str, ...] = ()
 
 
-LANES = {
-    "fast": LaneSpec(
+_DEVCHECK_PROFILES = {
+    "fast": DevcheckProfileSpec(
         name="fast",
         marker_expression="not agent_test",
         description="Cheap deterministic unit tests only.",
     ),
-    "system": LaneSpec(
+    "system": DevcheckProfileSpec(
         name="system",
         marker_expression="not agent_test",
         description="Runtime/orchestration/history/system tests.",
     ),
-    "integration": LaneSpec(
-        name="integration",
+    "packaging": DevcheckProfileSpec(
+        name="packaging",
         marker_expression="",
-        description="Packaging, install, and model-client integration tests.",
+        description="Packaging, install, and model-client code-correctness checks.",
     ),
-    "live": LaneSpec(
-        name="live",
+    "manual_validation": DevcheckProfileSpec(
+        name="manual_validation",
         marker_expression="agent_test",
-        description="Real llama.cpp agent tests.",
+        description="Explicit manual real-model validation tooling, not a test category.",
     ),
-    "benchmark_heavy": LaneSpec(
-        name="benchmark_heavy",
+    "heavy_agent": DevcheckProfileSpec(
+        name="heavy_agent",
         marker_expression="agent_test",
-        description="Heavy agent behavior tests.",
+        description="Expensive cached agent behavior checks kept outside routine code-correctness.",
     ),
 }
 
@@ -374,10 +373,10 @@ def all_test_files(root: Path | None = None) -> tuple[str, ...]:
 def fast_test_files(root: Path | None = None) -> tuple[str, ...]:
     test_files = set(all_test_files(root))
     special = (
-        _SYSTEM_TEST_FILES
-        | _INTEGRATION_TEST_FILES
-        | _LIVE_TEST_FILES
-        | _BENCHMARK_HEAVY_TEST_FILES
+        _DEVCHECK_SYSTEM_PROFILE_FILES
+        | _DEVCHECK_PACKAGING_PROFILE_FILES
+        | MANUAL_VALIDATION_FILES
+        | _DEVCHECK_HEAVY_AGENT_PROFILE_FILES
     )
     return tuple(sorted(test_files - special))
 
@@ -387,7 +386,7 @@ def fast_test_files(root: Path | None = None) -> tuple[str, ...]:
 # ---------------------------------------------------------------------------
 
 
-def top_level_lane_test_files(root: Path | None = None) -> dict[str, tuple[str, ...]]:
+def category_files(root: Path | None = None) -> dict[str, tuple[str, ...]]:
     base = project_root() if root is None else root
     known = set(all_test_files(base))
     return {
@@ -396,7 +395,7 @@ def top_level_lane_test_files(root: Path | None = None) -> dict[str, tuple[str, 
     }
 
 
-def top_level_lane_for_test_file(path: str, root: Path | None = None) -> str:
+def category_for_file(path: str, root: Path | None = None) -> str:
     normalized = path.replace("\\", "/")
     if normalized in AGENT_TEST_FILES:
         return "agent_test"
@@ -407,10 +406,10 @@ def top_level_lane_for_test_file(path: str, root: Path | None = None) -> str:
     raise ValueError(f"Unknown test file: {path}")
 
 
-def validate_top_level_lane_registry(root: Path | None = None) -> None:
+def validate_test_category_registry(root: Path | None = None) -> None:
     base = project_root() if root is None else root
     known = set(all_test_files(base))
-    referenced = CODE_CORRECTNESS_TEST_FILES | AGENT_TEST_FILES
+    referenced = CODE_CORRECTNESS_TEST_FILES | AGENT_TEST_FILES | MANUAL_VALIDATION_FILES
     missing = sorted(path for path in referenced if path not in known)
     if missing:
         raise RuntimeError(f"Top-level test-category registry references missing test files: {missing}")
@@ -423,63 +422,63 @@ def validate_top_level_lane_registry(root: Path | None = None) -> None:
 
 
 # ---------------------------------------------------------------------------
-# Internal devcheck lane API
+# Internal devcheck profile API
 # ---------------------------------------------------------------------------
 
 
-def lane_test_files(root: Path | None = None) -> dict[str, tuple[str, ...]]:
+def devcheck_profile_test_files(root: Path | None = None) -> dict[str, tuple[str, ...]]:
     return {
         "fast": fast_test_files(root),
-        "system": tuple(sorted(_SYSTEM_TEST_FILES)),
-        "integration": tuple(sorted(_INTEGRATION_TEST_FILES)),
-        "live": tuple(sorted(_LIVE_TEST_FILES)),
-        "benchmark_heavy": tuple(sorted(_BENCHMARK_HEAVY_TEST_FILES | {"tests/test_clean_install.py"})),
+        "system": tuple(sorted(_DEVCHECK_SYSTEM_PROFILE_FILES)),
+        "packaging": tuple(sorted(_DEVCHECK_PACKAGING_PROFILE_FILES)),
+        "manual_validation": tuple(sorted(MANUAL_VALIDATION_FILES)),
+        "heavy_agent": tuple(sorted(_DEVCHECK_HEAVY_AGENT_PROFILE_FILES | {"tests/test_clean_install.py"})),
     }
 
 
-def lane_for_test_file(path: str, root: Path | None = None) -> str:
+def devcheck_profile_for_test_file(path: str, root: Path | None = None) -> str:
     normalized = path.replace("\\", "/")
-    if normalized in _BENCHMARK_HEAVY_TEST_FILES:
-        return "benchmark_heavy"
-    if normalized in _LIVE_TEST_FILES:
-        return "live"
-    if normalized in _INTEGRATION_TEST_FILES:
-        return "integration"
-    if normalized in _SYSTEM_TEST_FILES:
+    if normalized in _DEVCHECK_HEAVY_AGENT_PROFILE_FILES:
+        return "heavy_agent"
+    if normalized in MANUAL_VALIDATION_FILES:
+        return "manual_validation"
+    if normalized in _DEVCHECK_PACKAGING_PROFILE_FILES:
+        return "packaging"
+    if normalized in _DEVCHECK_SYSTEM_PROFILE_FILES:
         return "system"
     if normalized in all_test_files(root):
         return "fast"
     raise ValueError(f"Unknown test file: {path}")
 
 
-def validate_lane_registry(root: Path | None = None) -> None:
+def validate_devcheck_profile_registry(root: Path | None = None) -> None:
     base = project_root() if root is None else root
     known = set(all_test_files(base))
     referenced = (
-        _SYSTEM_TEST_FILES
-        | _INTEGRATION_TEST_FILES
-        | _LIVE_TEST_FILES
-        | _BENCHMARK_HEAVY_TEST_FILES
+        _DEVCHECK_SYSTEM_PROFILE_FILES
+        | _DEVCHECK_PACKAGING_PROFILE_FILES
+        | MANUAL_VALIDATION_FILES
+        | _DEVCHECK_HEAVY_AGENT_PROFILE_FILES
     )
     missing = sorted(path for path in referenced if path not in known)
     if missing:
         raise RuntimeError(f"Test-profile registry references missing test files: {missing}")
     overlaps = set()
-    lane_sets = [
-        _SYSTEM_TEST_FILES,
-        _INTEGRATION_TEST_FILES,
-        _LIVE_TEST_FILES,
-        _BENCHMARK_HEAVY_TEST_FILES,
+    profile_sets = [
+        _DEVCHECK_SYSTEM_PROFILE_FILES,
+        _DEVCHECK_PACKAGING_PROFILE_FILES,
+        MANUAL_VALIDATION_FILES,
+        _DEVCHECK_HEAVY_AGENT_PROFILE_FILES,
     ]
-    for index, first in enumerate(lane_sets):
-        for second in lane_sets[index + 1 :]:
+    for index, first in enumerate(profile_sets):
+        for second in profile_sets[index + 1 :]:
             overlaps.update(first & second)
     if overlaps:
         raise RuntimeError(f"Test-profile registry has overlapping test files: {sorted(overlaps)}")
 
 
-def lane_marker_expression(lane: str) -> str:
-    return LANES[lane].marker_expression
+def devcheck_profile_marker_expression(profile: str) -> str:
+    return _DEVCHECK_PROFILES[profile].marker_expression
 
 
 def detect_testmon(root: Path | None = None) -> TestmonStatus:
@@ -493,8 +492,8 @@ def detect_testmon(root: Path | None = None) -> TestmonStatus:
     return TestmonStatus(True, True, "forceselect", "testmon baseline is ready")
 
 
-def _max_lane(current: str, candidate: str) -> str:
-    if _LANE_PRECEDENCE[candidate] > _LANE_PRECEDENCE[current]:
+def _max_devcheck_profile(current: str, candidate: str) -> str:
+    if _DEVCHECK_PROFILE_PRECEDENCE[candidate] > _DEVCHECK_PROFILE_PRECEDENCE[current]:
         return candidate
     return current
 
@@ -514,7 +513,7 @@ def _context_candidates() -> tuple[str, ...]:
 
 
 def _packaging_candidates() -> tuple[str, ...]:
-    return (*_PACKAGING_TESTS, *_LIVE_PROFILE_TESTS)
+    return (*_PACKAGING_TESTS, *_MANUAL_VALIDATION_PROFILE_TESTS)
 
 
 def _normalize_changed_files(changed_files: Iterable[str]) -> tuple[str, ...]:
@@ -531,31 +530,31 @@ def validate_candidate_tests(candidate_tests: Iterable[str], root: Path | None =
 
 
 def _mark_packaging_only_followup(path: str, reasons: list[str]) -> None:
-    reasons.append(f"{path} affects packaging/command wiring; broaden to the integration profile")
+    reasons.append(f"{path} affects packaging/command wiring; broaden to the packaging profile")
 
 
 def build_devcheck_plan(
     changed_files: Iterable[str],
     *,
     root: Path | None = None,
-    allow_live: bool = False,
-    allow_benchmark_heavy: bool = False,
+    allow_manual_validation: bool = False,
+    allow_heavy_agent: bool = False,
 ) -> DevcheckPlan:
     base = project_root() if root is None else root
-    validate_lane_registry(base)
+    validate_devcheck_profile_registry(base)
     changed = _normalize_changed_files(changed_files)
     if not changed:
         candidate_tests = validate_candidate_tests(("tests/test_imports.py",), base)
         return DevcheckPlan(
             changed_files=changed,
-            lane="fast",
+            profile="fast",
             candidate_tests=candidate_tests,
             reasons=("no tracked changes detected; running the smallest smoke import check",),
             marker_expression="not agent_test",
             testmon=detect_testmon(base),
         )
 
-    lane = "fast"
+    profile = "fast"
     targets: list[str] = []
     reasons: list[str] = []
     followups: list[str] = []
@@ -563,19 +562,19 @@ def build_devcheck_plan(
     for path in changed:
         if path.startswith("tests/"):
             try:
-                test_lane = lane_for_test_file(path, base)
+                test_profile = devcheck_profile_for_test_file(path, base)
             except ValueError:
                 reasons.append(f"{path} is an unknown test file; no automatic mapping exists")
                 continue
-            if test_lane == "live" and not allow_live:
-                followups.append("live")
-                reasons.append(f"{path} is a live-only test; explicit live execution is required")
+            if test_profile == "manual_validation" and not allow_manual_validation:
+                followups.append("manual_validation")
+                reasons.append(f"{path} is a manual-validation file; explicit real-model validation is required")
                 continue
-            if test_lane == "benchmark_heavy" and not allow_benchmark_heavy:
-                followups.append("benchmark_heavy")
-                reasons.append(f"{path} is benchmark-heavy; explicit heavy execution is required")
+            if test_profile == "heavy_agent" and not allow_heavy_agent:
+                followups.append("heavy_agent")
+                reasons.append(f"{path} needs expensive agent execution; explicit heavy-agent execution is required")
                 continue
-            lane = _max_lane(lane, test_lane)
+            profile = _max_devcheck_profile(profile, test_profile)
             _add_targets(targets, path)
             reasons.append(f"{path} changed; include the test file directly")
             continue
@@ -589,7 +588,7 @@ def build_devcheck_plan(
             continue
 
         if path in {"pyproject.toml", "scripts/archive_proof.py"} or path.startswith("scripts/"):
-            lane = _max_lane(lane, "integration")
+            profile = _max_devcheck_profile(profile, "packaging")
             _add_targets(targets, *_packaging_candidates())
             _mark_packaging_only_followup(path, reasons)
             continue
@@ -602,7 +601,7 @@ def build_devcheck_plan(
             "src/swaag/testlane.py",
             "tests/conftest.py",
         }:
-            lane = _max_lane(lane, "integration")
+            profile = _max_devcheck_profile(profile, "packaging")
             _add_targets(targets, *_packaging_candidates())
             _mark_packaging_only_followup(path, reasons)
             continue
@@ -614,15 +613,15 @@ def build_devcheck_plan(
             continue
 
         if path.startswith("src/swaag/benchmark/"):
-            lane = _max_lane(lane, "system")
+            profile = _max_devcheck_profile(profile, "system")
             _add_targets(targets, *_BENCHMARK_STRUCTURE_TESTS)
             reasons.append(f"{path} changes benchmark structure; include structure/report tests without the heavy proof profile")
             continue
 
         if path in {"src/swaag/live_runtime_profiles.py"}:
-            lane = _max_lane(lane, "integration")
-            _add_targets(targets, *_LIVE_PROFILE_TESTS)
-            reasons.append(f"{path} affects live execution policy; include live-profile consistency tests")
+            profile = _max_devcheck_profile(profile, "packaging")
+            _add_targets(targets, *_MANUAL_VALIDATION_PROFILE_TESTS)
+            reasons.append(f"{path} affects real-model execution policy; include profile consistency checks")
             continue
 
         if path.startswith("src/swaag/assets/") or path in {
@@ -640,7 +639,7 @@ def build_devcheck_plan(
             "src/swaag/strategy.py",
             "src/swaag/verification.py",
         }:
-            lane = _max_lane(lane, "system")
+            profile = _max_devcheck_profile(profile, "system")
             _add_targets(targets, *_runtime_candidates())
             reasons.append(f"{path} affects runtime semantics/orchestration; broaden to the system profile")
             continue
@@ -660,13 +659,13 @@ def build_devcheck_plan(
                 "src/swaag/history.py",
             }
         ):
-            lane = _max_lane(lane, "system")
+            profile = _max_devcheck_profile(profile, "system")
             _add_targets(targets, *_context_candidates())
             reasons.append(f"{path} affects context/tool/environment behavior; broaden to the system profile")
             continue
 
         if path.startswith("src/swaag/"):
-            lane = _max_lane(lane, "system")
+            profile = _max_devcheck_profile(profile, "system")
             _add_targets(targets, *_runtime_candidates(), *_context_candidates())
             reasons.append(f"{path} is an unmapped agent core file; degrade safely to the system profile")
             continue
@@ -674,49 +673,49 @@ def build_devcheck_plan(
         reasons.append(f"{path} is outside the tracked selector map; no automatic code tests added")
 
     candidate_tests = validate_candidate_tests(targets, base) if targets else ()
-    if lane == "integration":
-        marker_expression = lane_marker_expression("integration")
-    elif lane == "live":
-        marker_expression = lane_marker_expression("live")
-    elif lane == "benchmark_heavy":
-        marker_expression = lane_marker_expression("benchmark_heavy")
+    if profile == "packaging":
+        marker_expression = devcheck_profile_marker_expression("packaging")
+    elif profile == "manual_validation":
+        marker_expression = devcheck_profile_marker_expression("manual_validation")
+    elif profile == "heavy_agent":
+        marker_expression = devcheck_profile_marker_expression("heavy_agent")
     else:
         marker_expression = "not agent_test"
 
     return DevcheckPlan(
         changed_files=changed,
-        lane=lane,
+        profile=profile,
         candidate_tests=candidate_tests,
         reasons=tuple(reasons),
         marker_expression=marker_expression,
         testmon=detect_testmon(base),
-        explicit_followup_lanes=tuple(sorted(dict.fromkeys(followups))),
+        explicit_followup_profiles=tuple(sorted(dict.fromkeys(followups))),
     )
 
 
-def build_lane_command(
-    lane: str,
+def build_devcheck_profile_command(
+    profile: str,
     *,
     root: Path | None = None,
     use_testmon: bool = False,
     baseline_only: bool = False,
     candidate_tests: Iterable[str] = (),
 ) -> list[str]:
-    if lane == "proof":
+    if profile == "proof":
         return [sys.executable, "-m", "swaag.finalproof"]
     base = project_root() if root is None else root
-    validate_lane_registry(base)
-    if lane not in LANES:
-        raise ValueError(f"Unknown test profile: {lane}")
+    validate_devcheck_profile_registry(base)
+    if profile not in _DEVCHECK_PROFILES:
+        raise ValueError(f"Unknown test profile: {profile}")
     command = [sys.executable, "-m", "pytest", "-q"]
-    lane_files = lane_test_files(base).get(lane, ())
+    profile_files = devcheck_profile_test_files(base).get(profile, ())
     explicit_tests = validate_candidate_tests(candidate_tests, base) if candidate_tests else ()
 
     marker_expression = ""
-    if lane == "live":
-        marker_expression = lane_marker_expression("live")
-    elif lane == "benchmark_heavy":
-        marker_expression = lane_marker_expression("benchmark_heavy")
+    if profile == "manual_validation":
+        marker_expression = devcheck_profile_marker_expression("manual_validation")
+    elif profile == "heavy_agent":
+        marker_expression = devcheck_profile_marker_expression("heavy_agent")
 
     if marker_expression:
         command.extend(["-m", marker_expression])
@@ -730,8 +729,8 @@ def build_lane_command(
             command.append("--testmon-forceselect" if testmon.baseline_exists else "--testmon-noselect")
     if explicit_tests:
         command.extend(explicit_tests)
-    elif lane_files:
-        command.extend(lane_files)
+    elif profile_files:
+        command.extend(profile_files)
     return command
 
 

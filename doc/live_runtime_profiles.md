@@ -118,7 +118,7 @@ The benchmark reports include:
   - runs the smallest deterministic subset based on changed files
 - Final proof loop
   - `python3 -m swaag.finalproof`
-  - runs imports, scaled catalog, runtime verification flow, end-to-end tests, full fast suite, integration suite, validation suite, large benchmark, representative validation benchmark subset, and archive proof
+  - runs imports, scaled catalog, runtime verification flow, end-to-end tests, full fast suite, packaging checks, cached agent tests, large benchmark, representative manual-validation subset, and archive proof
 
 ## Practical guidance
 

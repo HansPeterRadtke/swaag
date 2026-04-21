@@ -74,6 +74,9 @@ class RecordReplayModelClient:
             metadata["model_profile"] = getattr(model, "profile_name", "")
             metadata["structured_output_mode"] = getattr(model, "structured_output_mode", "")
             metadata["seed"] = getattr(model, "seed", None)
+            metadata["timeout_seconds"] = getattr(model, "timeout_seconds", None)
+            metadata["connect_timeout_seconds"] = getattr(model, "connect_timeout_seconds", None)
+            metadata["request_timeout_affects_generation"] = False
         return metadata
 
     def _load_entries(self) -> dict[str, RecordReplayEntry]:
@@ -101,17 +104,17 @@ class RecordReplayModelClient:
             "mode": "record_replay",
             "request_metadata": _normalize_json(self.request_metadata),
             "hash_basis": "request_metadata_plus_payload",
-            "transport_metadata_not_in_hash": ["timeout_seconds"],
+            "transport_metadata_not_in_hash": ["send_completion_timeout_seconds"],
             "entries": [asdict(entry) for entry in sorted(self._entries.values(), key=lambda item: item.request_hash)],
         }
         write_text(self.cassette_path, stable_json_dumps(payload, indent=2) + "\n", encoding="utf-8")
 
     def _request_envelope(self, payload: dict[str, Any], *, timeout_seconds: int | None = None) -> dict[str, Any]:
-        # timeout_seconds is stored for reference only and is NOT part of the hash.
-        # Hash key = request_metadata + payload (transport-layer timeout does not affect output).
+        # send_completion timeout is stored for debugging, not hashed. The model
+        # config timeout is in request_metadata when configured.
         return {
             "request_metadata": _normalize_json(self.request_metadata),
-            "timeout_seconds": timeout_seconds,
+            "send_completion_timeout_seconds": timeout_seconds,
             "payload": _normalize_json(payload),
         }
 

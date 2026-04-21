@@ -1,98 +1,41 @@
-SWAAG test and evaluation report
-================================
+SWAAG test report model
+=======================
 
-Scope of this repo state
-------------------------
-The repository distinguishes two user-facing test categories:
+Authoritative test categories:
 
-1. Deterministic correctness tests
-2. Agent behavior tests
-   - cached mode
-   - no-cache validation mode
+1. code_correctness
+2. agent_test
 
-Deterministic correctness tests are the mechanical bug-detection surface.
-Agent behavior tests exercise the full runtime, orchestration, tools,
-verification, and reporting path.
+Uncached real-model execution is manual validation / real usage, not a test
+category.
 
-Current command surface
------------------------
-Deterministic correctness tests:
+Commands
+--------
 
-  python3 -m pytest -q -x
+Code correctness:
+  python3 -m swaag.testprofile code-correctness
 
-Agent behavior tests (cached mode):
+Cached agent tests:
+  python3 -m swaag.testprofile agent-tests
 
-  python3 -m swaag.benchmark agent-tests --mode cached --clean --validation-subset --output /tmp/swaag-agent-tests-cached
+Combined fail-fast:
+  python3 -m swaag.testprofile combined
 
-Agent behavior tests (no-cache validation mode):
+Artifact-producing combined run:
+  python3 -m swaag.benchmark test-categories --clean --output /tmp/swaag-test-categories
 
-  python3 -m swaag.benchmark agent-tests --mode no-cache-validation --clean --validation-subset --output /tmp/swaag-agent-tests-validation
+Manual validation, not tests:
+  python3 -m swaag.benchmark manual-validation --clean --validation-subset --output /tmp/swaag-manual-validation
 
-Authoritative combined score:
+Artifacts
+---------
 
-  python3 -m swaag.benchmark test-categories --clean --validation-subset --output /tmp/swaag-test-categories
+/tmp/swaag-test-categories/test_categories_results.json
+/tmp/swaag-test-categories/test_categories_report.md
+/tmp/swaag-test-categories/code_correctness/code_correctness_results.json
+/tmp/swaag-test-categories/code_correctness/code_correctness_report.md
+/tmp/swaag-test-categories/agent_test/agent_test_results.json
+/tmp/swaag-test-categories/agent_test/agent_test_report.md
 
-Key artifacts
--------------
-Deterministic correctness tests:
-
-  deterministic_correctness/functional_correctness_results.json
-  deterministic_correctness/functional_correctness_report.md
-
-Agent behavior tests (cached mode):
-
-  agent_behavior_cached_results.json
-  agent_behavior_cached_report.md
-  agent_behavior_cached/agent_behavior_cached_results.json
-  agent_behavior_cached/agent_behavior_cached_report.md
-  agent_behavior_cached/replay_cache/
-
-Agent behavior tests (no-cache validation mode):
-
-  agent_behavior_validation_results.json
-  agent_behavior_validation_report.md
-  agent_behavior_validation/agent_behavior_validation_results.json
-  agent_behavior_validation/agent_behavior_validation_report.md
-  agent_behavior_validation/benchmark_results.json
-  agent_behavior_validation/benchmark_report.md
-
-Combined output:
-
-  test_categories_results.json
-  test_categories_report.md
-
-Replay cache notes
-------------------
-The cached-mode path uses a test-only record/replay client keyed by:
-
-- normalized request payload
-- request metadata
-  - model base URL
-  - completion endpoint
-  - model profile
-  - structured output mode
-  - seed
-  - explicit task/mode metadata where the benchmark wrapper adds it
-
-`timeout_seconds` is stored with the request envelope for observability but is
-not part of the hash because it is a transport setting, not a semantic model
-input.
-
-Validation subset
------------------
-The no-cache validation subset keeps at least ten distinct tasks in each
-ordered difficulty tier:
-
-- extremely_easy
-- easy
-- normal
-- hard
-- extremely_hard
-
-The category reports expose:
-
-- per-task percentages
-- per-task rubric breakdowns
-- per-tier percentages for no-cache validation mode
-- per-category percentages
-- final overall percent
+/tmp/swaag-manual-validation/manual_validation_results.json
+/tmp/swaag-manual-validation/manual_validation_report.md

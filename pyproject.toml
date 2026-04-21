@@ -73,7 +73,7 @@ pythonpath = ["src"]
 testpaths = ["tests"]
 markers = [
   "code_correctness: deterministic software-correctness tests with no model dependency",
-  "agent_test: agent behavior tests that depend on LLM output, cached or uncached",
+  "agent_test: cached agent behavior tests",
   "fast: fast devcheck subset — cheap unit-level checks (internal routing only)",
   "system: system devcheck subset — runtime and orchestration checks (internal routing only)",
 ]

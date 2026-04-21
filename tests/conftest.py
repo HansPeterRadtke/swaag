@@ -9,7 +9,7 @@ from swaag.config import AgentConfig, load_config
 from swaag.test_categories import (
     AGENT_TEST_FILES,
     CODE_CORRECTNESS_TEST_FILES,
-    _SYSTEM_TEST_FILES,
+    _DEVCHECK_SYSTEM_PROFILE_FILES,
     project_root,
 )
 
@@ -55,7 +55,7 @@ def pytest_collection_modifyitems(items: list[pytest.Item]) -> None:
         elif relative in CODE_CORRECTNESS_TEST_FILES:
             item.add_marker(pytest.mark.code_correctness)
         # Devcheck subset markers (internal routing only — not for deselection).
-        if relative in _SYSTEM_TEST_FILES or relative in AGENT_TEST_FILES:
+        if relative in _DEVCHECK_SYSTEM_PROFILE_FILES or relative in AGENT_TEST_FILES:
             item.add_marker(pytest.mark.system)
         else:
             item.add_marker(pytest.mark.fast)

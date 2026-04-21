@@ -40,7 +40,7 @@ def test_finalproof_and_benchmark_defaults_use_the_documented_final_live_profile
 
     commands = build_finalproof_commands(
         benchmark_output=Path("/tmp/bench"),
-        live_benchmark_output=Path("/tmp/live"),
+        manual_validation_output=Path("/tmp/manual"),
     )
     env = build_finalproof_environment()
     flattened = [" ".join(command) for command in commands]

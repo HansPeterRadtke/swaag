@@ -87,7 +87,7 @@ _RECOMMENDATIONS: dict[LiveRuntimeUseCase, LiveRuntimeRecommendation] = {
         request_observability_mode="progress_polling",
         rationale=(
             "Use the smallest local context profile with generation-time schema enforcement plus local "
-            "post-validation so short live tests stay observable without dropping hard output contracts."
+            "post-validation so short manual-validation runs stay observable without dropping hard output contracts."
         ),
         measured_task_count=8,
         measured_success_rate=1.0,

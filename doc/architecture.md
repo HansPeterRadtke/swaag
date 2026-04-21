@@ -101,29 +101,16 @@
 
 ## Evaluation architecture
 
-Evaluation exposes two user-facing categories:
+Evaluation exposes two user-facing test categories:
 
-- deterministic correctness tests
-- agent behavior tests
+- `code_correctness`: deterministic software-correctness checks.
+- `agent_test`: cached agent behavior checks.
 
-Agent behavior tests run in two modes:
+Uncached real-model execution is manual validation / real usage, not a test
+category. The category evaluator writes separate JSON and markdown reports for
+`code_correctness`, `agent_test`, and the combined fail-fast result.
 
-- cached mode
-- no-cache validation mode
-
-- deterministic correctness tests
-  - deterministic health checks for the repository and runtime
-  - imports, smoke coverage, harness coverage, scheduler/runtime/history checks
-  - expected to remain at `100%`
-- agent behavior tests (cached mode)
-  - runs the real runtime/orchestrator/tool loop with cassette-backed record/replay by default
-  - keeps reruns fast once the cache exists
-  - still allows tightly controlled scripted fixtures for focused support-check families
-- agent behavior tests (no-cache validation mode)
-  - tasks run through the real agent runtime with direct model calls enabled
-  - scored by difficulty tier with per-task rubric breakdowns
-
-Validation difficulty tiers:
+Manual validation keeps the five difficulty tiers for real-model task scoring:
 
 - `extremely_easy`
 - `easy`
@@ -131,22 +118,6 @@ Validation difficulty tiers:
 - `hard`
 - `extremely_hard`
 
-The curated validation subset is intentionally balanced: each tier must keep at
-least `10` distinct tasks, and validation fails if that floor regresses.
-
-The category evaluator in `swaag.benchmark.evaluation_runner` writes:
-
-- deterministic correctness JSON and markdown reports
-- agent behavior tests (cached mode) JSON and markdown reports
-- agent behavior tests (no-cache validation mode) JSON and markdown reports
-- one combined report with:
-  - deterministic correctness percent
-  - agent behavior tests (cached mode) percent
-  - agent behavior tests (no-cache validation mode) percent
-  - no-cache validation per-tier percents
-  - no-cache validation per-task percentages
-  - no-cache validation rubric excerpts for the weakest tasks
-  - one final overall percent
 
 ## Memory model
 
@@ -306,3 +277,13 @@ the LLM ranker applies semantic relevance scores:
 
 All weights are zero-to-one and additive with the LLM's semantic score. They exist
 to give the shortlister a signal about source quality without replacing the ranker.
+
+
+## Test Categories
+
+SWAAG exposes exactly two authoritative test categories:
+
+- `code_correctness`: deterministic mechanical checks with no model-server dependency.
+- `agent_test`: cached agent behavior checks using scripted, fake, or record/replay model responses.
+
+Uncached real-model execution is manual validation / real usage. It is not a test category and is launched explicitly with `python3 -m swaag.benchmark manual-validation ...`.
