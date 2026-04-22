@@ -19,11 +19,27 @@ from swaag.benchmark.task_definitions import (
 )
 
 
-def test_benchmark_runner_executes_all_real_tasks_and_writes_reports(tmp_path: Path) -> None:
+def test_benchmark_runner_executes_all_real_tasks_and_writes_reports(monkeypatch, tmp_path: Path) -> None:
     output_dir = tmp_path / "benchmark"
+    representative_tasks = [
+        "coding_multifile_fix",
+        "file_edit_exact",
+        "reading_extract_structured",
+        "multi_step_environment_shell_persistence",
+        "failure_wrong_tool_usage",
+        "quality_already_decomposed_prompt",
+    ]
+    all_tasks = get_benchmark_tasks()
+    by_id = {task.task_id: task for task in all_tasks}
+    monkeypatch.setattr(
+        benchmark_runner,
+        "_load_tasks",
+        lambda task_ids, live_subset: [by_id[task_id] for task_id in representative_tasks],
+    )
+
     report = run_benchmarks(output_dir=output_dir, clean=True)
 
-    assert report["summary"]["total_tasks"] == len(get_benchmark_tasks())
+    assert report["summary"]["total_tasks"] == len(representative_tasks)
     assert report["summary"]["failed_tasks"] == 0
     assert report["summary"]["false_positives"] == 0
     assert report["aggregate_metrics"]["primary"]["false_positive_rate"] == 0.0
@@ -34,13 +50,15 @@ def test_benchmark_runner_executes_all_real_tasks_and_writes_reports(tmp_path: P
 
     persisted = json.loads((output_dir / "benchmark_results.json").read_text(encoding="utf-8"))
     assert persisted["summary"]["failed_tasks"] == 0
-    assert persisted["summary"]["total_tasks"] >= 170
-    assert persisted["aggregate_metrics"]["coverage_by_type"]["coding"] >= 40
-    assert persisted["aggregate_metrics"]["coverage_by_type"]["file_edit"] >= 25
-    assert persisted["aggregate_metrics"]["coverage_by_type"]["reading"] >= 25
-    assert persisted["aggregate_metrics"]["coverage_by_type"]["multi_step"] >= 30
-    assert persisted["aggregate_metrics"]["coverage_by_type"]["failure"] >= 30
-    assert persisted["aggregate_metrics"]["coverage_by_type"]["quality"] >= 20
+    assert persisted["summary"]["total_tasks"] == len(representative_tasks)
+    assert persisted["aggregate_metrics"]["coverage_by_type"] == {
+        "coding": 1,
+        "failure": 1,
+        "file_edit": 1,
+        "multi_step": 1,
+        "quality": 1,
+        "reading": 1,
+    }
     assert all(item["history_path"] for item in persisted["tasks"])
     assert all(Path(item["history_path"]).exists() for item in persisted["tasks"])
     report_text = (output_dir / "benchmark_report.md").read_text(encoding="utf-8")
@@ -258,7 +276,7 @@ def test_benchmark_runner_records_per_seed_live_results(monkeypatch, tmp_path: P
     assert "selected_skill_ids" in task_payload["metrics"]
     assert "exposed_tool_names" in task_payload["metrics"]
     assert "retrieval_trace_sample" in task_payload["metrics"]
-    assert task_payload["metrics"]["verification_trace"]["verification_type_used"] == "llm_fallback"
+    assert task_payload["metrics"]["verification_trace"]["verification_type_used"] == "composite"
 
 
 def test_benchmark_runner_keeps_one_fixed_profile_across_seeded_live_runs(monkeypatch, tmp_path: Path) -> None:

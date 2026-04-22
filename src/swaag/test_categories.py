@@ -70,7 +70,6 @@ AGENT_TEST_FILES = frozenset(
         # Scripted and cached agent behavior tests (LLM calls via FakeModelClient or replay cassettes)
         "tests/test_agent_loop_replay.py",
         "tests/test_benchmark.py",
-        "tests/test_clean_install_agent.py",
         "tests/test_end_to_end.py",
         "tests/test_environment.py",
         "tests/test_false_positive_killers.py",

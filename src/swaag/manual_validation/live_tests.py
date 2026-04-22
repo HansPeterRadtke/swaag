@@ -14,6 +14,7 @@ from pathlib import Path
 import pytest
 
 from swaag.config import AgentConfig, load_config
+from swaag.fsops import remove_file, write_text
 from swaag.live_runtime_profiles import get_live_runtime_recommendation
 from swaag.model import LlamaCppClient
 from swaag.runtime import AgentRuntime, TurnResult
@@ -187,7 +188,7 @@ def test_live_calculator_tool_path(live_settings: dict[str, str | int | float], 
 
 def test_live_file_read_exact_extraction(live_settings: dict[str, str | int | float], tmp_path: Path) -> None:
     facts = tmp_path / "facts.txt"
-    facts.write_text("line1=ignore\nline2=ignore\nowner=carol\n", encoding="utf-8")
+    write_text(facts, "line1=ignore\nline2=ignore\nowner=carol\n", encoding="utf-8")
 
     runs = _run_across_seeds(
         tmp_path,
@@ -207,7 +208,7 @@ def test_live_file_edit_exact_change(live_settings: dict[str, str | int | float]
         live_settings,
         f"Edit {note} so the file content becomes exactly world followed by a newline. Reply exactly done.",
         allow_side_effect_tools=True,
-        prepare_seed=lambda _seed: note.write_text("hello\n", encoding="utf-8"),
+        prepare_seed=lambda _seed: write_text(note, "hello\n", encoding="utf-8"),
     )
 
     assert all(turn.assistant_text.strip() == "done" for _seed, _runtime, _state, turn in runs)
@@ -231,8 +232,8 @@ def test_live_multi_step_read_compute_write(live_settings: dict[str, str | int |
         ),
         allow_side_effect_tools=True,
         prepare_seed=lambda _seed: (
-            numbers.write_text("19\n23\n", encoding="utf-8"),
-            result_file.unlink() if result_file.exists() else None,
+            write_text(numbers, "19\n23\n", encoding="utf-8"),
+            remove_file(result_file) if result_file.exists() else None,
         ),
     )
 
@@ -247,8 +248,9 @@ def test_live_multi_step_read_compute_write(live_settings: dict[str, str | int |
 def test_live_run_tests_tool_path(live_settings: dict[str, str | int | float], tmp_path: Path) -> None:
     module = tmp_path / "sample_math.py"
     test_file = tmp_path / "test_sample_math.py"
-    module.write_text("def add(a: int, b: int) -> int:\n    return a + b\n", encoding="utf-8")
-    test_file.write_text(
+    write_text(module, "def add(a: int, b: int) -> int:\n    return a + b\n", encoding="utf-8")
+    write_text(
+        test_file,
         "import unittest\n\n"
         "from sample_math import add\n\n\n"
         "class SampleMathTests(unittest.TestCase):\n"
@@ -295,7 +297,7 @@ def test_live_missing_file_returns_not_done(live_settings: dict[str, str | int |
 
 def test_live_verification_strength_rejects_unverified_claim(live_settings: dict[str, str | int | float], tmp_path: Path) -> None:
     facts = tmp_path / "facts.txt"
-    facts.write_text("owner=carol\n", encoding="utf-8")
+    write_text(facts, "owner=carol\n", encoding="utf-8")
 
     runs = _run_across_seeds(
         tmp_path,
