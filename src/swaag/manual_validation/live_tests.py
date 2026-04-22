@@ -1,3 +1,10 @@
+"""Live llama.cpp integration tests.
+
+These are NOT pytest test-category tests. They require a running llama.cpp server
+and SWAAG_RUN_LIVE=1. Run directly with pytest when needed:
+
+    SWAAG_RUN_LIVE=1 pytest src/swaag/manual_validation/live_tests.py
+"""
 from __future__ import annotations
 
 import json
@@ -11,8 +18,6 @@ from swaag.live_runtime_profiles import get_live_runtime_recommendation
 from swaag.model import LlamaCppClient
 from swaag.runtime import AgentRuntime, TurnResult
 
-
-pytestmark = pytest.mark.agent_test
 
 _FAST_LIVE = get_live_runtime_recommendation("fast_live_tests")
 

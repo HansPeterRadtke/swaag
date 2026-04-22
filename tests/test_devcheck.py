@@ -5,9 +5,9 @@ from pathlib import Path
 import pytest
 
 from swaag.devcheck import build_pytest_command, main
+from swaag.devcheck_profiles import DevcheckPlan, TestmonStatus
 from swaag.finalproof import build_finalproof_commands, build_finalproof_environment
 from swaag.live_runtime_profiles import get_documented_final_live_benchmark_recommendation
-from swaag.test_categories import DevcheckPlan, TestmonStatus
 
 
 def _plan(*, profile: str = "fast", marker_expression: str = "not agent_test", candidate_tests: tuple[str, ...] = ("tests/test_imports.py",), testmon: TestmonStatus | None = None) -> DevcheckPlan:
@@ -48,13 +48,12 @@ def test_build_pytest_command_can_require_testmon() -> None:
         )
 
 
-def test_devcheck_requires_explicit_manual_validation(capsys: pytest.CaptureFixture[str]) -> None:
-    exit_code = main(["--dry-run", "--changed-file", "tests/test_live_llamacpp.py"])
+def test_devcheck_routes_manual_validation_source_to_structure_tests(capsys: pytest.CaptureFixture[str]) -> None:
+    exit_code = main(["--dry-run", "--changed-file", "src/swaag/manual_validation/live_tests.py"])
     captured = capsys.readouterr()
 
-    assert exit_code == 2
-    assert "followup_profiles=['manual_validation']" in captured.out
-    assert "swaag.benchmark manual-validation" in captured.out
+    assert exit_code == 0
+    assert "tests/test_live_suite_structure.py" in captured.out
 
 
 def test_finalproof_builds_required_commands() -> None:
@@ -67,7 +66,7 @@ def test_finalproof_builds_required_commands() -> None:
 
     flattened = [" ".join(command) for command in commands]
     assert any("tests/test_imports.py" in command for command in flattened)
-    assert any("manual-validation" in command for command in flattened)
+    assert any("swaag.manual_validation" in command for command in flattened)
     assert any("--validation-subset" in command for command in flattened)
     assert any(f"--structured-output-mode {recommendation.structured_output_mode}" in command for command in flattened)
     assert any(f"--model-profile {recommendation.model_profile}" in command for command in flattened)

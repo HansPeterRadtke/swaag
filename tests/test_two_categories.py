@@ -3,7 +3,6 @@ from __future__ import annotations
 from swaag.test_categories import (
     AGENT_TEST_FILES,
     CODE_CORRECTNESS_TEST_FILES,
-    MANUAL_VALIDATION_FILES,
     TOP_LEVEL_TEST_CATEGORIES,
     build_agent_tests_command,
     build_code_correctness_command,
@@ -20,9 +19,6 @@ def test_top_level_category_registry_covers_current_tree() -> None:
 def test_top_level_category_registry_reports_expected_examples() -> None:
     assert category_for_file("tests/test_imports.py") == "code_correctness"
     assert category_for_file("tests/test_runtime.py") == "agent_test"
-    assert "tests/test_live_llamacpp.py" in MANUAL_VALIDATION_FILES
-    assert "tests/test_live_llamacpp.py" not in AGENT_TEST_FILES
-    assert "tests/test_live_llamacpp.py" not in CODE_CORRECTNESS_TEST_FILES
 
 
 def test_top_level_category_groups_are_non_empty_and_disjoint() -> None:
@@ -31,8 +27,23 @@ def test_top_level_category_groups_are_non_empty_and_disjoint() -> None:
     assert categories["code_correctness"]
     assert categories["agent_test"]
     assert TOP_LEVEL_TEST_CATEGORIES == ("code_correctness", "agent_test")
-    assert "tests/test_live_llamacpp.py" not in categories["agent_test"]
     assert set(categories["code_correctness"]).isdisjoint(categories["agent_test"])
+
+
+def test_every_pytest_file_in_tests_belongs_to_a_category() -> None:
+    """Every test_*.py file in tests/ must be in exactly one of the two categories.
+
+    No uncategorised files, no third category, no manual-validation test files
+    masquerading in the pytest tree.
+    """
+    from swaag.test_categories import all_test_files, project_root
+
+    known = set(all_test_files(project_root()))
+    classified = CODE_CORRECTNESS_TEST_FILES | AGENT_TEST_FILES
+    unclassified = sorted(known - classified)
+    assert unclassified == [], f"Test files not classified into either category: {unclassified}"
+    phantom = sorted(classified - known)
+    assert phantom == [], f"Category registries reference files that do not exist: {phantom}"
 
 
 def test_authoritative_commands_use_explicit_two_category_file_lists() -> None:
@@ -43,5 +54,3 @@ def test_authoritative_commands_use_explicit_two_category_file_lists() -> None:
     assert "-m" not in agent_command[3:]
     assert any(path.endswith("tests/test_imports.py") for path in code_command)
     assert any(path.endswith("tests/test_runtime.py") for path in agent_command)
-    assert not any(path.endswith("tests/test_live_llamacpp.py") for path in code_command)
-    assert not any(path.endswith("tests/test_live_llamacpp.py") for path in agent_command)

@@ -305,7 +305,7 @@ def test_package_installs_and_cli_runs_from_clean_venv(tmp_path: Path) -> None:
             capture_output=True,
         )
         assert "tests/test_runtime_verification_flow.py" in devcheck.stdout
-        assert "test_profile=system" in devcheck.stdout
+        assert "candidate_tests=" in devcheck.stdout
         assert "testmon=available:False" in devcheck.stdout
 
         finalproof = subprocess.run(
@@ -317,7 +317,7 @@ def test_package_installs_and_cli_runs_from_clean_venv(tmp_path: Path) -> None:
             capture_output=True,
         )
         assert "tests/test_scaled_catalog.py" in finalproof.stdout
-        assert "manual-validation" in finalproof.stdout
+        assert "swaag.manual_validation" in finalproof.stdout
         assert "--validation-subset" in finalproof.stdout
         assert "--model-profile small_fast" in finalproof.stdout
         assert "--structured-output-mode post_validate" in finalproof.stdout

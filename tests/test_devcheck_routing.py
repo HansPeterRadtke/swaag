@@ -6,9 +6,10 @@ from pathlib import Path
 
 import pytest
 
+import swaag.devcheck_profiles as devcheck_profiles
 import swaag.test_categories as test_categories
 import tests.conftest as test_conftest
-from swaag.test_categories import (
+from swaag.devcheck_profiles import (
     build_devcheck_plan,
     build_devcheck_profile_command,
     detect_testmon,
@@ -32,7 +33,6 @@ def test_runtime_change_selects_local_nonlive_runtime_candidates() -> None:
     assert plan.profile == "system"
     assert "tests/test_runtime.py" in plan.candidate_tests
     assert "tests/test_runtime_verification_flow.py" in plan.candidate_tests
-    assert "tests/test_live_llamacpp.py" not in plan.candidate_tests
     assert plan.explicit_followup_profiles == ()
     assert plan.marker_expression == "not agent_test"
 
@@ -78,18 +78,19 @@ def test_docs_with_dedicated_consistency_tests_selects_only_those_tests() -> Non
     assert plan.profile == "fast"
 
 
-def test_manual_validation_file_requires_explicit_followup() -> None:
-    plan = build_devcheck_plan(["tests/test_live_llamacpp.py"])
+def test_manual_validation_source_change_selects_live_suite_structure_test() -> None:
+    plan = build_devcheck_plan(["src/swaag/manual_validation/live_tests.py"])
 
-    assert plan.candidate_tests == ()
-    assert plan.explicit_followup_profiles == ("manual_validation",)
+    assert "tests/test_live_suite_structure.py" in plan.candidate_tests
+    assert plan.explicit_followup_profiles == ()
+    assert plan.profile == "packaging"
 
 
-def test_heavy_agent_test_change_requires_explicit_followup() -> None:
+def test_benchmark_test_change_is_included_directly() -> None:
     plan = build_devcheck_plan(["tests/test_benchmark.py"])
 
-    assert plan.candidate_tests == ()
-    assert plan.explicit_followup_profiles == ("heavy_agent",)
+    assert "tests/test_benchmark.py" in plan.candidate_tests
+    assert plan.explicit_followup_profiles == ()
 
 
 def test_detect_testmon_reports_missing_plugin(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> None:
@@ -157,7 +158,7 @@ def test_project_root_uses_direct_url_repo_source_when_installed(monkeypatch: py
 
 
 def test_build_devcheck_profile_command_uses_explicit_file_lists_for_fast_profile(monkeypatch: pytest.MonkeyPatch) -> None:
-    monkeypatch.setattr(test_categories, "detect_testmon", lambda root=None: test_categories.TestmonStatus(True, True, "forceselect", "ready"))
+    monkeypatch.setattr(devcheck_profiles, "detect_testmon", lambda root=None: devcheck_profiles.TestmonStatus(True, True, "forceselect", "ready"))
 
     command = build_devcheck_profile_command("fast", use_testmon=True)
 

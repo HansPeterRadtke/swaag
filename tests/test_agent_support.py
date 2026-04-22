@@ -57,7 +57,9 @@ def test_benchmark_runner_test_categories_command_uses_two_category_evaluation(m
     assert "benchmark_task_ids" not in observed
 
 
-def test_benchmark_runner_manual_validation_is_separate_from_tests(monkeypatch, tmp_path: Path) -> None:
+def test_manual_validation_cli_is_separate_from_tests(monkeypatch, tmp_path: Path) -> None:
+    from swaag.manual_validation import __main__ as manual_validation_main
+
     observed: dict[str, object] = {}
 
     def fake_run_manual_validation(**kwargs):
@@ -68,9 +70,9 @@ def test_benchmark_runner_manual_validation_is_separate_from_tests(monkeypatch, 
             "summary": {"total_tasks": 1, "failed_tasks": 0, "false_positives": 0},
         }
 
-    monkeypatch.setattr("swaag.benchmark.evaluation_runner.run_manual_validation", fake_run_manual_validation)
+    monkeypatch.setattr("swaag.manual_validation.runner.run_manual_validation", fake_run_manual_validation)
 
-    exit_code = benchmark_runner.main(["manual-validation", "--output", str(tmp_path / "manual"), "--clean", "--task", "demo"])
+    exit_code = manual_validation_main.main(["--output", str(tmp_path / "manual"), "--clean", "--task", "demo"])
 
     assert exit_code == 0
     assert observed["output_dir"] == tmp_path / "manual"

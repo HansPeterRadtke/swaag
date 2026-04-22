@@ -6,14 +6,13 @@ import sys
 from pathlib import Path
 
 from swaag.test_categories import (
-    MANUAL_VALIDATION_FILES,
     build_agent_tests_command,
     build_code_correctness_command,
     project_root,
 )
 
 # Public authoritative choices exposed to users.
-ALL_CHOICES = ["code-correctness", "agent-tests", "combined", "manual-validation"]
+ALL_CHOICES = ["code-correctness", "agent-tests", "combined"]
 
 
 def _run_combined(*, root: Path, dry_run: bool) -> int:
@@ -37,12 +36,13 @@ def _run_combined(*, root: Path, dry_run: bool) -> int:
 def main(argv: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser(
         description=(
-            "Run an explicit SWAAG test category or manual validation command.\n\n"
+            "Run an explicit SWAAG test category.\n\n"
             "Authoritative two-category commands:\n"
             "  code-correctness  — run only deterministic code-correctness tests (explicit file list)\n"
             "  agent-tests       — run only cached agent tests (explicit file list)\n"
             "  combined          — code-correctness first; agent-tests only if code-correctness is green\n\n"
-            "Manual validation is explicit real-model usage, not a test category."
+            "Manual validation is explicit real-model usage, not a test category.\n"
+            "Use: python -m swaag.manual_validation"
         ),
         formatter_class=argparse.RawDescriptionHelpFormatter,
     )
@@ -71,12 +71,7 @@ def main(argv: list[str] | None = None) -> int:
     if args.profile == "combined":
         return _run_combined(root=root, dry_run=args.dry_run)
 
-    command = [sys.executable, "-m", "pytest", "-q", *(str(root / f) for f in sorted(MANUAL_VALIDATION_FILES))]
-    print("$", " ".join(command))
-    if args.dry_run:
-        return 0
-    result = subprocess.run(command, cwd=Path(root))
-    return result.returncode
+    raise SystemExit(f"Unhandled profile: {args.profile}")
 
 
 if __name__ == "__main__":

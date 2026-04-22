@@ -8,9 +8,9 @@ from swaag.benchmark.evaluation_runner import (
     run_agent_test_category,
     run_code_correctness_category,
     run_full_evaluation,
-    run_manual_validation,
     run_test_category_evaluation,
 )
+from swaag.manual_validation.runner import run_manual_validation
 
 
 def _fake_junit(command: list[str], *, failures: int = 0) -> subprocess.CompletedProcess:
@@ -108,8 +108,7 @@ def test_run_test_category_evaluation_stops_when_code_correctness_fails(monkeypa
 
 def test_run_manual_validation_is_not_a_test_category(monkeypatch, tmp_path: Path) -> None:
     monkeypatch.setattr(
-        benchmark_runner,
-        "run_benchmarks",
+        "swaag.manual_validation.runner.run_benchmarks",
         lambda **kwargs: {
             "summary": {
                 "average_task_score_percent": 91.5,

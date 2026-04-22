@@ -26,8 +26,7 @@ def build_finalproof_commands(*, benchmark_output: Path, manual_validation_outpu
         [
             sys.executable,
             "-m",
-            "swaag.benchmark",
-            "manual-validation",
+            "swaag.manual_validation",
             "--clean",
             "--validation-subset",
             "--model-profile",

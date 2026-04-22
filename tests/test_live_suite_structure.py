@@ -2,7 +2,7 @@ from __future__ import annotations
 
 import inspect
 
-import tests.test_live_llamacpp as live_tests
+import swaag.manual_validation.live_tests as live_tests
 from swaag.live_runtime_profiles import get_live_runtime_recommendation
 
 

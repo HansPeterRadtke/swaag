@@ -73,7 +73,7 @@ validation / real usage.
 Manual validation command:
 
 ```bash
-python3 -m swaag.benchmark manual-validation --clean --validation-subset --output /tmp/swaag-manual-validation
+python3 -m swaag.manual_validation --clean --validation-subset --output /tmp/swaag-manual-validation
 ```
 
 Manual validation writes:

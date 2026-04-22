@@ -201,7 +201,7 @@ def run_agent_behavior_support_checks(
       to demonstrate that the replay mechanism itself works correctly.
 
     All three are "cached mode" support mechanisms in the sense that none make
-    manual-validation model calls. The RecordReplayModelClient is the
+    live uncached model calls. The RecordReplayModelClient is the
     authoritative cassette-backed replay path.
     FakeModelClient and ScriptedBenchmarkClient are deterministic scripted fixtures
     appropriate for tests that need precise control over the agent's decision path.

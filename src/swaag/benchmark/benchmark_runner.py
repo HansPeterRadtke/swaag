@@ -696,12 +696,12 @@ def main(argv: Sequence[str] | None = None) -> int:
                 print(f"skip_reason={report['skip_reason']}")
         return 0 if report["overall_percent"] == 100.0 else 1
     if args.command == "manual-validation":
-        from swaag.benchmark.evaluation_runner import run_manual_validation
+        from swaag.manual_validation.runner import run_manual_validation
 
         report = run_manual_validation(
             output_dir=Path(args.output),
             clean=bool(args.clean),
-            benchmark_task_ids=list(args.task),
+            benchmark_task_ids=list(args.task) or None,
             validation_subset=bool(args.validation_subset),
             model_base_url=args.model_base_url,
             timeout_seconds=args.timeout_seconds,
