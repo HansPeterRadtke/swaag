@@ -5,7 +5,7 @@ Authoritative categories:
 | Category | Command | Purpose |
 | --- | --- | --- |
 | code_correctness | `python3 -m swaag.testprofile code-correctness` | deterministic code checks |
-| agent_test | `python3 -m swaag.testprofile agent-tests` | cached agent behavior checks |
+| agent_test | `python3 -m swaag.testprofile agent-tests` | cached agent behavior checks including the full cached benchmark catalog |
 | combined | `python3 -m swaag.testprofile combined` | code_correctness first, then agent_test only if green |
 
 Artifact-producing combined command:

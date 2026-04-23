@@ -47,8 +47,18 @@ def test_run_agent_test_category_writes_reports(monkeypatch, tmp_path: Path) -> 
 
     assert payload["category"] == "agent_test"
     assert payload["summary"]["percent"] == 100.0
+    assert payload["full_cached_benchmark_catalog"]["total_tasks"] >= 190
+    assert payload["full_cached_benchmark_catalog"]["includes_extremely_hard"] is True
+    assert set(payload["full_cached_benchmark_catalog"]["counts_by_difficulty"]) == {
+        "easy",
+        "extremely_easy",
+        "extremely_hard",
+        "hard",
+        "normal",
+    }
     assert (tmp_path / "agent" / "agent_test_results.json").exists()
     assert (tmp_path / "agent" / "agent_test_report.md").exists()
+    assert "Full Cached Benchmark Catalog" in (tmp_path / "agent" / "agent_test_report.md").read_text(encoding="utf-8")
 
 
 def test_run_test_category_evaluation_runs_only_two_categories(monkeypatch, tmp_path: Path) -> None:

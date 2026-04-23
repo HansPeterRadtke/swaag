@@ -158,9 +158,11 @@ export SWAAG__TOOLS__ALLOW_SIDE_EFFECT_TOOLS=true
 SWAAG has exactly two authoritative test categories:
 
 - `code_correctness`: deterministic software-correctness checks.
-- `agent_test`: cached agent behavior tests.
+- `agent_test`: cached agent behavior tests, including the full cached benchmark catalog.
 
 Uncached llama.cpp execution is explicit manual validation / real usage, not a test category.
+
+The authoritative agent_test path executes the full cached benchmark catalog, not a reduced representative subset. Current catalog coverage is 196 tasks across all six task families and all five difficulty tiers, including extremely_hard.
 
 Run deterministic code-correctness tests:
 
@@ -168,7 +170,7 @@ Run deterministic code-correctness tests:
 python3 -m swaag.testprofile code-correctness
 ```
 
-Run cached agent tests:
+Run cached agent tests, including the full cached benchmark catalog:
 
 ```bash
 python3 -m swaag.testprofile agent-tests
@@ -209,9 +211,11 @@ Report artifacts appear at:
 SWAAG exposes exactly two authoritative test categories:
 
 - `code_correctness`: deterministic software-correctness checks with no model traffic.
-- `agent_test`: cached agent behavior checks.
+- `agent_test`: cached agent behavior checks, including the full cached benchmark catalog.
 
 Uncached llama.cpp execution is explicit manual validation / real usage, not a test category.
+
+The authoritative agent_test path executes the full cached benchmark catalog, not a reduced representative subset. Current catalog coverage is 196 tasks across all six task families and all five difficulty tiers, including extremely_hard.
 
 Recommended commands:
 

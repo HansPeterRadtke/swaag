@@ -15,7 +15,7 @@ Commands
 Code correctness:
   python3 -m swaag.testprofile code-correctness
 
-Cached agent tests:
+Cached agent tests, including the full cached benchmark catalog:
   python3 -m swaag.testprofile agent-tests
 
 Combined fail-fast:

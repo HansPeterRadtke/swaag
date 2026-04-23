@@ -1,6 +1,8 @@
 from __future__ import annotations
 
+import hashlib
 import json
+import shutil
 from pathlib import Path
 
 import pytest
@@ -19,27 +21,70 @@ from swaag.benchmark.task_definitions import (
 )
 
 
-def test_benchmark_runner_executes_all_real_tasks_and_writes_reports(monkeypatch, tmp_path: Path) -> None:
-    output_dir = tmp_path / "benchmark"
-    representative_tasks = [
-        "coding_multifile_fix",
-        "file_edit_exact",
-        "reading_extract_structured",
-        "multi_step_environment_shell_persistence",
-        "failure_wrong_tool_usage",
-        "quality_already_decomposed_prompt",
+def _full_catalog_cache_key(tasks: list[BenchmarkTaskDefinition]) -> str:
+    payload = [
+        {
+            "task_id": task.task_id,
+            "task_type": task.task_type,
+            "difficulty": task.difficulty,
+            "tags": list(task.tags),
+        }
+        for task in tasks
     ]
-    all_tasks = get_benchmark_tasks()
-    by_id = {task.task_id: task for task in all_tasks}
-    monkeypatch.setattr(
-        benchmark_runner,
-        "_load_tasks",
-        lambda task_ids, live_subset: [by_id[task_id] for task_id in representative_tasks],
+    raw = json.dumps({"version": 2, "tasks": payload}, sort_keys=True).encode("utf-8")
+    return hashlib.sha256(raw).hexdigest()[:16]
+
+
+def _valid_full_catalog_report(report_path: Path, tasks: list[BenchmarkTaskDefinition]) -> bool:
+    if not report_path.exists():
+        return False
+    try:
+        payload = json.loads(report_path.read_text(encoding="utf-8"))
+    except (OSError, json.JSONDecodeError):
+        return False
+    expected_ids = {task.task_id for task in tasks}
+    actual_ids = {str(item.get("task_id", "")) for item in payload.get("tasks", [])}
+    return (
+        payload.get("summary", {}).get("total_tasks") == len(tasks)
+        and payload.get("summary", {}).get("failed_tasks") == 0
+        and payload.get("summary", {}).get("false_positives") == 0
+        and actual_ids == expected_ids
     )
 
-    report = run_benchmarks(output_dir=output_dir, clean=True)
 
-    assert report["summary"]["total_tasks"] == len(representative_tasks)
+def _copy_cached_full_catalog(cache_dir: Path, output_dir: Path) -> dict:
+    if output_dir.exists():
+        shutil.rmtree(output_dir)
+    shutil.copytree(cache_dir, output_dir)
+    old_root = str(cache_dir)
+    new_root = str(output_dir)
+    results_path = output_dir / "benchmark_results.json"
+    report_path = output_dir / "benchmark_report.md"
+    results_text = results_path.read_text(encoding="utf-8").replace(old_root, new_root)
+    results_path.write_text(results_text, encoding="utf-8")
+    if report_path.exists():
+        report_path.write_text(report_path.read_text(encoding="utf-8").replace(old_root, new_root), encoding="utf-8")
+    return json.loads(results_text)
+
+
+def _run_full_catalog_with_artifact_reuse(output_dir: Path, tasks: list[BenchmarkTaskDefinition]) -> dict:
+    """Exercise the full cached catalog, reusing full-catalog artifacts when valid."""
+    cache_dir = Path("/tmp/swaag-full-cached-benchmark-catalog") / _full_catalog_cache_key(tasks)
+    if _valid_full_catalog_report(cache_dir / "benchmark_results.json", tasks):
+        return _copy_cached_full_catalog(cache_dir, output_dir)
+    report = run_benchmarks(output_dir=cache_dir, clean=True)
+    if not _valid_full_catalog_report(cache_dir / "benchmark_results.json", tasks):
+        raise AssertionError("full cached benchmark catalog did not produce a valid full-catalog report")
+    return _copy_cached_full_catalog(cache_dir, output_dir)
+
+
+def test_benchmark_runner_executes_full_cached_catalog_and_writes_reports(tmp_path: Path) -> None:
+    output_dir = tmp_path / "benchmark"
+    all_tasks = get_benchmark_tasks()
+
+    report = _run_full_catalog_with_artifact_reuse(output_dir, all_tasks)
+
+    assert report["summary"]["total_tasks"] == len(all_tasks)
     assert report["summary"]["failed_tasks"] == 0
     assert report["summary"]["false_positives"] == 0
     assert report["aggregate_metrics"]["primary"]["false_positive_rate"] == 0.0
@@ -50,15 +95,22 @@ def test_benchmark_runner_executes_all_real_tasks_and_writes_reports(monkeypatch
 
     persisted = json.loads((output_dir / "benchmark_results.json").read_text(encoding="utf-8"))
     assert persisted["summary"]["failed_tasks"] == 0
-    assert persisted["summary"]["total_tasks"] == len(representative_tasks)
-    assert persisted["aggregate_metrics"]["coverage_by_type"] == {
-        "coding": 1,
-        "failure": 1,
-        "file_edit": 1,
-        "multi_step": 1,
-        "quality": 1,
-        "reading": 1,
+    assert persisted["summary"]["total_tasks"] == len(all_tasks)
+    expected_coverage = {}
+    expected_difficulties = {}
+    for task in all_tasks:
+        expected_coverage[task.task_type] = expected_coverage.get(task.task_type, 0) + 1
+        expected_difficulties[task.difficulty] = expected_difficulties.get(task.difficulty, 0) + 1
+    assert persisted["aggregate_metrics"]["coverage_by_type"] == dict(sorted(expected_coverage.items()))
+    assert persisted["aggregate_metrics"]["coverage_by_difficulty"] == dict(sorted(expected_difficulties.items()))
+    assert set(persisted["aggregate_metrics"]["coverage_by_difficulty"]) == {
+        "easy",
+        "extremely_easy",
+        "extremely_hard",
+        "hard",
+        "normal",
     }
+    assert persisted["aggregate_metrics"]["coverage_by_difficulty"]["extremely_hard"] > 0
     assert all(item["history_path"] for item in persisted["tasks"])
     assert all(Path(item["history_path"]).exists() for item in persisted["tasks"])
     report_text = (output_dir / "benchmark_report.md").read_text(encoding="utf-8")
@@ -68,7 +120,7 @@ def test_benchmark_runner_executes_all_real_tasks_and_writes_reports(monkeypatch
     assert "Run Metadata" in report_text
 
 
-def test_benchmark_runner_classifies_expected_failure_tasks(tmp_path: Path) -> None:
+def test_benchmark_runner_helper_classifies_selected_expected_failure_tasks(tmp_path: Path) -> None:
     output_dir = tmp_path / "benchmark"
     report = run_benchmarks(
         output_dir=output_dir,
@@ -87,7 +139,7 @@ def test_benchmark_runner_classifies_expected_failure_tasks(tmp_path: Path) -> N
     assert all(item["success"] is True for item in report["tasks"])
 
 
-def test_benchmark_runner_keeps_project_level_multifile_task_consistent(tmp_path: Path) -> None:
+def test_benchmark_runner_helper_keeps_selected_project_level_multifile_task_consistent(tmp_path: Path) -> None:
     output_dir = tmp_path / "benchmark"
     report = run_benchmarks(output_dir=output_dir, clean=True, task_ids=["coding_multifile_fix"])
     task = report["tasks"][0]
@@ -98,7 +150,7 @@ def test_benchmark_runner_keeps_project_level_multifile_task_consistent(tmp_path
     assert "return f'total={total()}'" in (workspace / "service.py").read_text(encoding="utf-8")
 
 
-def test_benchmark_runner_executes_environment_tasks_with_persistent_state(tmp_path: Path) -> None:
+def test_benchmark_runner_helper_executes_selected_environment_tasks_with_persistent_state(tmp_path: Path) -> None:
     output_dir = tmp_path / "benchmark"
     report = run_benchmarks(
         output_dir=output_dir,
@@ -116,7 +168,7 @@ def test_benchmark_runner_executes_environment_tasks_with_persistent_state(tmp_p
     assert report["aggregate_metrics"]["benchmark_specific"]["iteration_improvement_rate"] == 1.0
 
 
-def test_benchmark_runner_writes_live_subset_artifacts_in_scripted_mode(tmp_path: Path) -> None:
+def test_benchmark_runner_helper_writes_selected_manual_validation_artifacts_in_scripted_mode(tmp_path: Path) -> None:
     output_dir = tmp_path / "live_subset"
     report = run_benchmarks(
         output_dir=output_dir,
@@ -191,7 +243,7 @@ def test_benchmark_runner_live_defaults_match_the_documented_final_recommendatio
     assert settings["progress_poll_seconds"] == recommendation.progress_poll_seconds
 
 
-def test_benchmark_runner_records_per_seed_live_results(monkeypatch, tmp_path: Path) -> None:
+def test_benchmark_runner_helper_records_per_seed_manual_validation_results(monkeypatch, tmp_path: Path) -> None:
     task = BenchmarkTaskDefinition(
         task_id="live_seed_probe",
         task_type="quality",
@@ -279,7 +331,7 @@ def test_benchmark_runner_records_per_seed_live_results(monkeypatch, tmp_path: P
     assert task_payload["metrics"]["verification_trace"]["verification_type_used"] == "composite"
 
 
-def test_benchmark_runner_keeps_one_fixed_profile_across_seeded_live_runs(monkeypatch, tmp_path: Path) -> None:
+def test_benchmark_runner_helper_keeps_one_fixed_profile_across_seeded_manual_validation_runs(monkeypatch, tmp_path: Path) -> None:
     task = BenchmarkTaskDefinition(
         task_id="live_profile_probe",
         task_type="quality",
@@ -427,7 +479,7 @@ def test_scripted_benchmark_client_auto_verification_uses_criterion_names() -> N
     }
 
 
-def test_scripted_benchmark_runs_do_not_use_profile_optimized_tool_input_calls(tmp_path: Path) -> None:
+def test_scripted_benchmark_helper_run_does_not_use_profile_optimized_tool_input_calls(tmp_path: Path) -> None:
     output_dir = tmp_path / "benchmark"
     report = run_benchmarks(
         output_dir=output_dir,

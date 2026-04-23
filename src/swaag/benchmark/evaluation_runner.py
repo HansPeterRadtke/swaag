@@ -5,6 +5,7 @@ import shutil
 import subprocess
 import sys
 import xml.etree.ElementTree as ET
+from collections import Counter
 from pathlib import Path
 from typing import Any, Sequence
 
@@ -112,6 +113,20 @@ def _render_pytest_category_report(payload: dict[str, Any]) -> str:
         "## Per-test results",
         "",
     ]
+    if payload["category"] == "agent_test" and isinstance(payload.get("full_cached_benchmark_catalog"), dict):
+        catalog = payload["full_cached_benchmark_catalog"]
+        lines[-2:] = [
+            "## Full Cached Benchmark Catalog",
+            "",
+            f"- total_tasks: `{catalog['total_tasks']}`",
+            f"- includes_extremely_hard: `{catalog['includes_extremely_hard']}`",
+            f"- counts_by_difficulty: `{catalog['counts_by_difficulty']}`",
+            f"- counts_by_family: `{catalog['counts_by_family']}`",
+            f"- execution_contract: `{catalog['execution_contract']}`",
+            "",
+            "## Per-test results",
+            "",
+        ]
     for test in payload["tests"]:
         score_text = "n/a" if test["score_percent"] is None else f"{float(test['score_percent']):.2f}%"
         lines.append(f"- `{test['nodeid']}`: `{test['status']}` / `{score_text}`")
@@ -133,7 +148,20 @@ def run_agent_test_category(*, output_dir: Path, pytest_args: Sequence[str] | No
 
         base = _project_root()
         pytest_args = sorted(str(base / f) for f in AGENT_TEST_FILES)
-    return _run_pytest_category(output_dir=output_dir, category_name="agent_test", pytest_args=pytest_args, env=env)
+    payload = _run_pytest_category(output_dir=output_dir, category_name="agent_test", pytest_args=pytest_args, env=env)
+    from swaag.benchmark.task_definitions import get_benchmark_tasks
+
+    tasks = get_benchmark_tasks()
+    payload["full_cached_benchmark_catalog"] = {
+        "total_tasks": len(tasks),
+        "counts_by_difficulty": dict(sorted(Counter(task.difficulty for task in tasks).items())),
+        "counts_by_family": dict(sorted(Counter(task.task_type for task in tasks).items())),
+        "includes_extremely_hard": any(task.difficulty == "extremely_hard" for task in tasks),
+        "execution_contract": "agent_test includes tests/test_benchmark.py::test_benchmark_runner_executes_full_cached_catalog_and_writes_reports",
+    }
+    write_text(output_dir / "agent_test_results.json", stable_json_dumps(payload, indent=2) + "\n", encoding="utf-8")
+    write_text(output_dir / "agent_test_report.md", _render_pytest_category_report(payload), encoding="utf-8")
+    return payload
 
 
 def _deterministic_failed(payload: dict[str, Any]) -> bool:

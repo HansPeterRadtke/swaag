@@ -29,6 +29,8 @@ Cached agent behavior tests. These tests exercise the agent workflow with script
 fake, or record/replay model responses. They are the normal day-to-day agent tests.
 All LLM-dependent test execution belongs here and must use cache-backed behavior.
 
+The authoritative agent_test path executes the full cached benchmark catalog. It is not a representative subset: current catalog coverage is 196 tasks across coding, file_edit, reading, multi_step, failure, and quality families, with all five difficulty tiers including extremely_hard.
+
 Replay cassettes are keyed by a normalized full request envelope: request payload,
 model profile/base URL metadata, structured-output mode, seed, generation parameters
 present in the payload, and configured model timeouts. Per-call transport timeout is
