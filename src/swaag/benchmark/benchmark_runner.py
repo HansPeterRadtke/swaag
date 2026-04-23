@@ -226,11 +226,12 @@ def _build_agent_behavior_model_client(
         if delegate is None and live_subset:
             return LlamaCppClient(config), None
         return delegate, None
-    if delegate is not None:
-        if getattr(delegate, "is_record_replay_client", False) or getattr(delegate, "is_scripted_benchmark_client", False):
-            return delegate, None
-    else:
-        delegate = LlamaCppClient(config)
+    if delegate is not None and getattr(delegate, "is_record_replay_client", False):
+        return delegate, None
+    # Cached agent tests must use real model responses behind the replay cache.
+    # Scripted benchmark clients are ignored here; they are not valid agent-test
+    # model delegates.
+    delegate = LlamaCppClient(config)
     replay_cache_root = output_dir / "replay_cache" / task.task_id
     os.makedirs(replay_cache_root, exist_ok=True)
     cassette_path = replay_cache_root / f"seed_{seed}.json"
