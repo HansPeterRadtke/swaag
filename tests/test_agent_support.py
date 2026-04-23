@@ -15,7 +15,7 @@ def test_agent_test_support_families_cover_replay_and_runtime_behavior() -> None
     assert "tool_routing_context_focus" in families
     assert "subagent_traceability" in families
     assert "record_replay_runtime" in families
-    assert "scripted_benchmark_runtime" in families
+    assert "benchmark_catalog_runtime" in families
     assert families["record_replay_runtime"].nodeids == (
         "tests/test_agent_loop_replay.py::test_record_replay_client_replays_runtime_tool_flow",
     )

@@ -12,6 +12,8 @@ from swaag.types import CompletionResult, ContractSpec, DecisionOutcome, PromptA
 
 
 class FakeModelClient:
+    is_deterministic_test_client = True
+
     def __init__(self, responses: list[Any] | None = None, *, contract_responses: dict[str, list[Any]] | None = None):
         self._responses = list(responses or [])
         self._contract_responses = {key: list(value) for key, value in (contract_responses or {}).items()}

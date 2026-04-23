@@ -3753,12 +3753,6 @@ class AgentRuntime:
     def _normalize_decision_for_active_step(self, state: SessionState, decision: ToolDecision) -> ToolDecision:
         if decision.action != "call_tool":
             return decision
-        if getattr(self.client, "is_scripted_benchmark_client", False):
-            # Scripted benchmark/replay clients deliberately exercise wrong-tool
-            # and repeated-action paths. Rewriting those decisions into the
-            # expected tool hides real agent behavior failures and breaks the
-            # failure-task catalog.
-            return decision
         step = self._current_or_next_plan_step(state)
         if step is None or not step.expected_tool:
             return decision
@@ -3782,10 +3776,13 @@ class AgentRuntime:
         # tool_input payload via the dedicated contract instead of going
         # through the general decision contract. This is a structural routing
         # decision, not a profile- or vocabulary-based bypass.
-        if getattr(self.client, "is_scripted_benchmark_client", False):
-            return False
         step = self._current_or_next_plan_step(state)
-        return bool(step is not None and step.expected_tool in {"edit_text", "write_file", "shell_command", "run_tests"})
+        if step is None or step.expected_tool not in {"edit_text", "write_file", "shell_command", "run_tests"}:
+            return False
+        if getattr(self.client, "is_deterministic_test_client", False):
+            contract_queues = getattr(self.client, "_contract_responses", {})
+            return bool(contract_queues.get(f"tool_input:{step.expected_tool}"))
+        return True
 
     def _decide_expected_tool_input(self, state: SessionState) -> tuple[ToolDecision | None, BudgetReport]:
         step = self._current_or_next_plan_step(state)

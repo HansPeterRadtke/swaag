@@ -284,6 +284,6 @@ to give the shortlister a signal about source quality without replacing the rank
 SWAAG exposes exactly two authoritative test categories:
 
 - `code_correctness`: deterministic mechanical checks with no model-server dependency.
-- `agent_test`: cached agent behavior checks using scripted, fake, or record/replay model responses.
+- `agent_test`: cached agent behavior checks using real model responses through the record/replay cache.
 
 Uncached real-model execution is manual validation / real usage. It is not a test category and is launched explicitly with `python3 -m swaag.benchmark manual-validation ...`.

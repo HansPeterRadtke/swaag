@@ -169,11 +169,11 @@ def get_agent_support_families() -> list[AgentSupportFamily]:
             nodeids=("tests/test_agent_loop_replay.py::test_record_replay_client_replays_runtime_tool_flow",),
         ),
         AgentSupportFamily(
-            family_id="scripted_benchmark_runtime",
-            description="Scripted benchmark tasks still exercise the real agent loop and reject false positives.",
+            family_id="benchmark_catalog_runtime",
+            description="Benchmark catalog tasks stay model-response-free and require cached real model execution in the authoritative agent-test path.",
             nodeids=(
-                "tests/test_false_positive_killers.py::test_false_positive_killer_tasks_never_report_success_incorrectly",
-                "tests/test_scaled_catalog.py::test_scaled_catalog_tasks_run_through_benchmark_runner",
+                "tests/test_false_positive_killers.py::test_false_positive_killer_tasks_are_catalogued_without_model_fixtures",
+                "tests/test_scaled_catalog.py::test_scaled_catalog_definitions_do_not_embed_model_responses",
             ),
         ),
     ]
@@ -187,24 +187,10 @@ def run_agent_behavior_support_checks(
 ) -> dict[str, Any]:
     """Run focused cached-mode agent behavior support-check families.
 
-    Each test family runs the real agent runtime/orchestrator/tool loop without
-    no-cache validation traffic. Model calls are handled by one of these
-    mechanisms, depending on the family:
-
-    - FakeModelClient: scripted test fixture returning exact pre-specified
-      responses in sequence. Used for runtime-behavior and recovery families
-      where precise control over model output is required.
-    - ScriptedBenchmarkClient: scripted fixture for full benchmark pipeline
-      tests. Covers task-catalog and false-positive-killer families.
-    - RecordReplayModelClient: replay-cached responses keyed by normalized
-      full request payload hash. Used for the ``record_replay_runtime`` family
-      to demonstrate that the replay mechanism itself works correctly.
-
-    All three are "cached mode" support mechanisms in the sense that none make
-    live uncached model calls. The RecordReplayModelClient is the
-    authoritative cassette-backed replay path.
-    FakeModelClient and ScriptedBenchmarkClient are deterministic scripted fixtures
-    appropriate for tests that need precise control over the agent's decision path.
+    These are support checks for runtime plumbing, replay mechanics, and catalog
+    structure. The authoritative agent-test benchmark path uses
+    RecordReplayModelClient over the real model client; catalog definitions must
+    not embed fixed model responses.
     """
     if clean and output_dir.exists():
         shutil.rmtree(output_dir)

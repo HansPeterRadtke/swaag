@@ -228,9 +228,7 @@ def _build_agent_behavior_model_client(
         return delegate, None
     if delegate is not None and getattr(delegate, "is_record_replay_client", False):
         return delegate, None
-    # Cached agent tests must use real model responses behind the replay cache.
-    # Scripted benchmark clients are ignored here; they are not valid agent-test
-    # model delegates.
+    # Cached agent tests use real model responses behind the replay cache.
     delegate = LlamaCppClient(config)
     replay_cache_root = output_dir / "replay_cache" / task.task_id
     os.makedirs(replay_cache_root, exist_ok=True)
@@ -402,11 +400,7 @@ def run_benchmarks(
             scenario_root = workspaces_root if not use_live_model else workspaces_root / f"seed_{seed}"
             scenario = task.create(scenario_root, live_mode=use_live_model)
             before_snapshot = _snapshot_workspace(scenario.workspace)
-            scenario_retrieval_backend = (
-                effective_retrieval_backend
-                if effective_retrieval_backend is not None
-                else ("degraded_lexical" if getattr(scenario.model_client, "is_scripted_benchmark_client", False) else None)
-            )
+            scenario_retrieval_backend = effective_retrieval_backend
             config = _build_config(
                 sessions_root=sessions_root,
                 workspace=scenario.workspace,
@@ -546,7 +540,7 @@ def run_benchmarks(
             "request_observability_mode": (
                 "replay_cache_or_progress_polling"
                 if resolved_agent_behavior_mode == "cached"
-                else ("progress_polling" if use_live_model else "scripted_immediate")
+                else "progress_polling"
             ),
             "model_base_url": effective_base_url,
             "model_profile": effective_profile or "",

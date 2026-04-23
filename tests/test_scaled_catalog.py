@@ -3,7 +3,6 @@ from __future__ import annotations
 from collections import Counter
 from pathlib import Path
 
-from swaag.benchmark.benchmark_runner import run_benchmarks
 from swaag.benchmark.scaled_catalog import (
     LIVE_SUBSET_DIFFICULTY_MINIMUMS,
     LIVE_SUBSET_STRUCTURAL_MINIMUMS,
@@ -42,22 +41,11 @@ def test_scaled_catalog_is_consumed_by_full_catalog_and_validation() -> None:
     assert generated_ids <= catalog_ids
 
 
-def test_scaled_catalog_tasks_run_through_benchmark_runner(tmp_path: Path) -> None:
-    report = run_benchmarks(
-        output_dir=tmp_path / "benchmark",
-        clean=True,
-        task_ids=[
-            "coding_generated_multifile_01",
-            "file_edit_generated_exact_01",
-            "reading_generated_structured_01",
-            "multi_step_generated_project_01",
-            "failure_generated_wrong_tool_01",
-            "quality_generated_vague_01",
-        ],
-    )
-
-    assert report["summary"]["failed_tasks"] == 0
-    assert report["summary"]["false_positives"] == 0
+def test_scaled_catalog_definitions_do_not_embed_model_responses(tmp_path: Path) -> None:
+    for task in generated_benchmark_tasks()[:12]:
+        scenario = task.create(tmp_path / "catalog")
+        assert scenario.model_client is None
+        assert scenario.verification_contract.task_type == task.task_type
 
 
 def test_live_subset_catalog_imports_and_meets_distribution_requirements() -> None:
@@ -89,17 +77,11 @@ def test_live_subset_catalog_keeps_at_least_ten_tasks_per_difficulty_tier() -> N
     assert all(count >= 10 for count in difficulty_counts.values())
 
 
-def test_live_subset_tasks_run_through_benchmark_runner_in_scripted_mode(tmp_path: Path) -> None:
-    report = run_benchmarks(
-        output_dir=tmp_path / "live_subset_scripted",
-        clean=True,
-        task_ids=["live_coding_fix_01", "live_file_edit_01", "live_reading_01", "live_multi_step_01", "live_failure_01", "live_quality_01"],
-        live_subset=True,
-        use_live_model=False,
-    )
-
-    assert report["summary"]["failed_tasks"] == 0
-    assert report["summary"]["false_positives"] == 0
+def test_live_subset_definitions_do_not_embed_model_responses(tmp_path: Path) -> None:
+    for task in generated_live_subset_tasks()[:12]:
+        scenario = task.create(tmp_path / "validation", live_mode=True)
+        assert scenario.model_client is None
+        assert scenario.verification_contract.task_type == task.task_type
 
 
 def test_live_multifile_coding_tasks_have_enough_iteration_budget() -> None:

@@ -21,7 +21,7 @@ def test_top_level_category_registry_covers_current_tree() -> None:
 
 def test_top_level_category_registry_reports_expected_examples() -> None:
     assert category_for_file("tests/test_imports.py") == "code_correctness"
-    assert category_for_file("tests/test_runtime.py") == "agent_test"
+    assert category_for_file("tests/test_runtime.py") == "code_correctness"
 
 
 def test_top_level_category_groups_are_non_empty_and_disjoint() -> None:
@@ -56,14 +56,15 @@ def test_authoritative_commands_use_explicit_two_category_file_lists() -> None:
     assert "-m" not in code_command[3:]
     assert "-m" not in agent_command[3:]
     assert any(path.endswith("tests/test_imports.py") for path in code_command)
-    assert any(path.endswith("tests/test_runtime.py") for path in agent_command)
+    assert any(path.endswith("tests/test_benchmark.py") for path in agent_command)
 
 
 def test_authoritative_agent_tests_include_full_cached_benchmark_catalog() -> None:
     agent_command = build_agent_tests_command()
 
     assert any(path.endswith("tests/test_benchmark.py") for path in agent_command)
-    assert not any(path.endswith("tests/test_clean_install_agent.py") for path in agent_command)
+    assert not any(path.endswith("tests/test_runtime.py") for path in agent_command)
+    assert not any(path.endswith("tests/test_scaled_catalog.py") for path in agent_command)
 
 
 def test_full_cached_benchmark_test_does_not_replace_catalog_with_subset() -> None:

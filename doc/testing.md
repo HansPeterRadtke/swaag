@@ -25,9 +25,7 @@ agent_test is not started.
 
 ## 2. agent_test
 
-Cached agent behavior tests. These tests exercise the agent workflow with scripted,
-fake, or record/replay model responses. They are the normal day-to-day agent tests.
-All LLM-dependent test execution belongs here and must use cache-backed behavior.
+Cached agent behavior tests. The authoritative agent_test path exercises the full benchmark catalog through RecordReplayModelClient over the real model client. Existing cassettes are replayed; missing cassettes are recorded from real model responses. No benchmark catalog task embeds fixed model responses.
 
 The authoritative agent_test path executes the full cached benchmark catalog. It is not a representative subset: current catalog coverage is 196 tasks across coding, file_edit, reading, multi_step, failure, and quality families, with all five difficulty tiers including extremely_hard.
 
