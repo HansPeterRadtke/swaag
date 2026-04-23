@@ -71,6 +71,11 @@ where = ["src"]
 [tool.pytest.ini_options]
 pythonpath = ["src"]
 testpaths = ["tests"]
+filterwarnings = [
+  "ignore::requests.exceptions.RequestsDependencyWarning",
+  'ignore::DeprecationWarning:google.protobuf.internal.well_known_types',
+  'ignore::sqlalchemy.exc.MovedIn20Warning:terminal_bench.db',
+]
 markers = [
   "code_correctness: deterministic software-correctness tests with no model dependency",
   "agent_test: cached agent behavior tests",
