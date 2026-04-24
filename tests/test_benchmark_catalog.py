@@ -52,6 +52,7 @@ def test_benchmark_catalog_uses_programmatic_verification_and_anti_tamper_contra
         elif task.task_type == "reading":
             assert contract.expected_json is not None
             assert contract.expected_json_schema is not None
+            assert contract.forbid_unexpected_workspace_changes is True
         elif task.task_type == "multi_step":
             assert contract.command
             assert contract.expected_files
@@ -60,9 +61,43 @@ def test_benchmark_catalog_uses_programmatic_verification_and_anti_tamper_contra
         elif task.task_type == "failure":
             assert contract.expected_files
             assert "false-positive-killer" in task.tags
+            assert contract.forbid_unexpected_workspace_changes is True
         elif task.task_type == "quality":
             assert scenario.oracle is not None
             assert contract.expected_answer_contains
+            assert contract.forbid_unexpected_workspace_changes is True
+
+
+def test_benchmark_catalog_preserves_family_specific_task_shapes(tmp_path) -> None:
+    tasks = {task.task_id: task for task in get_benchmark_tasks()}
+
+    coding = tasks["coding_generated_multifile_02"].create(tmp_path / "coding")
+    coding_files = {path.name for path in coding.workspace.rglob("*") if path.is_file()}
+    assert "release_settings.json" in coding_files
+    assert "release_notes.txt" in coding_files
+    assert any(name.endswith("_unit.py") for name in coding_files)
+    assert any(name.endswith("_compat.py") for name in coding_files)
+    assert any(name.endswith("_artifacts.py") for name in coding_files)
+    assert coding.verification_contract.required_tools_used == ["run_tests"]
+
+    reading = tasks["reading_generated_hallucination_guard_04"].create(tmp_path / "reading")
+    reading_files = {path.name for path in reading.workspace.rglob("*") if path.is_file()}
+    assert {"facts.json", "roadmap.md", "stale_note.txt"} <= reading_files
+
+    shell_flow = tasks["multi_step_environment_shell_persistence"].create(tmp_path / "shell")
+    shell_files = {path.name for path in shell_flow.workspace.rglob("*") if path.is_file()}
+    assert {"release.env", "capture_release.sh", "shell_release_summary.txt"} <= shell_files
+    assert "shell_command" in shell_flow.verification_contract.required_tools_used
+
+    failure = tasks["failure_generated_bad_plan_02"].create(tmp_path / "failure")
+    failure_files = {path.name for path in failure.workspace.rglob("*") if path.is_file()}
+    assert "requested_plan.md" in failure_files
+    assert {"shell_command", "edit_text", "write_file"} <= set(failure.verification_contract.forbidden_tools_used)
+
+    quality = tasks["quality_generated_incomplete_04"].create(tmp_path / "quality")
+    quality_files = {path.name for path in quality.workspace.rglob("*") if path.is_file()}
+    assert {"request.txt", "ticket.md"} <= quality_files
+    assert {"write_file", "edit_text", "run_tests"} <= set(quality.verification_contract.forbidden_tools_used)
 
 
 def test_extremely_hard_catalog_tasks_have_high_complexity_structure(tmp_path) -> None:

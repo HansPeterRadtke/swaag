@@ -118,6 +118,12 @@ programmatic: executable test commands, exact file expectations, structured JSON
 checks, allowed-modified-file locks, and anti-tamper guards carry the benchmark
 instead of hidden scripted model answers.
 
+The benchmark content is intentionally heterogeneous. Hard and extremely hard
+tasks are not just larger copies of easy tasks: they add multi-file
+dependencies, shell/environment workflows, contradiction handling, stale-source
+rejection, unsafe-plan refusal, repeated-action traps, and iterative
+correction loops.
+
 Manual validation keeps the five difficulty tiers for real-model task scoring:
 
 - `extremely_easy`

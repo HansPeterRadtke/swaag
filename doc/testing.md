@@ -37,6 +37,15 @@ Benchmark verification is programmatic rather than benchmark-author scripted:
 - failure tasks preserve protected files and reject unsafe changes
 - quality tasks use explicit prompt-understanding oracles plus structured answer expectations
 
+The catalog is intentionally varied, not a string-template exercise:
+
+- coding covers single-file bug fixes, refactor compatibility repairs, spec-driven logic fixes, and multi-file release-flow repairs
+- file_edit covers exact config edits, multi-occurrence replacement, no-op detection, and source-to-target synchronization
+- reading covers structured extraction, contradiction handling, stale-note rejection, and null-preserving reporting
+- multi_step covers release-note synchronization, computed report generation, shell-driven workflows, filesystem selection, note-taking, and iterative refinement
+- failure covers unsafe shell requests, bad plans, and repeated-action traps
+- quality covers vague prompts, incomplete prompts, already-decomposed prompts, and debug-log interpretation
+
 Replay cassettes are keyed by a normalized full request envelope: request payload,
 model profile/base URL metadata, structured-output mode, seed, generation parameters
 present in the payload, and configured model timeouts. Per-call transport timeout is
