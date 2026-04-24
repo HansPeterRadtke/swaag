@@ -601,12 +601,12 @@ def make_benchmark_task(
     )
     default_overrides = {
         "tools_allow_side_effect_tools": True,
-        "planner_max_replans": 1,
-        "planner_max_plan_steps": 4,
-        "runtime_max_reasoning_steps": 5 if task_type in {"coding", "multi_step"} else 3,
-        "runtime_max_total_actions": 5 if task_type in {"coding", "multi_step"} else 3,
-        "runtime_max_tool_steps": 3,
-        "runtime_tool_call_budget": 3,
+        "planner_max_replans": 0,
+        "planner_max_plan_steps": 3,
+        "runtime_max_reasoning_steps": 2 if task_type in {"coding", "multi_step"} else 1,
+        "runtime_max_total_actions": 2 if task_type in {"coding", "multi_step"} else 1,
+        "runtime_max_tool_steps": 1,
+        "runtime_tool_call_budget": 1,
     }
     return BenchmarkTaskDefinition(
         task_id=task_id,
