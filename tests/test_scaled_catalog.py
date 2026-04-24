@@ -70,9 +70,17 @@ def test_scaled_catalog_sample_tasks_build_realistic_workspace_fixtures(tmp_path
     coding = tasks["coding_multifile_fix"].create(tmp_path / "coding")
     assert coding.verification_contract.command[:3] == ["python3", "-m", "unittest"]
     assert coding.verification_contract.expected_file_patterns
+    assert coding.verification_contract.allowed_modified_files
+    assert coding.verification_contract.forbid_unexpected_workspace_changes is True
 
     reading = tasks["reading_identify_contradictions"].create(tmp_path / "reading")
     assert reading.verification_contract.expected_json is not None
+    assert reading.verification_contract.expected_json_schema is not None
+
+    multi_step = tasks["multi_step_mixed_read_note_compute_write"].create(tmp_path / "multi")
+    assert multi_step.verification_contract.command[:3] == ["python3", "-m", "unittest"]
+    assert len(multi_step.verification_contract.allowed_modified_files) >= 2
+    assert {"notes", "calculator", "file-edit"} <= set(tasks["multi_step_mixed_read_note_compute_write"].tags)
 
 
 def test_live_subset_catalog_imports_and_meets_distribution_requirements() -> None:

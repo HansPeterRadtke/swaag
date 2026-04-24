@@ -27,3 +27,4 @@ def test_prompt_understanding_benchmark_tasks_define_oracles_without_model_fixtu
             assert scenario.oracle is not None
             assert scenario.oracle.completeness == "complete"
             assert "marker" not in scenario.prompt.lower()
+            assert any(path.is_file() for path in scenario.workspace.rglob("*"))

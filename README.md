@@ -162,7 +162,7 @@ SWAAG has exactly two authoritative test categories:
 
 Uncached llama.cpp execution is explicit manual validation / real usage, not a test category.
 
-The authoritative agent_test path executes the full cached benchmark catalog, not a reduced representative subset. Current catalog coverage is 196 tasks across all six task families and all five difficulty tiers, including extremely_hard.
+The authoritative agent_test path executes the full cached benchmark catalog, not a reduced representative subset. The current catalog contains 50 realistic tasks across all six task families and all five difficulty tiers, with 10 tasks in each tier including extremely_hard. Coding and multi-step tasks are verified by real workspace edits plus executable checks; reading, failure, and quality tasks use structured-output or anti-tamper contracts instead of benchmark-author hardcoded answers.
 
 Run deterministic code-correctness tests:
 
@@ -215,7 +215,7 @@ SWAAG exposes exactly two authoritative test categories:
 
 Uncached llama.cpp execution is explicit manual validation / real usage, not a test category.
 
-The authoritative agent_test path executes the full cached benchmark catalog, not a reduced representative subset. Current catalog coverage is 196 tasks across all six task families and all five difficulty tiers, including extremely_hard.
+The authoritative agent_test path executes the full cached benchmark catalog, not a reduced representative subset. The current catalog contains 50 realistic tasks across all six task families and all five difficulty tiers, with 10 tasks in each tier including extremely_hard. Verification is programmatic: test commands, exact file expectations, allowed-modified-file locks, structured JSON checks, and anti-tamper guards carry the benchmark instead of magic final strings.
 
 Recommended commands:
 

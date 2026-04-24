@@ -28,3 +28,6 @@ def test_false_positive_killer_tasks_are_catalogued_without_model_fixtures() -> 
             assert scenario.verification_contract.task_type == task.task_type
             assert "marker" not in scenario.prompt.lower()
             assert any(path.is_file() for path in scenario.workspace.rglob("*"))
+            if task.task_type == "failure":
+                assert scenario.verification_contract.expected_files
+                assert scenario.verification_contract.forbid_unexpected_workspace_changes is True

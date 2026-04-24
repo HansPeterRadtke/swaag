@@ -29,7 +29,7 @@ def generated_benchmark_tasks() -> list[BenchmarkTaskDefinition]:
                 task_type="coding",
                 difficulty=difficulty,
                 tags=_tags(*tags),
-                description="Fix a realistic three-module code package and keep execution tests green.",
+                description="Repair a multi-file Python package, keep release artifacts consistent, and verify the fix with executable tests.",
                 config_overrides={"runtime_max_tool_steps": 8, "runtime_tool_call_budget": 8},
             )
         )
@@ -47,7 +47,7 @@ def generated_benchmark_tasks() -> list[BenchmarkTaskDefinition]:
                 task_type="file_edit",
                 difficulty=difficulty,
                 tags=_tags("file-edit", mode.replace("_", "-"), *( ["quality"] if mode == "reread" else [] )),
-                description=f"Generated file-edit benchmark in {mode} mode.",
+                description=f"Apply a realistic configuration-file edit in {mode} mode and verify the exact final contents.",
             )
         )
 
@@ -71,7 +71,7 @@ def generated_benchmark_tasks() -> list[BenchmarkTaskDefinition]:
                 task_type="reading",
                 difficulty=difficulty,
                 tags=_tags(*tags),
-                description=f"Generated reading benchmark in {mode} mode.",
+                description=f"Extract structured operational facts from realistic source files in {mode} mode.",
             )
         )
 
@@ -88,7 +88,7 @@ def generated_benchmark_tasks() -> list[BenchmarkTaskDefinition]:
                 task_type="multi_step",
                 difficulty=difficulty,
                 tags=_tags(*tags),
-                description="Synchronize a realistic multi-file project through a full read/edit/test loop.",
+                description="Complete a realistic read/edit/write/verify workflow across multiple artifacts and keep the verifier green.",
                 config_overrides={"runtime_max_reasoning_steps": 12, "runtime_max_total_actions": 12},
             )
         )
@@ -108,7 +108,7 @@ def generated_benchmark_tasks() -> list[BenchmarkTaskDefinition]:
                 task_type="failure",
                 difficulty=difficulty,
                 tags=_tags(*tags),
-                description=f"Generated adversarial failure benchmark in {mode} mode.",
+                description=f"Handle an adversarial unsafe request in {mode} mode without corrupting protected benchmark artifacts.",
             )
         )
 
@@ -135,7 +135,7 @@ def generated_benchmark_tasks() -> list[BenchmarkTaskDefinition]:
                 task_type="quality",
                 difficulty=difficulty,
                 tags=_tags(*tags),
-                description=f"Generated prompt-understanding benchmark in {mode} mode.",
+                description=f"Demonstrate realistic prompt-understanding behavior in {mode} mode without claiming unsupported progress.",
             )
         )
 

@@ -18,10 +18,12 @@ def _full_catalog_cache_key(tasks: list[BenchmarkTaskDefinition]) -> str:
             "task_type": task.task_type,
             "difficulty": task.difficulty,
             "tags": list(task.tags),
+            "description": task.description,
+            "setup_instructions": list(task.setup_instructions),
         }
         for task in tasks
     ]
-    raw = json.dumps({"version": 5, "tasks": payload}, sort_keys=True).encode("utf-8")
+    raw = json.dumps({"version": 6, "tasks": payload}, sort_keys=True).encode("utf-8")
     return hashlib.sha256(raw).hexdigest()[:16]
 
 

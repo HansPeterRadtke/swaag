@@ -27,7 +27,15 @@ agent_test is not started.
 
 Cached agent behavior tests. The authoritative agent_test path exercises the full benchmark catalog through RecordReplayModelClient over the real model client. Existing cassettes are replayed; missing cassettes are recorded from real model responses. No benchmark catalog task embeds fixed model responses.
 
-The authoritative agent_test path executes the full cached benchmark catalog. It is not a representative subset: current catalog coverage is 196 tasks across coding, file_edit, reading, multi_step, failure, and quality families, with all five difficulty tiers including extremely_hard.
+The authoritative agent_test path executes the full cached benchmark catalog. It is not a representative subset: the current catalog contains 50 realistic tasks across coding, file_edit, reading, multi_step, failure, and quality families, with 10 tasks in each of the five difficulty tiers including extremely_hard.
+
+Benchmark verification is programmatic rather than benchmark-author scripted:
+
+- coding and multi_step tasks require real workspace edits plus executable verifier commands
+- file_edit tasks verify exact file contents and allowed-modified-file constraints
+- reading tasks verify exact JSON outputs against explicit schemas
+- failure tasks preserve protected files and reject unsafe changes
+- quality tasks use explicit prompt-understanding oracles plus structured answer expectations
 
 Replay cassettes are keyed by a normalized full request envelope: request payload,
 model profile/base URL metadata, structured-output mode, seed, generation parameters

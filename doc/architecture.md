@@ -110,6 +110,14 @@ Uncached real-model execution is manual validation / real usage, not a test
 category. The category evaluator writes separate JSON and markdown reports for
 `code_correctness`, `agent_test`, and the combined fail-fast result.
 
+The authoritative cached benchmark catalog behind `agent_test` is full-catalog
+and record-replay backed. It currently contains 50 realistic tasks across six
+families (`coding`, `file_edit`, `reading`, `multi_step`, `failure`, `quality`)
+and all five difficulty tiers, with 10 tasks per tier. Verifiers are
+programmatic: executable test commands, exact file expectations, structured JSON
+checks, allowed-modified-file locks, and anti-tamper guards carry the benchmark
+instead of hidden scripted model answers.
+
 Manual validation keeps the five difficulty tiers for real-model task scoring:
 
 - `extremely_easy`
