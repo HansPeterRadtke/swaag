@@ -47,7 +47,7 @@ def test_run_agent_test_category_writes_reports(monkeypatch, tmp_path: Path) -> 
 
     assert payload["category"] == "agent_test"
     assert payload["summary"]["percent"] == 100.0
-    assert payload["full_cached_benchmark_catalog"]["total_tasks"] >= 190
+    assert payload["full_cached_benchmark_catalog"]["total_tasks"] >= 50
     assert payload["full_cached_benchmark_catalog"]["includes_extremely_hard"] is True
     assert set(payload["full_cached_benchmark_catalog"]["counts_by_difficulty"]) == {
         "easy",

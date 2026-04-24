@@ -18,174 +18,124 @@ def _tags(*items: str) -> list[str]:
 def generated_benchmark_tasks() -> list[BenchmarkTaskDefinition]:
     tasks: list[BenchmarkTaskDefinition] = []
 
-    for index in range(1, 41):
-        environment = index >= 25
+    coding_specs = (
+        (1, "hard", ["coding", "multifile", "realistic-code", "project-consistency", "environment", "run-tests"]),
+        (2, "extremely_hard", ["coding", "multifile", "realistic-code", "project-consistency", "environment", "run-tests"]),
+    )
+    for index, difficulty, tags in coding_specs:
         tasks.append(
             make_benchmark_task(
                 task_id=f"coding_generated_multifile_{index:02d}",
                 task_type="coding",
-                difficulty="extremely_hard" if environment or index % 5 == 0 else "normal",
-                tags=_tags("coding", "multifile", "realistic-code", "project-consistency", *( ["environment", "run-tests"] if environment else ["editor"] )),
-                description=f"Fix a realistic three-module code package and keep execution tests green ({'environment' if environment else 'editor'} mode).",
-                config_overrides={"runtime_max_tool_steps": 8, "runtime_tool_call_budget": 8} if environment else {},
+                difficulty=difficulty,
+                tags=_tags(*tags),
+                description="Fix a realistic three-module code package and keep execution tests green.",
+                config_overrides={"runtime_max_tool_steps": 8, "runtime_tool_call_budget": 8},
             )
         )
 
-    for index in range(1, 9):
+    file_edit_specs = (
+        (1, "exact", "extremely_easy"),
+        (2, "exact", "extremely_easy"),
+        (3, "replace_all", "easy"),
+        (4, "reread", "easy"),
+    )
+    for index, mode, difficulty in file_edit_specs:
         tasks.append(
             make_benchmark_task(
-                task_id=f"file_edit_generated_exact_{index:02d}",
+                task_id=f"file_edit_generated_{mode}_{index:02d}",
                 task_type="file_edit",
-                difficulty="extremely_easy",
-                tags=_tags("file-edit", "exact"),
-                description="Generated file-edit benchmark in exact mode.",
-            )
-        )
-    for index in range(9, 17):
-        tasks.append(
-            make_benchmark_task(
-                task_id=f"file_edit_generated_replace_all_{index:02d}",
-                task_type="file_edit",
-                difficulty="easy",
-                tags=_tags("file-edit", "replace_all"),
-                description="Generated file-edit benchmark in replace_all mode.",
-            )
-        )
-    for index in range(17, 26):
-        tasks.append(
-            make_benchmark_task(
-                task_id=f"file_edit_generated_reread_{index:02d}",
-                task_type="file_edit",
-                difficulty="normal",
-                tags=_tags("file-edit", "reread", "quality"),
-                description="Generated file-edit benchmark in reread mode.",
+                difficulty=difficulty,
+                tags=_tags("file-edit", mode.replace("_", "-"), *( ["quality"] if mode == "reread" else [] )),
+                description=f"Generated file-edit benchmark in {mode} mode.",
             )
         )
 
-    for index in range(1, 11):
+    reading_specs = (
+        (1, "structured", "extremely_easy"),
+        (2, "structured", "easy"),
+        (3, "contradiction", "easy"),
+        (4, "hallucination_guard", "extremely_hard"),
+    )
+    for index, mode, difficulty in reading_specs:
+        tags = ["reading"]
+        if mode == "structured":
+            tags.append("structured")
+        elif mode == "contradiction":
+            tags.extend(["contradiction", "adversarial"])
+        else:
+            tags.extend(["hallucination-guard", "adversarial"])
         tasks.append(
             make_benchmark_task(
-                task_id=f"reading_generated_structured_{index:02d}",
+                task_id=f"reading_generated_{mode}_{index:02d}",
                 task_type="reading",
-                difficulty="extremely_easy",
-                tags=_tags("reading", "structured"),
-                description="Generated reading benchmark in structured mode.",
-            )
-        )
-    for index in range(11, 18):
-        tasks.append(
-            make_benchmark_task(
-                task_id=f"reading_generated_contradiction_{index:02d}",
-                task_type="reading",
-                difficulty="normal",
-                tags=_tags("reading", "contradiction", "adversarial"),
-                description="Generated reading benchmark in contradiction mode.",
-            )
-        )
-    for index in range(18, 26):
-        tasks.append(
-            make_benchmark_task(
-                task_id=f"reading_generated_hallucination_guard_{index:02d}",
-                task_type="reading",
-                difficulty="normal",
-                tags=_tags("reading", "hallucination_guard", "adversarial"),
-                description="Generated reading benchmark in hallucination_guard mode.",
+                difficulty=difficulty,
+                tags=_tags(*tags),
+                description=f"Generated reading benchmark in {mode} mode.",
             )
         )
 
-    for index in range(1, 29):
-        environment = index >= 15
+    multi_step_specs = (
+        (1, "hard", ["multi-step", "environment", "shell"]),
+        (2, "extremely_hard", ["multi-step", "long-run", "recovery", "multifile", "realistic-code", "project-consistency"]),
+        (3, "extremely_hard", ["multi-step", "environment", "refinement", "multifile", "realistic-code", "project-consistency"]),
+        (4, "extremely_hard", ["multi-step", "environment", "filesystem", "multifile", "realistic-code", "project-consistency"]),
+    )
+    for index, difficulty, tags in multi_step_specs:
         tasks.append(
             make_benchmark_task(
                 task_id=f"multi_step_generated_project_{index:02d}",
                 task_type="multi_step",
-                difficulty="extremely_hard" if environment else "normal",
-                tags=_tags("multi-step", "multifile", "realistic-code", "project-consistency", *( ["environment"] if environment else ["editor"] )),
-                description=f"Synchronize a realistic multi-file project through a full read/edit/test loop ({'environment' if environment else 'editor'} mode).",
-                config_overrides={"runtime_max_reasoning_steps": 14, "runtime_max_total_actions": 14} if environment else {},
-            )
-        )
-    for index in range(23, 25):
-        tasks.append(
-            make_benchmark_task(
-                task_id=f"multi_step_long_run_{index:02d}",
-                task_type="multi_step",
-                difficulty="extremely_hard",
-                tags=_tags("multi-step", "long-run", "recovery", "multifile", "realistic-code", "project-consistency"),
-                description="Long-run recovery benchmark with multiple replans and a recovered final result.",
-                config_overrides={"runtime_max_reasoning_steps": 16, "runtime_max_total_actions": 16},
+                difficulty=difficulty,
+                tags=_tags(*tags),
+                description="Synchronize a realistic multi-file project through a full read/edit/test loop.",
+                config_overrides={"runtime_max_reasoning_steps": 12, "runtime_max_total_actions": 12},
             )
         )
 
-    for index in range(1, 11):
+    failure_specs = (
+        (1, "wrong_tool", "hard"),
+        (2, "bad_plan", "hard"),
+        (3, "bad_plan", "hard"),
+        (4, "repeated_action", "extremely_hard"),
+        (5, "repeated_action", "extremely_hard"),
+    )
+    for index, mode, difficulty in failure_specs:
+        tags = ["failure", mode, "adversarial", "false-positive-killer"]
         tasks.append(
             make_benchmark_task(
-                task_id=f"failure_generated_wrong_tool_{index:02d}",
+                task_id=f"failure_generated_{mode}_{index:02d}",
                 task_type="failure",
-                difficulty="hard",
-                tags=_tags("failure", "wrong_tool", "adversarial"),
-                description="Generated adversarial failure benchmark in wrong_tool mode.",
-            )
-        )
-    for index in range(11, 19):
-        tasks.append(
-            make_benchmark_task(
-                task_id=f"failure_generated_bad_plan_{index:02d}",
-                task_type="failure",
-                difficulty="hard",
-                tags=_tags("failure", "bad_plan", "adversarial", "false-positive-killer"),
-                description="Generated adversarial failure benchmark in bad_plan mode.",
-            )
-        )
-    for index in range(19, 31):
-        tasks.append(
-            make_benchmark_task(
-                task_id=f"failure_generated_repeated_action_{index:02d}",
-                task_type="failure",
-                difficulty="extremely_hard",
-                tags=_tags("failure", "repeated_action", "adversarial", "false-positive-killer"),
-                description="Generated adversarial failure benchmark in repeated_action mode.",
+                difficulty=difficulty,
+                tags=_tags(*tags),
+                description=f"Generated adversarial failure benchmark in {mode} mode.",
             )
         )
 
-    for index in range(1, 7):
+    quality_specs = (
+        (1, "vague", "extremely_easy"),
+        (2, "vague", "extremely_easy"),
+        (3, "decomposed", "easy"),
+        (4, "incomplete", "easy"),
+        (5, "debug_reading", "easy"),
+    )
+    for index, mode, difficulty in quality_specs:
+        tags = ["quality", "prompt-understanding"]
+        if mode == "vague":
+            tags.append("vague")
+        elif mode == "decomposed":
+            tags.append("decomposed")
+        elif mode == "incomplete":
+            tags.extend(["incomplete", "false-positive-killer"])
+        else:
+            tags.extend(["debug_reading", "false-positive-killer"])
         tasks.append(
             make_benchmark_task(
-                task_id=f"quality_generated_vague_{index:02d}",
+                task_id=f"quality_generated_{mode}_{index:02d}",
                 task_type="quality",
-                difficulty="extremely_easy",
-                tags=_tags("quality", "vague", "prompt-understanding"),
-                description="Generated prompt-understanding benchmark in vague mode.",
-            )
-        )
-    for index in range(7, 13):
-        tasks.append(
-            make_benchmark_task(
-                task_id=f"quality_generated_decomposed_{index:02d}",
-                task_type="quality",
-                difficulty="normal",
-                tags=_tags("quality", "decomposed", "prompt-understanding"),
-                description="Generated prompt-understanding benchmark in decomposed mode.",
-            )
-        )
-    for index in range(13, 17):
-        tasks.append(
-            make_benchmark_task(
-                task_id=f"quality_generated_incomplete_{index:02d}",
-                task_type="quality",
-                difficulty="extremely_easy",
-                tags=_tags("quality", "incomplete", "prompt-understanding", "false-positive-killer"),
-                description="Generated prompt-understanding benchmark in incomplete mode.",
-            )
-        )
-    for index in range(17, 21):
-        tasks.append(
-            make_benchmark_task(
-                task_id=f"quality_generated_debug_reading_{index:02d}",
-                task_type="quality",
-                difficulty="normal",
-                tags=_tags("quality", "debug_reading", "prompt-understanding", "false-positive-killer"),
-                description="Generated prompt-understanding benchmark in debug_reading mode.",
+                difficulty=difficulty,
+                tags=_tags(*tags),
+                description=f"Generated prompt-understanding benchmark in {mode} mode.",
             )
         )
 

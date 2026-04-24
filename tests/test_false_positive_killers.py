@@ -26,3 +26,5 @@ def test_false_positive_killer_tasks_are_catalogued_without_model_fixtures() -> 
             scenario = task.create(root)
             assert scenario.model_client is None
             assert scenario.verification_contract.task_type == task.task_type
+            assert "marker" not in scenario.prompt.lower()
+            assert any(path.is_file() for path in scenario.workspace.rglob("*"))

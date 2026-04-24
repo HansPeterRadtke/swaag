@@ -26,3 +26,4 @@ def test_prompt_understanding_benchmark_tasks_define_oracles_without_model_fixtu
             assert scenario.model_client is None
             assert scenario.oracle is not None
             assert scenario.oracle.completeness == "complete"
+            assert "marker" not in scenario.prompt.lower()

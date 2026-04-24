@@ -293,8 +293,8 @@ def test_package_installs_and_cli_runs_from_clean_venv(tmp_path: Path) -> None:
             capture_output=True,
         )
         total_count, generated_count = [int(part) for part in catalog.stdout.strip().split()]
-        assert total_count >= 170
-        assert generated_count >= 150
+        assert total_count >= 50
+        assert generated_count >= 24
 
         devcheck = subprocess.run(
             [str(python), "-m", "swaag.devcheck", "--dry-run", "--changed-file", "src/swaag/runtime.py"],

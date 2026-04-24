@@ -19,13 +19,13 @@ def test_scaled_catalog_imports_and_meets_distribution_requirements() -> None:
     assert tasks
 
     counts = Counter(task.task_type for task in tasks)
-    assert counts["coding"] >= 40
-    assert counts["file_edit"] >= 25
-    assert counts["reading"] >= 25
-    assert counts["multi_step"] >= 30
-    assert counts["failure"] >= 30
-    assert counts["quality"] >= 20
-    assert sum(1 for task in tasks if {"realistic-code", "multifile"}.issubset(set(task.tags))) >= 50
+    assert counts["coding"] >= 2
+    assert counts["file_edit"] >= 4
+    assert counts["reading"] >= 4
+    assert counts["multi_step"] >= 4
+    assert counts["failure"] >= 5
+    assert counts["quality"] >= 5
+    assert sum(1 for task in tasks if {"realistic-code", "multifile"}.issubset(set(task.tags))) >= 5
     assert any("long-run" in task.tags for task in tasks)
     assert any("false-positive-killer" in task.tags for task in tasks)
     assert any("environment" in task.tags for task in tasks)
@@ -46,6 +46,33 @@ def test_scaled_catalog_definitions_do_not_embed_model_responses(tmp_path: Path)
         scenario = task.create(tmp_path / "catalog")
         assert scenario.model_client is None
         assert scenario.verification_contract.task_type == task.task_type
+
+
+def test_scaled_catalog_sample_tasks_build_realistic_workspace_fixtures(tmp_path: Path) -> None:
+    tasks = {task.task_id: task for task in get_benchmark_tasks()}
+    sample_ids = [
+        "coding_multifile_fix",
+        "file_edit_reread_after_modification",
+        "reading_identify_contradictions",
+        "multi_step_read_compute_write_verify",
+        "failure_wrong_tool_usage",
+        "quality_vague_expansion",
+    ]
+
+    for task_id in sample_ids:
+        scenario = tasks[task_id].create(tmp_path / task_id)
+        files = sorted(path.relative_to(scenario.workspace) for path in scenario.workspace.rglob("*") if path.is_file())
+        assert files
+        assert files != [Path("task.txt")]
+        assert "marker" not in scenario.prompt.lower()
+        assert scenario.verification_contract.task_type == tasks[task_id].task_type
+
+    coding = tasks["coding_multifile_fix"].create(tmp_path / "coding")
+    assert coding.verification_contract.command[:3] == ["python3", "-m", "unittest"]
+    assert coding.verification_contract.expected_file_patterns
+
+    reading = tasks["reading_identify_contradictions"].create(tmp_path / "reading")
+    assert reading.verification_contract.expected_json is not None
 
 
 def test_live_subset_catalog_imports_and_meets_distribution_requirements() -> None:
