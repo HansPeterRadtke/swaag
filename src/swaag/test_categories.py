@@ -19,6 +19,7 @@ CODE_CORRECTNESS_TEST_FILES = frozenset(
     {
         'tests/test_agent_loop_replay.py',
         'tests/test_agent_support.py',
+        'tests/test_benchmark.py',
         'tests/test_benchmark_catalog.py',
         'tests/test_benchmark_import_hygiene.py',
         'tests/test_benchmark_metrics.py',
@@ -85,7 +86,7 @@ CODE_CORRECTNESS_TEST_FILES = frozenset(
     }
 )
 
-AGENT_TEST_FILES = frozenset({"tests/test_benchmark.py"})
+AGENT_TEST_FILES = frozenset()
 
 # ---------------------------------------------------------------------------
 # Project root discovery
@@ -216,10 +217,5 @@ def build_code_correctness_command(root: Path | None = None) -> list[str]:
 
 
 def build_agent_tests_command(root: Path | None = None) -> list[str]:
-    """Build the explicit authoritative agent-tests pytest command.
-
-    Passes the agent-test file list directly — no marker-based deselection.
-    """
-    base = project_root() if root is None else root
-    files = sorted(str(base / f) for f in AGENT_TEST_FILES)
-    return [sys.executable, "-m", "pytest", "-q", *files]
+    """Build the authoritative cached benchmark command for agent_test."""
+    return [sys.executable, "-m", "swaag.benchmark", "agent-tests"]

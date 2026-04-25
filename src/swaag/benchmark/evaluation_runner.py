@@ -1,11 +1,12 @@
 from __future__ import annotations
 
+import hashlib
+import json
 import os
 import shutil
 import subprocess
 import sys
 import xml.etree.ElementTree as ET
-from collections import Counter
 from pathlib import Path
 from typing import Any, Sequence
 
@@ -101,35 +102,212 @@ def _run_pytest_category(*, output_dir: Path, category_name: str, pytest_args: S
 
 
 def _render_pytest_category_report(payload: dict[str, Any]) -> str:
-    title = "Deterministic code-correctness tests" if payload["category"] == "code_correctness" else "Cached agent tests"
     lines = [
-        f"# {title}",
+        "# Code Correctness Report",
         "",
         f"- percent: `{payload['summary']['percent']:.2f}%`",
+        f"- total_checks: `{payload['summary']['executed_tests']}`",
         f"- passed: `{payload['summary']['passed_tests']}`",
         f"- failed: `{payload['summary']['failed_tests']}`",
         f"- skipped: `{payload['summary']['skipped_tests']}`",
+        f"- binary_result: `{'passed' if payload['exit_code'] == 0 and payload['summary']['failed_tests'] == 0 else 'failed'}`",
         "",
         "## Per-test results",
         "",
     ]
-    if payload["category"] == "agent_test" and isinstance(payload.get("full_cached_benchmark_catalog"), dict):
-        catalog = payload["full_cached_benchmark_catalog"]
-        lines[-2:] = [
-            "## Full Cached Benchmark Catalog",
-            "",
-            f"- total_tasks: `{catalog['total_tasks']}`",
-            f"- includes_extremely_hard: `{catalog['includes_extremely_hard']}`",
-            f"- counts_by_difficulty: `{catalog['counts_by_difficulty']}`",
-            f"- counts_by_family: `{catalog['counts_by_family']}`",
-            f"- execution_contract: `{catalog['execution_contract']}`",
-            "",
-            "## Per-test results",
-            "",
-        ]
     for test in payload["tests"]:
         score_text = "n/a" if test["score_percent"] is None else f"{float(test['score_percent']):.2f}%"
         lines.append(f"- `{test['nodeid']}`: `{test['status']}` / `{score_text}`")
+    return "\n".join(lines) + "\n"
+
+
+def _deterministic_failed(payload: dict[str, Any]) -> bool:
+    return (
+        float(payload["summary"].get("percent", 0.0)) < 100.0
+        or int(payload["summary"].get("failed_tests", 0)) > 0
+        or int(payload.get("exit_code", 0)) != 0
+    )
+
+
+def _group_average(mapping: dict[str, float]) -> float:
+    return round(sum(float(value) for value in mapping.values()) / len(mapping), 2) if mapping else 0.0
+
+
+def _score_mapping_from_tasks(tasks: Sequence[dict[str, Any]], key: str) -> dict[str, float]:
+    buckets: dict[str, list[float]] = {}
+    for task in tasks:
+        group = str(task.get(key, "")).strip()
+        if not group:
+            continue
+        score = float(task.get("score_percent", 0.0))
+        buckets.setdefault(group, []).append(score)
+    return {
+        group: round(sum(scores) / len(scores), 2)
+        for group, scores in sorted(buckets.items())
+        if scores
+    }
+
+
+def _build_agent_test_score_summary(report: dict[str, Any]) -> dict[str, Any]:
+    summary = report.get("summary", {})
+    tasks = list(report.get("tasks", []))
+    difficulty_scores = {key: float(value) for key, value in dict(summary.get("score_by_difficulty", {})).items()}
+    family_scores = {key: float(value) for key, value in dict(summary.get("score_by_family", {})).items()}
+    if not difficulty_scores and tasks:
+        difficulty_scores = _score_mapping_from_tasks(tasks, "difficulty")
+    if not family_scores and tasks:
+        family_scores = _score_mapping_from_tasks(tasks, "task_type")
+    difficulty_group_average = float(summary.get("difficulty_group_average_percent", _group_average(difficulty_scores)))
+    family_group_average = float(summary.get("family_group_average_percent", _group_average(family_scores)))
+    group_average_sources = [value for value in (difficulty_group_average, family_group_average) if value > 0.0]
+    group_average = round(sum(group_average_sources) / len(group_average_sources), 2) if group_average_sources else 0.0
+    total_tasks = int(summary.get("total_tasks", 0))
+    successful_tasks = int(summary.get("successful_tasks", 0))
+    full_task_success_percent = float(
+        summary.get(
+            "full_task_success_percent",
+            round(successful_tasks / total_tasks * 100.0, 2) if total_tasks else 0.0,
+        )
+    )
+    return {
+        "group_average_percent": group_average,
+        "difficulty_group_average_percent": difficulty_group_average,
+        "family_group_average_percent": family_group_average,
+        "full_task_success_percent": full_task_success_percent,
+        "average_task_score_percent": float(summary.get("average_task_score_percent", 0.0)),
+        "detailed_substep_score_percent": None,
+        "detailed_substep_score_note": "Intentionally omitted because reliable detailed sub-step scoring is not yet implemented.",
+        "group_scores_by_difficulty": difficulty_scores,
+        "group_scores_by_family": family_scores,
+    }
+
+
+def _full_catalog_cache_key(tasks: Sequence[Any]) -> str:
+    payload = [
+        {
+            "task_id": task.task_id,
+            "task_type": task.task_type,
+            "difficulty": task.difficulty,
+            "tags": list(task.tags),
+            "description": task.description,
+            "setup_instructions": list(task.setup_instructions),
+        }
+        for task in tasks
+    ]
+    raw = json.dumps({"version": 7, "tasks": payload}, sort_keys=True).encode("utf-8")
+    return hashlib.sha256(raw).hexdigest()[:16]
+
+
+def _valid_full_catalog_report(report_path: Path, tasks: Sequence[Any]) -> bool:
+    if not report_path.exists():
+        return False
+    try:
+        payload = json.loads(report_path.read_text(encoding="utf-8"))
+    except (OSError, json.JSONDecodeError):
+        return False
+    expected_ids = {task.task_id for task in tasks}
+    actual_ids = {str(item.get("task_id", "")) for item in payload.get("tasks", [])}
+    metadata = payload.get("run_metadata", {})
+    seed_results = [
+        seed_result
+        for task in payload.get("tasks", [])
+        for seed_result in task.get("metrics", {}).get("seed_results", [])
+        if isinstance(seed_result, dict)
+    ]
+    return (
+        payload.get("summary", {}).get("total_tasks") == len(tasks)
+        and actual_ids == expected_ids
+        and metadata.get("agent_behavior_mode") == "cached"
+        and metadata.get("replay_cache_enabled") is True
+        and bool(seed_results)
+        and all(seed.get("replay_cache", {}).get("cassette_path") for seed in seed_results)
+    )
+
+
+def _copy_cached_full_catalog(cache_dir: Path, output_dir: Path) -> dict[str, Any]:
+    if output_dir.exists():
+        shutil.rmtree(output_dir)
+    shutil.copytree(cache_dir, output_dir)
+    old_root = str(cache_dir)
+    new_root = str(output_dir)
+    results_path = output_dir / "agent_test_cached_results.json"
+    report_path = output_dir / "agent_test_cached_report.md"
+    results_text = results_path.read_text(encoding="utf-8").replace(old_root, new_root)
+    write_text(results_path, results_text, encoding="utf-8")
+    if report_path.exists():
+        write_text(report_path, report_path.read_text(encoding="utf-8").replace(old_root, new_root), encoding="utf-8")
+    payload = json.loads(results_text)
+    payload.setdefault("run_metadata", {})["artifact_reused_from"] = str(cache_dir)
+    return payload
+
+
+def _reuse_full_catalog_benchmark_artifact(output_dir: Path, benchmark_task_ids: Sequence[str] | None, clean: bool) -> dict[str, Any] | None:
+    if benchmark_task_ids:
+        return None
+    from swaag.benchmark.task_definitions import get_benchmark_tasks
+
+    tasks = get_benchmark_tasks()
+    artifact_root = Path(os.environ.get("SWAAG_FULL_CACHED_BENCHMARK_ARTIFACT_ROOT", "/tmp/swaag-full-cached-benchmark-catalog"))
+    cache_dir = artifact_root / _full_catalog_cache_key(tasks)
+    report_path = cache_dir / "agent_test_cached_results.json"
+    if not _valid_full_catalog_report(report_path, tasks):
+        return None
+    if clean and output_dir.exists():
+        shutil.rmtree(output_dir)
+    return _copy_cached_full_catalog(cache_dir, output_dir)
+
+
+def _seed_full_catalog_replay_cache(output_dir: Path, benchmark_task_ids: Sequence[str] | None) -> None:
+    if benchmark_task_ids:
+        return
+    from swaag.benchmark.task_definitions import get_benchmark_tasks
+
+    target = output_dir / "replay_cache"
+    if target.exists():
+        return
+    artifact_root = Path(os.environ.get("SWAAG_FULL_CACHED_BENCHMARK_ARTIFACT_ROOT", "/tmp/swaag-full-cached-benchmark-catalog"))
+    source = artifact_root / _full_catalog_cache_key(get_benchmark_tasks()) / "replay_cache"
+    if source.exists():
+        shutil.copytree(source, target)
+
+
+def _render_agent_test_category_report(payload: dict[str, Any]) -> str:
+    summary = payload["summary"]
+    scores = payload["score_summary"]
+    lines = [
+        "# Agent Test Benchmark Report",
+        "",
+        f"- execution_mode: `{payload.get('execution_mode', 'executed_cached_benchmark')}`",
+        f"- total_tasks: `{summary['total_tasks']}`",
+        f"- successful_tasks: `{summary['successful_tasks']}`",
+        f"- failed_tasks: `{summary['failed_tasks']}`",
+        f"- false_positives: `{summary['false_positives']}`",
+        f"- full_task_success_percent: `{scores['full_task_success_percent']:.2f}%`",
+        f"- group_average_percent: `{scores['group_average_percent']:.2f}%`",
+        f"- difficulty_group_average_percent: `{scores['difficulty_group_average_percent']:.2f}%`",
+        f"- family_group_average_percent: `{scores['family_group_average_percent']:.2f}%`",
+        f"- average_task_score_percent: `{scores['average_task_score_percent']:.2f}%`",
+        f"- detailed_substep_score: `{scores['detailed_substep_score_note']}`",
+        "",
+        "## Group Scores By Difficulty",
+        "",
+    ]
+    for difficulty in BENCHMARK_DIFFICULTY_ORDER:
+        if difficulty in scores["group_scores_by_difficulty"]:
+            lines.append(f"- `{difficulty}`: `{scores['group_scores_by_difficulty'][difficulty]:.2f}%`")
+    lines.extend(["", "## Group Scores By Family", ""])
+    for family, percent in sorted(scores["group_scores_by_family"].items()):
+        lines.append(f"- `{family}`: `{percent:.2f}%`")
+    lines.extend(
+        [
+            "",
+            "## Artifact Paths",
+            "",
+            f"- detailed_results: `{payload['cached_benchmark_results_path']}`",
+            f"- detailed_report: `{payload['cached_benchmark_report_path']}`",
+            "",
+        ]
+    )
     return "\n".join(lines) + "\n"
 
 
@@ -142,66 +320,113 @@ def run_code_correctness_category(*, output_dir: Path, pytest_args: Sequence[str
     return _run_pytest_category(output_dir=output_dir, category_name="code_correctness", pytest_args=pytest_args, env=env)
 
 
-def run_agent_test_category(*, output_dir: Path, pytest_args: Sequence[str] | None = None, env: dict[str, str] | None = None) -> dict[str, Any]:
-    if pytest_args is None:
-        from swaag.test_categories import AGENT_TEST_FILES, project_root as _project_root
+def run_agent_test_category(
+    *,
+    output_dir: Path,
+    benchmark_task_ids: Sequence[str] | None = None,
+    clean: bool = False,
+    pytest_args: Sequence[str] | None = None,
+    env: dict[str, str] | None = None,
+) -> dict[str, Any]:
+    del env
+    if pytest_args:
+        raise ValueError("agent_test no longer accepts pytest_args because it runs the real cached benchmark, not pytest benchmark wrappers")
+    from swaag.benchmark.benchmark_runner import run_benchmarks
 
-        base = _project_root()
-        pytest_args = sorted(str(base / f) for f in AGENT_TEST_FILES)
-    payload = _run_pytest_category(output_dir=output_dir, category_name="agent_test", pytest_args=pytest_args, env=env)
-    from swaag.benchmark.task_definitions import get_benchmark_tasks
-
-    tasks = get_benchmark_tasks()
-    payload["full_cached_benchmark_catalog"] = {
-        "total_tasks": len(tasks),
-        "counts_by_difficulty": dict(sorted(Counter(task.difficulty for task in tasks).items())),
-        "counts_by_family": dict(sorted(Counter(task.task_type for task in tasks).items())),
-        "includes_extremely_hard": any(task.difficulty == "extremely_hard" for task in tasks),
-        "execution_contract": "agent_test includes tests/test_benchmark.py::test_benchmark_runner_executes_full_cached_catalog_and_writes_reports",
+    reused_report = _reuse_full_catalog_benchmark_artifact(output_dir, benchmark_task_ids, clean)
+    if reused_report is not None:
+        benchmark_report = reused_report
+        execution_mode = "reused_cached_artifact"
+    else:
+        ensure_dir(output_dir)
+        _seed_full_catalog_replay_cache(output_dir, benchmark_task_ids)
+        benchmark_report = run_benchmarks(
+            output_dir=output_dir,
+            task_ids=list(benchmark_task_ids) if benchmark_task_ids is not None else None,
+            clean=clean,
+            live_subset=False,
+            use_live_model=False,
+            agent_behavior_mode="cached",
+        )
+        execution_mode = "executed_cached_benchmark"
+    payload = {
+        "category": "agent_test",
+        "status": "complete",
+        "execution_mode": execution_mode,
+        "summary": benchmark_report["summary"],
+        "aggregate_metrics": benchmark_report["aggregate_metrics"],
+        "run_metadata": benchmark_report.get("run_metadata", {}),
+        "tasks": benchmark_report.get("tasks", []),
+        "score_summary": _build_agent_test_score_summary(benchmark_report),
+        "cached_benchmark_results_path": str(output_dir / "agent_test_cached_results.json"),
+        "cached_benchmark_report_path": str(output_dir / "agent_test_cached_report.md"),
     }
     write_text(output_dir / "agent_test_results.json", stable_json_dumps(payload, indent=2) + "\n", encoding="utf-8")
-    write_text(output_dir / "agent_test_report.md", _render_pytest_category_report(payload), encoding="utf-8")
+    write_text(output_dir / "agent_test_report.md", _render_agent_test_category_report(payload), encoding="utf-8")
     return payload
-
-
-def _deterministic_failed(payload: dict[str, Any]) -> bool:
-    return (
-        float(payload["summary"].get("percent", 0.0)) < 100.0
-        or int(payload["summary"].get("failed_tests", 0)) > 0
-        or int(payload.get("exit_code", 0)) != 0
-    )
 
 
 def render_test_category_report(payload: dict[str, Any]) -> str:
     code = payload["code_correctness"]
     agent = payload.get("agent_test")
     lines = [
-        "# SWAAG test-category report",
+        "# SWAAG Test Category Report",
         "",
-        f"- overall_percent: `{payload['overall_percent']:.2f}%`",
-        f"- code_correctness_percent: `{code['summary']['percent']:.2f}%`",
-        f"- agent_test_percent: `{float(agent['summary']['percent']) if isinstance(agent, dict) else 0.0:.2f}%`",
         f"- status: `{payload.get('status', 'complete')}`",
-        f"- skip_reason: `{payload.get('skip_reason', '')}`" if payload.get("skip_reason") else "",
-        "",
-        "## Category summaries",
-        "",
-        f"- code_correctness: `{code['summary']['passed_tests']}` passed / `{code['summary']['failed_tests']}` failed / `{code['summary']['skipped_tests']}` skipped",
-        (
-            f"- agent_test: `{agent['summary']['passed_tests']}` passed / `{agent['summary']['failed_tests']}` failed / `{agent['summary']['skipped_tests']}` skipped"
-            if isinstance(agent, dict)
-            else "- agent_test: not run because code_correctness was not 100% green"
-        ),
-        "",
-        "## Artifact paths",
-        "",
-        "- code_correctness:",
-        "  - `code_correctness/code_correctness_results.json`",
-        "  - `code_correctness/code_correctness_report.md`",
-        "- agent_test:",
-        "  - `agent_test/agent_test_results.json`",
-        "  - `agent_test/agent_test_report.md`",
+        f"- code_correctness_binary_result: `{'passed' if payload.get('code_correctness_binary_passed') else 'failed'}`",
+        f"- agent_test_ran: `{payload.get('agent_test_ran', False)}`",
     ]
+    if payload.get("skip_reason"):
+        lines.append(f"- skip_reason: `{payload['skip_reason']}`")
+    lines.extend(
+        [
+            "",
+            "## Code Correctness",
+            "",
+            f"- total_checks: `{code['summary']['executed_tests']}`",
+            f"- passed: `{code['summary']['passed_tests']}`",
+            f"- failed: `{code['summary']['failed_tests']}`",
+            f"- skipped: `{code['summary']['skipped_tests']}`",
+            f"- percent: `{code['summary']['percent']:.2f}%`",
+            "",
+            "## Agent Test",
+            "",
+        ]
+    )
+    if isinstance(agent, dict):
+        score_summary = agent["score_summary"]
+        lines.extend(
+            [
+                f"- execution_mode: `{agent.get('execution_mode', 'executed_cached_benchmark')}`",
+                f"- total_tasks: `{agent['summary']['total_tasks']}`",
+                f"- successful_tasks: `{agent['summary']['successful_tasks']}`",
+                f"- failed_tasks: `{agent['summary']['failed_tasks']}`",
+                f"- false_positives: `{agent['summary']['false_positives']}`",
+                f"- full_task_success_percent: `{score_summary['full_task_success_percent']:.2f}%`",
+                f"- group_average_percent: `{score_summary['group_average_percent']:.2f}%`",
+                f"- difficulty_group_average_percent: `{score_summary['difficulty_group_average_percent']:.2f}%`",
+                f"- family_group_average_percent: `{score_summary['family_group_average_percent']:.2f}%`",
+                f"- average_task_score_percent: `{score_summary['average_task_score_percent']:.2f}%`",
+                f"- detailed_substep_score: `{score_summary['detailed_substep_score_note']}`",
+            ]
+        )
+    else:
+        lines.append("- not run because code_correctness was not 100% green")
+    lines.extend(
+        [
+            "",
+            "## Artifact Paths",
+            "",
+            "- code_correctness:",
+            "  - `code_correctness/code_correctness_results.json`",
+            "  - `code_correctness/code_correctness_report.md`",
+            "- agent_test:",
+            "  - `agent_test/agent_test_results.json`",
+            "  - `agent_test/agent_test_report.md`",
+            "  - `agent_test/agent_test_cached_results.json`",
+            "  - `agent_test/agent_test_cached_report.md`",
+        ]
+    )
     return "\n".join(lines) + "\n"
 
 
@@ -210,7 +435,7 @@ def run_test_category_evaluation(
     output_dir: Path,
     clean: bool = False,
     functional_pytest_args: Sequence[str] | None = None,
-    agent_pytest_args: Sequence[str] | None = None,
+    benchmark_task_ids: Sequence[str] | None = None,
     **_: Any,
 ) -> dict[str, Any]:
     if clean and output_dir.exists():
@@ -218,29 +443,24 @@ def run_test_category_evaluation(
     ensure_dir(output_dir)
     code = run_code_correctness_category(output_dir=output_dir / "code_correctness", pytest_args=functional_pytest_args)
     if _deterministic_failed(code):
-        code_percent = float(code["summary"].get("percent", 0.0))
         payload = {
+            "status": "code_correctness_failed",
+            "code_correctness_binary_passed": False,
+            "agent_test_ran": False,
+            "skip_reason": "code_correctness must be 100% before agent_test can run",
             "code_correctness": code,
             "agent_test": None,
-            "category_scores": {"code_correctness": code_percent, "agent_test": 0.0},
-            "overall_percent": round(code_percent / 2.0, 2),
-            "status": "code_correctness_failed",
-            "skipped_categories": ["agent_test"],
-            "skip_reason": "code_correctness must be 100% before agent_test can run",
         }
         write_text(output_dir / "test_categories_results.json", stable_json_dumps(payload, indent=2) + "\n", encoding="utf-8")
         write_text(output_dir / "test_categories_report.md", render_test_category_report(payload), encoding="utf-8")
         return payload
-    agent = run_agent_test_category(output_dir=output_dir / "agent_test", pytest_args=agent_pytest_args)
-    category_scores = {"code_correctness": float(code["summary"]["percent"]), "agent_test": float(agent["summary"]["percent"])}
-    overall_percent = round(sum(category_scores.values()) / len(category_scores), 2)
+    agent = run_agent_test_category(output_dir=output_dir / "agent_test", benchmark_task_ids=benchmark_task_ids, clean=False)
     payload = {
+        "status": "complete",
+        "code_correctness_binary_passed": True,
+        "agent_test_ran": True,
         "code_correctness": code,
         "agent_test": agent,
-        "category_scores": category_scores,
-        "overall_percent": overall_percent,
-        "status": "complete",
-        "skipped_categories": [],
     }
     write_text(output_dir / "test_categories_results.json", stable_json_dumps(payload, indent=2) + "\n", encoding="utf-8")
     write_text(output_dir / "test_categories_report.md", render_test_category_report(payload), encoding="utf-8")
@@ -290,7 +510,12 @@ def run_full_evaluation(
     }
     group_scores = {"code_correctness": float(code["summary"]["percent"]), **difficulty_scores}
     overall_percent = round(sum(group_scores.values()) / len(group_scores), 2) if group_scores else 0.0
-    payload = {"code_correctness": code, "agent_evaluation": {**agent_report, "difficulty_tier_scores": difficulty_scores}, "group_scores": group_scores, "overall_percent": overall_percent}
+    payload = {
+        "code_correctness": code,
+        "agent_evaluation": {**agent_report, "difficulty_tier_scores": difficulty_scores},
+        "group_scores": group_scores,
+        "overall_percent": overall_percent,
+    }
     write_text(output_dir / "evaluation_results.json", stable_json_dumps(payload, indent=2) + "\n", encoding="utf-8")
     write_text(output_dir / "evaluation_report.md", render_evaluation_report(payload), encoding="utf-8")
     return payload

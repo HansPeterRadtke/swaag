@@ -14,6 +14,10 @@ Authoritative command:
 python3 -m swaag.testprofile code-correctness
 ```
 
+The output is binary and intentionally concise: total checks, passed, failed,
+skipped, percent, and the final pass/fail result. It does not run the real
+benchmark catalog.
+
 Artifact-producing command:
 
 ```bash
@@ -58,6 +62,20 @@ Authoritative command:
 python3 -m swaag.testprofile agent-tests
 ```
 
+This command runs the real cached benchmark catalog through the normal agent
+loop. It is not a pytest wrapper. The output shows benchmark progress as tasks
+complete and ends with real benchmark-quality metrics:
+
+- total tasks
+- successful tasks
+- failed tasks
+- false positives
+- full-task success percentage
+- difficulty-group average score
+- family-group average score
+- overall group-average score
+- average task score
+
 Artifact-producing command:
 
 ```bash
@@ -81,6 +99,8 @@ The combined execution is strictly ordered:
 1. run code_correctness
 2. stop if code_correctness is below 100% or any code-correctness test fails
 3. run cached agent_test only after code_correctness is fully green
+
+`python3 -m swaag.testprofile all` is accepted as an alias for `combined`.
 
 ## Manual validation / real usage
 
@@ -110,6 +130,8 @@ writes:
 - `/tmp/swaag-test-categories/code_correctness/code_correctness_report.md`
 - `/tmp/swaag-test-categories/agent_test/agent_test_results.json` when code_correctness passes
 - `/tmp/swaag-test-categories/agent_test/agent_test_report.md` when code_correctness passes
+- `/tmp/swaag-test-categories/agent_test/agent_test_cached_results.json` when code_correctness passes
+- `/tmp/swaag-test-categories/agent_test/agent_test_cached_report.md` when code_correctness passes
 
 ## Incremental devcheck
 

@@ -329,6 +329,49 @@ def _evaluate_quality(oracle: PromptUnderstandingOracle | None, state, events) -
     }
 
 
+def _print_benchmark_progress(*, current: int, total: int, task: BenchmarkTaskDefinition, status: str) -> None:
+    percent = 0.0 if total == 0 else (current / total) * 100.0
+    print(
+        f"[agent_test {current}/{total} {percent:5.1f}%] {status} {task.task_id} "
+        f"({task.task_type}/{task.difficulty})",
+        flush=True,
+    )
+
+
+def _print_benchmark_summary(report: dict[str, Any]) -> None:
+    summary = report.get("summary", {})
+    aggregate_metrics = report.get("aggregate_metrics", {})
+    family_scores = dict(summary.get("score_by_family", {}))
+    difficulty_scores = dict(summary.get("score_by_difficulty", {}))
+    print("agent_test_summary", flush=True)
+    print(f"  total_tasks={summary.get('total_tasks', 0)}", flush=True)
+    print(f"  successful_tasks={summary.get('successful_tasks', 0)}", flush=True)
+    print(f"  failed_tasks={summary.get('failed_tasks', 0)}", flush=True)
+    print(f"  false_positives={summary.get('false_positives', 0)}", flush=True)
+    print(f"  full_task_success_percent={float(summary.get('full_task_success_percent', 0.0)):.2f}", flush=True)
+    print(f"  group_average_percent={float(summary.get('group_average_percent', 0.0)):.2f}", flush=True)
+    print(
+        f"  difficulty_group_average_percent={float(summary.get('difficulty_group_average_percent', 0.0)):.2f}",
+        flush=True,
+    )
+    print(
+        f"  family_group_average_percent={float(summary.get('family_group_average_percent', 0.0)):.2f}",
+        flush=True,
+    )
+    print(f"  average_task_score_percent={float(summary.get('average_task_score_percent', 0.0)):.2f}", flush=True)
+    print("  detailed_substep_score=omitted_unreliable", flush=True)
+    if difficulty_scores:
+        print(f"  group_scores_by_difficulty={stable_json_dumps(difficulty_scores, sort_keys=True)}", flush=True)
+    if family_scores:
+        print(f"  group_scores_by_family={stable_json_dumps(family_scores, sort_keys=True)}", flush=True)
+    primary = aggregate_metrics.get("primary", {})
+    if primary:
+        print(
+            f"  task_success_rate={float(primary.get('task_success_rate', 0.0)) * 100.0:.2f}",
+            flush=True,
+        )
+
+
 def run_benchmarks(
     *,
     output_dir: Path,
@@ -382,7 +425,9 @@ def run_benchmarks(
         else None
     )
 
-    for task in selected_tasks:
+    total_tasks = len(selected_tasks)
+    for task_index, task in enumerate(selected_tasks, start=1):
+        _print_benchmark_progress(current=task_index - 1, total=total_tasks, task=task, status="running")
         seed_results: list[dict[str, Any]] = []
         aggregate_success = True
         aggregate_false_positive = False
@@ -523,6 +568,12 @@ def run_benchmarks(
                 workspace=aggregate_workspace_paths[0] if aggregate_workspace_paths else "",
             )
         )
+        _print_benchmark_progress(
+            current=task_index,
+            total=total_tasks,
+            task=task,
+            status=f"finished success={aggregate_success} false_positive={aggregate_false_positive}",
+        )
     if resolved_agent_behavior_mode == "cached":
         artifact_prefix = "agent_test_cached"
     else:
@@ -555,7 +606,9 @@ def run_benchmarks(
             "task_count": len(selected_tasks),
         },
     )
-    return asdict(report)
+    payload = asdict(report)
+    _print_benchmark_summary(payload)
+    return payload
 
 
 def _build_parser() -> argparse.ArgumentParser:
@@ -575,17 +628,15 @@ def _build_parser() -> argparse.ArgumentParser:
     evaluate_parser.add_argument("--pytest-arg", action="append", default=[], help="Additional argument forwarded to the code-correctness pytest command.")
     evaluate_parser.add_argument("--json", action="store_true", help="Print the full evaluation JSON.")
 
-    agent_tests_parser = subparsers.add_parser("agent-tests", help="Run cached agent tests. This is the only agent-test mode in the test system.")
+    agent_tests_parser = subparsers.add_parser("agent-tests", help="Run the real cached benchmark for agent_test.")
     agent_tests_parser.add_argument("--output", default="agent_test_output", help="Output directory for cached agent-test results.")
     agent_tests_parser.add_argument("--clean", action="store_true", help="Delete the output directory before running.")
-    agent_tests_parser.add_argument("--pytest-arg", action="append", default=[], help="Additional argument forwarded to the cached agent-test pytest command.")
     agent_tests_parser.add_argument("--json", action="store_true", help="Print the full agent-test JSON.")
 
-    test_categories_parser = subparsers.add_parser("test-categories", help="Run code_correctness, then cached agent_test only if code_correctness is 100%% green.")
+    test_categories_parser = subparsers.add_parser("test-categories", help="Run code_correctness, then the real cached benchmark for agent_test only if code_correctness is 100%% green.")
     test_categories_parser.add_argument("--output", default="test_categories_output", help="Output directory for category results and reports.")
     test_categories_parser.add_argument("--clean", action="store_true", help="Delete the output directory before running.")
     test_categories_parser.add_argument("--pytest-arg", action="append", default=[], help="Additional argument forwarded to the code-correctness pytest command.")
-    test_categories_parser.add_argument("--agent-pytest-arg", action="append", default=[], help="Additional argument forwarded to the cached agent-test pytest command.")
     test_categories_parser.add_argument("--json", action="store_true", help="Print the full category JSON.")
 
     manual_parser = subparsers.add_parser("manual-validation", help="Run explicit real-model validation. This is not a test category.")
@@ -662,16 +713,16 @@ def main(argv: Sequence[str] | None = None) -> int:
     if args.command == "agent-tests":
         from swaag.benchmark.evaluation_runner import run_agent_test_category
 
-        if args.clean and Path(args.output).exists():
-            shutil.rmtree(Path(args.output))
-        report = run_agent_test_category(output_dir=Path(args.output), pytest_args=list(args.pytest_arg) or None)
+        report = run_agent_test_category(output_dir=Path(args.output), clean=bool(args.clean))
         if args.json:
             print(stable_json_dumps(report, indent=2))
         else:
-            print(f"agent_test_percent={report['summary']['percent']}")
-            print(f"passed_tests={report['summary']['passed_tests']}")
-            print(f"failed_tests={report['summary']['failed_tests']}")
-        return 0 if report["summary"]["failed_tests"] == 0 and report.get("exit_code", 0) == 0 else 1
+            score_summary = report["score_summary"]
+            print(f"group_average_percent={score_summary['group_average_percent']}")
+            print(f"full_task_success_percent={score_summary['full_task_success_percent']}")
+            print(f"average_task_score_percent={score_summary['average_task_score_percent']}")
+            print(f"cached_benchmark_results_path={report['cached_benchmark_results_path']}")
+        return 0
     if args.command == "test-categories":
         from swaag.benchmark.evaluation_runner import run_test_category_evaluation
 
@@ -679,17 +730,21 @@ def main(argv: Sequence[str] | None = None) -> int:
             output_dir=Path(args.output),
             clean=bool(args.clean),
             functional_pytest_args=list(args.pytest_arg) or None,
-            agent_pytest_args=list(args.agent_pytest_arg) or None,
         )
         if args.json:
             print(stable_json_dumps(report, indent=2))
         else:
-            print(f"overall_percent={report['overall_percent']}")
-            for category_name, score in report["category_scores"].items():
-                print(f"{category_name}_percent={score}")
+            print(f"code_correctness_binary_result={'passed' if report['code_correctness_binary_passed'] else 'failed'}")
+            print(f"code_correctness_percent={report['code_correctness']['summary']['percent']}")
+            print(f"agent_test_ran={report['agent_test_ran']}")
+            if report.get("agent_test"):
+                score_summary = report["agent_test"]["score_summary"]
+                print(f"agent_test_group_average_percent={score_summary['group_average_percent']}")
+                print(f"agent_test_full_task_success_percent={score_summary['full_task_success_percent']}")
+                print(f"agent_test_average_task_score_percent={score_summary['average_task_score_percent']}")
             if report.get("skip_reason"):
                 print(f"skip_reason={report['skip_reason']}")
-        return 0 if report["overall_percent"] == 100.0 else 1
+        return 0 if report["code_correctness_binary_passed"] else 1
     if args.command == "manual-validation":
         from swaag.manual_validation.runner import run_manual_validation
 

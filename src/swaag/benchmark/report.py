@@ -41,6 +41,10 @@ def render_benchmark_report(report) -> str:
             f"- Successful tasks: `{summary.successful_tasks}`",
             f"- Failed tasks: `{summary.failed_tasks}`",
             f"- False positives: `{summary.false_positives}`",
+            f"- Full-task success: `{summary.full_task_success_percent:.2f}%`",
+            f"- Group average score: `{summary.group_average_percent:.2f}%`",
+            f"- Difficulty-group average: `{summary.difficulty_group_average_percent:.2f}%`",
+            f"- Family-group average: `{summary.family_group_average_percent:.2f}%`",
             f"- Average task score: `{summary.average_task_score_percent:.2f}%`",
             "",
             "## Success Rates By Task Type",
@@ -49,6 +53,13 @@ def render_benchmark_report(report) -> str:
     )
     for task_type, rate in summary.success_rate_by_type.items():
         lines.append(f"- `{task_type}`: `{rate:.2%}`")
+    lines.append("")
+    lines.extend(["## Score By Family", ""])
+    if summary.score_by_family:
+        for family, percent in summary.score_by_family.items():
+            lines.append(f"- `{family}`: `{percent:.2f}%`")
+    else:
+        lines.append("- none")
     lines.append("")
     lines.extend(["## Score By Difficulty Tier", ""])
     if summary.score_by_difficulty:

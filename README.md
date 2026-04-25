@@ -176,6 +176,11 @@ Run cached agent tests, including the full cached benchmark catalog:
 python3 -m swaag.testprofile agent-tests
 ```
 
+This runs the real cached benchmark, not a pytest wrapper around benchmark-harness
+checks. The terminal output shows benchmark progress and benchmark-quality
+metrics such as full-task success percentage, difficulty/family group averages,
+and average task score.
+
 Run both with fail-fast ordering:
 
 ```bash
@@ -187,6 +192,11 @@ Generate JSON and markdown reports:
 ```bash
 python3 -m swaag.benchmark test-categories --clean --output /tmp/swaag-test-categories
 ```
+
+`code_correctness` is reported as a binary correctness result. `agent_test` is
+reported as the real benchmark result with task counts, false positives,
+full-task success percentage, group-average score, difficulty scores, family
+scores, and average task score.
 
 Manual real-model validation, not tests:
 

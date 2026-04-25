@@ -108,7 +108,9 @@ Evaluation exposes two user-facing test categories:
 
 Uncached real-model execution is manual validation / real usage, not a test
 category. The category evaluator writes separate JSON and markdown reports for
-`code_correctness`, `agent_test`, and the combined fail-fast result.
+`code_correctness`, `agent_test`, and the combined fail-fast result. The
+correctness category is binary; the agent category reports real benchmark
+quality directly instead of a pytest wrapper status.
 
 The authoritative cached benchmark catalog behind `agent_test` is full-catalog
 and record-replay backed. It currently contains 50 realistic tasks across six
@@ -123,6 +125,15 @@ tasks are not just larger copies of easy tasks: they add multi-file
 dependencies, shell/environment workflows, contradiction handling, stale-source
 rejection, unsafe-plan refusal, repeated-action traps, and iterative
 correction loops.
+
+`agent_test` result reporting is score-based. It surfaces:
+
+- total tasks / successes / failures / false positives
+- full-task success percentage
+- difficulty-group scores and difficulty-group average
+- family-group scores and family-group average
+- top-level group-average score
+- average task score
 
 Manual validation keeps the five difficulty tiers for real-model task scoring:
 

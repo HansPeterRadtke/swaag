@@ -21,14 +21,19 @@ def test_agent_test_support_families_cover_replay_and_runtime_behavior() -> None
     )
 
 
-def test_benchmark_runner_agent_tests_command_uses_cached_pytest_category(monkeypatch, tmp_path: Path) -> None:
+def test_benchmark_runner_agent_tests_command_runs_real_cached_benchmark(monkeypatch, tmp_path: Path) -> None:
     observed: dict[str, object] = {}
 
     def fake_run_agent_test_category(**kwargs):
         observed.update(kwargs)
         return {
-            "summary": {"percent": 100.0, "passed_tests": 2, "failed_tests": 0, "skipped_tests": 0},
-            "exit_code": 0,
+            "summary": {"total_tasks": 50, "successful_tasks": 20, "failed_tasks": 30, "false_positives": 4},
+            "score_summary": {
+                "group_average_percent": 50.0,
+                "full_task_success_percent": 40.0,
+                "average_task_score_percent": 44.0,
+            },
+            "cached_benchmark_results_path": str(tmp_path / "out" / "agent_test_cached_results.json"),
         }
 
     monkeypatch.setattr("swaag.benchmark.evaluation_runner.run_agent_test_category", fake_run_agent_test_category)
@@ -37,7 +42,7 @@ def test_benchmark_runner_agent_tests_command_uses_cached_pytest_category(monkey
 
     assert exit_code == 0
     assert observed["output_dir"] == tmp_path / "out"
-    assert observed["pytest_args"] is None
+    assert observed["clean"] is True
 
 
 def test_benchmark_runner_test_categories_command_uses_two_category_evaluation(monkeypatch, tmp_path: Path) -> None:
@@ -45,13 +50,25 @@ def test_benchmark_runner_test_categories_command_uses_two_category_evaluation(m
 
     def fake_run_test_category_evaluation(**kwargs):
         observed.update(kwargs)
-        return {"overall_percent": 95.0, "category_scores": {"code_correctness": 100.0, "agent_test": 90.0}}
+        return {
+            "status": "complete",
+            "code_correctness_binary_passed": True,
+            "agent_test_ran": True,
+            "code_correctness": {"summary": {"percent": 100.0}},
+            "agent_test": {
+                "score_summary": {
+                    "group_average_percent": 50.0,
+                    "full_task_success_percent": 40.0,
+                    "average_task_score_percent": 44.0,
+                }
+            },
+        }
 
     monkeypatch.setattr("swaag.benchmark.evaluation_runner.run_test_category_evaluation", fake_run_test_category_evaluation)
 
     exit_code = benchmark_runner.main(["test-categories", "--output", str(tmp_path / "eval"), "--clean"])
 
-    assert exit_code == 1
+    assert exit_code == 0
     assert observed["output_dir"] == tmp_path / "eval"
     assert observed["clean"] is True
     assert "benchmark_task_ids" not in observed

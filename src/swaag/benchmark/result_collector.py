@@ -48,7 +48,12 @@ class BenchmarkSummary:
     false_positives: int
     success_rate_by_type: dict[str, float]
     failure_breakdown: dict[str, int]
+    score_by_family: dict[str, float] = field(default_factory=dict)
     score_by_difficulty: dict[str, float] = field(default_factory=dict)
+    full_task_success_percent: float = 0.0
+    family_group_average_percent: float = 0.0
+    difficulty_group_average_percent: float = 0.0
+    group_average_percent: float = 0.0
     average_task_score_percent: float = 0.0
 
 
@@ -77,6 +82,7 @@ class ResultCollector:
         by_type_total: dict[str, int] = {}
         by_type_success: dict[str, int] = {}
         failure_breakdown: dict[str, int] = {}
+        score_by_family_totals: dict[str, list[float]] = {}
         score_by_difficulty_totals: dict[str, list[float]] = {}
         false_positives = 0
         hints: list[str] = []
@@ -95,17 +101,44 @@ class ResultCollector:
                 false_positives += 1
             if result.failure_category is not None:
                 failure_breakdown[result.failure_category] = failure_breakdown.get(result.failure_category, 0) + 1
+            score_by_family_totals.setdefault(result.task_type, []).append(float(result.score_percent))
             score_by_difficulty_totals.setdefault(result.difficulty, []).append(float(result.score_percent))
             hints.extend(result.improvement_hints)
         success_rate_by_type = {
             task_type: 0.0 if by_type_total[task_type] == 0 else by_type_success.get(task_type, 0) / by_type_total[task_type]
             for task_type in sorted(by_type_total)
         }
+        score_by_family = {
+            task_type: round(sum(values) / len(values), 2)
+            for task_type, values in sorted(score_by_family_totals.items())
+            if values
+        }
         score_by_difficulty = {
             difficulty: round(sum(values) / len(values), 2)
             for difficulty, values in sorted(score_by_difficulty_totals.items())
             if values
         }
+        full_task_success_percent = round(
+            sum(1 for item in self._results if item.success) / len(self._results) * 100.0,
+            2,
+        ) if self._results else 0.0
+        family_group_average_percent = round(
+            sum(score_by_family.values()) / len(score_by_family),
+            2,
+        ) if score_by_family else 0.0
+        difficulty_group_average_percent = round(
+            sum(score_by_difficulty.values()) / len(score_by_difficulty),
+            2,
+        ) if score_by_difficulty else 0.0
+        group_average_components = [
+            value
+            for value in (difficulty_group_average_percent, family_group_average_percent)
+            if value > 0.0
+        ]
+        group_average_percent = round(
+            sum(group_average_components) / len(group_average_components),
+            2,
+        ) if group_average_components else 0.0
         summary = BenchmarkSummary(
             generated_at=datetime.now(timezone.utc).isoformat(),
             total_tasks=len(self._results),
@@ -114,7 +147,12 @@ class ResultCollector:
             false_positives=false_positives,
             success_rate_by_type=success_rate_by_type,
             failure_breakdown=dict(sorted(failure_breakdown.items())),
+            score_by_family=score_by_family,
             score_by_difficulty=score_by_difficulty,
+            full_task_success_percent=full_task_success_percent,
+            family_group_average_percent=family_group_average_percent,
+            difficulty_group_average_percent=difficulty_group_average_percent,
+            group_average_percent=group_average_percent,
             average_task_score_percent=round(
                 sum(float(item.score_percent) for item in self._results) / len(self._results),
                 2,
