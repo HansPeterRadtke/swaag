@@ -48,13 +48,22 @@ def _fake_benchmark_report() -> dict[str, object]:
             "family_group_average_percent": 50.0,
             "group_average_percent": 50.0,
             "average_task_score_percent": 44.0,
+            "failure_breakdown": {"verification_failure": 12, "wrong_tool": 5},
         },
         "aggregate_metrics": {
             "primary": {"task_success_rate": 0.4},
             "success_by_type": {"coding": 0.5, "reading": 0.3},
             "success_by_difficulty": {"extremely_easy": 0.8},
+            "failure_breakdown": {"verification_failure": 12, "wrong_tool": 5},
+            "verifier_weakness_breakdown": {"schema_failure": 4},
+            "prompt_understanding_mistakes": {"authority_selection": 3},
         },
-        "run_metadata": {"agent_behavior_mode": "cached"},
+        "run_metadata": {
+            "agent_behavior_mode": "cached",
+            "seed_cache_mode_counts": {"replay": 120, "record": 30},
+            "task_cache_mode_counts": {"mixed": 10, "replay": 40},
+            "artifact_reused_from": "/tmp/benchmark-artifact",
+        },
         "tasks": [{"task_id": "demo_task", "success": True}],
     }
 
@@ -86,7 +95,12 @@ def test_run_agent_test_category_writes_real_benchmark_reports(monkeypatch, tmp_
     assert payload["score_summary"]["detailed_substep_score_percent"] is None
     assert (tmp_path / "agent" / "agent_test_results.json").exists()
     assert (tmp_path / "agent" / "agent_test_report.md").exists()
-    assert "Group Scores By Family" in (tmp_path / "agent" / "agent_test_report.md").read_text(encoding="utf-8")
+    report_text = (tmp_path / "agent" / "agent_test_report.md").read_text(encoding="utf-8")
+    assert "Group Scores By Family" in report_text
+    assert "Cache / Replay Summary" in report_text
+    assert "Top Failure Diagnostics" in report_text
+    assert "seed_cache_mode_counts" in report_text
+    assert "verification_failure" in report_text
 
 
 def test_run_agent_test_category_seeds_shared_replay_cache_when_available(monkeypatch, tmp_path: Path) -> None:
@@ -159,6 +173,8 @@ def test_run_agent_test_category_reuses_valid_full_cached_artifact(monkeypatch, 
     payload = run_agent_test_category(output_dir=tmp_path / "agent", clean=True)
 
     assert payload["execution_mode"] == "reused_cached_artifact"
+    assert payload["run_metadata"]["seed_cache_mode_counts"] == {"replay": 1}
+    assert payload["run_metadata"]["task_cache_mode_counts"] == {"replay": 1}
     assert (tmp_path / "agent" / "agent_test_cached_results.json").exists()
 
 

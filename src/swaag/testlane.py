@@ -34,10 +34,24 @@ def _print_code_correctness_summary(payload: dict[str, object], *, output_dir: P
     print(f"artifacts={output_dir}")
 
 
+def _print_mapping_block(title: str, mapping: dict[str, object]) -> None:
+    if not mapping:
+        return
+    print(title)
+    for key, value in mapping.items():
+        if isinstance(value, float):
+            print(f"  {key}={value:.2f}")
+        else:
+            print(f"  {key}={value}")
+
+
 def _print_agent_test_summary(payload: dict[str, object], *, output_dir: Path) -> None:
     summary = payload["summary"]
     scores = payload["score_summary"]
+    run_metadata = payload.get("run_metadata", {})
+    aggregate_metrics = payload.get("aggregate_metrics", {})
     print("== agent_test ==")
+    print(f"execution_mode={payload.get('execution_mode', run_metadata.get('execution_mode', 'executed_cached_benchmark'))}")
     print(f"total_tasks={summary['total_tasks']}")
     print(f"successful_tasks={summary['successful_tasks']}")
     print(f"failed_tasks={summary['failed_tasks']}")
@@ -48,6 +62,30 @@ def _print_agent_test_summary(payload: dict[str, object], *, output_dir: Path) -
     print(f"family_group_average_percent={scores['family_group_average_percent']:.2f}")
     print(f"average_task_score_percent={scores['average_task_score_percent']:.2f}")
     print(f"detailed_substep_score={scores['detailed_substep_score_note']}")
+    _print_mapping_block("difficulty_scores", scores.get("group_scores_by_difficulty", {}))
+    _print_mapping_block("family_scores", scores.get("group_scores_by_family", {}))
+    if run_metadata.get("seed_cache_mode_counts"):
+        print(f"seed_cache_mode_counts={run_metadata['seed_cache_mode_counts']}")
+    if run_metadata.get("task_cache_mode_counts"):
+        print(f"task_cache_mode_counts={run_metadata['task_cache_mode_counts']}")
+    if run_metadata.get("artifact_reused_from"):
+        print(f"artifact_reused_from={run_metadata['artifact_reused_from']}")
+        print("cache_replay_mode=full_artifact_reuse")
+    elif run_metadata.get("seed_cache_mode_counts"):
+        print("cache_replay_mode=per_seed_record_replay")
+    failure_breakdown = aggregate_metrics.get("failure_breakdown", {})
+    verifier_weakness = aggregate_metrics.get("verifier_weakness_breakdown", {})
+    understanding_mistakes = aggregate_metrics.get("prompt_understanding_mistakes", {})
+    if failure_breakdown:
+        print(f"top_failure_categories={failure_breakdown}")
+    if verifier_weakness:
+        print(f"top_verifier_weaknesses={verifier_weakness}")
+    if understanding_mistakes:
+        print(f"top_understanding_mistakes={understanding_mistakes}")
+    if payload.get("cached_benchmark_results_path"):
+        print(f"cached_benchmark_results_path={payload['cached_benchmark_results_path']}")
+    if payload.get("cached_benchmark_report_path"):
+        print(f"cached_benchmark_report_path={payload['cached_benchmark_report_path']}")
     print(f"artifacts={output_dir}")
 
 

@@ -120,3 +120,92 @@ def test_testprofile_all_alias_is_supported(capsys) -> None:
     assert exit_code == 0
     assert "python3 -m swaag.testprofile code-correctness" in captured.out
     assert "python3 -m swaag.testprofile agent-tests" in captured.out
+
+
+def test_testprofile_agent_tests_prints_real_benchmark_summary(monkeypatch, tmp_path: Path, capsys) -> None:
+    monkeypatch.setattr(testlane, "_OUTPUT_ROOT", tmp_path)
+    monkeypatch.setattr(
+        testlane,
+        "run_agent_test_category",
+        lambda *, output_dir, clean=False: {
+            "summary": {"total_tasks": 53, "successful_tasks": 7, "failed_tasks": 46, "false_positives": 9},
+            "score_summary": {
+                "group_average_percent": 31.5,
+                "full_task_success_percent": 13.21,
+                "difficulty_group_average_percent": 30.2,
+                "family_group_average_percent": 32.8,
+                "average_task_score_percent": 28.4,
+                "detailed_substep_score_note": "omitted",
+                "group_scores_by_difficulty": {"hard": 18.0, "extremely_hard": 9.5},
+                "group_scores_by_family": {"coding": 41.0, "failure": 17.5},
+            },
+            "aggregate_metrics": {
+                "failure_breakdown": {"verification_failure": 14, "wrong_tool": 6},
+                "verifier_weakness_breakdown": {"stale_source_failure": 4},
+                "prompt_understanding_mistakes": {"authority_selection": 3},
+            },
+            "run_metadata": {
+                "execution_mode": "reused_cached_artifact",
+                "seed_cache_mode_counts": {"replay": 53},
+                "task_cache_mode_counts": {"replay": 53},
+                "artifact_reused_from": "/tmp/shared-artifact",
+            },
+            "execution_mode": "reused_cached_artifact",
+            "cached_benchmark_results_path": "/tmp/results.json",
+            "cached_benchmark_report_path": "/tmp/report.md",
+        },
+    )
+
+    exit_code = testlane.main(["agent-tests"])
+
+    captured = capsys.readouterr()
+    assert exit_code == 0
+    assert "== agent_test ==" in captured.out
+    assert "execution_mode=reused_cached_artifact" in captured.out
+    assert "difficulty_scores" in captured.out
+    assert "family_scores" in captured.out
+    assert "cache_replay_mode=full_artifact_reuse" in captured.out
+    assert "top_failure_categories={'verification_failure': 14, 'wrong_tool': 6}" in captured.out
+    assert "cached_benchmark_results_path=/tmp/results.json" in captured.out
+
+
+def test_testprofile_combined_prints_code_correctness_then_benchmark(monkeypatch, tmp_path: Path, capsys) -> None:
+    monkeypatch.setattr(testlane, "_OUTPUT_ROOT", tmp_path)
+    monkeypatch.setattr(
+        testlane,
+        "run_test_category_evaluation",
+        lambda *, output_dir, clean=False: {
+            "code_correctness_binary_passed": True,
+            "code_correctness": {
+                "summary": {
+                    "executed_tests": 10,
+                    "passed_tests": 10,
+                    "failed_tests": 0,
+                    "skipped_tests": 0,
+                    "percent": 100.0,
+                },
+                "exit_code": 0,
+            },
+            "agent_test": {
+                "summary": {"total_tasks": 53, "successful_tasks": 7, "failed_tasks": 46, "false_positives": 9},
+                "score_summary": {
+                    "group_average_percent": 31.5,
+                    "full_task_success_percent": 13.21,
+                    "difficulty_group_average_percent": 30.2,
+                    "family_group_average_percent": 32.8,
+                    "average_task_score_percent": 28.4,
+                    "detailed_substep_score_note": "omitted",
+                    "group_scores_by_difficulty": {"hard": 18.0},
+                    "group_scores_by_family": {"coding": 41.0},
+                },
+                "aggregate_metrics": {},
+                "run_metadata": {},
+            },
+        },
+    )
+
+    exit_code = testlane.main(["combined"])
+
+    captured = capsys.readouterr()
+    assert exit_code == 0
+    assert captured.out.index("== code_correctness ==") < captured.out.index("== agent_test ==")

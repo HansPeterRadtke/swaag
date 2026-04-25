@@ -237,7 +237,26 @@ def _copy_cached_full_catalog(cache_dir: Path, output_dir: Path) -> dict[str, An
     if report_path.exists():
         write_text(report_path, report_path.read_text(encoding="utf-8").replace(old_root, new_root), encoding="utf-8")
     payload = json.loads(results_text)
-    payload.setdefault("run_metadata", {})["artifact_reused_from"] = str(cache_dir)
+    run_metadata = payload.setdefault("run_metadata", {})
+    seed_cache_mode_counts: dict[str, int] = {}
+    task_cache_mode_counts: dict[str, int] = {}
+    for task in payload.get("tasks", []):
+        seed_modes = set()
+        for seed_result in task.get("metrics", {}).get("seed_results", []):
+            if not isinstance(seed_result, dict):
+                continue
+            replay_cache = seed_result.get("replay_cache", {})
+            mode = str(replay_cache.get("cache_mode") or ("replay" if replay_cache.get("cassette_path") else "uncached"))
+            seed_modes.add(mode)
+        task_mode = "uncached" if not seed_modes else (next(iter(seed_modes)) if len(seed_modes) == 1 else "mixed")
+        task_cache_mode_counts[task_mode] = task_cache_mode_counts.get(task_mode, 0) + 1
+        for mode in seed_modes or {"uncached"}:
+            seed_cache_mode_counts[mode] = seed_cache_mode_counts.get(mode, 0) + 1
+    run_metadata["artifact_reused_from"] = str(cache_dir)
+    run_metadata.setdefault("results_path", str(results_path))
+    run_metadata.setdefault("report_path", str(report_path))
+    run_metadata.setdefault("seed_cache_mode_counts", dict(sorted(seed_cache_mode_counts.items())))
+    run_metadata.setdefault("task_cache_mode_counts", dict(sorted(task_cache_mode_counts.items())))
     return payload
 
 
@@ -287,6 +306,8 @@ def _seed_full_catalog_replay_cache(output_dir: Path, benchmark_task_ids: Sequen
 def _render_agent_test_category_report(payload: dict[str, Any]) -> str:
     summary = payload["summary"]
     scores = payload["score_summary"]
+    aggregate_metrics = payload.get("aggregate_metrics", {})
+    run_metadata = payload.get("run_metadata", {})
     lines = [
         "# Agent Test Benchmark Report",
         "",
@@ -318,6 +339,18 @@ def _render_agent_test_category_report(payload: dict[str, Any]) -> str:
             "",
             f"- detailed_results: `{payload['cached_benchmark_results_path']}`",
             f"- detailed_report: `{payload['cached_benchmark_report_path']}`",
+            "",
+            "## Cache / Replay Summary",
+            "",
+            f"- seed_cache_mode_counts: `{run_metadata.get('seed_cache_mode_counts', {})}`",
+            f"- task_cache_mode_counts: `{run_metadata.get('task_cache_mode_counts', {})}`",
+            f"- artifact_reused_from: `{run_metadata.get('artifact_reused_from', '')}`",
+            "",
+            "## Top Failure Diagnostics",
+            "",
+            f"- failure_breakdown: `{aggregate_metrics.get('failure_breakdown', {})}`",
+            f"- verifier_weakness_breakdown: `{aggregate_metrics.get('verifier_weakness_breakdown', {})}`",
+            f"- prompt_understanding_mistakes: `{aggregate_metrics.get('prompt_understanding_mistakes', {})}`",
             "",
         ]
     )
@@ -362,6 +395,7 @@ def run_agent_test_category(
             agent_behavior_mode="cached",
         )
         execution_mode = "executed_cached_benchmark"
+    benchmark_report.setdefault("run_metadata", {})["execution_mode"] = execution_mode
     payload = {
         "category": "agent_test",
         "status": "complete",

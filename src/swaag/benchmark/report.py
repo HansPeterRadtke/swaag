@@ -33,6 +33,23 @@ def render_benchmark_report(report) -> str:
         for key, value in run_metadata.items():
             lines.append(f"- `{key}`: `{value}`")
         lines.append("")
+    cache_summary = {
+        "seed_cache_mode_counts": run_metadata.get("seed_cache_mode_counts", {}),
+        "task_cache_mode_counts": run_metadata.get("task_cache_mode_counts", {}),
+        "replay_cache_root": run_metadata.get("replay_cache_root", ""),
+        "replay_cache_policy": run_metadata.get("replay_cache_policy", ""),
+        "artifact_reused_from": run_metadata.get("artifact_reused_from", ""),
+    }
+    lines.extend(["## Cache / Replay Summary", ""])
+    added_cache_line = False
+    for key, value in cache_summary.items():
+        if value in ({}, "", None):
+            continue
+        lines.append(f"- `{key}`: `{value}`")
+        added_cache_line = True
+    if not added_cache_line:
+        lines.append("- none")
+    lines.append("")
     lines.extend(
         [
             "## Summary",
@@ -88,6 +105,27 @@ def render_benchmark_report(report) -> str:
     lines.extend(_kv_lines("Coverage By Difficulty", metrics.coverage_by_difficulty))
     lines.extend(_kv_lines("Per-Seed Success", metrics.benchmark_specific.get("seed_success_by_seed", {})))
     lines.extend(_kv_lines("Per-Seed False Positives", metrics.benchmark_specific.get("seed_false_positive_by_seed", {})))
+    lines.extend(_kv_lines("Failure Categories", summary.failure_breakdown))
+
+    lines.extend(["## Top Failure Diagnostics", ""])
+    top_failure_categories = list(summary.failure_breakdown.items())[:5]
+    top_verifier_weaknesses = list(metrics.verifier_weakness_breakdown.items())[:5]
+    top_understanding_mistakes = list(metrics.prompt_understanding_mistakes.items())[:5]
+    if top_failure_categories:
+        lines.append("- Failure categories:")
+        for name, count in top_failure_categories:
+            lines.append(f"  - `{name}`: `{count}`")
+    if top_verifier_weaknesses:
+        lines.append("- Verifier weaknesses:")
+        for name, count in top_verifier_weaknesses:
+            lines.append(f"  - `{name}`: `{count}`")
+    if top_understanding_mistakes:
+        lines.append("- Understanding mistakes:")
+        for name, count in top_understanding_mistakes:
+            lines.append(f"  - `{name}`: `{count}`")
+    if not top_failure_categories and not top_verifier_weaknesses and not top_understanding_mistakes:
+        lines.append("- none")
+    lines.append("")
 
     false_positives = [item for item in report.tasks if item.false_positive]
     lines.extend(["## False Positive Analysis", ""])
@@ -166,6 +204,11 @@ def render_benchmark_report(report) -> str:
                     f"- Difficulty: `{item.difficulty}`",
                     f"- Score: `{item.score_percent:.2f}%`",
                     f"- Success: `{item.success}`",
+                    f"- Failure category: `{item.failure_category}`",
+                    f"- Failure subsystem: `{item.failure_subsystem}`",
+                    f"- Verification reason: `{item.verification_summary.get('reason')}`",
+                    f"- Verification type: `{item.metrics.get('verification_trace', {}).get('verification_type_used', '')}`",
+                    f"- Cache mode: `{item.metrics.get('cache_mode_summary', '')}`",
                 ]
             )
             if item.rubric_breakdown:

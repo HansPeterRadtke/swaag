@@ -67,6 +67,29 @@ class BenchmarkRunReport:
     score_weights: dict[str, float] = field(default_factory=lambda: dict(TASK_SCORE_COMPONENT_WEIGHTS))
 
 
+def _cache_transparency_summary(tasks: list[BenchmarkTaskResult]) -> tuple[dict[str, int], dict[str, int]]:
+    seed_cache_mode_counts: dict[str, int] = {}
+    task_cache_mode_counts: dict[str, int] = {}
+    for task in tasks:
+        seed_modes = set()
+        for seed_result in task.metrics.get("seed_results", []):
+            if not isinstance(seed_result, dict):
+                continue
+            replay_cache = seed_result.get("replay_cache", {})
+            mode = str(replay_cache.get("cache_mode") or ("replay" if replay_cache.get("cassette_path") else "uncached"))
+            seed_modes.add(mode)
+        if not seed_modes:
+            task_mode = "uncached"
+        elif len(seed_modes) == 1:
+            task_mode = next(iter(seed_modes))
+        else:
+            task_mode = "mixed"
+        task_cache_mode_counts[task_mode] = task_cache_mode_counts.get(task_mode, 0) + 1
+        for mode in seed_modes or {"uncached"}:
+            seed_cache_mode_counts[mode] = seed_cache_mode_counts.get(mode, 0) + 1
+    return dict(sorted(seed_cache_mode_counts.items())), dict(sorted(task_cache_mode_counts.items()))
+
+
 class ResultCollector:
     def __init__(self) -> None:
         self._results: list[BenchmarkTaskResult] = []
@@ -176,9 +199,16 @@ class ResultCollector:
     def write(self, output_dir: Path, *, prefix: str = "benchmark", run_metadata: dict[str, Any] | None = None) -> BenchmarkRunReport:
         os.makedirs(output_dir, exist_ok=True)
         report = self.build_report()
-        report.run_metadata = {} if run_metadata is None else dict(run_metadata)
         results_path = output_dir / f"{prefix}_results.json"
         report_path = output_dir / f"{prefix}_report.md"
+        seed_cache_mode_counts, task_cache_mode_counts = _cache_transparency_summary(report.tasks)
+        report.run_metadata = {
+            **({} if run_metadata is None else dict(run_metadata)),
+            "results_path": str(results_path),
+            "report_path": str(report_path),
+            "seed_cache_mode_counts": seed_cache_mode_counts,
+            "task_cache_mode_counts": task_cache_mode_counts,
+        }
         results_fd = os.open(results_path, os.O_WRONLY | os.O_CREAT | os.O_TRUNC, 0o644)
         try:
             os.write(results_fd, (stable_json_dumps(asdict(report), indent=2) + "\n").encode("utf-8"))

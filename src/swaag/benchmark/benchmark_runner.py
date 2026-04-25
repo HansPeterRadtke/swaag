@@ -12,6 +12,7 @@ from typing import Any, Sequence
 from swaag.benchmark.failure_analyzer import FailureAnalyzer
 from swaag.benchmark import external as external_benchmarks
 from swaag.benchmark.result_collector import BenchmarkTaskResult, ResultCollector
+from swaag.benchmark.scoring import build_task_rubric
 from swaag.benchmark.scaled_catalog import generated_live_subset_tasks, validate_live_subset_catalog
 from swaag.benchmark.system_suite import get_system_benchmark_families, run_system_benchmarks
 from swaag.benchmark.task_definitions import (
@@ -338,12 +339,48 @@ def _print_benchmark_progress(*, current: int, total: int, task: BenchmarkTaskDe
     )
 
 
+def _planned_cache_mode(output_dir: Path, task: BenchmarkTaskDefinition, seeds: Sequence[int], *, cached: bool) -> str:
+    if not cached:
+        return "uncached"
+    modes = []
+    for seed in seeds:
+        cassette_path = output_dir / "replay_cache" / task.task_id / f"seed_{seed}.json"
+        modes.append("replay" if cassette_path.exists() else "record")
+    return modes[0] if len(set(modes)) == 1 else "mixed"
+
+
+def _actual_cache_mode(seed_results: Sequence[dict[str, Any]], *, cached: bool) -> str:
+    if not cached:
+        return "uncached"
+    modes = {
+        str(seed_result.get("replay_cache", {}).get("cache_mode", "uncached"))
+        for seed_result in seed_results
+        if isinstance(seed_result, dict)
+    }
+    if not modes:
+        return "uncached"
+    return next(iter(modes)) if len(modes) == 1 else "mixed"
+
+
+def _print_group_lines(*, title: str, mapping: dict[str, Any]) -> None:
+    if not mapping:
+        return
+    print(title, flush=True)
+    for key, value in mapping.items():
+        if isinstance(value, float):
+            print(f"  {key}={value:.2f}", flush=True)
+        else:
+            print(f"  {key}={value}", flush=True)
+
+
 def _print_benchmark_summary(report: dict[str, Any]) -> None:
     summary = report.get("summary", {})
     aggregate_metrics = report.get("aggregate_metrics", {})
     family_scores = dict(summary.get("score_by_family", {}))
     difficulty_scores = dict(summary.get("score_by_difficulty", {}))
+    run_metadata = report.get("run_metadata", {})
     print("agent_test_summary", flush=True)
+    print(f"  execution_mode={run_metadata.get('execution_mode', 'executed_cached_benchmark')}", flush=True)
     print(f"  total_tasks={summary.get('total_tasks', 0)}", flush=True)
     print(f"  successful_tasks={summary.get('successful_tasks', 0)}", flush=True)
     print(f"  failed_tasks={summary.get('failed_tasks', 0)}", flush=True)
@@ -360,16 +397,72 @@ def _print_benchmark_summary(report: dict[str, Any]) -> None:
     )
     print(f"  average_task_score_percent={float(summary.get('average_task_score_percent', 0.0)):.2f}", flush=True)
     print("  detailed_substep_score=omitted_unreliable", flush=True)
-    if difficulty_scores:
-        print(f"  group_scores_by_difficulty={stable_json_dumps(dict(sorted(difficulty_scores.items())))}", flush=True)
-    if family_scores:
-        print(f"  group_scores_by_family={stable_json_dumps(dict(sorted(family_scores.items())))}", flush=True)
+    _print_group_lines(title="difficulty_scores", mapping=dict(sorted(difficulty_scores.items())))
+    _print_group_lines(title="family_scores", mapping=dict(sorted(family_scores.items())))
     primary = aggregate_metrics.get("primary", {})
     if primary:
         print(
             f"  task_success_rate={float(primary.get('task_success_rate', 0.0)) * 100.0:.2f}",
             flush=True,
         )
+    cache_seed_counts = run_metadata.get("seed_cache_mode_counts", {})
+    cache_task_counts = run_metadata.get("task_cache_mode_counts", {})
+    if cache_seed_counts:
+        print(f"  seed_cache_mode_counts={stable_json_dumps(cache_seed_counts)}", flush=True)
+    if cache_task_counts:
+        print(f"  task_cache_mode_counts={stable_json_dumps(cache_task_counts)}", flush=True)
+    if run_metadata.get("artifact_reused_from"):
+        print(f"  artifact_reused_from={run_metadata['artifact_reused_from']}", flush=True)
+    if run_metadata.get("results_path"):
+        print(f"  results_path={run_metadata['results_path']}", flush=True)
+    if run_metadata.get("report_path"):
+        print(f"  report_path={run_metadata['report_path']}", flush=True)
+    failure_breakdown = dict(summary.get("failure_breakdown", {})) or dict(aggregate_metrics.get("failure_breakdown", {}))
+    verifier_weakness = dict(aggregate_metrics.get("verifier_weakness_breakdown", {}))
+    understanding_mistakes = dict(aggregate_metrics.get("prompt_understanding_mistakes", {}))
+    if failure_breakdown:
+        print(f"  top_failure_categories={stable_json_dumps(dict(sorted(failure_breakdown.items())[:5]))}", flush=True)
+    if verifier_weakness:
+        print(f"  top_verifier_weaknesses={stable_json_dumps(dict(sorted(verifier_weakness.items(), key=lambda item: (-item[1], item[0]))[:5]))}", flush=True)
+    if understanding_mistakes:
+        print(f"  top_understanding_mistakes={stable_json_dumps(dict(sorted(understanding_mistakes.items(), key=lambda item: (-item[1], item[0]))[:5]))}", flush=True)
+
+
+def _print_agent_test_category_cli_summary(report: dict[str, Any]) -> None:
+    score_summary = report["score_summary"]
+    run_metadata = report.get("run_metadata", {})
+    aggregate_metrics = report.get("aggregate_metrics", {})
+    print("agent_test_category_summary", flush=True)
+    print(f"  execution_mode={report.get('execution_mode', 'executed_cached_benchmark')}", flush=True)
+    print(f"  total_tasks={report['summary']['total_tasks']}", flush=True)
+    print(f"  successful_tasks={report['summary']['successful_tasks']}", flush=True)
+    print(f"  failed_tasks={report['summary']['failed_tasks']}", flush=True)
+    print(f"  false_positives={report['summary']['false_positives']}", flush=True)
+    print(f"  full_task_success_percent={score_summary['full_task_success_percent']:.2f}", flush=True)
+    print(f"  group_average_percent={score_summary['group_average_percent']:.2f}", flush=True)
+    print(f"  difficulty_group_average_percent={score_summary['difficulty_group_average_percent']:.2f}", flush=True)
+    print(f"  family_group_average_percent={score_summary['family_group_average_percent']:.2f}", flush=True)
+    print(f"  average_task_score_percent={score_summary['average_task_score_percent']:.2f}", flush=True)
+    print(f"  detailed_substep_score={score_summary['detailed_substep_score_note']}", flush=True)
+    _print_group_lines(title="difficulty_scores", mapping=score_summary.get("group_scores_by_difficulty", {}))
+    _print_group_lines(title="family_scores", mapping=score_summary.get("group_scores_by_family", {}))
+    if run_metadata.get("seed_cache_mode_counts"):
+        print(f"  seed_cache_mode_counts={stable_json_dumps(run_metadata['seed_cache_mode_counts'])}", flush=True)
+    if run_metadata.get("task_cache_mode_counts"):
+        print(f"  task_cache_mode_counts={stable_json_dumps(run_metadata['task_cache_mode_counts'])}", flush=True)
+    if run_metadata.get("artifact_reused_from"):
+        print(f"  artifact_reused_from={run_metadata['artifact_reused_from']}", flush=True)
+    failure_breakdown = aggregate_metrics.get("failure_breakdown", {})
+    verifier_weakness = aggregate_metrics.get("verifier_weakness_breakdown", {})
+    if failure_breakdown:
+        print(f"  top_failure_categories={stable_json_dumps(failure_breakdown)}", flush=True)
+    if verifier_weakness:
+        print(
+            f"  top_verifier_weaknesses={stable_json_dumps(dict(sorted(verifier_weakness.items(), key=lambda item: (-item[1], item[0]))[:5]))}",
+            flush=True,
+        )
+    print(f"  cached_benchmark_results_path={report['cached_benchmark_results_path']}", flush=True)
+    print(f"  cached_benchmark_report_path={report['cached_benchmark_report_path']}", flush=True)
 
 
 def run_benchmarks(
@@ -427,7 +520,18 @@ def run_benchmarks(
 
     total_tasks = len(selected_tasks)
     for task_index, task in enumerate(selected_tasks, start=1):
-        _print_benchmark_progress(current=task_index - 1, total=total_tasks, task=task, status="running")
+        planned_cache_mode = _planned_cache_mode(
+            output_dir,
+            task,
+            effective_seeds,
+            cached=resolved_agent_behavior_mode == "cached",
+        )
+        _print_benchmark_progress(
+            current=task_index - 1,
+            total=total_tasks,
+            task=task,
+            status=f"running cache={planned_cache_mode}",
+        )
         seed_results: list[dict[str, Any]] = []
         aggregate_success = True
         aggregate_false_positive = False
@@ -558,6 +662,10 @@ def run_benchmarks(
                     "seed_success_count": sum(1 for item in seed_results if item["success"]),
                     "seed_false_positive_count": sum(1 for item in seed_results if item["false_positive"]),
                     "seed_variation": len({item["success"] for item in seed_results}) > 1 or len({item["assistant_text"] for item in seed_results}) > 1,
+                    "cache_mode_summary": _actual_cache_mode(
+                        seed_results,
+                        cached=resolved_agent_behavior_mode == "cached",
+                    ),
                 },
                 failure_category=aggregate_failure.category if aggregate_failure is not None else None,
                 failure_reason=aggregate_failure.reason if aggregate_failure is not None else None,
@@ -568,11 +676,22 @@ def run_benchmarks(
                 workspace=aggregate_workspace_paths[0] if aggregate_workspace_paths else "",
             )
         )
+        task_score_percent, _ = build_task_rubric(
+            success=aggregate_success,
+            verification_summary=aggregate_verification_summary or {"checks": {}, "evidence": {}, "reason": ""},
+            quality_summary=aggregate_quality_summary or {"passed": True, "checks": {}, "evidence": {}, "oracle": {}},
+        )
+        failure_label = aggregate_failure.category if aggregate_failure is not None else "none"
+        verification_type = trace_metrics.get("verification_trace", {}).get("verification_type_used", "")
         _print_benchmark_progress(
             current=task_index,
             total=total_tasks,
             task=task,
-            status=f"finished success={aggregate_success} false_positive={aggregate_false_positive}",
+            status=(
+                f"finished success={aggregate_success} false_positive={aggregate_false_positive} "
+                f"score={task_score_percent:.1f} failure={failure_label} "
+                f"verification_type={verification_type or 'unknown'} cache={_actual_cache_mode(seed_results, cached=resolved_agent_behavior_mode == 'cached')}"
+            ),
         )
     if resolved_agent_behavior_mode == "cached":
         artifact_prefix = "agent_test_cached"
@@ -582,6 +701,7 @@ def run_benchmarks(
         output_dir,
         prefix=artifact_prefix,
         run_metadata={
+            "execution_mode": "executed_cached_benchmark",
             "mode": "live_subset" if live_subset else "full",
             "use_live_model": use_live_model,
             "agent_behavior_mode": resolved_agent_behavior_mode or "",
@@ -717,11 +837,7 @@ def main(argv: Sequence[str] | None = None) -> int:
         if args.json:
             print(stable_json_dumps(report, indent=2))
         else:
-            score_summary = report["score_summary"]
-            print(f"group_average_percent={score_summary['group_average_percent']}")
-            print(f"full_task_success_percent={score_summary['full_task_success_percent']}")
-            print(f"average_task_score_percent={score_summary['average_task_score_percent']}")
-            print(f"cached_benchmark_results_path={report['cached_benchmark_results_path']}")
+            _print_agent_test_category_cli_summary(report)
         return 0
     if args.command == "test-categories":
         from swaag.benchmark.evaluation_runner import run_test_category_evaluation
@@ -738,10 +854,7 @@ def main(argv: Sequence[str] | None = None) -> int:
             print(f"code_correctness_percent={report['code_correctness']['summary']['percent']}")
             print(f"agent_test_ran={report['agent_test_ran']}")
             if report.get("agent_test"):
-                score_summary = report["agent_test"]["score_summary"]
-                print(f"agent_test_group_average_percent={score_summary['group_average_percent']}")
-                print(f"agent_test_full_task_success_percent={score_summary['full_task_success_percent']}")
-                print(f"agent_test_average_task_score_percent={score_summary['average_task_score_percent']}")
+                _print_agent_test_category_cli_summary(report["agent_test"])
             if report.get("skip_reason"):
                 print(f"skip_reason={report['skip_reason']}")
         return 0 if report["code_correctness_binary_passed"] else 1

@@ -40,7 +40,15 @@ def test_render_benchmark_report_includes_quality_sections() -> None:
             planning_mistakes={},
             improvement_priorities=[{"name": "evaluator_mistake", "count": 1, "kind": "failure_class"}],
         ),
-        run_metadata={"mode": "full", "wall_clock_seconds": 1.0},
+        run_metadata={
+            "mode": "full",
+            "wall_clock_seconds": 1.0,
+            "results_path": "/tmp/benchmark_results.json",
+            "report_path": "/tmp/benchmark_report.md",
+            "seed_cache_mode_counts": {"replay": 1},
+            "task_cache_mode_counts": {"replay": 1},
+            "replay_cache_root": "/tmp/replay_cache",
+        },
         improvement_hints=["Tighten evaluator evidence thresholds."],
         tasks=[
             BenchmarkTaskResult(
@@ -99,3 +107,6 @@ def test_render_benchmark_report_includes_quality_sections() -> None:
     assert "coding_patch" in text
     assert "Score By Difficulty Tier" in text
     assert "Per-Task Scores" in text
+    assert "Cache / Replay Summary" in text
+    assert "Top Failure Diagnostics" in text
+    assert "/tmp/benchmark_results.json" in text
