@@ -115,7 +115,8 @@ quality directly instead of a pytest wrapper status.
 The authoritative cached benchmark catalog behind `agent_test` is full-catalog
 and record-replay backed. It currently contains 50 realistic tasks across six
 families (`coding`, `file_edit`, `reading`, `multi_step`, `failure`, `quality`)
-and all five difficulty tiers, with 10 tasks per tier. Verifiers are
+and all five difficulty tiers, with intentionally asymmetric tier counts so the
+hardest tiers can carry richer scenarios instead of symmetrical filler. Verifiers are
 programmatic: executable test commands, exact file expectations, structured JSON
 checks, allowed-modified-file locks, and anti-tamper guards carry the benchmark
 instead of hidden scripted model answers.

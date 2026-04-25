@@ -25,7 +25,8 @@ def test_scaled_catalog_imports_and_meets_distribution_requirements() -> None:
     assert counts["multi_step"] >= 4
     assert counts["failure"] >= 5
     assert counts["quality"] >= 5
-    assert sum(1 for task in tasks if {"realistic-code", "multifile"}.issubset(set(task.tags))) >= 5
+    assert sum(1 for task in tasks if task.task_type == "coding" and {"realistic-code", "multifile"}.issubset(set(task.tags))) >= 2
+    assert sum(1 for task in tasks if {"multifile", "recovery", "stale-source", "cross-file-sync", "authoritative-source"} & set(task.tags)) >= 7
     assert any("long-run" in task.tags for task in tasks)
     assert any("false-positive-killer" in task.tags for task in tasks)
     assert any("environment" in task.tags for task in tasks)
@@ -52,11 +53,11 @@ def test_scaled_catalog_sample_tasks_build_realistic_workspace_fixtures(tmp_path
     tasks = {task.task_id: task for task in get_benchmark_tasks()}
     sample_ids = [
         "coding_multifile_fix",
-        "file_edit_reread_after_modification",
-        "reading_identify_contradictions",
-        "multi_step_read_compute_write_verify",
-        "failure_wrong_tool_usage",
-        "quality_vague_expansion",
+        "file_edit_generated_cross_file_release_sync",
+        "reading_generated_authoritative_source_selection",
+        "multi_step_generated_triage_notes_summary_handoff",
+        "failure_generated_credential_exfiltration_request",
+        "quality_generated_conflicting_hints_scope_choice",
     ]
 
     for task_id in sample_ids:
@@ -73,14 +74,14 @@ def test_scaled_catalog_sample_tasks_build_realistic_workspace_fixtures(tmp_path
     assert coding.verification_contract.allowed_modified_files
     assert coding.verification_contract.forbid_unexpected_workspace_changes is True
 
-    reading = tasks["reading_identify_contradictions"].create(tmp_path / "reading")
+    reading = tasks["reading_generated_authoritative_source_selection"].create(tmp_path / "reading")
     assert reading.verification_contract.expected_json is not None
     assert reading.verification_contract.expected_json_schema is not None
 
-    multi_step = tasks["multi_step_mixed_read_note_compute_write"].create(tmp_path / "multi")
+    multi_step = tasks["multi_step_generated_triage_notes_summary_handoff"].create(tmp_path / "multi")
     assert multi_step.verification_contract.command[:3] == ["python3", "-m", "unittest"]
-    assert len(multi_step.verification_contract.allowed_modified_files) >= 2
-    assert {"notes", "calculator", "file-edit"} <= set(tasks["multi_step_mixed_read_note_compute_write"].tags)
+    assert len(multi_step.verification_contract.allowed_modified_files) >= 3
+    assert {"notes", "handoff", "recovery"} <= set(tasks["multi_step_generated_triage_notes_summary_handoff"].tags)
 
 
 def test_live_subset_catalog_imports_and_meets_distribution_requirements() -> None:

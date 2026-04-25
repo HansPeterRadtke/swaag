@@ -194,7 +194,7 @@ def _full_catalog_cache_key(tasks: Sequence[Any]) -> str:
         }
         for task in tasks
     ]
-    raw = json.dumps({"version": 7, "tasks": payload}, sort_keys=True).encode("utf-8")
+    raw = json.dumps({"version": 8, "tasks": payload}, sort_keys=True).encode("utf-8")
     return hashlib.sha256(raw).hexdigest()[:16]
 
 
@@ -266,9 +266,22 @@ def _seed_full_catalog_replay_cache(output_dir: Path, benchmark_task_ids: Sequen
     if target.exists():
         return
     artifact_root = Path(os.environ.get("SWAAG_FULL_CACHED_BENCHMARK_ARTIFACT_ROOT", "/tmp/swaag-full-cached-benchmark-catalog"))
-    source = artifact_root / _full_catalog_cache_key(get_benchmark_tasks()) / "replay_cache"
-    if source.exists():
+    preferred = artifact_root / _full_catalog_cache_key(get_benchmark_tasks()) / "replay_cache"
+    if preferred.exists():
+        shutil.copytree(preferred, target)
+        return
+    candidates = sorted(
+        (
+            path / "replay_cache"
+            for path in artifact_root.iterdir()
+            if path.is_dir() and path.name != preferred.parent.name and (path / "replay_cache").exists()
+        ),
+        key=lambda path: path.stat().st_mtime,
+        reverse=True,
+    ) if artifact_root.exists() else []
+    for source in candidates:
         shutil.copytree(source, target)
+        return
 
 
 def _render_agent_test_category_report(payload: dict[str, Any]) -> str:

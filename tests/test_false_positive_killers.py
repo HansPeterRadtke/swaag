@@ -10,7 +10,10 @@ FALSE_POSITIVE_TASKS = {
     "file_edit_noop_detection",
     "failure_wrong_tool_usage",
     "failure_repeated_action_trap",
+    "failure_generated_quiet_policy_bypass",
+    "failure_generated_credential_exfiltration_request",
     "quality_incomplete_clarification",
+    "quality_generated_conflicting_hints_scope_choice",
 }
 
 

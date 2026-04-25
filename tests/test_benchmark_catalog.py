@@ -17,7 +17,8 @@ def test_benchmark_catalog_is_large_diverse_and_valid() -> None:
     assert counts["multi_step"] >= 8
     assert counts["failure"] >= 8
     assert counts["quality"] >= 8
-    assert sum(1 for task in tasks if {"realistic-code", "multifile"}.issubset(set(task.tags))) >= 5
+    assert sum(1 for task in tasks if task.task_type == "coding" and {"realistic-code", "multifile"}.issubset(set(task.tags))) >= 2
+    assert sum(1 for task in tasks if {"multifile", "recovery", "stale-source", "cross-file-sync", "authoritative-source"} & set(task.tags)) >= 9
     assert any("long-run" in task.tags for task in tasks)
     assert any("false-positive-killer" in task.tags for task in tasks)
     assert any("environment" in task.tags for task in tasks)
@@ -71,32 +72,31 @@ def test_benchmark_catalog_uses_programmatic_verification_and_anti_tamper_contra
 def test_benchmark_catalog_preserves_family_specific_task_shapes(tmp_path) -> None:
     tasks = {task.task_id: task for task in get_benchmark_tasks()}
 
-    coding = tasks["coding_generated_multifile_02"].create(tmp_path / "coding")
+    coding = tasks["coding_generated_compat_matrix_backfill"].create(tmp_path / "coding")
     coding_files = {path.name for path in coding.workspace.rglob("*") if path.is_file()}
-    assert "release_settings.json" in coding_files
-    assert "release_notes.txt" in coding_files
-    assert any(name.endswith("_unit.py") for name in coding_files)
-    assert any(name.endswith("_compat.py") for name in coding_files)
-    assert any(name.endswith("_artifacts.py") for name in coding_files)
+    assert "compatibility_matrix.json" in coding_files
+    assert "compatibility_report.md" in coding_files
+    assert any(name.endswith("_compatibility.py") for name in coding_files)
+    assert any(name.endswith("_report.py") for name in coding_files)
     assert coding.verification_contract.required_tools_used == ["run_tests"]
 
-    reading = tasks["reading_generated_hallucination_guard_04"].create(tmp_path / "reading")
+    reading = tasks["reading_generated_stale_note_null_guard"].create(tmp_path / "reading")
     reading_files = {path.name for path in reading.workspace.rglob("*") if path.is_file()}
-    assert {"facts.json", "roadmap.md", "stale_note.txt"} <= reading_files
+    assert {"release_facts.json", "approvals.md", "stale_note.txt"} <= reading_files
 
-    shell_flow = tasks["multi_step_environment_shell_persistence"].create(tmp_path / "shell")
+    shell_flow = tasks["multi_step_generated_shell_capture_and_verify"].create(tmp_path / "shell")
     shell_files = {path.name for path in shell_flow.workspace.rglob("*") if path.is_file()}
     assert {"release.env", "capture_release.sh", "shell_release_summary.txt"} <= shell_files
     assert "shell_command" in shell_flow.verification_contract.required_tools_used
 
-    failure = tasks["failure_generated_bad_plan_02"].create(tmp_path / "failure")
+    failure = tasks["failure_generated_invalid_migration_plan"].create(tmp_path / "failure")
     failure_files = {path.name for path in failure.workspace.rglob("*") if path.is_file()}
     assert "requested_plan.md" in failure_files
     assert {"shell_command", "edit_text", "write_file"} <= set(failure.verification_contract.forbidden_tools_used)
 
-    quality = tasks["quality_generated_incomplete_04"].create(tmp_path / "quality")
+    quality = tasks["quality_generated_conflicting_hints_scope_choice"].create(tmp_path / "quality")
     quality_files = {path.name for path in quality.workspace.rglob("*") if path.is_file()}
-    assert {"request.txt", "ticket.md"} <= quality_files
+    assert {"request.txt", "context.txt"} <= quality_files
     assert {"write_file", "edit_text", "run_tests"} <= set(quality.verification_contract.forbidden_tools_used)
 
 

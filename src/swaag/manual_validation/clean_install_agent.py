@@ -21,7 +21,7 @@ def test_package_runs_single_benchmark_task_from_clean_venv(tmp_path: Path) -> N
                 "run",
                 "--clean",
                 "--task",
-                "coding_generated_multifile_01",
+                "coding_generated_release_train_consistency",
                 "--output",
                 str(tmp_path / "single_benchmark_output"),
                 "--json",
@@ -38,4 +38,3 @@ def test_package_runs_single_benchmark_task_from_clean_venv(tmp_path: Path) -> N
     finally:
         server.shutdown()
         thread.join(timeout=5)
-

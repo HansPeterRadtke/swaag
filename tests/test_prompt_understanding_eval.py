@@ -8,9 +8,11 @@ from swaag.benchmark.task_definitions import get_benchmark_tasks
 
 UNDERSTANDING_TASKS = {
     "reading_debug_log_summary",
+    "reading_generated_authoritative_source_selection",
     "quality_vague_expansion",
     "quality_already_decomposed_prompt",
     "quality_incomplete_clarification",
+    "quality_generated_conflicting_hints_scope_choice",
 }
 
 

@@ -361,9 +361,9 @@ def _print_benchmark_summary(report: dict[str, Any]) -> None:
     print(f"  average_task_score_percent={float(summary.get('average_task_score_percent', 0.0)):.2f}", flush=True)
     print("  detailed_substep_score=omitted_unreliable", flush=True)
     if difficulty_scores:
-        print(f"  group_scores_by_difficulty={stable_json_dumps(difficulty_scores, sort_keys=True)}", flush=True)
+        print(f"  group_scores_by_difficulty={stable_json_dumps(dict(sorted(difficulty_scores.items())))}", flush=True)
     if family_scores:
-        print(f"  group_scores_by_family={stable_json_dumps(family_scores, sort_keys=True)}", flush=True)
+        print(f"  group_scores_by_family={stable_json_dumps(dict(sorted(family_scores.items())))}", flush=True)
     primary = aggregate_metrics.get("primary", {})
     if primary:
         print(

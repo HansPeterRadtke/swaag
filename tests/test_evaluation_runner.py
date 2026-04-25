@@ -5,11 +5,13 @@ from pathlib import Path
 
 from swaag.benchmark import benchmark_runner
 from swaag.benchmark.evaluation_runner import (
+    _full_catalog_cache_key,
     run_agent_test_category,
     run_code_correctness_category,
     run_full_evaluation,
     run_test_category_evaluation,
 )
+from swaag.benchmark.task_definitions import get_benchmark_tasks
 from swaag.manual_validation.runner import run_manual_validation
 
 
@@ -89,7 +91,7 @@ def test_run_agent_test_category_writes_real_benchmark_reports(monkeypatch, tmp_
 
 def test_run_agent_test_category_seeds_shared_replay_cache_when_available(monkeypatch, tmp_path: Path) -> None:
     artifact_root = tmp_path / "artifact-root"
-    cache_dir = artifact_root / "4645882b669db1f5" / "replay_cache" / "demo_task"
+    cache_dir = artifact_root / _full_catalog_cache_key(get_benchmark_tasks()) / "replay_cache" / "demo_task"
     cache_dir.mkdir(parents=True)
     (cache_dir / "seed_42.json").write_text("{}", encoding="utf-8")
     monkeypatch.setenv("SWAAG_FULL_CACHED_BENCHMARK_ARTIFACT_ROOT", str(artifact_root))
@@ -105,7 +107,7 @@ def test_run_agent_test_category_seeds_shared_replay_cache_when_available(monkey
 
 
 def test_run_agent_test_category_reuses_valid_full_cached_artifact(monkeypatch, tmp_path: Path) -> None:
-    source = tmp_path / "artifact-root" / "4645882b669db1f5"
+    source = tmp_path / "artifact-root" / _full_catalog_cache_key(get_benchmark_tasks())
     source.mkdir(parents=True)
     (source / "agent_test_cached_results.json").write_text(
         """

@@ -23,7 +23,7 @@ def _full_catalog_cache_key(tasks: list[BenchmarkTaskDefinition]) -> str:
         }
         for task in tasks
     ]
-    raw = json.dumps({"version": 7, "tasks": payload}, sort_keys=True).encode("utf-8")
+    raw = json.dumps({"version": 8, "tasks": payload}, sort_keys=True).encode("utf-8")
     return hashlib.sha256(raw).hexdigest()[:16]
 
 
@@ -68,11 +68,31 @@ def _copy_cached_full_catalog(cache_dir: Path, output_dir: Path) -> dict:
     return json.loads(results_text)
 
 
+def _seed_partial_replay_cache(cache_dir: Path) -> None:
+    target = cache_dir / "replay_cache"
+    if target.exists():
+        return
+    artifact_root = Path(os.environ.get("SWAAG_FULL_CACHED_BENCHMARK_ARTIFACT_ROOT", "/tmp/swaag-full-cached-benchmark-catalog"))
+    candidates = sorted(
+        (
+            path / "replay_cache"
+            for path in artifact_root.iterdir()
+            if path.is_dir() and path != cache_dir and (path / "replay_cache").exists()
+        ),
+        key=lambda path: path.stat().st_mtime,
+        reverse=True,
+    ) if artifact_root.exists() else []
+    for source in candidates:
+        shutil.copytree(source, target)
+        return
+
+
 def _run_full_catalog_with_artifact_reuse(output_dir: Path, tasks: list[BenchmarkTaskDefinition]) -> dict:
     """Run the full cached catalog, reusing only valid full real-response cache artifacts."""
     cache_dir = Path(os.environ.get("SWAAG_FULL_CACHED_BENCHMARK_ARTIFACT_ROOT", "/tmp/swaag-full-cached-benchmark-catalog")) / _full_catalog_cache_key(tasks)
     if _valid_full_catalog_report(cache_dir / "agent_test_cached_results.json", tasks):
         return _copy_cached_full_catalog(cache_dir, output_dir)
+    _seed_partial_replay_cache(cache_dir)
     report = run_benchmarks(
         output_dir=cache_dir,
         clean=not cache_dir.exists(),
@@ -87,6 +107,19 @@ def _run_full_catalog_with_artifact_reuse(output_dir: Path, tasks: list[Benchmar
     if not _valid_full_catalog_report(cache_dir / "agent_test_cached_results.json", tasks):
         raise AssertionError("full cached benchmark catalog did not produce a valid real-response full-catalog report")
     return _copy_cached_full_catalog(cache_dir, output_dir)
+
+
+def test_full_catalog_helper_seeds_partial_replay_cache_from_previous_artifacts(monkeypatch, tmp_path: Path) -> None:
+    artifact_root = tmp_path / "artifacts"
+    old_cache = artifact_root / "older-cache" / "replay_cache" / "demo_task"
+    old_cache.mkdir(parents=True)
+    (old_cache / "seed_42.json").write_text("{}", encoding="utf-8")
+    monkeypatch.setenv("SWAAG_FULL_CACHED_BENCHMARK_ARTIFACT_ROOT", str(artifact_root))
+
+    cache_dir = artifact_root / "new-cache"
+    _seed_partial_replay_cache(cache_dir)
+
+    assert (cache_dir / "replay_cache" / "demo_task" / "seed_42.json").exists()
 
 
 def test_benchmark_runner_executes_full_cached_catalog_and_writes_reports(tmp_path: Path) -> None:
