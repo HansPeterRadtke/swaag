@@ -260,6 +260,8 @@ def _copy_cached_full_catalog(cache_dir: Path, output_dir: Path) -> dict[str, An
     return payload
 
 
+# DEV UTILITY ONLY: not called in the authoritative agent_test / combined / all paths.
+# May be used for manual inspection of previously cached full benchmark runs.
 def _reuse_full_catalog_benchmark_artifact(output_dir: Path, benchmark_task_ids: Sequence[str] | None, clean: bool) -> dict[str, Any] | None:
     if benchmark_task_ids:
         return None
@@ -303,6 +305,22 @@ def _seed_full_catalog_replay_cache(output_dir: Path, benchmark_task_ids: Sequen
         return
 
 
+def _cached_benchmark_run_settings() -> dict[str, Any]:
+    """Stable model settings for the authoritative cached benchmark run.
+
+    These must be consistent with the settings used in test_benchmark.py so that
+    LLM response cassettes recorded there are compatible with agent_test runs.
+    """
+    return {
+        "model_base_url": os.environ.get("SWAAG_LIVE_BASE_URL", "http://127.0.0.1:14829"),
+        "model_profile": os.environ.get("SWAAG_BENCHMARK_CACHED_PROFILE", "small_fast"),
+        "structured_output_mode": os.environ.get("SWAAG_BENCHMARK_CACHED_STRUCTURED_OUTPUT_MODE", "post_validate"),
+        "connect_timeout_seconds": int(os.environ.get("SWAAG_BENCHMARK_CACHED_CONNECT_TIMEOUT_SECONDS", "5")),
+        "timeout_seconds": int(os.environ.get("SWAAG_BENCHMARK_CACHED_TIMEOUT_SECONDS", "15")),
+        "progress_poll_seconds": float(os.environ.get("SWAAG_BENCHMARK_CACHED_PROGRESS_POLL_SECONDS", "1.0")),
+    }
+
+
 def _render_agent_test_category_report(payload: dict[str, Any]) -> str:
     summary = payload["summary"]
     scores = payload["score_summary"]
@@ -312,6 +330,7 @@ def _render_agent_test_category_report(payload: dict[str, Any]) -> str:
         "# Agent Test Benchmark Report",
         "",
         f"- execution_mode: `{payload.get('execution_mode', 'executed_cached_benchmark')}`",
+        f"- full_artifact_reuse: `{payload.get('full_artifact_reuse', False)}`",
         f"- total_tasks: `{summary['total_tasks']}`",
         f"- successful_tasks: `{summary['successful_tasks']}`",
         f"- failed_tasks: `{summary['failed_tasks']}`",
@@ -379,27 +398,32 @@ def run_agent_test_category(
         raise ValueError("agent_test no longer accepts pytest_args because it runs the real cached benchmark, not pytest benchmark wrappers")
     from swaag.benchmark.benchmark_runner import run_benchmarks
 
-    reused_report = _reuse_full_catalog_benchmark_artifact(output_dir, benchmark_task_ids, clean)
-    if reused_report is not None:
-        benchmark_report = reused_report
-        execution_mode = "reused_cached_artifact"
-    else:
-        ensure_dir(output_dir)
-        _seed_full_catalog_replay_cache(output_dir, benchmark_task_ids)
-        benchmark_report = run_benchmarks(
-            output_dir=output_dir,
-            task_ids=list(benchmark_task_ids) if benchmark_task_ids is not None else None,
-            clean=clean,
-            live_subset=False,
-            use_live_model=False,
-            agent_behavior_mode="cached",
-        )
-        execution_mode = "executed_cached_benchmark"
+    # Always run a fresh benchmark. Full-run artifact reuse is NOT allowed in the
+    # authoritative agent_test path. Only LLM response cassettes are cached/replayed.
+    ensure_dir(output_dir)
+    _seed_full_catalog_replay_cache(output_dir, benchmark_task_ids)
+    model_settings = _cached_benchmark_run_settings()
+    benchmark_report = run_benchmarks(
+        output_dir=output_dir,
+        task_ids=list(benchmark_task_ids) if benchmark_task_ids is not None else None,
+        clean=clean,
+        live_subset=False,
+        use_live_model=False,
+        agent_behavior_mode="cached",
+        model_base_url=model_settings["model_base_url"],
+        model_profile=model_settings["model_profile"],
+        structured_output_mode=model_settings["structured_output_mode"],
+        connect_timeout_seconds=model_settings["connect_timeout_seconds"],
+        timeout_seconds=model_settings["timeout_seconds"],
+        progress_poll_seconds=model_settings["progress_poll_seconds"],
+    )
+    execution_mode = "executed_cached_benchmark"
     benchmark_report.setdefault("run_metadata", {})["execution_mode"] = execution_mode
     payload = {
         "category": "agent_test",
         "status": "complete",
         "execution_mode": execution_mode,
+        "full_artifact_reuse": False,
         "summary": benchmark_report["summary"],
         "aggregate_metrics": benchmark_report["aggregate_metrics"],
         "run_metadata": benchmark_report.get("run_metadata", {}),

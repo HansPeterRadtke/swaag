@@ -84,7 +84,6 @@ def test_run_code_correctness_category_writes_reports(monkeypatch, tmp_path: Pat
 
 def test_run_agent_test_category_writes_real_benchmark_reports(monkeypatch, tmp_path: Path) -> None:
     monkeypatch.setattr(benchmark_runner, "run_benchmarks", lambda **kwargs: _fake_benchmark_report())
-    monkeypatch.setattr("swaag.benchmark.evaluation_runner._reuse_full_catalog_benchmark_artifact", lambda output_dir, benchmark_task_ids, clean: None)
 
     payload = run_agent_test_category(output_dir=tmp_path / "agent", clean=True)
 
@@ -103,14 +102,31 @@ def test_run_agent_test_category_writes_real_benchmark_reports(monkeypatch, tmp_
     assert "verification_failure" in report_text
 
 
+def test_run_agent_test_category_never_reuses_full_catalog_artifact(monkeypatch, tmp_path: Path) -> None:
+    """run_agent_test_category must always call run_benchmarks, never skip with a cached artifact."""
+    run_benchmarks_called = []
+
+    def tracking_run_benchmarks(**kwargs):
+        run_benchmarks_called.append(kwargs)
+        return _fake_benchmark_report()
+
+    monkeypatch.setattr(benchmark_runner, "run_benchmarks", tracking_run_benchmarks)
+
+    # Even if a valid cached artifact exists, run_benchmarks must still be called
+    monkeypatch.setattr("swaag.benchmark.evaluation_runner._valid_full_catalog_report", lambda report_path, tasks: True)
+
+    run_agent_test_category(output_dir=tmp_path / "agent", clean=True)
+
+    assert len(run_benchmarks_called) == 1, "run_benchmarks must be called exactly once for every authoritative run"
+    assert run_benchmarks_called[0].get("agent_behavior_mode") == "cached"
+
+
 def test_run_agent_test_category_seeds_shared_replay_cache_when_available(monkeypatch, tmp_path: Path) -> None:
     artifact_root = tmp_path / "artifact-root"
     cache_dir = artifact_root / _full_catalog_cache_key(get_benchmark_tasks()) / "replay_cache" / "demo_task"
     cache_dir.mkdir(parents=True)
     (cache_dir / "seed_42.json").write_text("{}", encoding="utf-8")
     monkeypatch.setenv("SWAAG_FULL_CACHED_BENCHMARK_ARTIFACT_ROOT", str(artifact_root))
-    monkeypatch.setattr("swaag.benchmark.evaluation_runner._reuse_full_catalog_benchmark_artifact", lambda output_dir, benchmark_task_ids, clean: None)
-
     def fake_run_benchmarks(**kwargs):
         assert (kwargs["output_dir"] / "replay_cache" / "demo_task" / "seed_42.json").exists()
         return _fake_benchmark_report()
@@ -119,63 +135,6 @@ def test_run_agent_test_category_seeds_shared_replay_cache_when_available(monkey
 
     run_agent_test_category(output_dir=tmp_path / "agent", clean=False)
 
-
-def test_run_agent_test_category_reuses_valid_full_cached_artifact(monkeypatch, tmp_path: Path) -> None:
-    source = tmp_path / "artifact-root" / _full_catalog_cache_key(get_benchmark_tasks())
-    source.mkdir(parents=True)
-    (source / "agent_test_cached_results.json").write_text(
-        """
-{
-  "summary": {
-    "total_tasks": 50,
-    "successful_tasks": 20,
-    "failed_tasks": 30,
-    "false_positives": 4,
-    "score_by_family": {"coding": 60.0, "reading": 40.0},
-    "score_by_difficulty": {
-      "extremely_easy": 90.0,
-      "easy": 70.0,
-      "normal": 50.0,
-      "hard": 30.0,
-      "extremely_hard": 10.0
-    },
-    "full_task_success_percent": 40.0,
-    "difficulty_group_average_percent": 50.0,
-    "family_group_average_percent": 50.0,
-    "group_average_percent": 50.0,
-    "average_task_score_percent": 44.0
-  },
-  "aggregate_metrics": {"primary": {"task_success_rate": 0.4}},
-  "run_metadata": {
-    "agent_behavior_mode": "cached",
-    "replay_cache_enabled": true
-  },
-  "tasks": [
-    {
-      "task_id": "coding_implement_function",
-      "metrics": {
-        "seed_results": [
-          {"seed": 42, "replay_cache": {"cassette_path": "/tmp/demo.json"}}
-        ]
-      }
-    }
-  ]
-}
-        """.strip()
-        + "\n",
-        encoding="utf-8",
-    )
-    (source / "agent_test_cached_report.md").write_text("# cached\n", encoding="utf-8")
-    monkeypatch.setenv("SWAAG_FULL_CACHED_BENCHMARK_ARTIFACT_ROOT", str(tmp_path / "artifact-root"))
-    monkeypatch.setattr("swaag.benchmark.evaluation_runner._valid_full_catalog_report", lambda report_path, tasks: True)
-    monkeypatch.setattr(benchmark_runner, "run_benchmarks", lambda **kwargs: (_ for _ in ()).throw(AssertionError("run_benchmarks should not be called when a valid cached artifact exists")))
-
-    payload = run_agent_test_category(output_dir=tmp_path / "agent", clean=True)
-
-    assert payload["execution_mode"] == "reused_cached_artifact"
-    assert payload["run_metadata"]["seed_cache_mode_counts"] == {"replay": 1}
-    assert payload["run_metadata"]["task_cache_mode_counts"] == {"replay": 1}
-    assert (tmp_path / "agent" / "agent_test_cached_results.json").exists()
 
 
 def test_run_test_category_evaluation_runs_only_two_categories(monkeypatch, tmp_path: Path) -> None:

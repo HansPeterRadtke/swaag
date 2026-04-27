@@ -70,8 +70,7 @@ def _print_agent_test_summary(payload: dict[str, object], *, output_dir: Path) -
         print(f"task_cache_mode_counts={run_metadata['task_cache_mode_counts']}")
     if run_metadata.get("artifact_reused_from"):
         print(f"artifact_reused_from={run_metadata['artifact_reused_from']}")
-        print("cache_replay_mode=full_artifact_reuse")
-    elif run_metadata.get("seed_cache_mode_counts"):
+    if run_metadata.get("seed_cache_mode_counts"):
         print("cache_replay_mode=per_seed_record_replay")
     failure_breakdown = aggregate_metrics.get("failure_breakdown", {})
     verifier_weakness = aggregate_metrics.get("verifier_weakness_breakdown", {})

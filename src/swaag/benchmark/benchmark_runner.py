@@ -234,10 +234,12 @@ def _build_agent_behavior_model_client(
     replay_cache_root = output_dir / "replay_cache" / task.task_id
     os.makedirs(replay_cache_root, exist_ok=True)
     cassette_path = replay_cache_root / f"seed_{seed}.json"
-    replay_mode = "replay" if cassette_path.exists() else "record"
+    # Always use "record" mode: client replays existing cassette entries automatically
+    # and records new ones when missing. Never fails with MissingReplayEntryError.
+    planned_mode = "replay" if cassette_path.exists() else "record"
     wrapped = RecordReplayModelClient(
         cassette_path=cassette_path,
-        mode=replay_mode,
+        mode="record",
         delegate=delegate,
         request_metadata={
             "agent_behavior_mode": "cached",
@@ -247,7 +249,7 @@ def _build_agent_behavior_model_client(
             "difficulty": task.difficulty,
         },
     )
-    return wrapped, {"cassette_path": str(cassette_path), "cache_mode": replay_mode}
+    return wrapped, {"cassette_path": str(cassette_path), "cache_mode": planned_mode}
 
 
 def _snapshot_workspace(root: Path) -> dict[str, str]:
@@ -612,6 +614,17 @@ def run_benchmarks(
             else:
                 success = verification.passed and failure is not None and failure.category == scenario.expected_failure_category
                 false_positive = verification.passed and failure is not None and failure.category != scenario.expected_failure_category
+            if replay_cache_info is not None and hasattr(runtime_model_client, "recorded_count"):
+                actual_recorded = runtime_model_client.recorded_count
+                actual_replayed = runtime_model_client.replayed_count
+                if actual_recorded > 0 and actual_replayed > 0:
+                    replay_cache_info["cache_mode"] = "mixed"
+                elif actual_recorded > 0:
+                    replay_cache_info["cache_mode"] = "record"
+                elif actual_replayed > 0:
+                    replay_cache_info["cache_mode"] = "replay"
+                replay_cache_info["recorded_count"] = actual_recorded
+                replay_cache_info["replayed_count"] = actual_replayed
             seed_results.append(
                 {
                     "seed": seed,

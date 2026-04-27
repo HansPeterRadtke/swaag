@@ -63,3 +63,35 @@ def test_record_replay_client_key_changes_when_request_metadata_changes(tmp_path
 
     with pytest.raises(MissingReplayEntryError):
         replay_client.send_completion(request, timeout_seconds=5)
+
+def test_record_replay_client_record_mode_replays_existing_entries_without_calling_delegate(tmp_path: Path) -> None:
+    """In 'record' mode, existing cassette entries are replayed without calling the delegate."""
+    cassette_path = tmp_path / "cassette.json"
+    contract = yes_no_contract()
+    recording_delegate = FakeModelClient(responses=["yes"])
+    recording_client = RecordReplayModelClient(
+        cassette_path=cassette_path,
+        mode="record",
+        delegate=recording_delegate,
+        request_metadata={"model_name": "fixture-model", "model_version": "v1"},
+    )
+    request = recording_client.build_completion_request("Answer yes", max_tokens=4, contract=contract)
+    recording_client.send_completion(request, timeout_seconds=5)
+
+    assert recording_client.recorded_count == 1
+    assert recording_client.replayed_count == 0
+
+    # New client in "record" mode with same cassette: should replay without calling delegate
+    replay_delegate = FakeModelClient(responses=["no"])
+    replay_client = RecordReplayModelClient(
+        cassette_path=cassette_path,
+        mode="record",
+        delegate=replay_delegate,
+        request_metadata={"model_name": "fixture-model", "model_version": "v1"},
+    )
+    result = replay_client.send_completion(request, timeout_seconds=5)
+
+    assert result.text == "yes"  # replayed, not re-recorded
+    assert replay_delegate.requests == []  # delegate never called
+    assert replay_client.replayed_count == 1
+    assert replay_client.recorded_count == 0

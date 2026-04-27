@@ -59,10 +59,20 @@ class RecordReplayModelClient:
         self.cassette_path = Path(cassette_path)
         self.request_metadata = self._default_request_metadata() | dict(request_metadata or {})
         self._entries = self._load_entries()
+        self._replayed_count = 0
+        self._recorded_count = 0
 
     @property
     def is_record_replay_client(self) -> bool:
         return True
+
+    @property
+    def recorded_count(self) -> int:
+        return self._recorded_count
+
+    @property
+    def replayed_count(self) -> int:
+        return self._replayed_count
 
     def _default_request_metadata(self) -> dict[str, Any]:
         metadata: dict[str, Any] = {"client_class": type(self.delegate).__name__}
@@ -201,6 +211,18 @@ class RecordReplayModelClient:
             live_mode=live_mode,
         )
 
+    def _return_from_entry(self, entry: RecordReplayEntry, payload: dict[str, Any]) -> CompletionResult:
+        response_payload = dict(entry.response)
+        self._replayed_count += 1
+        return CompletionResult(
+            text=str(response_payload.get("text", "")),
+            raw_request=payload,
+            raw_response=response_payload.get("raw_response", {}) if isinstance(response_payload.get("raw_response", {}), dict) else {},
+            prompt_tokens=response_payload.get("prompt_tokens"),
+            completion_tokens=response_payload.get("completion_tokens"),
+            finish_reason=response_payload.get("finish_reason"),
+        )
+
     def send_completion(self, payload: dict[str, Any], *, timeout_seconds: int | None = None) -> CompletionResult:
         request_hash, request_envelope = self._request_hash(payload, timeout_seconds=timeout_seconds)
         if self.mode == "replay":
@@ -209,15 +231,12 @@ class RecordReplayModelClient:
                 raise MissingReplayEntryError(
                     f"No replay entry for request hash {request_hash}; record a cassette for the current full request payload first."
                 )
-            response_payload = dict(entry.response)
-            return CompletionResult(
-                text=str(response_payload.get("text", "")),
-                raw_request=payload,
-                raw_response=response_payload.get("raw_response", {}) if isinstance(response_payload.get("raw_response", {}), dict) else {},
-                prompt_tokens=response_payload.get("prompt_tokens"),
-                completion_tokens=response_payload.get("completion_tokens"),
-                finish_reason=response_payload.get("finish_reason"),
-            )
+            return self._return_from_entry(entry, payload)
+        # "record" mode: replay from existing cassette entry if present (avoids unnecessary model calls),
+        # otherwise call the real delegate and record the new entry.
+        existing = self._entries.get(request_hash)
+        if existing is not None:
+            return self._return_from_entry(existing, payload)
         result = self.delegate.send_completion(payload, timeout_seconds=timeout_seconds)
         self._entries[request_hash] = RecordReplayEntry(
             request_hash=request_hash,
@@ -225,6 +244,7 @@ class RecordReplayModelClient:
             response=_completion_result_payload(result),
         )
         self._write_entries()
+        self._recorded_count += 1
         return result
 
     def complete(

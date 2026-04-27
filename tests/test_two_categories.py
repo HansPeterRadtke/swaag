@@ -145,12 +145,11 @@ def test_testprofile_agent_tests_prints_real_benchmark_summary(monkeypatch, tmp_
                 "prompt_understanding_mistakes": {"authority_selection": 3},
             },
             "run_metadata": {
-                "execution_mode": "reused_cached_artifact",
-                "seed_cache_mode_counts": {"replay": 53},
-                "task_cache_mode_counts": {"replay": 53},
-                "artifact_reused_from": "/tmp/shared-artifact",
+                "execution_mode": "executed_cached_benchmark",
+                "seed_cache_mode_counts": {"replay": 50, "record": 3},
+                "task_cache_mode_counts": {"replay": 50, "record": 3},
             },
-            "execution_mode": "reused_cached_artifact",
+            "execution_mode": "executed_cached_benchmark",
             "cached_benchmark_results_path": "/tmp/results.json",
             "cached_benchmark_report_path": "/tmp/report.md",
         },
@@ -161,10 +160,10 @@ def test_testprofile_agent_tests_prints_real_benchmark_summary(monkeypatch, tmp_
     captured = capsys.readouterr()
     assert exit_code == 0
     assert "== agent_test ==" in captured.out
-    assert "execution_mode=reused_cached_artifact" in captured.out
+    assert "execution_mode=executed_cached_benchmark" in captured.out
     assert "difficulty_scores" in captured.out
     assert "family_scores" in captured.out
-    assert "cache_replay_mode=full_artifact_reuse" in captured.out
+    assert "cache_replay_mode=per_seed_record_replay" in captured.out
     assert "top_failure_categories={'verification_failure': 14, 'wrong_tool': 6}" in captured.out
     assert "cached_benchmark_results_path=/tmp/results.json" in captured.out
 
