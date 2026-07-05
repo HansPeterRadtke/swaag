@@ -316,6 +316,9 @@ class CompletionResult:
     prompt_tokens: int | None
     completion_tokens: int | None
     finish_reason: str | None
+    elapsed_seconds: float | None = None
+    tokens_per_second: float | None = None
+    first_token_seconds: float | None = None
 
 
 @dataclass(slots=True)

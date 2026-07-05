@@ -77,7 +77,13 @@ class FakeModelClient:
             live_mode=live_mode,
         )
 
-    def send_completion(self, payload: dict[str, Any], *, timeout_seconds: int | None = None) -> CompletionResult:
+    def send_completion(
+        self,
+        payload: dict[str, Any],
+        *,
+        timeout_seconds: int | None = None,
+        progress_callback=None,
+    ) -> CompletionResult:
         self.requests.append(payload)
         contract_name = str(payload.get("contract", ""))
         response = None

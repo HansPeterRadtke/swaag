@@ -1174,7 +1174,7 @@ class HistoryStore:
                 metrics.verification_type_distribution[verification_type] = (
                     metrics.verification_type_distribution.get(verification_type, 0) + 1
                 )
-        elif event.event_type == "model_request_progress":
+        elif event.event_type in {"model_request_progress", "model_token_progress"}:
             metrics.model_request_progress_events += 1
         elif event.event_type == "model_retry_scheduled":
             metrics.model_retry_events += 1

@@ -45,10 +45,9 @@ class HangingStructuredModelClient(FakeModelClient):
             progress_poll_seconds=0.01,
         )
 
-    def send_completion(self, payload: dict[str, Any], *, timeout_seconds: int | None = None) -> CompletionResult:
-        del payload, timeout_seconds
-        time.sleep(5)
-        raise AssertionError("unreachable")
+    def send_completion(self, payload: dict[str, Any], *, timeout_seconds: int | None = None, progress_callback=None) -> CompletionResult:
+        del payload, timeout_seconds, progress_callback
+        raise requests.ReadTimeout("No streamed model token/event for 1.0 seconds")
 
 
 def test_runtime_tool_flow_records_budget_reports(make_config) -> None:
@@ -556,11 +555,18 @@ def test_runtime_metrics_are_derived_from_history(make_config) -> None:
     assert rebuilt.metrics.llm_fallback_rate > 0.0
 
 
-def test_runtime_records_model_request_progress_for_slow_calls(make_config) -> None:
+def test_runtime_records_model_token_progress_for_streaming_calls(make_config) -> None:
     class SlowClient(FakeModelClient):
-        def send_completion(self, payload, *, timeout_seconds: int | None = None):
-            time.sleep(0.15)
-            return super().send_completion(payload, timeout_seconds=timeout_seconds)
+        def send_completion(self, payload, *, timeout_seconds: int | None = None, progress_callback=None):
+            if progress_callback is not None:
+                progress_callback({
+                    "completion_tokens": 50,
+                    "elapsed_seconds": 0.1,
+                    "tokens_per_second": 500.0,
+                    "first_token_seconds": 0.01,
+                    "token_timeout_seconds": timeout_seconds,
+                })
+            return super().send_completion(payload, timeout_seconds=timeout_seconds, progress_callback=progress_callback)
 
     config = make_config(model__progress_poll_seconds=0.05)
     goal = "Reply with exactly 17. Do not use any tools. Do not add any extra text."
@@ -589,7 +595,9 @@ def test_runtime_records_model_request_progress_for_slow_calls(make_config) -> N
     events = runtime.history.read_history(result.session_id)
 
     assert result.assistant_text == "17"
-    assert any(event.event_type == "model_request_progress" for event in events)
+    token_progress = [event for event in events if event.event_type == "model_token_progress"]
+    assert token_progress
+    assert token_progress[0].payload["tokens_per_second"] == 500.0
 
 
 def test_extract_unconditional_exact_reply_ignores_conditional_reply_clauses(make_config) -> None:
@@ -1128,7 +1136,7 @@ def test_runtime_waits_for_semantic_engine_instead_of_using_fake_semantic_fallba
     assert not any(event.event_type == "prompt_analyzed" for event in events)
 
 
-def test_runtime_progress_polling_enforces_request_timeout(make_config) -> None:
+def test_runtime_token_timeout_enters_retry_mode(make_config) -> None:
     runtime = AgentRuntime(
         make_config(),
         model_client=HangingStructuredModelClient(),
@@ -1140,7 +1148,8 @@ def test_runtime_progress_polling_enforces_request_timeout(make_config) -> None:
         runtime._analyze_prompt_frontend(state, "Fix app.py")
 
     events = runtime.history.read_history(state.session_id)
-    assert any(event.event_type == "model_request_progress" for event in events)
+    assert any(event.event_type == "retry" and event.payload.get("operation") == "model_token_timeout" for event in events)
+    assert any(event.event_type == "error" and event.payload.get("retry_mode") == "endless_until_token_progress_or_success" for event in events)
     assert not any(event.event_type == "prompt_analyzed" for event in events)
 
 

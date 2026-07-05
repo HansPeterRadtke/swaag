@@ -3,7 +3,8 @@ from __future__ import annotations
 from dataclasses import dataclass
 import json
 import os
-from typing import Any
+import time
+from typing import Any, Callable
 
 import requests
 
@@ -137,28 +138,47 @@ class LlamaCppClient:
             payload["json_schema"] = contract.json_schema
         return payload
 
-    def send_completion(self, payload: dict[str, Any], *, timeout_seconds: int | None = None) -> CompletionResult:
-        effective_timeout = timeout_seconds or self.config.model.timeout_seconds
-        if os.environ.get("SWAAG_MODEL_STREAM", "").lower() in {"1", "true", "yes", "on"}:
-            stream_payload = dict(payload)
-            stream_payload["stream"] = True
-            response = requests.post(
-                f"{self._base}{self.config.model.completion_endpoint}",
-                json=stream_payload,
-                timeout=(self.config.model.connect_timeout_seconds, effective_timeout),
-                stream=True,
-            )
-            try:
-                response.raise_for_status()
-            except requests.HTTPError as exc:
-                detail = _http_error_detail(response)
-                raise requests.HTTPError(
-                    f"{exc} :: {detail}",
-                    request=exc.request,
-                    response=exc.response,
-                ) from exc
-            content_parts: list[str] = []
-            last_body: dict[str, Any] = {}
+    def _token_timeout_seconds(self, timeout_seconds: int | None = None) -> float:
+        del timeout_seconds
+        raw = os.environ.get("SWAAG_MODEL_TOKEN_TIMEOUT_SECONDS", "60")
+        try:
+            value = float(raw)
+        except ValueError:
+            value = 60.0
+        return max(1.0, value)
+
+    def send_completion(
+        self,
+        payload: dict[str, Any],
+        *,
+        timeout_seconds: int | None = None,
+        progress_callback: Callable[[dict[str, Any]], None] | None = None,
+    ) -> CompletionResult:
+        token_timeout_seconds = self._token_timeout_seconds(timeout_seconds)
+        stream_payload = dict(payload)
+        stream_payload["stream"] = True
+        started = time.monotonic()
+        response = requests.post(
+            f"{self._base}{self.config.model.completion_endpoint}",
+            json=stream_payload,
+            timeout=(self.config.model.connect_timeout_seconds, token_timeout_seconds),
+            stream=True,
+        )
+        try:
+            response.raise_for_status()
+        except requests.HTTPError as exc:
+            detail = _http_error_detail(response)
+            raise requests.HTTPError(
+                f"{exc} :: {detail}",
+                request=exc.request,
+                response=exc.response,
+            ) from exc
+        content_parts: list[str] = []
+        last_body: dict[str, Any] = {}
+        completion_events = 0
+        reported_tokens = 0
+        first_token_seconds: float | None = None
+        try:
             for raw_line in response.iter_lines(decode_unicode=True):
                 if not raw_line:
                     continue
@@ -174,49 +194,59 @@ class LlamaCppClient:
                 if not isinstance(item, dict):
                     raise ModelClientError(f"Unexpected streamed completion item: {item!r}")
                 last_body = item
-                if "content" in item:
-                    content_parts.append(str(item.get("content", "")))
+                piece = str(item.get("content", "")) if "content" in item else ""
+                token_count_changed = False
+                if piece:
+                    content_parts.append(piece)
+                    completion_events += 1
+                    if first_token_seconds is None:
+                        first_token_seconds = round(time.monotonic() - started, 3)
+                    token_count_changed = True
+                raw_predicted = item.get("tokens_predicted")
+                if isinstance(raw_predicted, int) and raw_predicted >= reported_tokens:
+                    reported_tokens = raw_predicted
+                    token_count_changed = True
+                elif completion_events > reported_tokens:
+                    reported_tokens = completion_events
+                if token_count_changed and progress_callback is not None:
+                    elapsed = max(time.monotonic() - started, 1e-9)
+                    progress_callback(
+                        {
+                            "completion_tokens": reported_tokens,
+                            "elapsed_seconds": round(elapsed, 3),
+                            "tokens_per_second": round(reported_tokens / elapsed, 3),
+                            "first_token_seconds": first_token_seconds,
+                            "token_timeout_seconds": token_timeout_seconds,
+                        }
+                    )
                 if item.get("stop"):
                     break
-            if not content_parts and "content" not in last_body:
-                raise ModelClientError(f"Streamed completion response missing content: {last_body!r}")
-            body = dict(last_body)
-            body["content"] = "".join(content_parts)
-            body["stream"] = True
-            return CompletionResult(
-                text=str(body.get("content", "")),
-                raw_request=stream_payload,
-                raw_response=body,
-                prompt_tokens=body.get("tokens_evaluated"),
-                completion_tokens=body.get("tokens_predicted"),
-                finish_reason="stop" if body.get("stop") else None,
-            )
-        response = requests.post(
-            f"{self._base}{self.config.model.completion_endpoint}",
-            json=payload,
-            timeout=(self.config.model.connect_timeout_seconds, effective_timeout),
-        )
-        try:
-            response.raise_for_status()
-        except requests.HTTPError as exc:
-            detail = _http_error_detail(response)
-            raise requests.HTTPError(
-                f"{exc} :: {detail}",
-                request=exc.request,
-                response=exc.response,
-            ) from exc
-        body = response.json()
-        if not isinstance(body, dict):
-            raise ModelClientError(f"Unexpected completion response: {body!r}")
-        if "content" not in body:
-            raise ModelClientError(f"Completion response missing 'content': {body!r}")
+        except requests.Timeout as exc:
+            raise requests.ReadTimeout(f"No streamed model token/event for {token_timeout_seconds:.1f} seconds") from exc
+        if not content_parts and "content" not in last_body:
+            raise ModelClientError(f"Streamed completion response missing content: {last_body!r}")
+        elapsed_seconds = round(time.monotonic() - started, 3)
+        body = dict(last_body)
+        body["content"] = "".join(content_parts)
+        body["stream"] = True
+        body["token_timeout_seconds"] = token_timeout_seconds
+        completion_tokens = body.get("tokens_predicted")
+        if not isinstance(completion_tokens, int):
+            completion_tokens = reported_tokens
+        tokens_per_second = round(completion_tokens / max(elapsed_seconds, 1e-9), 3) if completion_tokens else 0.0
+        body["elapsed_seconds"] = elapsed_seconds
+        body["tokens_per_second"] = tokens_per_second
+        body["first_token_seconds"] = first_token_seconds
         return CompletionResult(
             text=str(body.get("content", "")),
-            raw_request=payload,
+            raw_request=stream_payload,
             raw_response=body,
             prompt_tokens=body.get("tokens_evaluated"),
-            completion_tokens=body.get("tokens_predicted"),
+            completion_tokens=completion_tokens,
             finish_reason="stop" if body.get("stop") else None,
+            elapsed_seconds=elapsed_seconds,
+            tokens_per_second=tokens_per_second,
+            first_token_seconds=first_token_seconds,
         )
 
     def complete(

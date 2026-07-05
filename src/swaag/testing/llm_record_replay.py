@@ -39,6 +39,9 @@ def _completion_result_payload(result: CompletionResult) -> dict[str, Any]:
         "prompt_tokens": result.prompt_tokens,
         "completion_tokens": result.completion_tokens,
         "finish_reason": result.finish_reason,
+        "elapsed_seconds": result.elapsed_seconds,
+        "tokens_per_second": result.tokens_per_second,
+        "first_token_seconds": result.first_token_seconds,
     }
 
 
@@ -221,9 +224,19 @@ class RecordReplayModelClient:
             prompt_tokens=response_payload.get("prompt_tokens"),
             completion_tokens=response_payload.get("completion_tokens"),
             finish_reason=response_payload.get("finish_reason"),
+            elapsed_seconds=response_payload.get("elapsed_seconds"),
+            tokens_per_second=response_payload.get("tokens_per_second"),
+            first_token_seconds=response_payload.get("first_token_seconds"),
         )
 
-    def send_completion(self, payload: dict[str, Any], *, timeout_seconds: int | None = None) -> CompletionResult:
+    def send_completion(
+        self,
+        payload: dict[str, Any],
+        *,
+        timeout_seconds: int | None = None,
+        progress_callback=None,
+    ) -> CompletionResult:
+        del progress_callback
         request_hash, request_envelope = self._request_hash(payload, timeout_seconds=timeout_seconds)
         if self.mode == "replay":
             entry = self._entries.get(request_hash)

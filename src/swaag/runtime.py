@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import copy
+import inspect
 import json
 import os
 import queue
@@ -5169,95 +5170,125 @@ class AgentRuntime:
         )
         last_error: Exception | None = None
         transient_unavailable_attempts = 0
-        attempt = 0
+        semantic_attempt = 0
+        total_attempt = 0
         while True:
+            total_attempt += 1
             guard = self.history.guard(state, f"model_call:{prepared.assembly.kind}")
             guard.record(
                 "model_request_sent",
                 {
                     "kind": prepared.assembly.kind,
                     "prompt_mode": prepared.prompt_mode,
-                    "attempt": attempt + 1,
+                    "attempt": total_attempt,
+                    "semantic_attempt": semantic_attempt + 1,
                     "request": request,
                     "budget_report": asdict(prepared.report),
                     "policy": asdict(request_policy),
+                    "token_timeout_seconds": request_policy.effective_timeout_seconds,
                     "requested_contract_mode": prepared.contract.mode,
                     "effective_contract_mode": resolved_contract.mode,
                 },
             )
             started = time.monotonic()
-            try:
-                completion_queue: queue.Queue[tuple[str, Any]] = queue.Queue(maxsize=1)
+            last_progress_log = started
+            last_progress_tokens = 0
 
-                def _worker() -> None:
-                    try:
-                        result = self.client.send_completion(
-                            request,
-                            timeout_seconds=request_policy.effective_timeout_seconds,
-                        )
-                    except Exception as exc:  # pragma: no cover - exercised through queue handoff
-                        completion_queue.put(("error", exc))
-                        return
-                    completion_queue.put(("result", result))
-
-                worker = threading.Thread(
-                    target=_worker,
-                    name=f"swaag-model-call-{prepared.assembly.kind}",
-                    daemon=True,
+            def _progress_callback(progress: dict[str, Any]) -> None:
+                nonlocal last_progress_log, last_progress_tokens
+                elapsed = float(progress.get("elapsed_seconds", round(time.monotonic() - started, 3)))
+                tokens = int(progress.get("completion_tokens", 0) or 0)
+                now = time.monotonic()
+                should_log = (now - last_progress_log) >= float(request_policy.progress_poll_seconds) or tokens >= last_progress_tokens + 50
+                if not should_log:
+                    return
+                last_progress_log = now
+                last_progress_tokens = tokens
+                tokens_per_second = float(progress.get("tokens_per_second", 0.0) or 0.0)
+                payload = {
+                    "kind": prepared.assembly.kind,
+                    "prompt_mode": prepared.prompt_mode,
+                    "attempt": total_attempt,
+                    "elapsed_seconds": round(elapsed, 3),
+                    "completion_tokens": tokens,
+                    "tokens_per_second": round(tokens_per_second, 3),
+                    "first_token_seconds": progress.get("first_token_seconds"),
+                    "token_timeout_seconds": progress.get("token_timeout_seconds", request_policy.effective_timeout_seconds),
+                }
+                guard.record("model_token_progress", payload)
+                print(
+                    "[model_token_progress] "
+                    f"kind={prepared.assembly.kind} attempt={total_attempt} "
+                    f"elapsed={payload['elapsed_seconds']}s tokens={tokens} "
+                    f"avg_tps={payload['tokens_per_second']} "
+                    f"token_timeout={payload['token_timeout_seconds']}s",
+                    flush=True,
                 )
-                worker.start()
-                while True:
-                    elapsed = round(time.monotonic() - started, 3)
-                    if elapsed >= float(request_policy.effective_timeout_seconds):
-                        raise requests.Timeout(
-                            f"llama.cpp request exceeded timeout_seconds={request_policy.effective_timeout_seconds}"
-                        )
-                    try:
-                        outcome, payload = completion_queue.get(timeout=request_policy.progress_poll_seconds)
-                    except queue.Empty:
-                        guard.record(
-                            "model_request_progress",
-                            {
-                                "kind": prepared.assembly.kind,
-                                "prompt_mode": prepared.prompt_mode,
-                                "attempt": attempt + 1,
-                                "elapsed_seconds": elapsed,
-                                "timeout_seconds": request_policy.effective_timeout_seconds,
-                                "policy": asdict(request_policy),
-                            },
-                        )
-                        continue
-                    if outcome == "error":
-                        raise payload
-                    completion = payload
-                    break
+
+            try:
+                send_completion = self.client.send_completion
+                try:
+                    signature = inspect.signature(send_completion)
+                    supports_progress = "progress_callback" in signature.parameters or any(
+                        param.kind == inspect.Parameter.VAR_KEYWORD for param in signature.parameters.values()
+                    )
+                except (TypeError, ValueError):
+                    supports_progress = False
+                if supports_progress:
+                    completion = send_completion(
+                        request,
+                        timeout_seconds=request_policy.effective_timeout_seconds,
+                        progress_callback=_progress_callback,
+                    )
+                else:
+                    completion = send_completion(request, timeout_seconds=request_policy.effective_timeout_seconds)
             except Exception as exc:
                 if self._is_model_server_unavailable(exc):
-                    if (
-                        self._max_model_unavailable_attempts is not None
-                        and transient_unavailable_attempts >= self._max_model_unavailable_attempts
-                    ):
-                        raise ModelClientError("semantic_engine_unavailable") from exc
-                    delay = self._model_unavailable_backoff_seconds(transient_unavailable_attempts)
                     transient_unavailable_attempts += 1
-                    guard.record(
-                        "retry",
-                        {
-                            "operation": "model_unavailable",
-                            "reason": str(exc),
-                            "attempt": transient_unavailable_attempts,
-                            "next_attempt": transient_unavailable_attempts + 1,
-                        },
+                    operation = "model_token_timeout" if isinstance(exc, requests.Timeout) else "model_unavailable"
+                    delay = self._model_unavailable_backoff_seconds(transient_unavailable_attempts - 1)
+                    payload = {
+                        "operation": operation,
+                        "reason": str(exc),
+                        "attempt": transient_unavailable_attempts,
+                        "next_attempt": transient_unavailable_attempts + 1,
+                        "elapsed_seconds": round(time.monotonic() - started, 3),
+                        "token_timeout_seconds": request_policy.effective_timeout_seconds,
+                        "retry_mode": "endless_until_token_progress_or_success",
+                    }
+                    guard.record("retry", payload)
+                    print(
+                        "[model_retry] "
+                        f"operation={operation} kind={prepared.assembly.kind} total_attempt={total_attempt} "
+                        f"elapsed={payload['elapsed_seconds']}s token_timeout={payload['token_timeout_seconds']}s "
+                        f"next_attempt={payload['next_attempt']} reason={payload['reason']}",
+                        flush=True,
                     )
                     self.history.record_event(
                         state,
                         "error",
                         {
-                            "operation": "semantic_engine_unavailable",
+                            "operation": operation,
                             "error": str(exc),
                             "error_type": exc.__class__.__name__,
+                            "retry_mode": "endless_until_token_progress_or_success",
                         },
                     )
+                    if (
+                        self._max_model_unavailable_attempts is not None
+                        and transient_unavailable_attempts > self._max_model_unavailable_attempts
+                    ):
+                        self.history.record_event(
+                            state,
+                            "error",
+                            {
+                                "operation": "semantic_engine_unavailable",
+                                "error": str(exc),
+                                "error_type": exc.__class__.__name__,
+                                "retry_mode": "bounded_by_test_escape",
+                            },
+                        )
+                        raise ModelClientError("semantic_engine_unavailable") from exc
                     self._sleep(delay)
                     continue
                 last_error = exc
@@ -5266,31 +5297,47 @@ class AgentRuntime:
                     {
                         "kind": prepared.assembly.kind,
                         "prompt_mode": prepared.prompt_mode,
-                        "attempt": attempt + 1,
+                        "attempt": total_attempt,
+                        "semantic_attempt": semantic_attempt + 1,
                         "error": str(exc),
                         "error_type": exc.__class__.__name__,
                         "elapsed_seconds": round(time.monotonic() - started, 3),
                     },
                 )
                 guard.require_all("model_request_sent", "model_call_failed")
-                if attempt < self.config.model.max_retries:
-                    attempt += 1
+                if semantic_attempt < self.config.model.max_retries:
+                    semantic_attempt += 1
                     guard.record(
                         "model_retry_scheduled",
-                        {"kind": prepared.assembly.kind, "prompt_mode": prepared.prompt_mode, "next_attempt": attempt + 1},
+                        {"kind": prepared.assembly.kind, "prompt_mode": prepared.prompt_mode, "next_attempt": semantic_attempt + 1},
                     )
                     continue
                 raise
+            elapsed_seconds = round(time.monotonic() - started, 3)
+            completion_tokens = completion.completion_tokens or 0
+            tokens_per_second = completion.tokens_per_second
+            if tokens_per_second is None and completion_tokens:
+                tokens_per_second = round(completion_tokens / max(elapsed_seconds, 1e-9), 3)
             guard.record(
                 "model_response_received",
                 {
                     "kind": prepared.assembly.kind,
                     "prompt_mode": prepared.prompt_mode,
-                    "attempt": attempt + 1,
+                    "attempt": total_attempt,
                     "completion": to_jsonable(completion),
-                    "elapsed_seconds": round(time.monotonic() - started, 3),
+                    "elapsed_seconds": elapsed_seconds,
+                    "completion_tokens": completion.completion_tokens,
+                    "tokens_per_second": tokens_per_second,
+                    "first_token_seconds": completion.first_token_seconds,
+                    "token_timeout_seconds": request_policy.effective_timeout_seconds,
                     "policy": asdict(request_policy),
                 },
+            )
+            print(
+                "[model_response] "
+                f"kind={prepared.assembly.kind} attempt={total_attempt} elapsed={elapsed_seconds}s "
+                f"tokens={completion.completion_tokens} avg_tps={tokens_per_second}",
+                flush=True,
             )
             guard.require_all("model_request_sent", "model_response_received")
             guard.ensure_progress()
