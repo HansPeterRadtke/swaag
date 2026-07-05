@@ -276,10 +276,12 @@ large = 0.10
 [budget_policy.output_ratio_by_kind]
 tool_input = 0.12
 plan = 0.30
+generation_decomposition = 0.45
 
 [budget_policy.output_floor_ratio_by_kind]
 tool_input = 0.08
 plan = 0.22
+generation_decomposition = 0.30
 
 [budget_policy.structured_output_json_factor_by_contract]
 prompt_analysis = 1.15

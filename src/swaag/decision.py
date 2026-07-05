@@ -69,20 +69,42 @@ def validate_decision(analysis: PromptAnalysis, decision: DecisionOutcome) -> No
 
 
 def decision_from_payload(payload: dict, analysis: PromptAnalysis) -> DecisionOutcome:
+    split_task = bool(payload.get("split_task"))
+    expand_task = bool(payload.get("expand_task"))
+    ask_user = bool(payload.get("ask_user"))
+    direct_response = bool(payload.get("direct_response", False))
+    execution_mode = str(payload.get("execution_mode", "direct_response" if direct_response else "full_plan"))
+    preferred_tool_name = str(payload.get("preferred_tool_name", "")).strip()
+    if analysis.task_type == "vague":
+        expand_task = True
+        direct_response = False
+    if analysis.task_type == "structured" and ask_user:
+        ask_user = False
+    if direct_response and (split_task or expand_task or ask_user):
+        direct_response = False
+        execution_mode = "full_plan"
+    if execution_mode == "direct_response" and not direct_response:
+        execution_mode = "full_plan"
+    if direct_response:
+        execution_mode = "direct_response"
+        preferred_tool_name = ""
+    elif execution_mode == "single_tool":
+        if not preferred_tool_name:
+            execution_mode = "full_plan"
+    else:
+        preferred_tool_name = ""
     decision = DecisionOutcome(
-        split_task=bool(payload.get("split_task")),
-        expand_task=bool(payload.get("expand_task")),
-        ask_user=bool(payload.get("ask_user")),
+        split_task=split_task,
+        expand_task=expand_task,
+        ask_user=ask_user,
         assume_missing=bool(payload.get("assume_missing")),
         generate_ideas=bool(payload.get("generate_ideas")),
         confidence=float(payload.get("confidence", 0.0)),
-        reason=str(payload.get("reason", "")).strip(),
-        direct_response=bool(payload.get("direct_response", False)),
-        execution_mode=str(payload.get("execution_mode", "direct_response" if payload.get("direct_response", False) else "full_plan")),
-        preferred_tool_name=str(payload.get("preferred_tool_name", "")).strip(),
+        reason=str(payload.get("reason", "")).strip() or "normalized_model_decision",
+        direct_response=direct_response,
+        execution_mode=execution_mode,
+        preferred_tool_name=preferred_tool_name,
     )
-    if not decision.reason:
-        raise DecisionValidationError("Decision reason must not be empty")
     if not (0.0 <= float(decision.confidence) <= 1.0):
         raise DecisionValidationError("Decision confidence must be between 0 and 1")
     validate_decision(analysis, decision)

@@ -374,6 +374,55 @@ def _validate_step(step: PlanStep, available_tools: set[str]) -> None:
 
 
 
+
+
+def _leaf_step_ids(steps: list[PlanStep]) -> list[str]:
+    depended_on = {dependency for step in steps for dependency in step.depends_on}
+    leaves = [step.step_id for step in steps if step.step_id not in depended_on]
+    return leaves or [steps[-1].step_id]
+
+
+def _append_final_response_step(steps: list[PlanStep], *, goal: str, now: str) -> list[PlanStep]:
+    if not steps or steps[-1].kind == "respond":
+        return steps
+    answer_step = PlanStep(
+        step_id=new_id("step"),
+        title="Answer the user",
+        goal="Produce the final response",
+        kind="respond",
+        expected_tool=None,
+        input_text=goal.strip() or "Summarize the completed work.",
+        expected_output="Final assistant response",
+        done_condition="assistant_response_nonempty",
+        success_criteria=goal.strip() or "The user receives the final answer.",
+        expected_outputs=["Final assistant response"],
+        verification_type="llm_fallback",
+        verification_checks=[],
+        required_conditions=[],
+        optional_conditions=[],
+        input_refs=["completed_work"],
+        output_refs=["final_response"],
+        fallback_strategy="If the final response cannot be produced, report the exact blocker.",
+        depends_on=_leaf_step_ids(steps),
+        status="pending",
+        last_updated=now,
+    )
+    (
+        answer_step.expected_outputs,
+        answer_step.verification_type,
+        answer_step.verification_checks,
+        answer_step.required_conditions,
+        answer_step.optional_conditions,
+    ) = default_verification_contract(
+        kind=answer_step.kind,
+        expected_tool=answer_step.expected_tool,
+        expected_output=answer_step.expected_output,
+        done_condition=answer_step.done_condition,
+        success_criteria=answer_step.success_criteria,
+    )
+    return [*steps, answer_step]
+
+
 def plan_from_payload(payload: dict, *, available_tools: Iterable[str], plan_id: str | None = None) -> Plan:
     available_tool_set = set(available_tools)
     goal = str(payload.get("goal", "")).strip()
@@ -416,8 +465,7 @@ def plan_from_payload(payload: dict, *, available_tools: Iterable[str], plan_id:
         steps.append(step)
     _validate_dependencies(steps)
     steps = _topological_sort(steps)
-    if steps[-1].kind != "respond":
-        raise PlanValidationError("The final plan step must be a respond step")
+    steps = _append_final_response_step(steps, goal=goal, now=now)
     plan = Plan(
         plan_id=plan_id or str(payload.get("plan_id", "")).strip() or new_id("plan"),
         goal=goal,

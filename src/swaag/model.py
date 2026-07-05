@@ -1,6 +1,8 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
+import json
+import os
 from typing import Any
 
 import requests
@@ -136,10 +138,63 @@ class LlamaCppClient:
         return payload
 
     def send_completion(self, payload: dict[str, Any], *, timeout_seconds: int | None = None) -> CompletionResult:
+        effective_timeout = timeout_seconds or self.config.model.timeout_seconds
+        if os.environ.get("SWAAG_MODEL_STREAM", "").lower() in {"1", "true", "yes", "on"}:
+            stream_payload = dict(payload)
+            stream_payload["stream"] = True
+            response = requests.post(
+                f"{self._base}{self.config.model.completion_endpoint}",
+                json=stream_payload,
+                timeout=(self.config.model.connect_timeout_seconds, effective_timeout),
+                stream=True,
+            )
+            try:
+                response.raise_for_status()
+            except requests.HTTPError as exc:
+                detail = _http_error_detail(response)
+                raise requests.HTTPError(
+                    f"{exc} :: {detail}",
+                    request=exc.request,
+                    response=exc.response,
+                ) from exc
+            content_parts: list[str] = []
+            last_body: dict[str, Any] = {}
+            for raw_line in response.iter_lines(decode_unicode=True):
+                if not raw_line:
+                    continue
+                line = raw_line.strip()
+                if line.startswith("data:"):
+                    line = line[5:].strip()
+                if not line or line == "[DONE]":
+                    continue
+                try:
+                    item = json.loads(line)
+                except json.JSONDecodeError as exc:
+                    raise ModelClientError(f"Unexpected streamed completion line: {raw_line!r}") from exc
+                if not isinstance(item, dict):
+                    raise ModelClientError(f"Unexpected streamed completion item: {item!r}")
+                last_body = item
+                if "content" in item:
+                    content_parts.append(str(item.get("content", "")))
+                if item.get("stop"):
+                    break
+            if not content_parts and "content" not in last_body:
+                raise ModelClientError(f"Streamed completion response missing content: {last_body!r}")
+            body = dict(last_body)
+            body["content"] = "".join(content_parts)
+            body["stream"] = True
+            return CompletionResult(
+                text=str(body.get("content", "")),
+                raw_request=stream_payload,
+                raw_response=body,
+                prompt_tokens=body.get("tokens_evaluated"),
+                completion_tokens=body.get("tokens_predicted"),
+                finish_reason="stop" if body.get("stop") else None,
+            )
         response = requests.post(
             f"{self._base}{self.config.model.completion_endpoint}",
             json=payload,
-            timeout=(self.config.model.connect_timeout_seconds, timeout_seconds or self.config.model.timeout_seconds),
+            timeout=(self.config.model.connect_timeout_seconds, effective_timeout),
         )
         try:
             response.raise_for_status()

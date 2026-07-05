@@ -67,7 +67,7 @@ def test_incorrect_decision_is_rejected() -> None:
         validate_decision(analysis, bad)
 
 
-def test_decision_from_payload_requires_reason() -> None:
+def test_decision_from_payload_repairs_missing_reason() -> None:
     analysis = PromptAnalysis(
         task_type="structured",
         completeness="complete",
@@ -76,22 +76,23 @@ def test_decision_from_payload_requires_reason() -> None:
         confidence=0.95,
     )
 
-    with pytest.raises(DecisionValidationError):
-        decision_from_payload(
-            {
-                "split_task": True,
-                "expand_task": False,
-                "ask_user": False,
-                "assume_missing": False,
-                "generate_ideas": False,
-                "confidence": 0.9,
-                "reason": "",
-            },
-            analysis,
-        )
+    decision = decision_from_payload(
+        {
+            "split_task": True,
+            "expand_task": False,
+            "ask_user": False,
+            "assume_missing": False,
+            "generate_ideas": False,
+            "confidence": 0.9,
+            "reason": "",
+        },
+        analysis,
+    )
+
+    assert decision.reason == "normalized_model_decision"
 
 
-def test_direct_response_cannot_request_expansion_or_clarification() -> None:
+def test_direct_response_with_expansion_is_repaired_to_full_plan() -> None:
     analysis = PromptAnalysis(
         task_type="structured",
         completeness="complete",
@@ -100,20 +101,22 @@ def test_direct_response_cannot_request_expansion_or_clarification() -> None:
         confidence=0.95,
     )
 
-    with pytest.raises(DecisionValidationError):
-        decision_from_payload(
-            {
-                "split_task": False,
-                "expand_task": True,
-                "ask_user": False,
-                "assume_missing": False,
-                "generate_ideas": False,
-                "direct_response": True,
-                "confidence": 0.9,
-                "reason": "contradictory",
-            },
-            analysis,
-        )
+    decision = decision_from_payload(
+        {
+            "split_task": False,
+            "expand_task": True,
+            "ask_user": False,
+            "assume_missing": False,
+            "generate_ideas": False,
+            "direct_response": True,
+            "confidence": 0.9,
+            "reason": "contradictory",
+        },
+        analysis,
+    )
+
+    assert decision.direct_response is False
+    assert decision.execution_mode == "full_plan"
 
 
 def test_decision_from_payload_parses_direct_response() -> None:

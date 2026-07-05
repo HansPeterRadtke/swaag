@@ -357,7 +357,9 @@ class PromptBuilder:
             PromptComponent(
                 name="planning_instruction",
                 category="instruction",
-                text=self._load_template(self._config.prompts.planning_template),
+                text=self._load_template(self._config.prompts.planning_template).format(
+                    max_plan_steps=self._config.planner.max_plan_steps
+                ),
             )
         )
         return self._assemble("plan", prompt_mode, user_components)

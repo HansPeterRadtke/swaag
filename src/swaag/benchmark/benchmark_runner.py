@@ -5,6 +5,8 @@ import json
 import os
 import shutil
 import time
+import urllib.error
+import urllib.request
 from dataclasses import asdict
 from pathlib import Path
 from typing import Any, Sequence
@@ -42,6 +44,29 @@ def _parse_seed_list(raw: str | None, *, default: tuple[int, int, int]) -> list[
     return seeds or list(default)
 
 
+
+def _discover_server_context_limit(base_url: str, *, timeout_seconds: int) -> int | None:
+    normalized = base_url.rstrip("/")
+    probes = (f"{normalized}/slots", f"{normalized}/props")
+    for probe_url in probes:
+        request = urllib.request.Request(probe_url, headers={"Accept": "application/json"})
+        try:
+            with urllib.request.urlopen(request, timeout=timeout_seconds) as response:
+                payload = json.loads(response.read().decode("utf-8"))
+        except (OSError, TimeoutError, ValueError, urllib.error.HTTPError, urllib.error.URLError):
+            continue
+        if isinstance(payload, list):
+            for item in payload:
+                if isinstance(item, dict) and isinstance(item.get("n_ctx"), int) and item["n_ctx"] > 0:
+                    return int(item["n_ctx"])
+        if isinstance(payload, dict):
+            settings = payload.get("default_generation_settings")
+            params = settings.get("params") if isinstance(settings, dict) else None
+            n_ctx = params.get("n_ctx") if isinstance(params, dict) else None
+            if isinstance(n_ctx, int) and n_ctx > 0:
+                return int(n_ctx)
+    return None
+
 def _build_config(
     *,
     sessions_root: Path,
@@ -56,17 +81,28 @@ def _build_config(
     seed: int | None = None,
     retrieval_backend: str | None = None,
 ) -> AgentConfig:
-    config = load_config(
-        env={
+    env = os.environ.copy()
+    env.update(
+        {
             "SWAAG__SESSIONS__ROOT": str(sessions_root),
             "SWAAG__TOOLS__READ_ROOTS": json.dumps([str(workspace)]),
             "SWAAG__MODEL__BASE_URL": base_url,
         }
     )
+    config = load_config(env=env)
+    discovery_timeout = max(1, min(1, int(connect_timeout_seconds or config.model.connect_timeout_seconds)))
+    discovered_context_limit = _discover_server_context_limit(base_url, timeout_seconds=discovery_timeout)
+    if discovered_context_limit is not None:
+        config.model.context_limit = discovered_context_limit
     if connect_timeout_seconds is not None:
         config.model.connect_timeout_seconds = int(connect_timeout_seconds)
     if timeout_seconds is not None:
-        config.model.timeout_seconds = int(timeout_seconds)
+        timeout_value = int(timeout_seconds)
+        config.model.timeout_seconds = timeout_value
+        config.model.simple_timeout_seconds = max(config.model.simple_timeout_seconds, timeout_value)
+        config.model.structured_timeout_seconds = max(config.model.structured_timeout_seconds, timeout_value)
+        config.model.verification_timeout_seconds = max(config.model.verification_timeout_seconds, timeout_value)
+        config.model.benchmark_timeout_seconds = max(config.model.benchmark_timeout_seconds, timeout_value)
     if profile_name is not None:
         config.model.profile_name = str(profile_name)
     if structured_output_mode is not None:
@@ -212,6 +248,22 @@ def _normalize_agent_behavior_mode(raw: str | None) -> str | None:
         raise SystemExit(f"Unsupported agent behavior test mode: {raw}. The test system only supports cached mode.")
     return value
 
+def _cached_replay_policy() -> str:
+    raw = os.environ.get("SWAAG_BENCHMARK_CACHED_REPLAY_POLICY", "replay_only").strip().lower()
+    aliases = {
+        "replay": "replay_only",
+        "replay_only": "replay_only",
+        "record": "record_if_missing",
+        "record_if_missing": "record_if_missing",
+        "replay_if_present_record_if_missing": "record_if_missing",
+    }
+    if raw not in aliases:
+        raise ValueError(
+            "SWAAG_BENCHMARK_CACHED_REPLAY_POLICY must be one of: replay_only, record_if_missing"
+        )
+    return aliases[raw]
+
+
 def _build_agent_behavior_model_client(
     *,
     config: AgentConfig,
@@ -222,24 +274,23 @@ def _build_agent_behavior_model_client(
     agent_behavior_mode: str | None,
     live_subset: bool,
 ):
-    delegate = scenario.model_client
+    delegate = scenario.model_client if scenario is not None else None
     if agent_behavior_mode != "cached":
         if delegate is None and live_subset:
             return LlamaCppClient(config), None
         return delegate, None
     if delegate is not None and getattr(delegate, "is_record_replay_client", False):
         return delegate, None
-    # Cached agent tests use real model responses behind the replay cache.
-    delegate = LlamaCppClient(config)
+    delegate = LlamaCppClient(config) if delegate is None else delegate
     replay_cache_root = output_dir / "replay_cache" / task.task_id
     os.makedirs(replay_cache_root, exist_ok=True)
     cassette_path = replay_cache_root / f"seed_{seed}.json"
-    # Always use "record" mode: client replays existing cassette entries automatically
-    # and records new ones when missing. Never fails with MissingReplayEntryError.
-    planned_mode = "replay" if cassette_path.exists() else "record"
+    replay_policy = _cached_replay_policy()
+    mode = "record" if replay_policy == "record_if_missing" else "replay"
+    planned_mode = "replay" if cassette_path.exists() else mode
     wrapped = RecordReplayModelClient(
         cassette_path=cassette_path,
-        mode="record",
+        mode=mode,
         delegate=delegate,
         request_metadata={
             "agent_behavior_mode": "cached",
@@ -249,7 +300,7 @@ def _build_agent_behavior_model_client(
             "difficulty": task.difficulty,
         },
     )
-    return wrapped, {"cassette_path": str(cassette_path), "cache_mode": planned_mode}
+    return wrapped, {"cassette_path": str(cassette_path), "cache_mode": planned_mode, "replay_policy": replay_policy}
 
 
 def _snapshot_workspace(root: Path) -> dict[str, str]:
@@ -344,10 +395,14 @@ def _print_benchmark_progress(*, current: int, total: int, task: BenchmarkTaskDe
 def _planned_cache_mode(output_dir: Path, task: BenchmarkTaskDefinition, seeds: Sequence[int], *, cached: bool) -> str:
     if not cached:
         return "uncached"
+    policy = _cached_replay_policy()
     modes = []
     for seed in seeds:
         cassette_path = output_dir / "replay_cache" / task.task_id / f"seed_{seed}.json"
-        modes.append("replay" if cassette_path.exists() else "record")
+        if cassette_path.exists():
+            modes.append("replay")
+        else:
+            modes.append("record" if policy == "record_if_missing" else "replay")
     return modes[0] if len(set(modes)) == 1 else "mixed"
 
 
@@ -720,7 +775,7 @@ def run_benchmarks(
             "agent_behavior_mode": resolved_agent_behavior_mode or "",
             "replay_cache_enabled": resolved_agent_behavior_mode == "cached",
             "replay_cache_root": str(output_dir / "replay_cache") if resolved_agent_behavior_mode == "cached" else "",
-            "replay_cache_policy": "replay_if_present_record_if_missing" if resolved_agent_behavior_mode == "cached" else "",
+            "replay_cache_policy": _cached_replay_policy() if resolved_agent_behavior_mode == "cached" else "",
             "request_observability_mode": (
                 "replay_cache_or_progress_polling"
                 if resolved_agent_behavior_mode == "cached"

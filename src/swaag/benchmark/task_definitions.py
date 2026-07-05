@@ -147,9 +147,16 @@ def _default_oracle(
     tag_set = set(tags)
     requires_expansion = "vague" in tag_set
     asks_for_clarification = bool({"clarification", "incomplete", "ambiguity"} & tag_set)
+    expected_prompt_type = "structured"
+    if "vague" in tag_set:
+        expected_prompt_type = "vague"
+    elif {"clarification", "incomplete", "ambiguity"} & tag_set:
+        expected_prompt_type = "incomplete"
+    elif "decomposition" in tag_set or "decomposed" in tag_set:
+        expected_prompt_type = "already_decomposed"
     return PromptUnderstandingOracle(
-        task_type=("reading" if task_type in {"reading", "quality"} else "execution"),
-        completeness="complete",
+        task_type=expected_prompt_type,
+        completeness="incomplete" if expected_prompt_type == "incomplete" else "complete",
         requires_expansion=requires_expansion,
         requires_decomposition=task_type in {"multi_step", "failure"} or difficulty in {"hard", "extremely_hard"},
         expand_task=requires_expansion,
@@ -157,9 +164,16 @@ def _default_oracle(
         ask_user=asks_for_clarification,
         assume_missing=False if asks_for_clarification or "hallucination-guard" in tag_set else None,
         generate_ideas=False if task_type in {"quality", "failure"} else None,
-        strategy_profile=("deep_execution" if task_type in {"multi_step", "failure"} or difficulty in {"hard", "extremely_hard"} else "direct_response"),
-        detected_goals_contains=[task_id.replace("_", " ").split()[0]],
-        detected_entities_contains=[task_id.split("_")[0]],
+        strategy_profile={
+            "coding": "coding",
+            "file_edit": "file_edit",
+            "reading": "reading",
+            "quality": "generic",
+            "multi_step": "multi_step",
+            "failure": "generic",
+        }[task_type],
+        detected_goals_contains=[],
+        detected_entities_contains=[],
     )
 
 
@@ -2385,14 +2399,18 @@ def make_benchmark_task(
         tags=normalized_tags,
     )
     is_complex = task_type in {"coding", "multi_step"} and difficulty in {"hard", "extremely_hard"}
+    # Keep these limits consistent with the planner prompt and with the
+    # generated live tasks. A normal inspect/edit/verify/respond flow needs
+    # four plan steps, and even small file/coding tasks need more than one
+    # action once the prompt explicitly says to inspect inputs first.
     default_overrides = {
         "tools_allow_side_effect_tools": True,
         "planner_max_replans": 0,
-        "planner_max_plan_steps": 3,
-        "runtime_max_reasoning_steps": 6 if is_complex else (2 if task_type in {"coding", "multi_step"} else 1),
-        "runtime_max_total_actions": 6 if is_complex else (2 if task_type in {"coding", "multi_step"} else 1),
-        "runtime_max_tool_steps": 4 if is_complex else 1,
-        "runtime_tool_call_budget": 4 if is_complex else 1,
+        "planner_max_plan_steps": 4,
+        "runtime_max_reasoning_steps": 8 if is_complex else 4,
+        "runtime_max_total_actions": 12 if is_complex else 8,
+        "runtime_max_tool_steps": 8 if is_complex else 4,
+        "runtime_tool_call_budget": 8 if is_complex else 4,
     }
     return BenchmarkTaskDefinition(
         task_id=task_id,

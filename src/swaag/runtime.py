@@ -1985,6 +1985,8 @@ class AgentRuntime:
         candidate_types: list[str],
         detail_lines: list[str] | None = None,
     ) -> SubagentSelectionDecision:
+        if os.environ.get("SWAAG_DISABLE_SUBAGENT_SELECTION", "").lower() in {"1", "true", "yes", "on"}:
+            return SubagentSelectionDecision(spawn=False, subagent_type="none", reason="disabled_by_env", focus="")
         if not candidate_types:
             return SubagentSelectionDecision(spawn=False, subagent_type="none", reason="no_candidates", focus="")
         contract = subagent_selection_contract(candidate_types)
@@ -2937,6 +2939,30 @@ class AgentRuntime:
             update_existing=update_existing,
             required_tools=required_tools or [],
         )
+        if seeded_plan is None and os.environ.get("SWAAG_FORCE_SHELL_RECOVERY_PLAN", "").lower() in {"1", "true", "yes", "on"}:
+            available_tools = set(self.tools.tool_names(self.config))
+            normalized_required = [tool for tool in (required_tools or []) if tool]
+            if {"shell_command", "edit_text", "run_tests"}.issubset(available_tools) and not any(
+                tool not in {"shell_command", "edit_text", "run_tests"} for tool in normalized_required
+            ):
+                seeded_plan = create_shell_recovery_plan(planning_goal)
+                if update_existing and state.active_plan is not None:
+                    seeded_plan.plan_id = state.active_plan.plan_id
+                self.history.record_event(
+                    state,
+                    "plan_repaired",
+                    {
+                        "reason": "env_forced_shell_recovery_plan",
+                        "required_tools": normalized_required,
+                        "repair": "shell_recovery_plan",
+                        "error": "forced by SWAAG_FORCE_SHELL_RECOVERY_PLAN",
+                        "error_type": "ForcedPlanFallback",
+                        "original_plan_id": state.active_plan.plan_id if state.active_plan is not None else "",
+                        "update_existing": update_existing,
+                        "contract_name": "env",
+                        "raw_response_preview": "",
+                    },
+                )
         if seeded_plan is not None:
             plan = seeded_plan
             if state.active_strategy is not None:
@@ -3122,7 +3148,21 @@ class AgentRuntime:
             )
             raise PlanValidationError(str(exc)) from exc
         if len(plan.steps) > self.config.planner.max_plan_steps:
-            raise PlanValidationError(f"Planner returned {len(plan.steps)} steps; max is {self.config.planner.max_plan_steps}")
+            final_response_overflow = (
+                len(plan.steps) == self.config.planner.max_plan_steps + 1
+                and plan.steps[-1].kind == "respond"
+            )
+            if not final_response_overflow:
+                raise PlanValidationError(f"Planner returned {len(plan.steps)} steps; max is {self.config.planner.max_plan_steps}")
+            self.history.record_event(
+                state,
+                "plan_limit_repaired",
+                {
+                    "reason": "allowed_extra_final_response_step",
+                    "step_count": len(plan.steps),
+                    "max_plan_steps": self.config.planner.max_plan_steps,
+                },
+            )
         plan = self._apply_exact_reply_requirement_to_plan(plan, goal=goal)
         self._review_plan(state, plan)
         if update_existing:
@@ -4468,12 +4508,35 @@ class AgentRuntime:
             prompt_modes=self._interactive_prompt_modes(),
             goal=self._goal_text(state),
         )
-        _completion, payload = self._execute_structured_call(
-            state,
-            prepared,
-            validator=self._validate_generation_units_payload,
-            validation_error_types=(ValueError,),
-        )
+        try:
+            _completion, payload = self._execute_structured_call(
+                state,
+                prepared,
+                validator=self._validate_generation_units_payload,
+                validation_error_types=(ValueError,),
+                fatal_on_structured_failure=False,
+            )
+        except (RuntimeError, ValueError) as exc:
+            payload = {
+                "output_class": "bounded_structured",
+                "reason": "fallback after invalid decomposition",
+                "units": [
+                    {
+                        "unit_id": "u1",
+                        "title": "Final response",
+                        "instruction": "Write the final response for the current task.",
+                    }
+                ],
+            }
+            self.history.record_event(
+                state,
+                "output_decomposition_planned",
+                {
+                    "output_class": payload["output_class"],
+                    "reason": f"invalid_generation_decomposition: {exc.__class__.__name__}",
+                    "units": payload["units"],
+                },
+            )
         self.history.record_event(
             state,
             "output_decomposition_planned",
@@ -5267,11 +5330,45 @@ class AgentRuntime:
         stripped = text.strip()
         try:
             payload = json.loads(stripped)
-        except json.JSONDecodeError as exc:
-            raise RuntimeError(f"Model returned invalid JSON for {contract_name}: {text!r}") from exc
+        except json.JSONDecodeError as direct_error:
+            extracted = self._extract_first_json_object(stripped)
+            if extracted is None:
+                raise RuntimeError(f"Model returned invalid JSON for {contract_name}: {text!r}") from direct_error
+            try:
+                payload = json.loads(extracted)
+            except json.JSONDecodeError as exc:
+                raise RuntimeError(f"Model returned invalid JSON for {contract_name}: {text!r}") from exc
         if not isinstance(payload, dict):
             raise RuntimeError(f"Model returned non-object JSON for {contract_name}: {payload!r}")
         return payload
+
+    def _extract_first_json_object(self, text: str) -> str | None:
+        start = text.find("{")
+        if start < 0:
+            return None
+        depth = 0
+        in_string = False
+        escape = False
+        for index in range(start, len(text)):
+            char = text[index]
+            if in_string:
+                if escape:
+                    escape = False
+                elif char == "\\":
+                    escape = True
+                elif char == '"':
+                    in_string = False
+                continue
+            if char == '"':
+                in_string = True
+                continue
+            if char == "{":
+                depth += 1
+            elif char == "}":
+                depth -= 1
+                if depth == 0:
+                    return text[start : index + 1]
+        return None
 
     def _extract_browser_query_argument(self, text: str) -> str | None:
         explicit_match = re.search(r"(?:^|\n)[^\n]*\bbrowser_search\s+query:\s*([^\n]+)", text, re.IGNORECASE)

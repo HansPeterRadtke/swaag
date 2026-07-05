@@ -103,14 +103,24 @@ def validate_analysis(analysis: PromptAnalysis) -> None:
 
 
 def analysis_from_payload(payload: dict) -> PromptAnalysis:
+    task_type = str(payload.get("task_type", "")).strip()
+    completeness = str(payload.get("completeness", "")).strip()
+    requires_expansion = bool(payload.get("requires_expansion"))
+    requires_decomposition = bool(payload.get("requires_decomposition"))
+    if task_type == "vague":
+        requires_expansion = True
+    if task_type == "already_decomposed":
+        requires_decomposition = True
+    if task_type == "incomplete" and completeness == "complete":
+        completeness = "incomplete"
     analysis = PromptAnalysis(
-        task_type=str(payload.get("task_type", "")).strip(),  # type: ignore[arg-type]
-        completeness=str(payload.get("completeness", "")).strip(),  # type: ignore[arg-type]
-        requires_expansion=bool(payload.get("requires_expansion")),
-        requires_decomposition=bool(payload.get("requires_decomposition")),
+        task_type=task_type,  # type: ignore[arg-type]
+        completeness=completeness,  # type: ignore[arg-type]
+        requires_expansion=requires_expansion,
+        requires_decomposition=requires_decomposition,
         confidence=float(payload.get("confidence", 0.0)),
-        detected_entities=[str(item).strip() for item in payload.get("detected_entities", []) if str(item).strip()],
-        detected_goals=[str(item).strip() for item in payload.get("detected_goals", []) if str(item).strip()],
+        detected_entities=[str(item).strip()[:96] for item in payload.get("detected_entities", []) if str(item).strip()][:8],
+        detected_goals=[str(item).strip()[:96] for item in payload.get("detected_goals", []) if str(item).strip()][:4],
     )
     validate_analysis(analysis)
     return analysis

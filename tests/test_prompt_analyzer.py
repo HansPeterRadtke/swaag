@@ -84,16 +84,17 @@ def test_prompt_analysis_rejects_unknown_task_type() -> None:
         )
 
 
-def test_prompt_analysis_rejects_vague_without_expansion() -> None:
-    with pytest.raises(PromptAnalysisValidationError):
-        analysis_from_payload(
-            {
-                "task_type": "vague",
-                "completeness": "incomplete",
-                "requires_expansion": False,
-                "requires_decomposition": False,
-                "confidence": 0.5,
-                "detected_entities": [],
-                "detected_goals": [],
-            }
-        )
+def test_prompt_analysis_repairs_vague_without_expansion() -> None:
+    analysis = analysis_from_payload(
+        {
+            "task_type": "vague",
+            "completeness": "incomplete",
+            "requires_expansion": False,
+            "requires_decomposition": False,
+            "confidence": 0.5,
+            "detected_entities": [],
+            "detected_goals": [],
+        }
+    )
+
+    assert analysis.requires_expansion is True

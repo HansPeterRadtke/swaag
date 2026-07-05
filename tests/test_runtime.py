@@ -479,18 +479,35 @@ def test_extract_path_argument_prefers_explicit_path_line_over_paths_in_task_tex
 
     assert path == "test_sample.py"
 
-def test_runtime_parse_json_rejects_trailing_text_after_structured_object(make_config) -> None:
+def test_runtime_parse_json_recovers_trailing_text_after_structured_object(make_config) -> None:
     runtime = AgentRuntime(make_config(), model_client=FakeModelClient(responses=[]))
 
-    with pytest.raises(RuntimeError, match="invalid JSON"):
-        runtime._parse_json('{"split_task": false, "expand_task": false}\n\n17', contract_name="task_decision")
+    payload = runtime._parse_json('{"split_task": false, "expand_task": false}\n\n17', contract_name="task_decision")
+
+    assert payload == {"split_task": False, "expand_task": False}
 
 
-def test_runtime_parse_json_rejects_fenced_json_object_for_structured_calls(make_config) -> None:
+def test_runtime_parse_json_recovers_fenced_json_object_for_structured_calls(make_config) -> None:
     runtime = AgentRuntime(make_config(), model_client=FakeModelClient(responses=[]))
 
-    with pytest.raises(RuntimeError, match="invalid JSON"):
-        runtime._parse_json("```json\n{\"task_type\": \"structured\"}\n```", contract_name="prompt_analysis")
+    payload = runtime._parse_json("```json\n{\"task_type\": \"structured\"}\n```", contract_name="prompt_analysis")
+
+    assert payload == {"task_type": "structured"}
+
+
+def test_plan_prompt_uses_configured_max_plan_steps(make_config) -> None:
+    config = make_config(planner__max_plan_steps=6)
+    runtime = AgentRuntime(config, model_client=FakeModelClient(responses=[]))
+
+    assembly = runtime.prompts.build_plan_prompt(
+        "Do the task.",
+        prompt_mode="lean",
+        context_components=[],
+        tools=[],
+    )
+
+    assert "Use at most 6 steps total" in assembly.prompt_text
+    assert "Use at most 4 steps total" not in assembly.prompt_text
 
 
 def test_selection_counter_uses_non_recording_tokenization(make_config) -> None:
@@ -3257,3 +3274,27 @@ def test_runtime_uses_overflow_recovery_planning_instead_of_blind_text_continuat
     assert result.assistant_text == "Recovered section A.\n\nRecovered section B."
     assert any(event.event_type == "output_overflow_recovery_planned" for event in events)
     assert all("continue this text" not in request.get("prompt", "").lower() for request in fake_client.requests)
+
+
+def test_runtime_generation_decomposition_falls_back_after_invalid_json(make_config) -> None:
+    runtime = AgentRuntime(
+        make_config(),
+        model_client=FakeModelClient(
+            contract_responses={
+                "generation_decomposition": ["{invalid json"],
+            }
+        ),
+    )
+    state = runtime.create_or_load_session()
+    runtime._record_message(state, Message(role="user", content="Write the final answer", created_at="t1"))
+
+    payload, _report = runtime._plan_answer_generation_units(state)
+    events = runtime.history.read_history(state.session_id)
+
+    assert payload["output_class"] == "bounded_structured"
+    assert payload["units"] == [
+        {"unit_id": "u1", "title": "Final response", "instruction": "Write the final response for the current task."}
+    ]
+    planned_events = [event for event in events if event.event_type == "output_decomposition_planned"]
+    assert any("invalid_generation_decomposition" in event.payload.get("reason", "") for event in planned_events)
+    assert not any(event.event_type == "fatal_system_error" for event in events)

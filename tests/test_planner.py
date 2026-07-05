@@ -429,3 +429,39 @@ def test_plan_from_payload_topologically_sorts_out_of_order_dag_steps() -> None:
 
     assert [step.step_id for step in plan.steps] == ["step_read", "step_answer"]
     assert plan.current_step_id == "step_read"
+
+
+def test_plan_from_payload_repairs_missing_final_response_step() -> None:
+    payload = json.loads(
+        plan_response(
+            goal="Inspect a file, edit it, and report the result.",
+            steps=[
+                plan_step("step_read", "Read the file", "read", expected_tool="read_text", expected_output="File contents", success_criteria="The file is read."),
+                plan_step(
+                    "step_edit",
+                    "Edit the file",
+                    "write",
+                    expected_tool="edit_text",
+                    expected_output="Edited file",
+                    success_criteria="The file is edited.",
+                    depends_on=["step_read"],
+                ),
+                plan_step(
+                    "step_verify",
+                    "Verify the file",
+                    "tool",
+                    expected_tool="run_tests",
+                    expected_output="Passing tests",
+                    success_criteria="The verification passes.",
+                    depends_on=["step_edit"],
+                ),
+            ],
+        )
+    )
+
+    plan = plan_from_payload(payload, available_tools=["read_text", "edit_text", "run_tests"])
+
+    assert [step.kind for step in plan.steps] == ["read", "write", "tool", "respond"]
+    assert plan.steps[-1].expected_tool is None
+    assert plan.steps[-1].done_condition == "assistant_response_nonempty"
+    assert plan.steps[-1].depends_on == ["step_verify"]
