@@ -10,6 +10,7 @@ from pathlib import Path
 from typing import Any, Callable, Literal
 
 from swaag.fsops import write_text
+from swaag.types import Message
 
 BenchmarkTaskType = Literal["coding", "file_edit", "reading", "multi_step", "failure", "quality"]
 BenchmarkDifficulty = Literal["extremely_easy", "easy", "normal", "hard", "extremely_hard"]
@@ -91,6 +92,7 @@ class TaskScenario:
     expected_outcome: ExpectedOutcome = "success"
     expected_failure_category: str | None = None
     oracle: PromptUnderstandingOracle | None = None
+    history_messages: list[Message] = field(default_factory=list)
 
     def __post_init__(self) -> None:
         if self.oracle is not None and self.model_client is not None:
@@ -2429,6 +2431,214 @@ def make_benchmark_task(
     )
 
 
+
+def _history_message(role: str, content: str, index: int) -> Message:
+    return Message(
+        role=role,  # type: ignore[arg-type]
+        content=content,
+        created_at=f"2026-01-01T00:{index:02d}:00+00:00",
+    )
+
+
+def _build_history_scenario(
+    *,
+    task_id: str,
+    workspace: Path,
+    prompt: str,
+    history_messages: list[Message],
+    expected_answer_contains: list[str],
+    expected_answer: str | None = None,
+    expected_answer_regex: str | None = None,
+    difficulty: BenchmarkDifficulty = "normal",
+    tags: list[str] | None = None,
+    description: str = "",
+) -> TaskScenario:
+    _write(workspace / "README.md", f"History benchmark fixture for {task_id}. No task answer is stored in files.\n")
+    tag_list = list(tags or ["quality", "history", "conversation-memory"])
+    oracle = _default_oracle(
+        task_id=task_id,
+        task_type="quality",
+        difficulty=difficulty,
+        tags=tag_list,
+    )
+    if oracle is not None:
+        oracle.requires_decomposition = False
+        oracle.split_task = False
+        oracle.strategy_profile = "generic"
+    return TaskScenario(
+        prompt=prompt,
+        workspace=workspace,
+        model_client=None,
+        history_messages=history_messages,
+        oracle=oracle,
+        verification_contract=BenchmarkVerificationContract(
+            task_type="quality",
+            expected_answer=expected_answer,
+            expected_answer_contains=expected_answer_contains,
+            expected_answer_regex=expected_answer_regex,
+            required_history_events=["reasoning_completed"],
+            required_event_counts={"message_added": len(history_messages) + 2},
+            max_tool_calls=0,
+            forbid_unexpected_workspace_changes=True,
+        ),
+    )
+
+
+def history_benchmark_tasks() -> list[BenchmarkTaskDefinition]:
+    specs: list[tuple[str, BenchmarkDifficulty, list[str], str, Callable[[Path], TaskScenario]]] = []
+
+    def add(task_id: str, difficulty: BenchmarkDifficulty, tags: list[str], description: str, builder: Callable[[Path], TaskScenario]) -> None:
+        specs.append((task_id, difficulty, tags, description, builder))
+
+    add(
+        "history_recall_user_fact",
+        "easy",
+        ["quality", "history", "conversation-memory", "user-fact"],
+        "Recall a specific fact stated by the user in earlier chat history.",
+        lambda workspace: _build_history_scenario(
+            task_id="history_recall_user_fact",
+            workspace=workspace,
+            difficulty="easy",
+            tags=["quality", "history", "conversation-memory", "user-fact"],
+            history_messages=[
+                _history_message("user", "For this session, remember that the deployment codename is Blue Heron.", 1),
+                _history_message("assistant", "Noted. The deployment codename for this session is Blue Heron.", 2),
+                _history_message("user", "Also note that the rollout window is Tuesday morning.", 3),
+            ],
+            prompt="Using only our earlier conversation, what deployment codename did I give you? Answer with the codename only.",
+            expected_answer="Blue Heron",
+            expected_answer_contains=["Blue Heron"],
+        ),
+    )
+    add(
+        "history_recall_assistant_statement",
+        "normal",
+        ["quality", "history", "conversation-memory", "assistant-statement"],
+        "Recall a concrete label introduced by an earlier assistant message.",
+        lambda workspace: _build_history_scenario(
+            task_id="history_recall_assistant_statement",
+            workspace=workspace,
+            difficulty="normal",
+            tags=["quality", "history", "conversation-memory", "assistant-statement"],
+            history_messages=[
+                _history_message("user", "Give the incident handoff a short tracking label.", 1),
+                _history_message("assistant", "Use tracking label orchid-7 for this incident handoff.", 2),
+                _history_message("user", "Good. We may need that label later.", 3),
+            ],
+            prompt="What tracking label did you assign earlier? Answer with only the label.",
+            expected_answer="orchid-7",
+            expected_answer_contains=["orchid-7"],
+        ),
+    )
+    add(
+        "history_reasoning_from_user_facts",
+        "normal",
+        ["quality", "history", "conversation-memory", "reasoning"],
+        "Compute a derived answer from multiple earlier user-provided facts.",
+        lambda workspace: _build_history_scenario(
+            task_id="history_reasoning_from_user_facts",
+            workspace=workspace,
+            difficulty="normal",
+            tags=["quality", "history", "conversation-memory", "reasoning"],
+            history_messages=[
+                _history_message("user", "For the next check, Alpha is 12 and Beta is 7.", 1),
+                _history_message("assistant", "Recorded: Alpha 12, Beta 7.", 2),
+                _history_message("user", "The multiplier for that check is 3.", 3),
+            ],
+            prompt="Using only the earlier conversation, calculate (Alpha minus Beta) times the multiplier. Answer with only the number.",
+            expected_answer="15",
+            expected_answer_contains=["15"],
+        ),
+    )
+    add(
+        "history_latest_fact_overrides_older_fact",
+        "hard",
+        ["quality", "history", "conversation-memory", "recency", "contradiction"],
+        "Use the latest relevant chat-history fact when an earlier value was superseded.",
+        lambda workspace: _build_history_scenario(
+            task_id="history_latest_fact_overrides_older_fact",
+            workspace=workspace,
+            difficulty="hard",
+            tags=["quality", "history", "conversation-memory", "recency", "contradiction"],
+            history_messages=[
+                _history_message("user", "Initial backup owner for the Falcon release is Mira.", 1),
+                _history_message("assistant", "Initial owner recorded as Mira.", 2),
+                _history_message("user", "Update that: the final backup owner for Falcon is Omar, not Mira.", 3),
+                _history_message("assistant", "Updated. Final Falcon backup owner is Omar.", 4),
+            ],
+            prompt="Using the latest relevant message in our conversation, who is the final Falcon backup owner? Answer with only the name.",
+            expected_answer="Omar",
+            expected_answer_contains=["Omar"],
+        ),
+    )
+    add(
+        "history_unknown_missing_fact",
+        "normal",
+        ["quality", "history", "conversation-memory", "unknown-answer", "hallucination-guard"],
+        "Say that the requested fact is absent when it never appeared in chat history.",
+        lambda workspace: _build_history_scenario(
+            task_id="history_unknown_missing_fact",
+            workspace=workspace,
+            difficulty="normal",
+            tags=["quality", "history", "conversation-memory", "unknown-answer", "hallucination-guard"],
+            history_messages=[
+                _history_message("user", "The account owner is Lina and the ticket id is TCK-441.", 1),
+                _history_message("assistant", "Recorded account owner Lina and ticket TCK-441.", 2),
+                _history_message("user", "The environment is staging, not production.", 3),
+            ],
+            prompt="Using only our earlier conversation, what was the vault recovery code? If it was never provided, answer exactly: not in the conversation history",
+            expected_answer="not in the conversation history",
+            expected_answer_contains=["not in the conversation history"],
+        ),
+    )
+    add(
+        "history_missing_operand_reasoning",
+        "hard",
+        ["quality", "history", "conversation-memory", "reasoning", "missing-information", "hallucination-guard"],
+        "Detect that a derived calculation cannot be completed because a required earlier-history value is missing.",
+        lambda workspace: _build_history_scenario(
+            task_id="history_missing_operand_reasoning",
+            workspace=workspace,
+            difficulty="hard",
+            tags=["quality", "history", "conversation-memory", "reasoning", "missing-information", "hallucination-guard"],
+            history_messages=[
+                _history_message("user", "Batch A has 17 items and Batch B has 9 items.", 1),
+                _history_message("assistant", "Recorded Batch A as 17 and Batch B as 9.", 2),
+                _history_message("user", "The correction ticket is CR-7. Do not confuse the ticket id with a correction factor.", 3),
+            ],
+            prompt="Using only our earlier conversation, calculate (Batch A plus Batch B) times the correction factor. If the correction factor was never provided, answer exactly: not enough information in the conversation history",
+            expected_answer="not enough information in the conversation history",
+            expected_answer_contains=["not enough information in the conversation history"],
+        ),
+    )
+
+    return [
+        BenchmarkTaskDefinition(
+            task_id=task_id,
+            task_type="quality",
+            description=description,
+            build=builder,
+            build_live=builder,
+            difficulty=difficulty,
+            tags=tags,
+            setup_instructions=[
+                "Seed real prior user/assistant messages into the benchmark session before the tested prompt.",
+                "The answer must be derived from actual chat history, not from files or external tools.",
+                "The verifier checks exact answer fragments and forbids tool calls or workspace mutation.",
+            ],
+            config_overrides={
+                "tools_allow_side_effect_tools": False,
+                "planner_max_replans": 0,
+                "planner_max_plan_steps": 3,
+                "runtime_max_reasoning_steps": 4,
+                "runtime_max_total_actions": 4,
+                "runtime_max_tool_steps": 0,
+                "runtime_tool_call_budget": 0,
+            },
+        )
+        for task_id, difficulty, tags, description, builder in specs
+    ]
+
 def base_benchmark_tasks() -> list[BenchmarkTaskDefinition]:
     return [
         make_benchmark_task(task_id=task_id, task_type=task_type, difficulty=difficulty, tags=list(tags), description=description)
@@ -2530,6 +2740,6 @@ def validate_benchmark_catalog(tasks: list[BenchmarkTaskDefinition]) -> None:
 def get_benchmark_tasks() -> list[BenchmarkTaskDefinition]:
     from swaag.benchmark.scaled_catalog import generated_benchmark_tasks
 
-    tasks = [*base_benchmark_tasks(), *generated_benchmark_tasks()]
+    tasks = [*base_benchmark_tasks(), *generated_benchmark_tasks(), *history_benchmark_tasks()]
     validate_benchmark_catalog(tasks)
     return tasks

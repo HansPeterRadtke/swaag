@@ -303,6 +303,11 @@ def _build_agent_behavior_model_client(
     return wrapped, {"cassette_path": str(cassette_path), "cache_mode": planned_mode, "replay_policy": replay_policy}
 
 
+
+def _seed_scenario_history(runtime: AgentRuntime, state, history_messages: Sequence[Any]) -> None:
+    for message in history_messages:
+        runtime._record_message(state, message)
+
 def _snapshot_workspace(root: Path) -> dict[str, str]:
     snapshot: dict[str, str] = {}
     if not root.exists():
@@ -631,6 +636,8 @@ def run_benchmarks(
             )
             runtime = AgentRuntime(config, model_client=runtime_model_client)
             state = runtime.create_or_load_session()
+            if scenario.history_messages:
+                _seed_scenario_history(runtime, state, scenario.history_messages)
             runtime_error: Exception | None = None
             assistant_text = ""
             task_started = time.monotonic()

@@ -8,6 +8,8 @@ import shutil
 import pytest
 from pathlib import Path
 
+from tests.helpers import FakeModelClient
+
 from swaag.benchmark.benchmark_runner import _build_agent_behavior_model_client, _resolve_live_model_settings, run_benchmarks
 from swaag.benchmark.task_definitions import BenchmarkTaskDefinition, get_benchmark_tasks, make_benchmark_task
 from swaag.config import load_config
@@ -367,3 +369,46 @@ def test_benchmark_config_uses_discovered_server_context_limit(monkeypatch, tmp_
     )
 
     assert config.model.context_limit == 32000
+
+
+def test_history_benchmark_tasks_are_in_catalog_and_seed_chat_history() -> None:
+    from swaag.benchmark.task_definitions import get_benchmark_tasks
+
+    tasks = {task.task_id: task for task in get_benchmark_tasks()}
+    expected = {
+        "history_recall_user_fact",
+        "history_recall_assistant_statement",
+        "history_reasoning_from_user_facts",
+        "history_latest_fact_overrides_older_fact",
+        "history_unknown_missing_fact",
+        "history_missing_operand_reasoning",
+    }
+
+    assert expected.issubset(tasks)
+    scenario = tasks["history_missing_operand_reasoning"].create(Path("/tmp/swaag-history-test"))
+    assert len(scenario.history_messages) >= 3
+    assert scenario.verification_contract.max_tool_calls == 0
+    assert scenario.verification_contract.expected_answer == "not enough information in the conversation history"
+    assert scenario.oracle is not None
+    assert scenario.oracle.requires_decomposition is False
+    assert scenario.oracle.split_task is False
+    assert scenario.oracle.strategy_profile == "generic"
+
+
+def test_benchmark_runner_seeds_scenario_history(make_config, tmp_path: Path) -> None:
+    from swaag.benchmark.benchmark_runner import _seed_scenario_history
+    from swaag.runtime import AgentRuntime
+    from swaag.types import Message
+
+    runtime = AgentRuntime(make_config(), model_client=FakeModelClient(responses=[]))
+    state = runtime.create_or_load_session()
+    history = [
+        Message(role="user", content="Remember value Z=9.", created_at="2026-01-01T00:00:00+00:00"),
+        Message(role="assistant", content="Recorded Z=9.", created_at="2026-01-01T00:01:00+00:00"),
+    ]
+
+    _seed_scenario_history(runtime, state, history)
+    rebuilt = runtime.history.rebuild_from_history(state.session_id)
+
+    assert [message.content for message in state.messages] == [message.content for message in history]
+    assert [message.content for message in rebuilt.messages] == [message.content for message in history]
