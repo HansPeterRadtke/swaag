@@ -66,6 +66,38 @@ def test_execution_verification_passes_for_zero_exit_and_passing_pytest(tmp_path
     assert result.verification_type_used == "execution"
 
 
+def test_execution_verification_normalizes_bare_pytest_to_current_python(tmp_path: Path) -> None:
+    test_file = tmp_path / "test_ok.py"
+    test_file.write_text("def test_ok():\n    assert 1 + 1 == 2\n", encoding="utf-8")
+    step = PlanStep(
+        step_id="step_exec",
+        title="Run tests",
+        goal="Run tests",
+        kind="reasoning",
+        expected_tool=None,
+        input_text="run",
+        expected_output="tests pass",
+        done_condition="reasoning_result_nonempty",
+        success_criteria="tests pass",
+        verification_type="execution",
+        verification_checks=[
+            {
+                "name": "pytest_green",
+                "check_type": "command_success",
+                "command": ["pytest", str(test_file), "-q"],
+                "cwd": str(tmp_path),
+                "framework": "pytest",
+            }
+        ],
+        required_conditions=["pytest_green"],
+        optional_conditions=[],
+    )
+    result = VerificationEngine().verify_step(runtime=_RuntimeStub(), state=_state(), plan=_plan(step), step=step, artifacts=VerificationArtifacts())
+    assert result.verification_passed is True
+    assert result.evidence["pytest_green"]["command"][0].endswith("python3.11")
+    assert result.evidence["pytest_green"]["command"][1:3] == ["-m", "pytest"]
+
+
 def test_execution_verification_fails_for_failing_pytest(tmp_path: Path) -> None:
     test_file = tmp_path / "test_fail.py"
     test_file.write_text("def test_fail():\n    assert 1 == 2\n", encoding="utf-8")

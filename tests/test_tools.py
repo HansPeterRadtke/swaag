@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import sys
 import time
 from pathlib import Path
 
@@ -7,6 +8,7 @@ import pytest
 
 from swaag.notes import make_note
 from swaag.tools.base import Tool, ToolContext, ToolValidationError
+from swaag.tools.builtin import ReadTextTool, RunTestsTool
 from swaag.tools.registry import ToolRegistry
 from swaag.types import SessionState, ToolExecutionResult
 
@@ -233,3 +235,14 @@ def test_tool_graph_planner_rejects_unreachable_chain(make_config) -> None:
 
     assert plan.valid is False
     assert plan.reason.startswith("no_capability_path:")
+
+
+def test_run_tests_tool_normalizes_bare_pytest_to_current_python() -> None:
+    validated = RunTestsTool().validate({"command": ["pytest", "test_sample.py", "-q"]})
+    assert validated["command"] == [sys.executable, "-m", "pytest", "test_sample.py", "-q"]
+
+
+def test_read_text_prefers_explicit_path_over_stale_reader_id() -> None:
+    validated = ReadTextTool().validate({"path": "policy.md", "reader_id": "stale_reader", "chunk_chars": 100})
+    assert validated["path"] == "policy.md"
+    assert validated["reader_id"] is None

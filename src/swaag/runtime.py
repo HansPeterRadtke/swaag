@@ -439,6 +439,7 @@ class AgentRuntime:
             not turn_prep.decision.direct_response
             and turn_prep.decision.execution_mode == "single_tool"
             and turn_prep.decision.preferred_tool_name in self.tools.tool_names(self.config)
+            and self._allow_direct_tool_plan(effective_goal, turn_prep.decision.preferred_tool_name)
         ):
             self._install_direct_tool_plan(
                 state,
@@ -589,6 +590,7 @@ class AgentRuntime:
                     not turn_prep.decision.direct_response
                     and turn_prep.decision.execution_mode == "single_tool"
                     and turn_prep.decision.preferred_tool_name in self.tools.tool_names(self.config)
+                    and self._allow_direct_tool_plan(effective_goal, turn_prep.decision.preferred_tool_name)
                 ):
                     self._install_direct_tool_plan(
                         state,
@@ -1659,6 +1661,25 @@ class AgentRuntime:
         self._refresh_project_state(state, reason="direct_response_plan")
         self._check_consistency(state)
         return state.active_plan or plan
+
+    def _allow_direct_tool_plan(self, goal: str, tool_name: str) -> bool:
+        if tool_name != "run_tests":
+            return True
+        lowered = goal.lower()
+        repair_markers = (
+            "fix",
+            "repair",
+            "update",
+            "edit",
+            "write",
+            "patch",
+            "bug",
+            "broken",
+            "passes",
+            "pass the",
+            "run tests before answering",
+        )
+        return not any(marker in lowered for marker in repair_markers)
 
     def _install_direct_tool_plan(self, state: SessionState, goal: str, tool_name: str, *, reason: str) -> Plan:
         if state.active_plan is not None and state.active_plan.status == "active" and state.active_plan.goal == goal:

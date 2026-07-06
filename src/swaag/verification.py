@@ -466,8 +466,11 @@ class VerificationEngine:
         if not isinstance(command, list) or not command or not all(isinstance(item, str) and item for item in command):
             raise VerificationError("Execution verification requires a non-empty command list")
         normalized_command = list(command)
-        if Path(normalized_command[0]).name in {"python", "python3"}:
+        requested_executable = Path(normalized_command[0]).name
+        if requested_executable in {"python", "python3"}:
             normalized_command[0] = sys.executable
+        elif requested_executable in {"pytest", "py.test"}:
+            normalized_command = [sys.executable, "-m", "pytest", *normalized_command[1:]]
         executable = Path(normalized_command[0]).name
         allowlist = set(self._command_allowlist) | {Path(sys.executable).name}
         if executable not in allowlist:

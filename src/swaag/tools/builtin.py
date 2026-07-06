@@ -187,6 +187,11 @@ class ReadTextTool(Tool):
         reader_id = raw_input.get("reader_id")
         chunk_chars = raw_input.get("chunk_chars")
         overlap_chars = raw_input.get("overlap_chars")
+        if path is not None and reader_id is not None:
+            # The model sometimes echoes a stale continuation reader_id while
+            # also supplying a concrete path. Prefer the explicit path; otherwise
+            # a harmless read step fails before any file can be inspected.
+            reader_id = None
         if sum(value is not None for value in [path, note_id, reader_id]) != 1:
             raise ToolValidationError("read_text requires exactly one of path, note_id, or reader_id")
         if path is not None and (not isinstance(path, str) or not path.strip()):
@@ -861,8 +866,11 @@ class RunTestsTool(Tool):
         if not isinstance(command, list) or not command or not all(isinstance(item, str) and item for item in command):
             raise ToolValidationError("run_tests.command must be a non-empty list of strings")
         normalized_command = list(command)
-        if normalized_command[0] in {"python", "python3"}:
+        executable_name = Path(normalized_command[0]).name
+        if executable_name in {"python", "python3"}:
             normalized_command[0] = sys.executable
+        elif executable_name in {"pytest", "py.test"}:
+            normalized_command = [sys.executable, "-m", "pytest", *normalized_command[1:]]
         return {"command": normalized_command, "background": bool(raw_input.get("background", False))}
 
     def required_generated_event_types(self, validated_input: dict[str, Any]) -> set[str]:

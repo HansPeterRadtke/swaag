@@ -3309,3 +3309,10 @@ def test_runtime_generation_decomposition_falls_back_after_invalid_json(make_con
     planned_events = [event for event in events if event.event_type == "output_decomposition_planned"]
     assert any("invalid_generation_decomposition" in event.payload.get("reason", "") for event in planned_events)
     assert not any(event.event_type == "fatal_system_error" for event in events)
+
+
+def test_runtime_does_not_direct_run_tests_for_repair_goal(make_config) -> None:
+    runtime = AgentRuntime(make_config(), model_client=FakeModelClient())
+    assert runtime._allow_direct_tool_plan("Fix pkg_492/stats.py so test_pkg_492.py passes.", "run_tests") is False
+    assert runtime._allow_direct_tool_plan("Run the requested tests and report the result.", "run_tests") is True
+    assert runtime._allow_direct_tool_plan("Use the calculator.", "calculator") is True
