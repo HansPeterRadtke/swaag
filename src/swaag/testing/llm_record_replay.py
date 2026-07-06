@@ -78,7 +78,11 @@ class RecordReplayModelClient:
         return self._replayed_count
 
     def _default_request_metadata(self) -> dict[str, Any]:
-        metadata: dict[str, Any] = {"client_class": type(self.delegate).__name__}
+        metadata: dict[str, Any] = {
+            "client_class": type(self.delegate).__name__,
+            "replay_contract_version": "2026-07-06-hard-verification-stream-v2",
+            "model_transport": "streaming_token_timeout",
+        }
         config = getattr(self.delegate, "config", None)
         model = getattr(config, "model", None)
         if model is not None:

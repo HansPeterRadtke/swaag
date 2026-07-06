@@ -4,6 +4,7 @@ import ast
 import json
 import re
 import subprocess
+import sys
 from collections import Counter
 from dataclasses import dataclass, field
 from pathlib import Path
@@ -377,9 +378,12 @@ class VerificationEngine:
         if latest.tool_name == "run_tests":
             stdout = output.get("stdout", "")
             stderr = output.get("stderr", "")
+            exit_code = output.get("exit_code")
+            passed = output.get("passed")
             evidence["has_output"] = isinstance(stdout, str) and isinstance(stderr, str)
-            evidence["passed"] = output.get("passed")
-            return "structural", evidence["has_output"] and isinstance(output.get("passed"), bool), evidence
+            evidence["passed"] = passed
+            evidence["exit_code"] = exit_code
+            return "structural", evidence["has_output"] and passed is True and exit_code == 0, evidence
         return "structural", True, evidence
 
     def _check_index(self, step: PlanStep) -> dict[str, dict[str, Any]]:
@@ -461,13 +465,17 @@ class VerificationEngine:
         command = check.get("command")
         if not isinstance(command, list) or not command or not all(isinstance(item, str) and item for item in command):
             raise VerificationError("Execution verification requires a non-empty command list")
-        executable = Path(command[0]).name
-        if executable not in self._command_allowlist:
+        normalized_command = list(command)
+        if Path(normalized_command[0]).name in {"python", "python3"}:
+            normalized_command[0] = sys.executable
+        executable = Path(normalized_command[0]).name
+        allowlist = set(self._command_allowlist) | {Path(sys.executable).name}
+        if executable not in allowlist:
             raise VerificationError(f"Execution verification command is not allowed: {executable}")
         cwd = check.get("cwd")
         timeout_seconds = int(check.get("timeout_seconds", 30))
         completed = subprocess.run(
-            command,
+            normalized_command,
             cwd=str(cwd) if cwd else None,
             capture_output=True,
             text=True,
@@ -480,7 +488,7 @@ class VerificationEngine:
         framework = str(check.get("framework", "")).strip()
         passed = completed.returncode == int(check.get("expected_exit_code", 0))
         summary: dict[str, Any] = {
-            "command": command,
+            "command": normalized_command,
             "cwd": cwd,
             "exit_code": completed.returncode,
             "stdout": stdout,

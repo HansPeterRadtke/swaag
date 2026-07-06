@@ -59,8 +59,13 @@ def tool_decision_contract(tool_names: Iterable[str]) -> ContractSpec:
 def tool_input_contract(tool_name: str, input_schema: dict[str, Any]) -> ContractSpec:
     schema = input_schema
     if tool_name == "edit_text":
+        properties = dict(input_schema.get("properties", {}))
+        for field in ("path", "pattern", "replacement", "insertion"):
+            if isinstance(properties.get(field), dict):
+                properties[field] = {**properties[field], "maxLength": 2000}
         schema = {
             **input_schema,
+            "properties": properties,
             "allOf": [
                 {
                     "if": {"properties": {"operation": {"const": "replace_range"}}},

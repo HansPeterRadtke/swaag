@@ -5168,6 +5168,21 @@ class AgentRuntime:
             max_tokens=prepared.report.reserved_response_tokens,
             contract=resolved_contract,
         )
+        if prepared.assembly.kind == "tool_input":
+            original_n_predict = request.get("n_predict")
+            if isinstance(original_n_predict, int) and original_n_predict > 512:
+                request = dict(request)
+                request["n_predict"] = 512
+                self.history.record_event(
+                    state,
+                    "budget_repaired",
+                    {
+                        "kind": prepared.assembly.kind,
+                        "reason": "cap_tool_input_generation_tokens",
+                        "requested_response_tokens": original_n_predict,
+                        "capped_response_tokens": 512,
+                    },
+                )
         last_error: Exception | None = None
         transient_unavailable_attempts = 0
         semantic_attempt = 0

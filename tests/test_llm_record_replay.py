@@ -95,3 +95,18 @@ def test_record_replay_client_record_mode_replays_existing_entries_without_calli
     assert replay_delegate.requests == []  # delegate never called
     assert replay_client.replayed_count == 1
     assert replay_client.recorded_count == 0
+
+
+def test_record_replay_default_metadata_versions_runtime_contract(tmp_path: Path) -> None:
+    cassette_path = tmp_path / "cassette.json"
+    client = RecordReplayModelClient(
+        cassette_path=cassette_path,
+        mode="record",
+        delegate=FakeModelClient(responses=["yes"]),
+    )
+    request = client.build_completion_request("Answer yes", max_tokens=4, contract=yes_no_contract())
+    client.send_completion(request, timeout_seconds=5)
+    payload = json.loads(cassette_path.read_text(encoding="utf-8"))
+    metadata = payload["request_metadata"]
+    assert metadata["replay_contract_version"] == "2026-07-06-hard-verification-stream-v2"
+    assert metadata["model_transport"] == "streaming_token_timeout"

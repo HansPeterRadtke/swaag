@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import json
 import random
+import sys
 import time
 from dataclasses import asdict
 from pathlib import Path
@@ -2112,6 +2113,7 @@ def test_runtime_uses_expected_tool_input_contract_for_profile_optimized_edit_st
     assert decision.tool_input["pattern"] == "return 0"
     contracts = [request["contract"] for request in fake_client.requests]
     assert contracts[-1] == "tool_input:edit_text"
+    assert fake_client.requests[-1]["n_predict"] <= 512
 
 
 def test_runtime_falls_back_when_expected_tool_input_contract_returns_malformed_json(make_config) -> None:
@@ -3134,7 +3136,7 @@ def test_runtime_synthesizes_targeted_run_tests_command_from_recent_hint(make_co
 
     assert decision.tool_name == "run_tests"
     assert decision.tool_input["command"] == [
-        "python3",
+        sys.executable,
         "-m",
         "pytest",
         "sympy/printing/tests/test_mathematica.py",

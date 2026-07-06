@@ -633,3 +633,18 @@ def test_history_rebuild_tracks_wait_events_and_background_process_completion(ma
     assert rebuilt_final.environment.waiting is False
     assert rebuilt_final.environment.waiting_process_ids == []
     assert rebuilt_final.environment.processes[process_id].status == "completed"
+
+
+def test_repair_events_are_valid_event_schema() -> None:
+    from swaag.events import validate_event_payload
+
+    validate_event_payload(
+        "plan_limit_repaired",
+        {"reason": "allowed_extra_final_response_step", "step_count": 7, "max_plan_steps": 6},
+        {},
+    )
+    validate_event_payload(
+        "budget_repaired",
+        {"kind": "tool_input", "reason": "cap_tool_input_generation_tokens", "requested_response_tokens": 3840, "capped_response_tokens": 512},
+        {},
+    )

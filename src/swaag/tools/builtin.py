@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import ast
+import sys
 from dataclasses import asdict
 from datetime import datetime, timezone
 from pathlib import Path
@@ -375,6 +376,8 @@ class EditTextTool(Tool):
             value = raw_input.get(field)
             if value is not None and not isinstance(value, str):
                 raise ToolValidationError(f"edit_text.{field} must be a string")
+            if isinstance(value, str) and len(value) > 2000:
+                raise ToolValidationError(f"edit_text.{field} must be at most 2000 characters")
             if value is not None:
                 validated[field] = value
         if operation == "replace_range":
@@ -857,7 +860,10 @@ class RunTestsTool(Tool):
         command = raw_input.get("command")
         if not isinstance(command, list) or not command or not all(isinstance(item, str) and item for item in command):
             raise ToolValidationError("run_tests.command must be a non-empty list of strings")
-        return {"command": list(command), "background": bool(raw_input.get("background", False))}
+        normalized_command = list(command)
+        if normalized_command[0] in {"python", "python3"}:
+            normalized_command[0] = sys.executable
+        return {"command": normalized_command, "background": bool(raw_input.get("background", False))}
 
     def required_generated_event_types(self, validated_input: dict[str, Any]) -> set[str]:
         if validated_input.get("background"):

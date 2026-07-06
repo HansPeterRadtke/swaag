@@ -156,6 +156,49 @@ def test_structural_verification_supports_schema_and_symbol_checks(tmp_path: Pat
     assert result.verification_passed is True
 
 
+def test_composite_verification_fails_failed_run_tests_even_without_exit_zero_check() -> None:
+    step = PlanStep(
+        step_id="step_tests",
+        title="Run tests",
+        goal="Run tests",
+        kind="tool",
+        expected_tool="run_tests",
+        input_text="run tests",
+        expected_output="test output",
+        done_condition="tool_result:run_tests",
+        success_criteria="tests ran",
+        verification_type="composite",
+        verification_checks=[
+            {"name": "dependencies_completed", "check_type": "dependencies_completed"},
+            {"name": "tool_result_present", "check_type": "artifact_present", "artifact": "tool_result"},
+            {"name": "tool_name_matches", "check_type": "tool_name_equals", "expected": "run_tests"},
+            {"name": "tool_output_nonempty", "check_type": "tool_output_nonempty"},
+            {"name": "tool_output_schema_valid", "check_type": "tool_output_schema_valid"},
+        ],
+        required_conditions=[
+            "dependencies_completed",
+            "tool_result_present",
+            "tool_name_matches",
+            "tool_output_nonempty",
+            "tool_output_schema_valid",
+        ],
+        optional_conditions=[],
+    )
+    artifacts = VerificationArtifacts(
+        tool_results=[
+            ToolExecutionResult(
+                tool_name="run_tests",
+                output={"stdout": "", "stderr": "FAILED", "exit_code": 1, "passed": False},
+                display_text="failed",
+            )
+        ]
+    )
+    result = VerificationEngine().verify_step(runtime=_RuntimeStub(), state=_state(), plan=_plan(step), step=step, artifacts=artifacts)
+    assert result.verification_passed is False
+    assert "perspective:structural" in result.conditions_failed
+    assert result.evidence["perspectives"]["structural"]["passed"] is False
+
+
 def test_composite_verification_allows_optional_failure(tmp_path: Path) -> None:
     data = tmp_path / "data.json"
     data.write_text(json.dumps({"value": 4}), encoding="utf-8")
