@@ -370,33 +370,38 @@ class EditTextTool(Tool):
             raise ToolValidationError("edit_text.path must be a non-empty string")
         if operation not in {"replace_range", "insert_at", "delete_range", "replace_pattern_once", "replace_pattern_all"}:
             raise ToolValidationError("edit_text.operation is invalid")
-        validated = {"path": path, "operation": operation, "dry_run": bool(raw_input.get("dry_run", False))}
-        for field in ["start", "end", "position"]:
+        def _non_negative_int(field: str) -> int:
             value = raw_input.get(field)
-            if value is not None and (not isinstance(value, int) or value < 0):
+            if not isinstance(value, int) or value < 0:
                 raise ToolValidationError(f"edit_text.{field} must be a non-negative integer")
-            if value is not None:
-                validated[field] = value
-        for field in ["replacement", "insertion", "pattern"]:
+            return value
+
+        def _string_field(field: str, *, required: bool = True) -> str:
             value = raw_input.get(field)
-            if value is not None and not isinstance(value, str):
+            if value is None and not required:
+                return ""
+            if not isinstance(value, str):
                 raise ToolValidationError(f"edit_text.{field} must be a string")
-            if isinstance(value, str) and len(value) > 2000:
+            if len(value) > 2000:
                 raise ToolValidationError(f"edit_text.{field} must be at most 2000 characters")
-            if value is not None:
-                validated[field] = value
+            return value
+
+        validated = {"path": path, "operation": operation, "dry_run": bool(raw_input.get("dry_run", False))}
         if operation == "replace_range":
-            if "start" not in validated or "end" not in validated or "replacement" not in validated:
-                raise ToolValidationError("edit_text.replace_range requires start, end, and replacement")
+            validated["start"] = _non_negative_int("start")
+            validated["end"] = _non_negative_int("end")
+            validated["replacement"] = _string_field("replacement")
         elif operation == "insert_at":
-            if "position" not in validated or "insertion" not in validated:
-                raise ToolValidationError("edit_text.insert_at requires position and insertion")
+            validated["position"] = _non_negative_int("position")
+            validated["insertion"] = _string_field("insertion")
         elif operation == "delete_range":
-            if "start" not in validated or "end" not in validated:
-                raise ToolValidationError("edit_text.delete_range requires start and end")
+            validated["start"] = _non_negative_int("start")
+            validated["end"] = _non_negative_int("end")
         elif operation in {"replace_pattern_once", "replace_pattern_all"}:
-            if "pattern" not in validated or "replacement" not in validated:
+            if raw_input.get("pattern") is None or raw_input.get("replacement") is None:
                 raise ToolValidationError(f"edit_text.{operation} requires pattern and replacement")
+            validated["pattern"] = _string_field("pattern")
+            validated["replacement"] = _string_field("replacement")
         return validated
 
     def effective_kind(self, validated_input: dict[str, Any]) -> str:

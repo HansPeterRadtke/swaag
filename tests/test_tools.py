@@ -8,7 +8,7 @@ import pytest
 
 from swaag.notes import make_note
 from swaag.tools.base import Tool, ToolContext, ToolValidationError
-from swaag.tools.builtin import ReadTextTool, RunTestsTool
+from swaag.tools.builtin import EditTextTool, ReadTextTool, RunTestsTool
 from swaag.tools.registry import ToolRegistry
 from swaag.types import SessionState, ToolExecutionResult
 
@@ -246,3 +246,36 @@ def test_read_text_prefers_explicit_path_over_stale_reader_id() -> None:
     validated = ReadTextTool().validate({"path": "policy.md", "reader_id": "stale_reader", "chunk_chars": 100})
     assert validated["path"] == "policy.md"
     assert validated["reader_id"] is None
+
+
+def test_edit_tool_strips_fields_from_pattern_operations(make_config, tmp_path: Path) -> None:
+    path = tmp_path / "stats.py"
+    path.write_text("def moving_total(values):\n    total = 0\n    return total\n", encoding="utf-8")
+    validated = EditTextTool().validate(
+        {
+            "path": str(path),
+            "operation": "replace_pattern_once",
+            "pattern": "return total",
+            "replacement": "return total + values[-1]",
+            "start": 0,
+            "end": 64,
+        }
+    )
+    assert "start" not in validated
+    assert "end" not in validated
+    registry = ToolRegistry()
+    _, result = registry.dispatch(
+        "edit_text",
+        {
+            "path": str(path),
+            "operation": "replace_pattern_once",
+            "pattern": "return total",
+            "replacement": "return total + values[-1]",
+            "start": 0,
+            "end": 64,
+        },
+        make_config(tools__allow_side_effect_tools=True, editor__allow_writes=True),
+        _empty_state(),
+    )
+    assert result.output["changed"] is True
+    assert "return total + values[-1]" in result.output["diff"]
