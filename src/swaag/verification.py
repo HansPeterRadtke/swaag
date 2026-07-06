@@ -49,6 +49,14 @@ class VerificationArtifacts:
         return self.tool_results[-1] if self.tool_results else None
 
 
+def _tool_names_equivalent(actual: str | None, expected: str | None) -> bool:
+    if expected in {None, ""}:
+        return True
+    if actual == expected:
+        return True
+    return {actual, expected} <= {"read_file", "read_text"}
+
+
 class VerificationEngine:
     def __init__(
         self,
@@ -327,7 +335,7 @@ class VerificationEngine:
         completed = {item.step_id for item in plan.steps if item.status == "completed"}
         missing_dependencies = [dependency for dependency in step.depends_on if dependency not in completed]
         latest = artifacts.latest_tool_result
-        tool_matches = latest is None or step.expected_tool in {None, "", latest.tool_name}
+        tool_matches = latest is None or _tool_names_equivalent(latest.tool_name, step.expected_tool)
         tool_output = latest.output if latest is not None else {}
         exit_code_consistent = True
         if latest is not None and latest.tool_name == "run_tests":
@@ -605,7 +613,7 @@ class VerificationEngine:
             latest = artifacts.latest_tool_result
             actual = latest.tool_name if latest is not None else None
             expected = str(check.get("expected", ""))
-            return actual == expected, {"actual": actual, "expected": expected}
+            return _tool_names_equivalent(actual, expected), {"actual": actual, "expected": expected}
         if check_type == "tool_output_nonempty":
             latest = artifacts.latest_tool_result
             output = latest.output if latest is not None else None

@@ -382,6 +382,7 @@ class EditTextTool(Tool):
                 return ""
             if not isinstance(value, str):
                 raise ToolValidationError(f"edit_text.{field} must be a string")
+            value = value.replace("\\r", "\r").replace("\\n", "\n").replace("\\t", "\t")
             if len(value) > 2000:
                 raise ToolValidationError(f"edit_text.{field} must be at most 2000 characters")
             return value

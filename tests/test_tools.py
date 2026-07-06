@@ -279,3 +279,22 @@ def test_edit_tool_strips_fields_from_pattern_operations(make_config, tmp_path: 
     )
     assert result.output["changed"] is True
     assert "return total + values[-1]" in result.output["diff"]
+
+
+def test_edit_tool_decodes_model_escaped_newlines_before_matching(make_config, tmp_path: Path) -> None:
+    path = tmp_path / "stats.py"
+    path.write_text("def moving_total(values):\n    total = 0\n    return total\n", encoding="utf-8")
+    registry = ToolRegistry()
+    _, result = registry.dispatch(
+        "edit_text",
+        {
+            "path": str(path),
+            "operation": "replace_pattern_once",
+            "pattern": "return total\\n",
+            "replacement": "return total + values[-1]\\n",
+        },
+        make_config(tools__allow_side_effect_tools=True, editor__allow_writes=True),
+        _empty_state(),
+    )
+    assert result.output["changed"] is True
+    assert "return total + values[-1]" in result.output["diff"]

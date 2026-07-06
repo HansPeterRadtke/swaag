@@ -622,3 +622,37 @@ def test_benchmark_verification_enforces_tool_usage_and_workspace_scope(tmp_path
     assert report.passed is True
     assert report.checks["allowed_modified_files"] is True
     assert report.checks["required_tools_used"] is True
+
+
+def test_tool_name_verification_treats_read_tools_as_equivalent() -> None:
+    step = PlanStep(
+        step_id="read_source",
+        title="Read source",
+        goal="Read source",
+        kind="read",
+        expected_tool="read_file",
+        input_text="read source",
+        expected_output="source text",
+        done_condition="tool_result:read_file",
+        success_criteria="source is read",
+        verification_type="composite",
+        verification_checks=[
+            {"name": "tool_result_present", "check_type": "artifact_present", "artifact": "tool_result"},
+            {"name": "tool_name_matches", "check_type": "tool_name_equals", "expected": "read_file"},
+            {"name": "tool_output_nonempty", "check_type": "tool_output_nonempty"},
+            {"name": "tool_output_schema_valid", "check_type": "tool_output_schema_valid"},
+        ],
+        required_conditions=["tool_result_present", "tool_name_matches", "tool_output_nonempty", "tool_output_schema_valid"],
+        optional_conditions=[],
+    )
+    artifacts = VerificationArtifacts(
+        tool_results=[
+            ToolExecutionResult(
+                tool_name="read_text",
+                output={"text": "content", "source_ref": "source.py", "reader_id": "reader", "source_kind": "file", "start_offset": 0, "end_offset": 7, "next_offset": 7, "finished": True},
+                display_text="content",
+            )
+        ]
+    )
+    result = VerificationEngine().verify_step(runtime=_RuntimeStub(), state=_state(), plan=_plan(step), step=step, artifacts=artifacts)
+    assert result.verification_passed is True
