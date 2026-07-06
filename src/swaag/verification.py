@@ -961,6 +961,15 @@ def verify_benchmark_contract(
                 checks["reading_json_schema"] = True
                 evidence["reading_json_schema"] = {"schema": expected_schema, "actual": parsed}
 
+    if task_type == "coding" and command and checks.get("command") and "expected_file_patterns" in checks:
+        # For coding tasks the executable test command is the authoritative
+        # contract. File patterns are useful evidence about one intended
+        # implementation shape, but they must not reject a different correct
+        # implementation that passes the task tests and respects the workspace
+        # modification policy.
+        evidence["expected_file_patterns"]["advisory_for_coding"] = True
+        checks["expected_file_patterns"] = True
+
     if task_type == "failure":
         failure_signals = bool(state.metrics.steps_failed or state.metrics.verification_failures or state.metrics.failed_turns)
         abnormal_stop = state.metrics.last_reasoning_reason not in {"answered", "final_response"}

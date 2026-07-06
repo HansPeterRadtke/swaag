@@ -656,3 +656,49 @@ def test_tool_name_verification_treats_read_tools_as_equivalent() -> None:
     )
     result = VerificationEngine().verify_step(runtime=_RuntimeStub(), state=_state(), plan=_plan(step), step=step, artifacts=artifacts)
     assert result.verification_passed is True
+
+
+def test_coding_contract_accepts_alternate_implementation_when_tests_pass(tmp_path: Path) -> None:
+    package = tmp_path / "pkg_alt"
+    package.mkdir()
+    (package / "__init__.py").write_text("", encoding="utf-8")
+    source = package / "stats.py"
+    source.write_text("def moving_total(values: list[int]) -> int:\n    return sum(values)\n", encoding="utf-8")
+    test_file = tmp_path / "test_pkg_alt.py"
+    test_file.write_text(
+        "import unittest\n\nfrom pkg_alt.stats import moving_total\n\n\n"
+        "class StatsTests(unittest.TestCase):\n"
+        "    def test_moving_total(self):\n        self.assertEqual(moving_total([7, 7, 15]), 29)\n",
+        encoding="utf-8",
+    )
+    contract = type(
+        "Contract",
+        (),
+        {
+            "task_type": "coding",
+            "expected_file_patterns": {str(source): ["for value in values:", "return total"]},
+            "command": ["python3", "-m", "unittest", "-q", test_file.name],
+            "command_cwd": str(tmp_path),
+            "command_framework": "unittest",
+            "required_history_events": ["reasoning_completed"],
+            "allowed_modified_files": [str(source)],
+            "forbid_unexpected_workspace_changes": True,
+        },
+    )()
+    state = _state()
+    state.metrics.last_reasoning_reason = "answered"
+    events = [HistoryEvent(id="1", sequence=1, session_id="session", timestamp="t", type="reasoning_completed", version=1, payload={})]
+
+    report = verify_benchmark_contract(
+        contract,
+        assistant_text="Fixed and tests pass.",
+        state=state,
+        events=events,
+        workspace_before={str(source): "def moving_total(values):\n    return 0\n"},
+        workspace_after={str(source): source.read_text(encoding="utf-8")},
+    )
+
+    assert report.passed is True
+    assert report.checks["command"] is True
+    assert report.checks["expected_file_patterns"] is True
+    assert report.evidence["expected_file_patterns"]["advisory_for_coding"] is True
