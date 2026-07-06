@@ -3314,5 +3314,6 @@ def test_runtime_generation_decomposition_falls_back_after_invalid_json(make_con
 def test_runtime_does_not_direct_run_tests_for_repair_goal(make_config) -> None:
     runtime = AgentRuntime(make_config(), model_client=FakeModelClient())
     assert runtime._allow_direct_tool_plan("Fix pkg_492/stats.py so test_pkg_492.py passes.", "run_tests") is False
+    assert runtime._allow_direct_tool_plan("A refactor broke the reporting flow. Restore the documented output.", "run_tests") is False
     assert runtime._allow_direct_tool_plan("Run the requested tests and report the result.", "run_tests") is True
     assert runtime._allow_direct_tool_plan("Use the calculator.", "calculator") is True

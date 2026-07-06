@@ -366,6 +366,8 @@ class EditTextTool(Tool):
     def validate(self, raw_input: dict[str, Any]) -> dict[str, Any]:
         path = raw_input.get("path")
         operation = raw_input.get("operation")
+        if operation == "replace" and raw_input.get("pattern") is not None and raw_input.get("replacement") is not None:
+            operation = "replace_pattern_once"
         if not isinstance(path, str) or not path.strip():
             raise ToolValidationError("edit_text.path must be a non-empty string")
         if operation not in {"replace_range", "insert_at", "delete_range", "replace_pattern_once", "replace_pattern_all"}:
