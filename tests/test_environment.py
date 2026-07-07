@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import sys
 import time
 from pathlib import Path
 
@@ -405,3 +406,15 @@ def test_environment_kill_background_shell_command_terminates_child_process(make
     rebuilt = runtime.history.rebuild_from_history(state.session_id)
     assert rebuilt.environment.processes[process_id].status == "killed"
     assert not target.exists()
+
+
+def test_environment_repairs_missing_test_file_argument(make_config, tmp_path: Path) -> None:
+    config = make_config(runtime__tool_timeout_seconds=10)
+    state = SessionState(session_id="s", created_at="t", updated_at="t", config_fingerprint="cfg", model_base_url="http://example.test")
+    environment = AgentEnvironment(config, state)
+    (tmp_path / "test_pkg_261_slugify.py").write_text("def test_ok():\n    assert True\n", encoding="utf-8")
+
+    result = environment.run_tests([sys.executable, "-m", "pytest", "pkg_261/tests/test_slugify.py"], background=False)
+
+    assert result.output["passed"] is True
+    assert result.output["command"][-1] == "test_pkg_261_slugify.py"

@@ -452,9 +452,54 @@ class AgentEnvironment:
         }
         return ToolExecutionResult(tool_name="shell_command", output=output, display_text=f"shell_command result: {stable_json_dumps(output, indent=2)}", generated_events=generated)
 
+    def _repair_test_command_paths(self, command: list[str]) -> list[str]:
+        repaired = list(command)
+        cwd = Path(self.current_cwd)
+        python_test_runner = len(repaired) >= 3 and Path(repaired[0]).name.startswith("python") and repaired[1:3] in (["-m", "pytest"], ["-m", "unittest"])
+        if not python_test_runner:
+            return repaired
+        runner = repaired[2]
+        test_args = repaired[3:]
+        test_files = sorted(
+            path.relative_to(cwd).as_posix()
+            for pattern in ("test*.py", "**/test*.py")
+            for path in cwd.glob(pattern)
+            if path.is_file() and ".pytest_cache" not in path.parts
+        )
+        test_files = sorted(dict.fromkeys(test_files))
+        if not test_files:
+            return repaired
+        updated = False
+        for index, arg in enumerate(test_args, start=3):
+            if not arg.endswith(".py") or (cwd / arg).exists():
+                continue
+            wanted_name = Path(arg).name
+            candidates = [path for path in test_files if Path(path).name == wanted_name]
+            if not candidates:
+                stem = Path(wanted_name).stem
+                stem_bits = {bit for bit in stem.replace("test_", "").replace("-", "_").split("_") if bit}
+                scored: list[tuple[int, str]] = []
+                for path in test_files:
+                    candidate_bits = {bit for bit in Path(path).stem.replace("test_", "").replace("-", "_").split("_") if bit}
+                    overlap = len(stem_bits & candidate_bits)
+                    if overlap:
+                        scored.append((overlap, path))
+                if scored:
+                    best = max(score for score, _ in scored)
+                    candidates = [path for score, path in scored if score == best]
+            if not candidates and len(test_files) == 1:
+                candidates = list(test_files)
+            if len(candidates) == 1:
+                repaired[index] = candidates[0]
+                updated = True
+        if not updated and runner == "pytest" and len(test_args) == 1 and test_args[0].endswith(".py") and not (cwd / test_args[0]).exists() and len(test_files) == 1:
+            repaired[3] = test_files[0]
+        return repaired
+
     def run_tests(self, command: list[str], *, background: bool = False) -> ToolExecutionResult:
         if not command:
             raise ToolValidationError("run_tests.command must not be empty")
+        command = self._repair_test_command_paths(command)
         if background:
             return self._start_background_tests(command)
         process_result = self.process.run(
