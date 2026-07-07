@@ -131,8 +131,13 @@ def test_failing_step_triggers_replan(make_config) -> None:
     events = runtime.history.read_history(result.session_id)
 
     assert result.assistant_text == "4"
-    assert any(event.event_type == "verification_failed" for event in events)
     assert any(event.event_type == "tool_graph_rejected" for event in events)
+    assert any(event.event_type == "step_failed" for event in events)
+    assert not any(
+        event.event_type == "verification_failed"
+        and event.payload.get("step_id") == "step_calc"
+        for event in events
+    )
     assert sum(1 for event in events if event.event_type == "plan_updated") >= 2
     assert any(event.event_type == "replan_triggered" for event in events)
 

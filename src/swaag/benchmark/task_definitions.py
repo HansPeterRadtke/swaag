@@ -2405,14 +2405,15 @@ def make_benchmark_task(
     # generated live tasks. A normal inspect/edit/verify/respond flow needs
     # four plan steps, and even small file/coding tasks need more than one
     # action once the prompt explicitly says to inspect inputs first.
+    repo_repair = task_type in {"coding", "file_edit", "multi_step"}
     default_overrides = {
         "tools_allow_side_effect_tools": True,
-        "planner_max_replans": 0,
+        "planner_max_replans": 2 if repo_repair else 0,
         "planner_max_plan_steps": 4,
-        "runtime_max_reasoning_steps": 8 if is_complex else 4,
-        "runtime_max_total_actions": 12 if is_complex else 8,
-        "runtime_max_tool_steps": 8 if is_complex else 4,
-        "runtime_tool_call_budget": 8 if is_complex else 4,
+        "runtime_max_reasoning_steps": 12 if repo_repair else (8 if is_complex else 4),
+        "runtime_max_total_actions": 18 if repo_repair else (12 if is_complex else 8),
+        "runtime_max_tool_steps": 10 if repo_repair else (8 if is_complex else 4),
+        "runtime_tool_call_budget": 10 if repo_repair else (8 if is_complex else 4),
     }
     return BenchmarkTaskDefinition(
         task_id=task_id,

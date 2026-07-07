@@ -462,3 +462,12 @@ def test_quality_oracle_uses_model_judge_for_semantic_mismatch() -> None:
     assert runtime.called is True
     assert result["passed"] is True
     assert result["checks"]["semantic_quality_judge"] is True
+
+
+def test_repo_repair_benchmark_tasks_allow_recovery_replans() -> None:
+    tasks = {task.task_id: task for task in get_benchmark_tasks()}
+    for task_id in ["coding_multifile_fix", "coding_refactor_keep_tests_green", "coding_optional_calculator", "coding_no_unnecessary_tool"]:
+        overrides = tasks[task_id].config_overrides
+        assert overrides["planner_max_replans"] >= 2
+        assert overrides["runtime_max_reasoning_steps"] >= 10
+        assert overrides["runtime_max_tool_steps"] >= 8

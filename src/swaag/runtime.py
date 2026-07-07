@@ -772,6 +772,55 @@ class AgentRuntime:
                     last_verification = None
                     last_failure = None
                     continue
+                if not subsystem_result.success:
+                    last_failure = self._classify_failure_frontend(
+                        state,
+                        step=step,
+                        reason=f"subsystem_failed:{subsystem_result.subsystem_name}",
+                    )
+                    updated_strategy = adapt_strategy(active_strategy, failure=last_failure, metrics=state.metrics, verification_failed=False)
+                    self._set_strategy(state, updated_strategy, reason=updated_strategy.reason)
+                    no_progress_failures += 1
+                    if last_failure.retryable and step_attempts[step.step_id] <= updated_strategy.retry_same_action_limit + 1:
+                        self.history.record_event(
+                            state,
+                            "retry_triggered",
+                            {
+                                "step_id": step.step_id,
+                                "reason": last_failure.reason,
+                                "attempt": step_attempts[step.step_id],
+                                "failure_kind": last_failure.kind,
+                            },
+                        )
+                        continue
+                    failed_steps += 1
+                    self._fail_step(state, plan, step, f"Subsystem {subsystem_result.subsystem_name} failed", last_failure.kind)
+                    current_running_step_id = None
+                    self._check_drift(state, failed_steps=failed_steps, completed_steps=completed_steps)
+                    if replans_used < self.config.planner.max_replans:
+                        replans_used += 1
+                        self.history.record_event(
+                            state,
+                            "replan_triggered",
+                            {"step_id": step.step_id, "reason": last_failure.reason, "replan_count": replans_used},
+                        )
+                        self._ensure_plan(
+                            state,
+                            effective_goal,
+                            replan_reason=f"Step {step.step_id} subsystem failed: {last_failure.reason}",
+                            replan_attempt=replans_used,
+                            force_replan=True,
+                        )
+                        last_verification = None
+                        last_failure = None
+                        continue
+                    if no_progress_failures >= self.config.runtime.no_progress_failure_limit:
+                        reasoning_status = "stopped"
+                        reasoning_reason = "no_progress_possible"
+                    else:
+                        reasoning_status = "fallback"
+                        reasoning_reason = "subsystem_failed"
+                    break
                 verification = self._verify_step(
                     state,
                     plan,
