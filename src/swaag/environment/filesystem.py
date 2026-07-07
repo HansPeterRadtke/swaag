@@ -48,10 +48,28 @@ class FilesystemManager:
                 items.append(self.relative_path(item))
         return items
 
-    def read_text(self, path_text: str, *, cwd: str | None = None) -> tuple[Path, str]:
+    def resolve_existing_file_path(self, path_text: str, *, cwd: str | None = None) -> Path:
         path = self.resolve_path(path_text, cwd=cwd)
-        if not path.exists() or not path.is_file():
-            raise FilesystemError(f"File does not exist: {path}")
+        if path.exists() and path.is_file():
+            return path
+        repaired = self._repair_missing_file_path(path_text)
+        if repaired is not None:
+            return repaired
+        raise FilesystemError(f"File does not exist: {path}")
+
+    def _repair_missing_file_path(self, path_text: str) -> Path | None:
+        requested_name = Path(path_text).name
+        if not requested_name or requested_name in {".", ".."}:
+            return None
+        candidates = [
+            item
+            for item in self.workspace_root.rglob(requested_name)
+            if item.is_file() and "__pycache__" not in item.parts and ".pytest_cache" not in item.parts
+        ]
+        return candidates[0].resolve() if len(candidates) == 1 else None
+
+    def read_text(self, path_text: str, *, cwd: str | None = None) -> tuple[Path, str]:
+        path = self.resolve_existing_file_path(path_text, cwd=cwd)
         return path, path.read_text(encoding="utf-8")
 
     def search_in_file(

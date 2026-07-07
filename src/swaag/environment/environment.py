@@ -169,7 +169,7 @@ class AgentEnvironment:
                     raise ToolValidationError(f"Cannot continue note reader; note not found: {note_id}")
                 buffer_text = note.content
         elif validated_input["path"] is not None:
-            resolved = self.filesystem.resolve_path(validated_input["path"], cwd=self.current_cwd)
+            resolved = self.filesystem.resolve_existing_file_path(validated_input["path"], cwd=self.current_cwd)
             reader_state = reader.open_file(
                 str(resolved),
                 chunk_chars=validated_input["chunk_chars"],

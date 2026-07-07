@@ -418,3 +418,15 @@ def test_environment_repairs_missing_test_file_argument(make_config, tmp_path: P
 
     assert result.output["passed"] is True
     assert result.output["command"][-1] == "test_pkg_261_slugify.py"
+
+
+def test_environment_repairs_missing_read_file_path_by_unique_basename(make_config, tmp_path: Path) -> None:
+    config = make_config()
+    state = SessionState(session_id="s", created_at="t", updated_at="t", config_fingerprint="cfg", model_base_url="http://example.test")
+    environment = AgentEnvironment(config, state)
+    (tmp_path / "test_pkg_492.py").write_text("content", encoding="utf-8")
+
+    result = environment.read_file("pkg_492/test_pkg_492.py")
+
+    assert result.output["relative_path"] == "test_pkg_492.py"
+    assert result.output["text"] == "content"
