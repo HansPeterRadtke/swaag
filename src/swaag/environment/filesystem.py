@@ -66,7 +66,32 @@ class FilesystemManager:
             for item in self.workspace_root.rglob(requested_name)
             if item.is_file() and "__pycache__" not in item.parts and ".pytest_cache" not in item.parts
         ]
-        return candidates[0].resolve() if len(candidates) == 1 else None
+        if len(candidates) == 1:
+            return candidates[0].resolve()
+        all_files = [
+            item
+            for item in self.workspace_root.rglob("*.py")
+            if item.is_file() and "__pycache__" not in item.parts and ".pytest_cache" not in item.parts
+        ]
+        requested_bits = self._filename_bits(requested_name)
+        if not requested_bits:
+            return None
+        scored: list[tuple[int, Path]] = []
+        for item in all_files:
+            bits = self._filename_bits(item.name) | self._filename_bits(item.as_posix())
+            overlap = len(requested_bits & bits)
+            if overlap:
+                scored.append((overlap, item))
+        if not scored:
+            return None
+        best = max(score for score, _ in scored)
+        winners = [item for score, item in scored if score == best]
+        return winners[0].resolve() if len(winners) == 1 and best >= min(2, len(requested_bits)) else None
+
+    @staticmethod
+    def _filename_bits(value: str) -> set[str]:
+        stem = Path(value).stem.lower()
+        return {bit for bit in re.split(r"[^a-z0-9]+", stem.replace("test_", "")) if bit}
 
     def read_text(self, path_text: str, *, cwd: str | None = None) -> tuple[Path, str]:
         path = self.resolve_existing_file_path(path_text, cwd=cwd)

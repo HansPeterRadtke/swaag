@@ -450,3 +450,18 @@ def test_environment_read_text_chunk_combines_multiple_paths(make_config, tmp_pa
     assert "A = 1" in result.output["text"]
     assert "--- b.py ---" in result.output["text"]
     assert "B = 2" in result.output["text"]
+
+
+def test_environment_repairs_missing_test_path_by_similar_filename(make_config, tmp_path: Path) -> None:
+    config = make_config()
+    state = SessionState(session_id="s", created_at="t", updated_at="t", config_fingerprint="cfg", model_base_url="http://example.test")
+    environment = AgentEnvironment(config, state)
+    (tmp_path / "test_pkg_261_slugify.py").write_text("content", encoding="utf-8")
+
+    result = environment.read_text_chunk(
+        {"path": "pkg_261/tests/test_slugify.py", "paths": None, "note_id": None, "reader_id": None, "chunk_chars": 1000, "overlap_chars": None},
+        ToolContext(config=config, session_state=state, environment=environment),
+    )
+
+    assert result.output["source_kind"] == "file"
+    assert result.output["text"] == "content"

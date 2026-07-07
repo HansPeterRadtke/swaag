@@ -3,6 +3,7 @@ from __future__ import annotations
 from dataclasses import dataclass
 from difflib import unified_diff
 from pathlib import Path
+import re
 
 
 class EditError(ValueError):
@@ -43,61 +44,132 @@ class TextEditor:
     def replace_pattern_once(text: str, pattern: str, replacement: str) -> EditPreview:
         if not pattern:
             raise EditError("pattern must not be empty")
-        count = text.count(pattern)
-        if count > 1:
-            raise EditError("pattern is ambiguous")
-        if count == 1:
-            new_text = text.replace(pattern, replacement, 1)
-            return TextEditor._preview(
-                "replace_pattern_once",
-                None,
-                text,
-                new_text,
-                {"pattern": pattern, "replacement": replacement, "match_count": count},
-            )
-        matches = TextEditor._loose_indented_block_matches(text, pattern)
-        if not matches:
-            raise EditError("pattern not found")
-        if len(matches) > 1:
-            raise EditError("pattern is ambiguous")
-        start, end, indent = matches[0]
-        replacement_text = TextEditor._indent_replacement(replacement, indent, text[start:end].endswith("\n"))
-        new_text = text[:start] + replacement_text + text[end:]
-        return TextEditor._preview(
-            "replace_pattern_once",
-            None,
-            text,
-            new_text,
-            {"pattern": pattern, "replacement": replacement, "match_count": 1, "match_style": "loose_indentation"},
-        )
+        candidates = TextEditor._pattern_candidates(pattern)
+        for candidate in candidates:
+            count = text.count(candidate)
+            if count > 1:
+                raise EditError("pattern is ambiguous")
+            if count == 1:
+                new_text = text.replace(candidate, replacement, 1)
+                return TextEditor._preview(
+                    "replace_pattern_once",
+                    None,
+                    text,
+                    new_text,
+                    {"pattern": pattern, "matched_pattern": candidate, "replacement": replacement, "match_count": count},
+                )
+        for candidate in candidates:
+            matches = TextEditor._loose_indented_block_matches(text, candidate)
+            if len(matches) > 1:
+                raise EditError("pattern is ambiguous")
+            if matches:
+                start, end, indent = matches[0]
+                replacement_text = TextEditor._indent_replacement(replacement, indent, text[start:end].endswith("\n"))
+                new_text = text[:start] + replacement_text + text[end:]
+                return TextEditor._preview(
+                    "replace_pattern_once",
+                    None,
+                    text,
+                    new_text,
+                    {"pattern": pattern, "matched_pattern": candidate, "replacement": replacement, "match_count": 1, "match_style": "loose_indentation"},
+                )
+        for candidate in candidates:
+            regex_matches = TextEditor._regex_pattern_matches(text, candidate)
+            if len(regex_matches) > 1:
+                raise EditError("pattern is ambiguous")
+            if regex_matches:
+                start, end = regex_matches[0]
+                new_text = text[:start] + replacement + text[end:]
+                return TextEditor._preview(
+                    "replace_pattern_once",
+                    None,
+                    text,
+                    new_text,
+                    {"pattern": pattern, "matched_pattern": candidate, "replacement": replacement, "match_count": 1, "match_style": "regex"},
+                )
+        raise EditError("pattern not found")
 
     @staticmethod
     def replace_pattern_all(text: str, pattern: str, replacement: str) -> EditPreview:
         if not pattern:
             raise EditError("pattern must not be empty")
-        count = text.count(pattern)
-        if count > 0:
-            new_text = text.replace(pattern, replacement)
-            return TextEditor._preview(
-                "replace_pattern_all",
-                None,
-                text,
-                new_text,
-                {"pattern": pattern, "replacement": replacement, "match_count": count},
-            )
-        matches = TextEditor._loose_indented_block_matches(text, pattern)
-        if not matches:
-            raise EditError("pattern not found")
-        new_text = text
-        for start, end, indent in reversed(matches):
-            new_text = new_text[:start] + TextEditor._indent_replacement(replacement, indent, new_text[start:end].endswith("\n")) + new_text[end:]
-        return TextEditor._preview(
-            "replace_pattern_all",
-            None,
-            text,
-            new_text,
-            {"pattern": pattern, "replacement": replacement, "match_count": len(matches), "match_style": "loose_indentation"},
-        )
+        for candidate in TextEditor._pattern_candidates(pattern):
+            count = text.count(candidate)
+            if count > 0:
+                new_text = text.replace(candidate, replacement)
+                return TextEditor._preview(
+                    "replace_pattern_all",
+                    None,
+                    text,
+                    new_text,
+                    {"pattern": pattern, "matched_pattern": candidate, "replacement": replacement, "match_count": count},
+                )
+            matches = TextEditor._loose_indented_block_matches(text, candidate)
+            if matches:
+                new_text = text
+                for start, end, indent in reversed(matches):
+                    new_text = new_text[:start] + TextEditor._indent_replacement(replacement, indent, new_text[start:end].endswith("\n")) + new_text[end:]
+                return TextEditor._preview(
+                    "replace_pattern_all",
+                    None,
+                    text,
+                    new_text,
+                    {"pattern": pattern, "matched_pattern": candidate, "replacement": replacement, "match_count": len(matches), "match_style": "loose_indentation"},
+                )
+            regex_matches = TextEditor._regex_pattern_matches(text, candidate)
+            if regex_matches:
+                new_text = text
+                for start, end in reversed(regex_matches):
+                    new_text = new_text[:start] + replacement + new_text[end:]
+                return TextEditor._preview(
+                    "replace_pattern_all",
+                    None,
+                    text,
+                    new_text,
+                    {"pattern": pattern, "matched_pattern": candidate, "replacement": replacement, "match_count": len(regex_matches), "match_style": "regex"},
+                )
+        raise EditError("pattern not found")
+
+    @staticmethod
+    def _pattern_candidates(pattern: str) -> list[str]:
+        candidates: list[str] = [pattern]
+        unescaped = TextEditor._unescape_regex_literal(pattern)
+        if unescaped != pattern:
+            candidates.append(unescaped)
+        compact = TextEditor._collapse_repeated_regex_whitespace(unescaped)
+        if compact not in candidates:
+            candidates.append(compact)
+        return [item for index, item in enumerate(candidates) if item and item not in candidates[:index]]
+
+    @staticmethod
+    def _unescape_regex_literal(pattern: str) -> str:
+        replacements = {
+            r"\n": "\n", r"\t": "\t", r"\r": "\r",
+            r"\(": "(", r"\)": ")", r"\[": "[", r"\]": "]", r"\{": "{", r"\}": "}",
+            r"\+": "+", r"\-": "-", r"\*": "*", r"\?": "?", r"\.": ".", r"\|": "|",
+            r"\^": "^", r"\$": "$", r"\=": "=", r"\:": ":", r"\,": ",", r"\'": "'", r'\"': '"',
+        }
+        result = pattern
+        for escaped, literal in replacements.items():
+            result = result.replace(escaped, literal)
+        return result
+
+    @staticmethod
+    def _collapse_repeated_regex_whitespace(pattern: str) -> str:
+        return re.sub(r"(?:\\s\*|\\n|\\t){2,}", "", pattern)
+
+    @staticmethod
+    def _regex_pattern_matches(text: str, pattern: str) -> list[tuple[int, int]]:
+        if not pattern or len(pattern) > 2000:
+            return []
+        if "\\" not in pattern and not any(token in pattern for token in (".*", "\\s", "[", "(")):
+            return []
+        try:
+            compiled = re.compile(pattern, re.MULTILINE)
+        except re.error:
+            return []
+        matches = [(match.start(), match.end()) for match in compiled.finditer(text) if match.start() != match.end()]
+        return matches
 
     @staticmethod
     def _loose_indented_block_matches(text: str, pattern: str) -> list[tuple[int, int, str]]:

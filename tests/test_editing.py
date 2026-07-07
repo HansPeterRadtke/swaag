@@ -47,3 +47,25 @@ def test_replace_pattern_once_matches_block_ignoring_indentation() -> None:
 
     assert "    return sum(values)" in preview.new_text
     assert "match_style" in preview.details
+
+
+def test_replace_pattern_once_unescapes_regex_style_literal_pattern() -> None:
+    preview = TextEditor.replace_pattern_once(
+        'return f"{total() + 1}:tax"\n',
+        r'total\(\) \+ 1',
+        'total()',
+    )
+
+    assert '{total()}:tax' in preview.new_text
+    assert preview.details["matched_pattern"] == 'total() + 1'
+
+
+def test_replace_pattern_once_unescapes_regex_style_multiline_block() -> None:
+    original = 'def moving_total(values):\n    total = 0\n    for value in values[:-1]:\n        total += value\n    return total\n'
+    preview = TextEditor.replace_pattern_once(
+        original,
+        r'total = 0\nfor value in values[:-1]:\n\ttotal \+= value\nreturn total',
+        'return sum(values)',
+    )
+
+    assert '    return sum(values)' in preview.new_text
