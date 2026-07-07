@@ -168,7 +168,7 @@ class ReadTextTool(Tool):
     input_schema = {
         "type": "object",
         "properties": {
-            "path": {"type": "string"},
+            "path": {"anyOf": [{"type": "string"}, {"type": "array", "items": {"type": "string"}, "minItems": 1}]},
             "note_id": {"type": "string"},
             "reader_id": {"type": "string"},
             "chunk_chars": {"type": "integer", "minimum": 1},
@@ -183,6 +183,10 @@ class ReadTextTool(Tool):
         if not set(raw_input).issubset(allowed):
             raise ToolValidationError("read_text received unknown arguments")
         path = raw_input.get("path")
+        paths = None
+        if isinstance(path, list):
+            paths = path
+            path = "\n".join(str(item) for item in paths)
         note_id = raw_input.get("note_id")
         reader_id = raw_input.get("reader_id")
         chunk_chars = raw_input.get("chunk_chars")
@@ -195,7 +199,10 @@ class ReadTextTool(Tool):
             reader_id = None
         if sum(value is not None for value in [path, note_id, reader_id]) != 1:
             raise ToolValidationError("read_text requires exactly one of path, note_id, or reader_id")
-        if path is not None and (not isinstance(path, str) or not path.strip()):
+        if paths is not None:
+            if not paths or not all(isinstance(item, str) and item.strip() for item in paths):
+                raise ToolValidationError("read_text.path list must contain non-empty strings")
+        elif path is not None and (not isinstance(path, str) or not path.strip()):
             raise ToolValidationError("read_text.path must be a non-empty string")
         if note_id is not None and (not isinstance(note_id, str) or not note_id.strip()):
             raise ToolValidationError("read_text.note_id must be a non-empty string")
@@ -207,6 +214,7 @@ class ReadTextTool(Tool):
             raise ToolValidationError("read_text.overlap_chars must be a non-negative integer")
         return {
             "path": path,
+            "paths": list(paths) if paths is not None else None,
             "note_id": note_id,
             "reader_id": reader_id,
             "chunk_chars": chunk_chars,
@@ -218,7 +226,9 @@ class ReadTextTool(Tool):
 
     def required_generated_event_types(self, validated_input: dict[str, Any]) -> set[str]:
         required = {"reader_chunk_read"}
-        if validated_input["path"] is not None:
+        if validated_input.get("paths") is not None:
+            required.add("buffer_chunk_read")
+        elif validated_input["path"] is not None:
             required.add("file_chunk_read")
         elif validated_input["note_id"] is not None:
             required.add("buffer_chunk_read")

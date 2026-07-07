@@ -35,3 +35,15 @@ def test_preview_file_roundtrip(tmp_path: Path) -> None:
     assert "-hello" in preview.diff
     assert "+world" in preview.diff
     assert file_path.read_text(encoding="utf-8") == "hello"
+
+
+def test_replace_pattern_once_matches_block_ignoring_indentation() -> None:
+    original = "def moving_total(values):\n    total = 0\n    for value in values[:-1]:\n        total += value\n    return total\n"
+    preview = TextEditor.replace_pattern_once(
+        original,
+        "total = 0\nfor value in values[:-1]:\n\ttotal += value",
+        "return sum(values)",
+    )
+
+    assert "    return sum(values)" in preview.new_text
+    assert "match_style" in preview.details

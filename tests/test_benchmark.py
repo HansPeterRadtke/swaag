@@ -471,3 +471,16 @@ def test_repo_repair_benchmark_tasks_allow_recovery_replans() -> None:
         assert overrides["planner_max_replans"] >= 2
         assert overrides["runtime_max_reasoning_steps"] >= 10
         assert overrides["runtime_max_tool_steps"] >= 8
+
+
+def test_coding_benchmark_tasks_allow_read_edit_verify_plan_room() -> None:
+    task = make_benchmark_task(
+        task_id="unit_coding_multifile",
+        task_type="coding",
+        difficulty="normal",
+        tags=("coding", "run-tests"),
+        description="Read multiple files, edit, verify, answer.",
+    )
+
+    assert task.config_overrides["planner_max_plan_steps"] >= 6
+    assert task.config_overrides["planner_max_replans"] >= 2

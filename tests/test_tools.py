@@ -348,3 +348,13 @@ def test_edit_tool_accepts_replace_pattern_alias(make_config, tmp_path: Path) ->
     )
     assert result.output["changed"] is True
     assert "CURRENCY = 'USD'" in result.output["diff"]
+
+
+def test_read_text_accepts_path_list_for_multi_file_buffer() -> None:
+    tool = ReadTextTool()
+
+    validated = tool.validate({"path": ["pkg/a.py", "pkg/b.py"], "chunk_chars": 1000})
+
+    assert validated["paths"] == ["pkg/a.py", "pkg/b.py"]
+    assert validated["note_id"] is None
+    assert validated["reader_id"] is None

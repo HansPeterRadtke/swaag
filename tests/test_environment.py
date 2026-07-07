@@ -8,6 +8,7 @@ from swaag.context_builder import build_context
 from swaag.environment.environment import AgentEnvironment
 from swaag.runtime import AgentRuntime
 from swaag.tokens import ConservativeEstimator
+from swaag.tools.base import ToolContext
 from swaag.types import SessionState
 
 from tests.helpers import FakeModelClient
@@ -430,3 +431,22 @@ def test_environment_repairs_missing_read_file_path_by_unique_basename(make_conf
 
     assert result.output["relative_path"] == "test_pkg_492.py"
     assert result.output["text"] == "content"
+
+
+def test_environment_read_text_chunk_combines_multiple_paths(make_config, tmp_path: Path) -> None:
+    config = make_config()
+    state = SessionState(session_id="s", created_at="t", updated_at="t", config_fingerprint="cfg", model_base_url="http://example.test")
+    environment = AgentEnvironment(config, state)
+    (tmp_path / "a.py").write_text("A = 1\n", encoding="utf-8")
+    (tmp_path / "b.py").write_text("B = 2\n", encoding="utf-8")
+
+    result = environment.read_text_chunk(
+        {"paths": [str(tmp_path / "a.py"), str(tmp_path / "b.py")], "path": "", "note_id": None, "reader_id": None, "chunk_chars": 2000, "overlap_chars": None},
+        ToolContext(config=config, session_state=state, environment=environment),
+    )
+
+    assert result.output["source_kind"] == "buffer"
+    assert "--- a.py ---" in result.output["text"]
+    assert "A = 1" in result.output["text"]
+    assert "--- b.py ---" in result.output["text"]
+    assert "B = 2" in result.output["text"]

@@ -9,6 +9,13 @@ class ToolSubsystem:
     name = "tool"
 
     _REFINEMENT_TOOLS = frozenset({"edit_text", "write_file", "shell_command", "run_tests"})
+
+    def _tools_equivalent(self, actual: str | None, expected: str | None) -> bool:
+        if not expected:
+            return True
+        if actual == expected:
+            return True
+        return {actual, expected} <= {"read_file", "read_text"}
     _REFINABLE_CHECK_TYPES = frozenset({"file_contains", "file_exists", "exact_match", "string_match", "numeric_tolerance"})
 
     def _should_preview(self, tool_name: str, *, state: SessionState) -> bool:
@@ -104,7 +111,7 @@ class ToolSubsystem:
                     and helper_hops < state.active_strategy.tool_chain_depth
                 )
             )
-            if step.expected_tool and decision.tool_name != step.expected_tool and allow_helper_chain and graph_plan.valid:
+            if step.expected_tool and not self._tools_equivalent(decision.tool_name, step.expected_tool) and allow_helper_chain and graph_plan.valid:
                 helper_result = runtime._execute_tool(state, decision)
                 if helper_result is not None:
                     tool_results.append(helper_result)
@@ -128,7 +135,7 @@ class ToolSubsystem:
                             },
                         )
                 continue
-            if step.expected_tool and decision.tool_name != step.expected_tool:
+            if step.expected_tool and not self._tools_equivalent(decision.tool_name, step.expected_tool):
                 runtime.history.record_event(
                     state,
                     "tool_graph_rejected",
@@ -143,7 +150,16 @@ class ToolSubsystem:
                 break
             tool_result = runtime._execute_tool(state, decision)
             if tool_result is None:
-                continue
+                runtime.history.record_event(
+                    state,
+                    "subsystem_progress",
+                    {
+                        "subsystem": self.name,
+                        "step_id": step.step_id,
+                        "progress": f"attempt={attempts}; tool_error={decision.tool_name}",
+                    },
+                )
+                break
             tool_results.append(tool_result)
             if not tool_result.completed:
                 runtime.history.record_event(

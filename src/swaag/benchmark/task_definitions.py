@@ -2409,7 +2409,7 @@ def make_benchmark_task(
     default_overrides = {
         "tools_allow_side_effect_tools": True,
         "planner_max_replans": 2 if repo_repair else 0,
-        "planner_max_plan_steps": 4,
+        "planner_max_plan_steps": 6 if task_type in {"coding", "multi_step"} else 4,
         "runtime_max_reasoning_steps": 12 if repo_repair else (8 if is_complex else 4),
         "runtime_max_total_actions": 18 if repo_repair else (12 if is_complex else 8),
         "runtime_max_tool_steps": 10 if repo_repair else (8 if is_complex else 4),

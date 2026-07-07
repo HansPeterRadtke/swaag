@@ -1556,6 +1556,19 @@ class AgentRuntime:
             )
             if any(phrase in lowered for phrase in phrases):
                 matches.append(tool_name)
+        command_mentions_test_runner = (
+            re.search(r"\brun\s+`?(?:python3?|pytest)\b", lowered) is not None
+            or re.search(r"\bpython3?\s+-m\s+unittest\b", lowered) is not None
+            or re.search(r"\bpytest\s+[-\w./]", lowered) is not None
+        )
+        if "run_tests" not in matches and (
+            "run tests" in lowered
+            or "run the tests" in lowered
+            or "run the provided unit test" in lowered
+            or "run the unit test" in lowered
+            or command_mentions_test_runner
+        ):
+            matches.append("run_tests")
         return matches
 
     def _detect_explicit_named_tool_request(self, text: str) -> str | None:

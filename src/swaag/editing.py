@@ -44,17 +44,31 @@ class TextEditor:
         if not pattern:
             raise EditError("pattern must not be empty")
         count = text.count(pattern)
-        if count == 0:
-            raise EditError("pattern not found")
         if count > 1:
             raise EditError("pattern is ambiguous")
-        new_text = text.replace(pattern, replacement, 1)
+        if count == 1:
+            new_text = text.replace(pattern, replacement, 1)
+            return TextEditor._preview(
+                "replace_pattern_once",
+                None,
+                text,
+                new_text,
+                {"pattern": pattern, "replacement": replacement, "match_count": count},
+            )
+        matches = TextEditor._loose_indented_block_matches(text, pattern)
+        if not matches:
+            raise EditError("pattern not found")
+        if len(matches) > 1:
+            raise EditError("pattern is ambiguous")
+        start, end, indent = matches[0]
+        replacement_text = TextEditor._indent_replacement(replacement, indent, text[start:end].endswith("\n"))
+        new_text = text[:start] + replacement_text + text[end:]
         return TextEditor._preview(
             "replace_pattern_once",
             None,
             text,
             new_text,
-            {"pattern": pattern, "replacement": replacement, "match_count": count},
+            {"pattern": pattern, "replacement": replacement, "match_count": 1, "match_style": "loose_indentation"},
         )
 
     @staticmethod
@@ -62,16 +76,64 @@ class TextEditor:
         if not pattern:
             raise EditError("pattern must not be empty")
         count = text.count(pattern)
-        if count == 0:
+        if count > 0:
+            new_text = text.replace(pattern, replacement)
+            return TextEditor._preview(
+                "replace_pattern_all",
+                None,
+                text,
+                new_text,
+                {"pattern": pattern, "replacement": replacement, "match_count": count},
+            )
+        matches = TextEditor._loose_indented_block_matches(text, pattern)
+        if not matches:
             raise EditError("pattern not found")
-        new_text = text.replace(pattern, replacement)
+        new_text = text
+        for start, end, indent in reversed(matches):
+            new_text = new_text[:start] + TextEditor._indent_replacement(replacement, indent, new_text[start:end].endswith("\n")) + new_text[end:]
         return TextEditor._preview(
             "replace_pattern_all",
             None,
             text,
             new_text,
-            {"pattern": pattern, "replacement": replacement, "match_count": count},
+            {"pattern": pattern, "replacement": replacement, "match_count": len(matches), "match_style": "loose_indentation"},
         )
+
+    @staticmethod
+    def _loose_indented_block_matches(text: str, pattern: str) -> list[tuple[int, int, str]]:
+        pattern_lines = [line.strip() for line in pattern.expandtabs().splitlines() if line.strip()]
+        if not pattern_lines:
+            return []
+        lines = text.splitlines(keepends=True)
+        starts: list[int] = []
+        offset = 0
+        for line in lines:
+            starts.append(offset)
+            offset += len(line)
+        matches: list[tuple[int, int, str]] = []
+        for index in range(0, len(lines) - len(pattern_lines) + 1):
+            window = lines[index : index + len(pattern_lines)]
+            if [line.expandtabs().strip() for line in window] != pattern_lines:
+                continue
+            first_nonempty = next((line for line in window if line.strip()), window[0])
+            indent = first_nonempty[: len(first_nonempty) - len(first_nonempty.lstrip())]
+            start = starts[index]
+            end = starts[index + len(pattern_lines)] if index + len(pattern_lines) < len(starts) else len(text)
+            matches.append((start, end, indent))
+        return matches
+
+    @staticmethod
+    def _indent_replacement(replacement: str, indent: str, preserve_trailing_newline: bool) -> str:
+        lines = replacement.splitlines()
+        if not lines:
+            return "\n" if preserve_trailing_newline else ""
+        rendered = "\n".join(
+            (line if not line.strip() or line.startswith((" ", "\t")) else indent + line)
+            for line in lines
+        )
+        if preserve_trailing_newline and not rendered.endswith("\n"):
+            rendered += "\n"
+        return rendered
 
     @staticmethod
     def preview_file(path: str, operation: str, **kwargs) -> EditPreview:

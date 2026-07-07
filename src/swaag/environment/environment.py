@@ -168,6 +168,23 @@ class AgentEnvironment:
                 if note is None:
                     raise ToolValidationError(f"Cannot continue note reader; note not found: {note_id}")
                 buffer_text = note.content
+        elif validated_input.get("paths") is not None:
+            parts: list[str] = []
+            for path_item in validated_input["paths"]:
+                resolved = self.filesystem.resolve_existing_file_path(path_item, cwd=self.current_cwd)
+                rel = self.filesystem.relative_path(resolved)
+                _, text = self.filesystem.read_text(str(resolved), cwd=self.current_cwd)
+                parts.append(f"--- {rel} ---\n{text.rstrip()}\n")
+                generated.append(ToolGeneratedEvent("file_read_requested", {"path": str(resolved), "reason": "open_multi_reader", "offset": 0}))
+                generated.append(ToolGeneratedEvent("filesystem_read", {"path": str(resolved), "relative_path": rel, "text": text, "size_chars": len(text), "cwd": self.current_cwd}))
+            buffer_text = "\n".join(parts)
+            reader_state = reader.open_buffer(
+                "paths:" + ",".join(validated_input["paths"]),
+                chunk_chars=validated_input["chunk_chars"],
+                overlap_chars=validated_input["overlap_chars"],
+            )
+            generated.append(ToolGeneratedEvent("reader_opened", {"reader_state": asdict(reader_state)}))
+            generated.append(ToolGeneratedEvent("buffer_read_requested", {"source_ref": reader_state.source_ref, "reason": "open_multi_file_reader", "reader_id": reader_state.reader_id, "offset": 0}))
         elif validated_input["path"] is not None:
             resolved = self.filesystem.resolve_existing_file_path(validated_input["path"], cwd=self.current_cwd)
             reader_state = reader.open_file(

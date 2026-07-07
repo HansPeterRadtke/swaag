@@ -99,3 +99,11 @@ def test_reasoning_subsystem_requires_nonempty_answer(make_config) -> None:
     assert result.success is True
     assert result.assistant_text == "final answer"
     assert result.evaluation is None
+
+
+def test_tool_subsystem_treats_read_file_and_read_text_as_equivalent() -> None:
+    subsystem = ToolSubsystem()
+
+    assert subsystem._tools_equivalent("read_text", "read_file") is True
+    assert subsystem._tools_equivalent("read_file", "read_text") is True
+    assert subsystem._tools_equivalent("edit_text", "read_file") is False
