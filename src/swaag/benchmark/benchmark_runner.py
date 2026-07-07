@@ -27,6 +27,7 @@ from swaag.config import AgentConfig, load_config
 from swaag.live_runtime_profiles import get_documented_final_live_benchmark_recommendation
 from swaag.model import LlamaCppClient
 from swaag.runtime import AgentRuntime
+from swaag.types import PlanStep
 from swaag.testing.llm_record_replay import RecordReplayModelClient
 from swaag.utils import stable_json_dumps
 from swaag.verification import verify_benchmark_contract
@@ -330,7 +331,22 @@ def _last_payload(events, event_type: str) -> dict[str, Any] | None:
     return None
 
 
-def _evaluate_quality(oracle: PromptUnderstandingOracle | None, state, events) -> dict[str, Any]:
+def _safe_payload(value: Any) -> Any:
+    if value is None:
+        return None
+    try:
+        return asdict(value)
+    except TypeError:
+        if isinstance(value, dict):
+            return value
+        return {
+            key: item
+            for key, item in vars(value).items()
+            if not key.startswith("_")
+        } if hasattr(value, "__dict__") else str(value)
+
+
+def _evaluate_quality(oracle: PromptUnderstandingOracle | None, state, events, *, runtime: Any | None = None, assistant_text: str = "") -> dict[str, Any]:
     if oracle is None:
         return {"passed": True, "checks": {}, "evidence": {}, "oracle": {}}
     checks: dict[str, bool] = {}
@@ -380,11 +396,71 @@ def _evaluate_quality(oracle: PromptUnderstandingOracle | None, state, events) -
     payload = _last_payload(events, "strategy_selected")
     if payload is not None:
         evidence["strategy_event"] = payload.get("strategy")
+    passed = all(checks.values()) if checks else True
+    oracle_payload = asdict(oracle)
+    if not passed and runtime is not None:
+        semantic_evidence = {
+            "oracle": oracle_payload,
+            "checks": checks,
+            "deterministic_evidence": evidence,
+            "prompt_analysis": _safe_payload(analysis),
+            "decision": _safe_payload(decision),
+            "strategy": _safe_payload(strategy),
+            "expanded_task_present": expanded_task is not None,
+            "plan_step_kinds": evidence.get("plan_step_kinds", []),
+            "assistant_text": assistant_text,
+        }
+        judge_step = PlanStep(
+            step_id="benchmark_quality_semantic_judge",
+            title="Judge benchmark prompt-understanding quality semantically",
+            goal="Decide whether the observed prompt understanding, decision, strategy, and final answer satisfy the benchmark quality oracle semantically.",
+            kind="reasoning",
+            expected_tool=None,
+            input_text="benchmark quality oracle",
+            expected_output="semantic pass/fail judgement",
+            done_condition="model_judgement",
+            success_criteria="The observed behavior satisfies the oracle, allowing semantically equivalent labels and explanations instead of exact enum/string equality.",
+            verification_type="llm_fallback",
+            verification_checks=[
+                {
+                    "name": "quality_oracle_satisfied",
+                    "check_type": "criterion",
+                    "criterion": "Return passed=true only if the observed prompt analysis, task decision, strategy, plan shape, and final answer satisfy the oracle semantically. Exact label mismatches are acceptable only when the behavior is clearly equivalent. Do not ignore concrete contradictions in the deterministic evidence.",
+                }
+            ],
+            required_conditions=["quality_oracle_satisfied"],
+            optional_conditions=[],
+        )
+        try:
+            judgement = runtime._run_llm_verification(
+                state,
+                step=judge_step,
+                criteria=[
+                    {
+                        "name": "quality_oracle_satisfied",
+                        "criterion": judge_step.verification_checks[0]["criterion"],
+                    }
+                ],
+                assistant_text=assistant_text,
+                evidence=semantic_evidence,
+            )
+            criteria = judgement.get("criteria", []) if isinstance(judgement, dict) else []
+            result = next((item for item in criteria if isinstance(item, dict) and item.get("name") == "quality_oracle_satisfied"), None)
+            semantic_passed = bool(result.get("passed")) if isinstance(result, dict) and isinstance(result.get("passed"), bool) else False
+            checks["semantic_quality_judge"] = semantic_passed
+            evidence["semantic_quality_judge"] = {
+                "passed": semantic_passed,
+                "evidence": result.get("evidence") if isinstance(result, dict) else "missing_or_invalid_judgement",
+            }
+            passed = semantic_passed
+        except Exception as exc:
+            checks["semantic_quality_judge"] = False
+            evidence["semantic_quality_judge"] = {"error": str(exc), "error_type": exc.__class__.__name__}
     return {
-        "passed": all(checks.values()) if checks else True,
+        "passed": passed,
         "checks": checks,
         "evidence": evidence,
-        "oracle": asdict(oracle),
+        "oracle": oracle_payload,
     }
 
 
@@ -660,8 +736,13 @@ def run_benchmarks(
                 events=events,
                 workspace_before=before_snapshot,
                 workspace_after=after_snapshot,
+                semantic_backend_mode="llm_scoring",
+                semantic_base_url=config.model.base_url,
+                semantic_seed=config.model.seed,
+                semantic_connect_timeout_seconds=config.model.connect_timeout_seconds,
+                semantic_read_timeout_seconds=config.model.verification_timeout_seconds,
             )
-            quality = _evaluate_quality(scenario.oracle, rebuilt, events)
+            quality = _evaluate_quality(scenario.oracle, rebuilt, events, runtime=runtime, assistant_text=final_text)
             failure = None
             if not verification.passed or scenario.expected_outcome == "expected_failure" or not quality["passed"]:
                 failure = analyzer.analyze(

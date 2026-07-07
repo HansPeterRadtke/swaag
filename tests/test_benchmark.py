@@ -10,8 +10,8 @@ from pathlib import Path
 
 from tests.helpers import FakeModelClient
 
-from swaag.benchmark.benchmark_runner import _build_agent_behavior_model_client, _resolve_live_model_settings, run_benchmarks
-from swaag.benchmark.task_definitions import BenchmarkTaskDefinition, get_benchmark_tasks, make_benchmark_task
+from swaag.benchmark.benchmark_runner import _build_agent_behavior_model_client, _evaluate_quality, _resolve_live_model_settings, run_benchmarks
+from swaag.benchmark.task_definitions import BenchmarkTaskDefinition, PromptUnderstandingOracle, get_benchmark_tasks, make_benchmark_task
 from swaag.config import load_config
 from swaag.live_runtime_profiles import get_documented_final_live_benchmark_recommendation
 from swaag.testing.llm_record_replay import MissingReplayEntryError
@@ -412,3 +412,53 @@ def test_benchmark_runner_seeds_scenario_history(make_config, tmp_path: Path) ->
 
     assert [message.content for message in state.messages] == [message.content for message in history]
     assert [message.content for message in rebuilt.messages] == [message.content for message in history]
+
+
+def test_quality_oracle_uses_model_judge_for_semantic_mismatch() -> None:
+    class RuntimeJudge:
+        def __init__(self) -> None:
+            self.called = False
+
+        def _run_llm_verification(self, state, *, step, criteria, assistant_text, evidence):
+            self.called = True
+            assert criteria[0]["name"] == "quality_oracle_satisfied"
+            assert evidence["oracle"]["task_type"] == "structured"
+            return {"criteria": [{"name": "quality_oracle_satisfied", "passed": True, "evidence": "semantically equivalent"}]}
+
+    class Analysis:
+        task_type = "actionable"
+        completeness = "complete"
+        requires_expansion = False
+        requires_decomposition = False
+        detected_goals = []
+        detected_entities = []
+
+    class Decision:
+        expand_task = False
+        split_task = False
+        ask_user = False
+        assume_missing = False
+        generate_ideas = False
+
+    class Strategy:
+        task_profile = "reading"
+
+    class State:
+        prompt_analysis = Analysis()
+        latest_decision = Decision()
+        active_strategy = Strategy()
+        expanded_task = None
+        active_plan = None
+
+    runtime = RuntimeJudge()
+    result = _evaluate_quality(
+        PromptUnderstandingOracle(task_type="structured", completeness="complete", requires_expansion=False, requires_decomposition=False, expand_task=False, split_task=False, ask_user=False, strategy_profile="reading"),
+        State(),
+        [],
+        runtime=runtime,
+        assistant_text="done",
+    )
+
+    assert runtime.called is True
+    assert result["passed"] is True
+    assert result["checks"]["semantic_quality_judge"] is True

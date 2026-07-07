@@ -702,3 +702,20 @@ def test_coding_contract_accepts_alternate_implementation_when_tests_pass(tmp_pa
     assert report.checks["command"] is True
     assert report.checks["expected_file_patterns"] is True
     assert report.evidence["expected_file_patterns"]["advisory_for_coding"] is True
+
+
+def test_benchmark_contract_accepts_live_semantic_backend_configuration() -> None:
+    contract = type("Contract", (), {"task_type": "reading", "expected_answer_contains": ["ok"]})()
+    state = _state()
+    report = verify_benchmark_contract(
+        contract,
+        assistant_text="ok",
+        state=state,
+        events=[],
+        semantic_backend_mode="degraded_lexical",
+        semantic_base_url=None,
+        semantic_seed=123,
+        semantic_connect_timeout_seconds=1,
+        semantic_read_timeout_seconds=1,
+    )
+    assert report.passed is True

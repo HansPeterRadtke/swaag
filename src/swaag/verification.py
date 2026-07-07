@@ -764,10 +764,21 @@ def verify_benchmark_contract(
     events: list[HistoryEvent],
     workspace_before: dict[str, str] | None = None,
     workspace_after: dict[str, str] | None = None,
+    semantic_backend_mode: str = "degraded_lexical",
+    semantic_base_url: str | None = None,
+    semantic_seed: int = 11,
+    semantic_connect_timeout_seconds: int = 10,
+    semantic_read_timeout_seconds: int = 60,
 ) -> BenchmarkVerificationReport:
     checks: dict[str, bool] = {}
     evidence: dict[str, Any] = {}
-    engine = VerificationEngine(semantic_backend_mode="degraded_lexical")
+    engine = VerificationEngine(
+        semantic_backend_mode=semantic_backend_mode,
+        semantic_base_url=semantic_base_url,
+        semantic_seed=semantic_seed,
+        semantic_connect_timeout_seconds=semantic_connect_timeout_seconds,
+        semantic_read_timeout_seconds=semantic_read_timeout_seconds,
+    )
 
     required_events = set(getattr(contract, "required_history_events", []) or [])
     forbidden_events = set(getattr(contract, "forbidden_history_events", []) or [])
