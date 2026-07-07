@@ -187,10 +187,11 @@ class ReadTextTool(Tool):
         reader_id = raw_input.get("reader_id")
         chunk_chars = raw_input.get("chunk_chars")
         overlap_chars = raw_input.get("overlap_chars")
-        if path is not None and reader_id is not None:
-            # The model sometimes echoes a stale continuation reader_id while
-            # also supplying a concrete path. Prefer the explicit path; otherwise
-            # a harmless read step fails before any file can be inspected.
+        if path is not None:
+            # The model sometimes echoes stale continuation or note-routing fields
+            # while also supplying a concrete path. Prefer the explicit path;
+            # otherwise a harmless read step fails before any file can be inspected.
+            note_id = None
             reader_id = None
         if sum(value is not None for value in [path, note_id, reader_id]) != 1:
             raise ToolValidationError("read_text requires exactly one of path, note_id, or reader_id")
@@ -366,7 +367,7 @@ class EditTextTool(Tool):
     def validate(self, raw_input: dict[str, Any]) -> dict[str, Any]:
         path = raw_input.get("path")
         operation = raw_input.get("operation")
-        if operation == "replace" and raw_input.get("pattern") is not None and raw_input.get("replacement") is not None:
+        if operation in {"replace", "replace_pattern", "replace_once", "replace_pattern"} and raw_input.get("pattern") is not None and raw_input.get("replacement") is not None:
             operation = "replace_pattern_once"
         if not isinstance(path, str) or not path.strip():
             raise ToolValidationError("edit_text.path must be a non-empty string")

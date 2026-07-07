@@ -319,3 +319,32 @@ def test_edit_tool_accepts_replace_alias_for_pattern_replacement(make_config, tm
     )
     assert result.output["changed"] is True
     assert "return text.split('|')" in result.output["diff"]
+
+
+def test_read_text_prefers_explicit_path_over_stale_note_and_reader() -> None:
+    tool = ReadTextTool()
+
+    validated = tool.validate({"path": "pkg/file.py", "note_id": "note_old", "reader_id": "reader_old"})
+
+    assert validated["path"] == "pkg/file.py"
+    assert validated["note_id"] is None
+    assert validated["reader_id"] is None
+
+
+def test_edit_tool_accepts_replace_pattern_alias(make_config, tmp_path: Path) -> None:
+    path = tmp_path / "formatter.py"
+    path.write_text("CURRENCY = 'USD-1'\n", encoding="utf-8")
+    registry = ToolRegistry()
+    _, result = registry.dispatch(
+        "edit_text",
+        {
+            "path": str(path),
+            "operation": "replace_pattern",
+            "pattern": "CURRENCY = 'USD-1'",
+            "replacement": "CURRENCY = 'USD'",
+        },
+        make_config(tools__allow_side_effect_tools=True, editor__allow_writes=True),
+        _empty_state(),
+    )
+    assert result.output["changed"] is True
+    assert "CURRENCY = 'USD'" in result.output["diff"]
