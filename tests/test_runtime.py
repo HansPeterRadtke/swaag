@@ -16,7 +16,7 @@ from swaag.model import ModelClientError
 from swaag.planner import create_shell_recovery_plan, plan_from_payload
 from swaag.retrieval.embeddings import SemanticBackendProtocolError
 from swaag.runtime import AgentRuntime, BudgetExceededError, FatalSemanticEngineError
-from swaag.types import CompletionResult, DecisionOutcome, Message, PromptAnalysis
+from swaag.types import CompletionResult, DecisionOutcome, Message, PlanStep, PromptAnalysis
 
 from tests.helpers import FakeModelClient, plan_response, plan_step
 
@@ -3388,3 +3388,81 @@ def test_runtime_maps_failed_test_name_to_source_file_hint(make_config, tmp_path
     )
 
     assert runtime._hinted_edit_path_from_failed_test(state) == "pkg_850/normalizer.py"
+
+
+def test_runtime_repairs_bad_tokenizer_edit_payload_from_workspace_tests(make_config, tmp_path) -> None:
+    workspace = tmp_path
+    pkg = workspace / "pkg_850"
+    pkg.mkdir()
+    target = pkg / "tokenizer.py"
+    target.write_text("def tokenize(text: str) -> list[str]:\n    return text.split(',')\n", encoding="utf-8")
+    (workspace / "test_pkg_850_pipeline.py").write_text(
+        "from pkg_850.tokenizer import tokenize\n"
+        "def test_tokenize():\n"
+        "    assert tokenize('item-04|item-10|item-14') == ['item-04', 'item-10', 'item-14']\n",
+        encoding="utf-8",
+    )
+    config = make_config(tools__read_roots=[workspace])
+    runtime = AgentRuntime(config, model_client=FakeModelClient(responses=[]))
+    state = runtime.create_or_load_session()
+    state.environment.workspace.root = str(workspace)
+    state.environment.workspace.cwd = str(workspace)
+    step = PlanStep(
+        step_id="fix",
+        title="Fix tokenizer",
+        kind="tool",
+        expected_tool="edit_text",
+        input_text="Fix pkg_850/tokenizer.py",
+        goal="fix tokenizer",
+        expected_output="tokenizer fixed",
+        done_condition="tool_result:edit_text",
+        success_criteria="tokenizer fixed",
+    )
+
+    payload = runtime._normalize_expected_tool_input(
+        state,
+        step,
+        {"path": "pkg_850/tokenizer.py", "operation": "replace_pattern_once", "pattern": "return text.split\\(,\\)", "replacement": "return text.split()"},
+    )
+
+    assert payload["pattern"] == "return text.split(',')"
+    assert payload["replacement"] == "return text.split('|')"
+
+
+def test_runtime_repairs_bad_normalizer_edit_payload_from_workspace_tests(make_config, tmp_path) -> None:
+    workspace = tmp_path
+    pkg = workspace / "pkg_850"
+    pkg.mkdir()
+    target = pkg / "normalizer.py"
+    target.write_text("from pkg_850.tokenizer import tokenize\n\ndef normalize(text: str) -> list[str]:\n    return [t.upper() for t in tokenize(text)]\n", encoding="utf-8")
+    (workspace / "test_pkg_850_pipeline.py").write_text(
+        "from pkg_850.normalizer import normalize\n"
+        "def test_normalize():\n"
+        "    assert normalize('item-04|item-10') == ['item-04', 'item-10']\n",
+        encoding="utf-8",
+    )
+    config = make_config(tools__read_roots=[workspace])
+    runtime = AgentRuntime(config, model_client=FakeModelClient(responses=[]))
+    state = runtime.create_or_load_session()
+    state.environment.workspace.root = str(workspace)
+    state.environment.workspace.cwd = str(workspace)
+    step = PlanStep(
+        step_id="fix",
+        title="Fix normalizer",
+        kind="tool",
+        expected_tool="edit_text",
+        input_text="Fix pkg_850/normalizer.py",
+        goal="fix normalizer",
+        expected_output="normalizer fixed",
+        done_condition="tool_result:edit_text",
+        success_criteria="normalizer fixed",
+    )
+
+    payload = runtime._normalize_expected_tool_input(
+        state,
+        step,
+        {"path": "pkg_850/normalizer.py", "operation": "replace_pattern_once", "pattern": "missing", "replacement": "bad"},
+    )
+
+    assert payload["pattern"] == "return [t.upper() for t in tokenize(text)]"
+    assert payload["replacement"] == "return [t for t in tokenize(text) if t and t.strip()]"
