@@ -265,6 +265,20 @@ def _cached_replay_policy() -> str:
     return aliases[raw]
 
 
+def _is_substantive_completion_text(text: str) -> bool:
+    normalized = " ".join(str(text or "").strip().lower().split())
+    if not normalized:
+        return False
+    failure_sentinels = {
+        "not done",
+        "failed",
+        "unable to complete",
+        "i could not complete the task",
+        "i cannot complete the task",
+    }
+    return normalized not in failure_sentinels
+
+
 def _build_agent_behavior_model_client(
     *,
     config: AgentConfig,
@@ -753,7 +767,7 @@ def run_benchmarks(
                 )
             if scenario.expected_outcome == "success":
                 success = verification.passed and runtime_error is None and bool(quality["passed"])
-                false_positive = runtime_error is None and bool(final_text.strip()) and (not verification.passed or not bool(quality["passed"]))
+                false_positive = runtime_error is None and _is_substantive_completion_text(final_text) and (not verification.passed or not bool(quality["passed"]))
             else:
                 success = verification.passed and failure is not None and failure.category == scenario.expected_failure_category
                 false_positive = verification.passed and failure is not None and failure.category != scenario.expected_failure_category

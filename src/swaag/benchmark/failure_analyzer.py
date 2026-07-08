@@ -80,11 +80,28 @@ class FailureAnalyzer:
                 subsystem="runtime",
                 improvement_hints=["Classify runtime exceptions earlier and convert recoverable cases into replans."],
             )
-        if not deterministic_verification_passed and state.metrics.verification_failures == 0 and state.metrics.steps_completed > 0:
+        fallback_reasons = {
+            "replan_limit_reached",
+            "subsystem_failed",
+            "tool_failed",
+            "step_failed",
+            "fatal_step_error",
+            "fatal_system_error",
+            "budget_exhausted",
+        }
+        if not deterministic_verification_passed and (last_reason in fallback_reasons or any(event.event_type == "step_failed" for event in events)):
+            return FailureAnalysis(
+                category="premature_termination",
+                reason="The agent stopped before satisfying the benchmark contract.",
+                evidence={"last_reason": last_reason, "steps_completed": state.metrics.steps_completed, "verification_failures": state.metrics.verification_failures},
+                subsystem="runtime",
+                improvement_hints=["Continue repair loops until the benchmark command/contract passes, or surface the exact blocker instead of a generic fallback."],
+            )
+        if not deterministic_verification_passed and state.metrics.verification_failures == 0 and state.metrics.steps_completed > 0 and last_reason in {"completed", "all_steps_completed", "response_ready"}:
             return FailureAnalysis(
                 category="evaluator_mistake",
-                reason="The runtime completed work without any failing verification, but deterministic benchmark verification failed.",
-                evidence={"steps_completed": state.metrics.steps_completed},
+                reason="The runtime reported successful completion without failing verification, but deterministic benchmark verification failed.",
+                evidence={"steps_completed": state.metrics.steps_completed, "last_reason": last_reason},
                 subsystem="evaluator",
                 improvement_hints=["Tighten evaluator evidence thresholds.", "Reject completion when deterministic benchmark signals are incomplete."],
             )

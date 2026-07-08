@@ -10,7 +10,7 @@ from pathlib import Path
 
 from tests.helpers import FakeModelClient
 
-from swaag.benchmark.benchmark_runner import _build_agent_behavior_model_client, _evaluate_quality, _resolve_live_model_settings, run_benchmarks
+from swaag.benchmark.benchmark_runner import _build_agent_behavior_model_client, _evaluate_quality, _is_substantive_completion_text, _resolve_live_model_settings, run_benchmarks
 from swaag.benchmark.task_definitions import BenchmarkTaskDefinition, PromptUnderstandingOracle, get_benchmark_tasks, make_benchmark_task
 from swaag.config import load_config
 from swaag.live_runtime_profiles import get_documented_final_live_benchmark_recommendation
@@ -484,3 +484,26 @@ def test_coding_benchmark_tasks_allow_read_edit_verify_plan_room() -> None:
 
     assert task.config_overrides["planner_max_plan_steps"] >= 6
     assert task.config_overrides["planner_max_replans"] >= 2
+
+
+def test_benchmark_false_positive_ignores_failure_sentinel_text() -> None:
+    assert _is_substantive_completion_text("not done") is False
+    assert _is_substantive_completion_text("") is False
+    assert _is_substantive_completion_text("Patched the file and verified the test.") is True
+
+
+def test_failure_analyzer_does_not_call_replan_limit_an_evaluator_mistake() -> None:
+    from swaag.benchmark.failure_analyzer import FailureAnalyzer
+    from swaag.types import HistoryEvent, SessionState
+
+    state = SessionState(session_id="s", created_at="t", updated_at="t", config_fingerprint="cfg", model_base_url="http://example.test")
+    state.metrics.steps_completed = 2
+    state.metrics.last_reasoning_reason = "replan_limit_reached"
+    events = [
+        HistoryEvent(id="e1", sequence=1, session_id="s", timestamp="t", type="step_failed", version=1, payload={"step_id": "step_1"}),
+    ]
+
+    failure = FailureAnalyzer().analyze(state=state, events=events, deterministic_verification_passed=False, runtime_error=None)
+
+    assert failure.category == "premature_termination"
+    assert failure.subsystem == "runtime"

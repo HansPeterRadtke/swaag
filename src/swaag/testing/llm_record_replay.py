@@ -80,7 +80,7 @@ class RecordReplayModelClient:
     def _default_request_metadata(self) -> dict[str, Any]:
         metadata: dict[str, Any] = {
             "client_class": type(self.delegate).__name__,
-            "replay_contract_version": "2026-07-06-hard-verification-stream-v2",
+            "replay_contract_version": "2026-07-08-runtime-tool-evaluator-v3",
             "model_transport": "streaming_token_timeout",
         }
         config = getattr(self.delegate, "config", None)
