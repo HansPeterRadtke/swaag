@@ -16,7 +16,7 @@ class ToolSubsystem:
         if actual == expected:
             return True
         return {actual, expected} <= {"read_file", "read_text"}
-    _REFINABLE_CHECK_TYPES = frozenset({"file_contains", "file_exists", "exact_match", "string_match", "numeric_tolerance", "command_success"})
+    _REFINABLE_CHECK_TYPES = frozenset({"file_contains", "file_exists", "exact_match", "string_match", "numeric_tolerance"})
 
     def _should_preview(self, tool_name: str, *, state: SessionState) -> bool:
         return state.active_plan is not None and tool_name in self._REFINEMENT_TOOLS

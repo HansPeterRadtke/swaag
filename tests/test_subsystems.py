@@ -109,7 +109,7 @@ def test_tool_subsystem_treats_read_file_and_read_text_as_equivalent() -> None:
     assert subsystem._tools_equivalent("edit_text", "read_file") is False
 
 
-def test_tool_subsystem_refines_after_failed_command_success_preview() -> None:
+def test_tool_subsystem_does_not_repeat_failed_command_success_preview() -> None:
     from types import SimpleNamespace
 
     step = PlanStep(
@@ -132,4 +132,4 @@ def test_tool_subsystem_refines_after_failed_command_success_preview() -> None:
     )
     preview = SimpleNamespace(requires_retry=True, conditions_failed=["tests_pass"])
 
-    assert ToolSubsystem()._can_continue_refinement(step, preview) is True
+    assert ToolSubsystem()._can_continue_refinement(step, preview) is False

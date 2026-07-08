@@ -3325,3 +3325,36 @@ def test_runtime_detects_natural_test_run_instructions_as_run_tests_tool(make_co
     tools = runtime._detect_explicit_named_tools("Run python3 -m unittest -q test_pkg.py before answering.")
 
     assert "run_tests" in tools
+
+
+def test_runtime_uses_failed_run_tests_output_for_repair_replan_reason(make_config, tmp_path) -> None:
+    from swaag.subsystems.base import SubsystemExecutionResult
+    from swaag.types import ToolExecutionResult
+
+    config = make_config()
+    runtime = AgentRuntime(config, model_client=FakeModelClient(responses=[]))
+    state = runtime.create_or_load_session()
+    result = SubsystemExecutionResult(
+        subsystem_name="tool",
+        success=True,
+        tool_results=[
+            ToolExecutionResult(
+                tool_name="run_tests",
+                output={
+                    "passed": False,
+                    "command": ["python3", "-m", "unittest", "test_pkg_850_pipeline.PipelineTests.test_tokenize"],
+                    "stderr": "AssertionError: split pipe delimiter expected item-04 item-10 item-14",
+                },
+                display_text="tests failed",
+            )
+        ],
+    )
+
+    failure = runtime._classify_failed_test_command(state, subsystem_result=result)
+
+    assert failure is not None
+    assert failure.kind == "verification_failure"
+    assert failure.retryable is False
+    assert failure.requires_replan is True
+    assert "test_pkg_850_pipeline" in failure.reason
+    assert "split pipe delimiter" in failure.reason

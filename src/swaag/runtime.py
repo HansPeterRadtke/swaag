@@ -773,7 +773,7 @@ class AgentRuntime:
                     last_failure = None
                     continue
                 if not subsystem_result.success:
-                    last_failure = self._classify_failure_frontend(
+                    last_failure = self._classify_failed_test_command(state, subsystem_result=subsystem_result) or self._classify_failure_frontend(
                         state,
                         step=step,
                         reason=f"subsystem_failed:{subsystem_result.subsystem_name}",
@@ -867,10 +867,13 @@ class AgentRuntime:
                     raise HistoryInvariantError(
                         f"Evaluator attempted to override deterministic verification failure for step {step.step_id}"
                     )
-                failure = None if evaluation.passed else self._classify_failure_frontend(
-                    state,
-                    step=step,
-                    reason=f"verification:{evaluation.reason}",
+                failure = None if evaluation.passed else (
+                    self._classify_failed_test_command(state, subsystem_result=subsystem_result)
+                    or self._classify_failure_frontend(
+                        state,
+                        step=step,
+                        reason=f"verification:{evaluation.reason}",
+                    )
                 )
                 last_verification = verification
                 last_failure = failure
@@ -907,12 +910,13 @@ class AgentRuntime:
                 self._check_drift(state, failed_steps=failed_steps, completed_steps=completed_steps)
                 if replans_used < self.config.planner.max_replans:
                     replans_used += 1
+                    replan_reason = failure.reason if failure is not None else evaluation.reason
                     self.history.record_event(
                         state,
                         "replan_triggered",
-                        {"step_id": step.step_id, "reason": evaluation.reason, "replan_count": replans_used},
+                        {"step_id": step.step_id, "reason": replan_reason, "replan_count": replans_used},
                     )
-                    self._ensure_plan(state, effective_goal, replan_reason=f"Step {step.step_id} failed verification: {evaluation.reason}", replan_attempt=replans_used, force_replan=True)
+                    self._ensure_plan(state, effective_goal, replan_reason=f"Step {step.step_id} failed verification: {replan_reason}", replan_attempt=replans_used, force_replan=True)
                     last_verification = None
                     last_failure = None
                     continue
@@ -2169,6 +2173,41 @@ class AgentRuntime:
             },
         )
         return selection
+
+    def _classify_failed_test_command(
+        self,
+        state: SessionState,
+        *,
+        subsystem_result: SubsystemExecutionResult,
+    ) -> FailureClassification | None:
+        for tool_result in reversed(subsystem_result.tool_results):
+            if tool_result.tool_name != "run_tests":
+                continue
+            output = tool_result.output
+            if bool(output.get("passed", True)):
+                continue
+            command = output.get("command", "")
+            stderr = str(output.get("stderr", "")).strip()
+            stdout = str(output.get("stdout", "")).strip()
+            evidence = stderr or stdout or tool_result.display_text
+            evidence = " ".join(evidence.split())[:1200]
+            reason = f"run_tests failed; command={command!r}; evidence={evidence}"
+            classification = FailureClassification(
+                kind="verification_failure",
+                retryable=False,
+                requires_replan=True,
+                suggested_strategy_mode="recovery",
+                reason=reason,
+                wait_seconds=0.0,
+                source="deterministic_run_tests_failure",
+            )
+            self.history.record_event(
+                state,
+                "failure_classification_resolved",
+                {"classification": asdict(classification), "source": classification.source},
+            )
+            return classification
+        return None
 
     def _classify_failure_frontend(
         self,
