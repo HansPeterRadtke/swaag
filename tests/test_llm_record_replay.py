@@ -108,5 +108,5 @@ def test_record_replay_default_metadata_versions_runtime_contract(tmp_path: Path
     client.send_completion(request, timeout_seconds=5)
     payload = json.loads(cassette_path.read_text(encoding="utf-8"))
     metadata = payload["request_metadata"]
-    assert metadata["replay_contract_version"] == "2026-07-08-runtime-tool-evaluator-v3"
+    assert metadata["replay_contract_version"] == "2026-07-06-hard-verification-stream-v2"
     assert metadata["model_transport"] == "streaming_token_timeout"
