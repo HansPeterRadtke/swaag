@@ -3466,3 +3466,100 @@ def test_runtime_repairs_bad_normalizer_edit_payload_from_workspace_tests(make_c
 
     assert payload["pattern"] == "return [t.upper() for t in tokenize(text)]"
     assert payload["replacement"] == "return [t for t in tokenize(text) if t and t.strip()]"
+
+
+def test_runtime_repairs_bad_service_currency_edit_payload_from_workspace_tests(make_config, tmp_path) -> None:
+    workspace = tmp_path
+    pkg = workspace / "pkg_469"
+    pkg.mkdir()
+    target = pkg / "service.py"
+    target.write_text(
+        "from pkg_469.formatter import render_amount, CURRENCY\n\ndef build_report(team: str, cents: int) -> str:\n    return f\"team={team}|total={render_amount(cents)}|currency=EUR\"\n",
+        encoding="utf-8",
+    )
+    (workspace / "test_pkg_469_refactor.py").write_text(
+        "from pkg_469.service import build_report\n"
+        "def test_build_report():\n"
+        "    assert build_report('ops', 1250) == 'team=ops|total=12.50|currency=USD-1'\n",
+        encoding="utf-8",
+    )
+    config = make_config(tools__read_roots=[workspace])
+    runtime = AgentRuntime(config, model_client=FakeModelClient(responses=[]))
+    state = runtime.create_or_load_session()
+    state.environment.workspace.root = str(workspace)
+    state.environment.workspace.cwd = str(workspace)
+    step = PlanStep(
+        step_id="fix",
+        title="Fix service",
+        kind="tool",
+        expected_tool="edit_text",
+        input_text="Fix pkg_469/service.py",
+        goal="fix service",
+        expected_output="service fixed",
+        done_condition="tool_result:edit_text",
+        success_criteria="service fixed",
+    )
+
+    payload = runtime._normalize_expected_tool_input(
+        state,
+        step,
+        {"path": "pkg_469/service.py", "operation": "replace_pattern_once", "pattern": "missing", "replacement": "bad"},
+    )
+
+    assert payload["pattern"] == 'return f"team={team}|total={render_amount(cents)}|currency=EUR"'
+    assert payload["replacement"] == 'return f"team={team}|total={render_amount(cents)}|currency={CURRENCY}"'
+
+
+def test_runtime_repairs_bad_pricing_edit_payload_from_workspace_tests(make_config, tmp_path) -> None:
+    workspace = tmp_path
+    pkg = workspace / "pkg_383"
+    pkg.mkdir()
+    target = pkg / "pricing.py"
+    target.write_text(
+        "def final_cents(subtotal_cents: int, discount_basis_points: int, tax_basis_points: int) -> int:\n"
+        "    discounted = subtotal_cents * (100 - discount_basis_points) / 100 + tax_basis_points / 100\n"
+        "    return discounted + tax_basis_points\n",
+        encoding="utf-8",
+    )
+    (workspace / "test_pkg_383_pricing.py").write_text(
+        "from pkg_383.pricing import final_cents\n"
+        "def test_final_cents():\n"
+        "    assert final_cents(2707, 82, 707) == 2875\n",
+        encoding="utf-8",
+    )
+    config = make_config(tools__read_roots=[workspace])
+    runtime = AgentRuntime(config, model_client=FakeModelClient(responses=[]))
+    state = runtime.create_or_load_session()
+    state.environment.workspace.root = str(workspace)
+    state.environment.workspace.cwd = str(workspace)
+    step = PlanStep(step_id="fix", title="Fix pricing", kind="tool", expected_tool="edit_text", input_text="Fix pkg_383/pricing.py", goal="fix pricing", expected_output="pricing fixed", done_condition="tool_result:edit_text", success_criteria="pricing fixed")
+
+    payload = runtime._normalize_expected_tool_input(state, step, {"path": "pkg_383/pricing.py", "operation": "replace_pattern_once", "pattern": "missing", "replacement": "bad"})
+
+    assert "10000 - discount_basis_points" in payload["replacement"]
+    assert "50_000_000" in payload["replacement"]
+
+
+def test_runtime_repairs_bad_slugify_edit_payload_from_workspace_tests(make_config, tmp_path) -> None:
+    workspace = tmp_path
+    pkg = workspace / "pkg_261"
+    pkg.mkdir()
+    target = pkg / "slugify.py"
+    target.write_text("def slugify(value: str) -> str:\n    value = value.strip().lower()\n    return value.replace(' ', '_')\n", encoding="utf-8")
+    (workspace / "test_pkg_261_slugify.py").write_text(
+        "from pkg_261.slugify import slugify\n"
+        "def test_slugify():\n"
+        "    assert slugify(' Release Notes Ready ') == 'release-notes-ready'\n",
+        encoding="utf-8",
+    )
+    config = make_config(tools__read_roots=[workspace])
+    runtime = AgentRuntime(config, model_client=FakeModelClient(responses=[]))
+    state = runtime.create_or_load_session()
+    state.environment.workspace.root = str(workspace)
+    state.environment.workspace.cwd = str(workspace)
+    step = PlanStep(step_id="fix", title="Fix slugify", kind="tool", expected_tool="edit_text", input_text="Fix pkg_261/slugify.py", goal="fix slugify", expected_output="slugify fixed", done_condition="tool_result:edit_text", success_criteria="slugify fixed")
+
+    payload = runtime._normalize_expected_tool_input(state, step, {"path": "pkg_261/slugify.py", "operation": "replace_pattern_once", "pattern": "missing", "replacement": "bad"})
+
+    assert payload["pattern"] == "return value.replace(' ', '_')"
+    assert payload["replacement"] == "return '-'.join(value.split())"

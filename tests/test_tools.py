@@ -358,3 +358,16 @@ def test_read_text_accepts_path_list_for_multi_file_buffer() -> None:
     assert validated["paths"] == ["pkg/a.py", "pkg/b.py"]
     assert validated["note_id"] is None
     assert validated["reader_id"] is None
+
+
+def test_read_text_accepts_paths_alias(tmp_path, make_config) -> None:
+    first = tmp_path / "a.txt"
+    second = tmp_path / "b.txt"
+    first.write_text("alpha", encoding="utf-8")
+    second.write_text("beta", encoding="utf-8")
+    tool = ReadTextTool()
+    validated = tool.validate({"paths": [str(first), str(second)]})
+
+    assert validated["paths"] == [str(first), str(second)]
+    assert str(first) in validated["path"]
+    assert str(second) in validated["path"]

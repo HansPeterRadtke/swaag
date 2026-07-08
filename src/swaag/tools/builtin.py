@@ -169,6 +169,7 @@ class ReadTextTool(Tool):
         "type": "object",
         "properties": {
             "path": {"anyOf": [{"type": "string"}, {"type": "array", "items": {"type": "string"}, "minItems": 1}]},
+            "paths": {"type": "array", "items": {"type": "string"}, "minItems": 1},
             "note_id": {"type": "string"},
             "reader_id": {"type": "string"},
             "chunk_chars": {"type": "integer", "minimum": 1},
@@ -179,12 +180,16 @@ class ReadTextTool(Tool):
     }
 
     def validate(self, raw_input: dict[str, Any]) -> dict[str, Any]:
-        allowed = {"path", "note_id", "reader_id", "chunk_chars", "overlap_chars"}
+        allowed = {"path", "paths", "note_id", "reader_id", "chunk_chars", "overlap_chars"}
         if not set(raw_input).issubset(allowed):
             raise ToolValidationError("read_text received unknown arguments")
         path = raw_input.get("path")
-        paths = None
-        if isinstance(path, list):
+        paths = raw_input.get("paths")
+        if paths is not None and path is not None:
+            raise ToolValidationError("read_text accepts either path or paths, not both")
+        if paths is not None:
+            path = "\n".join(str(item) for item in paths)
+        elif isinstance(path, list):
             paths = path
             path = "\n".join(str(item) for item in paths)
         note_id = raw_input.get("note_id")
