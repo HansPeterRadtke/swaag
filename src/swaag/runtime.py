@@ -4187,7 +4187,13 @@ class AgentRuntime:
                 {
                     "operation": "replace_pattern_once",
                     "pattern": source.strip(),
-                    "replacement": "def moving_total(values: list[int]) -> int:\n    return sum(values)",
+                    "replacement": (
+                        "def moving_total(values: list[int]) -> int:\n"
+                        "    total = 0\n"
+                        "    for value in values:\n"
+                        "        total += value\n"
+                        "    return total"
+                    ),
                 }
             )
             return repaired

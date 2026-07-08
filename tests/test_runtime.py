@@ -3593,4 +3593,10 @@ def test_runtime_repairs_bad_stats_edit_payload_from_workspace_tests(make_config
 
     payload = runtime._normalize_expected_tool_input(state, step, {"path": "pkg_492/stats.py", "operation": "replace_pattern_once", "pattern": "def moving_total(data, window_size):", "replacement": "bad"})
 
-    assert payload["replacement"] == "def moving_total(values: list[int]) -> int:\n    return sum(values)"
+    assert payload["replacement"] == (
+        "def moving_total(values: list[int]) -> int:\n"
+        "    total = 0\n"
+        "    for value in values:\n"
+        "        total += value\n"
+        "    return total"
+    )
