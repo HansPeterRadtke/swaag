@@ -519,6 +519,6 @@ def test_repo_repair_benchmark_tasks_have_enough_budget_for_test_failure_refinem
     )
 
     overrides = task.config_overrides
-    assert overrides["planner_max_replans"] >= 4
-    assert overrides["runtime_max_total_actions"] >= 30
-    assert overrides["runtime_tool_call_budget"] >= 14
+    assert overrides["planner_max_replans"] >= 6
+    assert overrides["runtime_max_total_actions"] >= 50
+    assert overrides["runtime_tool_call_budget"] >= 28

@@ -3358,3 +3358,33 @@ def test_runtime_uses_failed_run_tests_output_for_repair_replan_reason(make_conf
     assert failure.requires_replan is True
     assert "test_pkg_850_pipeline" in failure.reason
     assert "split pipe delimiter" in failure.reason
+
+
+def test_runtime_maps_failed_test_name_to_source_file_hint(make_config, tmp_path) -> None:
+    workspace = tmp_path
+    pkg = workspace / "pkg_850"
+    pkg.mkdir()
+    (pkg / "normalizer.py").write_text("def normalize(text):\n    return text.upper()\n", encoding="utf-8")
+    (pkg / "tokenizer.py").write_text("def tokenize(text):\n    return text.split('|')\n", encoding="utf-8")
+    config = make_config(tools__read_roots=[workspace])
+    runtime = AgentRuntime(config, model_client=FakeModelClient(responses=[]))
+    state = runtime.create_or_load_session()
+    state.environment.workspace.root = str(workspace)
+    state.environment.workspace.cwd = str(workspace)
+    state.messages.append(
+        Message(
+            role="tool",
+            name="run_tests",
+            content="tests failed",
+            created_at="t",
+            metadata={
+                "output": {
+                    "passed": False,
+                    "command": ["python3", "-m", "unittest", "test_pkg_850_pipeline.PipelineTests.test_normalize"],
+                    "stderr": "FAIL: test_normalize (test_pkg_850_pipeline.PipelineTests.test_normalize)\nAssertionError: ['ITEM-04'] != ['item-04']",
+                }
+            },
+        )
+    )
+
+    assert runtime._hinted_edit_path_from_failed_test(state) == "pkg_850/normalizer.py"

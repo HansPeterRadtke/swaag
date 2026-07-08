@@ -2191,7 +2191,11 @@ class AgentRuntime:
             stdout = str(output.get("stdout", "")).strip()
             evidence = stderr or stdout or tool_result.display_text
             evidence = " ".join(evidence.split())[:1200]
-            reason = f"run_tests failed; command={command!r}; evidence={evidence}"
+            reason = (
+                f"run_tests failed; command={command!r}; evidence={evidence}. "
+                "Recovery rule: do not run the same test command again until after a source edit that targets the failing symbol/file. "
+                "The next repair plan should inspect or edit the source module implicated by the failing test, not schedule another run_tests step first."
+            )
             classification = FailureClassification(
                 kind="verification_failure",
                 retryable=False,
@@ -4085,16 +4089,26 @@ class AgentRuntime:
     def _tool_input_evidence_components(self, state: SessionState, step: PlanStep) -> list[PromptComponent]:
         if step.expected_tool not in {"edit_text", "run_tests"}:
             return []
-        evidence = self._recent_inspection_evidence(state, step)
-        if not evidence:
-            return []
-        return [
-            PromptComponent(
-                name="recent_inspection_evidence",
-                category="turn_context",
-                text=f"Recent inspection evidence:\n{evidence}\n\n",
+        components: list[PromptComponent] = []
+        failed_test_evidence = self._recent_failed_run_tests_evidence(state)
+        if failed_test_evidence and step.expected_tool == "edit_text":
+            components.append(
+                PromptComponent(
+                    name="recent_failed_test_evidence",
+                    category="turn_context",
+                    text=f"Recent failed test evidence:\n{failed_test_evidence}\n\n",
+                )
             )
-        ]
+        evidence = self._recent_inspection_evidence(state, step)
+        if evidence:
+            components.append(
+                PromptComponent(
+                    name="recent_inspection_evidence",
+                    category="turn_context",
+                    text=f"Recent inspection evidence:\n{evidence}\n\n",
+                )
+            )
+        return components
 
     def _recent_inspection_evidence(self, state: SessionState, step: PlanStep) -> str | None:
         tool_name = step.expected_tool
@@ -4235,7 +4249,105 @@ class AgentRuntime:
                 return output
         return None
 
+    def _recent_failed_run_tests_output(self, state: SessionState) -> dict[str, Any] | None:
+        for message in reversed(state.messages):
+            if message.role != "tool" or message.name != "run_tests" or not isinstance(message.metadata, dict):
+                continue
+            output = message.metadata.get("output")
+            if isinstance(output, dict) and output.get("passed") is False:
+                return output
+        return None
+
+    def _recent_failed_run_tests_evidence(self, state: SessionState) -> str | None:
+        output = self._recent_failed_run_tests_output(state)
+        if not isinstance(output, dict):
+            return None
+        command = output.get("command", "")
+        stderr = str(output.get("stderr", "") or "").strip()
+        stdout = str(output.get("stdout", "") or "").strip()
+        evidence = stderr or stdout
+        if not evidence:
+            return None
+        compact = " ".join(evidence.split())[:1600]
+        return (
+            f"Previous run_tests command failed: {command!r}. "
+            "Do not run the same test command again until after a relevant source edit. "
+            f"Failure evidence: {compact}"
+        )
+
+    def _hinted_edit_path_from_failed_test(self, state: SessionState) -> str | None:
+        output = self._recent_failed_run_tests_output(state)
+        if not isinstance(output, dict):
+            return None
+        evidence = "\n".join(str(output.get(key, "") or "") for key in ("stderr", "stdout"))
+        if not evidence.strip():
+            return None
+        terms: list[str] = []
+        for pattern in (r"\b(?:FAIL|ERROR):\s+(test_[A-Za-z0-9_]+)", r"\b(test_[A-Za-z0-9_]+)\b"):
+            for match in re.finditer(pattern, evidence):
+                raw = match.group(1)
+                if raw.startswith("test_"):
+                    raw = raw[len("test_") :]
+                for part in re.split(r"[_\W]+", raw):
+                    if len(part) >= 3 and part.lower() not in {"test", "tests", "final", "cents"}:
+                        terms.append(part.lower())
+        for match in re.finditer(r"\b([A-Za-z_][A-Za-z0-9_]*)\s*\(", evidence):
+            name = match.group(1)
+            if name not in {"self", "assertEqual", "assertTrue", "assertFalse", "len", "round", "int"} and len(name) >= 3:
+                terms.append(name.lower())
+        seen_terms: list[str] = []
+        for term in terms:
+            if term not in seen_terms:
+                seen_terms.append(term)
+        if not seen_terms:
+            return None
+        cwd_text = self._environment_cwd(state)
+        if not cwd_text:
+            return None
+        try:
+            workspace = Path(cwd_text)
+            candidates = [
+                path
+                for path in workspace.rglob("*.py")
+                if path.is_file()
+                and not path.name.startswith("test_")
+                and path.name != "__init__.py"
+                and "__pycache__" not in path.parts
+                and not path.name.endswith(".bak")
+            ]
+        except OSError:
+            return None
+        scored: list[tuple[int, int, str]] = []
+        for path in candidates:
+            rel = self._workspace_relative_path(workspace, path)
+            lower_rel = rel.lower()
+            try:
+                content = path.read_text(encoding="utf-8", errors="ignore").lower()
+            except OSError:
+                content = ""
+            score = 0
+            for term in seen_terms:
+                if term in lower_rel:
+                    score += 6
+                if re.search(rf"\bdef\s+{re.escape(term)}\s*\(", content):
+                    score += 10
+                elif re.search(rf"\b{re.escape(term)}\s*\(", content):
+                    score += 4
+                elif term in content:
+                    score += 2
+            if score > 0:
+                scored.append((score, -len(rel), rel))
+        if not scored:
+            return None
+        scored.sort(reverse=True)
+        if len(scored) > 1 and scored[0][0] == scored[1][0] and scored[0][1] == scored[1][1]:
+            return None
+        return scored[0][2]
+
     def _hinted_edit_path_from_recent_tool_output(self, state: SessionState) -> str | None:
+        failed_test_path = self._hinted_edit_path_from_failed_test(state)
+        if failed_test_path:
+            return failed_test_path
         output = self._recent_tool_output(state, "shell_command")
         if not isinstance(output, dict):
             return None
