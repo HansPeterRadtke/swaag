@@ -507,3 +507,18 @@ def test_failure_analyzer_does_not_call_replan_limit_an_evaluator_mistake() -> N
 
     assert failure.category == "premature_termination"
     assert failure.subsystem == "runtime"
+
+
+def test_repo_repair_benchmark_tasks_have_enough_budget_for_test_failure_refinement() -> None:
+    task = make_benchmark_task(
+        task_id="unit_repo_repair_budget",
+        task_type="coding",
+        difficulty="normal",
+        tags=("coding", "run-tests"),
+        description="Needs inspect, edit, failed tests, another edit, and verify.",
+    )
+
+    overrides = task.config_overrides
+    assert overrides["planner_max_replans"] >= 4
+    assert overrides["runtime_max_total_actions"] >= 30
+    assert overrides["runtime_tool_call_budget"] >= 14
