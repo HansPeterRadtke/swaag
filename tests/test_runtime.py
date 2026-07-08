@@ -3563,3 +3563,34 @@ def test_runtime_repairs_bad_slugify_edit_payload_from_workspace_tests(make_conf
 
     assert payload["pattern"] == "return value.replace(' ', '_')"
     assert payload["replacement"] == "return '-'.join(value.split())"
+
+
+def test_runtime_repairs_bad_stats_edit_payload_from_workspace_tests(make_config, tmp_path) -> None:
+    workspace = tmp_path
+    pkg = workspace / "pkg_492"
+    pkg.mkdir()
+    target = pkg / "stats.py"
+    target.write_text(
+        "def moving_total(values: list[int]) -> int:\n"
+        "    total = 0\n"
+        "    for value in values[:-1]:\n"
+        "        total += value\n"
+        "    return total\n",
+        encoding="utf-8",
+    )
+    (workspace / "test_pkg_492.py").write_text(
+        "from pkg_492.stats import moving_total\n"
+        "def test_moving_total():\n"
+        "    assert moving_total([7, 7, 15]) == 29\n",
+        encoding="utf-8",
+    )
+    config = make_config(tools__read_roots=[workspace])
+    runtime = AgentRuntime(config, model_client=FakeModelClient(responses=[]))
+    state = runtime.create_or_load_session()
+    state.environment.workspace.root = str(workspace)
+    state.environment.workspace.cwd = str(workspace)
+    step = PlanStep(step_id="fix", title="Fix stats", kind="tool", expected_tool="edit_text", input_text="Fix pkg_492/stats.py", goal="fix stats", expected_output="stats fixed", done_condition="tool_result:edit_text", success_criteria="stats fixed")
+
+    payload = runtime._normalize_expected_tool_input(state, step, {"path": "pkg_492/stats.py", "operation": "replace_pattern_once", "pattern": "def moving_total(data, window_size):", "replacement": "bad"})
+
+    assert payload["replacement"] == "def moving_total(values: list[int]) -> int:\n    return sum(values)"
