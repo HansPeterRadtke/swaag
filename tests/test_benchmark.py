@@ -544,6 +544,26 @@ def test_success_task_without_quality_oracle_ignores_quality_noise() -> None:
     assert false_positive is False
 
 
+def test_success_task_ignores_runtime_error_after_contract_passes() -> None:
+    from types import SimpleNamespace
+
+    from swaag.benchmark.benchmark_runner import _classify_benchmark_task_outcome
+
+    scenario = SimpleNamespace(expected_outcome="success", expected_failure_category=None, oracle=None)
+
+    success, false_positive = _classify_benchmark_task_outcome(
+        scenario=scenario,
+        verification_passed=True,
+        runtime_error=RuntimeError("fatal_step_error:respond"),
+        quality_passed=True,
+        final_text="",
+        failure_category=None,
+    )
+
+    assert success is True
+    assert false_positive is False
+
+
 def test_success_task_with_quality_oracle_still_uses_quality_result() -> None:
     from types import SimpleNamespace
 

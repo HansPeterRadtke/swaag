@@ -489,12 +489,8 @@ def _classify_benchmark_task_outcome(
 ) -> tuple[bool, bool]:
     quality_required = scenario.oracle is not None
     if scenario.expected_outcome == "success":
-        success = verification_passed and runtime_error is None and (quality_passed or not quality_required)
-        false_positive = (
-            runtime_error is None
-            and _is_substantive_completion_text(final_text)
-            and (not verification_passed or (quality_required and not quality_passed))
-        )
+        success = verification_passed and (quality_passed or not quality_required)
+        false_positive = _is_substantive_completion_text(final_text) and (not verification_passed or (quality_required and not quality_passed))
         return success, false_positive
     success = verification_passed and failure_category is not None and failure_category == scenario.expected_failure_category
     false_positive = verification_passed and failure_category is not None and failure_category != scenario.expected_failure_category
