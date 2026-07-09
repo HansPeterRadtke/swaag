@@ -3617,6 +3617,39 @@ def test_runtime_repairs_bad_pricing_write_file_payload_from_workspace_tests(mak
     assert "return round(" in payload["content"]
 
 
+def test_runtime_prefers_read_text_paths_over_conflicting_path_fields(make_config, tmp_path) -> None:
+    workspace = tmp_path
+    config = make_config(tools__read_roots=[workspace])
+    runtime = AgentRuntime(config, model_client=FakeModelClient(responses=[]))
+    state = runtime.create_or_load_session()
+    state.environment.workspace.root = str(workspace)
+    state.environment.workspace.cwd = str(workspace)
+    step = PlanStep(
+        step_id="read_files",
+        title="Read relevant files",
+        kind="read",
+        expected_tool="read_text",
+        input_text="Read pkg_469/formatter.py and pkg_469/service.py",
+        goal="Read refactor files",
+        expected_output="files read",
+        done_condition="tool_result:read_text",
+        success_criteria="files read",
+    )
+
+    payload = runtime._normalize_expected_tool_input(
+        state,
+        step,
+        {
+            "path": "pkg_469/formatter.py",
+            "paths": ["pkg_469/formatter.py", "pkg_469/service.py"],
+            "note_id": "test_content",
+            "reader_id": "formatter_content",
+        },
+    )
+
+    assert payload == {"paths": ["pkg_469/formatter.py", "pkg_469/service.py"]}
+
+
 def test_runtime_turns_required_read_response_into_tool_call(make_config, tmp_path) -> None:
     workspace = tmp_path
     pkg = workspace / "pkg_261"

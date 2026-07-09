@@ -4051,6 +4051,15 @@ class AgentRuntime:
 
     def _normalize_expected_tool_input(self, state: SessionState, step: PlanStep, payload: dict[str, Any]) -> dict[str, Any]:
         normalized = dict(payload)
+        if step.expected_tool == "read_text":
+            paths = normalized.get("paths")
+            if isinstance(paths, list) and any(isinstance(item, str) and item.strip() for item in paths):
+                normalized["paths"] = [item for item in paths if isinstance(item, str) and item.strip()]
+                normalized.pop("path", None)
+                normalized.pop("note_id", None)
+                normalized.pop("reader_id", None)
+                return normalized
+            normalized.pop("paths", None)
         if step.expected_tool in {"edit_text", "write_file", "read_text", "read_file"}:
             expected_path = self._extract_path_argument(step.input_text or step.goal, prefer_last=step.expected_tool == "write_file")
             candidate = normalized.get("path")
