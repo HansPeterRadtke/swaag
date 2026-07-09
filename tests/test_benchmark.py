@@ -522,3 +522,43 @@ def test_repo_repair_benchmark_tasks_have_enough_budget_for_test_failure_refinem
     assert overrides["planner_max_replans"] >= 6
     assert overrides["runtime_max_total_actions"] >= 50
     assert overrides["runtime_tool_call_budget"] >= 28
+
+
+def test_success_task_without_quality_oracle_ignores_quality_noise() -> None:
+    from types import SimpleNamespace
+
+    from swaag.benchmark.benchmark_runner import _classify_benchmark_task_outcome
+
+    scenario = SimpleNamespace(expected_outcome="success", expected_failure_category=None, oracle=None)
+
+    success, false_positive = _classify_benchmark_task_outcome(
+        scenario=scenario,
+        verification_passed=True,
+        runtime_error=None,
+        quality_passed=False,
+        final_text="Tests pass and the source was repaired.",
+        failure_category="premature_termination",
+    )
+
+    assert success is True
+    assert false_positive is False
+
+
+def test_success_task_with_quality_oracle_still_uses_quality_result() -> None:
+    from types import SimpleNamespace
+
+    from swaag.benchmark.benchmark_runner import _classify_benchmark_task_outcome
+
+    scenario = SimpleNamespace(expected_outcome="success", expected_failure_category=None, oracle=object())
+
+    success, false_positive = _classify_benchmark_task_outcome(
+        scenario=scenario,
+        verification_passed=True,
+        runtime_error=None,
+        quality_passed=False,
+        final_text="Confident but wrong quality behavior.",
+        failure_category="prompt_misunderstanding",
+    )
+
+    assert success is False
+    assert false_positive is True

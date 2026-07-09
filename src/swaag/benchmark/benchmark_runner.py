@@ -478,6 +478,28 @@ def _evaluate_quality(oracle: PromptUnderstandingOracle | None, state, events, *
     }
 
 
+def _classify_benchmark_task_outcome(
+    *,
+    scenario: TaskScenario,
+    verification_passed: bool,
+    runtime_error: Exception | None,
+    quality_passed: bool,
+    final_text: str,
+    failure_category: str | None,
+) -> tuple[bool, bool]:
+    quality_required = scenario.oracle is not None
+    if scenario.expected_outcome == "success":
+        success = verification_passed and runtime_error is None and (quality_passed or not quality_required)
+        false_positive = (
+            runtime_error is None
+            and _is_substantive_completion_text(final_text)
+            and (not verification_passed or (quality_required and not quality_passed))
+        )
+        return success, false_positive
+    success = verification_passed and failure_category is not None and failure_category == scenario.expected_failure_category
+    false_positive = verification_passed and failure_category is not None and failure_category != scenario.expected_failure_category
+    return success, false_positive
+
 def _print_benchmark_progress(*, current: int, total: int, task: BenchmarkTaskDefinition, status: str) -> None:
     percent = 0.0 if total == 0 else (current / total) * 100.0
     print(
@@ -765,12 +787,14 @@ def run_benchmarks(
                     deterministic_verification_passed=verification.passed,
                     runtime_error=runtime_error,
                 )
-            if scenario.expected_outcome == "success":
-                success = verification.passed and runtime_error is None and bool(quality["passed"])
-                false_positive = runtime_error is None and _is_substantive_completion_text(final_text) and (not verification.passed or not bool(quality["passed"]))
-            else:
-                success = verification.passed and failure is not None and failure.category == scenario.expected_failure_category
-                false_positive = verification.passed and failure is not None and failure.category != scenario.expected_failure_category
+            success, false_positive = _classify_benchmark_task_outcome(
+                scenario=scenario,
+                verification_passed=verification.passed,
+                runtime_error=runtime_error,
+                quality_passed=bool(quality["passed"]),
+                final_text=final_text,
+                failure_category=failure.category if failure is not None else None,
+            )
             if replay_cache_info is not None and hasattr(runtime_model_client, "recorded_count"):
                 actual_recorded = runtime_model_client.recorded_count
                 actual_replayed = runtime_model_client.replayed_count
