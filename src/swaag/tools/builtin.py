@@ -188,8 +188,14 @@ class ReadTextTool(Tool):
         path = raw_input.get("path")
         paths = raw_input.get("paths")
         if paths is not None and path is not None:
-            raise ToolValidationError("read_text accepts either path or paths, not both")
-        if paths is not None:
+            # Some local models echo both the single-file field and the multi-file
+            # field.  Treat a valid paths list as authoritative so a harmless read
+            # step can continue instead of looping on validation failures.
+            if isinstance(paths, list) and paths and all(isinstance(item, str) and item.strip() for item in paths):
+                path = "\n".join(str(item) for item in paths)
+            else:
+                paths = None
+        elif paths is not None:
             path = "\n".join(str(item) for item in paths)
         elif isinstance(path, list):
             paths = path

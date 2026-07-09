@@ -360,6 +360,26 @@ def test_read_text_accepts_path_list_for_multi_file_buffer() -> None:
     assert validated["reader_id"] is None
 
 
+def test_read_text_prefers_paths_over_conflicting_path_field() -> None:
+    tool = ReadTextTool()
+
+    validated = tool.validate(
+        {
+            "path": "pkg/a.py\npkg/b.py",
+            "paths": ["pkg/a.py", "pkg/b.py"],
+            "note_id": None,
+            "reader_id": None,
+            "chunk_chars": None,
+            "overlap_chars": None,
+        }
+    )
+
+    assert validated["paths"] == ["pkg/a.py", "pkg/b.py"]
+    assert validated["path"] == "pkg/a.py\npkg/b.py"
+    assert validated["note_id"] is None
+    assert validated["reader_id"] is None
+
+
 def test_read_text_accepts_paths_alias(tmp_path, make_config) -> None:
     first = tmp_path / "a.txt"
     second = tmp_path / "b.txt"
