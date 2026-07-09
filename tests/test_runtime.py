@@ -3630,3 +3630,36 @@ def test_runtime_repairs_bad_release_report_edit_payload_from_workspace_tests(ma
 
     assert payload["pattern"] == 'return f"{settings[\'label\']}:{total() + 1}:tax={settings[\'tax_rate\']}"'
     assert payload["replacement"] == 'return f"{settings[\'label\']}:{total()}:tax={settings[\'tax_rate\']}"'
+
+
+def test_runtime_repairs_bad_multifile_write_payloads_from_workspace_tests(make_config, tmp_path) -> None:
+    workspace = tmp_path
+    pkg = workspace / "pkg_850"
+    pkg.mkdir()
+    (pkg / "tokenizer.py").write_text("def tokenize(text: str) -> list[str]:\n    return text.split(',')\n", encoding="utf-8")
+    (pkg / "normalizer.py").write_text("from pkg_850.tokenizer import tokenize\n\ndef normalize(text: str) -> list[str]:\n    return [t.upper() for t in tokenize(text)]\n", encoding="utf-8")
+    (workspace / "test_pkg_850_pipeline.py").write_text(
+        "from pkg_850.tokenizer import tokenize\n"
+        "from pkg_850.normalizer import normalize\n"
+        "def test_tokenize():\n"
+        "    assert tokenize('item-04|item-10|item-14') == ['item-04', 'item-10', 'item-14']\n"
+        "def test_normalize():\n"
+        "    assert normalize('item-04|item-10|item-14') == ['item-04', 'item-10', 'item-14']\n",
+        encoding="utf-8",
+    )
+    config = make_config(tools__read_roots=[workspace])
+    runtime = AgentRuntime(config, model_client=FakeModelClient(responses=[]))
+    state = runtime.create_or_load_session()
+    state.environment.workspace.root = str(workspace)
+    state.environment.workspace.cwd = str(workspace)
+    step = PlanStep(step_id="fix", title="Write file", kind="tool", expected_tool="write_file", input_text="Fix pkg_850/tokenizer.py", goal="fix tokenizer", expected_output="tokenizer fixed", done_condition="tool_result:write_file", success_criteria="tokenizer fixed")
+
+    payload = runtime._normalize_expected_tool_input(state, step, {"path": "pkg_850/tokenizer.py", "content": "def tokenize(text):\n    return text.split()\n", "create": False})
+
+    assert payload["content"] == "def tokenize(text: str) -> list[str]:\n    return text.split('|')\n"
+
+    step = PlanStep(step_id="fix", title="Write file", kind="tool", expected_tool="write_file", input_text="Fix pkg_850/normalizer.py", goal="fix normalizer", expected_output="normalizer fixed", done_condition="tool_result:write_file", success_criteria="normalizer fixed")
+    payload = runtime._normalize_expected_tool_input(state, step, {"path": "pkg_850/normalizer.py", "content": "def normalize(text):\n    return text.lower()", "create": False})
+
+    assert "t.lower()" in payload["content"]
+    assert "tokenize(text)" in payload["content"]
