@@ -174,13 +174,15 @@ class ReadTextTool(Tool):
             "reader_id": {"type": "string"},
             "chunk_chars": {"type": "integer", "minimum": 1},
             "overlap_chars": {"type": "integer", "minimum": 0},
+            "start_offset": {"type": "integer", "minimum": 0},
+            "end_offset": {"type": "integer", "minimum": 0},
         },
         "required": [],
         "additionalProperties": False,
     }
 
     def validate(self, raw_input: dict[str, Any]) -> dict[str, Any]:
-        allowed = {"path", "paths", "note_id", "reader_id", "chunk_chars", "overlap_chars"}
+        allowed = {"path", "paths", "note_id", "reader_id", "chunk_chars", "overlap_chars", "start_offset", "end_offset"}
         if not set(raw_input).issubset(allowed):
             raise ToolValidationError("read_text received unknown arguments")
         path = raw_input.get("path")

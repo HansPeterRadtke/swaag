@@ -371,3 +371,13 @@ def test_read_text_accepts_paths_alias(tmp_path, make_config) -> None:
     assert validated["paths"] == [str(first), str(second)]
     assert str(first) in validated["path"]
     assert str(second) in validated["path"]
+
+
+def test_read_text_accepts_offset_hints(tmp_path) -> None:
+    path = tmp_path / "a.txt"
+    path.write_text("alpha", encoding="utf-8")
+    tool = ReadTextTool()
+
+    validated = tool.validate({"path": str(path), "start_offset": 0, "end_offset": 5})
+
+    assert validated["path"] == str(path)

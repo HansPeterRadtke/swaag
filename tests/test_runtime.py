@@ -3600,3 +3600,33 @@ def test_runtime_repairs_bad_stats_edit_payload_from_workspace_tests(make_config
         "        total += value\n"
         "    return total"
     )
+
+
+def test_runtime_repairs_bad_release_report_edit_payload_from_workspace_tests(make_config, tmp_path) -> None:
+    workspace = tmp_path
+    pkg = workspace / "pkg_545"
+    pkg.mkdir()
+    target = pkg / "report.py"
+    target.write_text(
+        "import json\nfrom pathlib import Path\nfrom pkg_545.calc import total\n\ndef describe() -> str:\n"
+        "    settings = json.loads(Path('release_settings.json').read_text(encoding='utf-8'))\n"
+        "    return f\"{settings['label']}:{total() + 1}:tax={settings['tax_rate']}\"\n",
+        encoding="utf-8",
+    )
+    (workspace / "test_pkg_545_artifacts.py").write_text(
+        "from pkg_545.report import describe\n"
+        "def test_release_notes_match_report():\n"
+        "    assert describe() == 'release-20:41:tax=5'\n",
+        encoding="utf-8",
+    )
+    config = make_config(tools__read_roots=[workspace])
+    runtime = AgentRuntime(config, model_client=FakeModelClient(responses=[]))
+    state = runtime.create_or_load_session()
+    state.environment.workspace.root = str(workspace)
+    state.environment.workspace.cwd = str(workspace)
+    step = PlanStep(step_id="fix", title="Fix report", kind="tool", expected_tool="edit_text", input_text="Fix pkg_545/report.py", goal="fix report", expected_output="report fixed", done_condition="tool_result:edit_text", success_criteria="report fixed")
+
+    payload = runtime._normalize_expected_tool_input(state, step, {"path": "pkg_545/report.py", "operation": "replace_pattern_once", "pattern": "missing", "replacement": "bad"})
+
+    assert payload["pattern"] == 'return f"{settings[\'label\']}:{total() + 1}:tax={settings[\'tax_rate\']}"'
+    assert payload["replacement"] == 'return f"{settings[\'label\']}:{total()}:tax={settings[\'tax_rate\']}"'
