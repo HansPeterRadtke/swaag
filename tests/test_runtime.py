@@ -16,7 +16,7 @@ from swaag.model import ModelClientError
 from swaag.planner import create_shell_recovery_plan, plan_from_payload
 from swaag.retrieval.embeddings import SemanticBackendProtocolError
 from swaag.runtime import AgentRuntime, BudgetExceededError, FatalSemanticEngineError
-from swaag.types import CompletionResult, DecisionOutcome, Message, PlanStep, PromptAnalysis
+from swaag.types import CompletionResult, DecisionOutcome, Message, Plan, PlanStep, PromptAnalysis, ToolDecision
 
 from tests.helpers import FakeModelClient, plan_response, plan_step
 
@@ -3615,6 +3615,51 @@ def test_runtime_repairs_bad_pricing_write_file_payload_from_workspace_tests(mak
 
     assert "10000 - discount_basis_points" in payload["content"]
     assert "return round(" in payload["content"]
+
+
+def test_runtime_turns_required_read_response_into_tool_call(make_config, tmp_path) -> None:
+    workspace = tmp_path
+    pkg = workspace / "pkg_261"
+    pkg.mkdir()
+    target = pkg / "slugify.py"
+    target.write_text("def slugify(value: str) -> str:\n    return value\n", encoding="utf-8")
+    config = make_config(tools__read_roots=[workspace])
+    runtime = AgentRuntime(config, model_client=FakeModelClient(responses=[]))
+    state = runtime.create_or_load_session()
+    state.environment.workspace.root = str(workspace)
+    state.environment.workspace.cwd = str(workspace)
+    step = PlanStep(
+        step_id="read_slugify",
+        title="Read slugify",
+        kind="read",
+        expected_tool="read_text",
+        input_text="Read pkg_261/slugify.py",
+        goal="Read pkg_261/slugify.py",
+        expected_output="source read",
+        done_condition="tool_result:read_text",
+        success_criteria="source read",
+        status="running",
+    )
+    state.active_plan = Plan(
+        plan_id="plan_read",
+        goal="fix slugify",
+        steps=[step],
+        success_criteria="read source",
+        fallback_strategy="",
+        status="active",
+        created_at="t",
+        updated_at="t",
+        current_step_id="read_slugify",
+    )
+
+    decision = runtime._normalize_decision_for_active_step(
+        state,
+        ToolDecision(action="respond", response="I will inspect the file next.", tool_name="none", tool_input={}),
+    )
+
+    assert decision.action == "call_tool"
+    assert decision.tool_name == "read_text"
+    assert decision.tool_input["path"].endswith("pkg_261/slugify.py")
 
 
 def test_runtime_repairs_bad_slugify_edit_payload_from_workspace_tests(make_config, tmp_path) -> None:

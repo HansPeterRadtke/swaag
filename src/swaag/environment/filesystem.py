@@ -74,6 +74,12 @@ class FilesystemManager:
             if item.is_file() and "__pycache__" not in item.parts and ".pytest_cache" not in item.parts
         ]
         requested_bits = self._filename_bits(requested_name)
+        parts = Path(path_text).parts
+        if requested_name.startswith("test_") and len(parts) >= 2:
+            package_name = parts[-2]
+            package_candidate = self.workspace_root / f"test_{package_name}_{requested_name[5:]}"
+            if package_candidate.is_file():
+                return package_candidate.resolve()
         if not requested_bits:
             return None
         scored: list[tuple[int, Path]] = []

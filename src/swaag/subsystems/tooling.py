@@ -48,15 +48,15 @@ class ToolSubsystem:
                 scope["edit_count"] = state.edit_count
             elif decision.tool_name == "notes":
                 scope["note_count"] = len(state.notes)
-            action_key = stable_json_dumps(
-                {
-                    "action": decision.action,
-                    "tool_name": decision.tool_name,
-                    "tool_input": decision.tool_input,
-                    "response": decision.response,
-                    "scope": scope,
-                }
-            )
+            action_key_payload = {
+                "action": decision.action,
+                "tool_name": decision.tool_name,
+                "tool_input": decision.tool_input,
+                "scope": scope,
+            }
+            if not (step.expected_tool and decision.action != "call_tool"):
+                action_key_payload["response"] = decision.response
+            action_key = stable_json_dumps(action_key_payload)
             action_counts[action_key] = action_counts.get(action_key, 0) + 1
             runtime.history.record_event(
                 state,

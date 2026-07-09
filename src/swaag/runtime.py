@@ -3926,12 +3926,21 @@ class AgentRuntime:
         return decision, prepared.report
 
     def _normalize_decision_for_active_step(self, state: SessionState, decision: ToolDecision) -> ToolDecision:
-        if decision.action != "call_tool":
-            return decision
         step = self._current_or_next_plan_step(state)
         if step is None or not step.expected_tool:
             return decision
-        enforceable_tools = {"edit_text", "write_file", "shell_command", "run_tests"}
+        if decision.action != "call_tool":
+            if step.expected_tool in {"read_text", "read_file"}:
+                normalized_input = self._normalize_expected_tool_input(state, step, {})
+                if isinstance(normalized_input.get("path"), str) and normalized_input["path"].strip():
+                    return ToolDecision(
+                        action="call_tool",
+                        response="",
+                        tool_name=step.expected_tool,
+                        tool_input=normalized_input,
+                    )
+            return decision
+        enforceable_tools = {"read_text", "read_file", "edit_text", "write_file", "shell_command", "run_tests"}
         if step.expected_tool not in enforceable_tools:
             return decision
         target_tool_name = step.expected_tool
@@ -3952,7 +3961,7 @@ class AgentRuntime:
         # through the general decision contract. This is a structural routing
         # decision, not a profile- or vocabulary-based bypass.
         step = self._current_or_next_plan_step(state)
-        if step is None or step.expected_tool not in {"edit_text", "write_file", "shell_command", "run_tests"}:
+        if step is None or step.expected_tool not in {"read_text", "read_file", "edit_text", "write_file", "shell_command", "run_tests"}:
             return False
         if getattr(self.client, "is_deterministic_test_client", False):
             contract_queues = getattr(self.client, "_contract_responses", {})
