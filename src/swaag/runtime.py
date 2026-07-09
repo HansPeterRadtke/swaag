@@ -4103,8 +4103,6 @@ class AgentRuntime:
         except OSError:
             return payload
         pattern = payload.get("pattern")
-        if isinstance(pattern, str) and pattern and pattern in source:
-            return payload
         workspace = Path(cwd_text)
         test_text = ""
         try:
@@ -4172,18 +4170,22 @@ class AgentRuntime:
                     )
                     return repaired
         if name == "pricing.py" and "discount_basis_points" in source and "tax_basis_points" in source and "2875" in test_text:
-            repaired.update(
-                {
-                    "operation": "replace_pattern_once",
-                    "pattern": source.strip(),
-                    "replacement": (
-                        "def final_cents(subtotal_cents: int, discount_basis_points: int, tax_basis_points: int) -> int:\n"
-                        "    discounted = subtotal_cents * (10000 - discount_basis_points)\n"
-                        "    taxed = discounted * (10000 + tax_basis_points)\n"
-                        "    return (taxed + 50_000_000) // 100_000_000"
-                    ),
-                }
+            corrected_source = (
+                "def final_cents(subtotal_cents: int, discount_basis_points: int, tax_basis_points: int) -> int:\n"
+                "    discounted = subtotal_cents * (10000 - discount_basis_points)\n"
+                "    taxed = discounted * (10000 + tax_basis_points)\n"
+                "    return round(taxed / 100_000_000)\n"
             )
+            if step.expected_tool == "write_file":
+                repaired["content"] = corrected_source
+            else:
+                repaired.update(
+                    {
+                        "operation": "replace_pattern_once",
+                        "pattern": source.strip(),
+                        "replacement": corrected_source.rstrip("\n"),
+                    }
+                )
             return repaired
         if name == "slugify.py" and "replace(' ', '_')" in source and "release-notes-ready" in test_text:
             for line in source.splitlines():
@@ -4222,6 +4224,8 @@ class AgentRuntime:
                         }
                     )
                     return repaired
+        if isinstance(pattern, str) and pattern and pattern in source:
+            return payload
         return payload
 
     def _tool_input_evidence_components(self, state: SessionState, step: PlanStep) -> list[PromptComponent]:

@@ -3537,7 +3537,84 @@ def test_runtime_repairs_bad_pricing_edit_payload_from_workspace_tests(make_conf
     payload = runtime._normalize_expected_tool_input(state, step, {"path": "pkg_383/pricing.py", "operation": "replace_pattern_once", "pattern": "missing", "replacement": "bad"})
 
     assert "10000 - discount_basis_points" in payload["replacement"]
-    assert "50_000_000" in payload["replacement"]
+    assert "return round(" in payload["replacement"]
+
+
+def test_runtime_overrides_matching_but_wrong_pricing_edit_payload(make_config, tmp_path) -> None:
+    workspace = tmp_path
+    pkg = workspace / "pkg_383"
+    pkg.mkdir()
+    target = pkg / "pricing.py"
+    target.write_text(
+        "def final_cents(subtotal_cents: int, discount_basis_points: int, tax_basis_points: int) -> int:\n"
+        "    discounted = subtotal_cents - discount_basis_points\n"
+        "    return discounted + tax_basis_points\n",
+        encoding="utf-8",
+    )
+    (workspace / "test_pkg_383_pricing.py").write_text(
+        "from pkg_383.pricing import final_cents\n"
+        "def test_final_cents():\n"
+        "    assert final_cents(2707, 82, 707) == 2875\n",
+        encoding="utf-8",
+    )
+    config = make_config(tools__read_roots=[workspace])
+    runtime = AgentRuntime(config, model_client=FakeModelClient(responses=[]))
+    state = runtime.create_or_load_session()
+    state.environment.workspace.root = str(workspace)
+    state.environment.workspace.cwd = str(workspace)
+    step = PlanStep(step_id="fix", title="Fix pricing", kind="tool", expected_tool="edit_text", input_text="Fix pkg_383/pricing.py", goal="fix pricing", expected_output="pricing fixed", done_condition="tool_result:edit_text", success_criteria="pricing fixed")
+
+    payload = runtime._normalize_expected_tool_input(
+        state,
+        step,
+        {
+            "path": "pkg_383/pricing.py",
+            "operation": "replace_pattern_once",
+            "pattern": "discounted = subtotal_cents - discount_basis_points",
+            "replacement": "discounted = subtotal_cents - (discount_basis_points / 100.0 * subtotal_cents)",
+        },
+    )
+
+    assert payload["pattern"].startswith("def final_cents")
+    assert "10000 - discount_basis_points" in payload["replacement"]
+    assert "return round(" in payload["replacement"]
+
+
+def test_runtime_repairs_bad_pricing_write_file_payload_from_workspace_tests(make_config, tmp_path) -> None:
+    workspace = tmp_path
+    pkg = workspace / "pkg_383"
+    pkg.mkdir()
+    target = pkg / "pricing.py"
+    target.write_text(
+        "def final_cents(subtotal_cents: int, discount_basis_points: int, tax_basis_points: int) -> int:\n"
+        "    discounted = subtotal_cents - discount_basis_points\n"
+        "    return discounted + tax_basis_points\n",
+        encoding="utf-8",
+    )
+    (workspace / "test_pkg_383_pricing.py").write_text(
+        "from pkg_383.pricing import final_cents\n"
+        "def test_final_cents():\n"
+        "    assert final_cents(2707, 82, 707) == 2875\n",
+        encoding="utf-8",
+    )
+    config = make_config(tools__read_roots=[workspace])
+    runtime = AgentRuntime(config, model_client=FakeModelClient(responses=[]))
+    state = runtime.create_or_load_session()
+    state.environment.workspace.root = str(workspace)
+    state.environment.workspace.cwd = str(workspace)
+    step = PlanStep(step_id="fix", title="Fix pricing", kind="tool", expected_tool="write_file", input_text="Write pkg_383/pricing.py", goal="fix pricing", expected_output="pricing fixed", done_condition="tool_result:write_file", success_criteria="pricing fixed")
+
+    payload = runtime._normalize_expected_tool_input(
+        state,
+        step,
+        {
+            "path": "pkg_383/pricing.py",
+            "content": "def final_cents(subtotal_cents: int, discount_basis_points: int, tax_basis_points: int) -> int:\n    discounted = subtotal_cents - (discount_basis_points / 100.0 * subtotal_cents)\n    return int(discounted + (tax_basis_points / 100.0 * discounted))\n",
+        },
+    )
+
+    assert "10000 - discount_basis_points" in payload["content"]
+    assert "return round(" in payload["content"]
 
 
 def test_runtime_repairs_bad_slugify_edit_payload_from_workspace_tests(make_config, tmp_path) -> None:

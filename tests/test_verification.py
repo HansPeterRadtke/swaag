@@ -616,12 +616,22 @@ def test_benchmark_verification_enforces_tool_usage_and_workspace_scope(tmp_path
         state=state,
         events=events,
         workspace_before={"document.txt": "alpha\nbeta\n"},
-        workspace_after={"document.txt": "alpha\ngamma\n", "document.txt.bak": "alpha\nbeta\n"},
+        workspace_after={
+            "document.txt": "alpha\ngamma\n",
+            "document.txt.bak": "alpha\nbeta\n",
+            ".pytest_cache/README.md": "pytest cache\n",
+            "__pycache__/document.cpython-311.pyc": "compiled bytes",
+        },
     )
 
     assert report.passed is True
     assert report.checks["allowed_modified_files"] is True
     assert report.checks["required_tools_used"] is True
+    assert report.evidence["workspace_changes"]["changed_files"] == ["document.txt", "document.txt.bak"]
+    assert set(report.evidence["workspace_changes"]["ignored_changed_files"]) == {
+        ".pytest_cache/README.md",
+        "__pycache__/document.cpython-311.pyc",
+    }
 
 
 def test_tool_name_verification_treats_read_tools_as_equivalent() -> None:

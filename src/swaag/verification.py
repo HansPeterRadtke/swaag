@@ -15,6 +15,21 @@ from swaag.tools.base import ToolValidationError, _validate_schema_value
 from swaag.types import HistoryEvent, Plan, PlanStep, SessionState, ToolExecutionResult, VerificationType
 
 _EXECUTION_ALLOWLIST = frozenset({"python", "python3", "pytest"})
+_BENIGN_WORKSPACE_ARTIFACT_DIRS = frozenset({".pytest_cache", "__pycache__", ".mypy_cache", ".ruff_cache", ".hypothesis"})
+_BENIGN_WORKSPACE_ARTIFACT_SUFFIXES = (".pyc", ".pyo")
+
+
+def _is_benign_workspace_artifact(path_text: str) -> bool:
+    normalized = str(path_text).replace("\\", "/").strip("/")
+    if not normalized:
+        return False
+    parts = normalized.split("/")
+    if any(part in _BENIGN_WORKSPACE_ARTIFACT_DIRS for part in parts):
+        return True
+    name = parts[-1]
+    if name == ".coverage" or name.startswith(".coverage."):
+        return True
+    return name.endswith(_BENIGN_WORKSPACE_ARTIFACT_SUFFIXES)
 
 
 class VerificationError(RuntimeError):
@@ -898,13 +913,16 @@ def verify_benchmark_contract(
                     return key
             return path_text
 
-        changed_files = sorted(
+        raw_changed_files = sorted(
             path
             for path in set(before_snapshot) | set(after_snapshot)
             if before_snapshot.get(path) != after_snapshot.get(path)
         )
+        ignored_changed_files = [path for path in raw_changed_files if _is_benign_workspace_artifact(path)]
+        changed_files = [path for path in raw_changed_files if path not in ignored_changed_files]
         evidence["workspace_changes"] = {
             "changed_files": changed_files,
+            "ignored_changed_files": ignored_changed_files,
             "before_count": len(before_snapshot),
             "after_count": len(after_snapshot),
         }
