@@ -76,10 +76,16 @@ class FilesystemManager:
         requested_bits = self._filename_bits(requested_name)
         parts = Path(path_text).parts
         if requested_name.startswith("test_") and len(parts) >= 2:
-            package_name = parts[-2]
-            package_candidate = self.workspace_root / f"test_{package_name}_{requested_name[5:]}"
-            if package_candidate.is_file():
-                return package_candidate.resolve()
+            package_names: list[str] = []
+            if len(parts) >= 3 and parts[-2] in {"test", "tests"}:
+                package_names.append(parts[-3])
+            package_names.append(parts[-2])
+            for package_name in dict.fromkeys(package_names):
+                if package_name in {"", ".", "..", "test", "tests"}:
+                    continue
+                package_candidate = self.workspace_root / f"test_{package_name}_{requested_name[5:]}"
+                if package_candidate.is_file():
+                    return package_candidate.resolve()
         if not requested_bits:
             return None
         scored: list[tuple[int, Path]] = []

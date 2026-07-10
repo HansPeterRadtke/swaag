@@ -467,6 +467,25 @@ def test_environment_read_text_chunk_combines_multiple_paths(make_config, tmp_pa
     assert "B = 2" in result.output["text"]
 
 
+def test_environment_repairs_absolute_nested_package_test_path_with_source_present(make_config, tmp_path: Path) -> None:
+    config = make_config()
+    state = SessionState(session_id="s", created_at="t", updated_at="t", config_fingerprint="cfg", model_base_url="http://example.test")
+    environment = AgentEnvironment(config, state)
+    package_dir = tmp_path / "pkg_261"
+    package_dir.mkdir()
+    (package_dir / "slugify.py").write_text("source", encoding="utf-8")
+    (tmp_path / "test_pkg_261_slugify.py").write_text("content", encoding="utf-8")
+
+    result = environment.read_text_chunk(
+        {"path": str(package_dir / "tests" / "test_slugify.py"), "paths": None, "note_id": None, "reader_id": None, "chunk_chars": 1000, "overlap_chars": None},
+        ToolContext(config=config, session_state=state, environment=environment),
+    )
+
+    assert result.output["source_kind"] == "file"
+    assert result.output["source_ref"].endswith("test_pkg_261_slugify.py")
+    assert result.output["text"] == "content"
+
+
 def test_environment_repairs_missing_test_path_by_similar_filename(make_config, tmp_path: Path) -> None:
     config = make_config()
     state = SessionState(session_id="s", created_at="t", updated_at="t", config_fingerprint="cfg", model_base_url="http://example.test")
