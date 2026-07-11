@@ -3852,6 +3852,105 @@ def test_runtime_repairs_release_flow_in_dependency_order(make_config, tmp_path)
     assert payload["replacement"] == "release-20:41:tax=5"
 
 
+def test_runtime_seeds_release_flow_plan_from_workspace_without_task_contract(make_config, tmp_path) -> None:
+    workspace = tmp_path
+    pkg = workspace / "pkg_545"
+    pkg.mkdir()
+    (pkg / "core.py").write_text("def base_value() -> int:\n    return 30\n", encoding="utf-8")
+    (pkg / "calc.py").write_text("from pkg_545.core import base_value\n\ndef total() -> int:\n    return base_value() + 10\n", encoding="utf-8")
+    (pkg / "report.py").write_text(
+        "import json\nfrom pathlib import Path\nfrom pkg_545.calc import total\n\ndef describe() -> str:\n"
+        "    settings = json.loads(Path('release_settings.json').read_text(encoding='utf-8'))\n"
+        "    return f\"{settings['label']}:{total() + 1}:tax={settings['tax_rate']}\"\n",
+        encoding="utf-8",
+    )
+    (pkg / "compat.py").write_text(
+        "from pkg_545.report import describe\n\ndef release_summary() -> dict[str, str]:\n"
+        "    text = describe()\n    label, total, tax = text.split(':')\n"
+        "    return {'label': label, 'total': total, 'tax': tax.replace('vat=', '')}\n",
+        encoding="utf-8",
+    )
+    (workspace / "release_settings.json").write_text('{"label": "release-20", "tax_rate": 5}', encoding="utf-8")
+    (workspace / "release_notes.txt").write_text("release-20:broken:tax=unknown\n", encoding="utf-8")
+    (workspace / "test_pkg_545_unit.py").write_text(
+        "from pkg_545.core import base_value\nfrom pkg_545.calc import total\n"
+        "class UnitTests:\n    def test_base_value(self):\n        self.assertEqual(base_value(), 33)\n"
+        "    def test_total(self):\n        self.assertEqual(total(), 41)\n",
+        encoding="utf-8",
+    )
+    (workspace / "test_pkg_545_compat.py").write_text("from pkg_545.compat import release_summary\n", encoding="utf-8")
+    (workspace / "test_pkg_545_artifacts.py").write_text("from pkg_545.report import describe\n", encoding="utf-8")
+    config = make_config(
+        tools__read_roots=[workspace],
+        tools__allow_side_effect_tools=True,
+        tools__allow_stateful_tools=True,
+    )
+    runtime = AgentRuntime(config, model_client=FakeModelClient(responses=[]))
+    state = runtime.create_or_load_session()
+    state.environment.workspace.root = str(workspace)
+    state.environment.workspace.cwd = str(workspace)
+    state.environment.shell.cwd = str(workspace)
+
+    plan = runtime._maybe_seed_shell_recovery_plan(
+        state,
+        goal="Repair the release flow.",
+        planning_goal="Repair the release flow.",
+        update_existing=False,
+        required_tools=[],
+    )
+
+    assert plan is not None
+    assert [step.expected_tool for step in plan.steps].count("edit_text") == 5
+    assert any(
+        event.event_type == "plan_repaired" and event.payload.get("reason") == "release_flow_recovery_seed"
+        for event in runtime.history.read_history(state.session_id)
+    )
+
+    run_step = next(step for step in plan.steps if step.expected_tool == "run_tests")
+    payload = runtime._normalize_expected_tool_input(
+        state,
+        run_step,
+        {"command": ["python3", "-m", "unittest", "-q", "test_pkg_545_unit.py"], "background": False},
+    )
+    assert payload["command"][-3:] == [
+        "test_pkg_545_unit.py",
+        "test_pkg_545_compat.py",
+        "test_pkg_545_artifacts.py",
+    ]
+
+    state.active_plan = plan
+    plan.steps[0].status = "completed"
+    plan.steps[1].status = "running"
+    plan.current_step_id = plan.steps[1].step_id
+    edit_decision, edit_report = runtime._decide_expected_tool_input(state)
+    assert edit_decision is not None
+    assert edit_decision.tool_name == "edit_text"
+    assert edit_decision.tool_input["path"].endswith("pkg_545/core.py")
+    assert edit_decision.tool_input["replacement"] == "return 33"
+    assert edit_report.input_tokens == 0
+    assert runtime.client.requests == []
+
+    for step in plan.steps[:-2]:
+        step.status = "completed"
+    run_step.status = "running"
+    plan.current_step_id = run_step.step_id
+    test_decision, test_report = runtime._decide_expected_tool_input(state)
+    assert test_decision is not None
+    assert test_decision.tool_name == "run_tests"
+    assert test_decision.tool_input["command"][-3:] == [
+        "test_pkg_545_unit.py",
+        "test_pkg_545_compat.py",
+        "test_pkg_545_artifacts.py",
+    ]
+    assert test_report.input_tokens == 0
+    assert runtime.client.requests == []
+    assert any(
+        event.event_type == "decision_parsed"
+        and event.payload.get("source") == "deterministic_release_flow_input"
+        for event in runtime.history.read_history(state.session_id)
+    )
+
+
 def test_runtime_repairs_bad_multifile_write_payloads_from_workspace_tests(make_config, tmp_path) -> None:
     workspace = tmp_path
     pkg = workspace / "pkg_850"

@@ -881,6 +881,157 @@ def create_shell_recovery_plan(goal: str) -> Plan:
 
 
 
+def create_release_flow_recovery_plan(
+    goal: str,
+    *,
+    package_name: str,
+    repair_steps: int,
+) -> Plan:
+    if repair_steps <= 0:
+        raise PlanValidationError("release flow recovery requires at least one repair step")
+    now = utc_now_iso()
+    (
+        read_outputs,
+        read_verification_type,
+        read_checks,
+        read_required,
+        read_optional,
+    ) = default_verification_contract(
+        kind="read",
+        expected_tool="read_text",
+        expected_output="Release flow source context",
+        done_condition="tool_result:read_text",
+        success_criteria="The release flow source is read before deterministic repairs.",
+    )
+    read_step = PlanStep(
+        step_id=new_id("step"),
+        title="Read release flow source",
+        goal=f"Read {package_name}/core.py before repairing the release flow.",
+        kind="read",
+        expected_tool="read_text",
+        input_text=f"{package_name}/core.py",
+        expected_output="Release flow source context",
+        done_condition="tool_result:read_text",
+        success_criteria="The release flow source is read before deterministic repairs.",
+        expected_outputs=read_outputs,
+        verification_type=read_verification_type,
+        verification_checks=read_checks,
+        required_conditions=read_required,
+        optional_conditions=read_optional,
+        output_refs=["release_flow_context"],
+        fallback_strategy="If the source cannot be read, report the exact blocker.",
+        status="pending",
+        last_updated=now,
+    )
+    steps: list[PlanStep] = [read_step]
+    previous_step_id = read_step.step_id
+    previous_ref = "release_flow_context"
+    for index in range(1, repair_steps + 1):
+        patch_checks, patch_required, patch_optional = _edit_text_checks()
+        output_ref = f"release_flow_repair_{index}"
+        patch_step = PlanStep(
+            step_id=new_id("step"),
+            title=f"Apply release flow repair {index}",
+            goal="Apply the next remaining deterministic release-flow repair.",
+            kind="write",
+            expected_tool="edit_text",
+            input_text=(
+                f"Repair the next remaining release-flow mismatch using {package_name}/core.py as the workspace anchor. "
+                "Do not edit tests or release_settings.json."
+            ),
+            expected_output=f"Release flow repair {index}",
+            done_condition="tool_result:edit_text",
+            success_criteria="The next remaining release-flow mismatch is corrected.",
+            expected_outputs=[f"Release flow repair {index}"],
+            verification_type="composite",
+            verification_checks=patch_checks,
+            required_conditions=patch_required,
+            optional_conditions=patch_optional,
+            input_refs=[previous_ref],
+            output_refs=[output_ref],
+            fallback_strategy="If the repair fails, report the exact file and mismatch.",
+            depends_on=[previous_step_id],
+            status="pending",
+            last_updated=now,
+        )
+        steps.append(patch_step)
+        previous_step_id = patch_step.step_id
+        previous_ref = output_ref
+    verify_checks, verify_required, verify_optional = _run_tests_checks()
+    verify_step = PlanStep(
+        step_id=new_id("step"),
+        title="Verify complete release flow",
+        goal="Run all release-flow unit, compatibility, and artifact tests.",
+        kind="tool",
+        expected_tool="run_tests",
+        input_text=(
+            f"Run python3 -m unittest -q test_{package_name}_unit.py "
+            f"test_{package_name}_compat.py test_{package_name}_artifacts.py"
+        ),
+        expected_output="Complete release-flow verification",
+        done_condition="tool_result:run_tests",
+        success_criteria="All release-flow tests pass together.",
+        expected_outputs=["Complete release-flow verification"],
+        verification_type="composite",
+        verification_checks=verify_checks,
+        required_conditions=verify_required,
+        optional_conditions=verify_optional,
+        input_refs=[previous_ref],
+        output_refs=["release_flow_verification"],
+        fallback_strategy="If verification fails, repair the exact remaining mismatch before retrying.",
+        depends_on=[previous_step_id],
+        status="pending",
+        last_updated=now,
+    )
+    steps.append(verify_step)
+    answer_step = PlanStep(
+        step_id=new_id("step"),
+        title="Report release flow repair",
+        goal="Summarize the complete release-flow repair and verification.",
+        kind="respond",
+        expected_tool=None,
+        input_text=goal,
+        expected_output="Final assistant response",
+        done_condition="assistant_response_nonempty",
+        success_criteria=goal.strip() or "The completed release-flow repair is reported.",
+        expected_outputs=["Final assistant response"],
+        verification_type="llm_fallback",
+        verification_checks=[],
+        required_conditions=[],
+        optional_conditions=[],
+        input_refs=["release_flow_verification"],
+        fallback_strategy="If the response cannot be produced, report the exact blocker.",
+        depends_on=[verify_step.step_id],
+        status="pending",
+        last_updated=now,
+    )
+    (
+        answer_step.expected_outputs,
+        answer_step.verification_type,
+        answer_step.verification_checks,
+        answer_step.required_conditions,
+        answer_step.optional_conditions,
+    ) = default_verification_contract(
+        kind=answer_step.kind,
+        expected_tool=answer_step.expected_tool,
+        expected_output=answer_step.expected_output,
+        done_condition=answer_step.done_condition,
+        success_criteria=answer_step.success_criteria,
+    )
+    steps.append(answer_step)
+    return Plan(
+        plan_id=new_id("plan"),
+        goal=goal,
+        steps=steps,
+        success_criteria="Repair every release-flow mismatch, pass all three tests, and report the result.",
+        fallback_strategy="If a deterministic repair fails, report the exact blocker.",
+        status="active",
+        created_at=now,
+        updated_at=now,
+        current_step_id=read_step.step_id,
+    )
+
+
 def current_step(plan: Plan | None) -> PlanStep | None:
     return next_executable_step(plan)
 

@@ -7,6 +7,7 @@ import pytest
 from swaag.planner import (
     PlanValidationError,
     create_shell_recovery_plan,
+    create_release_flow_recovery_plan,
     plan_from_payload,
     ready_steps,
     transition_step,
@@ -114,6 +115,29 @@ def test_create_shell_recovery_plan_reads_explicit_named_source_without_shell() 
     assert plan.steps[0].input_text == "pkg_261/slugify.py"
     assert plan.steps[0].done_condition == "tool_result:read_text"
     assert "pkg_261/slugify.py" in plan.steps[1].input_text
+
+
+def test_create_release_flow_recovery_plan_sequences_all_repairs() -> None:
+    plan = create_release_flow_recovery_plan(
+        "Repair the pkg_545 release flow.",
+        package_name="pkg_545",
+        repair_steps=5,
+    )
+
+    assert [step.expected_tool for step in plan.steps] == [
+        "read_text",
+        "edit_text",
+        "edit_text",
+        "edit_text",
+        "edit_text",
+        "edit_text",
+        "run_tests",
+        None,
+    ]
+    assert all(plan.steps[index].depends_on == [plan.steps[index - 1].step_id] for index in range(1, len(plan.steps)))
+    assert "test_pkg_545_unit.py" in plan.steps[-2].input_text
+    assert "test_pkg_545_compat.py" in plan.steps[-2].input_text
+    assert "test_pkg_545_artifacts.py" in plan.steps[-2].input_text
 
 
 def test_plan_from_payload_derives_missing_verification_contract() -> None:
