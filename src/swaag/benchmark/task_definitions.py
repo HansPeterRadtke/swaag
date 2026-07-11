@@ -180,9 +180,10 @@ def _default_oracle(
 
 
 def _json_schema(required: list[str]) -> dict[str, Any]:
+    primitive_or_null = ["string", "integer", "number", "boolean", "null"]
     return {
         "type": "object",
-        "properties": {key: {"type": ["string", "null"]} for key in required},
+        "properties": {key: {"type": list(primitive_or_null)} for key in required},
         "required": required,
         "additionalProperties": False,
     }

@@ -66,6 +66,19 @@ class Tool(abc.ABC):
 
 def _validate_schema_value(value: Any, schema: dict[str, Any], *, path: str) -> None:
     expected_type = schema.get("type")
+    if isinstance(expected_type, list):
+        errors: list[str] = []
+        for candidate_type in expected_type:
+            candidate_schema = dict(schema)
+            candidate_schema["type"] = candidate_type
+            try:
+                _validate_schema_value(value, candidate_schema, path=path)
+            except ToolValidationError as exc:
+                errors.append(str(exc))
+                continue
+            return
+        allowed = ", ".join(str(item) for item in expected_type)
+        raise ToolValidationError(f"{path} must match one of the allowed schema types: {allowed}")
     if expected_type == "object":
         if not isinstance(value, dict):
             raise ToolValidationError(f"{path} must be an object")
@@ -105,6 +118,9 @@ def _validate_schema_value(value: Any, schema: dict[str, Any], *, path: str) -> 
     elif expected_type == "boolean":
         if not isinstance(value, bool):
             raise ToolValidationError(f"{path} must be a boolean")
+    elif expected_type == "null":
+        if value is not None:
+            raise ToolValidationError(f"{path} must be null")
     elif expected_type is not None:
         raise ToolValidationError(f"Unsupported schema type at {path}: {expected_type}")
 

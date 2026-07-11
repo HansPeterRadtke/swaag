@@ -7,7 +7,7 @@ from pathlib import Path
 import pytest
 
 from swaag.notes import make_note
-from swaag.tools.base import Tool, ToolContext, ToolValidationError
+from swaag.tools.base import Tool, ToolContext, ToolValidationError, _validate_schema_value
 from swaag.tools.builtin import EditTextTool, ReadTextTool, RunTestsTool
 from swaag.tools.registry import ToolRegistry
 from swaag.types import SessionState, ToolExecutionResult
@@ -17,6 +17,16 @@ from swaag.types import SessionState, ToolExecutionResult
 def _empty_state() -> SessionState:
     return SessionState(session_id="s", created_at="t", updated_at="t", config_fingerprint="cfg", model_base_url="http://example.test")
 
+
+
+def test_schema_validator_accepts_union_types_and_null() -> None:
+    schema = {"type": ["string", "integer", "null"]}
+
+    _validate_schema_value("ready", schema, path="value")
+    _validate_schema_value(7, schema, path="value")
+    _validate_schema_value(None, schema, path="value")
+    with pytest.raises(ToolValidationError):
+        _validate_schema_value([], schema, path="value")
 
 
 def test_calculator_tool_executes(make_config) -> None:

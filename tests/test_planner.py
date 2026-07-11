@@ -7,6 +7,7 @@ import pytest
 from swaag.planner import (
     PlanValidationError,
     create_shell_recovery_plan,
+    create_structured_reading_plan,
     create_release_flow_recovery_plan,
     plan_from_payload,
     ready_steps,
@@ -115,6 +116,20 @@ def test_create_shell_recovery_plan_reads_explicit_named_source_without_shell() 
     assert plan.steps[0].input_text == "pkg_261/slugify.py"
     assert plan.steps[0].done_condition == "tool_result:read_text"
     assert "pkg_261/slugify.py" in plan.steps[1].input_text
+
+
+def test_create_structured_reading_plan_is_two_step_and_deterministic() -> None:
+    plan = create_structured_reading_plan(
+        "Read files and return JSON.",
+        paths=["facts.json", "roadmap.md", "stale_note.txt"],
+        keys=["service", "owner", "status", "eta"],
+    )
+
+    assert [step.expected_tool for step in plan.steps] == ["read_text", None]
+    assert plan.steps[0].title == "Read structured evidence"
+    assert plan.steps[1].title == "Return structured JSON"
+    assert plan.steps[1].verification_type == "composite"
+    assert plan.steps[1].required_conditions == ["dependencies_completed", "assistant_text_nonempty"]
 
 
 def test_create_release_flow_recovery_plan_sequences_all_repairs() -> None:

@@ -881,6 +881,90 @@ def create_shell_recovery_plan(goal: str) -> Plan:
 
 
 
+def create_structured_reading_plan(
+    goal: str,
+    *,
+    paths: list[str],
+    keys: list[str],
+) -> Plan:
+    if not paths or not keys:
+        raise PlanValidationError("structured reading requires named paths and keys")
+    now = utc_now_iso()
+    (
+        read_outputs,
+        read_verification_type,
+        read_checks,
+        read_required,
+        read_optional,
+    ) = default_verification_contract(
+        kind="read",
+        expected_tool="read_text",
+        expected_output="Structured reading evidence",
+        done_condition="tool_result:read_text",
+        success_criteria="All explicitly named evidence files are read.",
+    )
+    read_step = PlanStep(
+        step_id=new_id("step"),
+        title="Read structured evidence",
+        goal="Read every explicitly named file needed for the requested JSON object.",
+        kind="read",
+        expected_tool="read_text",
+        input_text="\n".join(paths),
+        expected_output="Structured reading evidence",
+        done_condition="tool_result:read_text",
+        success_criteria="All explicitly named evidence files are read.",
+        expected_outputs=read_outputs,
+        verification_type=read_verification_type,
+        verification_checks=read_checks,
+        required_conditions=read_required,
+        optional_conditions=read_optional,
+        output_refs=["structured_evidence"],
+        fallback_strategy="If any named file cannot be read, report that exact path.",
+        status="pending",
+        last_updated=now,
+    )
+    response_checks: list[dict[str, object]] = [
+        {"name": "dependencies_completed", "check_type": "dependencies_completed"},
+        {
+            "name": "assistant_text_nonempty",
+            "check_type": "string_nonempty",
+            "actual_source": "assistant_text",
+        },
+    ]
+    answer_step = PlanStep(
+        step_id=new_id("step"),
+        title="Return structured JSON",
+        goal="Return the requested JSON object using only the named evidence files and authority rules.",
+        kind="respond",
+        expected_tool=None,
+        input_text=goal,
+        expected_output="Exact structured JSON",
+        done_condition="assistant_response_nonempty",
+        success_criteria="The response is a non-empty JSON object with exactly the requested keys.",
+        expected_outputs=["Exact structured JSON"],
+        verification_type="composite",
+        verification_checks=response_checks,
+        required_conditions=["dependencies_completed", "assistant_text_nonempty"],
+        optional_conditions=[],
+        input_refs=["structured_evidence"],
+        fallback_strategy="If the evidence is insufficient, preserve required nulls rather than inventing values.",
+        depends_on=[read_step.step_id],
+        status="pending",
+        last_updated=now,
+    )
+    return Plan(
+        plan_id=new_id("plan"),
+        goal=goal,
+        steps=[read_step, answer_step],
+        success_criteria=f"Read {len(paths)} named files and return JSON with exactly {len(keys)} requested keys.",
+        fallback_strategy="Report an exact missing file or unsupported field without hallucinating.",
+        status="active",
+        created_at=now,
+        updated_at=now,
+        current_step_id=read_step.step_id,
+    )
+
+
 def create_release_flow_recovery_plan(
     goal: str,
     *,

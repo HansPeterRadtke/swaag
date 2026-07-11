@@ -1658,6 +1658,28 @@ def test_runtime_deterministically_extracts_requested_line_from_file_read(make_c
     assert runtime._deterministic_answer(state) == "owner=carol"
 
 
+def test_runtime_marks_explicit_structured_read_prompt_complete(make_config) -> None:
+    runtime = AgentRuntime(make_config(), model_client=FakeModelClient(responses=[]))
+    analysis = PromptAnalysis(
+        task_type="structured",
+        completeness="partial",
+        requires_expansion=True,
+        requires_decomposition=True,
+        confidence=0.9,
+        detected_entities=["incident.json", "owner.txt"],
+        detected_goals=["return structured JSON"],
+    )
+
+    normalized = runtime._apply_task_contract_to_analysis(
+        "Read `incident.json` and `owner.txt`. Return a JSON object only with keys `ticket`, `status`, and `owner`.",
+        analysis,
+    )
+
+    assert normalized.completeness == "complete"
+    assert normalized.requires_expansion is False
+    assert normalized.requires_decomposition is False
+
+
 def test_runtime_strategy_selection_prompt_names_required_fields_and_prefers_standard_mode(make_config) -> None:
     runtime = AgentRuntime(
         make_config(),
@@ -3850,6 +3872,100 @@ def test_runtime_repairs_release_flow_in_dependency_order(make_config, tmp_path)
     payload = runtime._normalize_expected_tool_input(state, step, {"path": "pkg_545/report.py", "operation": "replace_pattern_once", "pattern": "missing", "replacement": "bad"})
     assert payload["path"].endswith("release_notes.txt")
     assert payload["replacement"] == "release-20:41:tax=5"
+
+
+def test_runtime_structured_reading_is_cache_independent_and_authority_aware(make_config, tmp_path) -> None:
+    workspace = tmp_path
+    (workspace / "primary.txt").write_text("service=payments\nregion=eu-3\nsource=deployment-record\n", encoding="utf-8")
+    (workspace / "secondary.txt").write_text("service=payments\nregion=us-2\nsource=dashboard-cache\n", encoding="utf-8")
+    (workspace / "source_of_truth.txt").write_text(
+        "Use deployment-record as the authoritative source when the dashboard cache disagrees.\n",
+        encoding="utf-8",
+    )
+    config = make_config(
+        tools__read_roots=[workspace],
+        tools__allow_stateful_tools=True,
+    )
+    runtime = AgentRuntime(config, model_client=FakeModelClient(responses=[]))
+    state = runtime.create_or_load_session()
+    state.environment.workspace.root = str(workspace)
+    state.environment.workspace.cwd = str(workspace)
+    state.environment.shell.cwd = str(workspace)
+    goal = (
+        "Read `primary.txt`, `secondary.txt`, and `source_of_truth.txt`. Return a JSON object only with keys "
+        "`service`, `primary_region`, `contradictory_region`, and `source_of_truth`."
+    )
+    state.messages.append(Message(role="user", content=goal, created_at="2026-01-01T00:00:00+00:00"))
+
+    plan = runtime._install_structured_reading_plan(
+        state,
+        goal,
+        reason="test_structured_precedence",
+    )
+
+    assert plan is not None
+    assert [step.expected_tool for step in plan.steps] == ["read_text", None]
+    state.active_plan = plan
+    read_decision, read_report = runtime._decide_expected_tool_input(state)
+    assert read_decision is not None
+    assert read_decision.tool_name == "read_text"
+    assert read_decision.tool_input["paths"] == ["primary.txt", "secondary.txt", "source_of_truth.txt"]
+    assert read_report.input_tokens == 0
+    assert runtime.client.requests == []
+
+    plan.steps[0].status = "completed"
+    plan.steps[1].status = "running"
+    plan.current_step_id = plan.steps[1].step_id
+    result = runtime._run_step_subsystem(state, plan.steps[1], action_counts={})
+    assert json.loads(result.assistant_text) == {
+        "service": "payments",
+        "primary_region": "eu-3",
+        "contradictory_region": "us-2",
+        "source_of_truth": "deployment-record",
+    }
+    assert runtime.client.requests == []
+
+
+def test_runtime_structured_reading_handles_logs_and_null_guards(make_config, tmp_path) -> None:
+    workspace = tmp_path
+    (workspace / "app.log").write_text(
+        "2025-04-03T10:00:00Z DEBUG retries=2 status=degraded ticket=INC-094\n",
+        encoding="utf-8",
+    )
+    (workspace / "owner.txt").write_text("owner=ops-5\n", encoding="utf-8")
+    config = make_config(tools__read_roots=[workspace])
+    runtime = AgentRuntime(config, model_client=FakeModelClient(responses=[]))
+    state = runtime.create_or_load_session()
+    state.environment.workspace.root = str(workspace)
+    state.environment.workspace.cwd = str(workspace)
+    state.environment.shell.cwd = str(workspace)
+    goal = (
+        "Read `app.log` and `owner.txt`. Return a JSON object only with keys `status`, `ticket`, and `owner`."
+    )
+    state.messages.append(Message(role="user", content=goal, created_at="2026-01-01T00:00:00+00:00"))
+    assert runtime._deterministic_structured_reading_payload(state) == {
+        "status": "degraded",
+        "ticket": "INC-094",
+        "owner": "ops-5",
+    }
+
+    (workspace / "facts.json").write_text(
+        json.dumps({"service": "search", "owner": "team-4", "status": "green"}) + "\n",
+        encoding="utf-8",
+    )
+    (workspace / "roadmap.md").write_text("No launch ETA has been approved yet.\n", encoding="utf-8")
+    (workspace / "stale_note.txt").write_text("eta=tomorrow\nsource=old scratchpad\n", encoding="utf-8")
+    null_goal = (
+        "Read `facts.json`, `roadmap.md`, and `stale_note.txt`. Return a JSON object only with keys "
+        "`service`, `owner`, `status`, and `eta`. Set `eta` to null when the authoritative files do not provide one."
+    )
+    state.messages.append(Message(role="user", content=null_goal, created_at="2026-01-01T00:01:00+00:00"))
+    assert runtime._deterministic_structured_reading_payload(state) == {
+        "service": "search",
+        "owner": "team-4",
+        "status": "green",
+        "eta": None,
+    }
 
 
 def test_runtime_seeds_release_flow_plan_from_workspace_without_task_contract(make_config, tmp_path) -> None:
