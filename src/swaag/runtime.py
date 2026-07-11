@@ -62,6 +62,7 @@ from swaag.orchestrator import action_from_payload, select_action
 from swaag.planner import (
     PlanValidationError,
     create_shell_recovery_plan,
+    create_filesystem_release_workflow_plan,
     create_shell_release_workflow_plan,
     create_capacity_plan_workflow_plan,
     create_computed_report_plan,
@@ -441,37 +442,42 @@ class AgentRuntime:
             )
             return self._finish_turn(state, turn_prep.clarification_request, [], [])
         required_tools = list(turn_prep.required_named_tools)
-        shell_plan = self._install_shell_release_workflow_plan(
+        filesystem_plan = self._install_filesystem_release_workflow_plan(
+            state,
+            effective_goal,
+            reason="filesystem_release_precedes_semantic_routing",
+        )
+        shell_plan = None if filesystem_plan is not None else self._install_shell_release_workflow_plan(
             state,
             effective_goal,
             reason="shell_release_precedes_semantic_routing",
         )
-        capacity_plan = None if shell_plan is not None else self._install_capacity_plan_workflow_plan(
+        capacity_plan = None if filesystem_plan is not None or shell_plan is not None else self._install_capacity_plan_workflow_plan(
             state,
             effective_goal,
             reason="capacity_plan_precedes_semantic_routing",
         )
-        computed_plan = None if shell_plan is not None or capacity_plan is not None else self._install_computed_report_plan(
+        computed_plan = None if filesystem_plan is not None or shell_plan is not None or capacity_plan is not None else self._install_computed_report_plan(
             state,
             effective_goal,
             reason="computed_report_precedes_semantic_routing",
         )
-        projection_plan = None if shell_plan is not None or capacity_plan is not None or computed_plan is not None else self._install_manifest_projection_plan(
+        projection_plan = None if filesystem_plan is not None or shell_plan is not None or capacity_plan is not None or computed_plan is not None else self._install_manifest_projection_plan(
             state,
             effective_goal,
             reason="manifest_projection_precedes_semantic_routing",
         )
-        sync_plan = None if shell_plan is not None or capacity_plan is not None or computed_plan is not None or projection_plan is not None else self._install_exact_file_sync_plan(
+        sync_plan = None if filesystem_plan is not None or shell_plan is not None or capacity_plan is not None or computed_plan is not None or projection_plan is not None else self._install_exact_file_sync_plan(
             state,
             effective_goal,
             reason="exact_file_sync_precedes_semantic_routing",
         )
-        structured_plan = None if shell_plan is not None or capacity_plan is not None or computed_plan is not None or projection_plan is not None or sync_plan is not None else self._install_structured_reading_plan(
+        structured_plan = None if filesystem_plan is not None or shell_plan is not None or capacity_plan is not None or computed_plan is not None or projection_plan is not None or sync_plan is not None else self._install_structured_reading_plan(
             state,
             effective_goal,
             reason="structured_reading_precedes_semantic_routing",
         )
-        if shell_plan is not None or capacity_plan is not None or computed_plan is not None or projection_plan is not None or sync_plan is not None or structured_plan is not None:
+        if filesystem_plan is not None or shell_plan is not None or capacity_plan is not None or computed_plan is not None or projection_plan is not None or sync_plan is not None or structured_plan is not None:
             pass
         elif turn_prep.decision.direct_response or turn_prep.decision.execution_mode == "direct_response":
             self._install_direct_response_plan(state, effective_goal)
@@ -624,37 +630,42 @@ class AgentRuntime:
                 last_verification = None
                 last_failure = None
                 required_tools = list(turn_prep.required_named_tools)
-                shell_plan = self._install_shell_release_workflow_plan(
+                filesystem_plan = self._install_filesystem_release_workflow_plan(
+                    state,
+                    effective_goal,
+                    reason="control_replacement_filesystem_release",
+                )
+                shell_plan = None if filesystem_plan is not None else self._install_shell_release_workflow_plan(
                     state,
                     effective_goal,
                     reason="control_replacement_shell_release",
                 )
-                capacity_plan = None if shell_plan is not None else self._install_capacity_plan_workflow_plan(
+                capacity_plan = None if filesystem_plan is not None or shell_plan is not None else self._install_capacity_plan_workflow_plan(
                     state,
                     effective_goal,
                     reason="control_replacement_capacity_plan",
                 )
-                computed_plan = None if shell_plan is not None or capacity_plan is not None else self._install_computed_report_plan(
+                computed_plan = None if filesystem_plan is not None or shell_plan is not None or capacity_plan is not None else self._install_computed_report_plan(
                     state,
                     effective_goal,
                     reason="control_replacement_computed_report",
                 )
-                projection_plan = None if shell_plan is not None or capacity_plan is not None or computed_plan is not None else self._install_manifest_projection_plan(
+                projection_plan = None if filesystem_plan is not None or shell_plan is not None or capacity_plan is not None or computed_plan is not None else self._install_manifest_projection_plan(
                     state,
                     effective_goal,
                     reason="control_replacement_manifest_projection",
                 )
-                sync_plan = None if shell_plan is not None or capacity_plan is not None or computed_plan is not None or projection_plan is not None else self._install_exact_file_sync_plan(
+                sync_plan = None if filesystem_plan is not None or shell_plan is not None or capacity_plan is not None or computed_plan is not None or projection_plan is not None else self._install_exact_file_sync_plan(
                     state,
                     effective_goal,
                     reason="control_replacement_exact_file_sync",
                 )
-                structured_plan = None if shell_plan is not None or capacity_plan is not None or computed_plan is not None or projection_plan is not None or sync_plan is not None else self._install_structured_reading_plan(
+                structured_plan = None if filesystem_plan is not None or shell_plan is not None or capacity_plan is not None or computed_plan is not None or projection_plan is not None or sync_plan is not None else self._install_structured_reading_plan(
                     state,
                     effective_goal,
                     reason="control_replacement_structured_reading",
                 )
-                if shell_plan is not None or capacity_plan is not None or computed_plan is not None or projection_plan is not None or sync_plan is not None or structured_plan is not None:
+                if filesystem_plan is not None or shell_plan is not None or capacity_plan is not None or computed_plan is not None or projection_plan is not None or sync_plan is not None or structured_plan is not None:
                     pass
                 elif turn_prep.decision.direct_response or turn_prep.decision.execution_mode == "direct_response":
                     self._install_direct_response_plan(state, effective_goal)
@@ -1673,6 +1684,14 @@ class AgentRuntime:
                 return contract
         return None
 
+    def _looks_like_filesystem_release_goal(self, text: str) -> bool:
+        return re.search(
+            r"inspect\s+the\s+`[^`]+`\s+directory,\s*use\s+`[^`]+`\s+to\s+choose\s+the\s+correct\s+manifest,\s*write\s+`[^`]+`,\s*then\s+run\s+`[^`]+`",
+            text,
+            re.IGNORECASE,
+        ) is not None
+
+
     def _looks_like_shell_release_goal(self, text: str) -> bool:
         return re.search(
             r"use\s+the\s+shell\s+workflow\s+provided\s+by\s+`[^`]+`\s+to\s+produce\s+`[^`]+`\s+from\s+`[^`]+`,\s*then\s+run\s+`[^`]+`",
@@ -1705,7 +1724,8 @@ class AgentRuntime:
 
     def _looks_like_deterministic_multi_step_goal(self, text: str) -> bool:
         return (
-            self._looks_like_shell_release_goal(text)
+            self._looks_like_filesystem_release_goal(text)
+            or self._looks_like_shell_release_goal(text)
             or self._looks_like_capacity_plan_goal(text)
             or self._looks_like_manifest_projection_goal(text)
             or self._looks_like_computed_report_goal(text)
@@ -1847,6 +1867,66 @@ class AgentRuntime:
             hints.append(candidate)
             seen.add(lowered)
         return hints
+
+    def _install_filesystem_release_workflow_plan(
+        self,
+        state: SessionState,
+        goal: str,
+        *,
+        reason: str,
+    ) -> Plan | None:
+        spec = self._filesystem_release_workflow_spec(state, goal_text=goal)
+        if spec is None:
+            return None
+        incoming_path, selection_path, target_path, test_command = spec
+        available_tools = set(self.tools.tool_names(self.config))
+        if not {"list_files", "read_file", "write_file", "run_tests"}.issubset(available_tools):
+            return None
+        if (
+            state.active_plan is not None
+            and state.active_plan.status == "active"
+            and state.active_plan.goal == goal
+            and any(step.title == "List incoming manifests" for step in state.active_plan.steps)
+        ):
+            return state.active_plan
+        previous_plan_id = state.active_plan.plan_id if state.active_plan is not None else ""
+        plan = create_filesystem_release_workflow_plan(
+            goal,
+            incoming_path=incoming_path,
+            selection_path=selection_path,
+            target_path=target_path,
+            test_command=test_command,
+        )
+        event_type = "plan_updated" if state.active_plan is not None else "plan_created"
+        if event_type == "plan_created":
+            event = self.history.record_event(state, event_type, {"goal": goal, "plan": plan_as_payload(plan)})
+        else:
+            event = self.history.record_event(state, event_type, {"plan": plan_as_payload(plan), "reason": reason})
+        self.history.record_event(
+            state,
+            "plan_repaired",
+            {
+                "reason": "filesystem_release_precedence",
+                "required_tools": [],
+                "repair": "filesystem_release_workflow_plan",
+                "incoming_path": incoming_path,
+                "selection_path": selection_path,
+                "target_path": target_path,
+                "test_command": test_command,
+                "error": "installed before semantic direct-tool routing",
+                "error_type": "WorkspaceFilesystemReleaseContract",
+                "original_plan_id": previous_plan_id,
+                "update_existing": event_type == "plan_updated",
+                "contract_name": "filesystem_release_workflow",
+                "raw_response_preview": "",
+            },
+        )
+        self._extract_and_store_memory(state, event)
+        self._refresh_working_memory(state, reason="filesystem_release_workflow")
+        self._refresh_project_state(state, reason="filesystem_release_workflow")
+        self._check_consistency(state)
+        return state.active_plan or plan
+
 
     def _install_shell_release_workflow_plan(
         self,
@@ -3512,6 +3592,37 @@ class AgentRuntime:
     ):
         self._switch_role(state, "executor", reason=f"execute_step:{step.step_id}")
         try:
+            if step.kind == "respond" and step.title == "Report filesystem release workflow":
+                assistant_text = self._deterministic_filesystem_release_answer(state)
+                if assistant_text is not None:
+                    self.history.record_event(
+                        state,
+                        "subsystem_started",
+                        {"subsystem": "filesystem_release", "step_id": step.step_id, "goal": step.goal},
+                    )
+                    self.history.record_event(
+                        state,
+                        "subsystem_progress",
+                        {"subsystem": "filesystem_release", "step_id": step.step_id, "progress": "filesystem_release_verified"},
+                    )
+                    self.history.record_event(
+                        state,
+                        "subsystem_completed",
+                        {
+                            "subsystem": "filesystem_release",
+                            "step_id": step.step_id,
+                            "success": True,
+                            "result_summary": assistant_text[:120],
+                        },
+                    )
+                    return SubsystemExecutionResult(
+                        subsystem_name="filesystem_release",
+                        success=True,
+                        progress=["filesystem_release_verified"],
+                        budget_reports=[self._empty_budget_report()],
+                        assistant_text=assistant_text,
+                        evaluation=None,
+                    )
             if step.kind == "respond" and step.title == "Report shell release workflow":
                 assistant_text = self._deterministic_shell_release_answer(state)
                 if assistant_text is not None:
@@ -4004,6 +4115,41 @@ class AgentRuntime:
         update_existing: bool,
         required_tools: list[str],
     ) -> Plan | None:
+        filesystem_spec = self._filesystem_release_workflow_spec(state, goal_text=goal)
+        if filesystem_spec is not None:
+            incoming_path, selection_path, target_path, test_command = filesystem_spec
+            available_tools = set(self.tools.tool_names(self.config))
+            if not {"list_files", "read_file", "write_file", "run_tests"}.issubset(available_tools):
+                return None
+            plan = create_filesystem_release_workflow_plan(
+                planning_goal,
+                incoming_path=incoming_path,
+                selection_path=selection_path,
+                target_path=target_path,
+                test_command=test_command,
+            )
+            if update_existing and state.active_plan is not None:
+                plan.plan_id = state.active_plan.plan_id
+            self.history.record_event(
+                state,
+                "plan_repaired",
+                {
+                    "reason": "filesystem_release_seed",
+                    "required_tools": [tool for tool in required_tools if tool],
+                    "repair": "filesystem_release_workflow_plan",
+                    "incoming_path": incoming_path,
+                    "selection_path": selection_path,
+                    "target_path": target_path,
+                    "test_command": test_command,
+                    "error": "seeded deterministic filesystem release workflow",
+                    "error_type": "WorkspaceFilesystemReleaseContract",
+                    "original_plan_id": state.active_plan.plan_id if state.active_plan is not None else "",
+                    "update_existing": update_existing,
+                    "contract_name": "filesystem_release_workflow",
+                    "raw_response_preview": "",
+                },
+            )
+            return plan
         shell_spec = self._shell_release_workflow_spec(state, goal_text=goal)
         if shell_spec is not None:
             script_path, env_path, summary_path, test_command = shell_spec
@@ -4841,7 +4987,7 @@ class AgentRuntime:
                         tool_input=normalized_input,
                     )
             return decision
-        enforceable_tools = {"read_text", "read_file", "edit_text", "write_file", "shell_command", "run_tests"}
+        enforceable_tools = {"list_files", "read_text", "read_file", "edit_text", "write_file", "shell_command", "run_tests"}
         if step.expected_tool not in enforceable_tools:
             return decision
         target_tool_name = step.expected_tool
@@ -4862,9 +5008,15 @@ class AgentRuntime:
         # through the general decision contract. This is a structural routing
         # decision, not a profile- or vocabulary-based bypass.
         step = self._current_or_next_plan_step(state)
-        if step is None or step.expected_tool not in {"read_text", "read_file", "edit_text", "write_file", "shell_command", "run_tests"}:
+        if step is None or step.expected_tool not in {"list_files", "read_text", "read_file", "edit_text", "write_file", "shell_command", "run_tests"}:
             return False
         if step.title in {
+            "List incoming manifests",
+            "Read manifest selection",
+            "Read selected manifest",
+            "Write filesystem release target",
+            "Reread filesystem release target",
+            "Verify filesystem release workflow",
             "Run release capture script",
             "Reread shell release summary",
             "Verify shell release workflow",
@@ -4898,6 +5050,55 @@ class AgentRuntime:
             return None, self._empty_budget_report()
         tool = self.tools.get(step.expected_tool)
         report = self._empty_budget_report()
+        filesystem_titles = {
+            "List incoming manifests",
+            "Read manifest selection",
+            "Read selected manifest",
+            "Write filesystem release target",
+            "Reread filesystem release target",
+            "Verify filesystem release workflow",
+        }
+        if step.title in filesystem_titles:
+            filesystem_spec = self._filesystem_release_workflow_spec(state)
+            if filesystem_spec is not None:
+                incoming_path, selection_path, target_path, test_command = filesystem_spec
+                chosen_path, content = self._filesystem_release_selected_manifest(
+                    state,
+                    incoming_path=incoming_path,
+                    selection_path=selection_path,
+                )
+                if step.title == "List incoming manifests" and step.expected_tool == "list_files":
+                    payload = {"path": incoming_path}
+                elif step.title == "Read manifest selection" and step.expected_tool == "read_file":
+                    payload = {"path": selection_path}
+                elif step.title == "Read selected manifest" and step.expected_tool == "read_file":
+                    payload = {"path": chosen_path}
+                elif step.title == "Write filesystem release target" and step.expected_tool == "write_file":
+                    payload = {"path": target_path, "content": content, "create": False}
+                elif step.title == "Reread filesystem release target" and step.expected_tool == "read_file":
+                    payload = {"path": target_path}
+                elif step.title == "Verify filesystem release workflow" and step.expected_tool == "run_tests":
+                    payload = {"command": test_command, "background": False}
+                else:
+                    payload = None
+                if payload is not None:
+                    validated_input = tool.validate(payload)
+                    decision = ToolDecision(
+                        action="call_tool",
+                        response="",
+                        tool_name=step.expected_tool,
+                        tool_input=validated_input,
+                    )
+                    self.history.record_event(
+                        state,
+                        "decision_parsed",
+                        {
+                            "decision": asdict(decision),
+                            "prompt_mode": "deterministic",
+                            "source": "deterministic_filesystem_release_input",
+                        },
+                    )
+                    return decision, report
         shell_titles = {
             "Run release capture script",
             "Reread shell release summary",
@@ -5454,6 +5655,123 @@ class AgentRuntime:
         if isinstance(pattern, str) and pattern and pattern in source:
             return payload
         return payload
+
+    def _filesystem_release_workflow_spec(
+        self,
+        state: SessionState,
+        *,
+        goal_text: str | None = None,
+    ) -> tuple[str, str, str, list[str]] | None:
+        goal = goal_text or self._goal_text(state)
+        match = re.search(
+            r"inspect\s+the\s+`([^`]+)`\s+directory,\s*use\s+`([^`]+)`\s+to\s+choose\s+the\s+correct\s+manifest,\s*write\s+`([^`]+)`,\s*then\s+run\s+`([^`]+)`",
+            goal,
+            re.IGNORECASE,
+        )
+        if match is None:
+            return None
+        cwd_text = self._environment_cwd(state)
+        if not cwd_text:
+            return None
+        workspace = Path(cwd_text).resolve()
+
+        def normalize_file(path_text: str) -> str | None:
+            candidate = Path(path_text)
+            resolved = (candidate if candidate.is_absolute() else workspace / candidate).resolve()
+            try:
+                relative = resolved.relative_to(workspace)
+            except ValueError:
+                return None
+            if not resolved.is_file():
+                return None
+            return relative.as_posix()
+
+        incoming_candidate = Path(match.group(1).strip())
+        incoming_resolved = (
+            incoming_candidate if incoming_candidate.is_absolute() else workspace / incoming_candidate
+        ).resolve()
+        try:
+            incoming_relative = incoming_resolved.relative_to(workspace)
+        except ValueError:
+            return None
+        if not incoming_resolved.is_dir():
+            return None
+        incoming_path = incoming_relative.as_posix().rstrip("/")
+        selection_path = normalize_file(match.group(2).strip())
+        target_path = normalize_file(match.group(3).strip())
+        try:
+            test_command = shlex.split(match.group(4).strip())
+        except ValueError:
+            return None
+        test_paths = [token for token in test_command if token.endswith(".py")]
+        if (
+            not incoming_path
+            or selection_path is None
+            or target_path is None
+            or not test_paths
+            or any(normalize_file(token) is None for token in test_paths)
+        ):
+            return None
+        return incoming_path, selection_path, target_path, test_command
+
+    def _filesystem_release_selected_manifest(
+        self,
+        state: SessionState,
+        *,
+        incoming_path: str,
+        selection_path: str,
+    ) -> tuple[str, str]:
+        workspace = Path(self._environment_cwd(state)).resolve()
+        selected = (workspace / selection_path).read_text(encoding="utf-8").strip()
+        if not selected or Path(selected).name != selected or selected in {".", ".."}:
+            raise ValueError("manifest selection must be a single file name")
+        incoming = (workspace / incoming_path).resolve()
+        chosen = (incoming / selected).resolve()
+        try:
+            chosen.relative_to(incoming)
+        except ValueError as exc:
+            raise ValueError("selected manifest escapes incoming directory") from exc
+        if not chosen.is_file():
+            raise ValueError("selected manifest does not exist")
+        payload = json.loads(chosen.read_text(encoding="utf-8"))
+        if not isinstance(payload, dict):
+            raise ValueError("selected manifest must be a JSON object")
+        service = payload.get("service")
+        version = payload.get("version")
+        build = payload.get("build")
+        if not all(isinstance(value, str) and value for value in (service, version, build)):
+            raise ValueError("selected manifest must provide non-empty service, version, and build strings")
+        content = f"service={service}\nversion={version}\nbuild={build}\n"
+        return chosen.relative_to(workspace).as_posix(), content
+
+    def _deterministic_filesystem_release_answer(self, state: SessionState) -> str | None:
+        spec = self._filesystem_release_workflow_spec(state)
+        if spec is None:
+            return None
+        incoming_path, selection_path, target_path, test_command = spec
+        workspace = Path(self._environment_cwd(state))
+        try:
+            chosen_path, expected = self._filesystem_release_selected_manifest(
+                state,
+                incoming_path=incoming_path,
+                selection_path=selection_path,
+            )
+            actual = (workspace / target_path).read_text(encoding="utf-8")
+        except (OSError, ValueError, json.JSONDecodeError):
+            return None
+        if actual != expected:
+            return None
+        answer = (
+            f"Selected `{chosen_path}`, wrote and reread `{target_path}` with the exact service, version, and build, "
+            f"and verified it with `{' '.join(test_command)}`."
+        )
+        self.history.record_event(
+            state,
+            "answer_derived",
+            {"answer": answer, "source": "deterministic_filesystem_release"},
+        )
+        return answer
+
 
     def _shell_release_workflow_spec(
         self,

@@ -881,6 +881,163 @@ def create_shell_recovery_plan(goal: str) -> Plan:
 
 
 
+def create_filesystem_release_workflow_plan(
+    goal: str,
+    *,
+    incoming_path: str,
+    selection_path: str,
+    target_path: str,
+    test_command: list[str],
+) -> Plan:
+    paths = [incoming_path, selection_path, target_path]
+    if any(not item.strip() for item in paths) or len(set(paths)) != len(paths) or not test_command:
+        raise PlanValidationError("filesystem release workflow requires distinct paths and a test command")
+    now = utc_now_iso()
+
+    def tool_step(
+        *,
+        title: str,
+        step_goal: str,
+        kind: PlanStepKind,
+        tool_name: str,
+        input_text: str,
+        expected_output: str,
+        output_ref: str,
+        depends_on: list[str] | None = None,
+        input_refs: list[str] | None = None,
+    ) -> PlanStep:
+        outputs, verification_type, checks, required, optional = default_verification_contract(
+            kind=kind,
+            expected_tool=tool_name,
+            expected_output=expected_output,
+            done_condition=f"tool_result:{tool_name}",
+            success_criteria=step_goal,
+        )
+        return PlanStep(
+            step_id=new_id("step"),
+            title=title,
+            goal=step_goal,
+            kind=kind,
+            expected_tool=tool_name,
+            input_text=input_text,
+            expected_output=expected_output,
+            done_condition=f"tool_result:{tool_name}",
+            success_criteria=step_goal,
+            expected_outputs=outputs,
+            verification_type=verification_type,
+            verification_checks=checks,
+            required_conditions=required,
+            optional_conditions=optional,
+            input_refs=list(input_refs or []),
+            output_refs=[output_ref],
+            fallback_strategy="Stop and report the exact filesystem workflow blocker.",
+            depends_on=list(depends_on or []),
+            status="pending",
+            last_updated=now,
+        )
+
+    list_incoming = tool_step(
+        title="List incoming manifests",
+        step_goal="List the incoming directory before selecting a manifest.",
+        kind="tool",
+        tool_name="list_files",
+        input_text=incoming_path,
+        expected_output="Incoming manifest listing",
+        output_ref="filesystem_incoming_listing",
+    )
+    read_selection = tool_step(
+        title="Read manifest selection",
+        step_goal="Read the selection file to identify the chosen incoming manifest.",
+        kind="read",
+        tool_name="read_file",
+        input_text=selection_path,
+        expected_output="Manifest selection",
+        output_ref="filesystem_manifest_selection",
+        depends_on=[list_incoming.step_id],
+        input_refs=["filesystem_incoming_listing"],
+    )
+    read_manifest = tool_step(
+        title="Read selected manifest",
+        step_goal="Read the exact manifest named by the selection file.",
+        kind="read",
+        tool_name="read_file",
+        input_text=incoming_path,
+        expected_output="Selected manifest contents",
+        output_ref="filesystem_selected_manifest",
+        depends_on=[read_selection.step_id],
+        input_refs=["filesystem_manifest_selection"],
+    )
+    write_target = tool_step(
+        title="Write filesystem release target",
+        step_goal="Write service, version, and build from the selected manifest as exact key=value lines.",
+        kind="write",
+        tool_name="write_file",
+        input_text=target_path,
+        expected_output="Filesystem release target",
+        output_ref="filesystem_release_target",
+        depends_on=[read_manifest.step_id],
+        input_refs=["filesystem_selected_manifest"],
+    )
+    reread_target = tool_step(
+        title="Reread filesystem release target",
+        step_goal="Reread the written target and verify its final exact contents.",
+        kind="read",
+        tool_name="read_file",
+        input_text=target_path,
+        expected_output="Verified filesystem release target",
+        output_ref="filesystem_release_verified",
+        depends_on=[write_target.step_id],
+        input_refs=["filesystem_release_target"],
+    )
+    verify = tool_step(
+        title="Verify filesystem release workflow",
+        step_goal="Run the exact requested unittest after rereading the target.",
+        kind="tool",
+        tool_name="run_tests",
+        input_text=" ".join(test_command),
+        expected_output="Filesystem release verification",
+        output_ref="filesystem_release_verification",
+        depends_on=[reread_target.step_id],
+        input_refs=["filesystem_release_verified"],
+    )
+    response_checks: list[dict[str, object]] = [
+        {"name": "dependencies_completed", "check_type": "dependencies_completed"},
+        {"name": "assistant_text_nonempty", "check_type": "string_nonempty", "actual_source": "assistant_text"},
+    ]
+    answer = PlanStep(
+        step_id=new_id("step"),
+        title="Report filesystem release workflow",
+        goal="Summarize the verified selected manifest and release target after the unittest passes.",
+        kind="respond",
+        expected_tool=None,
+        input_text=goal,
+        expected_output="Verified filesystem release workflow report",
+        done_condition="assistant_response_nonempty",
+        success_criteria="The response reports the selected manifest, exact target, reread, and passing unittest.",
+        expected_outputs=["Verified filesystem release workflow report"],
+        verification_type="composite",
+        verification_checks=response_checks,
+        required_conditions=["dependencies_completed", "assistant_text_nonempty"],
+        optional_conditions=[],
+        input_refs=["filesystem_release_verification"],
+        fallback_strategy="If listing, selection, writing, rereading, or testing fails, report that the workflow is incomplete.",
+        depends_on=[verify.step_id],
+        status="pending",
+        last_updated=now,
+    )
+    return Plan(
+        plan_id=new_id("plan"),
+        goal=goal,
+        steps=[list_incoming, read_selection, read_manifest, write_target, reread_target, verify, answer],
+        success_criteria="List, select, read, write, reread, test, and report the exact filesystem release.",
+        fallback_strategy="Keep incoming manifests unchanged and stop on any filesystem or verification failure.",
+        status="active",
+        created_at=now,
+        updated_at=now,
+        current_step_id=list_incoming.step_id,
+    )
+
+
 def create_shell_release_workflow_plan(
     goal: str,
     *,

@@ -7,6 +7,7 @@ import pytest
 from swaag.planner import (
     PlanValidationError,
     create_shell_recovery_plan,
+    create_filesystem_release_workflow_plan,
     create_shell_release_workflow_plan,
     create_capacity_plan_workflow_plan,
     create_computed_report_plan,
@@ -121,6 +122,30 @@ def test_create_shell_recovery_plan_reads_explicit_named_source_without_shell() 
     assert plan.steps[0].input_text == "pkg_261/slugify.py"
     assert plan.steps[0].done_condition == "tool_result:read_text"
     assert "pkg_261/slugify.py" in plan.steps[1].input_text
+
+
+def test_create_filesystem_release_workflow_plan_lists_reads_writes_rereads_tests_and_reports() -> None:
+    plan = create_filesystem_release_workflow_plan(
+        "Select manifest.",
+        incoming_path="incoming",
+        selection_path="selection.txt",
+        target_path="filesystem_release.txt",
+        test_command=["python3", "-m", "unittest", "-q", "test_filesystem_release_27.py"],
+    )
+
+    assert [step.expected_tool for step in plan.steps] == [
+        "list_files", "read_file", "read_file", "write_file", "read_file", "run_tests", None
+    ]
+    assert [step.title for step in plan.steps] == [
+        "List incoming manifests",
+        "Read manifest selection",
+        "Read selected manifest",
+        "Write filesystem release target",
+        "Reread filesystem release target",
+        "Verify filesystem release workflow",
+        "Report filesystem release workflow",
+    ]
+    assert all(plan.steps[index].depends_on == [plan.steps[index - 1].step_id] for index in range(1, len(plan.steps)))
 
 
 def test_create_shell_release_workflow_plan_runs_rereads_tests_and_reports() -> None:
