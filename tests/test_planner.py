@@ -7,6 +7,7 @@ import pytest
 from swaag.planner import (
     PlanValidationError,
     create_shell_recovery_plan,
+    create_exact_file_sync_plan,
     create_structured_reading_plan,
     create_release_flow_recovery_plan,
     plan_from_payload,
@@ -116,6 +117,24 @@ def test_create_shell_recovery_plan_reads_explicit_named_source_without_shell() 
     assert plan.steps[0].input_text == "pkg_261/slugify.py"
     assert plan.steps[0].done_condition == "tool_result:read_text"
     assert "pkg_261/slugify.py" in plan.steps[1].input_text
+
+
+def test_create_exact_file_sync_plan_reads_writes_and_rereads() -> None:
+    plan = create_exact_file_sync_plan(
+        "Synchronize files.",
+        source_path="staging.env",
+        target_path="release.env",
+    )
+
+    assert [step.expected_tool for step in plan.steps] == ["read_file", "write_file", "read_file", None]
+    assert [step.title for step in plan.steps] == [
+        "Read synchronization source",
+        "Write synchronization target",
+        "Reread synchronization target",
+        "Report exact file synchronization",
+    ]
+    assert all(plan.steps[index].depends_on == [plan.steps[index - 1].step_id] for index in range(1, len(plan.steps)))
+    assert plan.steps[-1].verification_type == "composite"
 
 
 def test_create_structured_reading_plan_is_two_step_and_deterministic() -> None:

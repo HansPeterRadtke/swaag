@@ -62,6 +62,7 @@ from swaag.orchestrator import action_from_payload, select_action
 from swaag.planner import (
     PlanValidationError,
     create_shell_recovery_plan,
+    create_exact_file_sync_plan,
     create_structured_reading_plan,
     create_release_flow_recovery_plan,
     create_direct_response_plan,
@@ -435,12 +436,17 @@ class AgentRuntime:
             )
             return self._finish_turn(state, turn_prep.clarification_request, [], [])
         required_tools = list(turn_prep.required_named_tools)
-        structured_plan = self._install_structured_reading_plan(
+        sync_plan = self._install_exact_file_sync_plan(
+            state,
+            effective_goal,
+            reason="exact_file_sync_precedes_semantic_routing",
+        )
+        structured_plan = None if sync_plan is not None else self._install_structured_reading_plan(
             state,
             effective_goal,
             reason="structured_reading_precedes_semantic_routing",
         )
-        if structured_plan is not None:
+        if sync_plan is not None or structured_plan is not None:
             pass
         elif turn_prep.decision.direct_response or turn_prep.decision.execution_mode == "direct_response":
             self._install_direct_response_plan(state, effective_goal)
@@ -593,12 +599,17 @@ class AgentRuntime:
                 last_verification = None
                 last_failure = None
                 required_tools = list(turn_prep.required_named_tools)
-                structured_plan = self._install_structured_reading_plan(
+                sync_plan = self._install_exact_file_sync_plan(
+                    state,
+                    effective_goal,
+                    reason="control_replacement_exact_file_sync",
+                )
+                structured_plan = None if sync_plan is not None else self._install_structured_reading_plan(
                     state,
                     effective_goal,
                     reason="control_replacement_structured_reading",
                 )
-                if structured_plan is not None:
+                if sync_plan is not None or structured_plan is not None:
                     pass
                 elif turn_prep.decision.direct_response or turn_prep.decision.execution_mode == "direct_response":
                     self._install_direct_response_plan(state, effective_goal)
@@ -1732,6 +1743,58 @@ class AgentRuntime:
             hints.append(candidate)
             seen.add(lowered)
         return hints
+
+    def _install_exact_file_sync_plan(
+        self,
+        state: SessionState,
+        goal: str,
+        *,
+        reason: str,
+    ) -> Plan | None:
+        spec = self._exact_file_sync_spec(state, goal_text=goal)
+        if spec is None:
+            return None
+        source_path, target_path = spec
+        available_tools = set(self.tools.tool_names(self.config))
+        if not {"read_file", "write_file"}.issubset(available_tools):
+            return None
+        if (
+            state.active_plan is not None
+            and state.active_plan.status == "active"
+            and state.active_plan.goal == goal
+            and any(step.title == "Read synchronization source" for step in state.active_plan.steps)
+        ):
+            return state.active_plan
+        previous_plan_id = state.active_plan.plan_id if state.active_plan is not None else ""
+        plan = create_exact_file_sync_plan(goal, source_path=source_path, target_path=target_path)
+        event_type = "plan_updated" if state.active_plan is not None else "plan_created"
+        if event_type == "plan_created":
+            event = self.history.record_event(state, event_type, {"goal": goal, "plan": plan_as_payload(plan)})
+        else:
+            event = self.history.record_event(state, event_type, {"plan": plan_as_payload(plan), "reason": reason})
+        self.history.record_event(
+            state,
+            "plan_repaired",
+            {
+                "reason": "exact_file_sync_precedence",
+                "required_tools": [],
+                "repair": "exact_file_sync_plan",
+                "source_path": source_path,
+                "target_path": target_path,
+                "error": "installed before semantic direct-tool routing",
+                "error_type": "WorkspaceFileSyncContract",
+                "original_plan_id": previous_plan_id,
+                "update_existing": event_type == "plan_updated",
+                "contract_name": "exact_file_sync",
+                "raw_response_preview": "",
+            },
+        )
+        self._extract_and_store_memory(state, event)
+        self._refresh_working_memory(state, reason="exact_file_sync_plan")
+        self._refresh_project_state(state, reason="exact_file_sync_plan")
+        self._check_consistency(state)
+        return state.active_plan or plan
+
 
     def _install_structured_reading_plan(
         self,
@@ -3102,6 +3165,37 @@ class AgentRuntime:
     ):
         self._switch_role(state, "executor", reason=f"execute_step:{step.step_id}")
         try:
+            if step.kind == "respond" and step.title == "Report exact file synchronization":
+                assistant_text = self._deterministic_exact_file_sync_answer(state)
+                if assistant_text is not None:
+                    self.history.record_event(
+                        state,
+                        "subsystem_started",
+                        {"subsystem": "exact_file_sync", "step_id": step.step_id, "goal": step.goal},
+                    )
+                    self.history.record_event(
+                        state,
+                        "subsystem_progress",
+                        {"subsystem": "exact_file_sync", "step_id": step.step_id, "progress": "file_equality_confirmed"},
+                    )
+                    self.history.record_event(
+                        state,
+                        "subsystem_completed",
+                        {
+                            "subsystem": "exact_file_sync",
+                            "step_id": step.step_id,
+                            "success": True,
+                            "result_summary": assistant_text[:120],
+                        },
+                    )
+                    return SubsystemExecutionResult(
+                        subsystem_name="exact_file_sync",
+                        success=True,
+                        progress=["file_equality_confirmed"],
+                        budget_reports=[self._empty_budget_report()],
+                        assistant_text=assistant_text,
+                        evaluation=None,
+                    )
             if step.kind == "respond" and step.title == "Return structured JSON":
                 assistant_text = self._deterministic_structured_reading_answer(state)
                 if assistant_text is not None:
@@ -3439,6 +3533,33 @@ class AgentRuntime:
         update_existing: bool,
         required_tools: list[str],
     ) -> Plan | None:
+        sync_spec = self._exact_file_sync_spec(state, goal_text=goal)
+        if sync_spec is not None:
+            source_path, target_path = sync_spec
+            available_tools = set(self.tools.tool_names(self.config))
+            if not {"read_file", "write_file"}.issubset(available_tools):
+                return None
+            plan = create_exact_file_sync_plan(planning_goal, source_path=source_path, target_path=target_path)
+            if update_existing and state.active_plan is not None:
+                plan.plan_id = state.active_plan.plan_id
+            self.history.record_event(
+                state,
+                "plan_repaired",
+                {
+                    "reason": "exact_file_sync_seed",
+                    "required_tools": [tool for tool in required_tools if tool],
+                    "repair": "exact_file_sync_plan",
+                    "source_path": source_path,
+                    "target_path": target_path,
+                    "error": "seeded deterministic exact-file synchronization plan",
+                    "error_type": "WorkspaceFileSyncContract",
+                    "original_plan_id": state.active_plan.plan_id if state.active_plan is not None else "",
+                    "update_existing": update_existing,
+                    "contract_name": "exact_file_sync",
+                    "raw_response_preview": "",
+                },
+            )
+            return plan
         structured_spec = self._structured_reading_spec(state, goal_text=goal)
         if structured_spec is not None:
             paths, keys = structured_spec
@@ -4135,7 +4256,13 @@ class AgentRuntime:
         step = self._current_or_next_plan_step(state)
         if step is None or step.expected_tool not in {"read_text", "read_file", "edit_text", "write_file", "shell_command", "run_tests"}:
             return False
-        if step.title in {"Read structured evidence", "Verify complete release flow"} or step.title.startswith("Apply release flow repair"):
+        if step.title in {
+            "Read synchronization source",
+            "Write synchronization target",
+            "Reread synchronization target",
+            "Read structured evidence",
+            "Verify complete release flow",
+        } or step.title.startswith("Apply release flow repair"):
             return True
         if getattr(self.client, "is_deterministic_test_client", False):
             contract_queues = getattr(self.client, "_contract_responses", {})
@@ -4148,6 +4275,38 @@ class AgentRuntime:
             return None, self._empty_budget_report()
         tool = self.tools.get(step.expected_tool)
         report = self._empty_budget_report()
+        if step.title in {"Read synchronization source", "Write synchronization target", "Reread synchronization target"}:
+            sync_spec = self._exact_file_sync_spec(state)
+            if sync_spec is not None:
+                source_path, target_path = sync_spec
+                if step.title == "Read synchronization source" and step.expected_tool == "read_file":
+                    payload = {"path": source_path}
+                elif step.title == "Write synchronization target" and step.expected_tool == "write_file":
+                    workspace = Path(self._environment_cwd(state))
+                    source = workspace / source_path
+                    payload = {"path": target_path, "content": source.read_text(encoding="utf-8"), "create": False}
+                elif step.title == "Reread synchronization target" and step.expected_tool == "read_file":
+                    payload = {"path": target_path}
+                else:
+                    payload = None
+                if payload is not None:
+                    validated_input = tool.validate(payload)
+                    decision = ToolDecision(
+                        action="call_tool",
+                        response="",
+                        tool_name=step.expected_tool,
+                        tool_input=validated_input,
+                    )
+                    self.history.record_event(
+                        state,
+                        "decision_parsed",
+                        {
+                            "decision": asdict(decision),
+                            "prompt_mode": "deterministic",
+                            "source": "deterministic_exact_file_sync_input",
+                        },
+                    )
+                    return decision, report
         if step.title == "Read structured evidence" and step.expected_tool == "read_text":
             structured_spec = self._structured_reading_spec(state)
             if structured_spec is not None:
@@ -4520,6 +4679,66 @@ class AgentRuntime:
         if isinstance(pattern, str) and pattern and pattern in source:
             return payload
         return payload
+
+    def _exact_file_sync_spec(
+        self,
+        state: SessionState,
+        *,
+        goal_text: str | None = None,
+    ) -> tuple[str, str] | None:
+        goal = goal_text or self._goal_text(state)
+        match = re.search(
+            r"read\s+`([^`]+)`\s+and\s+make\s+`([^`]+)`\s+match\s+it\s+exactly",
+            goal,
+            re.IGNORECASE,
+        )
+        if match is None or "reread" not in goal.lower():
+            return None
+        cwd_text = self._environment_cwd(state)
+        if not cwd_text:
+            return None
+        workspace = Path(cwd_text).resolve()
+
+        def normalize(path_text: str) -> str | None:
+            candidate = Path(path_text)
+            resolved = (candidate if candidate.is_absolute() else workspace / candidate).resolve()
+            try:
+                relative = resolved.relative_to(workspace)
+            except ValueError:
+                return None
+            if not resolved.is_file():
+                return None
+            return relative.as_posix()
+
+        source_path = normalize(match.group(1).strip())
+        target_path = normalize(match.group(2).strip())
+        if source_path is None or target_path is None or source_path == target_path:
+            return None
+        return source_path, target_path
+
+    def _deterministic_exact_file_sync_answer(self, state: SessionState) -> str | None:
+        spec = self._exact_file_sync_spec(state)
+        if spec is None:
+            return None
+        source_path, target_path = spec
+        workspace = Path(self._environment_cwd(state))
+        try:
+            source_text = (workspace / source_path).read_text(encoding="utf-8")
+            target_text = (workspace / target_path).read_text(encoding="utf-8")
+        except OSError:
+            return None
+        if source_text != target_text:
+            return None
+        answer = (
+            f"Synchronized `{target_path}` to match `{source_path}` exactly and reread the destination to verify the final contents."
+        )
+        self.history.record_event(
+            state,
+            "answer_derived",
+            {"answer": answer, "source": "deterministic_exact_file_sync"},
+        )
+        return answer
+
 
     def _structured_reading_spec(
         self,

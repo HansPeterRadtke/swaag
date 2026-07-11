@@ -881,6 +881,127 @@ def create_shell_recovery_plan(goal: str) -> Plan:
 
 
 
+def create_exact_file_sync_plan(
+    goal: str,
+    *,
+    source_path: str,
+    target_path: str,
+) -> Plan:
+    if not source_path.strip() or not target_path.strip() or source_path == target_path:
+        raise PlanValidationError("exact file synchronization requires distinct source and target paths")
+    now = utc_now_iso()
+
+    def tool_step(
+        *,
+        title: str,
+        step_goal: str,
+        kind: PlanStepKind,
+        tool_name: str,
+        input_text: str,
+        expected_output: str,
+        output_ref: str,
+        depends_on: list[str] | None = None,
+        input_refs: list[str] | None = None,
+    ) -> PlanStep:
+        outputs, verification_type, checks, required, optional = default_verification_contract(
+            kind=kind,
+            expected_tool=tool_name,
+            expected_output=expected_output,
+            done_condition=f"tool_result:{tool_name}",
+            success_criteria=step_goal,
+        )
+        return PlanStep(
+            step_id=new_id("step"),
+            title=title,
+            goal=step_goal,
+            kind=kind,
+            expected_tool=tool_name,
+            input_text=input_text,
+            expected_output=expected_output,
+            done_condition=f"tool_result:{tool_name}",
+            success_criteria=step_goal,
+            expected_outputs=outputs,
+            verification_type=verification_type,
+            verification_checks=checks,
+            required_conditions=required,
+            optional_conditions=optional,
+            input_refs=list(input_refs or []),
+            output_refs=[output_ref],
+            fallback_strategy="Stop and report the exact path if this synchronization step fails.",
+            depends_on=list(depends_on or []),
+            status="pending",
+            last_updated=now,
+        )
+
+    read_source = tool_step(
+        title="Read synchronization source",
+        step_goal="Read the complete source file before copying it.",
+        kind="read",
+        tool_name="read_file",
+        input_text=source_path,
+        expected_output="Source file contents",
+        output_ref="sync_source_contents",
+    )
+    write_target = tool_step(
+        title="Write synchronization target",
+        step_goal="Write the source contents to the existing destination exactly.",
+        kind="write",
+        tool_name="write_file",
+        input_text=target_path,
+        expected_output="Synchronized destination file",
+        output_ref="sync_target_written",
+        depends_on=[read_source.step_id],
+        input_refs=["sync_source_contents"],
+    )
+    reread_target = tool_step(
+        title="Reread synchronization target",
+        step_goal="Reread the destination after writing to verify its final contents.",
+        kind="read",
+        tool_name="read_file",
+        input_text=target_path,
+        expected_output="Verified destination contents",
+        output_ref="sync_target_verified",
+        depends_on=[write_target.step_id],
+        input_refs=["sync_target_written"],
+    )
+    response_checks: list[dict[str, object]] = [
+        {"name": "dependencies_completed", "check_type": "dependencies_completed"},
+        {"name": "assistant_text_nonempty", "check_type": "string_nonempty", "actual_source": "assistant_text"},
+    ]
+    answer = PlanStep(
+        step_id=new_id("step"),
+        title="Report exact file synchronization",
+        goal="Report synchronization only after the source and reread destination match exactly.",
+        kind="respond",
+        expected_tool=None,
+        input_text=goal,
+        expected_output="Verified synchronization report",
+        done_condition="assistant_response_nonempty",
+        success_criteria="The response confirms the exact copy and destination reread.",
+        expected_outputs=["Verified synchronization report"],
+        verification_type="composite",
+        verification_checks=response_checks,
+        required_conditions=["dependencies_completed", "assistant_text_nonempty"],
+        optional_conditions=[],
+        input_refs=["sync_target_verified"],
+        fallback_strategy="If the files differ, report that synchronization is not complete.",
+        depends_on=[reread_target.step_id],
+        status="pending",
+        last_updated=now,
+    )
+    return Plan(
+        plan_id=new_id("plan"),
+        goal=goal,
+        steps=[read_source, write_target, reread_target, answer],
+        success_criteria="Copy the source exactly, reread the destination, and report only after equality is confirmed.",
+        fallback_strategy="Stop on any file error or mismatch and report the exact blocker.",
+        status="active",
+        created_at=now,
+        updated_at=now,
+        current_step_id=read_source.step_id,
+    )
+
+
 def create_structured_reading_plan(
     goal: str,
     *,

@@ -3874,6 +3874,76 @@ def test_runtime_repairs_release_flow_in_dependency_order(make_config, tmp_path)
     assert payload["replacement"] == "release-20:41:tax=5"
 
 
+def test_runtime_exact_file_sync_is_cache_independent_and_rereads(make_config, tmp_path) -> None:
+    workspace = tmp_path
+    source = workspace / "staging.env"
+    target = workspace / "release.env"
+    source.write_text("release=34.1\nchannel=stable\nregion=eu-2\n", encoding="utf-8")
+    target.write_text("release=pending\nchannel=unknown\nregion=unset\n", encoding="utf-8")
+    config = make_config(
+        tools__read_roots=[workspace],
+        tools__allow_stateful_tools=True,
+        tools__allow_side_effect_tools=True,
+    )
+    runtime = AgentRuntime(config, model_client=FakeModelClient(responses=[]))
+    state = runtime.create_or_load_session()
+    state.environment.workspace.root = str(workspace)
+    state.environment.workspace.cwd = str(workspace)
+    state.environment.shell.cwd = str(workspace)
+    goal = (
+        "Read `staging.env` and make `release.env` match it exactly. "
+        "Reread the destination before answering so you do not claim success on stale state."
+    )
+    state.messages.append(Message(role="user", content=goal, created_at="2026-01-01T00:00:00+00:00"))
+
+    plan = runtime._install_exact_file_sync_plan(state, goal, reason="test_exact_sync_precedence")
+
+    assert plan is not None
+    assert [step.expected_tool for step in plan.steps] == ["read_file", "write_file", "read_file", None]
+    state.active_plan = plan
+    read_decision, read_report = runtime._decide_expected_tool_input(state)
+    assert read_decision is not None
+    assert read_decision.tool_name == "read_file"
+    assert read_decision.tool_input == {"path": "staging.env"}
+    assert read_report.input_tokens == 0
+
+    plan.steps[0].status = "completed"
+    plan.steps[1].status = "running"
+    plan.current_step_id = plan.steps[1].step_id
+    write_decision, write_report = runtime._decide_expected_tool_input(state)
+    assert write_decision is not None
+    assert write_decision.tool_name == "write_file"
+    assert write_decision.tool_input == {
+        "path": "release.env",
+        "content": source.read_text(encoding="utf-8"),
+        "create": False,
+    }
+    assert write_report.input_tokens == 0
+    target.write_text(write_decision.tool_input["content"], encoding="utf-8")
+
+    plan.steps[1].status = "completed"
+    plan.steps[2].status = "running"
+    plan.current_step_id = plan.steps[2].step_id
+    reread_decision, reread_report = runtime._decide_expected_tool_input(state)
+    assert reread_decision is not None
+    assert reread_decision.tool_name == "read_file"
+    assert reread_decision.tool_input == {"path": "release.env"}
+    assert reread_report.input_tokens == 0
+
+    plan.steps[2].status = "completed"
+    plan.steps[3].status = "running"
+    plan.current_step_id = plan.steps[3].step_id
+    result = runtime._run_step_subsystem(state, plan.steps[3], action_counts={})
+    assert "reread the destination" in result.assistant_text
+    assert target.read_text(encoding="utf-8") == source.read_text(encoding="utf-8")
+    assert runtime.client.requests == []
+    assert any(
+        event.event_type == "decision_parsed"
+        and event.payload.get("source") == "deterministic_exact_file_sync_input"
+        for event in runtime.history.read_history(state.session_id)
+    )
+
+
 def test_runtime_structured_reading_is_cache_independent_and_authority_aware(make_config, tmp_path) -> None:
     workspace = tmp_path
     (workspace / "primary.txt").write_text("service=payments\nregion=eu-3\nsource=deployment-record\n", encoding="utf-8")
