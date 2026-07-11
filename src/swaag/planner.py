@@ -881,6 +881,40 @@ def create_shell_recovery_plan(goal: str) -> Plan:
 
 
 
+def create_computed_report_plan(
+    goal: str,
+    *,
+    source_path: str,
+    target_path: str,
+    test_command: list[str],
+) -> Plan:
+    plan = create_manifest_projection_plan(
+        goal,
+        source_path=source_path,
+        target_path=target_path,
+        test_command=test_command,
+    )
+    titles = [
+        "Read computed report source",
+        "Write computed report target",
+        "Verify computed report",
+        "Report computed report",
+    ]
+    goals = [
+        "Read the authoritative JSON inputs before computing the report.",
+        "Compute the required derived fields and write the exact report.",
+        "Run the exact requested test command after writing the report.",
+        "Summarize the computed report after the requested test passes.",
+    ]
+    for step, title, step_goal in zip(plan.steps, titles, goals, strict=True):
+        step.title = title
+        step.goal = step_goal
+        step.success_criteria = step_goal
+    plan.success_criteria = "Compute the report from JSON inputs, pass the requested test, and report the result."
+    plan.fallback_strategy = "Stop on invalid inputs, computation failure, write failure, or test failure."
+    return plan
+
+
 def create_manifest_projection_plan(
     goal: str,
     *,

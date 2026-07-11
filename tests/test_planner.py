@@ -7,6 +7,7 @@ import pytest
 from swaag.planner import (
     PlanValidationError,
     create_shell_recovery_plan,
+    create_computed_report_plan,
     create_manifest_projection_plan,
     create_exact_file_sync_plan,
     create_structured_reading_plan,
@@ -118,6 +119,23 @@ def test_create_shell_recovery_plan_reads_explicit_named_source_without_shell() 
     assert plan.steps[0].input_text == "pkg_261/slugify.py"
     assert plan.steps[0].done_condition == "tool_result:read_text"
     assert "pkg_261/slugify.py" in plan.steps[1].input_text
+
+
+def test_create_computed_report_plan_reads_writes_tests_and_reports() -> None:
+    plan = create_computed_report_plan(
+        "Compute report.",
+        source_path="inputs.json",
+        target_path="capacity_report.txt",
+        test_command=["python3", "-m", "unittest", "-q", "test_capacity_43.py"],
+    )
+
+    assert [step.expected_tool for step in plan.steps] == ["read_file", "write_file", "run_tests", None]
+    assert [step.title for step in plan.steps] == [
+        "Read computed report source",
+        "Write computed report target",
+        "Verify computed report",
+        "Report computed report",
+    ]
 
 
 def test_create_manifest_projection_plan_reads_writes_tests_and_reports() -> None:

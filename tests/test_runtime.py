@@ -3938,6 +3938,78 @@ def test_runtime_repairs_release_flow_in_dependency_order(make_config, tmp_path)
     assert payload["replacement"] == "release-20:41:tax=5"
 
 
+def test_runtime_computed_report_is_cache_independent_and_exact(make_config, tmp_path) -> None:
+    workspace = tmp_path
+    source = workspace / "inputs.json"
+    target = workspace / "capacity_report.txt"
+    test_file = workspace / "test_capacity_43.py"
+    source.write_text(
+        json.dumps({"service": "svc-02", "queued_jobs": 85, "reserved_jobs": 11, "active_workers": 6}, indent=2) + "\n",
+        encoding="utf-8",
+    )
+    target.write_text("service=pending\nheadroom=pending\nworkers=pending\n", encoding="utf-8")
+    test_file.write_text("import unittest\n", encoding="utf-8")
+    config = make_config(
+        tools__read_roots=[workspace],
+        tools__allow_stateful_tools=True,
+        tools__allow_side_effect_tools=True,
+    )
+    runtime = AgentRuntime(config, model_client=FakeModelClient(responses=[]))
+    state = runtime.create_or_load_session()
+    state.environment.workspace.root = str(workspace)
+    state.environment.workspace.cwd = str(workspace)
+    state.environment.shell.cwd = str(workspace)
+    goal = (
+        "Read `inputs.json`, compute the correct capacity headroom, write `capacity_report.txt`, and run "
+        "`python3 -m unittest -q test_capacity_43.py` before answering. Do not modify the test. "
+        "Summarize the completed workflow after verification."
+    )
+    state.messages.append(Message(role="user", content=goal, created_at="2026-01-01T00:00:00+00:00"))
+
+    plan = runtime._install_computed_report_plan(state, goal, reason="test_computed_report_precedence")
+
+    assert plan is not None
+    assert [step.expected_tool for step in plan.steps] == ["read_file", "write_file", "run_tests", None]
+    state.active_plan = plan
+    read_decision, read_report = runtime._decide_expected_tool_input(state)
+    assert read_decision is not None and read_decision.tool_input == {"path": "inputs.json"}
+    assert read_report.input_tokens == 0
+
+    plan.steps[0].status = "completed"
+    plan.steps[1].status = "running"
+    plan.current_step_id = plan.steps[1].step_id
+    write_decision, write_report = runtime._decide_expected_tool_input(state)
+    assert write_decision is not None
+    assert write_decision.tool_input == {
+        "path": "capacity_report.txt",
+        "content": "service=svc-02\nheadroom=74\nworkers=6\n",
+        "create": False,
+    }
+    assert write_report.input_tokens == 0
+    target.write_text(write_decision.tool_input["content"], encoding="utf-8")
+
+    plan.steps[1].status = "completed"
+    plan.steps[2].status = "running"
+    plan.current_step_id = plan.steps[2].step_id
+    test_decision, test_report = runtime._decide_expected_tool_input(state)
+    assert test_decision is not None
+    assert test_decision.tool_input["command"][-4:] == ["-m", "unittest", "-q", "test_capacity_43.py"]
+    assert test_decision.tool_input["background"] is False
+    assert test_report.input_tokens == 0
+
+    plan.steps[2].status = "completed"
+    plan.steps[3].status = "running"
+    plan.current_step_id = plan.steps[3].step_id
+    result = runtime._run_step_subsystem(state, plan.steps[3], action_counts={})
+    assert "Computed capacity headroom" in result.assistant_text
+    assert runtime.client.requests == []
+    assert any(
+        event.event_type == "decision_parsed"
+        and event.payload.get("source") == "deterministic_computed_report_input"
+        for event in runtime.history.read_history(state.session_id)
+    )
+
+
 def test_runtime_manifest_projection_is_cache_independent_and_exact(make_config, tmp_path) -> None:
     workspace = tmp_path
     manifest = workspace / "manifest.json"
