@@ -3717,7 +3717,7 @@ def test_runtime_repairs_bad_slugify_edit_payload_from_workspace_tests(make_conf
     payload = runtime._normalize_expected_tool_input(state, step, {"path": "pkg_261/slugify.py", "operation": "replace_pattern_once", "pattern": "missing", "replacement": "bad"})
 
     assert payload["pattern"] == "return value.replace(' ', '_')"
-    assert payload["replacement"] == "return '-'.join(value.split())"
+    assert payload["replacement"] == "return value.replace(' ', '-')"
 
 
 def test_runtime_repairs_bad_stats_edit_payload_from_workspace_tests(make_config, tmp_path) -> None:
@@ -3785,6 +3785,71 @@ def test_runtime_repairs_bad_release_report_edit_payload_from_workspace_tests(ma
 
     assert payload["pattern"] == 'return f"{settings[\'label\']}:{total() + 1}:tax={settings[\'tax_rate\']}"'
     assert payload["replacement"] == 'return f"{settings[\'label\']}:{total()}:tax={settings[\'tax_rate\']}"'
+
+
+def test_runtime_repairs_release_flow_in_dependency_order(make_config, tmp_path) -> None:
+    workspace = tmp_path
+    pkg = workspace / "pkg_545"
+    pkg.mkdir()
+    core = pkg / "core.py"
+    calc = pkg / "calc.py"
+    report = pkg / "report.py"
+    compat = pkg / "compat.py"
+    core.write_text("def base_value() -> int:\n    return 30\n", encoding="utf-8")
+    calc.write_text("from pkg_545.core import base_value\n\ndef total() -> int:\n    return base_value() + 10\n", encoding="utf-8")
+    report.write_text(
+        "import json\nfrom pathlib import Path\nfrom pkg_545.calc import total\n\ndef describe() -> str:\n"
+        "    settings = json.loads(Path('release_settings.json').read_text(encoding='utf-8'))\n"
+        "    return f\"{settings['label']}:{total() + 1}:tax={settings['tax_rate']}\"\n",
+        encoding="utf-8",
+    )
+    compat.write_text(
+        "from pkg_545.report import describe\n\ndef release_summary() -> dict[str, str]:\n"
+        "    text = describe()\n    label, total, tax = text.split(':')\n"
+        "    return {'label': label, 'total': total, 'tax': tax.replace('vat=', '')}\n",
+        encoding="utf-8",
+    )
+    (workspace / "release_settings.json").write_text('{"label": "release-20", "tax_rate": 5}', encoding="utf-8")
+    (workspace / "release_notes.txt").write_text("release-20:broken:tax=unknown\n", encoding="utf-8")
+    (workspace / "test_pkg_545_unit.py").write_text(
+        "from pkg_545.core import base_value\nfrom pkg_545.calc import total\n"
+        "def test_values():\n    assert base_value() == 33\n    assert total() == 41\n"
+        "class UnitTests:\n    def test_base_value(self):\n        self.assertEqual(base_value(), 33)\n"
+        "    def test_total(self):\n        self.assertEqual(total(), 41)\n",
+        encoding="utf-8",
+    )
+    (workspace / "test_pkg_545_compat.py").write_text("from pkg_545.compat import release_summary\n", encoding="utf-8")
+    (workspace / "test_pkg_545_artifacts.py").write_text("from pkg_545.report import describe\n", encoding="utf-8")
+    config = make_config(tools__read_roots=[workspace])
+    runtime = AgentRuntime(config, model_client=FakeModelClient(responses=[]))
+    state = runtime.create_or_load_session()
+    state.environment.workspace.root = str(workspace)
+    state.environment.workspace.cwd = str(workspace)
+    step = PlanStep(step_id="fix", title="Fix release flow", kind="tool", expected_tool="edit_text", input_text="Fix pkg_545/report.py", goal="fix release flow", expected_output="release fixed", done_condition="tool_result:edit_text", success_criteria="release fixed")
+
+    payload = runtime._normalize_expected_tool_input(state, step, {"path": "pkg_545/report.py", "operation": "replace_pattern_once", "pattern": "missing", "replacement": "bad"})
+    assert payload["path"].endswith("pkg_545/core.py")
+    assert payload["replacement"] == "return 33"
+    core.write_text(core.read_text().replace("return 30", "return 33"), encoding="utf-8")
+
+    payload = runtime._normalize_expected_tool_input(state, step, {"path": "pkg_545/report.py", "operation": "replace_pattern_once", "pattern": "missing", "replacement": "bad"})
+    assert payload["path"].endswith("pkg_545/calc.py")
+    assert payload["replacement"] == "return base_value() + 8"
+    calc.write_text(calc.read_text().replace("return base_value() + 10", "return base_value() + 8"), encoding="utf-8")
+
+    payload = runtime._normalize_expected_tool_input(state, step, {"path": "pkg_545/report.py", "operation": "replace_pattern_once", "pattern": "missing", "replacement": "bad"})
+    assert payload["path"].endswith("pkg_545/report.py")
+    assert "{total()}" in payload["replacement"]
+    report.write_text(report.read_text().replace("{total() + 1}", "{total()}"), encoding="utf-8")
+
+    payload = runtime._normalize_expected_tool_input(state, step, {"path": "pkg_545/report.py", "operation": "replace_pattern_once", "pattern": "missing", "replacement": "bad"})
+    assert payload["path"].endswith("pkg_545/compat.py")
+    assert "tax.replace('tax=', '')" in payload["replacement"]
+    compat.write_text(compat.read_text().replace("tax.replace('vat=', '')", "tax.replace('tax=', '')"), encoding="utf-8")
+
+    payload = runtime._normalize_expected_tool_input(state, step, {"path": "pkg_545/report.py", "operation": "replace_pattern_once", "pattern": "missing", "replacement": "bad"})
+    assert payload["path"].endswith("release_notes.txt")
+    assert payload["replacement"] == "release-20:41:tax=5"
 
 
 def test_runtime_repairs_bad_multifile_write_payloads_from_workspace_tests(make_config, tmp_path) -> None:

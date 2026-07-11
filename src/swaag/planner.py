@@ -1,6 +1,8 @@
 from __future__ import annotations
 
 from dataclasses import asdict
+from pathlib import Path
+import re
 from typing import Iterable
 
 from swaag.config import AgentConfig
@@ -267,6 +269,49 @@ def _validate_dependencies(steps: list[PlanStep]) -> None:
         _walk(step.step_id)
 
 
+def _step_path_hints(step: PlanStep) -> set[str]:
+    text = " ".join([step.title, step.goal, step.input_text, step.expected_output, step.success_criteria])
+    matches = re.findall(r"(?:[A-Za-z0-9_.-]+/)*[A-Za-z0-9_.-]+\.[A-Za-z0-9]+", text)
+    return {item.replace("\\", "/").strip("`'\"").lower() for item in matches}
+
+
+def _remove_redundant_write_after_edit(steps: list[PlanStep]) -> list[PlanStep]:
+    replacement_by_step: dict[str, str] = {}
+    kept: list[PlanStep] = []
+    prior_edits: list[PlanStep] = []
+    for step in steps:
+        if step.expected_tool == "edit_text":
+            prior_edits.append(step)
+            kept.append(step)
+            continue
+        if step.expected_tool != "write_file":
+            kept.append(step)
+            continue
+        write_paths = _step_path_hints(step)
+        matching_edit = next(
+            (
+                edit_step
+                for edit_step in reversed(prior_edits)
+                if write_paths and write_paths & _step_path_hints(edit_step)
+            ),
+            None,
+        )
+        if matching_edit is None:
+            kept.append(step)
+            continue
+        replacement_by_step[step.step_id] = matching_edit.step_id
+    if not replacement_by_step:
+        return steps
+    for step in kept:
+        rewritten: list[str] = []
+        for dependency in step.depends_on:
+            replacement = replacement_by_step.get(dependency, dependency)
+            if replacement != step.step_id and replacement not in rewritten:
+                rewritten.append(replacement)
+        step.depends_on = rewritten
+    return kept
+
+
 def _topological_sort(steps: list[PlanStep]) -> list[PlanStep]:
     by_id = {step.step_id: step for step in steps}
     incoming = {step.step_id: set(step.depends_on) for step in steps}
@@ -465,6 +510,9 @@ def plan_from_payload(payload: dict, *, available_tools: Iterable[str], plan_id:
         steps.append(step)
     _validate_dependencies(steps)
     steps = _topological_sort(steps)
+    steps = _remove_redundant_write_after_edit(steps)
+    _validate_dependencies(steps)
+    steps = _topological_sort(steps)
     steps = _append_final_response_step(steps, goal=goal, now=now)
     plan = Plan(
         plan_id=plan_id or str(payload.get("plan_id", "")).strip() or new_id("plan"),
@@ -648,6 +696,23 @@ def _run_tests_checks() -> tuple[list[dict[str, object]], list[str], list[str]]:
     return checks, required, []
 
 
+def _named_source_path(goal: str) -> str | None:
+    candidates: list[str] = []
+    candidates.extend(re.findall(r"`([^`]+\.(?:py|pyi))`", goal))
+    candidates.extend(re.findall(r"(?:/|[A-Za-z0-9_.-]+/)[A-Za-z0-9_./-]+\.(?:py|pyi)", goal))
+    for raw in candidates:
+        value = raw.strip().strip("`'\"")
+        if not value:
+            continue
+        parts = Path(value).parts
+        name = Path(value).name.lower()
+        lowered_parts = {part.lower() for part in parts}
+        if name.startswith("test_") or "tests" in lowered_parts or "test" in lowered_parts:
+            continue
+        return value
+    return None
+
+
 def create_shell_recovery_plan(goal: str) -> Plan:
     """Deterministic recovery plan for coding-style tasks when plan JSON fails.
 
@@ -658,23 +723,55 @@ def create_shell_recovery_plan(goal: str) -> Plan:
     """
 
     now = utc_now_iso()
-    inspect_checks, inspect_required, inspect_optional = _shell_command_checks(stdout_label="inspection_stdout_nonempty")
-    inspect_step = PlanStep(
-        step_id=new_id("step"),
-        title="Inspect failing area",
-        goal="Locate the failing test or symbol and inspect the most relevant implementation before editing.",
-        kind="read",
-        expected_tool="shell_command",
-        input_text=(
+    named_source = _named_source_path(goal)
+    if named_source is not None:
+        (
+            inspect_outputs,
+            inspect_verification_type,
+            inspect_checks,
+            inspect_required,
+            inspect_optional,
+        ) = default_verification_contract(
+            kind="read",
+            expected_tool="read_text",
+            expected_output="Named source contents",
+            done_condition="tool_result:read_text",
+            success_criteria="The explicitly named implementation file is read before editing.",
+        )
+        inspect_title = "Read named source"
+        inspect_goal = f"Read {named_source} before editing."
+        inspect_tool = "read_text"
+        inspect_input = named_source
+        inspect_output = "Named source contents"
+        inspect_done = "tool_result:read_text"
+        inspect_success = "The explicitly named implementation file is read before editing."
+    else:
+        inspect_checks, inspect_required, inspect_optional = _shell_command_checks(stdout_label="inspection_stdout_nonempty")
+        inspect_outputs = ["Inspection evidence"]
+        inspect_verification_type = "composite"
+        inspect_title = "Inspect failing area"
+        inspect_goal = "Locate the failing test or symbol and inspect the most relevant implementation before editing."
+        inspect_tool = "shell_command"
+        inspect_input = (
             "Use repo-local shell commands to search for the exact failing test name first when one is provided. "
             "Do not broaden the search to generic issue words before you have located that exact test or named symbol. "
             "Once located, inspect only the most relevant nearby source and print concise evidence for the likely fix."
-        ),
-        expected_output="Inspection evidence",
-        done_condition="tool_result:shell_command",
-        success_criteria="Relevant failing-test or source evidence is printed.",
-        expected_outputs=["Inspection evidence"],
-        verification_type="composite",
+        )
+        inspect_output = "Inspection evidence"
+        inspect_done = "tool_result:shell_command"
+        inspect_success = "Relevant failing-test or source evidence is printed."
+    inspect_step = PlanStep(
+        step_id=new_id("step"),
+        title=inspect_title,
+        goal=inspect_goal,
+        kind="read",
+        expected_tool=inspect_tool,
+        input_text=inspect_input,
+        expected_output=inspect_output,
+        done_condition=inspect_done,
+        success_criteria=inspect_success,
+        expected_outputs=inspect_outputs,
+        verification_type=inspect_verification_type,
         verification_checks=inspect_checks,
         required_conditions=inspect_required,
         optional_conditions=inspect_optional,
@@ -691,9 +788,9 @@ def create_shell_recovery_plan(goal: str) -> Plan:
         kind="write",
         expected_tool="edit_text",
         input_text=(
-            "Edit the relevant implementation file identified during inspection. "
-            "Apply one minimal code change in the source file, not in docs or unrelated tests. "
-            "Prefer replace_pattern_once or replace_range over rewriting whole files."
+            (f"Edit {named_source}. " if named_source is not None else "Edit the relevant implementation file identified during inspection. ")
+            + "Apply one minimal code change in the source file, not in docs or unrelated tests. "
+            + "Prefer replace_pattern_once or replace_range over rewriting whole files."
         ),
         expected_output="Patched source file",
         done_condition="tool_result:edit_text",

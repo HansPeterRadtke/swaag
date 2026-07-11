@@ -53,6 +53,27 @@ def test_plan_from_payload_validates_ordered_steps(make_config) -> None:
         transition_step(plan, "step_write", "running")
 
 
+def test_plan_from_payload_removes_redundant_write_after_applying_edit() -> None:
+    payload = json.loads(
+        plan_response(
+            goal="Fix pkg_261/slugify.py and run tests.",
+            steps=[
+                plan_step("read", "Read pkg_261/slugify.py", "read", expected_tool="read_text", expected_output="source", success_criteria="read"),
+                plan_step("edit", "Edit pkg_261/slugify.py", "write", expected_tool="edit_text", expected_output="edited", success_criteria="edited", depends_on=["read"]),
+                plan_step("write", "Write pkg_261/slugify.py", "write", expected_tool="write_file", expected_output="written", success_criteria="written", depends_on=["edit"]),
+                plan_step("test", "Test pkg_261/slugify.py", "tool", expected_tool="run_tests", expected_output="tests pass", success_criteria="tests pass", depends_on=["write"]),
+                plan_step("answer", "Answer", "respond", expected_output="done", success_criteria="done", depends_on=["test"]),
+            ],
+        )
+    )
+
+    plan = plan_from_payload(payload, available_tools=["read_text", "edit_text", "write_file", "run_tests"])
+
+    assert [step.expected_tool for step in plan.steps[:-1]] == ["read_text", "edit_text", "run_tests"]
+    test_step = next(step for step in plan.steps if step.step_id == "test")
+    assert test_step.depends_on == ["edit"]
+
+
 def test_plan_from_payload_rejects_invalid_tool(make_config) -> None:
     payload = json.loads(
         plan_response(
@@ -82,6 +103,17 @@ def test_create_shell_recovery_plan_builds_read_write_respond_flow() -> None:
     assert any(check["name"] == "command_exit_zero" for check in plan.steps[2].verification_checks)
     assert "exact failing test name first" in plan.steps[0].input_text
     assert "Prefer replace_pattern_once or replace_range" in plan.steps[1].input_text
+
+
+def test_create_shell_recovery_plan_reads_explicit_named_source_without_shell() -> None:
+    plan = create_shell_recovery_plan(
+        "Repository root: /tmp/work. Fix `pkg_261/slugify.py` so tests/test_slugify.py passes."
+    )
+
+    assert [step.expected_tool for step in plan.steps[:-1]] == ["read_text", "edit_text", "run_tests"]
+    assert plan.steps[0].input_text == "pkg_261/slugify.py"
+    assert plan.steps[0].done_condition == "tool_result:read_text"
+    assert "pkg_261/slugify.py" in plan.steps[1].input_text
 
 
 def test_plan_from_payload_derives_missing_verification_contract() -> None:

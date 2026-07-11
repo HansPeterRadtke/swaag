@@ -86,6 +86,13 @@ class FilesystemManager:
                 package_candidate = self.workspace_root / f"test_{package_name}_{requested_name[5:]}"
                 if package_candidate.is_file():
                     return package_candidate.resolve()
+            suffix_candidates = [
+                item
+                for item in self.workspace_root.glob(f"test_*_{requested_name[5:]}")
+                if item.is_file()
+            ]
+            if len(suffix_candidates) == 1:
+                return suffix_candidates[0].resolve()
         if not requested_bits:
             return None
         scored: list[tuple[int, Path]] = []

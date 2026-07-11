@@ -37,6 +37,17 @@ def test_preview_file_roundtrip(tmp_path: Path) -> None:
     assert file_path.read_text(encoding="utf-8") == "hello"
 
 
+def test_replace_pattern_once_is_idempotent_when_replacement_is_already_present() -> None:
+    preview = TextEditor.replace_pattern_once(
+        "def describe():\n    return total()\n",
+        "return total() + 1",
+        "return total()",
+    )
+
+    assert preview.changed is False
+    assert preview.details["already_applied"] is True
+
+
 def test_replace_pattern_once_matches_block_ignoring_indentation() -> None:
     original = "def moving_total(values):\n    total = 0\n    for value in values[:-1]:\n        total += value\n    return total\n"
     preview = TextEditor.replace_pattern_once(

@@ -87,6 +87,21 @@ class TextEditor:
                     new_text,
                     {"pattern": pattern, "matched_pattern": candidate, "replacement": replacement, "match_count": 1, "match_style": "regex"},
                 )
+        for candidate in TextEditor._pattern_candidates(replacement):
+            if text.count(candidate) == 1:
+                return TextEditor._preview(
+                    "replace_pattern_once",
+                    None,
+                    text,
+                    text,
+                    {
+                        "pattern": pattern,
+                        "matched_pattern": None,
+                        "replacement": replacement,
+                        "match_count": 0,
+                        "already_applied": True,
+                    },
+                )
         raise EditError("pattern not found")
 
     @staticmethod
