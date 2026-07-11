@@ -7,6 +7,7 @@ import pytest
 from swaag.planner import (
     PlanValidationError,
     create_shell_recovery_plan,
+    create_shell_release_workflow_plan,
     create_capacity_plan_workflow_plan,
     create_computed_report_plan,
     create_manifest_projection_plan,
@@ -120,6 +121,25 @@ def test_create_shell_recovery_plan_reads_explicit_named_source_without_shell() 
     assert plan.steps[0].input_text == "pkg_261/slugify.py"
     assert plan.steps[0].done_condition == "tool_result:read_text"
     assert "pkg_261/slugify.py" in plan.steps[1].input_text
+
+
+def test_create_shell_release_workflow_plan_runs_rereads_tests_and_reports() -> None:
+    plan = create_shell_release_workflow_plan(
+        "Capture release.",
+        script_path="capture_release.sh",
+        env_path="release.env",
+        summary_path="shell_release_summary.txt",
+        test_command=["python3", "-m", "unittest", "-q", "test_shell_release_46.py"],
+    )
+
+    assert [step.expected_tool for step in plan.steps] == ["shell_command", "read_file", "run_tests", None]
+    assert [step.title for step in plan.steps] == [
+        "Run release capture script",
+        "Reread shell release summary",
+        "Verify shell release workflow",
+        "Report shell release workflow",
+    ]
+    assert all(plan.steps[index].depends_on == [plan.steps[index - 1].step_id] for index in range(1, len(plan.steps)))
 
 
 def test_create_capacity_plan_workflow_plan_has_all_required_steps() -> None:

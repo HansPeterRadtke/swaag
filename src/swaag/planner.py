@@ -881,6 +881,130 @@ def create_shell_recovery_plan(goal: str) -> Plan:
 
 
 
+def create_shell_release_workflow_plan(
+    goal: str,
+    *,
+    script_path: str,
+    env_path: str,
+    summary_path: str,
+    test_command: list[str],
+) -> Plan:
+    paths = [script_path, env_path, summary_path]
+    if any(not item.strip() for item in paths) or len(set(paths)) != len(paths) or not test_command:
+        raise PlanValidationError("shell release workflow requires distinct paths and a test command")
+    now = utc_now_iso()
+
+    def tool_step(
+        *,
+        title: str,
+        step_goal: str,
+        kind: PlanStepKind,
+        tool_name: str,
+        input_text: str,
+        expected_output: str,
+        output_ref: str,
+        depends_on: list[str] | None = None,
+        input_refs: list[str] | None = None,
+    ) -> PlanStep:
+        outputs, verification_type, checks, required, optional = default_verification_contract(
+            kind=kind,
+            expected_tool=tool_name,
+            expected_output=expected_output,
+            done_condition=f"tool_result:{tool_name}",
+            success_criteria=step_goal,
+        )
+        return PlanStep(
+            step_id=new_id("step"),
+            title=title,
+            goal=step_goal,
+            kind=kind,
+            expected_tool=tool_name,
+            input_text=input_text,
+            expected_output=expected_output,
+            done_condition=f"tool_result:{tool_name}",
+            success_criteria=step_goal,
+            expected_outputs=outputs,
+            verification_type=verification_type,
+            verification_checks=checks,
+            required_conditions=required,
+            optional_conditions=optional,
+            input_refs=list(input_refs or []),
+            output_refs=[output_ref],
+            fallback_strategy="Stop and report the exact shell workflow blocker.",
+            depends_on=list(depends_on or []),
+            status="pending",
+            last_updated=now,
+        )
+
+    run_script = tool_step(
+        title="Run release capture script",
+        step_goal="Run the provided shell script to generate the release summary from the environment file.",
+        kind="tool",
+        tool_name="shell_command",
+        input_text=f"bash {script_path}",
+        expected_output="Generated shell release summary",
+        output_ref="shell_release_generated",
+    )
+    reread_summary = tool_step(
+        title="Reread shell release summary",
+        step_goal="Read the generated summary after the shell command and verify its final contents.",
+        kind="read",
+        tool_name="read_file",
+        input_text=summary_path,
+        expected_output="Reread shell release summary",
+        output_ref="shell_release_summary",
+        depends_on=[run_script.step_id],
+        input_refs=["shell_release_generated"],
+    )
+    verify = tool_step(
+        title="Verify shell release workflow",
+        step_goal="Run the exact requested unittest after the generated summary is reread.",
+        kind="tool",
+        tool_name="run_tests",
+        input_text=" ".join(test_command),
+        expected_output="Shell release workflow verification",
+        output_ref="shell_release_verification",
+        depends_on=[reread_summary.step_id],
+        input_refs=["shell_release_summary"],
+    )
+    response_checks: list[dict[str, object]] = [
+        {"name": "dependencies_completed", "check_type": "dependencies_completed"},
+        {"name": "assistant_text_nonempty", "check_type": "string_nonempty", "actual_source": "assistant_text"},
+    ]
+    answer = PlanStep(
+        step_id=new_id("step"),
+        title="Report shell release workflow",
+        goal="Summarize the verified generated release summary after the script and test succeed.",
+        kind="respond",
+        expected_tool=None,
+        input_text=goal,
+        expected_output="Verified shell release workflow report",
+        done_condition="assistant_response_nonempty",
+        success_criteria="The response reports that the generated summary matches the environment and the unittest passed.",
+        expected_outputs=["Verified shell release workflow report"],
+        verification_type="composite",
+        verification_checks=response_checks,
+        required_conditions=["dependencies_completed", "assistant_text_nonempty"],
+        optional_conditions=[],
+        input_refs=["shell_release_verification"],
+        fallback_strategy="If generation, reread, or testing fails, report that the workflow is not complete.",
+        depends_on=[verify.step_id],
+        status="pending",
+        last_updated=now,
+    )
+    return Plan(
+        plan_id=new_id("plan"),
+        goal=goal,
+        steps=[run_script, reread_summary, verify, answer],
+        success_criteria="Generate the release summary with the shell tool, reread it, pass the unittest, and report the result.",
+        fallback_strategy="Do not edit the script or test; stop on shell, summary, or verification failure.",
+        status="active",
+        created_at=now,
+        updated_at=now,
+        current_step_id=run_script.step_id,
+    )
+
+
 def create_capacity_plan_workflow_plan(
     goal: str,
     *,

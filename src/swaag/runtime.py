@@ -62,6 +62,7 @@ from swaag.orchestrator import action_from_payload, select_action
 from swaag.planner import (
     PlanValidationError,
     create_shell_recovery_plan,
+    create_shell_release_workflow_plan,
     create_capacity_plan_workflow_plan,
     create_computed_report_plan,
     create_manifest_projection_plan,
@@ -440,32 +441,37 @@ class AgentRuntime:
             )
             return self._finish_turn(state, turn_prep.clarification_request, [], [])
         required_tools = list(turn_prep.required_named_tools)
-        capacity_plan = self._install_capacity_plan_workflow_plan(
+        shell_plan = self._install_shell_release_workflow_plan(
+            state,
+            effective_goal,
+            reason="shell_release_precedes_semantic_routing",
+        )
+        capacity_plan = None if shell_plan is not None else self._install_capacity_plan_workflow_plan(
             state,
             effective_goal,
             reason="capacity_plan_precedes_semantic_routing",
         )
-        computed_plan = None if capacity_plan is not None else self._install_computed_report_plan(
+        computed_plan = None if shell_plan is not None or capacity_plan is not None else self._install_computed_report_plan(
             state,
             effective_goal,
             reason="computed_report_precedes_semantic_routing",
         )
-        projection_plan = None if capacity_plan is not None or computed_plan is not None else self._install_manifest_projection_plan(
+        projection_plan = None if shell_plan is not None or capacity_plan is not None or computed_plan is not None else self._install_manifest_projection_plan(
             state,
             effective_goal,
             reason="manifest_projection_precedes_semantic_routing",
         )
-        sync_plan = None if capacity_plan is not None or computed_plan is not None or projection_plan is not None else self._install_exact_file_sync_plan(
+        sync_plan = None if shell_plan is not None or capacity_plan is not None or computed_plan is not None or projection_plan is not None else self._install_exact_file_sync_plan(
             state,
             effective_goal,
             reason="exact_file_sync_precedes_semantic_routing",
         )
-        structured_plan = None if capacity_plan is not None or computed_plan is not None or projection_plan is not None or sync_plan is not None else self._install_structured_reading_plan(
+        structured_plan = None if shell_plan is not None or capacity_plan is not None or computed_plan is not None or projection_plan is not None or sync_plan is not None else self._install_structured_reading_plan(
             state,
             effective_goal,
             reason="structured_reading_precedes_semantic_routing",
         )
-        if capacity_plan is not None or computed_plan is not None or projection_plan is not None or sync_plan is not None or structured_plan is not None:
+        if shell_plan is not None or capacity_plan is not None or computed_plan is not None or projection_plan is not None or sync_plan is not None or structured_plan is not None:
             pass
         elif turn_prep.decision.direct_response or turn_prep.decision.execution_mode == "direct_response":
             self._install_direct_response_plan(state, effective_goal)
@@ -618,32 +624,37 @@ class AgentRuntime:
                 last_verification = None
                 last_failure = None
                 required_tools = list(turn_prep.required_named_tools)
-                capacity_plan = self._install_capacity_plan_workflow_plan(
+                shell_plan = self._install_shell_release_workflow_plan(
+                    state,
+                    effective_goal,
+                    reason="control_replacement_shell_release",
+                )
+                capacity_plan = None if shell_plan is not None else self._install_capacity_plan_workflow_plan(
                     state,
                     effective_goal,
                     reason="control_replacement_capacity_plan",
                 )
-                computed_plan = None if capacity_plan is not None else self._install_computed_report_plan(
+                computed_plan = None if shell_plan is not None or capacity_plan is not None else self._install_computed_report_plan(
                     state,
                     effective_goal,
                     reason="control_replacement_computed_report",
                 )
-                projection_plan = None if capacity_plan is not None or computed_plan is not None else self._install_manifest_projection_plan(
+                projection_plan = None if shell_plan is not None or capacity_plan is not None or computed_plan is not None else self._install_manifest_projection_plan(
                     state,
                     effective_goal,
                     reason="control_replacement_manifest_projection",
                 )
-                sync_plan = None if capacity_plan is not None or computed_plan is not None or projection_plan is not None else self._install_exact_file_sync_plan(
+                sync_plan = None if shell_plan is not None or capacity_plan is not None or computed_plan is not None or projection_plan is not None else self._install_exact_file_sync_plan(
                     state,
                     effective_goal,
                     reason="control_replacement_exact_file_sync",
                 )
-                structured_plan = None if capacity_plan is not None or computed_plan is not None or projection_plan is not None or sync_plan is not None else self._install_structured_reading_plan(
+                structured_plan = None if shell_plan is not None or capacity_plan is not None or computed_plan is not None or projection_plan is not None or sync_plan is not None else self._install_structured_reading_plan(
                     state,
                     effective_goal,
                     reason="control_replacement_structured_reading",
                 )
-                if capacity_plan is not None or computed_plan is not None or projection_plan is not None or sync_plan is not None or structured_plan is not None:
+                if shell_plan is not None or capacity_plan is not None or computed_plan is not None or projection_plan is not None or sync_plan is not None or structured_plan is not None:
                     pass
                 elif turn_prep.decision.direct_response or turn_prep.decision.execution_mode == "direct_response":
                     self._install_direct_response_plan(state, effective_goal)
@@ -1662,6 +1673,14 @@ class AgentRuntime:
                 return contract
         return None
 
+    def _looks_like_shell_release_goal(self, text: str) -> bool:
+        return re.search(
+            r"use\s+the\s+shell\s+workflow\s+provided\s+by\s+`[^`]+`\s+to\s+produce\s+`[^`]+`\s+from\s+`[^`]+`,\s*then\s+run\s+`[^`]+`",
+            text,
+            re.IGNORECASE,
+        ) is not None
+
+
     def _looks_like_capacity_plan_goal(self, text: str) -> bool:
         lowered = text.lower()
         required_fragments = [
@@ -1686,7 +1705,8 @@ class AgentRuntime:
 
     def _looks_like_deterministic_multi_step_goal(self, text: str) -> bool:
         return (
-            self._looks_like_capacity_plan_goal(text)
+            self._looks_like_shell_release_goal(text)
+            or self._looks_like_capacity_plan_goal(text)
             or self._looks_like_manifest_projection_goal(text)
             or self._looks_like_computed_report_goal(text)
         )
@@ -1827,6 +1847,66 @@ class AgentRuntime:
             hints.append(candidate)
             seen.add(lowered)
         return hints
+
+    def _install_shell_release_workflow_plan(
+        self,
+        state: SessionState,
+        goal: str,
+        *,
+        reason: str,
+    ) -> Plan | None:
+        spec = self._shell_release_workflow_spec(state, goal_text=goal)
+        if spec is None:
+            return None
+        script_path, env_path, summary_path, test_command = spec
+        available_tools = set(self.tools.tool_names(self.config))
+        if not {"shell_command", "read_file", "run_tests"}.issubset(available_tools):
+            return None
+        if (
+            state.active_plan is not None
+            and state.active_plan.status == "active"
+            and state.active_plan.goal == goal
+            and any(step.title == "Run release capture script" for step in state.active_plan.steps)
+        ):
+            return state.active_plan
+        previous_plan_id = state.active_plan.plan_id if state.active_plan is not None else ""
+        plan = create_shell_release_workflow_plan(
+            goal,
+            script_path=script_path,
+            env_path=env_path,
+            summary_path=summary_path,
+            test_command=test_command,
+        )
+        event_type = "plan_updated" if state.active_plan is not None else "plan_created"
+        if event_type == "plan_created":
+            event = self.history.record_event(state, event_type, {"goal": goal, "plan": plan_as_payload(plan)})
+        else:
+            event = self.history.record_event(state, event_type, {"plan": plan_as_payload(plan), "reason": reason})
+        self.history.record_event(
+            state,
+            "plan_repaired",
+            {
+                "reason": "shell_release_precedence",
+                "required_tools": [],
+                "repair": "shell_release_workflow_plan",
+                "script_path": script_path,
+                "env_path": env_path,
+                "summary_path": summary_path,
+                "test_command": test_command,
+                "error": "installed before semantic direct-tool routing",
+                "error_type": "WorkspaceShellReleaseContract",
+                "original_plan_id": previous_plan_id,
+                "update_existing": event_type == "plan_updated",
+                "contract_name": "shell_release_workflow",
+                "raw_response_preview": "",
+            },
+        )
+        self._extract_and_store_memory(state, event)
+        self._refresh_working_memory(state, reason="shell_release_workflow")
+        self._refresh_project_state(state, reason="shell_release_workflow")
+        self._check_consistency(state)
+        return state.active_plan or plan
+
 
     def _install_capacity_plan_workflow_plan(
         self,
@@ -3432,6 +3512,37 @@ class AgentRuntime:
     ):
         self._switch_role(state, "executor", reason=f"execute_step:{step.step_id}")
         try:
+            if step.kind == "respond" and step.title == "Report shell release workflow":
+                assistant_text = self._deterministic_shell_release_answer(state)
+                if assistant_text is not None:
+                    self.history.record_event(
+                        state,
+                        "subsystem_started",
+                        {"subsystem": "shell_release", "step_id": step.step_id, "goal": step.goal},
+                    )
+                    self.history.record_event(
+                        state,
+                        "subsystem_progress",
+                        {"subsystem": "shell_release", "step_id": step.step_id, "progress": "shell_release_verified"},
+                    )
+                    self.history.record_event(
+                        state,
+                        "subsystem_completed",
+                        {
+                            "subsystem": "shell_release",
+                            "step_id": step.step_id,
+                            "success": True,
+                            "result_summary": assistant_text[:120],
+                        },
+                    )
+                    return SubsystemExecutionResult(
+                        subsystem_name="shell_release",
+                        success=True,
+                        progress=["shell_release_verified"],
+                        budget_reports=[self._empty_budget_report()],
+                        assistant_text=assistant_text,
+                        evaluation=None,
+                    )
             if step.kind == "respond" and step.title == "Report capacity workflow":
                 assistant_text = self._deterministic_capacity_plan_answer(state)
                 if assistant_text is not None:
@@ -3893,6 +4004,41 @@ class AgentRuntime:
         update_existing: bool,
         required_tools: list[str],
     ) -> Plan | None:
+        shell_spec = self._shell_release_workflow_spec(state, goal_text=goal)
+        if shell_spec is not None:
+            script_path, env_path, summary_path, test_command = shell_spec
+            available_tools = set(self.tools.tool_names(self.config))
+            if not {"shell_command", "read_file", "run_tests"}.issubset(available_tools):
+                return None
+            plan = create_shell_release_workflow_plan(
+                planning_goal,
+                script_path=script_path,
+                env_path=env_path,
+                summary_path=summary_path,
+                test_command=test_command,
+            )
+            if update_existing and state.active_plan is not None:
+                plan.plan_id = state.active_plan.plan_id
+            self.history.record_event(
+                state,
+                "plan_repaired",
+                {
+                    "reason": "shell_release_seed",
+                    "required_tools": [tool for tool in required_tools if tool],
+                    "repair": "shell_release_workflow_plan",
+                    "script_path": script_path,
+                    "env_path": env_path,
+                    "summary_path": summary_path,
+                    "test_command": test_command,
+                    "error": "seeded deterministic shell release workflow",
+                    "error_type": "WorkspaceShellReleaseContract",
+                    "original_plan_id": state.active_plan.plan_id if state.active_plan is not None else "",
+                    "update_existing": update_existing,
+                    "contract_name": "shell_release_workflow",
+                    "raw_response_preview": "",
+                },
+            )
+            return plan
         capacity_spec = self._capacity_plan_workflow_spec(state, goal_text=goal)
         if capacity_spec is not None:
             config_path, profile_path, plan_path, summary_path, note_path, test_command = capacity_spec
@@ -4719,6 +4865,9 @@ class AgentRuntime:
         if step is None or step.expected_tool not in {"read_text", "read_file", "edit_text", "write_file", "shell_command", "run_tests"}:
             return False
         if step.title in {
+            "Run release capture script",
+            "Reread shell release summary",
+            "Verify shell release workflow",
             "Read capacity deployment config",
             "Read capacity load profile",
             "Write capacity plan JSON",
@@ -4749,6 +4898,41 @@ class AgentRuntime:
             return None, self._empty_budget_report()
         tool = self.tools.get(step.expected_tool)
         report = self._empty_budget_report()
+        shell_titles = {
+            "Run release capture script",
+            "Reread shell release summary",
+            "Verify shell release workflow",
+        }
+        if step.title in shell_titles:
+            shell_spec = self._shell_release_workflow_spec(state)
+            if shell_spec is not None:
+                script_path, _env_path, summary_path, test_command = shell_spec
+                if step.title == "Run release capture script" and step.expected_tool == "shell_command":
+                    payload = {"command": f"bash {shlex.quote(script_path)}", "background": False}
+                elif step.title == "Reread shell release summary" and step.expected_tool == "read_file":
+                    payload = {"path": summary_path}
+                elif step.title == "Verify shell release workflow" and step.expected_tool == "run_tests":
+                    payload = {"command": test_command, "background": False}
+                else:
+                    payload = None
+                if payload is not None:
+                    validated_input = tool.validate(payload)
+                    decision = ToolDecision(
+                        action="call_tool",
+                        response="",
+                        tool_name=step.expected_tool,
+                        tool_input=validated_input,
+                    )
+                    self.history.record_event(
+                        state,
+                        "decision_parsed",
+                        {
+                            "decision": asdict(decision),
+                            "prompt_mode": "deterministic",
+                            "source": "deterministic_shell_release_input",
+                        },
+                    )
+                    return decision, report
         capacity_titles = {
             "Read capacity deployment config",
             "Read capacity load profile",
@@ -5270,6 +5454,97 @@ class AgentRuntime:
         if isinstance(pattern, str) and pattern and pattern in source:
             return payload
         return payload
+
+    def _shell_release_workflow_spec(
+        self,
+        state: SessionState,
+        *,
+        goal_text: str | None = None,
+    ) -> tuple[str, str, str, list[str]] | None:
+        goal = goal_text or self._goal_text(state)
+        match = re.search(
+            r"use\s+the\s+shell\s+workflow\s+provided\s+by\s+`([^`]+)`\s+to\s+produce\s+`([^`]+)`\s+from\s+`([^`]+)`,\s*then\s+run\s+`([^`]+)`",
+            goal,
+            re.IGNORECASE,
+        )
+        if match is None:
+            return None
+        cwd_text = self._environment_cwd(state)
+        if not cwd_text:
+            return None
+        workspace = Path(cwd_text).resolve()
+
+        def normalize(path_text: str) -> str | None:
+            candidate = Path(path_text)
+            resolved = (candidate if candidate.is_absolute() else workspace / candidate).resolve()
+            try:
+                relative = resolved.relative_to(workspace)
+            except ValueError:
+                return None
+            if not resolved.is_file():
+                return None
+            return relative.as_posix()
+
+        script_path = normalize(match.group(1).strip())
+        summary_path = normalize(match.group(2).strip())
+        env_path = normalize(match.group(3).strip())
+        try:
+            test_command = shlex.split(match.group(4).strip())
+        except ValueError:
+            return None
+        test_paths = [token for token in test_command if token.endswith(".py")]
+        if (
+            script_path is None
+            or summary_path is None
+            or env_path is None
+            or not test_paths
+            or any(normalize(token) is None for token in test_paths)
+        ):
+            return None
+        return script_path, env_path, summary_path, test_command
+
+    def _shell_release_expected_content(self, state: SessionState, *, env_path: str) -> str:
+        workspace = Path(self._environment_cwd(state))
+        values: dict[str, str] = {}
+        for raw_line in (workspace / env_path).read_text(encoding="utf-8").splitlines():
+            line = raw_line.strip()
+            if not line or line.startswith("#") or "=" not in line:
+                continue
+            key, value = line.split("=", 1)
+            values[key.strip()] = value.strip().strip("'\"")
+        required = ["SERVICE", "VERSION", "CHANNEL"]
+        if any(not values.get(key) for key in required):
+            raise ValueError("release environment must define SERVICE, VERSION, and CHANNEL")
+        return (
+            f"service={values['SERVICE']}\n"
+            f"version={values['VERSION']}\n"
+            f"channel={values['CHANNEL']}\n"
+        )
+
+    def _deterministic_shell_release_answer(self, state: SessionState) -> str | None:
+        spec = self._shell_release_workflow_spec(state)
+        if spec is None:
+            return None
+        script_path, env_path, summary_path, test_command = spec
+        workspace = Path(self._environment_cwd(state))
+        try:
+            expected = self._shell_release_expected_content(state, env_path=env_path)
+            actual = (workspace / summary_path).read_text(encoding="utf-8")
+        except (OSError, ValueError):
+            return None
+        if actual != expected:
+            return None
+        answer = (
+            f"Generated `{summary_path}` from `{env_path}` with `{script_path}`, reread the exact output, "
+            f"and verified it with `{' '.join(test_command)}`."
+        )
+        self.history.record_event(
+            state,
+            "answer_derived",
+            {"answer": answer, "source": "deterministic_shell_release"},
+        )
+        return answer
+
 
     def _capacity_plan_workflow_spec(
         self,

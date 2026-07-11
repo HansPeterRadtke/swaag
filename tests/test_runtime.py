@@ -3938,6 +3938,145 @@ def test_runtime_repairs_release_flow_in_dependency_order(make_config, tmp_path)
     assert payload["replacement"] == "release-20:41:tax=5"
 
 
+def test_runtime_shell_release_workflow_is_cache_independent_and_exact(make_config, tmp_path) -> None:
+    workspace = tmp_path
+    script_text = """#!/usr/bin/env bash
+set -euo pipefail
+source release.env
+printf 'service=%s\nversion=%s\nchannel=%s\n' "$SERVICE" "$VERSION" "$CHANNEL" > shell_release_summary.txt
+"""
+    (workspace / "capture_release.sh").write_text(script_text, encoding="utf-8")
+    (workspace / "release.env").write_text(
+        "SERVICE=svc-10\nVERSION=1.1.4\nCHANNEL=stable\n",
+        encoding="utf-8",
+    )
+    (workspace / "shell_release_summary.txt").write_text(
+        "service=pending\nversion=pending\nchannel=pending\n",
+        encoding="utf-8",
+    )
+    (workspace / "test_shell_release_46.py").write_text("import unittest\n", encoding="utf-8")
+    config = make_config(
+        tools__read_roots=[workspace],
+        tools__allow_stateful_tools=True,
+        tools__allow_side_effect_tools=True,
+    )
+    runtime = AgentRuntime(config, model_client=FakeModelClient(responses=[]))
+    state = runtime.create_or_load_session()
+    state.environment.workspace.root = str(workspace)
+    state.environment.workspace.cwd = str(workspace)
+    state.environment.shell.cwd = str(workspace)
+    goal = (
+        "Use the shell workflow provided by `capture_release.sh` to produce `shell_release_summary.txt` from `release.env`, "
+        "then run `python3 -m unittest -q test_shell_release_46.py`. Do not edit the script or the test; summarize the verified result."
+    )
+    state.messages.append(Message(role="user", content=goal, created_at="2026-01-01T00:00:00+00:00"))
+
+    plan = runtime._install_shell_release_workflow_plan(state, goal, reason="test_shell_release_precedence")
+
+    assert plan is not None
+    assert [step.expected_tool for step in plan.steps] == ["shell_command", "read_file", "run_tests", None]
+    state.active_plan = plan
+    shell_decision, shell_report = runtime._decide_expected_tool_input(state)
+    assert shell_decision is not None
+    assert shell_decision.tool_name == "shell_command"
+    assert shell_decision.tool_input == {"command": "bash capture_release.sh", "background": False}
+    assert shell_report.input_tokens == 0
+    (workspace / "shell_release_summary.txt").write_text(
+        "service=svc-10\nversion=1.1.4\nchannel=stable\n",
+        encoding="utf-8",
+    )
+
+    plan.steps[0].status = "completed"
+    plan.steps[1].status = "running"
+    plan.current_step_id = plan.steps[1].step_id
+    read_decision, read_report = runtime._decide_expected_tool_input(state)
+    assert read_decision is not None and read_decision.tool_input == {"path": "shell_release_summary.txt"}
+    assert read_report.input_tokens == 0
+
+    plan.steps[1].status = "completed"
+    plan.steps[2].status = "running"
+    plan.current_step_id = plan.steps[2].step_id
+    test_decision, test_report = runtime._decide_expected_tool_input(state)
+    assert test_decision is not None
+    assert test_decision.tool_input["command"][-4:] == ["-m", "unittest", "-q", "test_shell_release_46.py"]
+    assert test_decision.tool_input["background"] is False
+    assert test_report.input_tokens == 0
+
+    plan.steps[2].status = "completed"
+    plan.steps[3].status = "running"
+    plan.current_step_id = plan.steps[3].step_id
+    result = runtime._run_step_subsystem(state, plan.steps[3], action_counts={})
+    assert "reread the exact output" in result.assistant_text
+    assert runtime.client.requests == []
+    assert any(
+        event.event_type == "decision_parsed"
+        and event.payload.get("source") == "deterministic_shell_release_input"
+        for event in runtime.history.read_history(state.session_id)
+    )
+
+
+def test_runtime_shell_release_prompt_gets_full_multi_step_quality_normalization(make_config) -> None:
+    goal = (
+        "Use the shell workflow provided by `capture_release.sh` to produce `shell_release_summary.txt` from `release.env`, "
+        "then run `python3 -m unittest -q test_shell_release_46.py`. Do not edit the script or the test; summarize the verified result."
+    )
+    runtime = AgentRuntime(
+        make_config(),
+        model_client=FakeModelClient(
+            contract_responses={
+                "strategy_selection": [
+                    json.dumps(
+                        {
+                            "task_profile": "file_edit",
+                            "strategy_name": "conservative",
+                            "explore_before_commit": False,
+                            "tool_chain_depth": 1,
+                            "verification_intensity": 0.5,
+                            "reason": "model underclassified shell workflow",
+                        }
+                    )
+                ]
+            }
+        ),
+    )
+    state = runtime.create_or_load_session()
+    analysis = PromptAnalysis(
+        task_type="structured",
+        completeness="partial",
+        requires_expansion=True,
+        requires_decomposition=False,
+        confidence=0.9,
+        detected_entities=[],
+        detected_goals=[],
+    )
+    decision = DecisionOutcome(
+        expand_task=True,
+        split_task=False,
+        ask_user=True,
+        assume_missing=False,
+        generate_ideas=False,
+        direct_response=False,
+        execution_mode="single_tool",
+        preferred_tool_name="run_tests",
+        reason="model collapsed shell and test steps",
+        confidence=0.9,
+    )
+
+    normalized_analysis = runtime._apply_task_contract_to_analysis(goal, analysis)
+    normalized_decision = runtime._apply_task_contract_to_decision(goal, decision)
+    strategy = runtime._select_strategy_frontend(state, goal, normalized_analysis, normalized_decision)
+
+    assert normalized_analysis.completeness == "complete"
+    assert normalized_analysis.requires_expansion is False
+    assert normalized_analysis.requires_decomposition is True
+    assert normalized_decision.expand_task is False
+    assert normalized_decision.split_task is True
+    assert normalized_decision.ask_user is False
+    assert normalized_decision.execution_mode == "full_plan"
+    assert strategy.task_profile == "multi_step"
+    assert "shell_command" in strategy.allowed_tools
+
+
 def test_runtime_capacity_plan_workflow_is_cache_independent_and_exact(make_config, tmp_path) -> None:
     workspace = tmp_path
     (workspace / "deployment_config.json").write_text(
