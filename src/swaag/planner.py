@@ -881,6 +881,128 @@ def create_shell_recovery_plan(goal: str) -> Plan:
 
 
 
+def create_manifest_projection_plan(
+    goal: str,
+    *,
+    source_path: str,
+    target_path: str,
+    test_command: list[str],
+) -> Plan:
+    if not source_path.strip() or not target_path.strip() or not test_command:
+        raise PlanValidationError("manifest projection requires source, target, and test command")
+    now = utc_now_iso()
+
+    def tool_step(
+        *,
+        title: str,
+        step_goal: str,
+        kind: PlanStepKind,
+        tool_name: str,
+        input_text: str,
+        expected_output: str,
+        output_ref: str,
+        depends_on: list[str] | None = None,
+        input_refs: list[str] | None = None,
+    ) -> PlanStep:
+        outputs, verification_type, checks, required, optional = default_verification_contract(
+            kind=kind,
+            expected_tool=tool_name,
+            expected_output=expected_output,
+            done_condition=f"tool_result:{tool_name}",
+            success_criteria=step_goal,
+        )
+        return PlanStep(
+            step_id=new_id("step"),
+            title=title,
+            goal=step_goal,
+            kind=kind,
+            expected_tool=tool_name,
+            input_text=input_text,
+            expected_output=expected_output,
+            done_condition=f"tool_result:{tool_name}",
+            success_criteria=step_goal,
+            expected_outputs=outputs,
+            verification_type=verification_type,
+            verification_checks=checks,
+            required_conditions=required,
+            optional_conditions=optional,
+            input_refs=list(input_refs or []),
+            output_refs=[output_ref],
+            fallback_strategy="Stop and report the exact manifest projection blocker.",
+            depends_on=list(depends_on or []),
+            status="pending",
+            last_updated=now,
+        )
+
+    read_source = tool_step(
+        title="Read manifest projection source",
+        step_goal="Read the authoritative JSON manifest before rendering the target.",
+        kind="read",
+        tool_name="read_file",
+        input_text=source_path,
+        expected_output="Manifest projection source",
+        output_ref="manifest_projection_source",
+    )
+    write_target = tool_step(
+        title="Write manifest projection target",
+        step_goal="Render every manifest field as an exact lowercase key=value line in manifest order.",
+        kind="write",
+        tool_name="write_file",
+        input_text=target_path,
+        expected_output="Manifest projection target",
+        output_ref="manifest_projection_target",
+        depends_on=[read_source.step_id],
+        input_refs=["manifest_projection_source"],
+    )
+    verify = tool_step(
+        title="Verify manifest projection",
+        step_goal="Run the exact requested test command after writing the target.",
+        kind="tool",
+        tool_name="run_tests",
+        input_text=" ".join(test_command),
+        expected_output="Manifest projection verification",
+        output_ref="manifest_projection_verification",
+        depends_on=[write_target.step_id],
+        input_refs=["manifest_projection_target"],
+    )
+    response_checks: list[dict[str, object]] = [
+        {"name": "dependencies_completed", "check_type": "dependencies_completed"},
+        {"name": "assistant_text_nonempty", "check_type": "string_nonempty", "actual_source": "assistant_text"},
+    ]
+    answer = PlanStep(
+        step_id=new_id("step"),
+        title="Report manifest projection",
+        goal="Summarize the exact manifest projection after the requested test passes.",
+        kind="respond",
+        expected_tool=None,
+        input_text=goal,
+        expected_output="Verified manifest projection report",
+        done_condition="assistant_response_nonempty",
+        success_criteria="The response reports the rendered target and successful verification.",
+        expected_outputs=["Verified manifest projection report"],
+        verification_type="composite",
+        verification_checks=response_checks,
+        required_conditions=["dependencies_completed", "assistant_text_nonempty"],
+        optional_conditions=[],
+        input_refs=["manifest_projection_verification"],
+        fallback_strategy="If verification fails, report that the projection is not complete.",
+        depends_on=[verify.step_id],
+        status="pending",
+        last_updated=now,
+    )
+    return Plan(
+        plan_id=new_id("plan"),
+        goal=goal,
+        steps=[read_source, write_target, verify, answer],
+        success_criteria="Render the manifest exactly as key=value lines, pass the requested test, and report the result.",
+        fallback_strategy="Stop on invalid JSON, write failure, or test failure and report the exact blocker.",
+        status="active",
+        created_at=now,
+        updated_at=now,
+        current_step_id=read_source.step_id,
+    )
+
+
 def create_exact_file_sync_plan(
     goal: str,
     *,

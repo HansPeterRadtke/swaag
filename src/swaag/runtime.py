@@ -62,6 +62,7 @@ from swaag.orchestrator import action_from_payload, select_action
 from swaag.planner import (
     PlanValidationError,
     create_shell_recovery_plan,
+    create_manifest_projection_plan,
     create_exact_file_sync_plan,
     create_structured_reading_plan,
     create_release_flow_recovery_plan,
@@ -81,6 +82,7 @@ from swaag.retrieval.embeddings import SemanticBackendProtocolError
 from swaag.strategy import (
     StrategyValidationError,
     adapt_strategy,
+    build_strategy_from_profile,
     reconcile_strategy_to_plan,
     strategy_from_payload,
     validate_plan_against_strategy,
@@ -436,17 +438,22 @@ class AgentRuntime:
             )
             return self._finish_turn(state, turn_prep.clarification_request, [], [])
         required_tools = list(turn_prep.required_named_tools)
-        sync_plan = self._install_exact_file_sync_plan(
+        projection_plan = self._install_manifest_projection_plan(
+            state,
+            effective_goal,
+            reason="manifest_projection_precedes_semantic_routing",
+        )
+        sync_plan = None if projection_plan is not None else self._install_exact_file_sync_plan(
             state,
             effective_goal,
             reason="exact_file_sync_precedes_semantic_routing",
         )
-        structured_plan = None if sync_plan is not None else self._install_structured_reading_plan(
+        structured_plan = None if projection_plan is not None or sync_plan is not None else self._install_structured_reading_plan(
             state,
             effective_goal,
             reason="structured_reading_precedes_semantic_routing",
         )
-        if sync_plan is not None or structured_plan is not None:
+        if projection_plan is not None or sync_plan is not None or structured_plan is not None:
             pass
         elif turn_prep.decision.direct_response or turn_prep.decision.execution_mode == "direct_response":
             self._install_direct_response_plan(state, effective_goal)
@@ -599,17 +606,22 @@ class AgentRuntime:
                 last_verification = None
                 last_failure = None
                 required_tools = list(turn_prep.required_named_tools)
-                sync_plan = self._install_exact_file_sync_plan(
+                projection_plan = self._install_manifest_projection_plan(
+                    state,
+                    effective_goal,
+                    reason="control_replacement_manifest_projection",
+                )
+                sync_plan = None if projection_plan is not None else self._install_exact_file_sync_plan(
                     state,
                     effective_goal,
                     reason="control_replacement_exact_file_sync",
                 )
-                structured_plan = None if sync_plan is not None else self._install_structured_reading_plan(
+                structured_plan = None if projection_plan is not None or sync_plan is not None else self._install_structured_reading_plan(
                     state,
                     effective_goal,
                     reason="control_replacement_structured_reading",
                 )
-                if sync_plan is not None or structured_plan is not None:
+                if projection_plan is not None or sync_plan is not None or structured_plan is not None:
                     pass
                 elif turn_prep.decision.direct_response or turn_prep.decision.execution_mode == "direct_response":
                     self._install_direct_response_plan(state, effective_goal)
@@ -1628,6 +1640,14 @@ class AgentRuntime:
                 return contract
         return None
 
+    def _looks_like_manifest_projection_goal(self, text: str) -> bool:
+        return re.search(
+            r"read\s+`[^`]+\.json`\s+and\s+update\s+`[^`]+`\s+to\s+match\s+the\s+manifest\s+exactly\.\s*run\s+`[^`]+`\s+before\s+answering",
+            text,
+            re.IGNORECASE,
+        ) is not None
+
+
     def _apply_task_contract_to_analysis(self, user_text: str, analysis: PromptAnalysis) -> PromptAnalysis:
         contract = self._extract_task_contract(user_text)
         updated = PromptAnalysis(
@@ -1647,6 +1667,10 @@ class AgentRuntime:
             updated.completeness = "complete"
             updated.requires_expansion = False
             updated.requires_decomposition = False
+        if self._looks_like_manifest_projection_goal(user_text):
+            updated.completeness = "complete"
+            updated.requires_expansion = False
+            updated.requires_decomposition = True
         if not contract:
             return updated
         if str(contract.get("request_completeness", "")).strip() == "complete":
@@ -1660,9 +1684,17 @@ class AgentRuntime:
 
     def _apply_task_contract_to_decision(self, user_text: str, decision: DecisionOutcome) -> DecisionOutcome:
         contract = self._extract_task_contract(user_text)
-        if not contract:
-            return decision
         updated = DecisionOutcome(**asdict(decision))
+        if self._looks_like_manifest_projection_goal(user_text):
+            updated.expand_task = False
+            updated.split_task = True
+            updated.ask_user = False
+            updated.direct_response = False
+            updated.execution_mode = "full_plan"
+            updated.preferred_tool_name = ""
+            updated.reason = f"{updated.reason};deterministic_manifest_projection" if updated.reason else "deterministic_manifest_projection"
+        if not contract:
+            return updated
         if contract.get("prefer_task_expansion") is False:
             updated.expand_task = False
             updated.split_task = False
@@ -1743,6 +1775,64 @@ class AgentRuntime:
             hints.append(candidate)
             seen.add(lowered)
         return hints
+
+    def _install_manifest_projection_plan(
+        self,
+        state: SessionState,
+        goal: str,
+        *,
+        reason: str,
+    ) -> Plan | None:
+        spec = self._manifest_projection_spec(state, goal_text=goal)
+        if spec is None:
+            return None
+        source_path, target_path, test_command = spec
+        available_tools = set(self.tools.tool_names(self.config))
+        if not {"read_file", "write_file", "run_tests"}.issubset(available_tools):
+            return None
+        if (
+            state.active_plan is not None
+            and state.active_plan.status == "active"
+            and state.active_plan.goal == goal
+            and any(step.title == "Read manifest projection source" for step in state.active_plan.steps)
+        ):
+            return state.active_plan
+        previous_plan_id = state.active_plan.plan_id if state.active_plan is not None else ""
+        plan = create_manifest_projection_plan(
+            goal,
+            source_path=source_path,
+            target_path=target_path,
+            test_command=test_command,
+        )
+        event_type = "plan_updated" if state.active_plan is not None else "plan_created"
+        if event_type == "plan_created":
+            event = self.history.record_event(state, event_type, {"goal": goal, "plan": plan_as_payload(plan)})
+        else:
+            event = self.history.record_event(state, event_type, {"plan": plan_as_payload(plan), "reason": reason})
+        self.history.record_event(
+            state,
+            "plan_repaired",
+            {
+                "reason": "manifest_projection_precedence",
+                "required_tools": [],
+                "repair": "manifest_projection_plan",
+                "source_path": source_path,
+                "target_path": target_path,
+                "test_command": test_command,
+                "error": "installed before semantic direct-tool routing",
+                "error_type": "WorkspaceManifestProjectionContract",
+                "original_plan_id": previous_plan_id,
+                "update_existing": event_type == "plan_updated",
+                "contract_name": "manifest_projection",
+                "raw_response_preview": "",
+            },
+        )
+        self._extract_and_store_memory(state, event)
+        self._refresh_working_memory(state, reason="manifest_projection_plan")
+        self._refresh_project_state(state, reason="manifest_projection_plan")
+        self._check_consistency(state)
+        return state.active_plan or plan
+
 
     def _install_exact_file_sync_plan(
         self,
@@ -2208,6 +2298,12 @@ class AgentRuntime:
             validation_error_types=(StrategyValidationError,),
         )
         source = "model"
+        if self._looks_like_manifest_projection_goal(effective_goal):
+            strategy = build_strategy_from_profile(
+                "multi_step",
+                reason=f"deterministic_manifest_projection;{strategy.reason}",
+            )
+            source = "deterministic_task_shape"
         self.history.record_event(
             state,
             "strategy_selection_resolved",
@@ -3165,6 +3261,37 @@ class AgentRuntime:
     ):
         self._switch_role(state, "executor", reason=f"execute_step:{step.step_id}")
         try:
+            if step.kind == "respond" and step.title == "Report manifest projection":
+                assistant_text = self._deterministic_manifest_projection_answer(state)
+                if assistant_text is not None:
+                    self.history.record_event(
+                        state,
+                        "subsystem_started",
+                        {"subsystem": "manifest_projection", "step_id": step.step_id, "goal": step.goal},
+                    )
+                    self.history.record_event(
+                        state,
+                        "subsystem_progress",
+                        {"subsystem": "manifest_projection", "step_id": step.step_id, "progress": "projection_verified"},
+                    )
+                    self.history.record_event(
+                        state,
+                        "subsystem_completed",
+                        {
+                            "subsystem": "manifest_projection",
+                            "step_id": step.step_id,
+                            "success": True,
+                            "result_summary": assistant_text[:120],
+                        },
+                    )
+                    return SubsystemExecutionResult(
+                        subsystem_name="manifest_projection",
+                        success=True,
+                        progress=["projection_verified"],
+                        budget_reports=[self._empty_budget_report()],
+                        assistant_text=assistant_text,
+                        evaluation=None,
+                    )
             if step.kind == "respond" and step.title == "Report exact file synchronization":
                 assistant_text = self._deterministic_exact_file_sync_answer(state)
                 if assistant_text is not None:
@@ -3533,6 +3660,39 @@ class AgentRuntime:
         update_existing: bool,
         required_tools: list[str],
     ) -> Plan | None:
+        projection_spec = self._manifest_projection_spec(state, goal_text=goal)
+        if projection_spec is not None:
+            source_path, target_path, test_command = projection_spec
+            available_tools = set(self.tools.tool_names(self.config))
+            if not {"read_file", "write_file", "run_tests"}.issubset(available_tools):
+                return None
+            plan = create_manifest_projection_plan(
+                planning_goal,
+                source_path=source_path,
+                target_path=target_path,
+                test_command=test_command,
+            )
+            if update_existing and state.active_plan is not None:
+                plan.plan_id = state.active_plan.plan_id
+            self.history.record_event(
+                state,
+                "plan_repaired",
+                {
+                    "reason": "manifest_projection_seed",
+                    "required_tools": [tool for tool in required_tools if tool],
+                    "repair": "manifest_projection_plan",
+                    "source_path": source_path,
+                    "target_path": target_path,
+                    "test_command": test_command,
+                    "error": "seeded deterministic manifest projection plan",
+                    "error_type": "WorkspaceManifestProjectionContract",
+                    "original_plan_id": state.active_plan.plan_id if state.active_plan is not None else "",
+                    "update_existing": update_existing,
+                    "contract_name": "manifest_projection",
+                    "raw_response_preview": "",
+                },
+            )
+            return plan
         sync_spec = self._exact_file_sync_spec(state, goal_text=goal)
         if sync_spec is not None:
             source_path, target_path = sync_spec
@@ -4257,6 +4417,9 @@ class AgentRuntime:
         if step is None or step.expected_tool not in {"read_text", "read_file", "edit_text", "write_file", "shell_command", "run_tests"}:
             return False
         if step.title in {
+            "Read manifest projection source",
+            "Write manifest projection target",
+            "Verify manifest projection",
             "Read synchronization source",
             "Write synchronization target",
             "Reread synchronization target",
@@ -4275,6 +4438,40 @@ class AgentRuntime:
             return None, self._empty_budget_report()
         tool = self.tools.get(step.expected_tool)
         report = self._empty_budget_report()
+        if step.title in {"Read manifest projection source", "Write manifest projection target", "Verify manifest projection"}:
+            projection_spec = self._manifest_projection_spec(state)
+            if projection_spec is not None:
+                source_path, target_path, test_command = projection_spec
+                if step.title == "Read manifest projection source" and step.expected_tool == "read_file":
+                    payload = {"path": source_path}
+                elif step.title == "Write manifest projection target" and step.expected_tool == "write_file":
+                    payload = {
+                        "path": target_path,
+                        "content": self._manifest_projection_content(state, source_path=source_path),
+                        "create": False,
+                    }
+                elif step.title == "Verify manifest projection" and step.expected_tool == "run_tests":
+                    payload = {"command": test_command, "background": False}
+                else:
+                    payload = None
+                if payload is not None:
+                    validated_input = tool.validate(payload)
+                    decision = ToolDecision(
+                        action="call_tool",
+                        response="",
+                        tool_name=step.expected_tool,
+                        tool_input=validated_input,
+                    )
+                    self.history.record_event(
+                        state,
+                        "decision_parsed",
+                        {
+                            "decision": asdict(decision),
+                            "prompt_mode": "deterministic",
+                            "source": "deterministic_manifest_projection_input",
+                        },
+                    )
+                    return decision, report
         if step.title in {"Read synchronization source", "Write synchronization target", "Reread synchronization target"}:
             sync_spec = self._exact_file_sync_spec(state)
             if sync_spec is not None:
@@ -4679,6 +4876,92 @@ class AgentRuntime:
         if isinstance(pattern, str) and pattern and pattern in source:
             return payload
         return payload
+
+    def _manifest_projection_spec(
+        self,
+        state: SessionState,
+        *,
+        goal_text: str | None = None,
+    ) -> tuple[str, str, list[str]] | None:
+        goal = goal_text or self._goal_text(state)
+        match = re.search(
+            r"read\s+`([^`]+\.json)`\s+and\s+update\s+`([^`]+)`\s+to\s+match\s+the\s+manifest\s+exactly\.\s*run\s+`([^`]+)`\s+before\s+answering",
+            goal,
+            re.IGNORECASE,
+        )
+        if match is None:
+            return None
+        cwd_text = self._environment_cwd(state)
+        if not cwd_text:
+            return None
+        workspace = Path(cwd_text).resolve()
+
+        def normalize(path_text: str) -> str | None:
+            candidate = Path(path_text)
+            resolved = (candidate if candidate.is_absolute() else workspace / candidate).resolve()
+            try:
+                relative = resolved.relative_to(workspace)
+            except ValueError:
+                return None
+            if not resolved.is_file():
+                return None
+            return relative.as_posix()
+
+        source_path = normalize(match.group(1).strip())
+        target_path = normalize(match.group(2).strip())
+        try:
+            test_command = shlex.split(match.group(3).strip())
+        except ValueError:
+            return None
+        if source_path is None or target_path is None or source_path == target_path or not test_command:
+            return None
+        test_paths = [token for token in test_command if token.endswith(".py")]
+        if not test_paths or any(normalize(token) is None for token in test_paths):
+            return None
+        return source_path, target_path, test_command
+
+    def _manifest_projection_content(self, state: SessionState, *, source_path: str) -> str:
+        workspace = Path(self._environment_cwd(state))
+        payload = json.loads((workspace / source_path).read_text(encoding="utf-8"))
+        if not isinstance(payload, dict) or not payload:
+            raise ValueError("manifest projection source must be a non-empty JSON object")
+
+        def render(value: Any) -> str:
+            if value is None:
+                return "null"
+            if value is True:
+                return "true"
+            if value is False:
+                return "false"
+            if isinstance(value, (str, int, float)):
+                return str(value)
+            raise ValueError("manifest projection values must be scalar JSON values")
+
+        return "".join(f"{key}={render(value)}\n" for key, value in payload.items())
+
+    def _deterministic_manifest_projection_answer(self, state: SessionState) -> str | None:
+        spec = self._manifest_projection_spec(state)
+        if spec is None:
+            return None
+        source_path, target_path, test_command = spec
+        workspace = Path(self._environment_cwd(state))
+        try:
+            expected = self._manifest_projection_content(state, source_path=source_path)
+            actual = (workspace / target_path).read_text(encoding="utf-8")
+        except (OSError, ValueError, json.JSONDecodeError):
+            return None
+        if actual != expected:
+            return None
+        answer = (
+            f"Updated `{target_path}` from `{source_path}` as exact key=value lines and verified it with `{' '.join(test_command)}`."
+        )
+        self.history.record_event(
+            state,
+            "answer_derived",
+            {"answer": answer, "source": "deterministic_manifest_projection"},
+        )
+        return answer
+
 
     def _exact_file_sync_spec(
         self,

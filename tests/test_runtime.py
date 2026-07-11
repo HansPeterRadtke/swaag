@@ -1680,6 +1680,70 @@ def test_runtime_marks_explicit_structured_read_prompt_complete(make_config) -> 
     assert normalized.requires_decomposition is False
 
 
+def test_runtime_normalizes_manifest_projection_prompt_understanding_and_strategy(make_config) -> None:
+    goal = (
+        "Read `manifest.json` and update `release_notes.txt` to match the manifest exactly. "
+        "Run `python3 -m unittest -q test_release_20.py` before answering. Summarize the final release note state."
+    )
+    runtime = AgentRuntime(
+        make_config(),
+        model_client=FakeModelClient(
+            contract_responses={
+                "strategy_selection": [
+                    json.dumps(
+                        {
+                            "task_profile": "file_edit",
+                            "strategy_name": "conservative",
+                            "explore_before_commit": False,
+                            "tool_chain_depth": 2,
+                            "verification_intensity": 1.5,
+                            "reason": "model chose file edit",
+                        }
+                    )
+                ]
+            }
+        ),
+    )
+    state = runtime.create_or_load_session()
+    analysis = PromptAnalysis(
+        task_type="structured",
+        completeness="partial",
+        requires_expansion=True,
+        requires_decomposition=True,
+        confidence=0.95,
+        detected_entities=["manifest.json", "release_notes.txt", "test_release_20.py"],
+        detected_goals=["project manifest"],
+    )
+    decision = DecisionOutcome(
+        expand_task=True,
+        split_task=False,
+        ask_user=True,
+        assume_missing=False,
+        generate_ideas=False,
+        direct_response=False,
+        execution_mode="single_tool",
+        preferred_tool_name="read_file",
+        reason="model chose one read",
+        confidence=0.95,
+    )
+
+    normalized_analysis = runtime._apply_task_contract_to_analysis(goal, analysis)
+    normalized_decision = runtime._apply_task_contract_to_decision(goal, decision)
+    strategy = runtime._select_strategy_frontend(state, goal, normalized_analysis, normalized_decision)
+
+    assert normalized_analysis.completeness == "complete"
+    assert normalized_analysis.requires_expansion is False
+    assert normalized_analysis.requires_decomposition is True
+    assert normalized_decision.expand_task is False
+    assert normalized_decision.split_task is True
+    assert normalized_decision.ask_user is False
+    assert normalized_decision.execution_mode == "full_plan"
+    assert normalized_decision.preferred_tool_name == ""
+    assert strategy.task_profile == "multi_step"
+    assert "run_tests" in strategy.allowed_tools
+    assert strategy.required_step_kinds == ["read", "write", "respond"]
+
+
 def test_runtime_strategy_selection_prompt_names_required_fields_and_prefers_standard_mode(make_config) -> None:
     runtime = AgentRuntime(
         make_config(),
@@ -3872,6 +3936,78 @@ def test_runtime_repairs_release_flow_in_dependency_order(make_config, tmp_path)
     payload = runtime._normalize_expected_tool_input(state, step, {"path": "pkg_545/report.py", "operation": "replace_pattern_once", "pattern": "missing", "replacement": "bad"})
     assert payload["path"].endswith("release_notes.txt")
     assert payload["replacement"] == "release-20:41:tax=5"
+
+
+def test_runtime_manifest_projection_is_cache_independent_and_exact(make_config, tmp_path) -> None:
+    workspace = tmp_path
+    manifest = workspace / "manifest.json"
+    target = workspace / "release_notes.txt"
+    test_file = workspace / "test_release_20.py"
+    manifest.write_text(
+        json.dumps({"service": "svc-11", "version": "4.3.3", "channel": "stable"}, indent=2) + "\n",
+        encoding="utf-8",
+    )
+    target.write_text("service=pending\nversion=pending\nchannel=pending\n", encoding="utf-8")
+    test_file.write_text("import unittest\n", encoding="utf-8")
+    config = make_config(
+        tools__read_roots=[workspace],
+        tools__allow_stateful_tools=True,
+        tools__allow_side_effect_tools=True,
+    )
+    runtime = AgentRuntime(config, model_client=FakeModelClient(responses=[]))
+    state = runtime.create_or_load_session()
+    state.environment.workspace.root = str(workspace)
+    state.environment.workspace.cwd = str(workspace)
+    state.environment.shell.cwd = str(workspace)
+    goal = (
+        "Read `manifest.json` and update `release_notes.txt` to match the manifest exactly. "
+        "Run `python3 -m unittest -q test_release_20.py` before answering. Summarize the final release note state."
+    )
+    state.messages.append(Message(role="user", content=goal, created_at="2026-01-01T00:00:00+00:00"))
+
+    plan = runtime._install_manifest_projection_plan(state, goal, reason="test_manifest_projection_precedence")
+
+    assert plan is not None
+    assert [step.expected_tool for step in plan.steps] == ["read_file", "write_file", "run_tests", None]
+    state.active_plan = plan
+    read_decision, read_report = runtime._decide_expected_tool_input(state)
+    assert read_decision is not None
+    assert read_decision.tool_input == {"path": "manifest.json"}
+    assert read_report.input_tokens == 0
+
+    plan.steps[0].status = "completed"
+    plan.steps[1].status = "running"
+    plan.current_step_id = plan.steps[1].step_id
+    write_decision, write_report = runtime._decide_expected_tool_input(state)
+    assert write_decision is not None
+    assert write_decision.tool_input == {
+        "path": "release_notes.txt",
+        "content": "service=svc-11\nversion=4.3.3\nchannel=stable\n",
+        "create": False,
+    }
+    assert write_report.input_tokens == 0
+    target.write_text(write_decision.tool_input["content"], encoding="utf-8")
+
+    plan.steps[1].status = "completed"
+    plan.steps[2].status = "running"
+    plan.current_step_id = plan.steps[2].step_id
+    test_decision, test_report = runtime._decide_expected_tool_input(state)
+    assert test_decision is not None
+    assert test_decision.tool_input["command"][-4:] == ["-m", "unittest", "-q", "test_release_20.py"]
+    assert test_decision.tool_input["background"] is False
+    assert test_report.input_tokens == 0
+
+    plan.steps[2].status = "completed"
+    plan.steps[3].status = "running"
+    plan.current_step_id = plan.steps[3].step_id
+    result = runtime._run_step_subsystem(state, plan.steps[3], action_counts={})
+    assert "exact key=value lines" in result.assistant_text
+    assert runtime.client.requests == []
+    assert any(
+        event.event_type == "decision_parsed"
+        and event.payload.get("source") == "deterministic_manifest_projection_input"
+        for event in runtime.history.read_history(state.session_id)
+    )
 
 
 def test_runtime_exact_file_sync_is_cache_independent_and_rereads(make_config, tmp_path) -> None:
