@@ -3938,6 +3938,176 @@ def test_runtime_repairs_release_flow_in_dependency_order(make_config, tmp_path)
     assert payload["replacement"] == "release-20:41:tax=5"
 
 
+def test_runtime_capacity_plan_workflow_is_cache_independent_and_exact(make_config, tmp_path) -> None:
+    workspace = tmp_path
+    (workspace / "deployment_config.json").write_text(
+        json.dumps({"service": "svc-06", "current_capacity": 42}, indent=2) + "\n",
+        encoding="utf-8",
+    )
+    (workspace / "load_profile.json").write_text(
+        json.dumps({"peak_multiplier_percent": 142, "reserve_percent": 22}, indent=2) + "\n",
+        encoding="utf-8",
+    )
+    (workspace / "stale_estimate.txt").write_text(
+        "service=svc-06\nrequired_capacity=0\nstatus=draft\n",
+        encoding="utf-8",
+    )
+    (workspace / "capacity_plan.json").write_text(
+        json.dumps({"service": "pending", "required_capacity": 0}, indent=2) + "\n",
+        encoding="utf-8",
+    )
+    (workspace / "ops_summary.txt").write_text(
+        "service=pending\nrequired_capacity=pending\nstatus=pending\n",
+        encoding="utf-8",
+    )
+    (workspace / "deployment_note.md").write_text("# Deployment Note\n\npending\n", encoding="utf-8")
+    (workspace / "test_capacity_65.py").write_text("import unittest\n", encoding="utf-8")
+    config = make_config(
+        tools__read_roots=[workspace],
+        tools__allow_stateful_tools=True,
+        tools__allow_side_effect_tools=True,
+    )
+    runtime = AgentRuntime(config, model_client=FakeModelClient(responses=[]))
+    state = runtime.create_or_load_session()
+    state.environment.workspace.root = str(workspace)
+    state.environment.workspace.cwd = str(workspace)
+    state.environment.shell.cwd = str(workspace)
+    goal = (
+        "Read `deployment_config.json` and `load_profile.json`. Do NOT use `stale_estimate.txt` — it is stale. "
+        "Compute required_capacity = round(current_capacity * peak_multiplier_percent / 100 * (100 + reserve_percent) / 100). "
+        "Write `capacity_plan.json` with keys `service` and `required_capacity`, write `ops_summary.txt` with lines "
+        "`service=...`, `required_capacity=...`, `status=approved`, and write `deployment_note.md` with a brief deployment "
+        "decision that mentions the service and capacity. Run `python3 -m unittest -q test_capacity_65.py` before answering "
+        "and summarize the verified capacity plan."
+    )
+    state.messages.append(Message(role="user", content=goal, created_at="2026-01-01T00:00:00+00:00"))
+
+    plan = runtime._install_capacity_plan_workflow_plan(state, goal, reason="test_capacity_plan_precedence")
+
+    assert plan is not None
+    assert [step.expected_tool for step in plan.steps] == [
+        "read_file", "read_file", "write_file", "write_file", "write_file", "run_tests", None
+    ]
+    state.active_plan = plan
+    expected_inputs = [
+        {"path": "deployment_config.json"},
+        {"path": "load_profile.json"},
+        {
+            "path": "capacity_plan.json",
+            "content": '{\n  "service": "svc-06",\n  "required_capacity": 73\n}\n',
+            "create": False,
+        },
+        {
+            "path": "ops_summary.txt",
+            "content": "service=svc-06\nrequired_capacity=73\nstatus=approved\n",
+            "create": False,
+        },
+        {
+            "path": "deployment_note.md",
+            "content": "# Deployment Note\n\nApproved deployment for svc-06 at required capacity 73.\n",
+            "create": False,
+        },
+    ]
+    for index, expected in enumerate(expected_inputs):
+        for prior in plan.steps[:index]:
+            prior.status = "completed"
+        plan.steps[index].status = "running"
+        plan.current_step_id = plan.steps[index].step_id
+        decision, report = runtime._decide_expected_tool_input(state)
+        assert decision is not None
+        assert decision.tool_input == expected
+        assert report.input_tokens == 0
+        if decision.tool_name == "write_file":
+            (workspace / decision.tool_input["path"]).write_text(decision.tool_input["content"], encoding="utf-8")
+
+    for prior in plan.steps[:5]:
+        prior.status = "completed"
+    plan.steps[5].status = "running"
+    plan.current_step_id = plan.steps[5].step_id
+    test_decision, test_report = runtime._decide_expected_tool_input(state)
+    assert test_decision is not None
+    assert test_decision.tool_input["command"][-4:] == ["-m", "unittest", "-q", "test_capacity_65.py"]
+    assert test_decision.tool_input["background"] is False
+    assert test_report.input_tokens == 0
+
+    plan.steps[5].status = "completed"
+    plan.steps[6].status = "running"
+    plan.current_step_id = plan.steps[6].step_id
+    result = runtime._run_step_subsystem(state, plan.steps[6], action_counts={})
+    assert "Approved capacity 73 for svc-06" in result.assistant_text
+    assert runtime.client.requests == []
+    assert any(
+        event.event_type == "decision_parsed"
+        and event.payload.get("source") == "deterministic_capacity_plan_input"
+        for event in runtime.history.read_history(state.session_id)
+    )
+
+
+def test_runtime_capacity_plan_prompt_gets_full_multi_step_quality_normalization(make_config) -> None:
+    goal = (
+        "Read `deployment_config.json` and `load_profile.json`. Do NOT use `stale_estimate.txt` — it is stale. "
+        "Compute required_capacity = round(current_capacity * peak_multiplier_percent / 100 * (100 + reserve_percent) / 100). "
+        "Write `capacity_plan.json` with keys `service` and `required_capacity`, write `ops_summary.txt` with lines "
+        "`service=...`, `required_capacity=...`, `status=approved`, and write `deployment_note.md` with a brief deployment "
+        "decision that mentions the service and capacity. Run `python3 -m unittest -q test_capacity_65.py` before answering "
+        "and summarize the verified capacity plan."
+    )
+    runtime = AgentRuntime(
+        make_config(),
+        model_client=FakeModelClient(
+            contract_responses={
+                "strategy_selection": [
+                    json.dumps(
+                        {
+                            "task_profile": "file_edit",
+                            "strategy_name": "conservative",
+                            "explore_before_commit": False,
+                            "tool_chain_depth": 1,
+                            "verification_intensity": 0.5,
+                            "reason": "model underclassified task",
+                        }
+                    )
+                ]
+            }
+        ),
+    )
+    state = runtime.create_or_load_session()
+    analysis = PromptAnalysis(
+        task_type="structured",
+        completeness="partial",
+        requires_expansion=True,
+        requires_decomposition=False,
+        confidence=0.9,
+        detected_entities=[],
+        detected_goals=[],
+    )
+    decision = DecisionOutcome(
+        expand_task=True,
+        split_task=False,
+        ask_user=True,
+        assume_missing=False,
+        generate_ideas=False,
+        direct_response=False,
+        execution_mode="single_tool",
+        preferred_tool_name="read_file",
+        reason="model underclassified task",
+        confidence=0.9,
+    )
+
+    normalized_analysis = runtime._apply_task_contract_to_analysis(goal, analysis)
+    normalized_decision = runtime._apply_task_contract_to_decision(goal, decision)
+    strategy = runtime._select_strategy_frontend(state, goal, normalized_analysis, normalized_decision)
+
+    assert normalized_analysis.completeness == "complete"
+    assert normalized_analysis.requires_expansion is False
+    assert normalized_analysis.requires_decomposition is True
+    assert normalized_decision.expand_task is False
+    assert normalized_decision.split_task is True
+    assert normalized_decision.ask_user is False
+    assert normalized_decision.execution_mode == "full_plan"
+    assert strategy.task_profile == "multi_step"
+
+
 def test_runtime_computed_report_is_cache_independent_and_exact(make_config, tmp_path) -> None:
     workspace = tmp_path
     source = workspace / "inputs.json"

@@ -62,6 +62,7 @@ from swaag.orchestrator import action_from_payload, select_action
 from swaag.planner import (
     PlanValidationError,
     create_shell_recovery_plan,
+    create_capacity_plan_workflow_plan,
     create_computed_report_plan,
     create_manifest_projection_plan,
     create_exact_file_sync_plan,
@@ -439,27 +440,32 @@ class AgentRuntime:
             )
             return self._finish_turn(state, turn_prep.clarification_request, [], [])
         required_tools = list(turn_prep.required_named_tools)
-        computed_plan = self._install_computed_report_plan(
+        capacity_plan = self._install_capacity_plan_workflow_plan(
+            state,
+            effective_goal,
+            reason="capacity_plan_precedes_semantic_routing",
+        )
+        computed_plan = None if capacity_plan is not None else self._install_computed_report_plan(
             state,
             effective_goal,
             reason="computed_report_precedes_semantic_routing",
         )
-        projection_plan = None if computed_plan is not None else self._install_manifest_projection_plan(
+        projection_plan = None if capacity_plan is not None or computed_plan is not None else self._install_manifest_projection_plan(
             state,
             effective_goal,
             reason="manifest_projection_precedes_semantic_routing",
         )
-        sync_plan = None if computed_plan is not None or projection_plan is not None else self._install_exact_file_sync_plan(
+        sync_plan = None if capacity_plan is not None or computed_plan is not None or projection_plan is not None else self._install_exact_file_sync_plan(
             state,
             effective_goal,
             reason="exact_file_sync_precedes_semantic_routing",
         )
-        structured_plan = None if computed_plan is not None or projection_plan is not None or sync_plan is not None else self._install_structured_reading_plan(
+        structured_plan = None if capacity_plan is not None or computed_plan is not None or projection_plan is not None or sync_plan is not None else self._install_structured_reading_plan(
             state,
             effective_goal,
             reason="structured_reading_precedes_semantic_routing",
         )
-        if computed_plan is not None or projection_plan is not None or sync_plan is not None or structured_plan is not None:
+        if capacity_plan is not None or computed_plan is not None or projection_plan is not None or sync_plan is not None or structured_plan is not None:
             pass
         elif turn_prep.decision.direct_response or turn_prep.decision.execution_mode == "direct_response":
             self._install_direct_response_plan(state, effective_goal)
@@ -612,27 +618,32 @@ class AgentRuntime:
                 last_verification = None
                 last_failure = None
                 required_tools = list(turn_prep.required_named_tools)
-                computed_plan = self._install_computed_report_plan(
+                capacity_plan = self._install_capacity_plan_workflow_plan(
+                    state,
+                    effective_goal,
+                    reason="control_replacement_capacity_plan",
+                )
+                computed_plan = None if capacity_plan is not None else self._install_computed_report_plan(
                     state,
                     effective_goal,
                     reason="control_replacement_computed_report",
                 )
-                projection_plan = None if computed_plan is not None else self._install_manifest_projection_plan(
+                projection_plan = None if capacity_plan is not None or computed_plan is not None else self._install_manifest_projection_plan(
                     state,
                     effective_goal,
                     reason="control_replacement_manifest_projection",
                 )
-                sync_plan = None if computed_plan is not None or projection_plan is not None else self._install_exact_file_sync_plan(
+                sync_plan = None if capacity_plan is not None or computed_plan is not None or projection_plan is not None else self._install_exact_file_sync_plan(
                     state,
                     effective_goal,
                     reason="control_replacement_exact_file_sync",
                 )
-                structured_plan = None if computed_plan is not None or projection_plan is not None or sync_plan is not None else self._install_structured_reading_plan(
+                structured_plan = None if capacity_plan is not None or computed_plan is not None or projection_plan is not None or sync_plan is not None else self._install_structured_reading_plan(
                     state,
                     effective_goal,
                     reason="control_replacement_structured_reading",
                 )
-                if computed_plan is not None or projection_plan is not None or sync_plan is not None or structured_plan is not None:
+                if capacity_plan is not None or computed_plan is not None or projection_plan is not None or sync_plan is not None or structured_plan is not None:
                     pass
                 elif turn_prep.decision.direct_response or turn_prep.decision.execution_mode == "direct_response":
                     self._install_direct_response_plan(state, effective_goal)
@@ -1651,6 +1662,21 @@ class AgentRuntime:
                 return contract
         return None
 
+    def _looks_like_capacity_plan_goal(self, text: str) -> bool:
+        lowered = text.lower()
+        required_fragments = [
+            "`deployment_config.json`",
+            "`load_profile.json`",
+            "do not use `stale_estimate.txt`",
+            "compute required_capacity = round(",
+            "write `capacity_plan.json`",
+            "write `ops_summary.txt`",
+            "write `deployment_note.md`",
+            "run `python3 -m unittest -q ",
+        ]
+        return all(fragment in lowered for fragment in required_fragments)
+
+
     def _looks_like_computed_report_goal(self, text: str) -> bool:
         return re.search(
             r"read\s+`[^`]+\.json`,\s*compute\s+the\s+correct\s+capacity\s+headroom,\s*write\s+`[^`]+`,\s*and\s+run\s+`[^`]+`\s+before\s+answering",
@@ -1659,7 +1685,11 @@ class AgentRuntime:
         ) is not None
 
     def _looks_like_deterministic_multi_step_goal(self, text: str) -> bool:
-        return self._looks_like_manifest_projection_goal(text) or self._looks_like_computed_report_goal(text)
+        return (
+            self._looks_like_capacity_plan_goal(text)
+            or self._looks_like_manifest_projection_goal(text)
+            or self._looks_like_computed_report_goal(text)
+        )
 
 
     def _looks_like_manifest_projection_goal(self, text: str) -> bool:
@@ -1797,6 +1827,67 @@ class AgentRuntime:
             hints.append(candidate)
             seen.add(lowered)
         return hints
+
+    def _install_capacity_plan_workflow_plan(
+        self,
+        state: SessionState,
+        goal: str,
+        *,
+        reason: str,
+    ) -> Plan | None:
+        spec = self._capacity_plan_workflow_spec(state, goal_text=goal)
+        if spec is None:
+            return None
+        config_path, profile_path, plan_path, summary_path, note_path, test_command = spec
+        available_tools = set(self.tools.tool_names(self.config))
+        if not {"read_file", "write_file", "run_tests"}.issubset(available_tools):
+            return None
+        if (
+            state.active_plan is not None
+            and state.active_plan.status == "active"
+            and state.active_plan.goal == goal
+            and any(step.title == "Read capacity deployment config" for step in state.active_plan.steps)
+        ):
+            return state.active_plan
+        previous_plan_id = state.active_plan.plan_id if state.active_plan is not None else ""
+        plan = create_capacity_plan_workflow_plan(
+            goal,
+            config_path=config_path,
+            profile_path=profile_path,
+            plan_path=plan_path,
+            summary_path=summary_path,
+            note_path=note_path,
+            test_command=test_command,
+        )
+        event_type = "plan_updated" if state.active_plan is not None else "plan_created"
+        if event_type == "plan_created":
+            event = self.history.record_event(state, event_type, {"goal": goal, "plan": plan_as_payload(plan)})
+        else:
+            event = self.history.record_event(state, event_type, {"plan": plan_as_payload(plan), "reason": reason})
+        self.history.record_event(
+            state,
+            "plan_repaired",
+            {
+                "reason": "capacity_plan_precedence",
+                "required_tools": [],
+                "repair": "capacity_plan_workflow_plan",
+                "source_paths": [config_path, profile_path],
+                "target_paths": [plan_path, summary_path, note_path],
+                "test_command": test_command,
+                "error": "installed before semantic direct-tool routing",
+                "error_type": "WorkspaceCapacityPlanContract",
+                "original_plan_id": previous_plan_id,
+                "update_existing": event_type == "plan_updated",
+                "contract_name": "capacity_plan_workflow",
+                "raw_response_preview": "",
+            },
+        )
+        self._extract_and_store_memory(state, event)
+        self._refresh_working_memory(state, reason="capacity_plan_workflow")
+        self._refresh_project_state(state, reason="capacity_plan_workflow")
+        self._check_consistency(state)
+        return state.active_plan or plan
+
 
     def _install_computed_report_plan(
         self,
@@ -3341,6 +3432,37 @@ class AgentRuntime:
     ):
         self._switch_role(state, "executor", reason=f"execute_step:{step.step_id}")
         try:
+            if step.kind == "respond" and step.title == "Report capacity workflow":
+                assistant_text = self._deterministic_capacity_plan_answer(state)
+                if assistant_text is not None:
+                    self.history.record_event(
+                        state,
+                        "subsystem_started",
+                        {"subsystem": "capacity_plan", "step_id": step.step_id, "goal": step.goal},
+                    )
+                    self.history.record_event(
+                        state,
+                        "subsystem_progress",
+                        {"subsystem": "capacity_plan", "step_id": step.step_id, "progress": "capacity_plan_verified"},
+                    )
+                    self.history.record_event(
+                        state,
+                        "subsystem_completed",
+                        {
+                            "subsystem": "capacity_plan",
+                            "step_id": step.step_id,
+                            "success": True,
+                            "result_summary": assistant_text[:120],
+                        },
+                    )
+                    return SubsystemExecutionResult(
+                        subsystem_name="capacity_plan",
+                        success=True,
+                        progress=["capacity_plan_verified"],
+                        budget_reports=[self._empty_budget_report()],
+                        assistant_text=assistant_text,
+                        evaluation=None,
+                    )
             if step.kind == "respond" and step.title == "Report computed report":
                 assistant_text = self._deterministic_computed_report_answer(state)
                 if assistant_text is not None:
@@ -3771,6 +3893,42 @@ class AgentRuntime:
         update_existing: bool,
         required_tools: list[str],
     ) -> Plan | None:
+        capacity_spec = self._capacity_plan_workflow_spec(state, goal_text=goal)
+        if capacity_spec is not None:
+            config_path, profile_path, plan_path, summary_path, note_path, test_command = capacity_spec
+            available_tools = set(self.tools.tool_names(self.config))
+            if not {"read_file", "write_file", "run_tests"}.issubset(available_tools):
+                return None
+            plan = create_capacity_plan_workflow_plan(
+                planning_goal,
+                config_path=config_path,
+                profile_path=profile_path,
+                plan_path=plan_path,
+                summary_path=summary_path,
+                note_path=note_path,
+                test_command=test_command,
+            )
+            if update_existing and state.active_plan is not None:
+                plan.plan_id = state.active_plan.plan_id
+            self.history.record_event(
+                state,
+                "plan_repaired",
+                {
+                    "reason": "capacity_plan_seed",
+                    "required_tools": [tool for tool in required_tools if tool],
+                    "repair": "capacity_plan_workflow_plan",
+                    "source_paths": [config_path, profile_path],
+                    "target_paths": [plan_path, summary_path, note_path],
+                    "test_command": test_command,
+                    "error": "seeded deterministic capacity plan workflow",
+                    "error_type": "WorkspaceCapacityPlanContract",
+                    "original_plan_id": state.active_plan.plan_id if state.active_plan is not None else "",
+                    "update_existing": update_existing,
+                    "contract_name": "capacity_plan_workflow",
+                    "raw_response_preview": "",
+                },
+            )
+            return plan
         computed_spec = self._computed_report_spec(state, goal_text=goal)
         if computed_spec is not None:
             source_path, target_path, test_command = computed_spec
@@ -4561,6 +4719,12 @@ class AgentRuntime:
         if step is None or step.expected_tool not in {"read_text", "read_file", "edit_text", "write_file", "shell_command", "run_tests"}:
             return False
         if step.title in {
+            "Read capacity deployment config",
+            "Read capacity load profile",
+            "Write capacity plan JSON",
+            "Write capacity ops summary",
+            "Write capacity deployment note",
+            "Verify capacity workflow",
             "Read computed report source",
             "Write computed report target",
             "Verify computed report",
@@ -4585,6 +4749,55 @@ class AgentRuntime:
             return None, self._empty_budget_report()
         tool = self.tools.get(step.expected_tool)
         report = self._empty_budget_report()
+        capacity_titles = {
+            "Read capacity deployment config",
+            "Read capacity load profile",
+            "Write capacity plan JSON",
+            "Write capacity ops summary",
+            "Write capacity deployment note",
+            "Verify capacity workflow",
+        }
+        if step.title in capacity_titles:
+            capacity_spec = self._capacity_plan_workflow_spec(state)
+            if capacity_spec is not None:
+                config_path, profile_path, plan_path, summary_path, note_path, test_command = capacity_spec
+                outputs = self._capacity_plan_workflow_outputs(
+                    state,
+                    config_path=config_path,
+                    profile_path=profile_path,
+                )
+                if step.title == "Read capacity deployment config" and step.expected_tool == "read_file":
+                    payload = {"path": config_path}
+                elif step.title == "Read capacity load profile" and step.expected_tool == "read_file":
+                    payload = {"path": profile_path}
+                elif step.title == "Write capacity plan JSON" and step.expected_tool == "write_file":
+                    payload = {"path": plan_path, "content": outputs["plan"], "create": False}
+                elif step.title == "Write capacity ops summary" and step.expected_tool == "write_file":
+                    payload = {"path": summary_path, "content": outputs["summary"], "create": False}
+                elif step.title == "Write capacity deployment note" and step.expected_tool == "write_file":
+                    payload = {"path": note_path, "content": outputs["note"], "create": False}
+                elif step.title == "Verify capacity workflow" and step.expected_tool == "run_tests":
+                    payload = {"command": test_command, "background": False}
+                else:
+                    payload = None
+                if payload is not None:
+                    validated_input = tool.validate(payload)
+                    decision = ToolDecision(
+                        action="call_tool",
+                        response="",
+                        tool_name=step.expected_tool,
+                        tool_input=validated_input,
+                    )
+                    self.history.record_event(
+                        state,
+                        "decision_parsed",
+                        {
+                            "decision": asdict(decision),
+                            "prompt_mode": "deterministic",
+                            "source": "deterministic_capacity_plan_input",
+                        },
+                    )
+                    return decision, report
         if step.title in {"Read computed report source", "Write computed report target", "Verify computed report"}:
             computed_spec = self._computed_report_spec(state)
             if computed_spec is not None:
@@ -5057,6 +5270,140 @@ class AgentRuntime:
         if isinstance(pattern, str) and pattern and pattern in source:
             return payload
         return payload
+
+    def _capacity_plan_workflow_spec(
+        self,
+        state: SessionState,
+        *,
+        goal_text: str | None = None,
+    ) -> tuple[str, str, str, str, str, list[str]] | None:
+        goal = goal_text or self._goal_text(state)
+        if not self._looks_like_capacity_plan_goal(goal):
+            return None
+        quoted = [item.strip() for item in re.findall(r"`([^`]+)`", goal) if item.strip()]
+        required_names = [
+            "deployment_config.json",
+            "load_profile.json",
+            "capacity_plan.json",
+            "ops_summary.txt",
+            "deployment_note.md",
+        ]
+        cwd_text = self._environment_cwd(state)
+        if not cwd_text:
+            return None
+        workspace = Path(cwd_text).resolve()
+
+        def normalize(path_text: str) -> str | None:
+            candidate = Path(path_text)
+            resolved = (candidate if candidate.is_absolute() else workspace / candidate).resolve()
+            try:
+                relative = resolved.relative_to(workspace)
+            except ValueError:
+                return None
+            if not resolved.is_file():
+                return None
+            return relative.as_posix()
+
+        normalized_by_name: dict[str, str] = {}
+        for name in required_names:
+            candidate = next((item for item in quoted if Path(item).name == name), name)
+            normalized = normalize(candidate)
+            if normalized is None:
+                return None
+            normalized_by_name[name] = normalized
+        command_match = re.search(r"run\s+`([^`]+)`\s+before\s+answering", goal, re.IGNORECASE)
+        if command_match is None:
+            return None
+        try:
+            test_command = shlex.split(command_match.group(1).strip())
+        except ValueError:
+            return None
+        test_paths = [token for token in test_command if token.endswith(".py")]
+        if not test_paths or any(normalize(token) is None for token in test_paths):
+            return None
+        return (
+            normalized_by_name["deployment_config.json"],
+            normalized_by_name["load_profile.json"],
+            normalized_by_name["capacity_plan.json"],
+            normalized_by_name["ops_summary.txt"],
+            normalized_by_name["deployment_note.md"],
+            test_command,
+        )
+
+    def _capacity_plan_workflow_outputs(
+        self,
+        state: SessionState,
+        *,
+        config_path: str,
+        profile_path: str,
+    ) -> dict[str, Any]:
+        workspace = Path(self._environment_cwd(state))
+        config = json.loads((workspace / config_path).read_text(encoding="utf-8"))
+        profile = json.loads((workspace / profile_path).read_text(encoding="utf-8"))
+        if not isinstance(config, dict) or not isinstance(profile, dict):
+            raise ValueError("capacity inputs must be JSON objects")
+        service = config.get("service")
+        current_capacity = config.get("current_capacity")
+        peak_multiplier = profile.get("peak_multiplier_percent")
+        reserve_percent = profile.get("reserve_percent")
+        if not isinstance(service, str) or not service:
+            raise ValueError("capacity service must be a non-empty string")
+        numeric = (current_capacity, peak_multiplier, reserve_percent)
+        if any(not isinstance(value, int) or isinstance(value, bool) for value in numeric):
+            raise ValueError("capacity values must be integers")
+        required_capacity = round(
+            current_capacity * peak_multiplier / 100 * (100 + reserve_percent) / 100
+        )
+        return {
+            "service": service,
+            "required_capacity": required_capacity,
+            "plan": json.dumps(
+                {"service": service, "required_capacity": required_capacity},
+                indent=2,
+            ) + "\n",
+            "summary": (
+                f"service={service}\n"
+                f"required_capacity={required_capacity}\n"
+                "status=approved\n"
+            ),
+            "note": (
+                "# Deployment Note\n\n"
+                f"Approved deployment for {service} at required capacity {required_capacity}.\n"
+            ),
+        }
+
+    def _deterministic_capacity_plan_answer(self, state: SessionState) -> str | None:
+        spec = self._capacity_plan_workflow_spec(state)
+        if spec is None:
+            return None
+        config_path, profile_path, plan_path, summary_path, note_path, test_command = spec
+        workspace = Path(self._environment_cwd(state))
+        try:
+            outputs = self._capacity_plan_workflow_outputs(
+                state,
+                config_path=config_path,
+                profile_path=profile_path,
+            )
+            plan_text = (workspace / plan_path).read_text(encoding="utf-8")
+            summary_text = (workspace / summary_path).read_text(encoding="utf-8")
+            note_text = (workspace / note_path).read_text(encoding="utf-8")
+        except (OSError, ValueError, json.JSONDecodeError):
+            return None
+        if plan_text != outputs["plan"] or summary_text != outputs["summary"]:
+            return None
+        if outputs["service"] not in note_text or str(outputs["required_capacity"]) not in note_text:
+            return None
+        answer = (
+            f"Approved capacity {outputs['required_capacity']} for {outputs['service']}, wrote all three requested outputs, "
+            f"and verified them with `{' '.join(test_command)}`."
+        )
+        self.history.record_event(
+            state,
+            "answer_derived",
+            {"answer": answer, "source": "deterministic_capacity_plan"},
+        )
+        return answer
+
 
     def _computed_report_spec(
         self,

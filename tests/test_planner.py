@@ -7,6 +7,7 @@ import pytest
 from swaag.planner import (
     PlanValidationError,
     create_shell_recovery_plan,
+    create_capacity_plan_workflow_plan,
     create_computed_report_plan,
     create_manifest_projection_plan,
     create_exact_file_sync_plan,
@@ -119,6 +120,30 @@ def test_create_shell_recovery_plan_reads_explicit_named_source_without_shell() 
     assert plan.steps[0].input_text == "pkg_261/slugify.py"
     assert plan.steps[0].done_condition == "tool_result:read_text"
     assert "pkg_261/slugify.py" in plan.steps[1].input_text
+
+
+def test_create_capacity_plan_workflow_plan_has_all_required_steps() -> None:
+    plan = create_capacity_plan_workflow_plan(
+        "Build capacity plan.",
+        config_path="deployment_config.json",
+        profile_path="load_profile.json",
+        plan_path="capacity_plan.json",
+        summary_path="ops_summary.txt",
+        note_path="deployment_note.md",
+        test_command=["python3", "-m", "unittest", "-q", "test_capacity_65.py"],
+    )
+
+    assert [step.expected_tool for step in plan.steps] == [
+        "read_file",
+        "read_file",
+        "write_file",
+        "write_file",
+        "write_file",
+        "run_tests",
+        None,
+    ]
+    assert all(plan.steps[index].depends_on == [plan.steps[index - 1].step_id] for index in range(1, len(plan.steps)))
+    assert plan.steps[-1].title == "Report capacity workflow"
 
 
 def test_create_computed_report_plan_reads_writes_tests_and_reports() -> None:

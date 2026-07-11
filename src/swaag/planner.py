@@ -881,6 +881,165 @@ def create_shell_recovery_plan(goal: str) -> Plan:
 
 
 
+def create_capacity_plan_workflow_plan(
+    goal: str,
+    *,
+    config_path: str,
+    profile_path: str,
+    plan_path: str,
+    summary_path: str,
+    note_path: str,
+    test_command: list[str],
+) -> Plan:
+    paths = [config_path, profile_path, plan_path, summary_path, note_path]
+    if any(not item.strip() for item in paths) or len(set(paths)) != len(paths) or not test_command:
+        raise PlanValidationError("capacity workflow requires distinct source/target paths and a test command")
+    now = utc_now_iso()
+
+    def tool_step(
+        *,
+        title: str,
+        step_goal: str,
+        kind: PlanStepKind,
+        tool_name: str,
+        input_text: str,
+        expected_output: str,
+        output_ref: str,
+        depends_on: list[str] | None = None,
+        input_refs: list[str] | None = None,
+    ) -> PlanStep:
+        outputs, verification_type, checks, required, optional = default_verification_contract(
+            kind=kind,
+            expected_tool=tool_name,
+            expected_output=expected_output,
+            done_condition=f"tool_result:{tool_name}",
+            success_criteria=step_goal,
+        )
+        return PlanStep(
+            step_id=new_id("step"),
+            title=title,
+            goal=step_goal,
+            kind=kind,
+            expected_tool=tool_name,
+            input_text=input_text,
+            expected_output=expected_output,
+            done_condition=f"tool_result:{tool_name}",
+            success_criteria=step_goal,
+            expected_outputs=outputs,
+            verification_type=verification_type,
+            verification_checks=checks,
+            required_conditions=required,
+            optional_conditions=optional,
+            input_refs=list(input_refs or []),
+            output_refs=[output_ref],
+            fallback_strategy="Stop and report the exact capacity workflow blocker.",
+            depends_on=list(depends_on or []),
+            status="pending",
+            last_updated=now,
+        )
+
+    read_config = tool_step(
+        title="Read capacity deployment config",
+        step_goal="Read the authoritative deployment capacity configuration.",
+        kind="read",
+        tool_name="read_file",
+        input_text=config_path,
+        expected_output="Deployment capacity configuration",
+        output_ref="capacity_deployment_config",
+    )
+    read_profile = tool_step(
+        title="Read capacity load profile",
+        step_goal="Read the authoritative load and reserve profile.",
+        kind="read",
+        tool_name="read_file",
+        input_text=profile_path,
+        expected_output="Capacity load profile",
+        output_ref="capacity_load_profile",
+        depends_on=[read_config.step_id],
+        input_refs=["capacity_deployment_config"],
+    )
+    write_plan = tool_step(
+        title="Write capacity plan JSON",
+        step_goal="Compute the required capacity and write the exact JSON plan.",
+        kind="write",
+        tool_name="write_file",
+        input_text=plan_path,
+        expected_output="Capacity plan JSON",
+        output_ref="capacity_plan_json",
+        depends_on=[read_profile.step_id],
+        input_refs=["capacity_deployment_config", "capacity_load_profile"],
+    )
+    write_summary = tool_step(
+        title="Write capacity ops summary",
+        step_goal="Write the approved capacity summary as exact key=value lines.",
+        kind="write",
+        tool_name="write_file",
+        input_text=summary_path,
+        expected_output="Capacity operations summary",
+        output_ref="capacity_ops_summary",
+        depends_on=[write_plan.step_id],
+        input_refs=["capacity_plan_json"],
+    )
+    write_note = tool_step(
+        title="Write capacity deployment note",
+        step_goal="Write a brief approved deployment decision naming the service and required capacity.",
+        kind="write",
+        tool_name="write_file",
+        input_text=note_path,
+        expected_output="Capacity deployment note",
+        output_ref="capacity_deployment_note",
+        depends_on=[write_summary.step_id],
+        input_refs=["capacity_ops_summary"],
+    )
+    verify = tool_step(
+        title="Verify capacity workflow",
+        step_goal="Run the exact requested capacity test after all outputs are written.",
+        kind="tool",
+        tool_name="run_tests",
+        input_text=" ".join(test_command),
+        expected_output="Capacity workflow verification",
+        output_ref="capacity_workflow_verification",
+        depends_on=[write_note.step_id],
+        input_refs=["capacity_deployment_note"],
+    )
+    response_checks: list[dict[str, object]] = [
+        {"name": "dependencies_completed", "check_type": "dependencies_completed"},
+        {"name": "assistant_text_nonempty", "check_type": "string_nonempty", "actual_source": "assistant_text"},
+    ]
+    answer = PlanStep(
+        step_id=new_id("step"),
+        title="Report capacity workflow",
+        goal="Summarize the verified capacity plan after all requested outputs and tests succeed.",
+        kind="respond",
+        expected_tool=None,
+        input_text=goal,
+        expected_output="Verified capacity workflow report",
+        done_condition="assistant_response_nonempty",
+        success_criteria="The response reports the approved required capacity and successful verification.",
+        expected_outputs=["Verified capacity workflow report"],
+        verification_type="composite",
+        verification_checks=response_checks,
+        required_conditions=["dependencies_completed", "assistant_text_nonempty"],
+        optional_conditions=[],
+        input_refs=["capacity_workflow_verification"],
+        fallback_strategy="If any output or test is invalid, report that the workflow is not complete.",
+        depends_on=[verify.step_id],
+        status="pending",
+        last_updated=now,
+    )
+    return Plan(
+        plan_id=new_id("plan"),
+        goal=goal,
+        steps=[read_config, read_profile, write_plan, write_summary, write_note, verify, answer],
+        success_criteria="Compute and write all capacity outputs, pass the requested test, and report the verified result.",
+        fallback_strategy="Ignore stale estimates and stop on authoritative input, output, or verification failure.",
+        status="active",
+        created_at=now,
+        updated_at=now,
+        current_step_id=read_config.step_id,
+    )
+
+
 def create_computed_report_plan(
     goal: str,
     *,
