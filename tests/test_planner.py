@@ -7,6 +7,7 @@ import pytest
 from swaag.planner import (
     PlanValidationError,
     create_shell_recovery_plan,
+    create_deployment_refinement_workflow_plan,
     create_filesystem_release_workflow_plan,
     create_shell_release_workflow_plan,
     create_capacity_plan_workflow_plan,
@@ -122,6 +123,24 @@ def test_create_shell_recovery_plan_reads_explicit_named_source_without_shell() 
     assert plan.steps[0].input_text == "pkg_261/slugify.py"
     assert plan.steps[0].done_condition == "tool_result:read_text"
     assert "pkg_261/slugify.py" in plan.steps[1].input_text
+
+
+def test_create_deployment_refinement_workflow_plan_is_canonical() -> None:
+    plan = create_deployment_refinement_workflow_plan(
+        "Refine deployment.",
+        spec_path="deployment_spec.json",
+        infra_path="infra_plan.txt",
+        rollout_path="rollout_plan.json",
+        test_command=["python3", "-m", "unittest", "-q", "test_deployment_consistency_56.py"],
+    )
+    assert [step.expected_tool for step in plan.steps] == ["read_file", "write_file", "write_file", "run_tests", None]
+    assert [step.title for step in plan.steps] == [
+        "Read deployment refinement spec",
+        "Write deployment infra plan",
+        "Write deployment rollout plan",
+        "Verify deployment refinement",
+        "Report deployment refinement",
+    ]
 
 
 def test_create_filesystem_release_workflow_plan_lists_reads_writes_rereads_tests_and_reports() -> None:

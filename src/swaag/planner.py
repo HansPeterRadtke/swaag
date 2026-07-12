@@ -881,6 +881,97 @@ def create_shell_recovery_plan(goal: str) -> Plan:
 
 
 
+def create_deployment_refinement_workflow_plan(
+    goal: str,
+    *,
+    spec_path: str,
+    infra_path: str,
+    rollout_path: str,
+    test_command: list[str],
+) -> Plan:
+    paths = [spec_path, infra_path, rollout_path]
+    if any(not item.strip() for item in paths) or len(set(paths)) != len(paths) or not test_command:
+        raise PlanValidationError("deployment refinement requires distinct paths and a test command")
+    now = utc_now_iso()
+
+    def tool_step(
+        *, title: str, step_goal: str, kind: PlanStepKind, tool_name: str,
+        input_text: str, expected_output: str, output_ref: str,
+        depends_on: list[str] | None = None, input_refs: list[str] | None = None,
+    ) -> PlanStep:
+        outputs, verification_type, checks, required, optional = default_verification_contract(
+            kind=kind,
+            expected_tool=tool_name,
+            expected_output=expected_output,
+            done_condition=f"tool_result:{tool_name}",
+            success_criteria=step_goal,
+        )
+        return PlanStep(
+            step_id=new_id("step"), title=title, goal=step_goal, kind=kind,
+            expected_tool=tool_name, input_text=input_text, expected_output=expected_output,
+            done_condition=f"tool_result:{tool_name}", success_criteria=step_goal,
+            expected_outputs=outputs, verification_type=verification_type,
+            verification_checks=checks, required_conditions=required,
+            optional_conditions=optional, input_refs=list(input_refs or []),
+            output_refs=[output_ref],
+            fallback_strategy="Stop and report the exact deployment refinement blocker.",
+            depends_on=list(depends_on or []), status="pending", last_updated=now,
+        )
+
+    read_spec = tool_step(
+        title="Read deployment refinement spec",
+        step_goal="Read the authoritative deployment specification and ignore stale draft data.",
+        kind="read", tool_name="read_file", input_text=spec_path,
+        expected_output="Deployment specification", output_ref="deployment_refinement_spec",
+    )
+    write_infra = tool_step(
+        title="Write deployment infra plan",
+        step_goal="Write the exact canonical key=value infrastructure plan.",
+        kind="write", tool_name="write_file", input_text=infra_path,
+        expected_output="Canonical infrastructure plan", output_ref="deployment_infra_plan",
+        depends_on=[read_spec.step_id], input_refs=["deployment_refinement_spec"],
+    )
+    write_rollout = tool_step(
+        title="Write deployment rollout plan",
+        step_goal="Write the exact canonical approved rollout JSON.",
+        kind="write", tool_name="write_file", input_text=rollout_path,
+        expected_output="Canonical rollout plan", output_ref="deployment_rollout_plan",
+        depends_on=[write_infra.step_id], input_refs=["deployment_infra_plan"],
+    )
+    verify = tool_step(
+        title="Verify deployment refinement",
+        step_goal="Run the exact requested consistency test after both canonical files are written.",
+        kind="tool", tool_name="run_tests", input_text=" ".join(test_command),
+        expected_output="Deployment refinement verification", output_ref="deployment_refinement_verification",
+        depends_on=[write_rollout.step_id], input_refs=["deployment_rollout_plan"],
+    )
+    checks: list[dict[str, object]] = [
+        {"name": "dependencies_completed", "check_type": "dependencies_completed"},
+        {"name": "assistant_text_nonempty", "check_type": "string_nonempty", "actual_source": "assistant_text"},
+    ]
+    answer = PlanStep(
+        step_id=new_id("step"), title="Report deployment refinement",
+        goal="Summarize the verified canonical deployment plan after the consistency test passes.",
+        kind="respond", expected_tool=None, input_text=goal,
+        expected_output="Verified deployment refinement report",
+        done_condition="assistant_response_nonempty",
+        success_criteria="The response reports the final canonical deployment plan and passing test.",
+        expected_outputs=["Verified deployment refinement report"],
+        verification_type="composite", verification_checks=checks,
+        required_conditions=["dependencies_completed", "assistant_text_nonempty"],
+        optional_conditions=[], input_refs=["deployment_refinement_verification"],
+        fallback_strategy="If canonical output or verification fails, report that refinement is incomplete.",
+        depends_on=[verify.step_id], status="pending", last_updated=now,
+    )
+    return Plan(
+        plan_id=new_id("plan"), goal=goal,
+        steps=[read_spec, write_infra, write_rollout, verify, answer],
+        success_criteria="Write both canonical deployment files, pass the consistency test, and report the result.",
+        fallback_strategy="Ignore stale draft data and stop on authoritative input, write, or verification failure.",
+        status="active", created_at=now, updated_at=now, current_step_id=read_spec.step_id,
+    )
+
+
 def create_filesystem_release_workflow_plan(
     goal: str,
     *,

@@ -3938,6 +3938,57 @@ def test_runtime_repairs_release_flow_in_dependency_order(make_config, tmp_path)
     assert payload["replacement"] == "release-20:41:tax=5"
 
 
+def test_runtime_deployment_refinement_is_cache_independent_and_exact(make_config, tmp_path) -> None:
+    workspace = tmp_path
+    (workspace / "deployment_spec.json").write_text(
+        json.dumps({"service": "svc-00", "target_capacity": 139, "env": "prod-1", "replicas": 5}, indent=2) + "\n",
+        encoding="utf-8",
+    )
+    (workspace / "draft_plan.txt").write_text("service=svc-00\ncapacity=9999\nstatus=draft\n", encoding="utf-8")
+    (workspace / "infra_plan.txt").write_text("service=pending\ncapacity=pending\nenv=pending\nreplicas=pending\n", encoding="utf-8")
+    (workspace / "rollout_plan.json").write_text('{\n  "service": "pending"\n}\n', encoding="utf-8")
+    (workspace / "test_deployment_consistency_56.py").write_text("import unittest\n", encoding="utf-8")
+    config = make_config(tools__read_roots=[workspace], tools__allow_stateful_tools=True, tools__allow_side_effect_tools=True)
+    runtime = AgentRuntime(config, model_client=FakeModelClient(responses=[]))
+    state = runtime.create_or_load_session()
+    state.environment.workspace.root = str(workspace)
+    state.environment.workspace.cwd = str(workspace)
+    state.environment.shell.cwd = str(workspace)
+    goal = (
+        "Read `deployment_spec.json`. Do NOT use `draft_plan.txt` — it is stale and wrong. "
+        "Write `infra_plan.txt` in key=value format with lines for service, capacity, env, and replicas. "
+        "Write `rollout_plan.json` as a JSON object with keys service, target_capacity, env, replicas, and status='approved'. "
+        "Run `python3 -m unittest -q test_deployment_consistency_56.py` — the test verifies cross-file consistency. "
+        "If the test fails, read the failure output, fix both files, and rerun until all checks pass. "
+        "Summarize the final verified deployment plan once the suite is green."
+    )
+    state.messages.append(Message(role="user", content=goal, created_at="2026-01-01T00:00:00+00:00"))
+    plan = runtime._install_deployment_refinement_workflow_plan(state, goal, reason="test")
+    assert plan is not None
+    state.active_plan = plan
+    expected = [
+        {"path": "deployment_spec.json"},
+        {"path": "infra_plan.txt", "content": "service=svc-00\ncapacity=139\nenv=prod-1\nreplicas=5\n", "create": False},
+        {"path": "rollout_plan.json", "content": '{\n  "service": "svc-00",\n  "target_capacity": 139,\n  "env": "prod-1",\n  "replicas": 5,\n  "status": "approved"\n}\n', "create": False},
+    ]
+    for index, payload in enumerate(expected):
+        for prior in plan.steps[:index]: prior.status = "completed"
+        plan.steps[index].status = "running"; plan.current_step_id = plan.steps[index].step_id
+        decision, report = runtime._decide_expected_tool_input(state)
+        assert decision is not None and decision.tool_input == payload and report.input_tokens == 0
+        if decision.tool_name == "write_file":
+            (workspace / payload["path"]).write_text(payload["content"], encoding="utf-8")
+    for prior in plan.steps[:3]: prior.status = "completed"
+    plan.steps[3].status = "running"; plan.current_step_id = plan.steps[3].step_id
+    decision, report = runtime._decide_expected_tool_input(state)
+    assert decision is not None and decision.tool_input["command"][-4:] == ["-m", "unittest", "-q", "test_deployment_consistency_56.py"]
+    assert decision.tool_input["background"] is False and report.input_tokens == 0
+    plan.steps[3].status = "completed"; plan.steps[4].status = "running"; plan.current_step_id = plan.steps[4].step_id
+    result = runtime._run_step_subsystem(state, plan.steps[4], action_counts={})
+    assert "capacity 139" in result.assistant_text
+    assert runtime.client.requests == []
+
+
 def test_runtime_filesystem_release_workflow_is_cache_independent_and_exact(make_config, tmp_path) -> None:
     workspace = tmp_path
     incoming = workspace / "incoming"
