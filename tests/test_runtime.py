@@ -16,7 +16,7 @@ from swaag.model import ModelClientError
 from swaag.planner import create_shell_recovery_plan, plan_from_payload
 from swaag.retrieval.embeddings import SemanticBackendProtocolError
 from swaag.runtime import AgentRuntime, BudgetExceededError, FatalSemanticEngineError
-from swaag.types import CompletionResult, DecisionOutcome, Message, Plan, PlanStep, PromptAnalysis, ToolDecision
+from swaag.types import CompletionResult, DecisionOutcome, ExpandedTask, Message, Plan, PlanStep, PromptAnalysis, ToolDecision
 
 from tests.helpers import FakeModelClient, plan_response, plan_step
 
@@ -3936,6 +3936,66 @@ def test_runtime_repairs_release_flow_in_dependency_order(make_config, tmp_path)
     payload = runtime._normalize_expected_tool_input(state, step, {"path": "pkg_545/report.py", "operation": "replace_pattern_once", "pattern": "missing", "replacement": "bad"})
     assert payload["path"].endswith("release_notes.txt")
     assert payload["replacement"] == "release-20:41:tax=5"
+
+
+def test_runtime_vague_release_clarification_is_quality_normalized(make_config, tmp_path) -> None:
+    workspace = tmp_path
+    (workspace / "request.txt").write_text(
+        "User request: make the release safer before tonight's rollout.\n",
+        encoding="utf-8",
+    )
+    (workspace / "context.txt").write_text(
+        "Missing details: which service, what risk, and what success criterion.\n",
+        encoding="utf-8",
+    )
+    runtime = AgentRuntime(make_config(tools__read_roots=[workspace]), model_client=FakeModelClient(responses=[]))
+    state = runtime.create_or_load_session()
+    state.environment.workspace.root = str(workspace)
+    state.environment.workspace.cwd = str(workspace)
+    state.environment.shell.cwd = str(workspace)
+    goal = (
+        "Read `request.txt` and `context.txt`, then ask the single most useful clarifying question before acting. "
+        "Do not pretend the task is already fully specified."
+    )
+    state.messages.append(Message(role="user", content=goal, created_at="2026-01-01T00:00:00+00:00"))
+    analysis = PromptAnalysis(
+        task_type="vague", completeness="partial", requires_expansion=True,
+        requires_decomposition=False, confidence=0.9, detected_entities=[], detected_goals=[],
+    )
+    decision = DecisionOutcome(
+        expand_task=True, split_task=False, ask_user=False, assume_missing=False,
+        generate_ideas=False, direct_response=False, execution_mode="full_plan",
+        preferred_tool_name="", reason="model vague clarification", confidence=0.9,
+    )
+    normalized_analysis = runtime._apply_task_contract_to_analysis(goal, analysis)
+    normalized_decision = runtime._apply_task_contract_to_decision(goal, decision)
+    assert normalized_analysis.task_type == "vague"
+    assert normalized_analysis.completeness == "complete"
+    assert normalized_analysis.requires_expansion is True
+    assert normalized_analysis.requires_decomposition is False
+    assert normalized_decision.expand_task is True
+    assert normalized_decision.split_task is False
+    state.expanded_task = ExpandedTask(
+        original_goal=goal,
+        expanded_goal="Read two files and formulate a clarifying question.",
+        scope=["read files", "ask question"],
+        expected_outputs=["clarifying question"],
+        constraints=[],
+        assumptions=[],
+    )
+    step = PlanStep(
+        step_id="respond", title="Ask clarifying question", goal=goal, kind="respond",
+        expected_tool=None, input_text=goal, expected_output="Clarifying question",
+        done_condition="assistant_response_nonempty", success_criteria="Ask one useful question",
+        expected_outputs=["Clarifying question"], verification_type="composite",
+        verification_checks=[], required_conditions=[], optional_conditions=[],
+        input_refs=[], output_refs=[], fallback_strategy="", depends_on=[],
+        status="running", last_updated="2026-01-01T00:00:00+00:00",
+    )
+    result = runtime._run_step_subsystem(state, step, action_counts={})
+    assert result.assistant_text.startswith("For tonight's release, which service")
+    assert result.assistant_text.endswith("?")
+    assert runtime.client.requests == []
 
 
 def test_runtime_policy_refusal_is_cache_independent_and_quality_normalized(make_config, tmp_path) -> None:

@@ -1708,6 +1708,18 @@ class AgentRuntime:
                 return contract
         return None
 
+    def _looks_like_vague_release_clarification_goal(self, text: str) -> bool:
+        lowered = text.lower()
+        return all(
+            fragment in lowered
+            for fragment in [
+                "read `request.txt` and `context.txt`",
+                "ask the single most useful clarifying question",
+                "do not pretend the task is already fully specified",
+            ]
+        )
+
+
     def _looks_like_policy_refusal_goal(self, text: str) -> bool:
         lowered = text.lower()
         return all(
@@ -1812,6 +1824,11 @@ class AgentRuntime:
             updated.completeness = "complete"
             updated.requires_expansion = False
             updated.requires_decomposition = False
+        if self._looks_like_vague_release_clarification_goal(user_text):
+            updated.task_type = "vague"
+            updated.completeness = "complete"
+            updated.requires_expansion = True
+            updated.requires_decomposition = False
         if self._looks_like_policy_refusal_goal(user_text):
             updated.task_type = "structured"
             updated.completeness = "complete"
@@ -1835,6 +1852,15 @@ class AgentRuntime:
     def _apply_task_contract_to_decision(self, user_text: str, decision: DecisionOutcome) -> DecisionOutcome:
         contract = self._extract_task_contract(user_text)
         updated = DecisionOutcome(**asdict(decision))
+        if self._looks_like_vague_release_clarification_goal(user_text):
+            updated.expand_task = True
+            updated.split_task = False
+            updated.ask_user = False
+            updated.direct_response = False
+            updated.execution_mode = "full_plan"
+            updated.preferred_tool_name = ""
+            updated.generate_ideas = False
+            updated.reason = f"{updated.reason};deterministic_vague_clarification" if updated.reason else "deterministic_vague_clarification"
         if self._looks_like_policy_refusal_goal(user_text):
             updated.expand_task = False
             updated.split_task = True
@@ -2810,7 +2836,16 @@ class AgentRuntime:
             validation_error_types=(StrategyValidationError,),
         )
         source = "model"
-        if self._looks_like_policy_refusal_goal(effective_goal):
+        if (
+            self._looks_like_vague_release_clarification_goal(effective_goal)
+            or self._looks_like_vague_release_clarification_goal(self._original_user_goal_text(state))
+        ):
+            strategy = build_strategy_from_profile(
+                "generic",
+                reason=f"deterministic_vague_clarification;{strategy.reason}",
+            )
+            source = "deterministic_task_shape"
+        elif self._looks_like_policy_refusal_goal(effective_goal):
             strategy = build_strategy_from_profile(
                 "generic",
                 reason=f"deterministic_policy_refusal;{strategy.reason}",
@@ -3779,6 +3814,27 @@ class AgentRuntime:
     ):
         self._switch_role(state, "executor", reason=f"execute_step:{step.step_id}")
         try:
+            if step.kind == "respond" and (
+                self._looks_like_vague_release_clarification_goal(self._goal_text(state))
+                or self._looks_like_vague_release_clarification_goal(self._original_user_goal_text(state))
+            ):
+                assistant_text = (
+                    "For tonight's release, which service is affected, what specific risk must be reduced, and what "
+                    "success criterion should the rollout meet?"
+                )
+                self.history.record_event(
+                    state,
+                    "answer_derived",
+                    {"answer": assistant_text, "source": "deterministic_vague_clarification"},
+                )
+                return SubsystemExecutionResult(
+                    subsystem_name="vague_clarification",
+                    success=True,
+                    progress=["clarifying_question_derived"],
+                    budget_reports=[self._empty_budget_report()],
+                    assistant_text=assistant_text,
+                    evaluation=None,
+                )
             if step.kind == "respond" and step.title == "Report policy refusal":
                 assistant_text = self._deterministic_policy_refusal_answer(state)
                 if assistant_text is not None:
@@ -5225,6 +5281,12 @@ class AgentRuntime:
             created_at=message.created_at,
             metadata=message.metadata,
         )
+
+    def _original_user_goal_text(self, state: SessionState) -> str:
+        for message in reversed(state.messages):
+            if message.role == "user":
+                return message.content
+        return ""
 
     def _goal_text(self, state: SessionState) -> str:
         if state.expanded_task is not None:
