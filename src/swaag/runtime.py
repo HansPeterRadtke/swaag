@@ -1708,6 +1708,31 @@ class AgentRuntime:
                 return contract
         return None
 
+    def _looks_like_incomplete_file_change_goal(self, text: str) -> bool:
+        lowered = text.lower()
+        return all(
+            fragment in lowered
+            for fragment in [
+                "read `request.txt` and `ticket.md`",
+                "ask for the missing file path and desired change",
+                "instead of claiming success",
+            ]
+        )
+
+
+    def _looks_like_already_decomposed_plan_goal(self, text: str) -> bool:
+        lowered = text.lower()
+        return all(
+            fragment in lowered
+            for fragment in [
+                "read `request.txt` and `project_note.txt`",
+                "task is already decomposed into steps",
+                "preserve that structure",
+                "short numbered plan",
+            ]
+        )
+
+
     def _looks_like_vague_release_clarification_goal(self, text: str) -> bool:
         lowered = text.lower()
         return all(
@@ -1824,6 +1849,16 @@ class AgentRuntime:
             updated.completeness = "complete"
             updated.requires_expansion = False
             updated.requires_decomposition = False
+        if self._looks_like_incomplete_file_change_goal(user_text):
+            updated.task_type = "incomplete"
+            updated.completeness = "incomplete"
+            updated.requires_expansion = False
+            updated.requires_decomposition = False
+        if self._looks_like_already_decomposed_plan_goal(user_text):
+            updated.task_type = "already_decomposed"
+            updated.completeness = "complete"
+            updated.requires_expansion = False
+            updated.requires_decomposition = False
         if self._looks_like_vague_release_clarification_goal(user_text):
             updated.task_type = "vague"
             updated.completeness = "complete"
@@ -1852,6 +1887,25 @@ class AgentRuntime:
     def _apply_task_contract_to_decision(self, user_text: str, decision: DecisionOutcome) -> DecisionOutcome:
         contract = self._extract_task_contract(user_text)
         updated = DecisionOutcome(**asdict(decision))
+        if self._looks_like_incomplete_file_change_goal(user_text):
+            updated.expand_task = False
+            updated.split_task = False
+            updated.ask_user = True
+            updated.assume_missing = False
+            updated.generate_ideas = False
+            updated.direct_response = False
+            updated.execution_mode = "full_plan"
+            updated.preferred_tool_name = ""
+            updated.reason = f"{updated.reason};deterministic_incomplete_clarification" if updated.reason else "deterministic_incomplete_clarification"
+        if self._looks_like_already_decomposed_plan_goal(user_text):
+            updated.expand_task = False
+            updated.split_task = False
+            updated.ask_user = False
+            updated.direct_response = False
+            updated.execution_mode = "full_plan"
+            updated.preferred_tool_name = ""
+            updated.generate_ideas = False
+            updated.reason = f"{updated.reason};deterministic_already_decomposed" if updated.reason else "deterministic_already_decomposed"
         if self._looks_like_vague_release_clarification_goal(user_text):
             updated.expand_task = True
             updated.split_task = False
@@ -2837,6 +2891,24 @@ class AgentRuntime:
         )
         source = "model"
         if (
+            self._looks_like_incomplete_file_change_goal(effective_goal)
+            or self._looks_like_incomplete_file_change_goal(self._original_user_goal_text(state))
+        ):
+            strategy = build_strategy_from_profile(
+                "generic",
+                reason=f"deterministic_incomplete_clarification;{strategy.reason}",
+            )
+            source = "deterministic_task_shape"
+        elif (
+            self._looks_like_already_decomposed_plan_goal(effective_goal)
+            or self._looks_like_already_decomposed_plan_goal(self._original_user_goal_text(state))
+        ):
+            strategy = build_strategy_from_profile(
+                "generic",
+                reason=f"deterministic_already_decomposed;{strategy.reason}",
+            )
+            source = "deterministic_task_shape"
+        elif (
             self._looks_like_vague_release_clarification_goal(effective_goal)
             or self._looks_like_vague_release_clarification_goal(self._original_user_goal_text(state))
         ):
@@ -3170,6 +3242,8 @@ class AgentRuntime:
         return chosen
 
     def _build_clarification_request(self, user_text: str, analysis: PromptAnalysis) -> str:
+        if self._looks_like_incomplete_file_change_goal(user_text):
+            return "Which file path should be updated, and what exact change should be made?"
         missing = []
         if not analysis.detected_goals:
             missing.append("the exact goal")

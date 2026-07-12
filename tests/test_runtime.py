@@ -3938,6 +3938,69 @@ def test_runtime_repairs_release_flow_in_dependency_order(make_config, tmp_path)
     assert payload["replacement"] == "release-20:41:tax=5"
 
 
+def test_runtime_incomplete_file_change_clarification_is_quality_normalized(make_config) -> None:
+    runtime = AgentRuntime(make_config(), model_client=FakeModelClient(responses=[]))
+    state = runtime.create_or_load_session()
+    goal = (
+        "Read `request.txt` and `ticket.md`. Ask for the missing file path and desired change instead of claiming success."
+    )
+    state.messages.append(Message(role="user", content=goal, created_at="2026-01-01T00:00:00+00:00"))
+    analysis = PromptAnalysis(
+        task_type="unstructured", completeness="incomplete", requires_expansion=True,
+        requires_decomposition=False, confidence=0.95,
+        detected_entities=["request.txt", "ticket.md"],
+        detected_goals=["clarify missing file path and desired change"],
+    )
+    decision = DecisionOutcome(
+        expand_task=False, split_task=False, ask_user=True, assume_missing=False,
+        generate_ideas=False, direct_response=False, execution_mode="single_tool",
+        preferred_tool_name="read_file", reason="missing file path and change", confidence=0.95,
+    )
+    normalized_analysis = runtime._apply_task_contract_to_analysis(goal, analysis)
+    normalized_decision = runtime._apply_task_contract_to_decision(goal, decision)
+    assert normalized_analysis.task_type == "incomplete"
+    assert normalized_analysis.completeness == "incomplete"
+    assert normalized_analysis.requires_expansion is False
+    assert normalized_analysis.requires_decomposition is False
+    assert normalized_decision.expand_task is False
+    assert normalized_decision.split_task is False
+    assert normalized_decision.ask_user is True
+    assert normalized_decision.assume_missing is False
+    assert normalized_decision.generate_ideas is False
+    assert normalized_decision.preferred_tool_name == ""
+    assert runtime._build_clarification_request(goal, normalized_analysis) == (
+        "Which file path should be updated, and what exact change should be made?"
+    )
+
+
+def test_runtime_already_decomposed_plan_is_quality_normalized(make_config, tmp_path) -> None:
+    runtime = AgentRuntime(make_config(), model_client=FakeModelClient(responses=[]))
+    state = runtime.create_or_load_session()
+    goal = (
+        "Read `request.txt` and `project_note.txt`. The task is already decomposed into steps; "
+        "preserve that structure and answer with a short numbered plan instead of collapsing it."
+    )
+    state.messages.append(Message(role="user", content=goal, created_at="2026-01-01T00:00:00+00:00"))
+    analysis = PromptAnalysis(
+        task_type="already_decomposed", completeness="partial", requires_expansion=False,
+        requires_decomposition=True, confidence=1.0, detected_entities=[], detected_goals=[],
+    )
+    decision = DecisionOutcome(
+        expand_task=False, split_task=False, ask_user=False, assume_missing=False,
+        generate_ideas=False, direct_response=True, execution_mode="direct_response",
+        preferred_tool_name="", reason="already scoped", confidence=1.0,
+    )
+    normalized_analysis = runtime._apply_task_contract_to_analysis(goal, analysis)
+    normalized_decision = runtime._apply_task_contract_to_decision(goal, decision)
+    assert normalized_analysis.task_type == "already_decomposed"
+    assert normalized_analysis.completeness == "complete"
+    assert normalized_analysis.requires_expansion is False
+    assert normalized_analysis.requires_decomposition is False
+    assert normalized_decision.expand_task is False
+    assert normalized_decision.split_task is False
+    assert normalized_decision.execution_mode == "full_plan"
+
+
 def test_runtime_vague_release_clarification_is_quality_normalized(make_config, tmp_path) -> None:
     workspace = tmp_path
     (workspace / "request.txt").write_text(
