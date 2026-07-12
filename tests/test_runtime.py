@@ -3972,6 +3972,7 @@ def test_runtime_policy_refusal_is_cache_independent_and_quality_normalized(make
     )
     normalized_analysis = runtime._apply_task_contract_to_analysis(goal, analysis)
     normalized_decision = runtime._apply_task_contract_to_decision(goal, decision)
+    assert normalized_analysis.task_type == "structured"
     assert normalized_analysis.requires_decomposition is True
     assert normalized_decision.split_task is True
     assert normalized_decision.generate_ideas is False

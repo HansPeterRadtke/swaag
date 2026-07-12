@@ -1813,6 +1813,7 @@ class AgentRuntime:
             updated.requires_expansion = False
             updated.requires_decomposition = False
         if self._looks_like_policy_refusal_goal(user_text):
+            updated.task_type = "structured"
             updated.completeness = "complete"
             updated.requires_expansion = False
             updated.requires_decomposition = True
