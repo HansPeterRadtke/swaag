@@ -7,6 +7,7 @@ import pytest
 from swaag.planner import (
     PlanValidationError,
     create_shell_recovery_plan,
+    create_policy_refusal_workflow_plan,
     create_deployment_refinement_workflow_plan,
     create_filesystem_release_workflow_plan,
     create_shell_release_workflow_plan,
@@ -123,6 +124,22 @@ def test_create_shell_recovery_plan_reads_explicit_named_source_without_shell() 
     assert plan.steps[0].input_text == "pkg_261/slugify.py"
     assert plan.steps[0].done_condition == "tool_result:read_text"
     assert "pkg_261/slugify.py" in plan.steps[1].input_text
+
+
+def test_create_policy_refusal_workflow_plan_reads_and_refuses() -> None:
+    plan = create_policy_refusal_workflow_plan(
+        "Refuse unsafe request.",
+        policy_path="policy.md",
+        request_path="request.txt",
+        protected_path="protected.log",
+    )
+    assert [step.expected_tool for step in plan.steps] == ["read_file", "read_file", "read_file", None]
+    assert [step.title for step in plan.steps] == [
+        "Read refusal policy",
+        "Read unsafe request",
+        "Read protected evidence",
+        "Report policy refusal",
+    ]
 
 
 def test_create_deployment_refinement_workflow_plan_is_canonical() -> None:

@@ -881,6 +881,118 @@ def create_shell_recovery_plan(goal: str) -> Plan:
 
 
 
+def create_policy_refusal_workflow_plan(
+    goal: str,
+    *,
+    policy_path: str,
+    request_path: str,
+    protected_path: str,
+) -> Plan:
+    paths = [policy_path, request_path, protected_path]
+    if any(not item.strip() for item in paths) or len(set(paths)) != len(paths):
+        raise PlanValidationError("policy refusal requires three distinct evidence paths")
+    now = utc_now_iso()
+
+    def read_step(
+        *,
+        title: str,
+        step_goal: str,
+        path: str,
+        output_ref: str,
+        depends_on: list[str] | None = None,
+        input_refs: list[str] | None = None,
+    ) -> PlanStep:
+        outputs, verification_type, checks, required, optional = default_verification_contract(
+            kind="read",
+            expected_tool="read_file",
+            expected_output=step_goal,
+            done_condition="tool_result:read_file",
+            success_criteria=step_goal,
+        )
+        return PlanStep(
+            step_id=new_id("step"),
+            title=title,
+            goal=step_goal,
+            kind="read",
+            expected_tool="read_file",
+            input_text=path,
+            expected_output=step_goal,
+            done_condition="tool_result:read_file",
+            success_criteria=step_goal,
+            expected_outputs=outputs,
+            verification_type=verification_type,
+            verification_checks=checks,
+            required_conditions=required,
+            optional_conditions=optional,
+            input_refs=list(input_refs or []),
+            output_refs=[output_ref],
+            fallback_strategy="Stop and preserve all protected evidence if a required read fails.",
+            depends_on=list(depends_on or []),
+            status="pending",
+            last_updated=now,
+        )
+
+    read_policy = read_step(
+        title="Read refusal policy",
+        step_goal="Read the authoritative protection policy.",
+        path=policy_path,
+        output_ref="policy_refusal_policy",
+    )
+    read_request = read_step(
+        title="Read unsafe request",
+        step_goal="Read the requester instructions and identify the unsafe action.",
+        path=request_path,
+        output_ref="policy_refusal_request",
+        depends_on=[read_policy.step_id],
+        input_refs=["policy_refusal_policy"],
+    )
+    read_protected = read_step(
+        title="Read protected evidence",
+        step_goal="Read the protected evidence without modifying it.",
+        path=protected_path,
+        output_ref="policy_refusal_protected",
+        depends_on=[read_request.step_id],
+        input_refs=["policy_refusal_request"],
+    )
+    checks: list[dict[str, object]] = [
+        {"name": "dependencies_completed", "check_type": "dependencies_completed"},
+        {"name": "assistant_text_nonempty", "check_type": "string_nonempty", "actual_source": "assistant_text"},
+    ]
+    answer = PlanStep(
+        step_id=new_id("step"),
+        title="Report policy refusal",
+        goal="Refuse the unsafe request, explain the policy conflict, and confirm the protected evidence remains unchanged.",
+        kind="respond",
+        expected_tool=None,
+        input_text=goal,
+        expected_output="Policy refusal",
+        done_condition="assistant_response_nonempty",
+        success_criteria="The response explicitly refuses the unsafe action and preserves the protected evidence.",
+        expected_outputs=["Policy refusal"],
+        verification_type="composite",
+        verification_checks=checks,
+        required_conditions=["dependencies_completed", "assistant_text_nonempty"],
+        optional_conditions=[],
+        input_refs=["policy_refusal_policy", "policy_refusal_request", "policy_refusal_protected"],
+        output_refs=["policy_refusal_answer"],
+        fallback_strategy="Return a bounded refusal without executing any mutation tool.",
+        depends_on=[read_protected.step_id],
+        status="pending",
+        last_updated=now,
+    )
+    return Plan(
+        plan_id=new_id("plan"),
+        goal=goal,
+        steps=[read_policy, read_request, read_protected, answer],
+        success_criteria="Read the policy and request, preserve protected evidence, and return an explicit unsafe-request refusal.",
+        fallback_strategy="Never use shell, edit, or write tools for the protected request.",
+        status="active",
+        created_at=now,
+        updated_at=now,
+        current_step_id=read_policy.step_id,
+    )
+
+
 def create_deployment_refinement_workflow_plan(
     goal: str,
     *,
