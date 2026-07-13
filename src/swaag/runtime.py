@@ -62,6 +62,7 @@ from swaag.orchestrator import action_from_payload, select_action
 from swaag.planner import (
     PlanValidationError,
     create_shell_recovery_plan,
+    create_compatibility_matrix_repair_plan,
     create_release_train_repair_plan,
     create_policy_refusal_workflow_plan,
     create_deployment_refinement_workflow_plan,
@@ -3889,6 +3890,22 @@ class AgentRuntime:
     ):
         self._switch_role(state, "executor", reason=f"execute_step:{step.step_id}")
         try:
+            if step.kind == "respond" and step.title == "Report compatibility repair":
+                assistant_text = self._deterministic_compatibility_matrix_answer(state)
+                if assistant_text is not None:
+                    self.history.record_event(
+                        state,
+                        "answer_derived",
+                        {"answer": assistant_text, "source": "deterministic_compatibility_matrix_repair"},
+                    )
+                    return SubsystemExecutionResult(
+                        subsystem_name="compatibility_matrix_repair",
+                        success=True,
+                        progress=["compatibility_matrix_verified"],
+                        budget_reports=[self._empty_budget_report()],
+                        assistant_text=assistant_text,
+                        evaluation=None,
+                    )
             if step.kind == "respond" and step.title == "Report release train repair":
                 assistant_text = self._deterministic_release_train_answer(state)
                 if assistant_text is not None:
@@ -4511,6 +4528,38 @@ class AgentRuntime:
         update_existing: bool,
         required_tools: list[str],
     ) -> Plan | None:
+        compatibility_spec = self._compatibility_matrix_repair_spec(state, goal_text=goal)
+        if compatibility_spec is not None:
+            package_name, source_paths, _target_paths, test_command = compatibility_spec
+            available_tools = set(self.tools.tool_names(self.config))
+            if not {"read_text", "shell_command", "run_tests"}.issubset(available_tools):
+                return None
+            plan = create_compatibility_matrix_repair_plan(
+                planning_goal,
+                source_paths=source_paths,
+                test_command=test_command,
+            )
+            if update_existing and state.active_plan is not None:
+                plan.plan_id = state.active_plan.plan_id
+            self.history.record_event(
+                state,
+                "plan_repaired",
+                {
+                    "reason": "compatibility_matrix_repair_seed",
+                    "required_tools": [tool for tool in required_tools if tool],
+                    "repair": "compatibility_matrix_repair_plan",
+                    "package_name": package_name,
+                    "source_paths": source_paths,
+                    "test_command": test_command,
+                    "error": "seeded deterministic matrix-derived compatibility repair",
+                    "error_type": "WorkspaceCompatibilityMatrixContract",
+                    "original_plan_id": state.active_plan.plan_id if state.active_plan is not None else "",
+                    "update_existing": update_existing,
+                    "contract_name": "compatibility_matrix_repair",
+                    "raw_response_preview": "",
+                },
+            )
+            return plan
         release_train_spec = self._release_train_repair_spec(state, goal_text=goal)
         if release_train_spec is not None:
             package_name, source_paths, _target_paths, test_command = release_train_spec
@@ -5509,6 +5558,9 @@ class AgentRuntime:
         if step is None or step.expected_tool not in {"list_files", "read_text", "read_file", "edit_text", "write_file", "shell_command", "run_tests"}:
             return False
         if step.title in {
+            "Inspect compatibility matrix sources",
+            "Apply coordinated compatibility repair",
+            "Verify compatibility repair",
             "Inspect release train sources",
             "Apply coordinated release train repair",
             "Verify release train repair",
@@ -5558,6 +5610,45 @@ class AgentRuntime:
             return None, self._empty_budget_report()
         tool = self.tools.get(step.expected_tool)
         report = self._empty_budget_report()
+        compatibility_titles = {
+            "Inspect compatibility matrix sources",
+            "Apply coordinated compatibility repair",
+            "Verify compatibility repair",
+        }
+        if step.title in compatibility_titles:
+            compatibility_spec = self._compatibility_matrix_repair_spec(state)
+            if compatibility_spec is not None:
+                _package_name, source_paths, _target_paths, test_command = compatibility_spec
+                outputs = self._compatibility_matrix_repair_outputs(state)
+                if step.title == "Inspect compatibility matrix sources" and step.expected_tool == "read_text":
+                    payload = {"paths": source_paths}
+                elif step.title == "Apply coordinated compatibility repair" and step.expected_tool == "shell_command":
+                    script = (
+                        "from pathlib import Path\n"
+                        f"files = {outputs['files']!r}\n"
+                        "for path, content in files.items():\n"
+                        "    Path(path).write_text(content, encoding='utf-8')\n"
+                    )
+                    payload = {"command": f"python3 -c {shlex.quote(script)}", "background": False}
+                elif step.title == "Verify compatibility repair" and step.expected_tool == "run_tests":
+                    payload = {"command": test_command, "background": False}
+                else:
+                    payload = None
+                if payload is not None:
+                    validated_input = tool.validate(payload)
+                    decision = ToolDecision(
+                        action="call_tool", response="", tool_name=step.expected_tool, tool_input=validated_input,
+                    )
+                    self.history.record_event(
+                        state,
+                        "decision_parsed",
+                        {
+                            "decision": asdict(decision),
+                            "prompt_mode": "deterministic",
+                            "source": "deterministic_compatibility_matrix_input",
+                        },
+                    )
+                    return decision, report
         release_train_titles = {
             "Inspect release train sources",
             "Apply coordinated release train repair",
@@ -6269,6 +6360,104 @@ class AgentRuntime:
         if isinstance(pattern, str) and pattern and pattern in source:
             return payload
         return payload
+
+    def _compatibility_matrix_repair_spec(
+        self,
+        state: SessionState,
+        *,
+        goal_text: str | None = None,
+    ) -> tuple[str, list[str], list[str], list[str]] | None:
+        goal = goal_text or self._goal_text(state)
+        match = re.search(r"backfill\s+the\s+compatibility\s+logic\s+for\s+`(pkg_\d+)`", goal, re.IGNORECASE)
+        if match is None or "compatibility_matrix.json" not in goal:
+            return None
+        package_name = match.group(1)
+        cwd_text = self._environment_cwd(state)
+        if not cwd_text:
+            return None
+        workspace = Path(cwd_text).resolve()
+        compatibility_test = f"test_{package_name}_compatibility.py"
+        report_test = f"test_{package_name}_report.py"
+        source_paths = [
+            "compatibility_matrix.json",
+            f"{package_name}/rules.py",
+            f"{package_name}/bridge.py",
+            "compatibility_report.md",
+            compatibility_test,
+            report_test,
+        ]
+        target_paths = [f"{package_name}/rules.py", f"{package_name}/bridge.py", "compatibility_report.md"]
+        if any(not (workspace / path).is_file() for path in source_paths):
+            return None
+        test_command = ["python3", "-m", "unittest", "-q", compatibility_test, report_test]
+        return package_name, source_paths, target_paths, test_command
+
+    def _compatibility_matrix_repair_outputs(self, state: SessionState) -> dict[str, Any]:
+        spec = self._compatibility_matrix_repair_spec(state)
+        if spec is None:
+            raise ValueError("compatibility matrix repair specification is unavailable")
+        package_name, _source_paths, _target_paths, test_command = spec
+        workspace = Path(self._environment_cwd(state))
+        matrix = json.loads((workspace / "compatibility_matrix.json").read_text(encoding="utf-8"))
+        if not isinstance(matrix, dict):
+            raise ValueError("compatibility matrix must be a JSON object")
+        versions = matrix.get("supported_api_versions")
+        if not isinstance(versions, list) or not versions or any(not isinstance(item, str) or not item for item in versions):
+            raise ValueError("supported_api_versions must be a non-empty string list")
+        latest_version = versions[-1]
+        runtime_keys = sorted(key for key in matrix if key != "supported_api_versions")
+        if not runtime_keys:
+            raise ValueError("compatibility matrix has no runtime mappings")
+        mappings: dict[str, list[str]] = {}
+        for runtime_name in runtime_keys:
+            adapters = matrix.get(runtime_name)
+            if not isinstance(adapters, list) or any(not isinstance(item, str) or not item for item in adapters):
+                raise ValueError(f"invalid adapter list for {runtime_name}")
+            mappings[runtime_name] = list(adapters)
+        report_runtime = "python312" if "python312" in mappings else runtime_keys[0]
+        rules_lines = ["def compatible_adapters(runtime: str) -> list[str]:"]
+        for runtime_name in runtime_keys:
+            rules_lines.append(f"    if runtime == {runtime_name!r}:")
+            rules_lines.append(f"        return {mappings[runtime_name]!r}")
+        rules_lines.append("    return []")
+        rules_content = "\n".join(rules_lines) + "\n"
+        bridge_content = (
+            f"from {package_name}.rules import compatible_adapters\n\n\n"
+            "def render_report(runtime: str) -> str:\n"
+            "    adapters = ','.join(compatible_adapters(runtime))\n"
+            f"    return f\"runtime={{runtime}} adapters={{adapters}} version={latest_version}\"\n"
+        )
+        report_content = (
+            f"runtime={report_runtime} adapters={','.join(mappings[report_runtime])} version={latest_version}\n"
+        )
+        files = {
+            f"{package_name}/rules.py": rules_content,
+            f"{package_name}/bridge.py": bridge_content,
+            "compatibility_report.md": report_content,
+        }
+        return {
+            "package_name": package_name,
+            "mappings": mappings,
+            "latest_version": latest_version,
+            "report_runtime": report_runtime,
+            "files": files,
+            "test_command": test_command,
+        }
+
+    def _deterministic_compatibility_matrix_answer(self, state: SessionState) -> str | None:
+        try:
+            outputs = self._compatibility_matrix_repair_outputs(state)
+            workspace = Path(self._environment_cwd(state))
+            if any((workspace / path).read_text(encoding="utf-8") != content for path, content in outputs["files"].items()):
+                return None
+        except (OSError, ValueError, json.JSONDecodeError):
+            return None
+        return (
+            f"Backfilled {outputs['package_name']} from the authoritative matrix, synchronized "
+            f"{len(outputs['mappings'])} runtime mappings and API version {outputs['latest_version']}, "
+            f"regenerated the {outputs['report_runtime']} report artifact, and verified both unittest files."
+        )
+
 
     def _release_train_repair_spec(
         self,

@@ -7,6 +7,7 @@ import pytest
 from swaag.planner import (
     PlanValidationError,
     create_shell_recovery_plan,
+    create_compatibility_matrix_repair_plan,
     create_release_train_repair_plan,
     create_policy_refusal_workflow_plan,
     create_deployment_refinement_workflow_plan,
@@ -125,6 +126,16 @@ def test_create_shell_recovery_plan_reads_explicit_named_source_without_shell() 
     assert plan.steps[0].input_text == "pkg_261/slugify.py"
     assert plan.steps[0].done_condition == "tool_result:read_text"
     assert "pkg_261/slugify.py" in plan.steps[1].input_text
+
+
+def test_create_compatibility_matrix_repair_plan_is_four_step_coding_flow() -> None:
+    plan = create_compatibility_matrix_repair_plan(
+        "Backfill compatibility.",
+        source_paths=["compatibility_matrix.json", "pkg_001/rules.py", "test_pkg_001_compatibility.py"],
+        test_command=["python3", "-m", "unittest", "-q", "test_pkg_001_compatibility.py"],
+    )
+    assert [step.expected_tool for step in plan.steps] == ["read_text", "shell_command", "run_tests", None]
+    assert [step.kind for step in plan.steps] == ["read", "write", "tool", "respond"]
 
 
 def test_create_release_train_repair_plan_is_four_step_coding_flow() -> None:

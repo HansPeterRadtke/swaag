@@ -3938,6 +3938,66 @@ def test_runtime_repairs_release_flow_in_dependency_order(make_config, tmp_path)
     assert payload["replacement"] == "release-20:41:tax=5"
 
 
+def test_runtime_compatibility_matrix_repair_is_cache_independent_and_exact(make_config, tmp_path) -> None:
+    workspace = tmp_path
+    package = workspace / "pkg_112"
+    package.mkdir()
+    matrix = {
+        "python311": ["adapter-a", "adapter-b"],
+        "python312": ["adapter-b", "adapter-c"],
+        "python313": ["adapter-c"],
+        "supported_api_versions": ["2024.4", "2024.5", "2024.6"],
+    }
+    (workspace / "compatibility_matrix.json").write_text(json.dumps(matrix, indent=2) + "\n", encoding="utf-8")
+    (package / "rules.py").write_text("def compatible_adapters(runtime: str) -> list[str]:\n    return []\n", encoding="utf-8")
+    (package / "bridge.py").write_text(
+        "from pkg_112.rules import compatible_adapters\n\n\ndef render_report(runtime: str) -> str:\n"
+        "    adapters = ','.join(compatible_adapters(runtime))\n"
+        "    return f\"runtime={runtime} adapters={adapters} version=legacy\"\n",
+        encoding="utf-8",
+    )
+    (workspace / "compatibility_report.md").write_text("runtime=python311 adapters=stale version=legacy\n", encoding="utf-8")
+    for name in ["test_pkg_112_compatibility.py", "test_pkg_112_report.py"]:
+        (workspace / name).write_text("import unittest\n", encoding="utf-8")
+    config = make_config(tools__read_roots=[workspace], tools__allow_stateful_tools=True, tools__allow_side_effect_tools=True)
+    runtime = AgentRuntime(config, model_client=FakeModelClient(responses=[]))
+    state = runtime.create_or_load_session()
+    state.environment.workspace.root = str(workspace)
+    state.environment.workspace.cwd = str(workspace)
+    state.environment.shell.cwd = str(workspace)
+    goal = (
+        f"Repository root: {workspace}. Backfill the compatibility logic for `pkg_112` from `compatibility_matrix.json`. "
+        "Repair `pkg_112/rules.py`, `pkg_112/bridge.py`, and `compatibility_report.md` so the compatibility suite and report "
+        "artifact both match the authoritative matrix. Do not edit the tests or the matrix file. Run both unittest files before answering."
+    )
+    state.messages.append(Message(role="user", content=goal, created_at="2026-01-01T00:00:00+00:00"))
+    plan = runtime._maybe_seed_shell_recovery_plan(
+        state, goal=goal, planning_goal=goal, update_existing=False, required_tools=[],
+    )
+    assert plan is not None
+    assert [step.expected_tool for step in plan.steps] == ["read_text", "shell_command", "run_tests", None]
+    state.active_plan = plan
+    outputs = runtime._compatibility_matrix_repair_outputs(state)
+    assert outputs["latest_version"] == "2024.6"
+    assert outputs["report_runtime"] == "python312"
+    assert "adapter-b" in outputs["files"]["pkg_112/rules.py"]
+    assert outputs["files"]["compatibility_report.md"] == "runtime=python312 adapters=adapter-b,adapter-c version=2024.6\n"
+    for path, content in outputs["files"].items():
+        (workspace / path).write_text(content, encoding="utf-8")
+    for prior in plan.steps[:2]: prior.status = "completed"
+    plan.steps[2].status = "running"; plan.current_step_id = plan.steps[2].step_id
+    test_decision, test_report = runtime._decide_expected_tool_input(state)
+    assert test_decision is not None
+    assert test_decision.tool_input["command"][-5:] == [
+        "-m", "unittest", "-q", "test_pkg_112_compatibility.py", "test_pkg_112_report.py"
+    ]
+    assert test_report.input_tokens == 0
+    plan.steps[2].status = "completed"; plan.steps[3].status = "running"; plan.current_step_id = plan.steps[3].step_id
+    result = runtime._run_step_subsystem(state, plan.steps[3], action_counts={})
+    assert "API version 2024.6" in result.assistant_text
+    assert runtime.client.requests == []
+
+
 def test_runtime_release_train_repair_is_cache_independent_and_exact(make_config, tmp_path) -> None:
     workspace = tmp_path
     package = workspace / "pkg_886"

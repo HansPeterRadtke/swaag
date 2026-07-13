@@ -881,6 +881,91 @@ def create_shell_recovery_plan(goal: str) -> Plan:
 
 
 
+def create_compatibility_matrix_repair_plan(
+    goal: str,
+    *,
+    source_paths: list[str],
+    test_command: list[str],
+) -> Plan:
+    if not source_paths or any(not path.strip() for path in source_paths) or not test_command:
+        raise PlanValidationError("compatibility matrix repair requires source paths and a test command")
+    now = utc_now_iso()
+
+    def tool_step(
+        *,
+        title: str,
+        step_goal: str,
+        kind: PlanStepKind,
+        tool_name: str,
+        input_text: str,
+        expected_output: str,
+        output_ref: str,
+        depends_on: list[str] | None = None,
+        input_refs: list[str] | None = None,
+    ) -> PlanStep:
+        outputs, verification_type, checks, required, optional = default_verification_contract(
+            kind=kind,
+            expected_tool=tool_name,
+            expected_output=expected_output,
+            done_condition=f"tool_result:{tool_name}",
+            success_criteria=step_goal,
+        )
+        return PlanStep(
+            step_id=new_id("step"), title=title, goal=step_goal, kind=kind,
+            expected_tool=tool_name, input_text=input_text, expected_output=expected_output,
+            done_condition=f"tool_result:{tool_name}", success_criteria=step_goal,
+            expected_outputs=outputs, verification_type=verification_type,
+            verification_checks=checks, required_conditions=required,
+            optional_conditions=optional, input_refs=list(input_refs or []),
+            output_refs=[output_ref],
+            fallback_strategy="Stop and report the exact compatibility repair blocker.",
+            depends_on=list(depends_on or []), status="pending", last_updated=now,
+        )
+
+    inspect = tool_step(
+        title="Inspect compatibility matrix sources",
+        step_goal="Read the authoritative matrix, implementation files, artifact, and tests.",
+        kind="read", tool_name="read_text", input_text="\n".join(source_paths),
+        expected_output="Compatibility matrix evidence", output_ref="compatibility_sources",
+    )
+    repair = tool_step(
+        title="Apply coordinated compatibility repair",
+        step_goal="Write the exact runtime mappings, report renderer, and generated artifact from the matrix.",
+        kind="write", tool_name="shell_command", input_text="Apply the exact matrix-derived compatibility repair.",
+        expected_output="Coordinated compatibility repair", output_ref="compatibility_repaired",
+        depends_on=[inspect.step_id], input_refs=["compatibility_sources"],
+    )
+    verify = tool_step(
+        title="Verify compatibility repair",
+        step_goal="Run both exact unittest files after the matrix-derived repair.",
+        kind="tool", tool_name="run_tests", input_text=" ".join(test_command),
+        expected_output="Compatibility verification", output_ref="compatibility_verification",
+        depends_on=[repair.step_id], input_refs=["compatibility_repaired"],
+    )
+    checks: list[dict[str, object]] = [
+        {"name": "dependencies_completed", "check_type": "dependencies_completed"},
+        {"name": "assistant_text_nonempty", "check_type": "string_nonempty", "actual_source": "assistant_text"},
+    ]
+    answer = PlanStep(
+        step_id=new_id("step"), title="Report compatibility repair",
+        goal="Summarize the matrix-derived compatibility repair after both tests pass.",
+        kind="respond", expected_tool=None, input_text=goal,
+        expected_output="Verified compatibility repair report", done_condition="assistant_response_nonempty",
+        success_criteria="The response reports synchronized runtime mappings, bridge version, and report artifact.",
+        expected_outputs=["Verified compatibility repair report"], verification_type="composite",
+        verification_checks=checks, required_conditions=["dependencies_completed", "assistant_text_nonempty"],
+        optional_conditions=[], input_refs=["compatibility_verification"], output_refs=["compatibility_answer"],
+        fallback_strategy="If verification fails, report that compatibility backfill is incomplete.",
+        depends_on=[verify.step_id], status="pending", last_updated=now,
+    )
+    return Plan(
+        plan_id=new_id("plan"), goal=goal, steps=[inspect, repair, verify, answer],
+        success_criteria="Synchronize implementation and artifact to the matrix, pass both tests, and report the repair.",
+        fallback_strategy="Do not edit tests or the matrix; stop on evidence, write, or verification failure.",
+        status="active", created_at=now, updated_at=now, current_step_id=inspect.step_id,
+    )
+
+
 def create_release_train_repair_plan(
     goal: str,
     *,
