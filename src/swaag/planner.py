@@ -881,6 +881,91 @@ def create_shell_recovery_plan(goal: str) -> Plan:
 
 
 
+def create_multi_target_projection_plan(
+    goal: str,
+    *,
+    source_path: str,
+    target_paths: list[str],
+) -> Plan:
+    if not source_path.strip() or not target_paths or len(target_paths) > 2:
+        raise PlanValidationError("multi-target projection requires one source and one or two targets")
+    if any(not path.strip() for path in target_paths) or source_path in target_paths or len(set(target_paths)) != len(target_paths):
+        raise PlanValidationError("multi-target projection paths must be distinct")
+    now = utc_now_iso()
+
+    def tool_step(
+        *,
+        title: str,
+        step_goal: str,
+        kind: PlanStepKind,
+        tool_name: str,
+        input_text: str,
+        expected_output: str,
+        output_ref: str,
+        depends_on: list[str] | None = None,
+        input_refs: list[str] | None = None,
+    ) -> PlanStep:
+        outputs, verification_type, checks, required, optional = default_verification_contract(
+            kind=kind,
+            expected_tool=tool_name,
+            expected_output=expected_output,
+            done_condition=f"tool_result:{tool_name}",
+            success_criteria=step_goal,
+        )
+        return PlanStep(
+            step_id=new_id("step"), title=title, goal=step_goal, kind=kind,
+            expected_tool=tool_name, input_text=input_text, expected_output=expected_output,
+            done_condition=f"tool_result:{tool_name}", success_criteria=step_goal,
+            expected_outputs=outputs, verification_type=verification_type,
+            verification_checks=checks, required_conditions=required, optional_conditions=optional,
+            input_refs=list(input_refs or []), output_refs=[output_ref],
+            fallback_strategy="Stop and report the exact projection blocker.",
+            depends_on=list(depends_on or []), status="pending", last_updated=now,
+        )
+
+    read_source = tool_step(
+        title="Read projection source",
+        step_goal="Read the authoritative structured source without modifying it.",
+        kind="read", tool_name="read_file", input_text=source_path,
+        expected_output="Authoritative projection source", output_ref="projection_source",
+    )
+    steps: list[PlanStep] = [read_source]
+    previous = read_source
+    for index, target_path in enumerate(target_paths, start=1):
+        write_target = tool_step(
+            title=f"Write projected target {index}",
+            step_goal=f"Render and write {target_path} from the authoritative source while preserving its target format.",
+            kind="write", tool_name="write_file", input_text=target_path,
+            expected_output=f"Projected target {index}", output_ref=f"projected_target_{index}",
+            depends_on=[previous.step_id], input_refs=["projection_source"],
+        )
+        steps.append(write_target)
+        previous = write_target
+    response_checks: list[dict[str, object]] = [
+        {"name": "dependencies_completed", "check_type": "dependencies_completed"},
+        {"name": "assistant_text_nonempty", "check_type": "string_nonempty", "actual_source": "assistant_text"},
+    ]
+    answer = PlanStep(
+        step_id=new_id("step"), title="Report multi-target projection",
+        goal="Summarize the synchronized target state after verifying all rendered outputs.",
+        kind="respond", expected_tool=None, input_text=goal,
+        expected_output="Verified multi-target projection report", done_condition="assistant_response_nonempty",
+        success_criteria="The response confirms every target was derived from the unchanged authoritative source.",
+        expected_outputs=["Verified multi-target projection report"], verification_type="composite",
+        verification_checks=response_checks, required_conditions=["dependencies_completed", "assistant_text_nonempty"],
+        optional_conditions=[], input_refs=[f"projected_target_{index}" for index in range(1, len(target_paths) + 1)],
+        output_refs=["projection_answer"], fallback_strategy="Report that target synchronization is incomplete.",
+        depends_on=[previous.step_id], status="pending", last_updated=now,
+    )
+    steps.append(answer)
+    return Plan(
+        plan_id=new_id("plan"), goal=goal, steps=steps,
+        success_criteria="Render all target formats from one unchanged authoritative source and report the synchronized state.",
+        fallback_strategy="Do not guess regex edits; derive complete target contents from source evidence.",
+        status="active", created_at=now, updated_at=now, current_step_id=read_source.step_id,
+    )
+
+
 def create_replace_all_file_edit_plan(
     goal: str,
     *,

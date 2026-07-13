@@ -3938,6 +3938,63 @@ def test_runtime_repairs_release_flow_in_dependency_order(make_config, tmp_path)
     assert payload["replacement"] == "release-20:41:tax=5"
 
 
+def test_runtime_multi_target_projection_is_generic_and_exact(make_config, tmp_path) -> None:
+    workspace = tmp_path
+    source = workspace / "release_decision.json"
+    source_payload = {
+        "service": "svc-01",
+        "version": "3.5.0",
+        "channel": "stable",
+        "owner": "team-3",
+        "status": "approved",
+    }
+    source.write_text(json.dumps(source_payload, indent=2) + "\n", encoding="utf-8")
+    deployment = workspace / "deployment.yaml"
+    deployment.write_text(
+        "service: svc-01\nchannel: draft\nversion: pending\nowner: team-5\nstatus: awaiting-review\n",
+        encoding="utf-8",
+    )
+    notes = workspace / "release_notes.md"
+    notes.write_text(
+        "# Release Notes\n\n- status: pending\n- channel: draft\n- owner: unknown\n- rollout: not approved\n",
+        encoding="utf-8",
+    )
+    config = make_config(tools__read_roots=[workspace], tools__allow_side_effect_tools=True)
+    runtime = AgentRuntime(config, model_client=FakeModelClient(responses=[]))
+    state = runtime.create_or_load_session()
+    state.environment.workspace.root = str(workspace)
+    state.environment.workspace.cwd = str(workspace)
+    state.environment.shell.cwd = str(workspace)
+    goal = (
+        "Use `release_decision.json` as the source of truth. Update `deployment.yaml` and `release_notes.md` so they both "
+        "reflect the approved release, and leave the source file unchanged. Make the exact intended propagation only, "
+        "then summarize the synchronized release state."
+    )
+    state.messages.append(Message(role="user", content=goal, created_at="2026-01-01T00:00:00+00:00"))
+    plan = runtime._maybe_seed_shell_recovery_plan(
+        state, goal=goal, planning_goal=goal, update_existing=False, required_tools=[],
+    )
+    assert plan is not None
+    assert [step.expected_tool for step in plan.steps] == ["read_file", "write_file", "write_file", None]
+    state.active_plan = plan
+    outputs = runtime._multi_target_projection_outputs(state)
+    assert outputs["deployment.yaml"] == (
+        "service: svc-01\nchannel: stable\nversion: 3.5.0\nowner: team-3\nstatus: approved\n"
+    )
+    assert outputs["release_notes.md"] == (
+        "# Release Notes\n\n- status: approved\n- channel: stable\n- owner: team-3\n- rollout: svc-01 3.5.0\n"
+    )
+    source_before = source.read_text(encoding="utf-8")
+    for path, content in outputs.items():
+        (workspace / path).write_text(content, encoding="utf-8")
+    assert source.read_text(encoding="utf-8") == source_before
+    for prior in plan.steps[:3]: prior.status = "completed"
+    plan.steps[3].status = "running"; plan.current_step_id = plan.steps[3].step_id
+    result = runtime._run_step_subsystem(state, plan.steps[3], action_counts={})
+    assert "unchanged `release_decision.json`" in result.assistant_text
+    assert runtime.client.requests == []
+
+
 def test_runtime_replace_all_file_edit_is_generic_and_exact(make_config, tmp_path) -> None:
     workspace = tmp_path
     target = workspace / "deployment.ini"

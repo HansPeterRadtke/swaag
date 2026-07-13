@@ -7,6 +7,7 @@ import pytest
 from swaag.planner import (
     PlanValidationError,
     create_shell_recovery_plan,
+    create_multi_target_projection_plan,
     create_replace_all_file_edit_plan,
     create_compatibility_matrix_repair_plan,
     create_release_train_repair_plan,
@@ -127,6 +128,16 @@ def test_create_shell_recovery_plan_reads_explicit_named_source_without_shell() 
     assert plan.steps[0].input_text == "pkg_261/slugify.py"
     assert plan.steps[0].done_condition == "tool_result:read_text"
     assert "pkg_261/slugify.py" in plan.steps[1].input_text
+
+
+def test_create_multi_target_projection_plan_reads_writes_and_reports() -> None:
+    plan = create_multi_target_projection_plan(
+        "Project one source.",
+        source_path="decision.json",
+        target_paths=["deployment.yaml", "notes.md"],
+    )
+    assert [step.expected_tool for step in plan.steps] == ["read_file", "write_file", "write_file", None]
+    assert [step.kind for step in plan.steps] == ["read", "write", "write", "respond"]
 
 
 def test_create_replace_all_file_edit_plan_uses_single_write_then_response() -> None:

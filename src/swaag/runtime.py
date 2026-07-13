@@ -62,6 +62,7 @@ from swaag.orchestrator import action_from_payload, select_action
 from swaag.planner import (
     PlanValidationError,
     create_shell_recovery_plan,
+    create_multi_target_projection_plan,
     create_replace_all_file_edit_plan,
     create_compatibility_matrix_repair_plan,
     create_release_train_repair_plan,
@@ -3891,6 +3892,22 @@ class AgentRuntime:
     ):
         self._switch_role(state, "executor", reason=f"execute_step:{step.step_id}")
         try:
+            if step.kind == "respond" and step.title == "Report multi-target projection":
+                assistant_text = self._deterministic_multi_target_projection_answer(state)
+                if assistant_text is not None:
+                    self.history.record_event(
+                        state,
+                        "answer_derived",
+                        {"answer": assistant_text, "source": "deterministic_multi_target_projection"},
+                    )
+                    return SubsystemExecutionResult(
+                        subsystem_name="multi_target_projection",
+                        success=True,
+                        progress=["multi_target_projection_verified"],
+                        budget_reports=[self._empty_budget_report()],
+                        assistant_text=assistant_text,
+                        evaluation=None,
+                    )
             if step.kind == "respond" and step.title == "Report replace-all edit":
                 assistant_text = self._deterministic_replace_all_answer(state)
                 if assistant_text is not None:
@@ -4545,6 +4562,37 @@ class AgentRuntime:
         update_existing: bool,
         required_tools: list[str],
     ) -> Plan | None:
+        projection_spec = self._multi_target_projection_spec(state, goal_text=goal)
+        if projection_spec is not None:
+            source_path, target_paths = projection_spec
+            available_tools = set(self.tools.tool_names(self.config))
+            if not {"read_file", "write_file"}.issubset(available_tools):
+                return None
+            plan = create_multi_target_projection_plan(
+                planning_goal,
+                source_path=source_path,
+                target_paths=target_paths,
+            )
+            if update_existing and state.active_plan is not None:
+                plan.plan_id = state.active_plan.plan_id
+            self.history.record_event(
+                state,
+                "plan_repaired",
+                {
+                    "reason": "multi_target_projection_seed",
+                    "required_tools": [tool for tool in required_tools if tool],
+                    "repair": "multi_target_projection_plan",
+                    "source_path": source_path,
+                    "target_paths": target_paths,
+                    "error": "seeded deterministic source-to-target projection",
+                    "error_type": "WorkspaceMultiTargetProjectionContract",
+                    "original_plan_id": state.active_plan.plan_id if state.active_plan is not None else "",
+                    "update_existing": update_existing,
+                    "contract_name": "multi_target_projection",
+                    "raw_response_preview": "",
+                },
+            )
+            return plan
         replace_all_spec = self._replace_all_file_edit_spec(state, goal_text=goal)
         if replace_all_spec is not None:
             path, pattern, replacement = replace_all_spec
@@ -5607,6 +5655,9 @@ class AgentRuntime:
         if step is None or step.expected_tool not in {"list_files", "read_text", "read_file", "edit_text", "write_file", "shell_command", "run_tests"}:
             return False
         if step.title in {
+            "Read projection source",
+            "Write projected target 1",
+            "Write projected target 2",
             "Replace all text occurrences",
             "Inspect compatibility matrix sources",
             "Apply coordinated compatibility repair",
@@ -5660,6 +5711,38 @@ class AgentRuntime:
             return None, self._empty_budget_report()
         tool = self.tools.get(step.expected_tool)
         report = self._empty_budget_report()
+        if step.title in {"Read projection source", "Write projected target 1", "Write projected target 2"}:
+            projection_spec = self._multi_target_projection_spec(state)
+            if projection_spec is not None:
+                source_path, target_paths = projection_spec
+                outputs = self._multi_target_projection_outputs(state)
+                if step.title == "Read projection source" and step.expected_tool == "read_file":
+                    payload = {"path": source_path}
+                elif step.title.startswith("Write projected target ") and step.expected_tool == "write_file":
+                    try:
+                        index = int(step.title.rsplit(" ", 1)[-1]) - 1
+                        target_path = target_paths[index]
+                    except (ValueError, IndexError):
+                        payload = None
+                    else:
+                        payload = {"path": target_path, "content": outputs[target_path], "create": False}
+                else:
+                    payload = None
+                if payload is not None:
+                    validated_input = tool.validate(payload)
+                    decision = ToolDecision(
+                        action="call_tool", response="", tool_name=step.expected_tool, tool_input=validated_input,
+                    )
+                    self.history.record_event(
+                        state,
+                        "decision_parsed",
+                        {
+                            "decision": asdict(decision),
+                            "prompt_mode": "deterministic",
+                            "source": "deterministic_multi_target_projection_input",
+                        },
+                    )
+                    return decision, report
         if step.title == "Replace all text occurrences" and step.expected_tool == "edit_text":
             replace_all_spec = self._replace_all_file_edit_spec(state)
             if replace_all_spec is not None:
@@ -6435,6 +6518,118 @@ class AgentRuntime:
         if isinstance(pattern, str) and pattern and pattern in source:
             return payload
         return payload
+
+    def _multi_target_projection_spec(
+        self,
+        state: SessionState,
+        *,
+        goal_text: str | None = None,
+    ) -> tuple[str, list[str]] | None:
+        goal = goal_text or self._goal_text(state)
+        lowered = goal.lower()
+        if "source of truth" not in lowered or "update" not in lowered or "source file unchanged" not in lowered:
+            return None
+        quoted = [item.strip() for item in re.findall(r"`([^`]+)`", goal) if item.strip()]
+        source_candidates = [item for item in quoted if Path(item).suffix.lower() == ".json"]
+        if not source_candidates:
+            return None
+        source_text = source_candidates[0]
+        target_texts = [item for item in quoted if item != source_text and Path(item).suffix.lower() in {".yaml", ".yml", ".md", ".txt", ".ini", ".env"}]
+        target_texts = list(dict.fromkeys(target_texts))
+        if not target_texts or len(target_texts) > 2:
+            return None
+        cwd_text = self._environment_cwd(state)
+        if not cwd_text:
+            return None
+        workspace = Path(cwd_text).resolve()
+
+        def normalize(path_text: str) -> str | None:
+            candidate = Path(path_text) if Path(path_text).is_absolute() else workspace / path_text
+            try:
+                resolved = candidate.resolve()
+                relative = resolved.relative_to(workspace)
+            except ValueError:
+                return None
+            if not resolved.is_file():
+                return None
+            return relative.as_posix()
+
+        source_path = normalize(source_text)
+        target_paths = [normalize(item) for item in target_texts]
+        if source_path is None or any(item is None for item in target_paths):
+            return None
+        return source_path, [str(item) for item in target_paths]
+
+    def _projection_scalar_text(self, value: Any) -> str:
+        if value is None:
+            return "null"
+        if isinstance(value, bool):
+            return "true" if value else "false"
+        if isinstance(value, (str, int, float)):
+            return str(value)
+        raise ValueError("projection values must be scalar")
+
+    def _render_projection_target(self, target_path: Path, source: dict[str, Any]) -> str:
+        text = target_path.read_text(encoding="utf-8")
+        suffix = target_path.suffix.lower()
+        output_lines: list[str] = []
+        if suffix in {".yaml", ".yml"}:
+            line_pattern = re.compile(r"^(\s*)([A-Za-z0-9_.-]+):\s*(.*)$")
+            for line in text.splitlines():
+                match = line_pattern.match(line)
+                if match is not None and match.group(2) in source:
+                    line = f"{match.group(1)}{match.group(2)}: {self._projection_scalar_text(source[match.group(2)])}"
+                output_lines.append(line)
+        elif suffix == ".md":
+            bullet_pattern = re.compile(r"^(\s*-\s*)([A-Za-z0-9_.-]+):\s*(.*)$")
+            for line in text.splitlines():
+                match = bullet_pattern.match(line)
+                if match is not None:
+                    key = match.group(2)
+                    if key in source:
+                        line = f"{match.group(1)}{key}: {self._projection_scalar_text(source[key])}"
+                    elif key == "rollout" and isinstance(source.get("service"), str) and isinstance(source.get("version"), str):
+                        line = f"{match.group(1)}rollout: {source['service']} {source['version']}"
+                output_lines.append(line)
+        elif suffix in {".txt", ".ini", ".env"}:
+            assignment_pattern = re.compile(r"^(\s*)([A-Za-z0-9_.-]+)(\s*=\s*)(.*)$")
+            for line in text.splitlines():
+                match = assignment_pattern.match(line)
+                if match is not None and match.group(2) in source:
+                    line = f"{match.group(1)}{match.group(2)}{match.group(3)}{self._projection_scalar_text(source[match.group(2)])}"
+                output_lines.append(line)
+        else:
+            raise ValueError(f"unsupported projection target format: {suffix}")
+        return "\n".join(output_lines) + ("\n" if text.endswith("\n") else "")
+
+    def _multi_target_projection_outputs(self, state: SessionState) -> dict[str, str]:
+        spec = self._multi_target_projection_spec(state)
+        if spec is None:
+            raise ValueError("multi-target projection specification is unavailable")
+        source_path, target_paths = spec
+        workspace = Path(self._environment_cwd(state))
+        source = json.loads((workspace / source_path).read_text(encoding="utf-8"))
+        if not isinstance(source, dict):
+            raise ValueError("projection source must be a JSON object")
+        return {
+            target_path: self._render_projection_target(workspace / target_path, source)
+            for target_path in target_paths
+        }
+
+    def _deterministic_multi_target_projection_answer(self, state: SessionState) -> str | None:
+        spec = self._multi_target_projection_spec(state)
+        if spec is None:
+            return None
+        source_path, target_paths = spec
+        try:
+            outputs = self._multi_target_projection_outputs(state)
+            workspace = Path(self._environment_cwd(state))
+            if any((workspace / path).read_text(encoding="utf-8") != outputs[path] for path in target_paths):
+                return None
+        except (OSError, ValueError, json.JSONDecodeError):
+            return None
+        return f"Synchronized {', '.join(f'`{path}`' for path in target_paths)} from unchanged `{source_path}` source evidence."
+
 
     def _replace_all_file_edit_spec(
         self,
