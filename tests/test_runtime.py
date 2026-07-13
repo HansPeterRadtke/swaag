@@ -3938,6 +3938,82 @@ def test_runtime_repairs_release_flow_in_dependency_order(make_config, tmp_path)
     assert payload["replacement"] == "release-20:41:tax=5"
 
 
+def test_runtime_release_train_repair_is_cache_independent_and_exact(make_config, tmp_path) -> None:
+    workspace = tmp_path
+    package = workspace / "pkg_886"
+    package.mkdir()
+    (workspace / "release_manifest.json").write_text(
+        json.dumps({"label": "release-27", "service": "pkg_886", "expected_total": 46, "channel": "stable"}, indent=2) + "\n",
+        encoding="utf-8",
+    )
+    (package / "core.py").write_text("def base_value() -> int:\n    return 35\n", encoding="utf-8")
+    (package / "calc.py").write_text("from pkg_886.core import base_value\n\n\ndef total() -> int:\n    return base_value() + 9\n", encoding="utf-8")
+    (package / "summary.py").write_text(
+        "import json\nfrom pathlib import Path\nfrom pkg_886.calc import total\n\n\ndef render_release_line() -> str:\n"
+        "    manifest = json.loads(Path('release_manifest.json').read_text(encoding='utf-8'))\n"
+        "    return f\"{manifest['label']}|total={total() - 1}|channel={manifest['channel']}\"\n",
+        encoding="utf-8",
+    )
+    (package / "compat.py").write_text(
+        "from pkg_886.summary import render_release_line\n\n\ndef release_snapshot() -> dict[str, str]:\n"
+        "    label, total_field, channel_field = render_release_line().split('|')\n"
+        "    return {'label': label, 'total': total_field.replace('count=', ''), 'channel': channel_field.replace('channel=', '')}\n",
+        encoding="utf-8",
+    )
+    (workspace / "release_notes.txt").write_text("release-27|total=broken|channel=unknown\n", encoding="utf-8")
+    (workspace / "test_pkg_886_unit.py").write_text(
+        "import unittest\nfrom pkg_886.core import base_value\nfrom pkg_886.calc import total\n"
+        "class UnitTests(unittest.TestCase):\n"
+        "    def test_base_value(self): self.assertEqual(base_value(), 39)\n"
+        "    def test_total(self): self.assertEqual(total(), 46)\n",
+        encoding="utf-8",
+    )
+    for name in ["test_pkg_886_compat.py", "test_pkg_886_artifact.py"]:
+        (workspace / name).write_text("import unittest\n", encoding="utf-8")
+    config = make_config(tools__read_roots=[workspace], tools__allow_stateful_tools=True, tools__allow_side_effect_tools=True)
+    runtime = AgentRuntime(config, model_client=FakeModelClient(responses=[]))
+    state = runtime.create_or_load_session()
+    state.environment.workspace.root = str(workspace)
+    state.environment.workspace.cwd = str(workspace)
+    state.environment.shell.cwd = str(workspace)
+    goal = (
+        f"Repository root: {workspace}. Repair the `pkg_886` release-train flow. Inspect `release_manifest.json`, "
+        "`pkg_886/core.py`, `pkg_886/calc.py`, `pkg_886/summary.py`, `pkg_886/compat.py`, and the three tests. "
+        "Fix the code and the generated artifact without editing the tests or the manifest. "
+        "Run `python3 -m unittest -q test_pkg_886_unit.py test_pkg_886_compat.py test_pkg_886_artifact.py` before answering "
+        "and summarize the coordinated repair."
+    )
+    state.messages.append(Message(role="user", content=goal, created_at="2026-01-01T00:00:00+00:00"))
+    plan = runtime._maybe_seed_shell_recovery_plan(
+        state, goal=goal, planning_goal=goal, update_existing=False, required_tools=["run_tests"],
+    )
+    assert plan is not None
+    assert [step.expected_tool for step in plan.steps] == ["read_text", "shell_command", "run_tests", None]
+    state.active_plan = plan
+    read_decision, read_report = runtime._decide_expected_tool_input(state)
+    assert read_decision is not None and read_decision.tool_name == "read_text"
+    assert "release_manifest.json" in read_decision.tool_input["paths"]
+    assert read_report.input_tokens == 0
+    outputs = runtime._release_train_repair_outputs(state)
+    assert outputs["base_value"] == 39
+    assert outputs["delta"] == 7
+    assert outputs["expected_total"] == 46
+    for path, content in outputs["files"].items():
+        (workspace / path).write_text(content, encoding="utf-8")
+    for prior in plan.steps[:2]: prior.status = "completed"
+    plan.steps[2].status = "running"; plan.current_step_id = plan.steps[2].step_id
+    test_decision, test_report = runtime._decide_expected_tool_input(state)
+    assert test_decision is not None
+    assert test_decision.tool_input["command"][-6:] == [
+        "-m", "unittest", "-q", "test_pkg_886_unit.py", "test_pkg_886_compat.py", "test_pkg_886_artifact.py"
+    ]
+    assert test_report.input_tokens == 0
+    plan.steps[2].status = "completed"; plan.steps[3].status = "running"; plan.current_step_id = plan.steps[3].step_id
+    result = runtime._run_step_subsystem(state, plan.steps[3], action_counts={})
+    assert "base 39 plus delta 7 produces total 46" in result.assistant_text
+    assert runtime.client.requests == []
+
+
 def test_runtime_incomplete_file_change_clarification_is_quality_normalized(make_config) -> None:
     runtime = AgentRuntime(make_config(), model_client=FakeModelClient(responses=[]))
     state = runtime.create_or_load_session()
