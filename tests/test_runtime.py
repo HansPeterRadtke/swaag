@@ -3938,6 +3938,47 @@ def test_runtime_repairs_release_flow_in_dependency_order(make_config, tmp_path)
     assert payload["replacement"] == "release-20:41:tax=5"
 
 
+def test_runtime_replace_all_file_edit_is_generic_and_exact(make_config, tmp_path) -> None:
+    workspace = tmp_path
+    target = workspace / "deployment.ini"
+    target.write_text(
+        "[api]\nimage=registry.local/service:24-legacy\nsidecar=registry.local/service:24-legacy\n",
+        encoding="utf-8",
+    )
+    config = make_config(tools__read_roots=[workspace], tools__allow_side_effect_tools=True)
+    runtime = AgentRuntime(config, model_client=FakeModelClient(responses=[]))
+    state = runtime.create_or_load_session()
+    state.environment.workspace.root = str(workspace)
+    state.environment.workspace.cwd = str(workspace)
+    state.environment.shell.cwd = str(workspace)
+    goal = (
+        f"Update `{target}` so every image tag ending in `24-legacy` becomes `24-current`. "
+        "Replace every occurrence and then summarize the change."
+    )
+    state.messages.append(Message(role="user", content=goal, created_at="2026-01-01T00:00:00+00:00"))
+    plan = runtime._maybe_seed_shell_recovery_plan(
+        state, goal=goal, planning_goal=goal, update_existing=False, required_tools=[],
+    )
+    assert plan is not None
+    assert [step.expected_tool for step in plan.steps] == ["edit_text", None]
+    state.active_plan = plan
+    decision, report = runtime._decide_expected_tool_input(state)
+    assert decision is not None
+    assert decision.tool_input == {
+        "path": "deployment.ini",
+        "operation": "replace_pattern_all",
+        "dry_run": False,
+        "pattern": "24-legacy",
+        "replacement": "24-current",
+    }
+    assert report.input_tokens == 0
+    target.write_text(target.read_text(encoding="utf-8").replace("24-legacy", "24-current"), encoding="utf-8")
+    plan.steps[0].status = "completed"; plan.steps[1].status = "running"; plan.current_step_id = plan.steps[1].step_id
+    result = runtime._run_step_subsystem(state, plan.steps[1], action_counts={})
+    assert "Replaced every occurrence" in result.assistant_text
+    assert runtime.client.requests == []
+
+
 def test_runtime_compatibility_matrix_repair_is_cache_independent_and_exact(make_config, tmp_path) -> None:
     workspace = tmp_path
     package = workspace / "pkg_112"

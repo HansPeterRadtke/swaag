@@ -62,6 +62,7 @@ from swaag.orchestrator import action_from_payload, select_action
 from swaag.planner import (
     PlanValidationError,
     create_shell_recovery_plan,
+    create_replace_all_file_edit_plan,
     create_compatibility_matrix_repair_plan,
     create_release_train_repair_plan,
     create_policy_refusal_workflow_plan,
@@ -3890,6 +3891,22 @@ class AgentRuntime:
     ):
         self._switch_role(state, "executor", reason=f"execute_step:{step.step_id}")
         try:
+            if step.kind == "respond" and step.title == "Report replace-all edit":
+                assistant_text = self._deterministic_replace_all_answer(state)
+                if assistant_text is not None:
+                    self.history.record_event(
+                        state,
+                        "answer_derived",
+                        {"answer": assistant_text, "source": "deterministic_replace_all_edit"},
+                    )
+                    return SubsystemExecutionResult(
+                        subsystem_name="replace_all_edit",
+                        success=True,
+                        progress=["replace_all_verified"],
+                        budget_reports=[self._empty_budget_report()],
+                        assistant_text=assistant_text,
+                        evaluation=None,
+                    )
             if step.kind == "respond" and step.title == "Report compatibility repair":
                 assistant_text = self._deterministic_compatibility_matrix_answer(state)
                 if assistant_text is not None:
@@ -4528,6 +4545,38 @@ class AgentRuntime:
         update_existing: bool,
         required_tools: list[str],
     ) -> Plan | None:
+        replace_all_spec = self._replace_all_file_edit_spec(state, goal_text=goal)
+        if replace_all_spec is not None:
+            path, pattern, replacement = replace_all_spec
+            if "edit_text" not in set(self.tools.tool_names(self.config)):
+                return None
+            plan = create_replace_all_file_edit_plan(
+                planning_goal,
+                path=path,
+                pattern=pattern,
+                replacement=replacement,
+            )
+            if update_existing and state.active_plan is not None:
+                plan.plan_id = state.active_plan.plan_id
+            self.history.record_event(
+                state,
+                "plan_repaired",
+                {
+                    "reason": "explicit_replace_all_seed",
+                    "required_tools": [tool for tool in required_tools if tool],
+                    "repair": "replace_all_file_edit_plan",
+                    "path": path,
+                    "pattern": pattern,
+                    "replacement": replacement,
+                    "error": "seeded deterministic replace-all edit",
+                    "error_type": "WorkspaceReplaceAllContract",
+                    "original_plan_id": state.active_plan.plan_id if state.active_plan is not None else "",
+                    "update_existing": update_existing,
+                    "contract_name": "replace_all_file_edit",
+                    "raw_response_preview": "",
+                },
+            )
+            return plan
         compatibility_spec = self._compatibility_matrix_repair_spec(state, goal_text=goal)
         if compatibility_spec is not None:
             package_name, source_paths, _target_paths, test_command = compatibility_spec
@@ -5558,6 +5607,7 @@ class AgentRuntime:
         if step is None or step.expected_tool not in {"list_files", "read_text", "read_file", "edit_text", "write_file", "shell_command", "run_tests"}:
             return False
         if step.title in {
+            "Replace all text occurrences",
             "Inspect compatibility matrix sources",
             "Apply coordinated compatibility repair",
             "Verify compatibility repair",
@@ -5610,6 +5660,31 @@ class AgentRuntime:
             return None, self._empty_budget_report()
         tool = self.tools.get(step.expected_tool)
         report = self._empty_budget_report()
+        if step.title == "Replace all text occurrences" and step.expected_tool == "edit_text":
+            replace_all_spec = self._replace_all_file_edit_spec(state)
+            if replace_all_spec is not None:
+                path, pattern, replacement = replace_all_spec
+                validated_input = tool.validate(
+                    {
+                        "path": path,
+                        "operation": "replace_pattern_all",
+                        "pattern": pattern,
+                        "replacement": replacement,
+                    }
+                )
+                decision = ToolDecision(
+                    action="call_tool", response="", tool_name="edit_text", tool_input=validated_input,
+                )
+                self.history.record_event(
+                    state,
+                    "decision_parsed",
+                    {
+                        "decision": asdict(decision),
+                        "prompt_mode": "deterministic",
+                        "source": "deterministic_replace_all_input",
+                    },
+                )
+                return decision, report
         compatibility_titles = {
             "Inspect compatibility matrix sources",
             "Apply coordinated compatibility repair",
@@ -6360,6 +6435,60 @@ class AgentRuntime:
         if isinstance(pattern, str) and pattern and pattern in source:
             return payload
         return payload
+
+    def _replace_all_file_edit_spec(
+        self,
+        state: SessionState,
+        *,
+        goal_text: str | None = None,
+    ) -> tuple[str, str, str] | None:
+        goal = goal_text or self._goal_text(state)
+        lowered = goal.lower()
+        if "every occurrence" not in lowered and "all occurrences" not in lowered and "replace all" not in lowered:
+            return None
+        quoted = [item.strip() for item in re.findall(r"`([^`]+)`", goal) if item.strip()]
+        if len(quoted) < 3:
+            return None
+        path_text, pattern, replacement = quoted[0], quoted[1], quoted[2]
+        cwd_text = self._environment_cwd(state)
+        if not cwd_text or not pattern or pattern == replacement:
+            return None
+        workspace = Path(cwd_text).resolve()
+        target = Path(path_text) if Path(path_text).is_absolute() else workspace / path_text
+        try:
+            resolved = target.resolve()
+            resolved.relative_to(workspace)
+            source = resolved.read_text(encoding="utf-8")
+        except (OSError, ValueError):
+            return None
+        if pattern not in source:
+            return None
+        return resolved.relative_to(workspace).as_posix(), pattern, replacement
+
+    def _deterministic_replace_all_answer(self, state: SessionState) -> str | None:
+        spec = self._replace_all_file_edit_spec(state)
+        if spec is not None:
+            return None
+        goal = self._original_user_goal_text(state)
+        quoted = [item.strip() for item in re.findall(r"`([^`]+)`", goal) if item.strip()]
+        if len(quoted) < 3:
+            return None
+        path_text, pattern, replacement = quoted[0], quoted[1], quoted[2]
+        cwd_text = self._environment_cwd(state)
+        if not cwd_text:
+            return None
+        workspace = Path(cwd_text).resolve()
+        target = Path(path_text) if Path(path_text).is_absolute() else workspace / path_text
+        try:
+            resolved = target.resolve()
+            resolved.relative_to(workspace)
+            source = resolved.read_text(encoding="utf-8")
+        except (OSError, ValueError):
+            return None
+        if pattern in source or replacement not in source:
+            return None
+        return f"Replaced every occurrence of `{pattern}` with `{replacement}` in `{resolved.relative_to(workspace).as_posix()}`."
+
 
     def _compatibility_matrix_repair_spec(
         self,
