@@ -4,12 +4,15 @@ from dataclasses import dataclass
 import json
 import os
 import time
+from pathlib import Path
 from typing import Any, Callable
 
 import requests
 
 from swaag.config import AgentConfig
+from swaag.schema_portability import PortableSchemaError, assert_portable_json_schema
 from swaag.types import CompletionResult, ContractSpec
+from swaag.utils import sha256_text, stable_json_dumps
 
 
 class ModelClientError(RuntimeError):
@@ -23,6 +26,26 @@ class CompletionRequestPolicy:
     effective_contract_mode: str
     effective_timeout_seconds: int
     progress_poll_seconds: float
+
+
+def uses_chat_completions_transport(base_url: str, completion_endpoint: str) -> bool:
+    base = base_url.rstrip("/").lower()
+    endpoint = completion_endpoint.rstrip("/").lower()
+    return (
+        endpoint.endswith("/chat/completions")
+        or "openrouter.ai" in base
+        or base.endswith("/v1")
+    )
+
+
+def completion_url(base_url: str, completion_endpoint: str) -> str:
+    base = base_url.rstrip("/")
+    endpoint = completion_endpoint
+    if uses_chat_completions_transport(base_url, completion_endpoint) and completion_endpoint.rstrip("/") == "/completion":
+        endpoint = "/chat/completions"
+    if not endpoint.startswith("/"):
+        endpoint = f"/{endpoint}"
+    return f"{base}{endpoint}"
 
 
 @dataclass(slots=True)
@@ -43,6 +66,54 @@ class LlamaCppClient:
         if not isinstance(payload, dict):
             raise ModelClientError(f"Unexpected health response: {payload!r}")
         return payload
+
+    def cache_identity(self) -> dict[str, Any]:
+        """Return a stable identity for every model/server fact that can affect output."""
+        configured_identity = self.config.model.model_identity.strip()
+        identity: dict[str, Any] = {
+            "configured_model_identity": configured_identity,
+            "base_url": self.config.model.base_url.rstrip("/"),
+            "completion_endpoint": self.config.model.completion_endpoint,
+            "profile_name": self.config.model.profile_name,
+        }
+        try:
+            response = requests.get(
+                f"{self._base}/props",
+                timeout=(self.config.model.connect_timeout_seconds, min(self.config.model.timeout_seconds, 15)),
+            )
+            response.raise_for_status()
+            props = response.json()
+            if not isinstance(props, dict):
+                raise ModelClientError(f"Unexpected model props response: {props!r}")
+            model_path = str(props.get("model_path", "")).strip()
+            model_file: dict[str, Any] = {"path": model_path}
+            if model_path:
+                try:
+                    stat = Path(model_path).stat()
+                    model_file.update({"size": stat.st_size, "mtime_ns": stat.st_mtime_ns})
+                except OSError as exc:
+                    model_file["stat_error"] = exc.__class__.__name__
+            output_affecting_props = {
+                "model_alias": props.get("model_alias"),
+                "model_file": model_file,
+                "build_info": props.get("build_info"),
+                "bos_token": props.get("bos_token"),
+                "eos_token": props.get("eos_token"),
+                "chat_template": props.get("chat_template"),
+                "default_generation_settings": props.get("default_generation_settings"),
+                "modalities": props.get("modalities"),
+            }
+            identity["server_properties_sha256"] = sha256_text(
+                stable_json_dumps(output_affecting_props, indent=None)
+            )
+            identity["model_alias"] = props.get("model_alias")
+            identity["model_file"] = model_file
+            identity["server_build_info"] = props.get("build_info")
+            identity["status"] = "resolved"
+        except Exception as exc:
+            identity["status"] = "configured_only" if configured_identity else "unresolved"
+            identity["probe_error_type"] = exc.__class__.__name__
+        return identity
 
     def tokenize(self, text: str) -> int:
         response = requests.post(
@@ -74,17 +145,16 @@ class LlamaCppClient:
     ) -> CompletionRequestPolicy:
         mode = contract.mode
         structured_output_mode = self.config.model.structured_output_mode
-        # `post_validate` now means "use generation-time contract
-        # enforcement and then validate locally as an additional guard".
-        # Core semantic calls must not silently downgrade to plain output.
+        if structured_output_mode != "server_schema":
+            raise ModelClientError("Every live model call must use server_schema structured output mode")
         if kind == "verification":
             timeout_seconds = self.config.model.verification_timeout_seconds
         elif live_mode and (len(prompt) > 1200 or max_tokens > 192):
             timeout_seconds = self.config.model.benchmark_timeout_seconds
-        elif mode in {"json_schema", "gbnf"}:
+        elif mode == "json_schema":
             timeout_seconds = self.config.model.structured_timeout_seconds
         else:
-            timeout_seconds = self.config.model.simple_timeout_seconds
+            raise ModelClientError(f"Unsupported unconstrained contract mode for live model call: {mode}")
         timeout_seconds = max(timeout_seconds, self.config.model.timeout_seconds)
         return CompletionRequestPolicy(
             profile_name=self.config.model.profile_name,
@@ -112,6 +182,17 @@ class LlamaCppClient:
         )
         return contract, policy
 
+    def _require_portable_schema(self, contract: ContractSpec) -> dict[str, Any]:
+        if contract.mode != "json_schema":
+            raise ModelClientError(f"Every live model call must use json_schema, got {contract.mode!r} for {contract.name}")
+        if not contract.json_schema:
+            raise ModelClientError(f"JSON schema contract {contract.name} is missing schema")
+        try:
+            assert_portable_json_schema(contract.json_schema, schema_name=contract.name)
+        except PortableSchemaError as exc:
+            raise ModelClientError(f"Contract {contract.name} is not portable: {exc}") from exc
+        return contract.json_schema
+
     def build_completion_request(
         self,
         prompt: str,
@@ -120,31 +201,45 @@ class LlamaCppClient:
         contract: ContractSpec,
         temperature: float | None = None,
     ) -> dict[str, Any]:
-        payload: dict[str, Any] = {
+        schema = self._require_portable_schema(contract)
+        effective_temperature = self.config.model.temperature if temperature is None else temperature
+        if uses_chat_completions_transport(self.config.model.base_url, self.config.model.completion_endpoint):
+            return {
+                "model": self.config.model.profile_name,
+                "messages": [{"role": "user", "content": prompt}],
+                "max_tokens": max_tokens,
+                "temperature": effective_temperature,
+                "top_p": self.config.model.top_p,
+                "seed": self.config.model.seed,
+                "stop": list(self.config.model.stop),
+                "response_format": {
+                    "type": "json_schema",
+                    "json_schema": {
+                        "name": contract.name.replace(":", "_"),
+                        "strict": True,
+                        "schema": schema,
+                    },
+                },
+                "provider": {"require_parameters": True},
+            }
+        return {
             "prompt": prompt,
             "n_predict": max_tokens,
-            "temperature": self.config.model.temperature if temperature is None else temperature,
+            "temperature": effective_temperature,
             "top_p": self.config.model.top_p,
             "seed": self.config.model.seed,
             "stop": list(self.config.model.stop),
+            "json_schema": schema,
         }
-        if contract.mode == "gbnf":
-            if not contract.grammar:
-                raise ModelClientError(f"GBNF contract {contract.name} is missing grammar text")
-            payload["grammar"] = contract.grammar
-        if contract.mode == "json_schema":
-            if not contract.json_schema:
-                raise ModelClientError(f"JSON schema contract {contract.name} is missing schema")
-            payload["json_schema"] = contract.json_schema
-        return payload
 
     def _token_timeout_seconds(self, timeout_seconds: int | None = None) -> float:
-        del timeout_seconds
-        raw = os.environ.get("SWAAG_MODEL_TOKEN_TIMEOUT_SECONDS", "60")
+        raw = os.environ.get("SWAAG_MODEL_TOKEN_TIMEOUT_SECONDS")
+        if raw is None or raw.strip() == "":
+            return max(1.0, float(timeout_seconds if timeout_seconds is not None else self.config.model.timeout_seconds))
         try:
             value = float(raw)
         except ValueError:
-            value = 60.0
+            value = float(timeout_seconds if timeout_seconds is not None else self.config.model.timeout_seconds)
         return max(1.0, value)
 
     def send_completion(
@@ -159,7 +254,7 @@ class LlamaCppClient:
         stream_payload["stream"] = True
         started = time.monotonic()
         response = requests.post(
-            f"{self._base}{self.config.model.completion_endpoint}",
+            completion_url(self.config.model.base_url, self.config.model.completion_endpoint),
             json=stream_payload,
             timeout=(self.config.model.connect_timeout_seconds, token_timeout_seconds),
             stream=True,
@@ -194,7 +289,7 @@ class LlamaCppClient:
                 if not isinstance(item, dict):
                     raise ModelClientError(f"Unexpected streamed completion item: {item!r}")
                 last_body = item
-                piece = str(item.get("content", "")) if "content" in item else ""
+                piece = _completion_piece(item)
                 token_count_changed = False
                 if piece:
                     content_parts.append(piece)
@@ -219,15 +314,15 @@ class LlamaCppClient:
                             "token_timeout_seconds": token_timeout_seconds,
                         }
                     )
-                if item.get("stop"):
+                if item.get("stop") or _chat_finished(item):
                     break
         except requests.Timeout as exc:
             raise requests.ReadTimeout(f"No streamed model token/event for {token_timeout_seconds:.1f} seconds") from exc
-        if not content_parts and "content" not in last_body:
+        if not content_parts and "content" not in last_body and not _chat_content(last_body):
             raise ModelClientError(f"Streamed completion response missing content: {last_body!r}")
         elapsed_seconds = round(time.monotonic() - started, 3)
         body = dict(last_body)
-        body["content"] = "".join(content_parts)
+        body["content"] = "".join(content_parts) or _chat_content(last_body)
         body["stream"] = True
         body["token_timeout_seconds"] = token_timeout_seconds
         completion_tokens = body.get("tokens_predicted")
@@ -292,3 +387,42 @@ def _http_error_detail(response: requests.Response) -> str:
             return " | ".join(parts)
     trimmed = text[:400].replace("\n", " ").strip()
     return f"http_status={response.status_code} | body={trimmed}"
+
+
+def _completion_piece(item: dict[str, Any]) -> str:
+    if "content" in item:
+        return str(item.get("content", ""))
+    choices = item.get("choices")
+    if not isinstance(choices, list) or not choices:
+        return ""
+    first = choices[0]
+    if not isinstance(first, dict):
+        return ""
+    delta = first.get("delta")
+    if isinstance(delta, dict) and isinstance(delta.get("content"), str):
+        return str(delta["content"])
+    message = first.get("message")
+    if isinstance(message, dict) and isinstance(message.get("content"), str):
+        return str(message["content"])
+    return ""
+
+
+def _chat_content(item: dict[str, Any]) -> str:
+    choices = item.get("choices")
+    if not isinstance(choices, list) or not choices:
+        return ""
+    first = choices[0]
+    if not isinstance(first, dict):
+        return ""
+    message = first.get("message")
+    if isinstance(message, dict) and isinstance(message.get("content"), str):
+        return str(message["content"])
+    return ""
+
+
+def _chat_finished(item: dict[str, Any]) -> bool:
+    choices = item.get("choices")
+    if not isinstance(choices, list) or not choices:
+        return False
+    first = choices[0]
+    return isinstance(first, dict) and bool(first.get("finish_reason"))

@@ -12,7 +12,32 @@ from swaag.notes import compact_notes, enforce_limits, make_note, render_notes
 from swaag.reader import ReaderError, SequentialReader
 from swaag.tools.base import Tool, ToolContext, ToolValidationError
 from swaag.types import DerivedFileWrite, ToolExecutionResult, ToolGeneratedEvent
-from swaag.utils import stable_json_dumps
+from swaag.utils import sha256_text, stable_json_dumps
+
+
+def _closed_input(properties: dict[str, dict[str, Any]]) -> dict[str, Any]:
+    return {
+        "type": "object",
+        "properties": properties,
+        "required": list(properties),
+        "additionalProperties": False,
+    }
+
+
+def _nullable(schema: dict[str, Any]) -> dict[str, Any]:
+    return {"anyOf": [schema, {"type": "null"}]}
+
+
+def _string_or_null() -> dict[str, Any]:
+    return _nullable({"type": "string"})
+
+
+def _integer_or_null() -> dict[str, Any]:
+    return _nullable({"type": "integer"})
+
+
+def _string_array_or_null() -> dict[str, Any]:
+    return _nullable({"type": "array", "items": {"type": "string"}})
 
 
 class EchoTool(Tool):
@@ -21,7 +46,6 @@ class EchoTool(Tool):
     kind = "pure"
     requires_artifacts = ("text",)
     provides_artifacts = ("text",)
-    allowed_followers = ("respond",)
     output_schema = {
         "type": "object",
         "properties": {"text": {"type": "string"}},
@@ -50,7 +74,6 @@ class TimeNowTool(Tool):
     description = "Return the current local and UTC time from the machine running the agent."
     kind = "pure"
     provides_artifacts = ("time_info",)
-    allowed_followers = ("respond",)
     output_schema = {
         "type": "object",
         "properties": {
@@ -91,7 +114,6 @@ class CalculatorTool(Tool):
     kind = "pure"
     requires_artifacts = ("expression",)
     provides_artifacts = ("numeric_result",)
-    allowed_followers = ("respond",)
     output_schema = {
         "type": "object",
         "properties": {
@@ -149,7 +171,6 @@ class ReadTextTool(Tool):
     kind = "stateful"
     requires_artifacts = ("path_or_reader",)
     provides_artifacts = ("text", "path")
-    allowed_followers = ("notes", "edit_text", "echo", "respond")
     output_schema = {
         "type": "object",
         "properties": {
@@ -165,21 +186,18 @@ class ReadTextTool(Tool):
         "required": ["reader_id", "source_kind", "source_ref", "start_offset", "end_offset", "next_offset", "finished", "text"],
         "additionalProperties": False,
     }
-    input_schema = {
-        "type": "object",
-        "properties": {
-            "path": {"anyOf": [{"type": "string"}, {"type": "array", "items": {"type": "string"}, "minItems": 1}]},
-            "paths": {"type": "array", "items": {"type": "string"}, "minItems": 1},
-            "note_id": {"type": "string"},
-            "reader_id": {"type": "string"},
-            "chunk_chars": {"type": "integer", "minimum": 1},
-            "overlap_chars": {"type": "integer", "minimum": 0},
-            "start_offset": {"type": "integer", "minimum": 0},
-            "end_offset": {"type": "integer", "minimum": 0},
-        },
-        "required": [],
-        "additionalProperties": False,
-    }
+    input_schema = _closed_input(
+        {
+            "path": _string_or_null(),
+            "paths": _string_array_or_null(),
+            "note_id": _string_or_null(),
+            "reader_id": _string_or_null(),
+            "chunk_chars": _integer_or_null(),
+            "overlap_chars": _integer_or_null(),
+            "start_offset": _integer_or_null(),
+            "end_offset": _integer_or_null(),
+        }
+    )
 
     def validate(self, raw_input: dict[str, Any]) -> dict[str, Any]:
         allowed = {"path", "paths", "note_id", "reader_id", "chunk_chars", "overlap_chars", "start_offset", "end_offset"}
@@ -188,30 +206,17 @@ class ReadTextTool(Tool):
         path = raw_input.get("path")
         paths = raw_input.get("paths")
         if paths is not None and path is not None:
-            # Some local models echo both the single-file field and the multi-file
-            # field.  Treat a valid paths list as authoritative so a harmless read
-            # step can continue instead of looping on validation failures.
-            if isinstance(paths, list) and paths and all(isinstance(item, str) and item.strip() for item in paths):
-                path = "\n".join(str(item) for item in paths)
-            else:
-                paths = None
-        elif paths is not None:
+            raise ToolValidationError("read_text requires exactly one of path, paths, note_id, or reader_id")
+        if paths is not None:
             path = "\n".join(str(item) for item in paths)
         elif isinstance(path, list):
-            paths = path
-            path = "\n".join(str(item) for item in paths)
+            raise ToolValidationError("read_text.path must be a string or null")
         note_id = raw_input.get("note_id")
         reader_id = raw_input.get("reader_id")
         chunk_chars = raw_input.get("chunk_chars")
         overlap_chars = raw_input.get("overlap_chars")
-        if path is not None:
-            # The model sometimes echoes stale continuation or note-routing fields
-            # while also supplying a concrete path. Prefer the explicit path;
-            # otherwise a harmless read step fails before any file can be inspected.
-            note_id = None
-            reader_id = None
         if sum(value is not None for value in [path, note_id, reader_id]) != 1:
-            raise ToolValidationError("read_text requires exactly one of path, note_id, or reader_id")
+            raise ToolValidationError("read_text requires exactly one of path, paths, note_id, or reader_id")
         if paths is not None:
             if not paths or not all(isinstance(item, str) and item.strip() for item in paths):
                 raise ToolValidationError("read_text.path list must contain non-empty strings")
@@ -257,7 +262,6 @@ class NotesTool(Tool):
     kind = "stateful"
     requires_artifacts = ("note_action",)
     provides_artifacts = ("notes_state", "text")
-    allowed_followers = ("calculator", "echo", "edit_text", "respond")
     output_schema = {
         "type": "object",
         "properties": {
@@ -271,17 +275,14 @@ class NotesTool(Tool):
         },
         "additionalProperties": False,
     }
-    input_schema = {
-        "type": "object",
-        "properties": {
+    input_schema = _closed_input(
+        {
             "action": {"type": "string", "enum": ["list", "add", "replace", "compact"]},
-            "note_id": {"type": "string"},
-            "title": {"type": "string"},
-            "content": {"type": "string"},
-        },
-        "required": ["action"],
-        "additionalProperties": False,
-    }
+            "note_id": _string_or_null(),
+            "title": _string_or_null(),
+            "content": _string_or_null(),
+        }
+    )
 
     def validate(self, raw_input: dict[str, Any]) -> dict[str, Any]:
         action = raw_input.get("action")
@@ -354,10 +355,23 @@ class NotesTool(Tool):
 class EditTextTool(Tool):
     name = "edit_text"
     description = "Preview or apply a bounded text edit to a local UTF-8 text file."
+    usage_guidance = (
+        "Return one concrete edit with path, operation, dry_run, and null for inapplicable nullable fields. "
+        "dry_run=false applies the edit; do not add write_file just to persist it. "
+        "Prefer replace_exact when you have observed the exact current text to replace: set old_text to the current literal text and new_text to the desired replacement; it requires exactly one match and fails closed on zero or multiple matches. "
+        "replace_pattern_once/all replace the entire matched text; preserve needed context in replacement or match a narrower span. "
+        "If the pattern is absent, choose an edit that matches the current file text; absence fails closed even if replacement text already appears. "
+        "Use replace_range only as a low-level fallback when exact text replacement is unsuitable; it needs start, end, expected_text, and replacement. delete_range needs start, end, and expected_text. "
+        "expected_text must exactly equal the current file text in the selected range; range offsets are zero-based character offsets. "
+        "insert_at needs position and insertion. "
+        "Plans using this tool should require tool_effect_verified as the mechanical objective check; it verifies that the current file exactly matches this tool result's after-hash. "
+        "Use file_contains or command_success only for a distinct additional objective with a concrete non-empty payload."
+    )
     kind = "side_effect"
+    objective_verification_check_types = ("tool_effect_verified", "file_contains", "command_success")
+    semantic_result_review_required = True
     requires_artifacts = ("path", "text")
     provides_artifacts = ("edited_text", "path")
-    allowed_followers = ("respond", "read_text")
     output_schema = {
         "type": "object",
         "properties": {
@@ -366,35 +380,35 @@ class EditTextTool(Tool):
             "changed": {"type": "boolean"},
             "diff": {"type": "string"},
             "details": {"type": "object"},
+            "before_sha256": {"type": "string"},
+            "after_sha256": {"type": "string"},
         },
-        "required": ["path", "operation", "changed", "diff", "details"],
+        "required": ["path", "operation", "changed", "diff", "details", "before_sha256", "after_sha256"],
         "additionalProperties": False,
     }
-    input_schema = {
-        "type": "object",
-        "properties": {
+    input_schema = _closed_input(
+        {
             "path": {"type": "string"},
-            "operation": {"type": "string", "enum": ["replace_range", "insert_at", "delete_range", "replace_pattern_once", "replace_pattern_all"]},
+            "operation": {"type": "string", "enum": ["replace_exact", "replace_range", "insert_at", "delete_range", "replace_pattern_once", "replace_pattern_all"]},
             "dry_run": {"type": "boolean"},
-            "start": {"type": "integer", "minimum": 0},
-            "end": {"type": "integer", "minimum": 0},
-            "position": {"type": "integer", "minimum": 0},
-            "replacement": {"type": "string"},
-            "insertion": {"type": "string"},
-            "pattern": {"type": "string"},
-        },
-        "required": ["path", "operation"],
-        "additionalProperties": False,
-    }
+            "old_text": _string_or_null(),
+            "new_text": _string_or_null(),
+            "start": _integer_or_null(),
+            "end": _integer_or_null(),
+            "position": _integer_or_null(),
+            "expected_text": _string_or_null(),
+            "replacement": _string_or_null(),
+            "insertion": _string_or_null(),
+            "pattern": _string_or_null(),
+        }
+    )
 
     def validate(self, raw_input: dict[str, Any]) -> dict[str, Any]:
         path = raw_input.get("path")
         operation = raw_input.get("operation")
-        if operation in {"replace", "replace_pattern", "replace_once", "replace_pattern"} and raw_input.get("pattern") is not None and raw_input.get("replacement") is not None:
-            operation = "replace_pattern_once"
         if not isinstance(path, str) or not path.strip():
             raise ToolValidationError("edit_text.path must be a non-empty string")
-        if operation not in {"replace_range", "insert_at", "delete_range", "replace_pattern_once", "replace_pattern_all"}:
+        if operation not in {"replace_exact", "replace_range", "insert_at", "delete_range", "replace_pattern_once", "replace_pattern_all"}:
             raise ToolValidationError("edit_text.operation is invalid")
         def _non_negative_int(field: str) -> int:
             value = raw_input.get(field)
@@ -414,9 +428,16 @@ class EditTextTool(Tool):
             return value
 
         validated = {"path": path, "operation": operation, "dry_run": bool(raw_input.get("dry_run", False))}
-        if operation == "replace_range":
+        if operation == "replace_exact":
+            old_text = _string_field("old_text")
+            if old_text == "":
+                raise ToolValidationError("edit_text.replace_exact requires non-empty old_text")
+            validated["old_text"] = old_text
+            validated["new_text"] = _string_field("new_text")
+        elif operation == "replace_range":
             validated["start"] = _non_negative_int("start")
             validated["end"] = _non_negative_int("end")
+            validated["expected_text"] = _string_field("expected_text")
             validated["replacement"] = _string_field("replacement")
         elif operation == "insert_at":
             validated["position"] = _non_negative_int("position")
@@ -424,6 +445,7 @@ class EditTextTool(Tool):
         elif operation == "delete_range":
             validated["start"] = _non_negative_int("start")
             validated["end"] = _non_negative_int("end")
+            validated["expected_text"] = _string_field("expected_text")
         elif operation in {"replace_pattern_once", "replace_pattern_all"}:
             if raw_input.get("pattern") is None or raw_input.get("replacement") is None:
                 raise ToolValidationError(f"edit_text.{operation} requires pattern and replacement")
@@ -445,6 +467,49 @@ class EditTextTool(Tool):
             required.add("edit_applied")
         return required
 
+    def verify_effect(
+        self,
+        result: ToolExecutionResult,
+        environment,
+    ) -> tuple[bool, dict[str, Any]]:
+        output = result.output
+        path_text = output.get("path")
+        changed = output.get("changed")
+        before_sha256 = output.get("before_sha256")
+        after_sha256 = output.get("after_sha256")
+        evidence: dict[str, Any] = {
+            "tool_name": result.tool_name,
+            "path": path_text,
+            "operation": output.get("operation"),
+            "changed": changed,
+            "before_sha256": before_sha256,
+            "after_sha256": after_sha256,
+        }
+        if result.tool_name != self.name:
+            evidence["reason"] = "tool_name_mismatch"
+            return False, evidence
+        if not isinstance(path_text, str) or not path_text.strip():
+            evidence["reason"] = "missing_path"
+            return False, evidence
+        if not isinstance(before_sha256, str) or not before_sha256 or not isinstance(after_sha256, str) or not after_sha256:
+            evidence["reason"] = "missing_effect_hashes"
+            return False, evidence
+        try:
+            resolved, current_text = environment.filesystem.read_text(path_text, cwd=environment.current_cwd)
+        except Exception as exc:  # noqa: BLE001 - evidence must fail closed for any filesystem error.
+            evidence["reason"] = "current_file_unreadable"
+            evidence["error"] = str(exc)
+            return False, evidence
+        current_sha256 = sha256_text(current_text)
+        evidence["resolved_path"] = str(resolved)
+        evidence["current_sha256"] = current_sha256
+        evidence["persisted"] = current_sha256 == after_sha256
+        evidence["real_change"] = changed is True and before_sha256 != after_sha256
+        passed = bool(evidence["persisted"]) and bool(evidence["real_change"])
+        if not passed:
+            evidence["reason"] = "tool_effect_not_persisted"
+        return passed, evidence
+
     def execute(self, validated_input: dict[str, Any], context: ToolContext) -> ToolExecutionResult:
         return context.environment.preview_or_apply_edit(validated_input, context)
 
@@ -455,7 +520,6 @@ class ListFilesTool(Tool):
     kind = "stateful"
     requires_artifacts = ("path",)
     provides_artifacts = ("file_list",)
-    allowed_followers = ("read_file", "read_text", "respond")
     output_schema = {
         "type": "object",
         "properties": {
@@ -466,12 +530,7 @@ class ListFilesTool(Tool):
         "required": ["path", "entries", "count"],
         "additionalProperties": False,
     }
-    input_schema = {
-        "type": "object",
-        "properties": {"path": {"type": "string"}},
-        "required": [],
-        "additionalProperties": False,
-    }
+    input_schema = _closed_input({"path": {"type": "string"}})
 
     def validate(self, raw_input: dict[str, Any]) -> dict[str, Any]:
         path = raw_input.get("path", ".")
@@ -492,7 +551,6 @@ class ReadFileTool(Tool):
     kind = "stateful"
     requires_artifacts = ("path",)
     provides_artifacts = ("text", "path")
-    allowed_followers = ("write_file", "edit_text", "respond", "run_tests")
     output_schema = {
         "type": "object",
         "properties": {
@@ -530,7 +588,6 @@ class SearchInFileTool(Tool):
     kind = "stateful"
     requires_artifacts = ("path", "pattern")
     provides_artifacts = ("matches",)
-    allowed_followers = ("read_file", "read_text", "respond")
     output_schema = {
         "type": "object",
         "properties": {
@@ -545,18 +602,15 @@ class SearchInFileTool(Tool):
         "required": ["path", "relative_path", "pattern", "regex", "ignore_case", "matches", "match_count"],
         "additionalProperties": False,
     }
-    input_schema = {
-        "type": "object",
-        "properties": {
+    input_schema = _closed_input(
+        {
             "path": {"type": "string"},
             "pattern": {"type": "string"},
             "regex": {"type": "boolean"},
             "ignore_case": {"type": "boolean"},
-            "max_matches": {"type": "integer"},
-        },
-        "required": ["path", "pattern"],
-        "additionalProperties": False,
-    }
+            "max_matches": _integer_or_null(),
+        }
+    )
 
     def validate(self, raw_input: dict[str, Any]) -> dict[str, Any]:
         path = raw_input.get("path")
@@ -565,7 +619,9 @@ class SearchInFileTool(Tool):
             raise ToolValidationError("search_in_file.path must be a non-empty string")
         if not isinstance(pattern, str) or not pattern:
             raise ToolValidationError("search_in_file.pattern must be a non-empty string")
-        max_matches = raw_input.get("max_matches", 50)
+        max_matches = raw_input.get("max_matches")
+        if max_matches is None:
+            max_matches = 50
         if not isinstance(max_matches, int) or max_matches <= 0:
             raise ToolValidationError("search_in_file.max_matches must be a positive integer")
         return {
@@ -595,7 +651,6 @@ class SearchRepoTool(Tool):
     kind = "stateful"
     requires_artifacts = ("pattern",)
     provides_artifacts = ("matches", "paths")
-    allowed_followers = ("read_file", "read_text", "respond")
     output_schema = {
         "type": "object",
         "properties": {
@@ -610,27 +665,28 @@ class SearchRepoTool(Tool):
         "required": ["path", "pattern", "regex", "ignore_case", "matches", "match_count", "matched_files"],
         "additionalProperties": False,
     }
-    input_schema = {
-        "type": "object",
-        "properties": {
-            "path": {"type": "string"},
+    input_schema = _closed_input(
+        {
+            "path": _string_or_null(),
             "pattern": {"type": "string"},
             "regex": {"type": "boolean"},
             "ignore_case": {"type": "boolean"},
-            "max_matches": {"type": "integer"},
-        },
-        "required": ["pattern"],
-        "additionalProperties": False,
-    }
+            "max_matches": _integer_or_null(),
+        }
+    )
 
     def validate(self, raw_input: dict[str, Any]) -> dict[str, Any]:
         pattern = raw_input.get("pattern")
         if not isinstance(pattern, str) or not pattern:
             raise ToolValidationError("search_repo.pattern must be a non-empty string")
-        path = raw_input.get("path", ".")
+        path = raw_input.get("path")
+        if path is None:
+            path = "."
         if not isinstance(path, str) or not path.strip():
             raise ToolValidationError("search_repo.path must be a non-empty string")
-        max_matches = raw_input.get("max_matches", 100)
+        max_matches = raw_input.get("max_matches")
+        if max_matches is None:
+            max_matches = 100
         if not isinstance(max_matches, int) or max_matches <= 0:
             raise ToolValidationError("search_repo.max_matches must be a positive integer")
         return {
@@ -657,10 +713,17 @@ class SearchRepoTool(Tool):
 class WriteFileTool(Tool):
     name = "write_file"
     description = "Write full UTF-8 file contents through the persistent environment."
+    usage_guidance = (
+        "Return path, complete final file content, and create as a boolean. "
+        "Use this only when replacing or creating the whole file is the intended action with concrete content. "
+        "Do not pass artifact placeholders; use observed file text or choose a narrower edit tool when appropriate. "
+        "Plans using this tool must verify the resulting state with a required file_contains or command_success check; file_exists is not enough."
+    )
     kind = "side_effect"
+    objective_verification_check_types = ("file_contains", "command_success")
+    semantic_result_review_required = True
     requires_artifacts = ("path", "text")
     provides_artifacts = ("edited_text", "path")
-    allowed_followers = ("read_file", "read_text", "respond", "run_tests")
     output_schema = {
         "type": "object",
         "properties": {
@@ -671,16 +734,13 @@ class WriteFileTool(Tool):
         "required": ["path", "written", "size_chars"],
         "additionalProperties": False,
     }
-    input_schema = {
-        "type": "object",
-        "properties": {
+    input_schema = _closed_input(
+        {
             "path": {"type": "string"},
             "content": {"type": "string"},
             "create": {"type": "boolean"},
-        },
-        "required": ["path", "content"],
-        "additionalProperties": False,
-    }
+        }
+    )
 
     def validate(self, raw_input: dict[str, Any]) -> dict[str, Any]:
         path = raw_input.get("path")
@@ -705,7 +765,6 @@ class InspectDiffTool(Tool):
     kind = "stateful"
     requires_artifacts = ("path",)
     provides_artifacts = ("diff",)
-    allowed_followers = ("edit_text", "write_file", "respond")
     output_schema = {
         "type": "object",
         "properties": {
@@ -744,7 +803,6 @@ class ListChangesTool(Tool):
     kind = "stateful"
     requires_artifacts = ()
     provides_artifacts = ("changes",)
-    allowed_followers = ("read_file", "inspect_diff", "respond")
     output_schema = {
         "type": "object",
         "properties": {
@@ -774,7 +832,6 @@ class WorkspaceSnapshotTool(Tool):
     kind = "stateful"
     requires_artifacts = ()
     provides_artifacts = ("workspace_snapshot",)
-    allowed_followers = ("search_repo", "read_file", "respond")
     output_schema = {
         "type": "object",
         "properties": {
@@ -804,10 +861,13 @@ class WorkspaceSnapshotTool(Tool):
 class ShellCommandTool(Tool):
     name = "shell_command"
     description = "Run a shell command in the persistent session workspace."
+    usage_guidance = (
+        "Return one non-interactive shell command directly executable in the current workspace. "
+        "Do not return only an interpreter name. Set background to true only for work that should continue after the call returns."
+    )
     kind = "side_effect"
     requires_artifacts = ("command",)
     provides_artifacts = ("command_result",)
-    allowed_followers = ("run_tests", "read_file", "list_files", "respond")
     output_schema = {
         "type": "object",
         "properties": {
@@ -826,26 +886,18 @@ class ShellCommandTool(Tool):
         "required": ["command", "cwd_before", "cwd_after", "exit_code", "stdout", "stderr", "created_files", "modified_files", "deleted_files", "background"],
         "additionalProperties": False,
     }
-    input_schema = {
-        "type": "object",
-        "properties": {
+    input_schema = _closed_input(
+        {
             "command": {"type": "string"},
             "background": {"type": "boolean"},
-        },
-        "required": ["command"],
-        "additionalProperties": False,
-    }
+        }
+    )
 
     def validate(self, raw_input: dict[str, Any]) -> dict[str, Any]:
         command = raw_input.get("command")
         if not isinstance(command, str) or not command.strip():
             raise ToolValidationError("shell_command.command must be a non-empty string")
         stripped = command.strip()
-        lowered = stripped.lower()
-        if any(marker in stripped for marker in ("<patch_file>", "<file>", "<path>", "<command>")):
-            raise ToolValidationError("shell_command.command must not contain placeholder tokens")
-        if "/path/to/" in lowered or "todo" in lowered or "insert command here" in lowered:
-            raise ToolValidationError("shell_command.command must be directly executable without placeholder text")
         background = bool(raw_input.get("background", False))
         return {"command": stripped, "background": background}
 
@@ -864,10 +916,10 @@ class ShellCommandTool(Tool):
 class RunTestsTool(Tool):
     name = "run_tests"
     description = "Run a test command inside the persistent workspace and capture structured results."
+    usage_guidance = "Return the command as an argv array of strings and background as a boolean."
     kind = "stateful"
     requires_artifacts = ("command",)
     provides_artifacts = ("test_result",)
-    allowed_followers = ("read_file", "edit_text", "write_file", "respond")
     output_schema = {
         "type": "object",
         "properties": {
@@ -883,15 +935,12 @@ class RunTestsTool(Tool):
         "required": ["command", "cwd", "exit_code", "stdout", "stderr", "passed", "background"],
         "additionalProperties": False,
     }
-    input_schema = {
-        "type": "object",
-        "properties": {
+    input_schema = _closed_input(
+        {
             "command": {"type": "array", "items": {"type": "string"}},
             "background": {"type": "boolean"},
-        },
-        "required": ["command"],
-        "additionalProperties": False,
-    }
+        }
+    )
 
     def validate(self, raw_input: dict[str, Any]) -> dict[str, Any]:
         command = raw_input.get("command")
@@ -923,7 +972,6 @@ class BrowserSearchTool(Tool):
     kind = "stateful"
     requires_artifacts = ("search_query",)
     provides_artifacts = ("search_results",)
-    allowed_followers = ("browser_browse", "notes", "respond")
     output_schema = {
         "type": "object",
         "properties": {
@@ -962,21 +1010,20 @@ class BrowserSearchTool(Tool):
         "required": ["query", "engine", "url", "result_count", "results", "attempts"],
         "additionalProperties": False,
     }
-    input_schema = {
-        "type": "object",
-        "properties": {
+    input_schema = _closed_input(
+        {
             "query": {"type": "string"},
             "engine": {"type": "string", "enum": ["auto", "privau", "bing", "duckduckgo"]},
-            "limit": {"type": "integer", "minimum": 1},
-        },
-        "required": ["query"],
-        "additionalProperties": False,
-    }
+            "limit": _integer_or_null(),
+        }
+    )
 
     def validate(self, raw_input: dict[str, Any]) -> dict[str, Any]:
         query = raw_input.get("query")
         engine = raw_input.get("engine", "auto")
-        limit = raw_input.get("limit", 5)
+        limit = raw_input.get("limit")
+        if limit is None:
+            limit = 5
         if not isinstance(query, str) or not query.strip():
             raise ToolValidationError("browser_search.query must be a non-empty string")
         if engine not in {"auto", "privau", "bing", "duckduckgo"}:
@@ -1003,7 +1050,6 @@ class BrowserBrowseTool(Tool):
     kind = "stateful"
     requires_artifacts = ("url",)
     provides_artifacts = ("page_summary", "text")
-    allowed_followers = ("notes", "respond")
     output_schema = {
         "type": "object",
         "properties": {

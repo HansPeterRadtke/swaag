@@ -16,11 +16,45 @@ def test_runtime_recovers_after_multiple_replans_and_remains_bounded(make_config
         "import unittest\n\nfrom counter import value\n\n\nclass CounterTests(unittest.TestCase):\n    def test_value(self) -> None:\n        self.assertEqual(value(), 3)\n\n\nif __name__ == '__main__':\n    unittest.main()\n",
         encoding="utf-8",
     )
-    config = make_config(tools__allow_side_effect_tools=True, planner__max_replans=2, runtime__max_reasoning_steps=10, runtime__max_total_actions=12)
+    config = make_config(
+        tools__allow_side_effect_tools=True,
+        planner__max_replans=2,
+        runtime__max_reasoning_steps=10,
+        runtime__max_total_actions=12,
+        model__context_limit=8192,
+    )
     goal = f"Read {module}, fix it so the tests pass, and reply fixed."
     runtime = AgentRuntime(
         config,
         model_client=FakeModelClient(
+            contract_responses={
+                "failure_classification": [
+                    json.dumps(
+                        {
+                            "kind": "verification_failure",
+                            "retryable": False,
+                            "requires_replan": True,
+                            "suggested_strategy_mode": "recovery",
+                            "wait_seconds": 0.0,
+                            "reason": "first edited value still fails verification",
+                        }
+                    ),
+                    json.dumps(
+                        {
+                            "kind": "verification_failure",
+                            "retryable": False,
+                            "requires_replan": True,
+                            "suggested_strategy_mode": "recovery",
+                            "wait_seconds": 0.0,
+                            "reason": "second edited value still fails verification",
+                        }
+                    ),
+                ],
+                "action_selection": [
+                    json.dumps({"action": "replan", "reason": "verification failure requires a new plan"}),
+                    json.dumps({"action": "replan", "reason": "verification failure requires a final plan"}),
+                ],
+            },
             responses=[
                 plan_response(
                     goal=goal,
@@ -47,7 +81,7 @@ def test_runtime_recovers_after_multiple_replans_and_remains_bounded(make_config
                     ],
                 ),
                 json.dumps({"action": "call_tool", "response": "", "tool_name": "read_text", "tool_input": {"path": str(module)}}),
-                json.dumps({"action": "call_tool", "response": "", "tool_name": "edit_text", "tool_input": {"path": str(module), "operation": "replace_pattern_once", "pattern": "return 0", "replacement": "return 1"}}),
+                json.dumps({"action": "call_tool", "response": "", "tool_name": "edit_text", "tool_input": {"path": str(module), "operation": "replace_pattern_once", "dry_run": False, "start": None, "end": None, "position": None, "expected_text": None, "pattern": "return 0", "replacement": "return 1", "insertion": None}}),
                 plan_response(
                     goal=goal,
                     steps=[
@@ -73,7 +107,7 @@ def test_runtime_recovers_after_multiple_replans_and_remains_bounded(make_config
                     ],
                 ),
                 json.dumps({"action": "call_tool", "response": "", "tool_name": "read_text", "tool_input": {"path": str(module)}}),
-                json.dumps({"action": "call_tool", "response": "", "tool_name": "edit_text", "tool_input": {"path": str(module), "operation": "replace_pattern_once", "pattern": "return 1", "replacement": "return 2"}}),
+                json.dumps({"action": "call_tool", "response": "", "tool_name": "edit_text", "tool_input": {"path": str(module), "operation": "replace_pattern_once", "dry_run": False, "start": None, "end": None, "position": None, "expected_text": None, "pattern": "return 1", "replacement": "return 2", "insertion": None}}),
                 plan_response(
                     goal=goal,
                     steps=[
@@ -99,7 +133,7 @@ def test_runtime_recovers_after_multiple_replans_and_remains_bounded(make_config
                     ],
                 ),
                 json.dumps({"action": "call_tool", "response": "", "tool_name": "read_text", "tool_input": {"path": str(module)}}),
-                json.dumps({"action": "call_tool", "response": "", "tool_name": "edit_text", "tool_input": {"path": str(module), "operation": "replace_pattern_once", "pattern": "return 2", "replacement": "return 3"}}),
+                json.dumps({"action": "call_tool", "response": "", "tool_name": "edit_text", "tool_input": {"path": str(module), "operation": "replace_pattern_once", "dry_run": False, "start": None, "end": None, "position": None, "expected_text": None, "pattern": "return 2", "replacement": "return 3", "insertion": None}}),
                 "fixed",
             ]
         ),

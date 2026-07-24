@@ -17,5 +17,5 @@ python3 -m swaag.benchmark test-categories --clean --output /tmp/swaag-test-cate
 Manual validation / real usage, not tests:
 
 ```bash
-python3 -m swaag.benchmark manual-validation --clean --validation-subset --output /tmp/swaag-manual-validation
+python3 -m swaag.benchmark manual-validation --clean --full-catalog --output /tmp/swaag-manual-validation
 ```

@@ -41,6 +41,33 @@ class TextEditor:
         return TextEditor._preview("delete_range", None, text, new_text, {"start": start, "end": end})
 
     @staticmethod
+    def replace_exact(text: str, old_text: str, new_text: str) -> EditPreview:
+        if not old_text:
+            raise EditError("old_text must not be empty")
+        match_count = text.count(old_text)
+        if match_count == 0:
+            raise EditError("old_text not found; match_count=0")
+        if match_count > 1:
+            raise EditError(f"old_text is ambiguous; match_count={match_count}")
+        start = text.index(old_text)
+        end = start + len(old_text)
+        updated = text[:start] + new_text + text[end:]
+        return TextEditor._preview(
+            "replace_exact",
+            None,
+            text,
+            updated,
+            {
+                "old_text": old_text,
+                "new_text": new_text,
+                "match_count": match_count,
+                "start": start,
+                "end": end,
+                "precondition": "exactly_one_old_text_match",
+            },
+        )
+
+    @staticmethod
     def replace_pattern_once(text: str, pattern: str, replacement: str) -> EditPreview:
         if not pattern:
             raise EditError("pattern must not be empty")
@@ -86,21 +113,6 @@ class TextEditor:
                     text,
                     new_text,
                     {"pattern": pattern, "matched_pattern": candidate, "replacement": replacement, "match_count": 1, "match_style": "regex"},
-                )
-        for candidate in TextEditor._pattern_candidates(replacement):
-            if text.count(candidate) == 1:
-                return TextEditor._preview(
-                    "replace_pattern_once",
-                    None,
-                    text,
-                    text,
-                    {
-                        "pattern": pattern,
-                        "matched_pattern": None,
-                        "replacement": replacement,
-                        "match_count": 0,
-                        "already_applied": True,
-                    },
                 )
         raise EditError("pattern not found")
 
@@ -241,6 +253,7 @@ class TextEditor:
     def apply(text: str, operation: str, **kwargs) -> EditPreview:
         operations = {
             "replace_range": TextEditor.replace_range,
+            "replace_exact": TextEditor.replace_exact,
             "insert_at": TextEditor.insert_at,
             "delete_range": TextEditor.delete_range,
             "replace_pattern_once": TextEditor.replace_pattern_once,

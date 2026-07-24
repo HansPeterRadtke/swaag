@@ -5,12 +5,9 @@ from pathlib import Path
 
 import pytest
 
-terminal_bench_fm = pytest.importorskip("terminal_bench.agents.failure_mode")
-FailureMode = terminal_bench_fm.FailureMode
-
 from swaag.benchmark import terminal_bench_local
 from swaag.benchmark import terminal_bench_agent
-from swaag.benchmark.terminal_bench_agent import RealAgentTerminalBenchAgent
+from swaag.benchmark.terminal_bench_agent import FailureMode, RealAgentTerminalBenchAgent
 from swaag.config import load_config
 
 

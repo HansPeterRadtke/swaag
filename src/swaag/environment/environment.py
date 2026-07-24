@@ -8,7 +8,7 @@ from typing import Any
 from typing import TYPE_CHECKING
 
 from swaag.config import AgentConfig
-from swaag.editing import TextEditor
+from swaag.editing import EditError, TextEditor
 from swaag.environment.browser import aubro_available, run_aubro_command
 from swaag.environment.filesystem import FilesystemError, FilesystemManager
 from swaag.environment.process import ProcessManager
@@ -19,7 +19,7 @@ from swaag.reader import SequentialReader
 from swaag.tools.base import ToolValidationError
 from swaag.types import DerivedFileWrite, SessionState, ToolExecutionResult, ToolGeneratedEvent
 from swaag.fsops import ensure_dir, write_text as _fsops_write_text
-from swaag.utils import stable_json_dumps, utc_now_iso
+from swaag.utils import sha256_text, stable_json_dumps, utc_now_iso
 
 if TYPE_CHECKING:
     from swaag.tools.base import ToolContext
@@ -85,7 +85,10 @@ class AgentEnvironment:
         return ToolExecutionResult(
             tool_name="read_file",
             output={"path": str(path), "relative_path": rel, "text": text, "size_chars": len(text)},
-            display_text=f"read_file result: {stable_json_dumps({'path': str(path), 'size_chars': len(text)}, indent=2)}",
+            display_text=(
+                "read_file result: "
+                + stable_json_dumps({"path": str(path), "relative_path": rel, "text": text, "size_chars": len(text)}, indent=2)
+            ),
             generated_events=[
                 ToolGeneratedEvent("file_read_requested", {"path": str(path), "reason": "read_file"}),
                 ToolGeneratedEvent(
@@ -231,8 +234,45 @@ class AgentEnvironment:
     def preview_or_apply_edit(self, validated_input: dict[str, Any], context: "ToolContext") -> ToolExecutionResult:
         path = self.filesystem.resolve_path(validated_input["path"], cwd=self.current_cwd)
         _, original_text = self.filesystem.read_text(str(path), cwd=self.current_cwd)
-        kwargs = {key: validated_input[key] for key in ["start", "end", "position", "replacement", "insertion", "pattern"] if key in validated_input}
-        preview = TextEditor.apply(original_text, validated_input["operation"], **kwargs)
+        if validated_input["operation"] in {"replace_range", "delete_range"}:
+            selected = original_text[validated_input["start"] : validated_input["end"]]
+            if selected != validated_input["expected_text"]:
+                matching_ranges: list[dict[str, int]] = []
+                cursor = 0
+                expected_text = validated_input["expected_text"]
+                if expected_text:
+                    while len(matching_ranges) < 5:
+                        found = original_text.find(expected_text, cursor)
+                        if found < 0:
+                            break
+                        matching_ranges.append({"start": found, "end": found + len(expected_text)})
+                        cursor = found + max(len(expected_text), 1)
+                raise ToolValidationError(
+                    "edit_text range expected_text does not match current file content "
+                    f"at start={validated_input['start']} end={validated_input['end']}: "
+                    f"selected={selected!r} expected={expected_text!r} "
+                    f"range_units=zero_based_character_offsets "
+                    f"expected_text_matching_ranges={stable_json_dumps(matching_ranges)}"
+                )
+        kwargs = {
+            key: validated_input[key]
+            for key in ["start", "end", "position", "replacement", "insertion", "pattern", "old_text", "new_text"]
+            if key in validated_input
+        }
+        try:
+            preview = TextEditor.apply(original_text, validated_input["operation"], **kwargs)
+        except EditError as exc:
+            error_payload: dict[str, Any] = {
+                "operation": validated_input["operation"],
+                "path": str(path),
+                "error": str(exc),
+                "current_text": original_text,
+            }
+            for key in ["pattern", "replacement", "expected_text", "old_text", "new_text"]:
+                value = validated_input.get(key)
+                if isinstance(value, str):
+                    error_payload[key] = value
+            raise ToolValidationError(f"edit_text could not produce an edit: {stable_json_dumps(error_payload)}") from exc
         payload = {
             "path": str(path),
             "operation": validated_input["operation"],
@@ -265,7 +305,15 @@ class AgentEnvironment:
                     ],
                 )
             )
-        output = {"path": str(path), "operation": validated_input["operation"], "changed": preview.changed, "diff": preview.diff, "details": preview.details}
+        output = {
+            "path": str(path),
+            "operation": validated_input["operation"],
+            "changed": preview.changed,
+            "diff": preview.diff,
+            "details": preview.details,
+            "before_sha256": sha256_text(preview.original_text),
+            "after_sha256": sha256_text(preview.new_text),
+        }
         return ToolExecutionResult(tool_name="edit_text", output=output, display_text=f"edit_text result: {stable_json_dumps(output, indent=2)}", generated_events=generated)
 
     def write_file(self, path_text: str, content: str, *, create: bool = True) -> ToolExecutionResult:
@@ -469,54 +517,9 @@ class AgentEnvironment:
         }
         return ToolExecutionResult(tool_name="shell_command", output=output, display_text=f"shell_command result: {stable_json_dumps(output, indent=2)}", generated_events=generated)
 
-    def _repair_test_command_paths(self, command: list[str]) -> list[str]:
-        repaired = list(command)
-        cwd = Path(self.current_cwd)
-        python_test_runner = len(repaired) >= 3 and Path(repaired[0]).name.startswith("python") and repaired[1:3] in (["-m", "pytest"], ["-m", "unittest"])
-        if not python_test_runner:
-            return repaired
-        runner = repaired[2]
-        test_args = repaired[3:]
-        test_files = sorted(
-            path.relative_to(cwd).as_posix()
-            for pattern in ("test*.py", "**/test*.py")
-            for path in cwd.glob(pattern)
-            if path.is_file() and ".pytest_cache" not in path.parts
-        )
-        test_files = sorted(dict.fromkeys(test_files))
-        if not test_files:
-            return repaired
-        updated = False
-        for index, arg in enumerate(test_args, start=3):
-            if not arg.endswith(".py") or (cwd / arg).exists():
-                continue
-            wanted_name = Path(arg).name
-            candidates = [path for path in test_files if Path(path).name == wanted_name]
-            if not candidates:
-                stem = Path(wanted_name).stem
-                stem_bits = {bit for bit in stem.replace("test_", "").replace("-", "_").split("_") if bit}
-                scored: list[tuple[int, str]] = []
-                for path in test_files:
-                    candidate_bits = {bit for bit in Path(path).stem.replace("test_", "").replace("-", "_").split("_") if bit}
-                    overlap = len(stem_bits & candidate_bits)
-                    if overlap:
-                        scored.append((overlap, path))
-                if scored:
-                    best = max(score for score, _ in scored)
-                    candidates = [path for score, path in scored if score == best]
-            if not candidates and len(test_files) == 1:
-                candidates = list(test_files)
-            if len(candidates) == 1:
-                repaired[index] = candidates[0]
-                updated = True
-        if not updated and runner == "pytest" and len(test_args) == 1 and test_args[0].endswith(".py") and not (cwd / test_args[0]).exists() and len(test_files) == 1:
-            repaired[3] = test_files[0]
-        return repaired
-
     def run_tests(self, command: list[str], *, background: bool = False) -> ToolExecutionResult:
         if not command:
             raise ToolValidationError("run_tests.command must not be empty")
-        command = self._repair_test_command_paths(command)
         if background:
             return self._start_background_tests(command)
         process_result = self.process.run(

@@ -7,7 +7,7 @@ def render_skill_metadata(skills: list[SkillSpec]) -> str:
     if not skills:
         return ""
     return "\n".join(
-        f"- {skill.skill_id}: {skill.selection_blurb} tools={','.join(skill.allowed_tools)} outputs={','.join(skill.expected_outputs)}"
+        f"- {skill.skill_id}: {skill.selection_blurb} outputs={','.join(skill.expected_outputs)}"
         for skill in skills
     )
 

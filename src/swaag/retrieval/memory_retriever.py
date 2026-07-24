@@ -12,8 +12,8 @@ def memory_candidates(config: AgentConfig, state: SessionState, *, counter) -> l
             continue
         text = item.content
         trust = 1.0 if item.trust_level != "untrusted" else config.selection_policy.retrieval_trust_untrusted_memory
-        structural = config.selection_policy.retrieval_structural_procedural_memory if item.memory_kind == "procedural" else 0.0
         confidence = float(item.metadata.get("confidence", 1.0)) if isinstance(item.metadata, dict) else 1.0
+        source_sequence = float(item.metadata.get("source_sequence", 0.0)) if isinstance(item.metadata, dict) else 0.0
         candidates.append(
             RetrievalCandidate(
                 item_type="semantic_memory",
@@ -22,7 +22,7 @@ def memory_candidates(config: AgentConfig, state: SessionState, *, counter) -> l
                 text=text,
                 token_cost=counter.count_text(text).tokens,
                 payload=item,
-                metadata={"trust": trust * confidence, "structural": structural},
+                metadata={"trust": trust * confidence, "structural": 0.0, "recency": source_sequence},
             )
         )
     if state.project_state.files_seen or state.project_state.relationships:

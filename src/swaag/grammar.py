@@ -1,186 +1,146 @@
 from __future__ import annotations
 
+from copy import deepcopy
 from typing import Any, Iterable
 
+from swaag.schema_portability import assert_portable_json_schema
 from swaag.types import ContractSpec
 
 
-def _bounded_string(*, max_length: int, min_length: int = 0) -> dict[str, Any]:
-    schema: dict[str, Any] = {"type": "string", "maxLength": max_length}
-    if min_length:
-        schema["minLength"] = min_length
-    return schema
+def _string() -> dict[str, Any]:
+    return {"type": "string"}
 
 
-def _bounded_string_array(
-    *,
-    max_items: int,
-    max_length: int,
-    min_items: int = 0,
-) -> dict[str, Any]:
-    schema: dict[str, Any] = {
-        "type": "array",
-        "maxItems": max_items,
-        "items": _bounded_string(max_length=max_length, min_length=1),
+def _number() -> dict[str, Any]:
+    return {"type": "number"}
+
+
+def _integer() -> dict[str, Any]:
+    return {"type": "integer"}
+
+
+def _boolean() -> dict[str, Any]:
+    return {"type": "boolean"}
+
+
+def _array(item_schema: dict[str, Any]) -> dict[str, Any]:
+    return {"type": "array", "items": item_schema}
+
+
+def _closed_object(properties: dict[str, dict[str, Any]]) -> dict[str, Any]:
+    return {
+        "type": "object",
+        "properties": properties,
+        "required": list(properties),
+        "additionalProperties": False,
     }
-    if min_items:
-        schema["minItems"] = min_items
-    return schema
 
 
-def plain_text_contract() -> ContractSpec:
-    return ContractSpec(name="plain_text", mode="plain")
+def _nullable(schema: dict[str, Any]) -> dict[str, Any]:
+    return {"anyOf": [schema, {"type": "null"}]}
+
+
+def _contract(name: str, schema: dict[str, Any]) -> ContractSpec:
+    assert_portable_json_schema(schema, schema_name=name)
+    return ContractSpec(name=name, mode="json_schema", json_schema=schema)
+
+
+def text_response_contract(name: str = "text_response") -> ContractSpec:
+    return _contract(name, _closed_object({"text": _string()}))
 
 
 def yes_no_contract() -> ContractSpec:
-    return ContractSpec(
-        name="yes_no",
-        mode="gbnf",
-        grammar='root ::= ("yes" | "no")',
-    )
+    return _contract("yes_no", _closed_object({"answer": {"type": "string", "enum": ["yes", "no"]}}))
 
 
 def tool_decision_contract(tool_names: Iterable[str]) -> ContractSpec:
     names = sorted(tool_names)
-    schema: dict[str, Any] = {
-        "type": "object",
-        "properties": {
+    schema = _closed_object(
+        {
             "action": {"type": "string", "enum": ["respond", "call_tool"]},
-            "response": _bounded_string(max_length=512),
+            "response": _string(),
             "tool_name": {"type": "string", "enum": ["none", *names]},
-            "tool_input": {"type": "object", "additionalProperties": True},
-        },
-        "required": ["action", "response", "tool_name", "tool_input"],
-        "additionalProperties": False,
-    }
-    return ContractSpec(name="tool_decision", mode="json_schema", json_schema=schema)
+            "tool_input": _closed_object({}),
+        }
+    )
+    return _contract("tool_decision", schema)
 
 
 def tool_input_contract(tool_name: str, input_schema: dict[str, Any]) -> ContractSpec:
-    schema = input_schema
-    if tool_name == "edit_text":
-        properties = dict(input_schema.get("properties", {}))
-        for field in ("path", "pattern", "replacement", "insertion"):
-            if isinstance(properties.get(field), dict):
-                properties[field] = {**properties[field], "maxLength": 2000}
-        schema = {
-            **input_schema,
-            "properties": properties,
-            "allOf": [
-                {
-                    "if": {"properties": {"operation": {"const": "replace_range"}}},
-                    "then": {"required": ["path", "operation", "start", "end", "replacement"]},
-                },
-                {
-                    "if": {"properties": {"operation": {"const": "insert_at"}}},
-                    "then": {"required": ["path", "operation", "position", "insertion"]},
-                },
-                {
-                    "if": {"properties": {"operation": {"const": "delete_range"}}},
-                    "then": {"required": ["path", "operation", "start", "end"]},
-                },
-                {
-                    "if": {
-                        "properties": {
-                            "operation": {
-                                "enum": ["replace_pattern_once", "replace_pattern_all"]
-                            }
-                        }
-                    },
-                    "then": {"required": ["path", "operation", "pattern", "replacement"]},
-                },
-            ],
-        }
-    return ContractSpec(name=f"tool_input:{tool_name}", mode="json_schema", json_schema=schema)
+    schema = deepcopy(input_schema)
+    return _contract(f"tool_input:{tool_name}", schema)
 
 
 def prompt_analysis_contract() -> ContractSpec:
-    schema: dict[str, Any] = {
-        "type": "object",
-        "properties": {
+    schema = _closed_object(
+        {
             "task_type": {"type": "string", "enum": ["structured", "unstructured", "vague", "incomplete", "already_decomposed"]},
             "completeness": {"type": "string", "enum": ["complete", "partial", "incomplete"]},
-            "requires_expansion": {"type": "boolean"},
-            "requires_decomposition": {"type": "boolean"},
-            "confidence": {"type": "number", "minimum": 0.0, "maximum": 1.0},
-            "detected_entities": _bounded_string_array(max_items=8, max_length=96),
-            "detected_goals": _bounded_string_array(max_items=4, max_length=96),
-        },
-        "required": [
-            "task_type",
-            "completeness",
-            "requires_expansion",
-            "requires_decomposition",
-            "confidence",
-            "detected_entities",
-            "detected_goals",
-        ],
-        "additionalProperties": False,
-    }
-    return ContractSpec(name="prompt_analysis", mode="json_schema", json_schema=schema)
+            "requires_expansion": _boolean(),
+            "requires_decomposition": _boolean(),
+            "missing_required_information": _boolean(),
+            "confidence": _number(),
+            "detected_entities": _array(_string()),
+            "detected_goals": _array(_string()),
+        }
+    )
+    return _contract("prompt_analysis", schema)
 
 
 def task_decision_contract(tool_names: Iterable[str] = ()) -> ContractSpec:
     names = sorted(set(tool_names))
-    schema: dict[str, Any] = {
-        "type": "object",
-        "properties": {
-            "split_task": {"type": "boolean"},
-            "expand_task": {"type": "boolean"},
-            "ask_user": {"type": "boolean"},
-            "assume_missing": {"type": "boolean"},
-            "generate_ideas": {"type": "boolean"},
-            "direct_response": {"type": "boolean"},
-            "execution_mode": {"type": "string", "enum": ["full_plan", "single_tool", "direct_response"]},
+    schema = _closed_object(
+        {
+            "split_task": _boolean(),
+            "expand_task": _boolean(),
+            "ask_user": _boolean(),
+            "assume_missing": _boolean(),
+            "generate_ideas": _boolean(),
+            "direct_response": _boolean(),
+            "execution_mode": {"type": "string", "enum": ["full_plan", "single_tool", "direct_response", "clarification"]},
             "preferred_tool_name": {"type": "string", "enum": ["", *names]},
-            "confidence": {"type": "number", "minimum": 0.0, "maximum": 1.0},
-            "reason": _bounded_string(max_length=96, min_length=1),
-        },
-        "required": [
-            "split_task",
-            "expand_task",
-            "ask_user",
-            "assume_missing",
-            "generate_ideas",
-            "direct_response",
-            "execution_mode",
-            "preferred_tool_name",
-            "confidence",
-            "reason",
-        ],
-        "additionalProperties": False,
-    }
-    return ContractSpec(name="task_decision", mode="json_schema", json_schema=schema)
+            "evidence_required_before_response": _boolean(),
+            "evidence_call_count": {"type": "integer"},
+            "confidence": _number(),
+            "reason": _string(),
+        }
+    )
+    return _contract("task_decision", schema)
+
+
+def task_decision_semantic_review_contract() -> ContractSpec:
+    return _contract(
+        "task_decision_semantic_review",
+        _closed_object(
+            {
+                "decision_matches_request": _boolean(),
+                "decision_is_internally_consistent": _boolean(),
+                "required_evidence_sources": _array(_string()),
+                "minimum_evidence_call_count": _integer(),
+                "selected_mode_and_tool_can_cover_declared_count": _boolean(),
+                "feedback": _string(),
+            }
+        ),
+    )
 
 
 def task_expansion_contract() -> ContractSpec:
-    schema: dict[str, Any] = {
-        "type": "object",
-        "properties": {
-            "original_goal": _bounded_string(max_length=320, min_length=1),
-            "expanded_goal": _bounded_string(max_length=512, min_length=1),
-            "scope": _bounded_string_array(max_items=8, max_length=160),
-            "constraints": _bounded_string_array(max_items=8, max_length=160),
-            "expected_outputs": _bounded_string_array(max_items=8, max_length=160),
-            "assumptions": _bounded_string_array(max_items=8, max_length=160),
-        },
-        "required": [
-            "original_goal",
-            "expanded_goal",
-            "scope",
-            "constraints",
-            "expected_outputs",
-            "assumptions",
-        ],
-        "additionalProperties": False,
-    }
-    return ContractSpec(name="task_expansion", mode="json_schema", json_schema=schema)
+    schema = _closed_object(
+        {
+            "original_goal": _string(),
+            "expanded_goal": _string(),
+            "scope": _array(_string()),
+            "constraints": _array(_string()),
+            "expected_outputs": _array(_string()),
+            "assumptions": _array(_string()),
+        }
+    )
+    return _contract("task_expansion", schema)
 
 
 def active_session_control_contract() -> ContractSpec:
-    schema: dict[str, Any] = {
-        "type": "object",
-        "properties": {
+    schema = _closed_object(
+        {
             "action": {
                 "type": "string",
                 "enum": [
@@ -194,44 +154,19 @@ def active_session_control_contract() -> ContractSpec:
                     "clarify_conflict",
                 ],
             },
-            "reason": _bounded_string(max_length=160, min_length=1),
-            "response_text": _bounded_string(max_length=320),
-            "added_context": _bounded_string(max_length=320),
-            "replacement_goal": _bounded_string(max_length=320),
-            "queued_task": _bounded_string(max_length=320),
-            "clarification_question": _bounded_string(max_length=320),
-        },
-        "required": [
-            "action",
-            "reason",
-            "response_text",
-            "added_context",
-            "replacement_goal",
-            "queued_task",
-            "clarification_question",
-        ],
-        "additionalProperties": False,
-    }
-    return ContractSpec(name="active_session_control", mode="json_schema", json_schema=schema)
+            "reason": _string(),
+            "response_text": _string(),
+            "added_context": _string(),
+            "replacement_goal": _string(),
+            "queued_task": _string(),
+            "clarification_question": _string(),
+        }
+    )
+    return _contract("active_session_control", schema)
 
 
 def summary_contract() -> ContractSpec:
-    schema: dict[str, Any] = {
-        "type": "object",
-        "properties": {
-            "summary": _bounded_string(max_length=1200, min_length=1),
-        },
-        "required": ["summary"],
-        "additionalProperties": False,
-    }
-    return ContractSpec(name="summary", mode="json_schema", json_schema=schema)
-
-
-def _scaled_limit(context_limit: int, *, minimum: int, medium: int, maximum: int) -> int:
-    if context_limit <= 2048:
-        return max(minimum, min(medium, int(round(context_limit / 2048 * medium))))
-    scaled = int(round(medium + ((context_limit - 2048) / 6144) * (maximum - medium)))
-    return max(minimum, min(maximum, scaled))
+    return _contract("summary", _closed_object({"summary": _string()}))
 
 
 def plan_contract(
@@ -240,131 +175,103 @@ def plan_contract(
     context_limit: int = 2048,
     max_steps: int | None = None,
 ) -> ContractSpec:
+    del context_limit, max_steps
     names = sorted(tool_names)
-    verification_types = ["execution", "structural", "value", "composite", "llm_fallback"]
-    bounded_max_steps = max_steps if max_steps is not None else _scaled_limit(context_limit, minimum=3, medium=4, maximum=6)
-    bounded_max_steps = max(2, min(8, int(bounded_max_steps)))
-    goal_length = _scaled_limit(context_limit, minimum=160, medium=224, maximum=320)
-    success_length = _scaled_limit(context_limit, minimum=120, medium=160, maximum=240)
-    fallback_length = _scaled_limit(context_limit, minimum=96, medium=144, maximum=220)
-    title_length = _scaled_limit(context_limit, minimum=48, medium=72, maximum=96)
-    step_goal_length = _scaled_limit(context_limit, minimum=120, medium=180, maximum=256)
-    input_text_length = _scaled_limit(context_limit, minimum=120, medium=180, maximum=256)
-    expected_output_length = _scaled_limit(context_limit, minimum=48, medium=72, maximum=120)
-    condition_length = _scaled_limit(context_limit, minimum=48, medium=72, maximum=96)
-    ref_length = _scaled_limit(context_limit, minimum=32, medium=48, maximum=80)
-    verification_items = max(2, min(6, bounded_max_steps))
-    schema: dict[str, Any] = {
-        "type": "object",
-        "properties": {
-            "goal": _bounded_string(max_length=goal_length, min_length=1),
-            "success_criteria": _bounded_string(max_length=success_length, min_length=1),
-            "fallback_strategy": _bounded_string(max_length=fallback_length, min_length=1),
-            "steps": {
-                "type": "array",
-                "minItems": 1,
-                "maxItems": bounded_max_steps,
-                "items": {
-                    "type": "object",
-                    "properties": {
-                        "step_id": _bounded_string(max_length=48, min_length=1),
-                        "title": _bounded_string(max_length=title_length, min_length=1),
-                        "goal": _bounded_string(max_length=step_goal_length, min_length=1),
-                        "kind": {"type": "string", "enum": ["tool", "read", "write", "reasoning", "note", "respond"]},
-                        "expected_tool": {"type": "string", "enum": ["", *names]},
-                        "input_text": _bounded_string(max_length=input_text_length, min_length=1),
-                        "expected_output": _bounded_string(max_length=expected_output_length, min_length=1),
-                        "expected_outputs": _bounded_string_array(max_items=max(2, min(4, bounded_max_steps)), max_length=expected_output_length, min_items=1),
-                        "done_condition": _bounded_string(max_length=condition_length, min_length=1),
-                        "success_criteria": _bounded_string(max_length=success_length, min_length=1),
-                        "verification_type": {"type": "string", "enum": verification_types},
-                        "verification_checks": {
-                            "type": "array",
-                            "minItems": 1,
-                            "maxItems": verification_items,
-                            "items": {
-                                "type": "object",
-                                "properties": {
-                                    "name": _bounded_string(max_length=ref_length, min_length=1),
-                                    "check_type": _bounded_string(max_length=48, min_length=1),
-                                    "artifact": _bounded_string(max_length=ref_length),
-                                    "actual_source": _bounded_string(max_length=ref_length),
-                                    "expected": {},
-                                    "criterion": _bounded_string(max_length=success_length),
-                                    "path": _bounded_string(max_length=input_text_length),
-                                    "pattern": _bounded_string(max_length=expected_output_length),
-                                    "command": {
-                                        "type": "array",
-                                        "maxItems": max(4, bounded_max_steps + 1),
-                                        "items": _bounded_string(max_length=96, min_length=1),
-                                    },
-                                    "cwd": _bounded_string(max_length=input_text_length),
-                                    "tolerance": {"type": "number"},
-                                    "mode": _bounded_string(max_length=32),
-                                },
-                                "required": ["name", "check_type"],
-                                "additionalProperties": True,
-                            },
-                        },
-                        "required_conditions": _bounded_string_array(max_items=verification_items, max_length=ref_length, min_items=1),
-                        "optional_conditions": _bounded_string_array(max_items=verification_items, max_length=ref_length),
-                        "input_refs": _bounded_string_array(max_items=max(2, bounded_max_steps), max_length=ref_length),
-                        "output_refs": _bounded_string_array(max_items=max(2, bounded_max_steps), max_length=ref_length),
-                        "fallback_strategy": _bounded_string(max_length=fallback_length, min_length=1),
-                        "depends_on": _bounded_string_array(max_items=max(2, bounded_max_steps), max_length=ref_length),
-                    },
-                    "required": [
-                        "step_id",
-                        "title",
-                        "goal",
-                        "kind",
-                        "expected_tool",
-                        "input_text",
-                        "expected_output",
-                        "done_condition",
-                        "success_criteria",
-                    ],
-                    "additionalProperties": False,
-                },
-            },
-        },
-        "required": ["goal", "steps"],
-        "additionalProperties": False,
-    }
-    return ContractSpec(name="task_plan", mode="json_schema", json_schema=schema)
+    verification_types = ["composite"]
+    check_types = [
+        "dependencies_completed",
+        "artifact_present",
+        "tool_name_equals",
+        "tool_output_nonempty",
+        "tool_output_schema_valid",
+        "tool_effect_verified",
+        "tool_files_changed",
+        "file_exists",
+        "file_contains",
+        "json_schema_valid",
+        "function_exists",
+        "symbol_exists",
+        "command_success",
+        "string_nonempty",
+        "exact_match",
+        "numeric_tolerance",
+        "string_match",
+        "criterion",
+    ]
+    check_schema = _closed_object(
+        {
+            "name": _string(),
+            "check_type": {"type": "string", "enum": check_types},
+            "artifact": _string(),
+            "actual_source": _string(),
+            "expected": _string(),
+            "expected_json": _string(),
+            "schema_json": _string(),
+            "criterion": _string(),
+            "path": _string(),
+            "pattern": _string(),
+            "function_name": _string(),
+            "symbol": _string(),
+            "command": _array(_string()),
+            "cwd": _string(),
+            "tolerance": _number(),
+            "regex": _boolean(),
+            "mode": _string(),
+        }
+    )
+    step_schema = _closed_object(
+        {
+            "step_id": _string(),
+            "title": _string(),
+            "goal": _string(),
+            "kind": {"type": "string", "enum": ["tool", "read", "write", "reasoning", "note", "respond"]},
+            "expected_tool": {"type": "string", "enum": ["", *names]},
+            "input_text": _string(),
+            "expected_output": _string(),
+            "expected_outputs": _array(_string()),
+            "done_condition": _string(),
+            "success_criteria": _string(),
+            "verification_type": {"type": "string", "enum": verification_types},
+            "verification_checks": _array(check_schema),
+            "required_conditions": _array(_string()),
+            "optional_conditions": _array(_string()),
+            "input_refs": _array(_string()),
+            "output_refs": _array(_string()),
+            "fallback_strategy": _string(),
+            "depends_on": _array(_string()),
+        }
+    )
+    schema = _closed_object(
+        {
+            "goal": _string(),
+            "success_criteria": _string(),
+            "fallback_strategy": _string(),
+            "steps": _array(step_schema),
+        }
+    )
+    return _contract("task_plan", schema)
 
 
 def strategy_selection_contract() -> ContractSpec:
-    schema: dict[str, Any] = {
-        "type": "object",
-        "properties": {
+    schema = _closed_object(
+        {
             "task_profile": {
                 "type": "string",
                 "enum": ["coding", "file_edit", "reading", "multi_step", "generic"],
             },
             "strategy_name": {"type": "string", "enum": ["conservative", "exploratory"]},
-            "explore_before_commit": {"type": "boolean"},
-            "tool_chain_depth": {"type": "integer", "minimum": 1, "maximum": 3},
-            "verification_intensity": {"type": "number", "minimum": 0.0, "maximum": 2.0},
-            "reason": _bounded_string(max_length=160, min_length=1),
-        },
-        "required": [
-            "task_profile",
-            "strategy_name",
-            "explore_before_commit",
-            "tool_chain_depth",
-            "verification_intensity",
-            "reason",
-        ],
-        "additionalProperties": False,
-    }
-    return ContractSpec(name="strategy_selection", mode="json_schema", json_schema=schema)
+            "explore_before_commit": _boolean(),
+            "tool_chain_depth": _integer(),
+            "verification_intensity": _number(),
+            "reason": _string(),
+        }
+    )
+    return _contract("strategy_selection", schema)
 
 
 def failure_classification_contract() -> ContractSpec:
-    schema: dict[str, Any] = {
-        "type": "object",
-        "properties": {
+    schema = _closed_object(
+        {
             "kind": {
                 "type": "string",
                 "enum": [
@@ -386,161 +293,80 @@ def failure_classification_contract() -> ContractSpec:
                     "continue_other",
                 ],
             },
-            "retryable": {"type": "boolean"},
-            "requires_replan": {"type": "boolean"},
+            "retryable": _boolean(),
+            "requires_replan": _boolean(),
             "suggested_strategy_mode": {
                 "type": "string",
                 "enum": ["conservative", "recovery", "verification_heavy"],
             },
-            "wait_seconds": {"type": "number", "minimum": 0},
-            "reason": _bounded_string(max_length=200, min_length=1),
-        },
-        "required": [
-            "kind",
-            "retryable",
-            "requires_replan",
-            "suggested_strategy_mode",
-            "wait_seconds",
-            "reason",
-        ],
-        "additionalProperties": False,
-    }
-    return ContractSpec(name="failure_classification", mode="json_schema", json_schema=schema)
+            "wait_seconds": _number(),
+            "reason": _string(),
+        }
+    )
+    return _contract("failure_classification", schema)
 
 
 def action_selection_contract() -> ContractSpec:
-    schema: dict[str, Any] = {
-        "type": "object",
-        "properties": {
+    schema = _closed_object(
+        {
             "action": {
                 "type": "string",
                 "enum": ["execute_step", "retry_step", "replan", "stop", "answer_directly"],
             },
-            "reason": _bounded_string(max_length=160, min_length=1),
-        },
-        "required": ["action", "reason"],
-        "additionalProperties": False,
-    }
-    return ContractSpec(name="action_selection", mode="json_schema", json_schema=schema)
+            "reason": _string(),
+        }
+    )
+    return _contract("action_selection", schema)
 
 
 def subagent_selection_contract(candidate_types: Iterable[str]) -> ContractSpec:
     ordered = ["none", *[item for item in dict.fromkeys(str(item).strip() for item in candidate_types if str(item).strip()) if item != "none"]]
-    schema: dict[str, Any] = {
-        "type": "object",
-        "properties": {
-            "spawn": {"type": "boolean"},
+    schema = _closed_object(
+        {
+            "spawn": _boolean(),
             "subagent_type": {
                 "type": "string",
                 "enum": ordered,
             },
-            "reason": _bounded_string(max_length=160, min_length=1),
-            "focus": _bounded_string(max_length=160),
-        },
-        "required": ["spawn", "subagent_type", "reason", "focus"],
-        "additionalProperties": False,
-    }
-    return ContractSpec(name="subagent_selection", mode="json_schema", json_schema=schema)
-
-
-def generation_decomposition_contract() -> ContractSpec:
-    unit_schema: dict[str, Any] = {
-        "type": "object",
-        "properties": {
-            "unit_id": _bounded_string(max_length=64, min_length=1),
-            "title": _bounded_string(max_length=120, min_length=1),
-            "instruction": _bounded_string(max_length=240, min_length=1),
-        },
-        "required": ["unit_id", "title", "instruction"],
-        "additionalProperties": False,
-    }
-    schema: dict[str, Any] = {
-        "type": "object",
-        "properties": {
-            "output_class": {
-                "type": "string",
-                "enum": ["bounded_structured", "schema_bounded", "open_ended"],
-            },
-            "reason": _bounded_string(max_length=160, min_length=1),
-            "units": {
-                "type": "array",
-                "minItems": 1,
-                "maxItems": 8,
-                "items": unit_schema,
-            },
-        },
-        "required": ["output_class", "reason", "units"],
-        "additionalProperties": False,
-    }
-    return ContractSpec(name="generation_decomposition", mode="json_schema", json_schema=schema)
-
-
-def overflow_recovery_contract() -> ContractSpec:
-    unit_schema: dict[str, Any] = {
-        "type": "object",
-        "properties": {
-            "unit_id": _bounded_string(max_length=64, min_length=1),
-            "title": _bounded_string(max_length=120, min_length=1),
-            "instruction": _bounded_string(max_length=240, min_length=1),
-        },
-        "required": ["unit_id", "title", "instruction"],
-        "additionalProperties": False,
-    }
-    schema: dict[str, Any] = {
-        "type": "object",
-        "properties": {
-            "keep_partial": {"type": "boolean"},
-            "reason": _bounded_string(max_length=160, min_length=1),
-            "next_units": {
-                "type": "array",
-                "minItems": 0,
-                "maxItems": 8,
-                "items": unit_schema,
-            },
-        },
-        "required": ["keep_partial", "reason", "next_units"],
-        "additionalProperties": False,
-    }
-    return ContractSpec(name="overflow_recovery", mode="json_schema", json_schema=schema)
+            "reason": _string(),
+            "focus": _string(),
+        }
+    )
+    return _contract("subagent_selection", schema)
 
 
 def relevance_scoring_contract(item_count: int) -> ContractSpec:
-    schema: dict[str, Any] = {
-        "type": "object",
-        "properties": {
-            "scores": {
-                "type": "array",
-                "items": {"type": "number"},
-                "minItems": item_count,
-                "maxItems": item_count,
-            },
-        },
-        "required": ["scores"],
-        "additionalProperties": False,
-    }
-    return ContractSpec(name="relevance_scoring", mode="json_schema", json_schema=schema)
+    if item_count <= 0:
+        raise ValueError("relevance scoring requires at least one candidate")
+    schema = _closed_object({f"score_{index}": _number() for index in range(item_count)})
+    return _contract("relevance_scoring", schema)
 
 
-def verification_contract(criteria_names: Iterable[str]) -> ContractSpec:
+def verification_contract(
+    criteria_names: Iterable[str],
+    *,
+    name: str = "verification",
+    candidate_excerpt_options: Iterable[str] | None = None,
+) -> ContractSpec:
     ordered = list(dict.fromkeys(str(item).strip() for item in criteria_names if str(item).strip()))
-    schema: dict[str, Any] = {
-        "type": "object",
-        "properties": {
-            "criteria": {
-                "type": "array",
-                "items": {
-                    "type": "object",
-                    "properties": {
-                        "name": {"type": "string", "enum": ordered},
-                        "passed": {"type": "boolean"},
-                        "evidence": _bounded_string(max_length=200),
-                    },
-                    "required": ["name", "passed", "evidence"],
-                    "additionalProperties": False,
-                },
-            }
-        },
-        "required": ["criteria"],
-        "additionalProperties": False,
-    }
-    return ContractSpec(name="verification", mode="json_schema", json_schema=schema)
+    excerpt_options = list(
+        dict.fromkeys(str(item) for item in (candidate_excerpt_options or []) if isinstance(item, str) and item)
+    )
+    excerpt_schema: dict[str, Any] = _string()
+    if excerpt_options:
+        excerpt_schema = {"type": "string", "enum": excerpt_options}
+    criterion_schema = _closed_object(
+        {
+            "name": {"type": "string", "enum": ordered},
+            "passed": _boolean(),
+            "evidence": _string(),
+            "candidate_excerpts": _array(excerpt_schema),
+        }
+    )
+    schema = _closed_object({"criteria": _array(criterion_schema)})
+    return _contract(name, schema)
+
+
+NULLABLE_STRING_SCHEMA = _nullable(_string())
+NULLABLE_INTEGER_SCHEMA = _nullable(_integer())
+NULLABLE_STRING_ARRAY_SCHEMA = _nullable(_array(_string()))

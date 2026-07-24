@@ -149,7 +149,7 @@ def compute_benchmark_metrics(results: list[Any]) -> BenchmarkAggregateMetrics:
         "no_progress_rate": _rate(sum(1 for item in results if int(item.metrics.get("no_progress_stops", 0)) > 0), total),
         "average_model_progress_events_per_task": _mean_metric(results, "model_request_progress_events"),
         "model_retry_rate": _rate(sum(int(item.metrics.get("model_retry_events", 0)) for item in results), total),
-        "post_validate_fallbacks": sum(int(item.metrics.get("post_validate_fallbacks", 0)) for item in results),
+        "unconstrained_contract_violations": sum(int(item.metrics.get("unconstrained_contract_violations", 0)) for item in results),
         "server_schema_requests": sum(int(item.metrics.get("server_schema_requests", 0)) for item in results),
         "timeout_failure_rate": _rate(
             sum(
@@ -225,7 +225,7 @@ def compute_benchmark_metrics(results: list[Any]) -> BenchmarkAggregateMetrics:
         "tasks_with_iteration": len(iterative_tasks),
         "tasks_with_recovery": len(recovery_tasks),
         "slowest_task_wall_clock_seconds": max((float(item.wall_clock_seconds) for item in results), default=0.0),
-        "post_validate_fallback_count": sum(int(item.metrics.get("post_validate_fallbacks", 0)) for item in results),
+        "unconstrained_contract_violation_count": sum(int(item.metrics.get("unconstrained_contract_violations", 0)) for item in results),
         "seed_success_rate": _rate(sum(1 for item in seed_runs if item.get("success")), len(seed_runs)),
         "seed_false_positive_rate": _rate(sum(1 for item in seed_runs if item.get("false_positive")), len(seed_runs)),
         "seed_variability_rate": _rate(sum(1 for item in results if bool(item.metrics.get("seed_variation"))), len(results)),

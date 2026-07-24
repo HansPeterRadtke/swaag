@@ -17,3 +17,4 @@ class SubsystemExecutionResult:
     evaluation: EvaluationOutcome | None = None
     background_job_started: bool = False
     background_process_id: str | None = None
+    same_step_retry_allowed: bool = True

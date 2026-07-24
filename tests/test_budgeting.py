@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 from swaag.budgeting import compute_call_budget, compute_section_budgets, structured_output_token_floor
-from swaag.grammar import plain_text_contract, plan_contract, prompt_analysis_contract
+from swaag.grammar import plan_contract, prompt_analysis_contract, summary_contract, text_response_contract
 from swaag.runtime import AgentRuntime
 from swaag.types import PromptAssembly, PromptComponent, SessionState
 
@@ -59,11 +59,13 @@ def test_runtime_budget_report_uses_dynamic_call_budget_not_legacy_reserved_toke
             model_base_url=config.model.base_url,
         ),
         assembly,
-        plain_text_contract(),
+        text_response_contract("answer_response"),
     )
     dynamic = compute_call_budget(config, call_kind="analysis")
 
-    assert report.reserved_response_tokens == dynamic.output_tokens
+    counter = runtime._get_budget_counter(None)
+    schema_floor = structured_output_token_floor(text_response_contract("answer_response"), config=config, counter=counter, call_kind="analysis")
+    assert report.reserved_response_tokens == max(dynamic.output_tokens, schema_floor)
     assert report.safety_margin_tokens == dynamic.safety_margin_tokens
     assert report.reserved_response_tokens != 999
 
@@ -100,7 +102,7 @@ def test_runtime_budget_report_raises_structured_reserve_for_bounded_contracts(m
     assert plan_report.required_tokens <= config.model.context_limit
 
 
-def test_structured_output_floor_uses_bounded_schema_instance_not_schema_text(make_config) -> None:
+def test_structured_output_floor_uses_conservative_schema_shape_instance(make_config) -> None:
     config = make_config(model__context_limit=2048)
     runtime = AgentRuntime(config)
     counter = runtime._get_budget_counter(None)
@@ -110,7 +112,22 @@ def test_structured_output_floor_uses_bounded_schema_instance_not_schema_text(ma
     schema_tokens = counter.count_text(str(contract.json_schema)).tokens
 
     assert floor > 0
-    assert floor <= schema_tokens
+    assert floor >= config.budget_policy.structured_output_json_floor_tokens
+    assert floor <= max(schema_tokens, config.budget_policy.structured_output_json_floor_tokens)
+
+
+def test_structured_output_floor_scales_down_for_tiny_contexts(make_config) -> None:
+    config = make_config(
+        model__context_limit=120,
+        context__reserved_response_tokens=16,
+    )
+    runtime = AgentRuntime(config)
+    counter = runtime._get_budget_counter(None)
+
+    floor = structured_output_token_floor(summary_contract(), config=config, counter=counter, call_kind="summary")
+
+    assert floor < config.budget_policy.structured_output_json_floor_tokens
+    assert floor >= config.context.reserved_response_tokens
 
 
 def test_budget_policy_ratios_are_read_from_config_object(make_config) -> None:

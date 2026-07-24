@@ -79,7 +79,7 @@ _RECOMMENDATIONS: dict[LiveRuntimeUseCase, LiveRuntimeRecommendation] = {
     "fast_live_tests": LiveRuntimeRecommendation(
         use_case="fast_live_tests",
         model_profile="small_fast",
-        structured_output_mode="post_validate",
+        structured_output_mode="server_schema",
         seeds=(11, 23, 37),
         timeout_seconds=120,
         connect_timeout_seconds=10,
@@ -87,36 +87,36 @@ _RECOMMENDATIONS: dict[LiveRuntimeUseCase, LiveRuntimeRecommendation] = {
         request_observability_mode="progress_polling",
         rationale=(
             "Use the smallest local context profile with generation-time schema enforcement plus local "
-            "post-validation so short manual-validation runs stay observable without dropping hard output contracts."
+            "post-validation so short live checks stay observable without changing semantic runtime behavior."
         ),
-        measured_task_count=8,
-        measured_success_rate=1.0,
+        measured_task_count=0,
+        measured_success_rate=0.0,
         measured_false_positive_rate=0.0,
-        measured_wall_clock_seconds=251.77,
+        measured_wall_clock_seconds=0.0,
     ),
     "final_live_benchmark": LiveRuntimeRecommendation(
         use_case="final_live_benchmark",
         model_profile="small_fast",
-        structured_output_mode="post_validate",
+        structured_output_mode="server_schema",
         seeds=(11, 23, 37),
         timeout_seconds=180,
         connect_timeout_seconds=10,
         progress_poll_seconds=5.0,
         request_observability_mode="progress_polling",
         rationale=(
-            "The representative 30-task live subset is intentionally bounded to fit the local 2048-token "
-            "profile. On current hardware this profile/mode completed the full live subset with zero false "
-            "positives, so final proof uses the measured path instead of a larger slower context profile."
+            "Use the local 2048-token profile as the default transport envelope for repeatable live runs. "
+            "This setting controls latency, timeout, and schema-transport behavior only; it must not add "
+            "task-family, benchmark, or prompt-specific semantic routing."
         ),
-        measured_task_count=30,
-        measured_success_rate=1.0,
+        measured_task_count=0,
+        measured_success_rate=0.0,
         measured_false_positive_rate=0.0,
-        measured_wall_clock_seconds=1022.282,
+        measured_wall_clock_seconds=0.0,
     ),
     "heavy_structured": LiveRuntimeRecommendation(
         use_case="heavy_structured",
         model_profile="mid_context",
-        structured_output_mode="auto",
+        structured_output_mode="server_schema",
         seeds=(11, 23, 37),
         timeout_seconds=240,
         connect_timeout_seconds=10,
@@ -124,7 +124,7 @@ _RECOMMENDATIONS: dict[LiveRuntimeUseCase, LiveRuntimeRecommendation] = {
         request_observability_mode="progress_polling",
         rationale=(
             "Use the larger local context profile only for ad hoc human-directed runs when prompt assembly "
-            "no longer fits the fixed final-proof profile. This is not part of the normal live/final-proof path."
+            "no longer fits the default profile. This choice must remain an operator transport decision."
         ),
         measured_task_count=0,
         measured_success_rate=0.0,
@@ -134,7 +134,7 @@ _RECOMMENDATIONS: dict[LiveRuntimeUseCase, LiveRuntimeRecommendation] = {
     "slow_hardware_fallback": LiveRuntimeRecommendation(
         use_case="slow_hardware_fallback",
         model_profile="small_fast",
-        structured_output_mode="post_validate",
+        structured_output_mode="server_schema",
         seeds=(11, 23, 37),
         timeout_seconds=240,
         connect_timeout_seconds=15,

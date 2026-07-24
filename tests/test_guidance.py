@@ -35,7 +35,11 @@ def test_guidance_inheritance_and_directory_override(make_config, tmp_path: Path
 
     assert "Global: always verify." in bundle.guidance_text
     assert "Repo: keep patches minimal." in bundle.guidance_text
-    assert "Directory: prefer pkg-specific naming." in bundle.guidance_text
+    assert "Directory: prefer pkg-specific naming." not in bundle.guidance_text
+    assert any(
+        item.item_type == "guidance" and "semantic_backend_unavailable" in item.reasons
+        for item in bundle.selection_trace
+    )
     assert any(item.item_type == "guidance" and item.selected for item in bundle.selection_trace)
 
 
@@ -53,7 +57,7 @@ def test_task_local_and_role_guidance_are_included(make_config, tmp_path: Path) 
 
     bundle = build_context(make_config(), state, ConservativeEstimator(), goal="fix it")
 
-    assert "Do not widen the patch" in bundle.guidance_text
+    assert "Do not widen the patch" not in bundle.guidance_text
     assert "Reject unsupported or partial results." in bundle.guidance_text
     assert bundle.guidance_sources
 

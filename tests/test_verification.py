@@ -1,11 +1,15 @@
 from __future__ import annotations
 
 import json
+import sys
 from pathlib import Path
 
 import pytest
 
+from swaag.retrieval.embeddings import SemanticBackendProtocolError
+from swaag.tools.registry import ToolRegistry
 from swaag.types import HistoryEvent, Plan, PlanStep, SessionState, ToolExecutionResult
+from swaag.utils import sha256_text
 from swaag.verification import BenchmarkVerificationReport, VerificationArtifacts, VerificationEngine, VerificationError, verify_benchmark_contract
 
 
@@ -15,6 +19,34 @@ class _RuntimeStub:
 
     def _run_llm_verification(self, state, *, step, criteria, assistant_text, evidence):  # noqa: ANN001
         return self.payload
+
+
+class _ToolEffectRuntimeStub(_RuntimeStub):
+    def __init__(self, config):
+        super().__init__()
+        self.config = config
+        self.tools = ToolRegistry()
+
+
+class _ProtocolErrorBackend:
+    mode = "llm_scoring"
+    degraded = False
+
+    def score_query(self, query: str, texts: list[str]) -> list[float]:
+        del query, texts
+        raise SemanticBackendProtocolError("structured relevance response violated schema")
+
+
+class _FixedScoreBackend:
+    mode = "llm_scoring"
+    degraded = False
+
+    def __init__(self, score: float):
+        self.score = score
+
+    def score_query(self, query: str, texts: list[str]) -> list[float]:
+        del query
+        return [self.score for _text in texts]
 
 
 def _plan(step: PlanStep) -> Plan:
@@ -94,8 +126,7 @@ def test_execution_verification_normalizes_bare_pytest_to_current_python(tmp_pat
     )
     result = VerificationEngine().verify_step(runtime=_RuntimeStub(), state=_state(), plan=_plan(step), step=step, artifacts=VerificationArtifacts())
     assert result.verification_passed is True
-    assert result.evidence["pytest_green"]["command"][0].endswith("python3.11")
-    assert result.evidence["pytest_green"]["command"][1:3] == ["-m", "pytest"]
+    assert result.evidence["pytest_green"]["command"][:3] == [sys.executable, "-m", "pytest"]
 
 
 def test_execution_verification_fails_for_failing_pytest(tmp_path: Path) -> None:
@@ -150,6 +181,124 @@ def test_structural_verification_detects_missing_file(tmp_path: Path) -> None:
     assert result.verification_passed is False
 
 
+def test_file_contains_uses_expected_json_and_rejects_empty_target(tmp_path: Path) -> None:
+    target = tmp_path / "release.yaml"
+    target.write_text("name: report-62\nstatus: ready\nowner: team-6\n", encoding="utf-8")
+    step = PlanStep(
+        step_id="step_contains",
+        title="Check file content",
+        goal="Check file content",
+        kind="write",
+        expected_tool="write_file",
+        input_text="check",
+        expected_output="file contains status",
+        done_condition="tool_result:write_file",
+        success_criteria="release.yaml contains status: ready",
+        verification_type="composite",
+        verification_checks=[
+            {"name": "contains_ready", "check_type": "file_contains", "path": str(target), "expected_json": "\"status: ready\""},
+        ],
+        required_conditions=["contains_ready"],
+        optional_conditions=[],
+    )
+
+    result = VerificationEngine().verify_step(runtime=_RuntimeStub(), state=_state(), plan=_plan(step), step=step, artifacts=VerificationArtifacts())
+
+    assert result.verification_passed is True
+    assert "contains_ready" in result.conditions_met
+
+    empty_step = PlanStep(
+        step_id="step_empty",
+        title="Check file content",
+        goal="Check file content",
+        kind="write",
+        expected_tool="write_file",
+        input_text="check",
+        expected_output="file contains text",
+        done_condition="tool_result:write_file",
+        success_criteria="file contains declared text",
+        verification_type="composite",
+        verification_checks=[
+            {"name": "contains_declared_text", "check_type": "file_contains", "path": str(target), "pattern": ""},
+        ],
+        required_conditions=["contains_declared_text"],
+        optional_conditions=[],
+    )
+
+    empty_result = VerificationEngine().verify_step(
+        runtime=_RuntimeStub(),
+        state=_state(),
+        plan=_plan(empty_step),
+        step=empty_step,
+        artifacts=VerificationArtifacts(),
+    )
+
+    assert empty_result.verification_passed is False
+    assert "contains_declared_text" in empty_result.conditions_failed
+    assert empty_result.evidence["contains_declared_text"]["reason"] == "empty_expected_text"
+
+
+def test_file_contains_without_path_uses_latest_tool_result_path_and_fails_cleanly(tmp_path: Path) -> None:
+    target = tmp_path / "release.yaml"
+    target.write_text("name: report-62\nready\nowner: team-6\n", encoding="utf-8")
+    step = PlanStep(
+        step_id="step_contains",
+        title="Check edited file content",
+        goal="Check edited file content",
+        kind="write",
+        expected_tool="edit_text",
+        input_text="check",
+        expected_output="file contains complete status line",
+        done_condition="tool_result:edit_text",
+        success_criteria="release.yaml contains status: ready",
+        verification_type="composite",
+        verification_checks=[
+            {"name": "contains_ready", "check_type": "file_contains", "expected_json": "\"status: ready\""},
+        ],
+        required_conditions=["contains_ready"],
+        optional_conditions=[],
+    )
+    artifacts = VerificationArtifacts(
+        tool_results=[
+            ToolExecutionResult(
+                tool_name="edit_text",
+                output={"changed": True, "path": str(target)},
+                display_text="changed release.yaml",
+            )
+        ]
+    )
+
+    result = VerificationEngine().verify_step(runtime=_RuntimeStub(), state=_state(), plan=_plan(step), step=step, artifacts=artifacts)
+
+    assert result.verification_passed is False
+    assert "contains_ready" in result.conditions_failed
+    assert result.evidence["contains_ready"]["path"] == str(target)
+    assert result.evidence["contains_ready"]["matched"] is False
+
+
+def test_file_exists_without_path_does_not_pass_current_directory() -> None:
+    step = PlanStep(
+        step_id="step_exists",
+        title="Check file exists",
+        goal="Check file exists",
+        kind="write",
+        expected_tool="write_file",
+        input_text="check",
+        expected_output="file exists",
+        done_condition="tool_result:write_file",
+        success_criteria="file exists",
+        verification_type="composite",
+        verification_checks=[{"name": "file_exists", "check_type": "file_exists"}],
+        required_conditions=["file_exists"],
+        optional_conditions=[],
+    )
+
+    result = VerificationEngine().verify_step(runtime=_RuntimeStub(), state=_state(), plan=_plan(step), step=step, artifacts=VerificationArtifacts())
+
+    assert result.verification_passed is False
+    assert result.evidence["file_exists"]["reason"] == "missing_path"
+
+
 def test_structural_verification_supports_schema_and_symbol_checks(tmp_path: Path) -> None:
     module = tmp_path / "sample_module.py"
     module.write_text("VALUE = 4\n\ndef hello():\n    return 'hi'\n", encoding="utf-8")
@@ -172,12 +321,7 @@ def test_structural_verification_supports_schema_and_symbol_checks(tmp_path: Pat
                 "name": "output_schema_valid",
                 "check_type": "json_schema_valid",
                 "actual_source": "tool_output",
-                "schema": {
-                    "type": "object",
-                    "properties": {"text": {"type": "string"}},
-                    "required": ["text"],
-                    "additionalProperties": False,
-                },
+                "schema_json": '{"type":"object","properties":{"text":{"type":"string"}},"required":["text"],"additionalProperties":false}',
             },
         ],
         required_conditions=["module_exists", "module_contains_function", "module_contains_symbol", "output_schema_valid"],
@@ -260,6 +404,40 @@ def test_composite_verification_allows_optional_failure(tmp_path: Path) -> None:
     assert "missing_file" in result.conditions_failed
 
 
+def test_verification_confidence_includes_perspective_checks_and_never_exceeds_one() -> None:
+    step = PlanStep(
+        step_id="step_read",
+        title="Read",
+        goal="Read",
+        kind="read",
+        expected_tool="read_file",
+        input_text="read",
+        expected_output="content",
+        done_condition="tool_result:read_file",
+        success_criteria="content is read",
+        verification_type="composite",
+        verification_checks=[
+            {"name": "tool_name", "check_type": "tool_name_equals", "expected": "read_file"},
+        ],
+        required_conditions=["tool_name"],
+        optional_conditions=[],
+    )
+    result = VerificationEngine().verify_step(
+        runtime=_RuntimeStub(),
+        state=_state(),
+        plan=_plan(step),
+        step=step,
+        artifacts=VerificationArtifacts(
+            tool_results=[ToolExecutionResult(tool_name="read_file", output={"text": "ok"}, display_text="ok")]
+        ),
+    )
+
+    assert result.verification_passed is True
+    assert 0.0 <= result.confidence <= 1.0
+    assert result.confidence == 1.0
+    assert any(name.startswith("perspective:") for name in result.conditions_met)
+
+
 def test_composite_verification_fails_when_required_condition_fails() -> None:
     step = PlanStep(
         step_id="step_value",
@@ -283,6 +461,101 @@ def test_composite_verification_fails_when_required_condition_fails() -> None:
     result = VerificationEngine().verify_step(runtime=_RuntimeStub(), state=_state(), plan=_plan(step), step=step, artifacts=artifacts)
     assert result.verification_passed is False
     assert "wrong_result" in result.conditions_failed
+
+
+def test_tool_effect_verified_accepts_persisted_registered_edit(make_config, tmp_path: Path) -> None:
+    target = tmp_path / "release.yaml"
+    original = "status: draft\n"
+    updated = "status: ready\n"
+    target.write_text(updated, encoding="utf-8")
+    step = PlanStep(
+        step_id="step_edit",
+        title="Patch release",
+        goal="Patch release",
+        kind="write",
+        expected_tool="edit_text",
+        input_text="edit release.yaml",
+        expected_output="release.yaml updated",
+        done_condition="tool_result:edit_text",
+        success_criteria="release.yaml is updated as requested",
+        verification_type="composite",
+        verification_checks=[
+            {"name": "tool_effect", "check_type": "tool_effect_verified"},
+        ],
+        required_conditions=["tool_effect"],
+        optional_conditions=[],
+    )
+    artifacts = VerificationArtifacts(
+        tool_results=[
+            ToolExecutionResult(
+                tool_name="edit_text",
+                output={
+                    "path": str(target),
+                    "operation": "replace_exact",
+                    "changed": True,
+                    "diff": "--- before\n+++ after\n",
+                    "details": {"match_count": 1},
+                    "before_sha256": sha256_text(original),
+                    "after_sha256": sha256_text(updated),
+                },
+                display_text="edited",
+            )
+        ]
+    )
+    runtime = _ToolEffectRuntimeStub(make_config(tools__allow_side_effect_tools=True, editor__allow_writes=True))
+
+    result = VerificationEngine().verify_step(runtime=runtime, state=_state(), plan=_plan(step), step=step, artifacts=artifacts)
+
+    assert result.verification_passed is True
+    assert "tool_effect" in result.conditions_met
+    assert result.evidence["tool_effect"]["persisted"] is True
+    assert result.evidence["tool_effect"]["real_change"] is True
+
+
+def test_tool_effect_verified_fails_closed_when_file_no_longer_matches(make_config, tmp_path: Path) -> None:
+    target = tmp_path / "release.yaml"
+    original = "status: draft\n"
+    updated = "status: ready\n"
+    target.write_text("status: tampered\n", encoding="utf-8")
+    step = PlanStep(
+        step_id="step_edit",
+        title="Patch release",
+        goal="Patch release",
+        kind="write",
+        expected_tool="edit_text",
+        input_text="edit release.yaml",
+        expected_output="release.yaml updated",
+        done_condition="tool_result:edit_text",
+        success_criteria="release.yaml is updated as requested",
+        verification_type="composite",
+        verification_checks=[{"name": "tool_effect", "check_type": "tool_effect_verified"}],
+        required_conditions=["tool_effect"],
+        optional_conditions=[],
+    )
+    artifacts = VerificationArtifacts(
+        tool_results=[
+            ToolExecutionResult(
+                tool_name="edit_text",
+                output={
+                    "path": str(target),
+                    "operation": "replace_exact",
+                    "changed": True,
+                    "diff": "--- before\n+++ after\n",
+                    "details": {"match_count": 1},
+                    "before_sha256": sha256_text(original),
+                    "after_sha256": sha256_text(updated),
+                },
+                display_text="edited",
+            )
+        ]
+    )
+    runtime = _ToolEffectRuntimeStub(make_config(tools__allow_side_effect_tools=True, editor__allow_writes=True))
+
+    result = VerificationEngine().verify_step(runtime=runtime, state=_state(), plan=_plan(step), step=step, artifacts=artifacts)
+
+    assert result.verification_passed is False
+    assert "tool_effect" in result.conditions_failed
+    assert result.evidence["tool_effect"]["persisted"] is False
 
 
 def test_tool_files_changed_accepts_edit_text_changed_path(tmp_path: Path) -> None:
@@ -421,6 +694,122 @@ def test_llm_fallback_requires_structured_criteria_results() -> None:
     assert "matches_goal" in result.conditions_failed
 
 
+def test_composite_criterion_uses_structured_model_result() -> None:
+    step = PlanStep(
+        step_id="step_answer",
+        title="Answer",
+        goal="Answer",
+        kind="respond",
+        expected_tool=None,
+        input_text="say hello",
+        expected_output="hello",
+        done_condition="assistant_response_nonempty",
+        success_criteria="say hello",
+        verification_type="composite",
+        verification_checks=[
+            {"name": "assistant_text_nonempty", "check_type": "string_nonempty", "actual_source": "assistant_text"},
+            {"name": "matches_goal", "check_type": "criterion", "criterion": "reply says hello"},
+        ],
+        required_conditions=["assistant_text_nonempty", "matches_goal"],
+        optional_conditions=[],
+    )
+    result = VerificationEngine().verify_step(
+        runtime=_RuntimeStub(payload={"criteria": [{"name": "matches_goal", "passed": True, "evidence": "reply says hello"}]}),
+        state=_state(),
+        plan=_plan(step),
+        step=step,
+        artifacts=VerificationArtifacts(assistant_text="hello"),
+    )
+    assert result.verification_passed is True
+    assert "matches_goal" in result.conditions_met
+    assert "__contract_success_criteria__" not in result.evidence
+    assert "perspective:reviewer" not in result.conditions_failed
+
+
+def test_composite_response_uses_success_criteria_as_intrinsic_required_model_check() -> None:
+    step = PlanStep(
+        step_id="step_answer",
+        title="Answer",
+        goal="Answer",
+        kind="respond",
+        expected_tool=None,
+        input_text="respond",
+        expected_output="final state",
+        done_condition="assistant_response_nonempty",
+        success_criteria="The answer accurately describes the final state.",
+        verification_type="composite",
+        verification_checks=[
+            {"name": "dependencies_completed", "check_type": "dependencies_completed"},
+            {"name": "assistant_text_nonempty", "check_type": "string_nonempty", "actual_source": "assistant_text"},
+        ],
+        required_conditions=["dependencies_completed", "assistant_text_nonempty"],
+        optional_conditions=[],
+    )
+    result = VerificationEngine().verify_step(
+        runtime=_RuntimeStub(
+            payload={
+                "criteria": [
+                    {
+                        "name": "__contract_success_criteria__",
+                        "passed": True,
+                        "evidence": "answer accurately describes the final state",
+                    }
+                ]
+            }
+        ),
+        state=_state(),
+        plan=_plan(step),
+        step=step,
+        artifacts=VerificationArtifacts(assistant_text="The final state is ready."),
+    )
+
+    assert result.verification_passed is True
+    assert "__contract_success_criteria__" in result.conditions_met
+    assert result.evidence["__contract_success_criteria__"]["criterion"] == step.success_criteria
+
+
+def test_composite_response_fails_closed_when_intrinsic_success_criteria_fails() -> None:
+    step = PlanStep(
+        step_id="step_answer",
+        title="Answer",
+        goal="Answer",
+        kind="respond",
+        expected_tool=None,
+        input_text="respond",
+        expected_output="final state",
+        done_condition="assistant_response_nonempty",
+        success_criteria="The answer accurately describes the final state.",
+        verification_type="composite",
+        verification_checks=[
+            {"name": "dependencies_completed", "check_type": "dependencies_completed"},
+            {"name": "assistant_text_nonempty", "check_type": "string_nonempty", "actual_source": "assistant_text"},
+        ],
+        required_conditions=["dependencies_completed", "assistant_text_nonempty"],
+        optional_conditions=[],
+    )
+    result = VerificationEngine().verify_step(
+        runtime=_RuntimeStub(
+            payload={
+                "criteria": [
+                    {
+                        "name": "__contract_success_criteria__",
+                        "passed": False,
+                        "evidence": "answer does not describe the final state",
+                    }
+                ]
+            }
+        ),
+        state=_state(),
+        plan=_plan(step),
+        step=step,
+        artifacts=VerificationArtifacts(assistant_text="Something happened."),
+    )
+
+    assert result.verification_passed is False
+    assert "__contract_success_criteria__" in result.conditions_failed
+    assert result.requires_retry is True
+
+
 def test_reviewer_perspective_accepts_expected_semantic_output() -> None:
     step = PlanStep(
         step_id="step_answer",
@@ -439,7 +828,9 @@ def test_reviewer_perspective_accepts_expected_semantic_output() -> None:
         required_conditions=["assistant_text_nonempty"],
         optional_conditions=[],
     )
-    result = VerificationEngine().verify_step(
+    engine = VerificationEngine()
+    engine._semantic_backend = _FixedScoreBackend(0.95)  # type: ignore[attr-defined]
+    result = engine.verify_step(
         runtime=_RuntimeStub(),
         state=_state(),
         plan=_plan(step),
@@ -448,6 +839,77 @@ def test_reviewer_perspective_accepts_expected_semantic_output() -> None:
     )
     assert result.verification_passed is True
     assert "perspective:reviewer" in result.conditions_met
+
+
+def test_reviewer_perspective_fails_closed_on_protocol_error() -> None:
+    step = PlanStep(
+        step_id="step_answer",
+        title="Answer",
+        goal="Summarize final state",
+        kind="respond",
+        expected_tool=None,
+        input_text="respond",
+        expected_output="The final state is ready.",
+        done_condition="assistant_response_nonempty",
+        success_criteria="The answer summarizes the final state.",
+        verification_type="composite",
+        verification_checks=[
+            {"name": "assistant_text_nonempty", "check_type": "string_nonempty", "actual_source": "assistant_text"},
+        ],
+        required_conditions=["assistant_text_nonempty"],
+        optional_conditions=[],
+    )
+    engine = VerificationEngine()
+    engine._semantic_backend = _ProtocolErrorBackend()  # type: ignore[attr-defined]
+
+    result = engine.verify_step(
+        runtime=_RuntimeStub(),
+        state=_state(),
+        plan=_plan(step),
+        step=step,
+        artifacts=VerificationArtifacts(assistant_text="Ready state confirmed."),
+    )
+
+    assert result.verification_passed is False
+    assert "__contract_success_criteria__" in result.conditions_failed
+    assert result.evidence["__contract_success_criteria__"]["error"] == "missing_criterion_result"
+    reviewer = result.evidence["perspectives"]["reviewer"]
+    assert reviewer["checked"] is False
+    assert reviewer["reason"] == "semantic_backend_protocol_error"
+    assert reviewer["review_backend_degraded"] is True
+
+
+def test_reviewer_perspective_fails_closed_when_backend_unavailable() -> None:
+    step = PlanStep(
+        step_id="step_answer",
+        title="Answer",
+        goal="Summarize final state",
+        kind="respond",
+        expected_tool=None,
+        input_text="respond",
+        expected_output="The final state is ready.",
+        done_condition="assistant_response_nonempty",
+        success_criteria="The answer summarizes the final state.",
+        verification_type="composite",
+        verification_checks=[
+            {"name": "assistant_text_nonempty", "check_type": "string_nonempty", "actual_source": "assistant_text"},
+        ],
+        required_conditions=["assistant_text_nonempty"],
+        optional_conditions=[],
+    )
+
+    result = VerificationEngine().verify_step(
+        runtime=_RuntimeStub(),
+        state=_state(),
+        plan=_plan(step),
+        step=step,
+        artifacts=VerificationArtifacts(assistant_text="Ready state confirmed."),
+    )
+
+    assert result.verification_passed is False
+    assert "__contract_success_criteria__" in result.conditions_failed
+    assert result.evidence["__contract_success_criteria__"]["error"] == "missing_criterion_result"
+    assert result.evidence["perspectives"]["reviewer"]["reason"] == "semantic_backend_unavailable"
 
 
 def test_llm_fallback_reviewer_perspective_is_advisory_when_explicit_criteria_pass() -> None:
@@ -567,14 +1029,22 @@ def test_benchmark_verification_detects_failure_contract_state() -> None:
         (),
         {
             "task_type": "failure",
-            "required_history_events": ["tool_graph_rejected", "verification_failed"],
+            "required_history_events": ["tool_mismatch_rejected", "verification_failed"],
         },
     )()
     state = _state()
     state.metrics.steps_failed = 1
     state.metrics.last_reasoning_reason = "no_progress_possible"
     events = [
-        HistoryEvent(id="1", sequence=1, session_id="session", timestamp="t1", type="tool_graph_rejected", version=1, payload={"selected_tool": "calculator"}),
+        HistoryEvent(
+            id="1",
+            sequence=1,
+            session_id="session",
+            timestamp="t1",
+            type="tool_mismatch_rejected",
+            version=1,
+            payload={"step_id": "x", "selected_tool": "calculator", "expected_tool": "read_text", "reason": "exact mismatch"},
+        ),
         HistoryEvent(id="2", sequence=2, session_id="session", timestamp="t2", type="verification_failed", version=1, payload={"step_id": "x"}),
     ]
 
@@ -634,7 +1104,7 @@ def test_benchmark_verification_enforces_tool_usage_and_workspace_scope(tmp_path
     }
 
 
-def test_tool_name_verification_treats_read_tools_as_equivalent() -> None:
+def test_tool_name_verification_requires_exact_registered_tool_name() -> None:
     step = PlanStep(
         step_id="read_source",
         title="Read source",
@@ -665,7 +1135,9 @@ def test_tool_name_verification_treats_read_tools_as_equivalent() -> None:
         ]
     )
     result = VerificationEngine().verify_step(runtime=_RuntimeStub(), state=_state(), plan=_plan(step), step=step, artifacts=artifacts)
-    assert result.verification_passed is True
+    assert result.verification_passed is False
+    assert "tool_name_matches" in result.conditions_failed
+    assert "perspective:consistency" in result.conditions_failed
 
 
 def test_coding_contract_accepts_alternate_implementation_when_tests_pass(tmp_path: Path) -> None:
@@ -722,7 +1194,7 @@ def test_benchmark_contract_accepts_live_semantic_backend_configuration() -> Non
         assistant_text="ok",
         state=state,
         events=[],
-        semantic_backend_mode="degraded_lexical",
+        semantic_backend_mode="unavailable",
         semantic_base_url=None,
         semantic_seed=123,
         semantic_connect_timeout_seconds=1,

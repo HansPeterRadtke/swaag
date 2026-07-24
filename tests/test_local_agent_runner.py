@@ -3,12 +3,14 @@ from __future__ import annotations
 import json
 from pathlib import Path
 
+import pytest
+
 from swaag.benchmark import local_agent_runner
 from swaag.types import CompletionResult
 
 
 class FakeClient:
-    def __init__(self, payloads: list[dict[str, str] | str]):
+    def __init__(self, payloads: list[object]):
         self._payloads = list(payloads)
         self.prompts: list[str] = []
 
@@ -34,6 +36,7 @@ def test_local_agent_runner_applies_structured_edit_to_candidate_file(tmp_path: 
     )
     client = FakeClient(
         [
+            {"paths": ["maths.py"], "reason": "Inspect the model-selected file."},
             {
                 "summary": "Adjust the helper implementation.",
                 "path": "maths.py",
@@ -51,11 +54,12 @@ def test_local_agent_runner_applies_structured_edit_to_candidate_file(tmp_path: 
 
     assert payload["edited_path"] == "maths.py"
     assert "return a - b" in target.read_text(encoding="utf-8")
-    assert client.prompts
+    assert len(client.prompts) == 2
     assert "maths.py" in client.prompts[0]
+    assert "maths.py" in client.prompts[1]
 
 
-def test_local_agent_runner_materializes_a_real_edit_when_selected_snippet_does_not_apply(tmp_path: Path) -> None:
+def test_local_agent_runner_retries_when_selected_snippet_does_not_apply(tmp_path: Path) -> None:
     workspace = tmp_path
     target = workspace / "worker.py"
     target.write_text(
@@ -64,12 +68,19 @@ def test_local_agent_runner_materializes_a_real_edit_when_selected_snippet_does_
     )
     client = FakeClient(
         [
+            {"paths": ["worker.py"], "reason": "Inspect the model-selected file."},
             {
                 "summary": "Broken first attempt.",
                 "path": "worker.py",
                 "find": "return value + 2",
                 "replace": "return value - 1",
-            }
+            },
+            {
+                "summary": "Valid second attempt.",
+                "path": "worker.py",
+                "find": "return value + 1",
+                "replace": "return value - 1",
+            },
         ]
     )
 
@@ -81,44 +92,26 @@ def test_local_agent_runner_materializes_a_real_edit_when_selected_snippet_does_
 
     assert payload["edited_path"] == "worker.py"
     assert "return value - 1" in target.read_text(encoding="utf-8")
-    assert len(client.prompts) == 1
+    assert len(client.prompts) == 3
+    assert "Previous attempt failed" in client.prompts[2]
 
 
-def test_local_agent_runner_ignores_prompt_wrapper_boilerplate_when_extracting_terms() -> None:
-    prompt = """
-You are solving a local SWE-bench benchmark instance inside the current repository checkout.
-Apply code changes directly to files in the workspace.
-
-Problem statement:
-Support Post aggregation function `pow` to add Math.pow support in arithmetic post aggregators.
-The request is to add `pow` support in ArithmeticPostAggregator.
-
-Hints:
-"""
-
-    path_hints, terms = local_agent_runner._extract_search_terms(prompt)
-
-    assert path_hints == []
-    assert "pow" in terms
-    assert "ArithmeticPostAggregator" in terms
-    assert "workspace" not in terms
-    assert "solving" not in terms
-
-
-def test_local_agent_runner_prefers_source_files_over_docs_for_candidate_ranking(tmp_path: Path) -> None:
+def test_local_agent_runner_uses_model_selected_files_for_context(tmp_path: Path) -> None:
     (tmp_path / "CONTRIBUTING.md").write_text("pow support docs\n", encoding="utf-8")
     source = tmp_path / "module.py"
     source.write_text("def pow_fix(value):\n    return value\n", encoding="utf-8")
+    client = FakeClient([{"paths": ["module.py"], "reason": "The model selected the implementation file."}])
 
-    candidates = local_agent_runner._candidate_files(
+    candidates = local_agent_runner._select_candidate_files(
         tmp_path,
-        [],
-        ["pow"],
-        limit=2,
+        "Choose the relevant file.",
+        client=client,
+        policy=local_agent_runner.LocalRunnerPolicy(candidate_file_limit=1),
     )
 
-    assert candidates[0] == "./module.py"
-    assert "./CONTRIBUTING.md" in candidates
+    assert candidates == ["module.py"]
+    assert "CONTRIBUTING.md" in client.prompts[0]
+    assert "module.py" in client.prompts[0]
 
 
 def test_local_agent_runner_retries_when_model_returns_invalid_json(tmp_path: Path) -> None:
@@ -130,6 +123,7 @@ def test_local_agent_runner_retries_when_model_returns_invalid_json(tmp_path: Pa
     )
     client = FakeClient(
         [
+            {"paths": ["worker.py"], "reason": "Inspect the model-selected file."},
             '{"summary": "oops", "path": "worker.py", "find": "return value + 1", "replace": ',
             {
                 "summary": "Valid second attempt.",
@@ -148,8 +142,8 @@ def test_local_agent_runner_retries_when_model_returns_invalid_json(tmp_path: Pa
 
     assert payload["edited_path"] == "worker.py"
     assert "return value - 1" in target.read_text(encoding="utf-8")
-    assert len(client.prompts) == 2
-    assert "Previous attempt failed" in client.prompts[1]
+    assert len(client.prompts) == 3
+    assert "Previous attempt failed" in client.prompts[2]
 
 
 def test_local_agent_runner_solver_prompt_names_structured_edit_keys() -> None:
@@ -166,7 +160,7 @@ def test_local_agent_runner_solver_prompt_names_structured_edit_keys() -> None:
     assert "replace is the exact replacement text" in prompt
 
 
-def test_local_agent_runner_falls_back_to_matching_exact_line_when_full_snippet_misses(tmp_path: Path) -> None:
+def test_local_agent_runner_rejects_missing_find_text(tmp_path: Path) -> None:
     workspace = tmp_path
     target = workspace / "worker.py"
     target.write_text(
@@ -174,18 +168,17 @@ def test_local_agent_runner_falls_back_to_matching_exact_line_when_full_snippet_
         encoding="utf-8",
     )
 
-    changed_path = local_agent_runner._apply_edit(
-        workspace,
-        relative_path="worker.py",
-        find="if missing:\n    total = value + 1\n    return total",
-        replace="    total = value - 1\n",
-    )
+    with pytest.raises(local_agent_runner.LocalAgentRunnerError, match="did not appear exactly"):
+        local_agent_runner._apply_edit(
+            workspace,
+            relative_path="worker.py",
+            find="if missing:\n    total = value + 1\n    return total",
+            replace="    total = value - 1\n",
+        )
+    assert target.read_text(encoding="utf-8") == "def handle(value):\n    total = value + 1\n    return total\n"
 
-    assert changed_path == target
-    assert "value - 1" in target.read_text(encoding="utf-8")
 
-
-def test_local_agent_runner_appends_replace_text_when_no_snippet_fragment_matches(tmp_path: Path) -> None:
+def test_local_agent_runner_rejects_missing_snippet_without_appending(tmp_path: Path) -> None:
     workspace = tmp_path
     target = workspace / "worker.py"
     target.write_text(
@@ -193,19 +186,17 @@ def test_local_agent_runner_appends_replace_text_when_no_snippet_fragment_matche
         encoding="utf-8",
     )
 
-    changed_path = local_agent_runner._apply_edit(
-        workspace,
-        relative_path="worker.py",
-        find="totally missing snippet",
-        replace="def fallback():\n    return 1",
-    )
-
-    assert changed_path == target
-    text = target.read_text(encoding="utf-8")
-    assert text.endswith("def fallback():\n    return 1\n")
+    with pytest.raises(local_agent_runner.LocalAgentRunnerError, match="did not appear exactly"):
+        local_agent_runner._apply_edit(
+            workspace,
+            relative_path="worker.py",
+            find="totally missing snippet",
+            replace="def fallback():\n    return 1",
+        )
+    assert target.read_text(encoding="utf-8") == "def handle(value):\n    return value + 1\n"
 
 
-def test_local_agent_runner_appends_replace_text_when_exact_edit_would_be_a_noop(tmp_path: Path) -> None:
+def test_local_agent_runner_rejects_noop_edit(tmp_path: Path) -> None:
     workspace = tmp_path
     target = workspace / "worker.py"
     target.write_text(
@@ -213,12 +204,11 @@ def test_local_agent_runner_appends_replace_text_when_exact_edit_would_be_a_noop
         encoding="utf-8",
     )
 
-    changed_path = local_agent_runner._apply_edit(
-        workspace,
-        relative_path="worker.py",
-        find="return value + 1",
-        replace="return value + 1",
-    )
-
-    assert changed_path == target
-    assert target.read_text(encoding="utf-8").count("return value + 1") == 2
+    with pytest.raises(local_agent_runner.LocalAgentRunnerError, match="would not change"):
+        local_agent_runner._apply_edit(
+            workspace,
+            relative_path="worker.py",
+            find="return value + 1",
+            replace="return value + 1",
+        )
+    assert target.read_text(encoding="utf-8").count("return value + 1") == 1

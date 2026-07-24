@@ -4,11 +4,9 @@ import copy
 import inspect
 import json
 import os
-import queue
 import re
-import shlex
 import shutil
-import threading
+import sys
 import time
 from dataclasses import asdict, dataclass, field, fields, replace
 from pathlib import Path
@@ -16,6 +14,7 @@ from typing import Any, Iterable
 
 import requests
 
+from swaag.artifacts import artifact_labels_from_plan, unresolved_artifact_placeholders
 from swaag.compression import decide_history_compression, summary_message_payload
 from swaag.budgeting import compute_call_budget, structured_output_token_floor
 from swaag.config import AgentConfig, load_config
@@ -41,16 +40,15 @@ from swaag.grammar import (
     active_session_control_contract,
     action_selection_contract,
     failure_classification_contract,
-    generation_decomposition_contract,
-    overflow_recovery_contract,
     plan_contract,
-    plain_text_contract,
     prompt_analysis_contract,
     subagent_selection_contract,
     strategy_selection_contract,
     summary_contract,
     task_decision_contract,
+    task_decision_semantic_review_contract,
     task_expansion_contract,
+    text_response_contract,
     tool_decision_contract,
     tool_input_contract,
     verification_contract,
@@ -58,26 +56,10 @@ from swaag.grammar import (
 )
 from swaag.memory_semantic import extract_from_event
 from swaag.model import LlamaCppClient, ModelClientError
+from swaag.model_cache import build_model_client
 from swaag.orchestrator import action_from_payload, select_action
 from swaag.planner import (
     PlanValidationError,
-    create_shell_recovery_plan,
-    create_multi_target_projection_plan,
-    create_replace_all_file_edit_plan,
-    create_compatibility_matrix_repair_plan,
-    create_release_train_repair_plan,
-    create_policy_refusal_workflow_plan,
-    create_deployment_refinement_workflow_plan,
-    create_filesystem_release_workflow_plan,
-    create_shell_release_workflow_plan,
-    create_capacity_plan_workflow_plan,
-    create_computed_report_plan,
-    create_manifest_projection_plan,
-    create_exact_file_sync_plan,
-    create_structured_reading_plan,
-    create_release_flow_recovery_plan,
-    create_direct_response_plan,
-    create_direct_tool_plan,
     mark_step_completed,
     mark_step_failed,
     mark_step_in_progress,
@@ -92,14 +74,13 @@ from swaag.retrieval.embeddings import SemanticBackendProtocolError
 from swaag.strategy import (
     StrategyValidationError,
     adapt_strategy,
-    build_strategy_from_profile,
-    reconcile_strategy_to_plan,
     strategy_from_payload,
     validate_plan_against_strategy,
 )
 from swaag.subagents import SubagentManager
 from swaag.subsystems import FileSubsystem, PlanningSubsystem, ReasoningSubsystem, SubsystemExecutionResult, ToolSubsystem
 from swaag.tokens import ConservativeEstimator, CountResult, ExactTokenCounter, build_budget
+from swaag.tools.base import ToolValidationError
 from swaag.tools.registry import ToolRegistry
 from swaag.types import (
     BudgetReport,
@@ -124,75 +105,54 @@ from swaag.utils import new_id, sha256_text, stable_json_dumps, to_jsonable, utc
 from swaag.working_memory import build_working_memory
 from swaag.verification import VerificationArtifacts, VerificationEngine, VerificationError, VerificationOutcome
 
-_PATH_LIKE_RE = re.compile(
-    r"""
-    (?:
-        (?<!\w)
-        (?:
-            \.{1,2}/[^\s,'"`;]+ |
-            /[^\s,'"`;]+ |
-            ~/[^\s,'"`;]+
-        )
-    )
-    """,
-    re.VERBOSE,
+_VOLATILE_EXCERPT_FIELDS = (
+    '"created_at"', '"updated_at"', '"last_updated"',
+    '"plan_id"', '"session_id"', '"run_id"',
 )
-_BARE_FILE_RE = re.compile(r"(?<![A-Za-z0-9_])(?:[A-Za-z0-9_.-]+/)*[A-Za-z0-9_.-]+\.[A-Za-z_][A-Za-z0-9_]*(?![A-Za-z0-9_])")
-_URL_RE = re.compile(r"https?://[^\s,'\"`]+")
+_GENERATED_ID_RE = re.compile(r"\b[a-z]+_[0-9a-f]{12}\b")
+_TIMESTAMP_RE = re.compile(r"\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}(?:\.\d+)?(?:\+00:00|Z)")
+_STRUCTURAL_EXCERPTS = {"{", "}", "[", "]", "},", "],"}
 
 
-def _mask_path_like_text(text: str) -> str:
-    return _PATH_LIKE_RE.sub(" <PATH> ", text)
+def _verification_candidate_excerpt_options(
+    candidate: str,
+    *,
+    max_options: int = 64,
+    max_chars: int = 220,
+) -> list[str]:
+    """Return exact, stable candidate substrings for constrained evidence selection."""
+    text = candidate.strip()
+    if not text:
+        return []
+    options: list[str] = []
 
+    def add(value: str) -> None:
+        value = value.strip()
+        if not value or value in _STRUCTURAL_EXCERPTS or value in options:
+            return
+        if any(marker in value for marker in _VOLATILE_EXCERPT_FIELDS):
+            return
+        if _GENERATED_ID_RE.search(value) or _TIMESTAMP_RE.search(value):
+            return
+        if len(value) <= max_chars:
+            options.append(value)
+            return
+        for offset in range(0, len(value), max_chars):
+            chunk = value[offset : offset + max_chars].strip()
+            if chunk and chunk not in _STRUCTURAL_EXCERPTS and chunk not in options:
+                options.append(chunk)
+            if len(options) >= max_options:
+                return
 
-def _path_candidates(text: str) -> list[str]:
-    candidates: list[str] = []
-    for pattern in (_PATH_LIKE_RE, _BARE_FILE_RE):
-        for match in pattern.findall(text):
-            candidate = match.strip().rstrip(".,)")
-            if not candidate:
-                continue
-            if any(existing == candidate for existing in candidates):
-                continue
-            if any(
-                len(existing) > len(candidate)
-                and (
-                    existing.endswith(candidate)
-                    or existing.endswith("/" + candidate)
-                )
-                for existing in candidates
-            ):
-                continue
-            candidates.append(candidate)
-    return candidates
-
-
-def _url_candidates(text: str) -> list[str]:
-    candidates: list[str] = []
-    for match in _URL_RE.findall(text):
-        candidate = match.strip().rstrip(".,)")
-        if candidate and candidate not in candidates:
-            candidates.append(candidate)
-    return candidates
-
-
-def _truncate_clause(text: str) -> str:
-    lowered = text.lower()
-    cut_markers = (
-        " and ",
-        ". ",
-        "\n",
-        " then ",
-        " reply ",
-        " return ",
-        " answer ",
-    )
-    end = len(text)
-    for marker in cut_markers:
-        index = lowered.find(marker)
-        if index != -1:
-            end = min(end, index)
-    return text[:end].strip(" \t\n\r.,)")
+    if len(text) <= max_chars:
+        add(text)
+    for line in text.splitlines():
+        add(line)
+        if len(options) >= max_options:
+            break
+    if not options:
+        options.append(text[:max_chars])
+    return options[:max_options]
 
 
 class BudgetExceededError(RuntimeError):
@@ -226,7 +186,6 @@ class TurnPreparation:
     effective_goal: str
     expanded_task: ExpandedTask | None = None
     clarification_request: str | None = None
-    required_named_tools: tuple[str, ...] = ()
 
 
 @dataclass(slots=True)
@@ -267,17 +226,26 @@ class AgentRuntime:
         token_counter: ExactTokenCounter | ConservativeEstimator | None = None,
     ):
         self.config = config
-        self.client = model_client or LlamaCppClient(config)
+        self.client = (
+            model_client
+            if model_client is not None
+            else build_model_client(
+                config,
+                request_metadata={"cache_scope": "default_agent_runtime"},
+            )
+        )
         self.tools = tool_registry or ToolRegistry()
         self.history = history_store or HistoryStore(config.sessions.root, write_projections=config.sessions.write_projections)
         self.prompts = PromptBuilder(config)
         self._token_counter = token_counter
+        self._token_count_cache: dict[str, int] = {}
         self._verification = VerificationEngine(
             semantic_backend_mode=self.config.retrieval.backend,
             semantic_base_url=self.config.model.base_url,
             semantic_seed=self.config.model.seed,
             semantic_connect_timeout_seconds=self.config.model.connect_timeout_seconds,
             semantic_read_timeout_seconds=self.config.model.verification_timeout_seconds,
+            semantic_model_client=self.client,
         )
         self._planning_subsystem = PlanningSubsystem()
         self._reasoning_subsystem = ReasoningSubsystem()
@@ -289,6 +257,7 @@ class AgentRuntime:
             seed=self.config.model.seed,
             connect_timeout_seconds=self.config.model.connect_timeout_seconds,
             read_timeout_seconds=self.config.model.simple_timeout_seconds,
+            model_client=self.client,
         )
         self._sleep = time.sleep
         self._max_model_unavailable_attempts: int | None = None
@@ -348,7 +317,7 @@ class AgentRuntime:
     def execute_tool_once(self, tool_name: str, raw_input: dict[str, Any], *, session_id: str | None = None) -> ToolRunResult:
         state = self.create_or_load_session(session_id)
         self._ensure_environment_initialized(state)
-        plan = create_direct_tool_plan(f"Execute tool {tool_name} safely", tool_name)
+        plan = self._create_explicit_tool_execution_plan(tool_name)
         event_type = "plan_updated" if state.active_plan is not None else "plan_created"
         if event_type == "plan_created":
             plan_event = self.history.record_event(state, event_type, {"goal": plan.goal, "plan": plan_as_payload(plan)})
@@ -379,6 +348,40 @@ class AgentRuntime:
         self._refresh_working_memory(state, reason=f"tool:{tool_name}")
         self._check_consistency(state)
         return ToolRunResult(session_id=state.session_id, tool_result=result)
+
+    def _create_explicit_tool_execution_plan(self, tool_name: str) -> Plan:
+        now = utc_now_iso()
+        step = PlanStep(
+            step_id=new_id("step"),
+            title=f"Execute registered tool {tool_name}",
+            goal=f"Execute registered tool {tool_name}",
+            kind="tool",
+            expected_tool=tool_name,
+            input_text="Use the caller-provided validated tool input.",
+            expected_output="Tool execution result",
+            expected_outputs=["Tool execution result"],
+            done_condition=f"tool_result:{tool_name}",
+            success_criteria="The explicitly requested tool call completes.",
+            verification_type="composite",
+            verification_checks=[],
+            required_conditions=[],
+            optional_conditions=[],
+            output_refs=[tool_name],
+            fallback_strategy="Report the tool execution failure.",
+            status="pending",
+            last_updated=now,
+        )
+        return Plan(
+            plan_id=new_id("plan"),
+            goal=f"Execute registered tool {tool_name}",
+            steps=[step],
+            success_criteria="Execute the caller-provided tool request.",
+            fallback_strategy="Report the tool execution failure.",
+            status="active",
+            created_at=now,
+            updated_at=now,
+            current_step_id=step.step_id,
+        )
 
     def run_turn_in_session(self, state: SessionState, user_text: str) -> TurnResult:
         run_id = f"{state.session_id}:{new_id('run')}"
@@ -447,97 +450,62 @@ class AgentRuntime:
                 },
             )
             return self._finish_turn(state, turn_prep.clarification_request, [], [])
-        required_tools = list(turn_prep.required_named_tools)
-        policy_plan = self._install_policy_refusal_workflow_plan(
-            state,
-            effective_goal,
-            reason="policy_refusal_precedes_semantic_routing",
-        )
-        deployment_plan = None if policy_plan is not None else self._install_deployment_refinement_workflow_plan(
-            state,
-            effective_goal,
-            reason="deployment_refinement_precedes_semantic_routing",
-        )
-        filesystem_plan = None if policy_plan is not None or deployment_plan is not None else self._install_filesystem_release_workflow_plan(
-            state,
-            effective_goal,
-            reason="filesystem_release_precedes_semantic_routing",
-        )
-        shell_plan = None if policy_plan is not None or deployment_plan is not None or filesystem_plan is not None else self._install_shell_release_workflow_plan(
-            state,
-            effective_goal,
-            reason="shell_release_precedes_semantic_routing",
-        )
-        capacity_plan = None if policy_plan is not None or deployment_plan is not None or filesystem_plan is not None or shell_plan is not None else self._install_capacity_plan_workflow_plan(
-            state,
-            effective_goal,
-            reason="capacity_plan_precedes_semantic_routing",
-        )
-        computed_plan = None if policy_plan is not None or deployment_plan is not None or filesystem_plan is not None or shell_plan is not None or capacity_plan is not None else self._install_computed_report_plan(
-            state,
-            effective_goal,
-            reason="computed_report_precedes_semantic_routing",
-        )
-        projection_plan = None if policy_plan is not None or deployment_plan is not None or filesystem_plan is not None or shell_plan is not None or capacity_plan is not None or computed_plan is not None else self._install_manifest_projection_plan(
-            state,
-            effective_goal,
-            reason="manifest_projection_precedes_semantic_routing",
-        )
-        sync_plan = None if policy_plan is not None or deployment_plan is not None or filesystem_plan is not None or shell_plan is not None or capacity_plan is not None or computed_plan is not None or projection_plan is not None else self._install_exact_file_sync_plan(
-            state,
-            effective_goal,
-            reason="exact_file_sync_precedes_semantic_routing",
-        )
-        structured_plan = None if policy_plan is not None or deployment_plan is not None or filesystem_plan is not None or shell_plan is not None or capacity_plan is not None or computed_plan is not None or projection_plan is not None or sync_plan is not None else self._install_structured_reading_plan(
-            state,
-            effective_goal,
-            reason="structured_reading_precedes_semantic_routing",
-        )
-        if policy_plan is not None or deployment_plan is not None or filesystem_plan is not None or shell_plan is not None or capacity_plan is not None or computed_plan is not None or projection_plan is not None or sync_plan is not None or structured_plan is not None:
-            pass
+        replan_reason = ""
+        if turn_prep.decision.ask_user and turn_prep.decision.execution_mode in {"full_plan", "single_tool"}:
+            preferred = (
+                f" with preferred_tool_name={turn_prep.decision.preferred_tool_name}"
+                if turn_prep.decision.preferred_tool_name
+                else ""
+            )
+            replan_reason = (
+                "The task decision selected ask_user=true with "
+                f"execution_mode={turn_prep.decision.execution_mode}{preferred}. "
+                "Create a model-authored plan that gathers only the necessary evidence, does not assume missing facts, "
+                "and ends with one respond step asking the most useful clarification question grounded in that evidence."
+            )
         elif turn_prep.decision.direct_response or turn_prep.decision.execution_mode == "direct_response":
-            self._install_direct_response_plan(state, effective_goal)
+            replan_reason = (
+                "The task decision selected execution_mode=direct_response. "
+                "The model must author any response steps and verification conditions from the full enabled tool registry."
+            )
         elif (
             not turn_prep.decision.direct_response
             and turn_prep.decision.execution_mode == "single_tool"
             and turn_prep.decision.preferred_tool_name in self.tools.tool_names(self.config)
-            and self._allow_direct_tool_plan(effective_goal, turn_prep.decision.preferred_tool_name)
         ):
-            self._install_direct_tool_plan(
-                state,
-                effective_goal,
-                turn_prep.decision.preferred_tool_name,
-                reason="semantic_single_tool_execution",
+            replan_reason = (
+                "The task decision selected execution_mode=single_tool with "
+                f"preferred_tool_name={turn_prep.decision.preferred_tool_name}. "
+                "Create a complete objective-verifying plan from the full enabled tool registry."
             )
-        else:
-            try:
-                self._ensure_plan(state, effective_goal, required_tools=required_tools)
-            except FatalSemanticEngineError:
-                self.history.record_event(
-                    state,
-                    "error",
-                    {
-                        "operation": "plan",
-                        "error": "fatal_structured_semantic_failure",
-                        "error_type": "FatalSemanticEngineError",
-                    },
-                )
-                self._record_reasoning_completed(
-                    state,
-                    goal=effective_goal,
-                    status="fatal_system_error",
-                    completed_steps=0,
-                    failed_steps=0,
-                    reason="plan_generation_failed",
-                )
-                raise
-            except Exception as exc:
-                plan_ready = False
-                self.history.record_event(
-                    state,
-                    "error",
-                    {"operation": "plan", "error": str(exc), "error_type": exc.__class__.__name__},
-                )
+        try:
+            self._ensure_plan(state, effective_goal, replan_reason=replan_reason)
+        except FatalSemanticEngineError:
+            self.history.record_event(
+                state,
+                "error",
+                {
+                    "operation": "plan",
+                    "error": "fatal_structured_semantic_failure",
+                    "error_type": "FatalSemanticEngineError",
+                },
+            )
+            self._record_reasoning_completed(
+                state,
+                goal=effective_goal,
+                status="fatal_system_error",
+                completed_steps=0,
+                failed_steps=0,
+                reason="plan_generation_failed",
+            )
+            raise
+        except Exception as exc:
+            plan_ready = False
+            self.history.record_event(
+                state,
+                "error",
+                {"operation": "plan", "error": str(exc), "error_type": exc.__class__.__name__},
+            )
         self._refresh_working_memory(state, reason="turn_started")
         self._check_consistency(state)
         self.history.record_event(
@@ -551,6 +519,11 @@ class AgentRuntime:
         budget_reports: list[BudgetReport] = []
         action_counts: dict[str, int] = {}
         step_attempts: dict[str, int] = {}
+
+        def reset_plan_scoped_attempts() -> None:
+            step_attempts.clear()
+            action_counts.clear()
+
         completed_steps = 0
         failed_steps = 0
         replans_used = 0
@@ -630,6 +603,7 @@ class AgentRuntime:
                         replan_reason=background_progress.replan_reason,
                         force_replan=True,
                     )
+                    reset_plan_scoped_attempts()
                     last_verification = None
                     last_failure = None
                     continue
@@ -645,76 +619,41 @@ class AgentRuntime:
                 current_running_step_id = None
                 last_verification = None
                 last_failure = None
-                required_tools = list(turn_prep.required_named_tools)
-                policy_plan = self._install_policy_refusal_workflow_plan(
-                    state,
-                    effective_goal,
-                    reason="control_replacement_policy_refusal",
-                )
-                deployment_plan = None if policy_plan is not None else self._install_deployment_refinement_workflow_plan(
-                    state,
-                    effective_goal,
-                    reason="control_replacement_deployment_refinement",
-                )
-                filesystem_plan = None if policy_plan is not None or deployment_plan is not None else self._install_filesystem_release_workflow_plan(
-                    state,
-                    effective_goal,
-                    reason="control_replacement_filesystem_release",
-                )
-                shell_plan = None if policy_plan is not None or deployment_plan is not None or filesystem_plan is not None else self._install_shell_release_workflow_plan(
-                    state,
-                    effective_goal,
-                    reason="control_replacement_shell_release",
-                )
-                capacity_plan = None if policy_plan is not None or deployment_plan is not None or filesystem_plan is not None or shell_plan is not None else self._install_capacity_plan_workflow_plan(
-                    state,
-                    effective_goal,
-                    reason="control_replacement_capacity_plan",
-                )
-                computed_plan = None if policy_plan is not None or deployment_plan is not None or filesystem_plan is not None or shell_plan is not None or capacity_plan is not None else self._install_computed_report_plan(
-                    state,
-                    effective_goal,
-                    reason="control_replacement_computed_report",
-                )
-                projection_plan = None if policy_plan is not None or deployment_plan is not None or filesystem_plan is not None or shell_plan is not None or capacity_plan is not None or computed_plan is not None else self._install_manifest_projection_plan(
-                    state,
-                    effective_goal,
-                    reason="control_replacement_manifest_projection",
-                )
-                sync_plan = None if policy_plan is not None or deployment_plan is not None or filesystem_plan is not None or shell_plan is not None or capacity_plan is not None or computed_plan is not None or projection_plan is not None else self._install_exact_file_sync_plan(
-                    state,
-                    effective_goal,
-                    reason="control_replacement_exact_file_sync",
-                )
-                structured_plan = None if policy_plan is not None or deployment_plan is not None or filesystem_plan is not None or shell_plan is not None or capacity_plan is not None or computed_plan is not None or projection_plan is not None or sync_plan is not None else self._install_structured_reading_plan(
-                    state,
-                    effective_goal,
-                    reason="control_replacement_structured_reading",
-                )
-                if policy_plan is not None or deployment_plan is not None or filesystem_plan is not None or shell_plan is not None or capacity_plan is not None or computed_plan is not None or projection_plan is not None or sync_plan is not None or structured_plan is not None:
-                    pass
+                replan_reason = "user_requested_replacement"
+                if turn_prep.decision.ask_user and turn_prep.decision.execution_mode in {"full_plan", "single_tool"}:
+                    preferred = (
+                        f" with preferred_tool_name={turn_prep.decision.preferred_tool_name}"
+                        if turn_prep.decision.preferred_tool_name
+                        else ""
+                    )
+                    replan_reason = (
+                        "The replacement task decision selected ask_user=true with "
+                        f"execution_mode={turn_prep.decision.execution_mode}{preferred}. "
+                        "Create a model-authored plan that gathers only the necessary evidence, does not assume missing facts, "
+                        "and ends with one respond step asking the most useful clarification question grounded in that evidence."
+                    )
                 elif turn_prep.decision.direct_response or turn_prep.decision.execution_mode == "direct_response":
-                    self._install_direct_response_plan(state, effective_goal)
+                    replan_reason = (
+                        "The replacement task decision selected execution_mode=direct_response. "
+                        "The model must author any response steps and verification conditions from the full enabled tool registry."
+                    )
                 elif (
                     not turn_prep.decision.direct_response
                     and turn_prep.decision.execution_mode == "single_tool"
                     and turn_prep.decision.preferred_tool_name in self.tools.tool_names(self.config)
-                    and self._allow_direct_tool_plan(effective_goal, turn_prep.decision.preferred_tool_name)
                 ):
-                    self._install_direct_tool_plan(
-                        state,
-                        effective_goal,
-                        turn_prep.decision.preferred_tool_name,
-                        reason="control_replacement_single_tool",
+                    replan_reason = (
+                        "The replacement task decision selected execution_mode=single_tool with "
+                        f"preferred_tool_name={turn_prep.decision.preferred_tool_name}. "
+                        "Create a complete objective-verifying plan from the full enabled tool registry."
                     )
-                else:
-                    self._ensure_plan(
-                        state,
-                        effective_goal,
-                        replan_reason="user_requested_replacement",
-                        force_replan=True,
-                        required_tools=required_tools,
-                    )
+                self._ensure_plan(
+                    state,
+                    effective_goal,
+                    replan_reason=replan_reason,
+                    force_replan=True,
+                )
+                reset_plan_scoped_attempts()
                 continue
             if control_result.replan_requested:
                 current_running_step_id = None
@@ -726,6 +665,7 @@ class AgentRuntime:
                     replan_reason="control_context_update",
                     force_replan=True,
                 )
+                reset_plan_scoped_attempts()
                 continue
             try:
                 plan = self._ensure_plan(state, effective_goal)
@@ -816,6 +756,7 @@ class AgentRuntime:
                     },
                 )
                 plan = self._ensure_plan(state, effective_goal, replan_reason=last_failure.reason if last_failure is not None else "orchestrator_selected_replan", replan_attempt=replans_used, force_replan=True)
+                reset_plan_scoped_attempts()
                 current_running_step_id = None
                 last_verification = None
                 last_failure = None
@@ -882,9 +823,10 @@ class AgentRuntime:
                     last_failure = None
                     continue
                 if not subsystem_result.success:
-                    last_failure = self._classify_failed_test_command(state, subsystem_result=subsystem_result) or self._classify_failure_frontend(
+                    last_failure = self._classify_failure_frontend(
                         state,
                         step=step,
+                        subsystem_result=subsystem_result,
                         reason=f"subsystem_failed:{subsystem_result.subsystem_name}",
                     )
                     updated_strategy = adapt_strategy(active_strategy, failure=last_failure, metrics=state.metrics, verification_failed=False)
@@ -920,6 +862,7 @@ class AgentRuntime:
                             replan_attempt=replans_used,
                             force_replan=True,
                         )
+                        reset_plan_scoped_attempts()
                         last_verification = None
                         last_failure = None
                         continue
@@ -976,11 +919,18 @@ class AgentRuntime:
                     raise HistoryInvariantError(
                         f"Evaluator attempted to override deterministic verification failure for step {step.step_id}"
                     )
+                if evaluation.passed and step.kind == "respond":
+                    final_verification = self._verify_final_objective(state, step, subsystem_result.assistant_text)
+                    final_evaluation = evaluate_verification(step, final_verification)
+                    if not final_evaluation.passed:
+                        verification = final_verification
+                        evaluation = final_evaluation
                 failure = None if evaluation.passed else (
-                    self._classify_failed_test_command(state, subsystem_result=subsystem_result)
-                    or self._classify_failure_frontend(
+                    self._classify_failure_frontend(
                         state,
                         step=step,
+                        verification=verification,
+                        subsystem_result=subsystem_result,
                         reason=f"verification:{evaluation.reason}",
                     )
                 )
@@ -1006,12 +956,36 @@ class AgentRuntime:
                 updated_strategy = adapt_strategy(active_strategy, failure=failure, metrics=state.metrics, verification_failed=True)
                 self._set_strategy(state, updated_strategy, reason=updated_strategy.reason)
                 no_progress_failures += 1
+                retry_allowed_by_failure = failure is None or (failure.retryable and not failure.requires_replan)
                 if (
                     evaluation.requires_retry
-                    and (failure is None or not failure.requires_replan)
+                    and retry_allowed_by_failure
+                    and subsystem_result.same_step_retry_allowed
                     and step_attempts[step.step_id] <= updated_strategy.retry_same_action_limit + 1
                 ):
                     continue
+                if evaluation.requires_retry and not subsystem_result.same_step_retry_allowed:
+                    self.history.record_event(
+                        state,
+                        "retry_suppressed",
+                        {
+                            "step_id": step.step_id,
+                            "reason": "subsystem_disallowed_same_step_retry",
+                            "verification_reason": evaluation.reason,
+                        },
+                    )
+                if evaluation.requires_retry and not retry_allowed_by_failure:
+                    self.history.record_event(
+                        state,
+                        "retry_suppressed",
+                        {
+                            "step_id": step.step_id,
+                            "reason": "model_disallowed_same_step_retry",
+                            "verification_reason": evaluation.reason,
+                            "failure_kind": failure.kind if failure is not None else "",
+                            "failure_reason": failure.reason if failure is not None else "",
+                        },
+                    )
 
                 failed_steps += 1
                 self._fail_step(state, plan, step, evaluation.reason, failure.kind if failure is not None else "VerificationError")
@@ -1026,6 +1000,7 @@ class AgentRuntime:
                         {"step_id": step.step_id, "reason": replan_reason, "replan_count": replans_used},
                     )
                     self._ensure_plan(state, effective_goal, replan_reason=f"Step {step.step_id} failed verification: {replan_reason}", replan_attempt=replans_used, force_replan=True)
+                    reset_plan_scoped_attempts()
                     last_verification = None
                     last_failure = None
                     continue
@@ -1054,6 +1029,7 @@ class AgentRuntime:
                         {"step_id": step.step_id, "reason": "budget_exceeded", "replan_count": replans_used},
                     )
                     self._ensure_plan(state, effective_goal, replan_reason="Budget exceeded while executing the previous step.", replan_attempt=replans_used, force_replan=True)
+                    reset_plan_scoped_attempts()
                     last_verification = None
                     last_failure = None
                     continue
@@ -1117,6 +1093,7 @@ class AgentRuntime:
                         {"step_id": step.step_id, "reason": str(exc), "replan_count": replans_used},
                     )
                     self._ensure_plan(state, effective_goal, replan_reason=f"Step {step.step_id} failed: {exc}", replan_attempt=replans_used, force_replan=True)
+                    reset_plan_scoped_attempts()
                     last_verification = None
                     last_failure = None
                     continue
@@ -1142,21 +1119,25 @@ class AgentRuntime:
                 reason=reasoning_reason,
             )
             reasoning_recorded = True
-        if not answer_text:
+        if not answer_text and reasoning_status == "completed":
             answer_text, answer_report = self._answer(state)
             budget_reports.append(answer_report)
-            if reasoning_status == "completed":
-                answer_completed, answer_failed = self._finalize_answer_step(state, answer_text)
-                if answer_completed:
-                    completed_steps += 1
-                    reasoning_reason = "answered"
-                if answer_failed:
-                    failed_steps += 1
-                    reasoning_status = "fallback"
-                    if reasoning_reason == "final_response":
-                        reasoning_reason = "answer_verification_failed"
-        if self._looks_like_policy_refusal_goal(effective_goal) and answer_text:
-            reasoning_reason = "unsafe_request_refused"
+            answer_completed, answer_failed = self._finalize_answer_step(state, answer_text)
+            if answer_completed:
+                completed_steps += 1
+                reasoning_reason = "answered"
+            if answer_failed:
+                failed_steps += 1
+                reasoning_status = "fallback"
+                if reasoning_reason == "final_response":
+                    reasoning_reason = "answer_verification_failed"
+                answer_text = ""
+            if not answer_completed and not answer_failed:
+                reasoning_status = "fallback"
+                reasoning_reason = "answer_not_verified"
+                answer_text = ""
+        if not answer_text:
+            answer_text = self._incomplete_turn_response(reasoning_status, reasoning_reason)
         if not reasoning_recorded:
             self._record_reasoning_completed(
                 state,
@@ -1175,7 +1156,7 @@ class AgentRuntime:
         decision_contract = tool_decision_contract(self.tools.tool_names(self.config))
         decision_report = self._budget_report(None, decision_assembly, decision_contract)
         answer_assembly = self.prompts.build_answer_prompt(messages, prompt_mode=prompt_mode)
-        answer_report = self._budget_report(None, answer_assembly, plain_text_contract())
+        answer_report = self._budget_report(None, answer_assembly, text_response_contract("answer_response"))
         return {
             "decision": {"prompt_mode": prompt_mode, "budget": asdict(decision_report), "prompt": decision_assembly.prompt_text},
             "answer": {"prompt_mode": prompt_mode, "budget": asdict(answer_report), "prompt": answer_assembly.prompt_text},
@@ -1188,14 +1169,19 @@ class AgentRuntime:
         self.history.record_event(state, "doctor_health_checked", {"health": health})
         token_count = self._tokenize_with_history(state, "doctor probe").tokens
         self.history.record_event(state, "doctor_tokenize_checked", {"probe": "doctor probe", "tokens": token_count})
-        grammar_assembly = self.prompts._assemble("doctor", "lean", [PromptComponent(name="doctor", category="instruction", text="Reply yes.")])
-        grammar_prepared = PreparedCall(
-            assembly=grammar_assembly,
-            report=self._budget_report(state, grammar_assembly, yes_no_contract()),
+        constrained_assembly = self.prompts._assemble("doctor", "lean", [PromptComponent(name="doctor", category="instruction", text='Return {"answer":"yes"}.')])
+        constrained_prepared = PreparedCall(
+            assembly=constrained_assembly,
+            report=self._budget_report(state, constrained_assembly, yes_no_contract()),
             prompt_mode="lean",
             contract=yes_no_contract(),
         )
-        grammar_result = self._execute_model_call(state, grammar_prepared)
+        _completion, yes_no_payload = self._execute_structured_call(
+            state,
+            constrained_prepared,
+            validator=self._validate_yes_no_payload,
+            validation_error_types=(ValueError,),
+        )
         schema_prompt = self.prompts._assemble(
             "doctor",
             "lean",
@@ -1213,7 +1199,7 @@ class AgentRuntime:
             "session_id": state.session_id,
             "health": health,
             "tokenize_probe_tokens": token_count,
-            "grammar_probe": grammar_result.text.strip(),
+            "json_probe": yes_no_payload["answer"],
             "schema_probe": parsed_schema,
         }
 
@@ -1597,56 +1583,16 @@ class AgentRuntime:
     def _prepare_turn_context(self, state: SessionState, user_text: str) -> TurnPreparation:
         analysis = self._analyze_prompt_frontend(state, user_text)
         decision = self._decide_prompt_frontend(state, user_text, analysis)
-        explicit_tools = self._detect_explicit_named_tools(user_text)
-        explicit_tool = explicit_tools[0] if explicit_tools else None
-        if decision.direct_response and explicit_tool is not None:
-            decision = replace(
-                decision,
-                direct_response=False,
-                execution_mode="full_plan",
-                preferred_tool_name="",
-                reason=f"{decision.reason}; direct_response_blocked=explicit_tool:{explicit_tool}",
-            )
-            self.history.record_event(
-                state,
-                "decision_adjusted",
-                {
-                    "reason": "explicit_named_tool_requirement",
-                    "tool_name": explicit_tool,
-                    "decision": asdict(decision),
-                },
-            )
         expanded: ExpandedTask | None = None
-        effective_goal = self._operational_goal_from_task_contract(user_text)
+        effective_goal = user_text
         clarification_request: str | None = None
         if decision.expand_task and not decision.direct_response:
             expanded = self._expand_task_frontend(state, user_text, analysis, decision)
             effective_goal = expanded.expanded_goal
-        if decision.ask_user and not decision.direct_response:
-            clarification_request = self._build_clarification_request(user_text, analysis)
+        if decision.ask_user and not decision.direct_response and decision.execution_mode == "clarification":
+            clarification_request = self._build_clarification_request(user_text, analysis, state=state)
         strategy = self._select_strategy_frontend(state, effective_goal, analysis, decision)
         self._set_strategy(state, strategy, reason=strategy.reason)
-        if decision.direct_response and any(kind != "respond" for kind in strategy.required_step_kinds):
-            decision = replace(
-                decision,
-                direct_response=False,
-                execution_mode="full_plan",
-                preferred_tool_name="",
-                reason=(
-                    f"{decision.reason}; direct_response_blocked=strategy_requires:"
-                    f"{','.join(strategy.required_step_kinds)}"
-                ),
-            )
-            self.history.record_event(
-                state,
-                "decision_adjusted",
-                {
-                    "reason": "strategy_requires_full_plan",
-                    "tool_name": "",
-                    "required_step_kinds": list(strategy.required_step_kinds),
-                    "decision": asdict(decision),
-                },
-            )
         self._refresh_project_state(state, reason="turn_prepared")
         return TurnPreparation(
             analysis=analysis,
@@ -1654,959 +1600,52 @@ class AgentRuntime:
             effective_goal=effective_goal,
             expanded_task=expanded,
             clarification_request=clarification_request,
-            required_named_tools=tuple(explicit_tools),
-        )
-
-    def _detect_explicit_named_tools(self, text: str) -> list[str]:
-        lowered = text.lower()
-        matches: list[str] = []
-        for tool_name in self.tools.tool_names(self.config):
-            underscored = tool_name.lower()
-            spaced = underscored.replace("_", " ")
-            phrases = (
-                f"use the {underscored} tool",
-                f"use the {spaced} tool",
-                f"call the {underscored} tool",
-                f"call the {spaced} tool",
-            )
-            if any(phrase in lowered for phrase in phrases):
-                matches.append(tool_name)
-        command_mentions_test_runner = (
-            re.search(r"\brun\s+`?(?:python3?|pytest)\b", lowered) is not None
-            or re.search(r"\bpython3?\s+-m\s+unittest\b", lowered) is not None
-            or re.search(r"\bpytest\s+[-\w./]", lowered) is not None
-        )
-        if "run_tests" not in matches and (
-            "run tests" in lowered
-            or "run the tests" in lowered
-            or "run the provided unit test" in lowered
-            or "run the unit test" in lowered
-            or command_mentions_test_runner
-        ):
-            matches.append("run_tests")
-        return matches
-
-    def _detect_explicit_named_tool_request(self, text: str) -> str | None:
-        matches = self._detect_explicit_named_tools(text)
-        return matches[0] if matches else None
-
-    def _extract_task_contract(self, text: str) -> dict[str, Any] | None:
-        match = re.search(r"Task contract:\s*(\{[^\n]+\})", text)
-        if match is None:
-            return None
-        try:
-            payload = json.loads(match.group(1))
-        except json.JSONDecodeError:
-            return None
-        return payload if isinstance(payload, dict) else None
-
-    def _task_contract_for_goal(self, state: SessionState, goal: str) -> dict[str, Any] | None:
-        contract = self._extract_task_contract(goal)
-        if contract is not None:
-            return contract
-        for message in reversed(state.messages):
-            if message.role != "user":
-                continue
-            contract = self._extract_task_contract(message.content)
-            if contract is not None:
-                return contract
-        return None
-
-    def _looks_like_incomplete_file_change_goal(self, text: str) -> bool:
-        lowered = text.lower()
-        return all(
-            fragment in lowered
-            for fragment in [
-                "read `request.txt` and `ticket.md`",
-                "ask for the missing file path and desired change",
-                "instead of claiming success",
-            ]
         )
 
 
-    def _looks_like_already_decomposed_plan_goal(self, text: str) -> bool:
-        lowered = text.lower()
-        return all(
-            fragment in lowered
-            for fragment in [
-                "read `request.txt` and `project_note.txt`",
-                "task is already decomposed into steps",
-                "preserve that structure",
-                "short numbered plan",
-            ]
-        )
 
 
-    def _looks_like_vague_release_clarification_goal(self, text: str) -> bool:
-        lowered = text.lower()
-        return all(
-            fragment in lowered
-            for fragment in [
-                "read `request.txt` and `context.txt`",
-                "ask the single most useful clarifying question",
-                "do not pretend the task is already fully specified",
-            ]
-        )
 
 
-    def _looks_like_policy_refusal_goal(self, text: str) -> bool:
-        lowered = text.lower()
-        return all(
-            fragment in lowered
-            for fragment in [
-                "read `policy.md`",
-                "`request.txt`",
-                "`protected.log`",
-                "refuse the unsafe request",
-                "preserve the protected file unchanged",
-                "violates policy",
-            ]
-        )
 
 
-    def _looks_like_deployment_refinement_goal(self, text: str) -> bool:
-        lowered = text.lower()
-        required = [
-            "read `deployment_spec.json`",
-            "do not use `draft_plan.txt`",
-            "write `infra_plan.txt`",
-            "write `rollout_plan.json`",
-            "run `python3 -m unittest -q ",
-            "cross-file consistency",
-        ]
-        return all(fragment in lowered for fragment in required)
 
 
-    def _looks_like_filesystem_release_goal(self, text: str) -> bool:
-        return re.search(
-            r"inspect\s+the\s+`[^`]+`\s+directory,\s*use\s+`[^`]+`\s+to\s+choose\s+the\s+correct\s+manifest,\s*write\s+`[^`]+`,\s*then\s+run\s+`[^`]+`",
-            text,
-            re.IGNORECASE,
-        ) is not None
 
 
-    def _looks_like_shell_release_goal(self, text: str) -> bool:
-        return re.search(
-            r"use\s+the\s+shell\s+workflow\s+provided\s+by\s+`[^`]+`\s+to\s+produce\s+`[^`]+`\s+from\s+`[^`]+`,\s*then\s+run\s+`[^`]+`",
-            text,
-            re.IGNORECASE,
-        ) is not None
 
 
-    def _looks_like_capacity_plan_goal(self, text: str) -> bool:
-        lowered = text.lower()
-        required_fragments = [
-            "`deployment_config.json`",
-            "`load_profile.json`",
-            "do not use `stale_estimate.txt`",
-            "compute required_capacity = round(",
-            "write `capacity_plan.json`",
-            "write `ops_summary.txt`",
-            "write `deployment_note.md`",
-            "run `python3 -m unittest -q ",
-        ]
-        return all(fragment in lowered for fragment in required_fragments)
 
 
-    def _looks_like_computed_report_goal(self, text: str) -> bool:
-        return re.search(
-            r"read\s+`[^`]+\.json`,\s*compute\s+the\s+correct\s+capacity\s+headroom,\s*write\s+`[^`]+`,\s*and\s+run\s+`[^`]+`\s+before\s+answering",
-            text,
-            re.IGNORECASE,
-        ) is not None
-
-    def _looks_like_deterministic_multi_step_goal(self, text: str) -> bool:
-        return (
-            self._looks_like_deployment_refinement_goal(text)
-            or self._looks_like_filesystem_release_goal(text)
-            or self._looks_like_shell_release_goal(text)
-            or self._looks_like_capacity_plan_goal(text)
-            or self._looks_like_manifest_projection_goal(text)
-            or self._looks_like_computed_report_goal(text)
-        )
 
 
-    def _looks_like_manifest_projection_goal(self, text: str) -> bool:
-        return re.search(
-            r"read\s+`[^`]+\.json`\s+and\s+update\s+`[^`]+`\s+to\s+match\s+the\s+manifest\s+exactly\.\s*run\s+`[^`]+`\s+before\s+answering",
-            text,
-            re.IGNORECASE,
-        ) is not None
 
 
-    def _apply_task_contract_to_analysis(self, user_text: str, analysis: PromptAnalysis) -> PromptAnalysis:
-        contract = self._extract_task_contract(user_text)
-        updated = PromptAnalysis(
-            task_type=analysis.task_type,
-            completeness=analysis.completeness,
-            requires_expansion=analysis.requires_expansion,
-            requires_decomposition=analysis.requires_decomposition,
-            confidence=analysis.confidence,
-            detected_entities=list(analysis.detected_entities),
-            detected_goals=list(analysis.detected_goals),
-        )
-        explicit_structured_read = bool(
-            re.search(r"return\s+a\s+json\s+object\s+only\s+with\s+keys", user_text, re.IGNORECASE)
-            and re.search(r"`[^`]+\.(?:json|txt|md|log|ya?ml|ini|env)`", user_text, re.IGNORECASE)
-        )
-        if explicit_structured_read:
-            updated.completeness = "complete"
-            updated.requires_expansion = False
-            updated.requires_decomposition = False
-        if self._looks_like_incomplete_file_change_goal(user_text):
-            updated.task_type = "incomplete"
-            updated.completeness = "incomplete"
-            updated.requires_expansion = False
-            updated.requires_decomposition = False
-        if self._looks_like_already_decomposed_plan_goal(user_text):
-            updated.task_type = "already_decomposed"
-            updated.completeness = "complete"
-            updated.requires_expansion = False
-            updated.requires_decomposition = False
-        if self._looks_like_vague_release_clarification_goal(user_text):
-            updated.task_type = "vague"
-            updated.completeness = "complete"
-            updated.requires_expansion = True
-            updated.requires_decomposition = False
-        if self._looks_like_policy_refusal_goal(user_text):
-            updated.task_type = "structured"
-            updated.completeness = "complete"
-            updated.requires_expansion = False
-            updated.requires_decomposition = True
-        if self._looks_like_deterministic_multi_step_goal(user_text):
-            updated.completeness = "complete"
-            updated.requires_expansion = False
-            updated.requires_decomposition = True
-        if not contract:
-            return updated
-        if str(contract.get("request_completeness", "")).strip() == "complete":
-            updated.completeness = "complete"
-        if contract.get("prefer_task_expansion") is False:
-            updated.requires_expansion = False
-            updated.requires_decomposition = False
-        if contract.get("requires_code_changes") is True and updated.task_type == "structured":
-            updated.requires_decomposition = False
-        return updated
-
-    def _apply_task_contract_to_decision(self, user_text: str, decision: DecisionOutcome) -> DecisionOutcome:
-        contract = self._extract_task_contract(user_text)
-        updated = DecisionOutcome(**asdict(decision))
-        if self._looks_like_incomplete_file_change_goal(user_text):
-            updated.expand_task = False
-            updated.split_task = False
-            updated.ask_user = True
-            updated.assume_missing = False
-            updated.generate_ideas = False
-            updated.direct_response = False
-            updated.execution_mode = "full_plan"
-            updated.preferred_tool_name = ""
-            updated.reason = f"{updated.reason};deterministic_incomplete_clarification" if updated.reason else "deterministic_incomplete_clarification"
-        if self._looks_like_already_decomposed_plan_goal(user_text):
-            updated.expand_task = False
-            updated.split_task = False
-            updated.ask_user = False
-            updated.direct_response = False
-            updated.execution_mode = "full_plan"
-            updated.preferred_tool_name = ""
-            updated.generate_ideas = False
-            updated.reason = f"{updated.reason};deterministic_already_decomposed" if updated.reason else "deterministic_already_decomposed"
-        if self._looks_like_vague_release_clarification_goal(user_text):
-            updated.expand_task = True
-            updated.split_task = False
-            updated.ask_user = False
-            updated.direct_response = False
-            updated.execution_mode = "full_plan"
-            updated.preferred_tool_name = ""
-            updated.generate_ideas = False
-            updated.reason = f"{updated.reason};deterministic_vague_clarification" if updated.reason else "deterministic_vague_clarification"
-        if self._looks_like_policy_refusal_goal(user_text):
-            updated.expand_task = False
-            updated.split_task = True
-            updated.ask_user = False
-            updated.direct_response = False
-            updated.execution_mode = "full_plan"
-            updated.preferred_tool_name = ""
-            updated.generate_ideas = False
-            updated.reason = f"{updated.reason};deterministic_policy_refusal" if updated.reason else "deterministic_policy_refusal"
-        if self._looks_like_deterministic_multi_step_goal(user_text):
-            updated.expand_task = False
-            updated.split_task = True
-            updated.ask_user = False
-            updated.direct_response = False
-            updated.execution_mode = "full_plan"
-            updated.preferred_tool_name = ""
-            updated.reason = f"{updated.reason};deterministic_manifest_projection" if updated.reason else "deterministic_manifest_projection"
-        if not contract:
-            return updated
-        if contract.get("prefer_task_expansion") is False:
-            updated.expand_task = False
-            updated.split_task = False
-        if contract.get("requires_code_changes") is True and updated.direct_response:
-            updated.direct_response = False
-            updated.execution_mode = "full_plan"
-            updated.preferred_tool_name = ""
-        if updated.reason:
-            updated.reason = f"{updated.reason};task_contract"
-        else:
-            updated.reason = "task_contract"
-        return updated
-
-    def _operational_goal_from_task_contract(self, text: str) -> str:
-        contract = self._extract_task_contract(text)
-        if not contract:
-            return text
-
-        problem_lines = self._task_contract_section_lines(
-            text,
-            "Problem statement:",
-            stop_labels=("Known failing tests:", "Hints:", "Benchmark recovery note:"),
-        )
-        problem_summary = ""
-        for raw in problem_lines:
-            stripped = raw.strip()
-            if not stripped or stripped.startswith("```"):
-                continue
-            problem_summary = stripped
-            break
-        failing_tests = self._task_contract_failing_tests(text)
-        parts: list[str] = []
-        if problem_summary:
-            parts.append(problem_summary[:220])
-        if failing_tests:
-            parts.append(f"Verify {', '.join(failing_tests[:2])}.")
-        if not parts:
-            return text
-        return "Fix the benchmark issue. " + " ".join(parts)
-
-    def _task_contract_section_lines(self, text: str, label: str, *, stop_labels: tuple[str, ...]) -> list[str]:
-        lines = text.splitlines()
-        collected: list[str] = []
-        capture = False
-        for raw in lines:
-            stripped = raw.strip()
-            if stripped == label:
-                capture = True
-                continue
-            if capture and stripped in stop_labels:
-                break
-            if capture:
-                collected.append(raw)
-        return collected
-
-    def _task_contract_failing_tests(self, text: str) -> list[str]:
-        return [
-            raw.strip()[2:].strip()
-            for raw in self._task_contract_section_lines(
-                text,
-                "Known failing tests:",
-                stop_labels=("Hints:", "Benchmark recovery note:"),
-            )
-            if raw.strip().startswith("- ")
-        ]
-
-    def _task_contract_file_hints(self, text: str) -> list[str]:
-        hints: list[str] = []
-        seen: set[str] = set()
-        for candidate in re.findall(r"\b([A-Za-z0-9_./-]+\.[A-Za-z0-9_+-]+)\b", text):
-            lowered = candidate.lower()
-            if lowered in seen:
-                continue
-            if lowered.startswith(("http://", "https://")):
-                continue
-            if candidate.startswith("tests/"):
-                continue
-            hints.append(candidate)
-            seen.add(lowered)
-        return hints
-
-    def _install_policy_refusal_workflow_plan(
-        self,
-        state: SessionState,
-        goal: str,
-        *,
-        reason: str,
-    ) -> Plan | None:
-        spec = self._policy_refusal_workflow_spec(state, goal_text=goal)
-        if spec is None:
-            return None
-        policy_path, request_path, protected_path = spec
-        if "read_file" not in set(self.tools.tool_names(self.config)):
-            return None
-        if (
-            state.active_plan is not None
-            and state.active_plan.status == "active"
-            and state.active_plan.goal == goal
-            and any(step.title == "Read refusal policy" for step in state.active_plan.steps)
-        ):
-            return state.active_plan
-        previous_plan_id = state.active_plan.plan_id if state.active_plan is not None else ""
-        plan = create_policy_refusal_workflow_plan(
-            goal,
-            policy_path=policy_path,
-            request_path=request_path,
-            protected_path=protected_path,
-        )
-        event_type = "plan_updated" if state.active_plan is not None else "plan_created"
-        if event_type == "plan_created":
-            event = self.history.record_event(state, event_type, {"goal": goal, "plan": plan_as_payload(plan)})
-        else:
-            event = self.history.record_event(state, event_type, {"plan": plan_as_payload(plan), "reason": reason})
-        self.history.record_event(
-            state,
-            "plan_repaired",
-            {
-                "reason": "policy_refusal_precedence",
-                "required_tools": [],
-                "repair": "policy_refusal_workflow_plan",
-                "source_paths": [policy_path, request_path, protected_path],
-                "error": "installed before semantic direct-tool routing",
-                "error_type": "WorkspacePolicyRefusalContract",
-                "original_plan_id": previous_plan_id,
-                "update_existing": event_type == "plan_updated",
-                "contract_name": "policy_refusal_workflow",
-                "raw_response_preview": "",
-            },
-        )
-        self._extract_and_store_memory(state, event)
-        self._refresh_working_memory(state, reason="policy_refusal_workflow")
-        self._refresh_project_state(state, reason="policy_refusal_workflow")
-        self._check_consistency(state)
-        return state.active_plan or plan
 
 
-    def _install_deployment_refinement_workflow_plan(
-        self,
-        state: SessionState,
-        goal: str,
-        *,
-        reason: str,
-    ) -> Plan | None:
-        spec = self._deployment_refinement_workflow_spec(state, goal_text=goal)
-        if spec is None:
-            return None
-        spec_path, infra_path, rollout_path, test_command = spec
-        available_tools = set(self.tools.tool_names(self.config))
-        if not {"read_file", "write_file", "run_tests"}.issubset(available_tools):
-            return None
-        if (
-            state.active_plan is not None
-            and state.active_plan.status == "active"
-            and state.active_plan.goal == goal
-            and any(step.title == "Read deployment refinement spec" for step in state.active_plan.steps)
-        ):
-            return state.active_plan
-        previous_plan_id = state.active_plan.plan_id if state.active_plan is not None else ""
-        plan = create_deployment_refinement_workflow_plan(
-            goal,
-            spec_path=spec_path,
-            infra_path=infra_path,
-            rollout_path=rollout_path,
-            test_command=test_command,
-        )
-        event_type = "plan_updated" if state.active_plan is not None else "plan_created"
-        if event_type == "plan_created":
-            event = self.history.record_event(state, event_type, {"goal": goal, "plan": plan_as_payload(plan)})
-        else:
-            event = self.history.record_event(state, event_type, {"plan": plan_as_payload(plan), "reason": reason})
-        self.history.record_event(
-            state,
-            "plan_repaired",
-            {
-                "reason": "deployment_refinement_precedence",
-                "required_tools": [],
-                "repair": "deployment_refinement_workflow_plan",
-                "spec_path": spec_path,
-                "target_paths": [infra_path, rollout_path],
-                "test_command": test_command,
-                "error": "installed before semantic direct-tool routing",
-                "error_type": "WorkspaceDeploymentRefinementContract",
-                "original_plan_id": previous_plan_id,
-                "update_existing": event_type == "plan_updated",
-                "contract_name": "deployment_refinement_workflow",
-                "raw_response_preview": "",
-            },
-        )
-        self._extract_and_store_memory(state, event)
-        self._refresh_working_memory(state, reason="deployment_refinement_workflow")
-        self._refresh_project_state(state, reason="deployment_refinement_workflow")
-        self._check_consistency(state)
-        return state.active_plan or plan
 
 
-    def _install_filesystem_release_workflow_plan(
-        self,
-        state: SessionState,
-        goal: str,
-        *,
-        reason: str,
-    ) -> Plan | None:
-        spec = self._filesystem_release_workflow_spec(state, goal_text=goal)
-        if spec is None:
-            return None
-        incoming_path, selection_path, target_path, test_command = spec
-        available_tools = set(self.tools.tool_names(self.config))
-        if not {"list_files", "read_file", "write_file", "run_tests"}.issubset(available_tools):
-            return None
-        if (
-            state.active_plan is not None
-            and state.active_plan.status == "active"
-            and state.active_plan.goal == goal
-            and any(step.title == "List incoming manifests" for step in state.active_plan.steps)
-        ):
-            return state.active_plan
-        previous_plan_id = state.active_plan.plan_id if state.active_plan is not None else ""
-        plan = create_filesystem_release_workflow_plan(
-            goal,
-            incoming_path=incoming_path,
-            selection_path=selection_path,
-            target_path=target_path,
-            test_command=test_command,
-        )
-        event_type = "plan_updated" if state.active_plan is not None else "plan_created"
-        if event_type == "plan_created":
-            event = self.history.record_event(state, event_type, {"goal": goal, "plan": plan_as_payload(plan)})
-        else:
-            event = self.history.record_event(state, event_type, {"plan": plan_as_payload(plan), "reason": reason})
-        self.history.record_event(
-            state,
-            "plan_repaired",
-            {
-                "reason": "filesystem_release_precedence",
-                "required_tools": [],
-                "repair": "filesystem_release_workflow_plan",
-                "incoming_path": incoming_path,
-                "selection_path": selection_path,
-                "target_path": target_path,
-                "test_command": test_command,
-                "error": "installed before semantic direct-tool routing",
-                "error_type": "WorkspaceFilesystemReleaseContract",
-                "original_plan_id": previous_plan_id,
-                "update_existing": event_type == "plan_updated",
-                "contract_name": "filesystem_release_workflow",
-                "raw_response_preview": "",
-            },
-        )
-        self._extract_and_store_memory(state, event)
-        self._refresh_working_memory(state, reason="filesystem_release_workflow")
-        self._refresh_project_state(state, reason="filesystem_release_workflow")
-        self._check_consistency(state)
-        return state.active_plan or plan
 
 
-    def _install_shell_release_workflow_plan(
-        self,
-        state: SessionState,
-        goal: str,
-        *,
-        reason: str,
-    ) -> Plan | None:
-        spec = self._shell_release_workflow_spec(state, goal_text=goal)
-        if spec is None:
-            return None
-        script_path, env_path, summary_path, test_command = spec
-        available_tools = set(self.tools.tool_names(self.config))
-        if not {"shell_command", "read_file", "run_tests"}.issubset(available_tools):
-            return None
-        if (
-            state.active_plan is not None
-            and state.active_plan.status == "active"
-            and state.active_plan.goal == goal
-            and any(step.title == "Run release capture script" for step in state.active_plan.steps)
-        ):
-            return state.active_plan
-        previous_plan_id = state.active_plan.plan_id if state.active_plan is not None else ""
-        plan = create_shell_release_workflow_plan(
-            goal,
-            script_path=script_path,
-            env_path=env_path,
-            summary_path=summary_path,
-            test_command=test_command,
-        )
-        event_type = "plan_updated" if state.active_plan is not None else "plan_created"
-        if event_type == "plan_created":
-            event = self.history.record_event(state, event_type, {"goal": goal, "plan": plan_as_payload(plan)})
-        else:
-            event = self.history.record_event(state, event_type, {"plan": plan_as_payload(plan), "reason": reason})
-        self.history.record_event(
-            state,
-            "plan_repaired",
-            {
-                "reason": "shell_release_precedence",
-                "required_tools": [],
-                "repair": "shell_release_workflow_plan",
-                "script_path": script_path,
-                "env_path": env_path,
-                "summary_path": summary_path,
-                "test_command": test_command,
-                "error": "installed before semantic direct-tool routing",
-                "error_type": "WorkspaceShellReleaseContract",
-                "original_plan_id": previous_plan_id,
-                "update_existing": event_type == "plan_updated",
-                "contract_name": "shell_release_workflow",
-                "raw_response_preview": "",
-            },
-        )
-        self._extract_and_store_memory(state, event)
-        self._refresh_working_memory(state, reason="shell_release_workflow")
-        self._refresh_project_state(state, reason="shell_release_workflow")
-        self._check_consistency(state)
-        return state.active_plan or plan
 
 
-    def _install_capacity_plan_workflow_plan(
-        self,
-        state: SessionState,
-        goal: str,
-        *,
-        reason: str,
-    ) -> Plan | None:
-        spec = self._capacity_plan_workflow_spec(state, goal_text=goal)
-        if spec is None:
-            return None
-        config_path, profile_path, plan_path, summary_path, note_path, test_command = spec
-        available_tools = set(self.tools.tool_names(self.config))
-        if not {"read_file", "write_file", "run_tests"}.issubset(available_tools):
-            return None
-        if (
-            state.active_plan is not None
-            and state.active_plan.status == "active"
-            and state.active_plan.goal == goal
-            and any(step.title == "Read capacity deployment config" for step in state.active_plan.steps)
-        ):
-            return state.active_plan
-        previous_plan_id = state.active_plan.plan_id if state.active_plan is not None else ""
-        plan = create_capacity_plan_workflow_plan(
-            goal,
-            config_path=config_path,
-            profile_path=profile_path,
-            plan_path=plan_path,
-            summary_path=summary_path,
-            note_path=note_path,
-            test_command=test_command,
-        )
-        event_type = "plan_updated" if state.active_plan is not None else "plan_created"
-        if event_type == "plan_created":
-            event = self.history.record_event(state, event_type, {"goal": goal, "plan": plan_as_payload(plan)})
-        else:
-            event = self.history.record_event(state, event_type, {"plan": plan_as_payload(plan), "reason": reason})
-        self.history.record_event(
-            state,
-            "plan_repaired",
-            {
-                "reason": "capacity_plan_precedence",
-                "required_tools": [],
-                "repair": "capacity_plan_workflow_plan",
-                "source_paths": [config_path, profile_path],
-                "target_paths": [plan_path, summary_path, note_path],
-                "test_command": test_command,
-                "error": "installed before semantic direct-tool routing",
-                "error_type": "WorkspaceCapacityPlanContract",
-                "original_plan_id": previous_plan_id,
-                "update_existing": event_type == "plan_updated",
-                "contract_name": "capacity_plan_workflow",
-                "raw_response_preview": "",
-            },
-        )
-        self._extract_and_store_memory(state, event)
-        self._refresh_working_memory(state, reason="capacity_plan_workflow")
-        self._refresh_project_state(state, reason="capacity_plan_workflow")
-        self._check_consistency(state)
-        return state.active_plan or plan
 
 
-    def _install_computed_report_plan(
-        self,
-        state: SessionState,
-        goal: str,
-        *,
-        reason: str,
-    ) -> Plan | None:
-        spec = self._computed_report_spec(state, goal_text=goal)
-        if spec is None:
-            return None
-        source_path, target_path, test_command = spec
-        available_tools = set(self.tools.tool_names(self.config))
-        if not {"read_file", "write_file", "run_tests"}.issubset(available_tools):
-            return None
-        if (
-            state.active_plan is not None
-            and state.active_plan.status == "active"
-            and state.active_plan.goal == goal
-            and any(step.title == "Read computed report source" for step in state.active_plan.steps)
-        ):
-            return state.active_plan
-        previous_plan_id = state.active_plan.plan_id if state.active_plan is not None else ""
-        plan = create_computed_report_plan(
-            goal,
-            source_path=source_path,
-            target_path=target_path,
-            test_command=test_command,
-        )
-        event_type = "plan_updated" if state.active_plan is not None else "plan_created"
-        if event_type == "plan_created":
-            event = self.history.record_event(state, event_type, {"goal": goal, "plan": plan_as_payload(plan)})
-        else:
-            event = self.history.record_event(state, event_type, {"plan": plan_as_payload(plan), "reason": reason})
-        self.history.record_event(
-            state,
-            "plan_repaired",
-            {
-                "reason": "computed_report_precedence",
-                "required_tools": [],
-                "repair": "computed_report_plan",
-                "source_path": source_path,
-                "target_path": target_path,
-                "test_command": test_command,
-                "error": "installed before semantic direct-tool routing",
-                "error_type": "WorkspaceComputedReportContract",
-                "original_plan_id": previous_plan_id,
-                "update_existing": event_type == "plan_updated",
-                "contract_name": "computed_report",
-                "raw_response_preview": "",
-            },
-        )
-        self._extract_and_store_memory(state, event)
-        self._refresh_working_memory(state, reason="computed_report_plan")
-        self._refresh_project_state(state, reason="computed_report_plan")
-        self._check_consistency(state)
-        return state.active_plan or plan
 
 
-    def _install_manifest_projection_plan(
-        self,
-        state: SessionState,
-        goal: str,
-        *,
-        reason: str,
-    ) -> Plan | None:
-        spec = self._manifest_projection_spec(state, goal_text=goal)
-        if spec is None:
-            return None
-        source_path, target_path, test_command = spec
-        available_tools = set(self.tools.tool_names(self.config))
-        if not {"read_file", "write_file", "run_tests"}.issubset(available_tools):
-            return None
-        if (
-            state.active_plan is not None
-            and state.active_plan.status == "active"
-            and state.active_plan.goal == goal
-            and any(step.title == "Read manifest projection source" for step in state.active_plan.steps)
-        ):
-            return state.active_plan
-        previous_plan_id = state.active_plan.plan_id if state.active_plan is not None else ""
-        plan = create_manifest_projection_plan(
-            goal,
-            source_path=source_path,
-            target_path=target_path,
-            test_command=test_command,
-        )
-        event_type = "plan_updated" if state.active_plan is not None else "plan_created"
-        if event_type == "plan_created":
-            event = self.history.record_event(state, event_type, {"goal": goal, "plan": plan_as_payload(plan)})
-        else:
-            event = self.history.record_event(state, event_type, {"plan": plan_as_payload(plan), "reason": reason})
-        self.history.record_event(
-            state,
-            "plan_repaired",
-            {
-                "reason": "manifest_projection_precedence",
-                "required_tools": [],
-                "repair": "manifest_projection_plan",
-                "source_path": source_path,
-                "target_path": target_path,
-                "test_command": test_command,
-                "error": "installed before semantic direct-tool routing",
-                "error_type": "WorkspaceManifestProjectionContract",
-                "original_plan_id": previous_plan_id,
-                "update_existing": event_type == "plan_updated",
-                "contract_name": "manifest_projection",
-                "raw_response_preview": "",
-            },
-        )
-        self._extract_and_store_memory(state, event)
-        self._refresh_working_memory(state, reason="manifest_projection_plan")
-        self._refresh_project_state(state, reason="manifest_projection_plan")
-        self._check_consistency(state)
-        return state.active_plan or plan
 
 
-    def _install_exact_file_sync_plan(
-        self,
-        state: SessionState,
-        goal: str,
-        *,
-        reason: str,
-    ) -> Plan | None:
-        spec = self._exact_file_sync_spec(state, goal_text=goal)
-        if spec is None:
-            return None
-        source_path, target_path = spec
-        available_tools = set(self.tools.tool_names(self.config))
-        if not {"read_file", "write_file"}.issubset(available_tools):
-            return None
-        if (
-            state.active_plan is not None
-            and state.active_plan.status == "active"
-            and state.active_plan.goal == goal
-            and any(step.title == "Read synchronization source" for step in state.active_plan.steps)
-        ):
-            return state.active_plan
-        previous_plan_id = state.active_plan.plan_id if state.active_plan is not None else ""
-        plan = create_exact_file_sync_plan(goal, source_path=source_path, target_path=target_path)
-        event_type = "plan_updated" if state.active_plan is not None else "plan_created"
-        if event_type == "plan_created":
-            event = self.history.record_event(state, event_type, {"goal": goal, "plan": plan_as_payload(plan)})
-        else:
-            event = self.history.record_event(state, event_type, {"plan": plan_as_payload(plan), "reason": reason})
-        self.history.record_event(
-            state,
-            "plan_repaired",
-            {
-                "reason": "exact_file_sync_precedence",
-                "required_tools": [],
-                "repair": "exact_file_sync_plan",
-                "source_path": source_path,
-                "target_path": target_path,
-                "error": "installed before semantic direct-tool routing",
-                "error_type": "WorkspaceFileSyncContract",
-                "original_plan_id": previous_plan_id,
-                "update_existing": event_type == "plan_updated",
-                "contract_name": "exact_file_sync",
-                "raw_response_preview": "",
-            },
-        )
-        self._extract_and_store_memory(state, event)
-        self._refresh_working_memory(state, reason="exact_file_sync_plan")
-        self._refresh_project_state(state, reason="exact_file_sync_plan")
-        self._check_consistency(state)
-        return state.active_plan or plan
 
 
-    def _install_structured_reading_plan(
-        self,
-        state: SessionState,
-        goal: str,
-        *,
-        reason: str,
-    ) -> Plan | None:
-        spec = self._structured_reading_spec(state, goal_text=goal)
-        if spec is None:
-            return None
-        paths, keys = spec
-        if (
-            state.active_plan is not None
-            and state.active_plan.status == "active"
-            and state.active_plan.goal == goal
-            and any(step.title == "Read structured evidence" for step in state.active_plan.steps)
-        ):
-            return state.active_plan
-        plan = create_structured_reading_plan(goal, paths=paths, keys=keys)
-        event_type = "plan_updated" if state.active_plan is not None else "plan_created"
-        if event_type == "plan_created":
-            event = self.history.record_event(
-                state,
-                event_type,
-                {"goal": goal, "plan": plan_as_payload(plan)},
-            )
-        else:
-            event = self.history.record_event(
-                state,
-                event_type,
-                {"plan": plan_as_payload(plan), "reason": reason},
-            )
-        self.history.record_event(
-            state,
-            "plan_repaired",
-            {
-                "reason": "structured_reading_precedence",
-                "required_tools": [],
-                "repair": "structured_reading_plan",
-                "paths": paths,
-                "keys": keys,
-                "error": "installed before semantic direct-tool routing",
-                "error_type": "WorkspaceReadingContract",
-                "original_plan_id": state.active_plan.plan_id if state.active_plan is not None else "",
-                "update_existing": event_type == "plan_updated",
-                "contract_name": "structured_reading",
-                "raw_response_preview": "",
-            },
-        )
-        self._extract_and_store_memory(state, event)
-        self._refresh_working_memory(state, reason="structured_reading_plan")
-        self._refresh_project_state(state, reason="structured_reading_plan")
-        self._check_consistency(state)
-        return state.active_plan or plan
 
 
-    def _install_direct_response_plan(self, state: SessionState, goal: str) -> Plan:
-        if state.active_plan is not None and state.active_plan.status == "active" and state.active_plan.goal == goal:
-            return state.active_plan
-        plan = create_direct_response_plan(goal)
-        event_type = "plan_updated" if state.active_plan is not None else "plan_created"
-        if event_type == "plan_created":
-            event = self.history.record_event(state, event_type, {"goal": goal, "plan": plan_as_payload(plan)})
-        else:
-            event = self.history.record_event(
-                state,
-                event_type,
-                {"plan": plan_as_payload(plan), "reason": "semantic_direct_response"},
-            )
-        self._extract_and_store_memory(state, event)
-        self._refresh_working_memory(state, reason="direct_response_plan")
-        self._refresh_project_state(state, reason="direct_response_plan")
-        self._check_consistency(state)
-        return state.active_plan or plan
 
-    def _allow_direct_tool_plan(self, goal: str, tool_name: str) -> bool:
-        if tool_name != "run_tests":
-            return True
-        lowered = goal.lower()
-        repair_markers = (
-            "fix",
-            "repair",
-            "update",
-            "edit",
-            "write",
-            "patch",
-            "bug",
-            "broken",
-            "broke",
-            "restore",
-            "refactor",
-            "implementation",
-            "module",
-            "source",
-            "public function",
-            "do not modify the test",
-            "passes",
-            "pass the",
-            "run tests before answering",
-        )
-        return not any(marker in lowered for marker in repair_markers)
 
-    def _install_direct_tool_plan(self, state: SessionState, goal: str, tool_name: str, *, reason: str) -> Plan:
-        if state.active_plan is not None and state.active_plan.status == "active" and state.active_plan.goal == goal:
-            if any(step.expected_tool == tool_name for step in state.active_plan.steps):
-                return state.active_plan
-        plan = create_direct_tool_plan(goal, tool_name)
-        event_type = "plan_updated" if state.active_plan is not None else "plan_created"
-        if event_type == "plan_created":
-            event = self.history.record_event(
-                state,
-                event_type,
-                {"goal": goal, "plan": plan_as_payload(plan)},
-            )
-        else:
-            event = self.history.record_event(
-                state,
-                event_type,
-                {"plan": plan_as_payload(plan), "reason": reason},
-            )
-        self._extract_and_store_memory(state, event)
-        self._refresh_working_memory(state, reason="direct_tool_plan")
-        self._refresh_project_state(state, reason="direct_tool_plan")
-        self._check_consistency(state)
-        return state.active_plan or plan
+
+
+
+
+
 
     def _log_fatal_system_error(
         self,
@@ -2654,7 +1693,7 @@ class AgentRuntime:
             "raw_response": (raw_response or "")[:4000],
             "details": details or {},
             "why_fatal": (
-                "A core structured semantic call violated its enforced grammar/schema contract. "
+                "A core structured semantic call violated its enforced JSON-schema contract. "
                 "This is a fundamental semantic-engine failure, not a normal retry/replan case."
             ),
         }
@@ -2684,7 +1723,7 @@ class AgentRuntime:
         try:
             payload = self._parse_json(completion.text, contract_name=prepared.contract.name)
         except Exception as exc:
-            if fatal_on_structured_failure and prepared.contract.mode in {"json_schema", "gbnf"}:
+            if fatal_on_structured_failure and prepared.contract.mode == "json_schema":
                 self._log_fatal_system_error(
                     state,
                     category="structured_parse_failure",
@@ -2699,7 +1738,7 @@ class AgentRuntime:
         try:
             validated = validator(payload)
         except validation_error_types as exc:
-            if fatal_on_structured_failure and prepared.contract.mode in {"json_schema", "gbnf"}:
+            if fatal_on_structured_failure and prepared.contract.mode == "json_schema":
                 self._log_fatal_system_error(
                     state,
                     category="structured_validation_failure",
@@ -2718,25 +1757,109 @@ class AgentRuntime:
             raise ValueError("Summary call returned empty summary")
         return {"summary": summary_text}
 
-    def _validate_verification_payload(self, payload: dict[str, Any]) -> dict[str, Any]:
+    def _validate_text_response_payload(self, payload: dict[str, Any]) -> dict[str, str]:
+        raw_text = payload.get("text")
+        if not isinstance(raw_text, str):
+            raise ValueError("Text response call returned non-string text")
+        if not raw_text.strip():
+            raise ValueError("Text response call returned empty text")
+        return {"text": raw_text}
+
+    def _validate_yes_no_payload(self, payload: dict[str, Any]) -> dict[str, str]:
+        answer = str(payload.get("answer", "")).strip()
+        if answer not in {"yes", "no"}:
+            raise ValueError("yes_no contract returned an invalid answer")
+        return {"answer": answer}
+
+    def _validate_verification_payload(
+        self,
+        payload: dict[str, Any],
+        *,
+        expected_names: list[str] | None = None,
+        criteria_by_name: dict[str, str] | None = None,
+        candidate_grounding_by_name: dict[str, str] | None = None,
+        assistant_text: str = "",
+    ) -> dict[str, Any]:
         criteria = payload.get("criteria")
         if not isinstance(criteria, list):
             raise ValueError("Verification call returned invalid criteria payload")
         validated: list[dict[str, Any]] = []
+        seen_names: set[str] = set()
+        normalized_candidate = assistant_text.strip()
+        criteria_map = dict(criteria_by_name or {})
+        grounding_map = dict(candidate_grounding_by_name or {})
         for item in criteria:
             if not isinstance(item, dict):
                 raise ValueError("Verification criteria entry must be an object")
             name = str(item.get("name", "")).strip()
-            evidence = str(item.get("evidence", "")).strip()
             if not name:
                 raise ValueError("Verification criteria entry is missing name")
+            if name in seen_names:
+                raise ValueError(f"Verification criteria entry {name!r} is duplicated")
+            seen_names.add(name)
+            passed = item.get("passed")
+            if not isinstance(passed, bool):
+                raise ValueError(f"Verification criterion {name!r} passed must be a boolean")
+            evidence = item.get("evidence")
+            if not isinstance(evidence, str) or not evidence.strip():
+                raise ValueError(f"Verification criterion {name!r} requires non-empty evidence")
+            evidence = evidence.strip()
+            candidate_excerpts = item.get("candidate_excerpts")
+            if not isinstance(candidate_excerpts, list) or any(not isinstance(excerpt, str) for excerpt in candidate_excerpts):
+                raise ValueError(f"Verification criterion {name!r} candidate_excerpts must be an array of strings")
+            candidate_excerpts = [excerpt.strip() for excerpt in candidate_excerpts]
+            if any(not excerpt for excerpt in candidate_excerpts):
+                raise ValueError(f"Verification criterion {name!r} candidate_excerpts cannot contain empty strings")
+            candidate_excerpts = list(dict.fromkeys(candidate_excerpts))
+            grounding_policy = str(grounding_map.get(name, "required")).strip() or "required"
+            if grounding_policy not in {"required", "optional"}:
+                raise ValueError(
+                    f"Verification criterion {name!r} has unsupported candidate grounding policy {grounding_policy!r}"
+                )
+            if normalized_candidate:
+                if grounding_policy == "required" and not candidate_excerpts:
+                    raise ValueError(
+                        f"Verification criterion {name!r} requires at least one exact candidate excerpt"
+                    )
+                for excerpt in candidate_excerpts:
+                    if excerpt not in assistant_text:
+                        optional_hint = (
+                            " Candidate grounding is optional for this criterion; use an empty candidate_excerpts array "
+                            "when the judgment is grounded only in deterministic evidence or absence."
+                            if grounding_policy == "optional"
+                            else ""
+                        )
+                        raise ValueError(
+                            f"Verification criterion {name!r} candidate excerpt is not an exact substring of the candidate result: {excerpt!r}."
+                            f"{optional_hint}"
+                        )
+            elif candidate_excerpts:
+                raise ValueError(
+                    f"Verification criterion {name!r} candidate_excerpts must be empty when the candidate result is empty"
+                )
+            criterion_text = criteria_map.get(name, "").strip()
+            if criterion_text:
+                normalized_evidence = " ".join(evidence.split())
+                normalized_criterion = " ".join(criterion_text.split())
+                if normalized_evidence == normalized_criterion:
+                    raise ValueError(
+                        f"Verification criterion {name!r} evidence merely repeats the criterion instead of judging the candidate"
+                    )
             validated.append(
                 {
                     "name": name,
-                    "passed": bool(item.get("passed")),
+                    "passed": passed,
                     "evidence": evidence,
+                    "candidate_excerpts": candidate_excerpts,
+                    "candidate_grounding": grounding_policy,
                 }
             )
+        if expected_names is not None:
+            if [item["name"] for item in validated] != expected_names:
+                raise ValueError(
+                    "Verification criteria names must appear exactly once in input order: "
+                    f"expected {expected_names!r}, got {[item['name'] for item in validated]!r}"
+                )
         return {"criteria": validated}
 
     def _analyze_prompt_frontend(self, state: SessionState, user_text: str) -> PromptAnalysis:
@@ -2759,36 +1882,301 @@ class AgentRuntime:
             validator=analysis_from_payload,
             validation_error_types=(PromptAnalysisValidationError,),
         )
-        analysis = self._apply_task_contract_to_analysis(user_text, analysis)
         source = "model"
         self.history.record_event(state, "prompt_analyzed", {"analysis": asdict(analysis), "source": source})
         return analysis
 
-    def _decide_prompt_frontend(self, state: SessionState, user_text: str, analysis: PromptAnalysis) -> DecisionOutcome:
-        contract = task_decision_contract(self.tools.tool_names(self.config))
-        prepared = self._prepare_call(
-            state,
-            kind="task_decision",
-            build_prompt=lambda prompt_mode, bundle: self.prompts.build_task_decision_prompt(
-                user_text,
-                stable_json_dumps(asdict(analysis)),
+    @staticmethod
+    def _validate_task_decision_semantic_review_payload(payload: dict[str, Any]) -> dict[str, Any]:
+        for field in ("decision_matches_request", "decision_is_internally_consistent", "selected_mode_and_tool_can_cover_declared_count"):
+            if not isinstance(payload.get(field), bool):
+                raise ValueError(f"{field} must be a boolean")
+        sources = payload.get("required_evidence_sources")
+        if not isinstance(sources, list) or any(not isinstance(item, str) or not item.strip() for item in sources):
+            raise ValueError("required_evidence_sources must be an array of non-empty strings")
+        normalized_sources = list(dict.fromkeys(item.strip() for item in sources))
+        minimum_calls = payload.get("minimum_evidence_call_count")
+        if not isinstance(minimum_calls, int) or isinstance(minimum_calls, bool) or minimum_calls < 0:
+            raise ValueError("minimum_evidence_call_count must be a non-negative integer")
+        feedback = payload.get("feedback")
+        if not isinstance(feedback, str):
+            raise ValueError("feedback must be a string")
+        return {
+            "decision_matches_request": payload["decision_matches_request"],
+            "decision_is_internally_consistent": payload["decision_is_internally_consistent"],
+            "required_evidence_sources": normalized_sources,
+            "minimum_evidence_call_count": minimum_calls,
+            "selected_mode_and_tool_can_cover_declared_count": payload["selected_mode_and_tool_can_cover_declared_count"],
+            "feedback": feedback.strip(),
+        }
+
+    def _prepare_direct_task_decision_semantic_review_call(
+        self,
+        state: SessionState,
+        *,
+        user_text: str,
+        analysis: PromptAnalysis,
+        decision: DecisionOutcome,
+        contract: ContractSpec,
+    ) -> PreparedCall:
+        last_report: BudgetReport | None = None
+        last_error = "unknown direct semantic-review budget failure"
+        complete_tools = self.tools.prompt_tuples(self.config)
+        for prompt_mode in self._interactive_prompt_modes():
+            assembly = self.prompts.build_task_decision_semantic_review_prompt(
+                user_text=user_text,
+                analysis_json=stable_json_dumps(asdict(analysis), indent=2),
+                decision_json=stable_json_dumps(asdict(decision), indent=2),
+                tools=complete_tools,
                 prompt_mode=prompt_mode,
-                context_components=bundle.components,
-            ),
-            contract=contract,
-            prompt_modes=self._interactive_prompt_modes(),
-            goal=user_text,
+                context_components=[],
+            )
+            report = self._budget_report(state, assembly, contract)
+            assembly, report = self._fit_optional_prompt_context(state, assembly, contract, report)
+            self.history.record_event(
+                state,
+                "prompt_built",
+                {
+                    "kind": "verification",
+                    "prompt_mode": prompt_mode,
+                    "contract": to_jsonable(contract),
+                    "prompt": assembly.prompt_text,
+                    "components": [asdict(component) for component in assembly.components],
+                    "budget_report": asdict(report),
+                },
+            )
+            cap_error = self._cap_error(report)
+            self.history.record_event(
+                state,
+                "budget_checked",
+                {
+                    "kind": "verification",
+                    "prompt_mode": prompt_mode,
+                    "budget_report": asdict(report),
+                    "cap_error": cap_error,
+                },
+            )
+            if report.fits and cap_error is None:
+                return PreparedCall(
+                    assembly=assembly,
+                    report=report,
+                    prompt_mode=prompt_mode,
+                    contract=contract,
+                )
+            last_report = report
+            last_error = cap_error or "budget overflow"
+            self.history.record_event(
+                state,
+                "budget_rejected",
+                {
+                    "kind": "verification",
+                    "prompt_mode": prompt_mode,
+                    "reason": last_error,
+                    "budget_report": asdict(report),
+                },
+            )
+        raise BudgetExceededError(
+            f"Direct task-decision semantic review does not fit within context budget: {last_error}",
+            last_report,
         )
-        _completion, decision = self._execute_structured_call(
+
+    def _review_task_decision_semantically(
+        self,
+        state: SessionState,
+        *,
+        user_text: str,
+        analysis: PromptAnalysis,
+        decision: DecisionOutcome,
+        attempt: int,
+    ) -> tuple[bool, str, dict[str, Any]]:
+        target_id = f"task_decision:semantic_review:{attempt}"
+        registry_payload = [
+            {
+                "name": name,
+                "description": description,
+                "input_schema": schema,
+                "usage_guidance": guidance,
+            }
+            for name, description, schema, guidance in self.tools.prompt_tuples(self.config)
+        ]
+        self.history.record_event(
+            state,
+            "review_started",
+            {
+                "review_kind": "task_decision_semantic",
+                "target_id": target_id,
+                "role": "verifier",
+            },
+        )
+        contract = task_decision_semantic_review_contract()
+        prepared = self._prepare_direct_task_decision_semantic_review_call(
+            state,
+            user_text=user_text,
+            analysis=analysis,
+            decision=decision,
+            contract=contract,
+        )
+        _completion, review = self._execute_structured_call(
             state,
             prepared,
-            validator=lambda payload: decision_from_payload(payload, analysis),
-            validation_error_types=(DecisionValidationError,),
+            validator=self._validate_task_decision_semantic_review_payload,
+            validation_error_types=(ValueError,),
         )
-        decision = self._apply_task_contract_to_decision(user_text, decision)
-        source = "model"
-        self.history.record_event(state, "decision_made", {"decision": asdict(decision), "source": source})
-        return decision
+        minimum_calls = int(review["minimum_evidence_call_count"])
+        failures: list[str] = []
+        if not review["decision_matches_request"]:
+            failures.append("The reviewer found that the decision drops or changes an explicit user instruction.")
+        if not review["decision_is_internally_consistent"]:
+            failures.append("The reviewer found that the decision fields or reason contradict one another.")
+        if not review["selected_mode_and_tool_can_cover_declared_count"]:
+            failures.append("The reviewer found that the selected execution mode or preferred tool cannot cover the required evidence in the declared count.")
+        if minimum_calls > 0 and not decision.evidence_required_before_response:
+            failures.append(f"The reviewer requires at least {minimum_calls} evidence call(s), but evidence_required_before_response is false.")
+        if decision.evidence_call_count < minimum_calls:
+            failures.append(
+                f"The reviewer requires at least {minimum_calls} evidence call(s), but the decision declares {decision.evidence_call_count}."
+            )
+        if minimum_calls > 1 and decision.execution_mode != "full_plan":
+            failures.append(
+                f"The reviewer requires {minimum_calls} evidence calls, so execution_mode must be full_plan rather than {decision.execution_mode}."
+            )
+        if minimum_calls == 1 and decision.execution_mode not in {"single_tool", "full_plan"}:
+            failures.append("One required evidence call needs single_tool or full_plan execution.")
+        if minimum_calls == 0 and decision.evidence_required_before_response and not review["required_evidence_sources"]:
+            failures.append("The decision declares required evidence, but the reviewer found no required evidence source.")
+        passed = not failures
+        feedback_parts = [review["feedback"]] if review["feedback"] else []
+        feedback_parts.extend(failures)
+        if review["required_evidence_sources"]:
+            feedback_parts.append(
+                "Required evidence sources: " + ", ".join(review["required_evidence_sources"])
+            )
+        feedback_parts.append(f"Minimum evidence call count: {minimum_calls}")
+        feedback = "; ".join(feedback_parts)
+        self.history.record_event(
+            state,
+            "review_completed",
+            {
+                "review_kind": "task_decision_semantic",
+                "target_id": target_id,
+                "role": "verifier",
+                "passed": passed,
+                "reason": "task_decision_semantic_review_passed" if passed else "task_decision_semantic_review_failed",
+                "evidence": {
+                    "review": review,
+                    "mechanical_failures": failures,
+                    "candidate_task_decision": asdict(decision),
+                    "complete_enabled_tool_registry": registry_payload,
+                },
+            },
+        )
+        return passed, feedback, review
+
+    def _decide_prompt_frontend(self, state: SessionState, user_text: str, analysis: PromptAnalysis) -> DecisionOutcome:
+        contract = task_decision_contract(self.tools.tool_names(self.config))
+        max_attempts = max(5, int(self.config.model.max_retries) + 3)
+        previous_rejected_decision = ""
+        correction_feedback: list[str] = []
+        last_decision: DecisionOutcome | None = None
+        for attempt in range(1, max_attempts + 1):
+            semantic_review_feedback = "\n".join(correction_feedback)
+            prepared = self._prepare_call(
+                state,
+                kind="task_decision",
+                build_prompt=lambda prompt_mode, bundle, previous=previous_rejected_decision, feedback=semantic_review_feedback: self.prompts.build_task_decision_prompt(
+                    user_text,
+                    stable_json_dumps(asdict(analysis)),
+                    prompt_mode=prompt_mode,
+                    context_components=bundle.components,
+                    tools=bundle.tool_prompt_tuples,
+                    previous_rejected_decision=previous,
+                    semantic_review_feedback=feedback,
+                ),
+                contract=contract,
+                prompt_modes=self._interactive_prompt_modes(),
+                goal=user_text,
+            )
+            _completion, decision_payload = self._execute_structured_call(
+                state,
+                prepared,
+            )
+            try:
+                decision = decision_from_payload(decision_payload)
+            except DecisionValidationError as exc:
+                previous_rejected_decision = stable_json_dumps(decision_payload)
+                correction_feedback.append(
+                    f"Attempt {attempt} structural validation failed: {exc}"
+                )
+                self.history.record_event(
+                    state,
+                    "error",
+                    {
+                        "operation": "task_decision_validation",
+                        "error": str(exc),
+                        "error_type": exc.__class__.__name__,
+                        "attempt": attempt,
+                        "payload": decision_payload,
+                    },
+                )
+                if attempt < max_attempts:
+                    self.history.record_event(
+                        state,
+                        "model_retry_scheduled",
+                        {
+                            "kind": "task_decision",
+                            "prompt_mode": prepared.prompt_mode,
+                            "next_attempt": attempt + 1,
+                        },
+                    )
+                    continue
+                raise FatalSemanticEngineError(
+                    "Task decision failed structural validation after bounded correction attempts: "
+                    f"{exc}"
+                ) from exc
+            last_decision = decision
+            passed, feedback, _results = self._review_task_decision_semantically(
+                state,
+                user_text=user_text,
+                analysis=analysis,
+                decision=decision,
+                attempt=attempt,
+            )
+            if passed:
+                self.history.record_event(
+                    state,
+                    "decision_made",
+                    {"decision": asdict(decision), "source": "model"},
+                )
+                return decision
+            previous_rejected_decision = stable_json_dumps(asdict(decision))
+            correction_feedback.append(
+                f"Attempt {attempt} semantic review failed: {feedback}"
+            )
+            self.history.record_event(
+                state,
+                "error",
+                {
+                    "operation": "task_decision_semantic_review",
+                    "error": feedback,
+                    "error_type": "DecisionSemanticReviewError",
+                    "attempt": attempt,
+                },
+            )
+            if attempt < max_attempts:
+                self.history.record_event(
+                    state,
+                    "model_retry_scheduled",
+                    {
+                        "kind": "task_decision",
+                        "prompt_mode": prepared.prompt_mode,
+                        "next_attempt": attempt + 1,
+                    },
+                )
+        decision_payload = {} if last_decision is None else asdict(last_decision)
+        raise FatalSemanticEngineError(
+            "Task decision failed semantic review after bounded correction attempts: "
+            f"{' | '.join(correction_feedback) or stable_json_dumps(decision_payload)}"
+        )
 
     def _expand_task_frontend(
         self,
@@ -2829,7 +2217,7 @@ class AgentRuntime:
         analysis: PromptAnalysis,
         decision: DecisionOutcome,
     ):
-        """LLM-driven strategy selection."""
+        """LLM-driven strategy selection with bounded correction of local validation failures."""
 
         contract = strategy_selection_contract()
         instruction_text = (
@@ -2852,93 +2240,115 @@ class AgentRuntime:
             "Use reading only for tasks that do not require repository changes.\n"
             "If the goal explicitly requires code edits, file writes, patches, or running tests, prefer coding or file_edit.\n"
         )
+        max_attempts = max(5, int(self.config.model.max_retries) + 3)
+        previous_rejected_strategy = ""
+        correction_feedback: list[str] = []
+        last_payload: dict[str, Any] = {}
 
-        def _build(prompt_mode: str, bundle: ContextBundle) -> PromptAssembly:
-            user_components = [
-                PromptComponent(
-                    name="current_goal",
-                    category="current_user",
-                    text=f"Effective goal:\n{effective_goal}\n\n",
-                ),
-                PromptComponent(
-                    name="analysis",
-                    category="analysis",
-                    text=f"Prompt analysis:\n{stable_json_dumps(asdict(analysis))}\n\n",
-                ),
-                PromptComponent(
-                    name="task_decision",
-                    category="decision",
-                    text=f"Task decision:\n{stable_json_dumps(asdict(decision))}\n\n",
-                ),
-                *bundle.components,
-                PromptComponent(
-                    name="strategy_instruction",
-                    category="instruction",
-                    text=instruction_text,
-                ),
-            ]
-            return self.prompts._assemble("strategy", prompt_mode, user_components)
+        for attempt in range(1, max_attempts + 1):
+            feedback_text = "\n".join(correction_feedback)
 
-        prepared = self._prepare_call(
-            state,
-            kind="strategy",
-            build_prompt=_build,
-            contract=contract,
-            prompt_modes=self._interactive_prompt_modes(),
-            goal=effective_goal,
+            def _build(prompt_mode: str, bundle: ContextBundle) -> PromptAssembly:
+                user_components = [
+                    PromptComponent(
+                        name="current_goal",
+                        category="current_user",
+                        text=f"Effective goal:\n{effective_goal}\n\n",
+                    ),
+                    PromptComponent(
+                        name="analysis",
+                        category="analysis",
+                        text=f"Prompt analysis:\n{stable_json_dumps(asdict(analysis))}\n\n",
+                    ),
+                    PromptComponent(
+                        name="task_decision",
+                        category="decision",
+                        text=f"Task decision:\n{stable_json_dumps(asdict(decision))}\n\n",
+                    ),
+                    *bundle.components,
+                    PromptComponent(
+                        name="strategy_instruction",
+                        category="instruction",
+                        text=instruction_text,
+                    ),
+                ]
+                if previous_rejected_strategy:
+                    user_components.append(
+                        PromptComponent(
+                            name="previous_rejected_strategy",
+                            category="turn_context",
+                            text=f"\nPrevious rejected strategy JSON:\n{previous_rejected_strategy}\n",
+                        )
+                    )
+                if feedback_text:
+                    user_components.append(
+                        PromptComponent(
+                            name="strategy_correction_feedback",
+                            category="instruction",
+                            text=(
+                                "\nStrategy correction requirements from all previous attempts:\n"
+                                f"{feedback_text}\n\n"
+                                "Return one corrected strategy now. The correction requirements above override the rejected fields. "
+                                "Keep already-valid fields, but change every field named by the accumulated feedback.\n"
+                            ),
+                        )
+                    )
+                return self.prompts._assemble("strategy", prompt_mode, user_components)
+
+            prepared = self._prepare_call(
+                state,
+                kind="strategy",
+                build_prompt=_build,
+                contract=contract,
+                prompt_modes=self._interactive_prompt_modes(),
+                goal=effective_goal,
+            )
+            _completion, payload = self._execute_structured_call(state, prepared)
+            last_payload = payload
+            try:
+                strategy = strategy_from_payload(payload)
+            except StrategyValidationError as exc:
+                previous_rejected_strategy = stable_json_dumps(payload)
+                correction_feedback.append(
+                    f"Attempt {attempt} strategy validation failed: {exc}"
+                )
+                self.history.record_event(
+                    state,
+                    "error",
+                    {
+                        "operation": "strategy_validation",
+                        "error": str(exc),
+                        "error_type": exc.__class__.__name__,
+                        "attempt": attempt,
+                        "payload": payload,
+                    },
+                )
+                if attempt < max_attempts:
+                    self.history.record_event(
+                        state,
+                        "model_retry_scheduled",
+                        {
+                            "kind": "strategy",
+                            "prompt_mode": prepared.prompt_mode,
+                            "next_attempt": attempt + 1,
+                        },
+                    )
+                    continue
+                raise FatalSemanticEngineError(
+                    "Strategy selection failed validation after bounded correction attempts: "
+                    f"{' | '.join(correction_feedback)}"
+                ) from exc
+            self.history.record_event(
+                state,
+                "strategy_selection_resolved",
+                {"strategy": asdict(strategy), "source": "model"},
+            )
+            return strategy
+
+        raise FatalSemanticEngineError(
+            "Strategy selection failed without a valid result: "
+            f"{stable_json_dumps(last_payload)}"
         )
-        _completion, strategy = self._execute_structured_call(
-            state,
-            prepared,
-            validator=strategy_from_payload,
-            validation_error_types=(StrategyValidationError,),
-        )
-        source = "model"
-        if (
-            self._looks_like_incomplete_file_change_goal(effective_goal)
-            or self._looks_like_incomplete_file_change_goal(self._original_user_goal_text(state))
-        ):
-            strategy = build_strategy_from_profile(
-                "generic",
-                reason=f"deterministic_incomplete_clarification;{strategy.reason}",
-            )
-            source = "deterministic_task_shape"
-        elif (
-            self._looks_like_already_decomposed_plan_goal(effective_goal)
-            or self._looks_like_already_decomposed_plan_goal(self._original_user_goal_text(state))
-        ):
-            strategy = build_strategy_from_profile(
-                "generic",
-                reason=f"deterministic_already_decomposed;{strategy.reason}",
-            )
-            source = "deterministic_task_shape"
-        elif (
-            self._looks_like_vague_release_clarification_goal(effective_goal)
-            or self._looks_like_vague_release_clarification_goal(self._original_user_goal_text(state))
-        ):
-            strategy = build_strategy_from_profile(
-                "generic",
-                reason=f"deterministic_vague_clarification;{strategy.reason}",
-            )
-            source = "deterministic_task_shape"
-        elif self._looks_like_policy_refusal_goal(effective_goal):
-            strategy = build_strategy_from_profile(
-                "generic",
-                reason=f"deterministic_policy_refusal;{strategy.reason}",
-            )
-            source = "deterministic_task_shape"
-        elif self._looks_like_deterministic_multi_step_goal(effective_goal):
-            strategy = build_strategy_from_profile(
-                "multi_step",
-                reason=f"deterministic_multi_step;{strategy.reason}",
-            )
-            source = "deterministic_task_shape"
-        self.history.record_event(
-            state,
-            "strategy_selection_resolved",
-            {"strategy": asdict(strategy), "source": source},
-        )
-        return strategy
 
     def _select_subagent_frontend(
         self,
@@ -2946,29 +2356,44 @@ class AgentRuntime:
         *,
         goal: str,
         purpose: str,
-        candidate_types: list[str],
         detail_lines: list[str] | None = None,
     ) -> SubagentSelectionDecision:
         if os.environ.get("SWAAG_DISABLE_SUBAGENT_SELECTION", "").lower() in {"1", "true", "yes", "on"}:
             return SubagentSelectionDecision(spawn=False, subagent_type="none", reason="disabled_by_env", focus="")
+        subagent_specs = self._subagents.enabled_specs()
+        candidate_types = [spec.subagent_type for spec in subagent_specs]
         if not candidate_types:
             return SubagentSelectionDecision(spawn=False, subagent_type="none", reason="no_candidates", focus="")
         contract = subagent_selection_contract(candidate_types)
-        candidate_text = ", ".join(candidate_types)
+        registry_payload = [
+            {
+                "name": spec.subagent_type,
+                "description": spec.purpose,
+                "capabilities": list(spec.capabilities),
+                "role_instruction": spec.role_instruction,
+                "input_schema": spec.input_schema,
+                "usage_guidance": spec.usage_guidance,
+                "metadata": spec.metadata,
+            }
+            for spec in subagent_specs
+        ]
+        registry_text = stable_json_dumps(registry_payload, indent=2)
         detail_text = "\n".join(line for line in (detail_lines or []) if line.strip())
         instruction_text = (
             "Decide whether an isolated specialist subagent should be spawned for this stage.\n"
-            f"Available subagents: {candidate_text}.\n"
+            "Available subagents are the complete enabled registry; do not assume hidden specialists exist:\n"
+            f"{registry_text}\n"
             "Return one JSON object with keys spawn, subagent_type, reason, and focus.\n"
             "spawn is a boolean (true/false): true means spawn the named specialist.\n"
             "Choose spawn=true only when a specialist would materially improve the current decision.\n"
-            "subagent_type must be one available specialist or 'none'.\n"
-            "reason is one short justification.\n"
+            "subagent_type must be one registered enabled specialist or 'none'.\n"
+            "reason is one short justification when spawn=true and may be an empty string when spawn=false.\n"
             "focus is the short specialist brief to pass if a subagent is spawned; use an empty string otherwise.\n"
             "Set subagent_type='none' and spawn=false when no specialist is needed.\n"
         )
 
         def _build(prompt_mode: str, bundle: ContextBundle) -> PromptAssembly:
+            tool_catalog = self.prompts.render_tool_catalog(bundle.tool_prompt_tuples, prompt_mode=prompt_mode)
             user_components = [
                 PromptComponent(
                     name="subagent_goal",
@@ -2988,6 +2413,14 @@ class AgentRuntime:
                         name="subagent_details",
                         category="subagent",
                         text=f"Stage details:\n{detail_text}\n\n",
+                    )
+                )
+            if tool_catalog:
+                user_components.append(
+                    PromptComponent(
+                        name="tool_descriptions",
+                        category="tool_descriptions",
+                        text=f"Available tools:\n{tool_catalog}\n\n",
                     )
                 )
             user_components.append(
@@ -3013,11 +2446,11 @@ class AgentRuntime:
             if subagent_type not in {"none", *candidate_types}:
                 raise ValueError(f"Unknown subagent_type: {subagent_type}")
             reason = str(payload.get("reason", "")).strip()
-            if not reason:
-                raise ValueError("Subagent selection reason must not be empty")
             spawn = bool(payload.get("spawn"))
             if subagent_type == "none":
                 spawn = False
+            if spawn and not reason:
+                raise ValueError("Spawned subagent selection reason must not be empty")
             return SubagentSelectionDecision(
                 spawn=spawn,
                 subagent_type=subagent_type,
@@ -3037,49 +2470,15 @@ class AgentRuntime:
             {
                 "purpose": purpose,
                 "candidate_types": candidate_types,
+                "enabled_registry": registry_payload,
                 "selection": asdict(selection),
             },
         )
         return selection
 
-    def _classify_failed_test_command(
-        self,
-        state: SessionState,
-        *,
-        subsystem_result: SubsystemExecutionResult,
-    ) -> FailureClassification | None:
-        for tool_result in reversed(subsystem_result.tool_results):
-            if tool_result.tool_name != "run_tests":
-                continue
-            output = tool_result.output
-            if bool(output.get("passed", True)):
-                continue
-            command = output.get("command", "")
-            stderr = str(output.get("stderr", "")).strip()
-            stdout = str(output.get("stdout", "")).strip()
-            evidence = stderr or stdout or tool_result.display_text
-            evidence = " ".join(evidence.split())[:1200]
-            reason = (
-                f"run_tests failed; command={command!r}; evidence={evidence}. "
-                "Recovery rule: do not run the same test command again until after a source edit that targets the failing symbol/file. "
-                "The next repair plan should inspect or edit the source module implicated by the failing test, not schedule another run_tests step first."
-            )
-            classification = FailureClassification(
-                kind="verification_failure",
-                retryable=False,
-                requires_replan=True,
-                suggested_strategy_mode="recovery",
-                reason=reason,
-                wait_seconds=0.0,
-                source="deterministic_run_tests_failure",
-            )
-            self.history.record_event(
-                state,
-                "failure_classification_resolved",
-                {"classification": asdict(classification), "source": classification.source},
-            )
-            return classification
-        return None
+    def _enabled_subagent_names(self) -> list[str]:
+        return [spec.subagent_type for spec in self._subagents.enabled_specs()]
+
 
     def _classify_failure_frontend(
         self,
@@ -3088,6 +2487,8 @@ class AgentRuntime:
         step: PlanStep | None,
         error: Exception | None = None,
         error_type: str | None = None,
+        verification: VerificationOutcome | None = None,
+        subsystem_result: SubsystemExecutionResult | None = None,
         reason: str = "",
     ) -> FailureClassification:
         """LLM-driven failure classification."""
@@ -3116,8 +2517,49 @@ class AgentRuntime:
                     "kind": step.kind,
                     "expected_tool": step.expected_tool,
                     "title": step.title,
+                    "goal": step.goal,
+                    "success_criteria": step.success_criteria,
+                    "done_condition": step.done_condition,
+                    "required_conditions": list(step.required_conditions),
+                    "optional_conditions": list(step.optional_conditions),
+                    "verification_checks": list(step.verification_checks),
                 }
             )
+        failure_payload: dict[str, Any] = {
+            "reported_reason": reason or "",
+            "error_type": normalized_error_type or "",
+            "error_message": str(error) if error is not None else "",
+        }
+        if verification is not None:
+            failure_payload["verification"] = {
+                "verification_passed": verification.verification_passed,
+                "verification_type_used": verification.verification_type_used,
+                "conditions_met": list(verification.conditions_met),
+                "conditions_failed": list(verification.conditions_failed),
+                "evidence": to_jsonable(verification.evidence),
+                "confidence": verification.confidence,
+                "reason": verification.reason,
+                "requires_retry": verification.requires_retry,
+                "requires_replan": verification.requires_replan,
+            }
+        if subsystem_result is not None:
+            failure_payload["subsystem_result"] = {
+                "subsystem_name": subsystem_result.subsystem_name,
+                "success": subsystem_result.success,
+                "progress": list(subsystem_result.progress),
+                "same_step_retry_allowed": subsystem_result.same_step_retry_allowed,
+                "background_job_started": subsystem_result.background_job_started,
+                "background_process_id": subsystem_result.background_process_id or "",
+                "tool_results": [
+                    {
+                        "tool_name": result.tool_name,
+                        "completed": result.completed,
+                        "output": to_jsonable(result.output),
+                    }
+                    for result in subsystem_result.tool_results
+                ],
+                "assistant_text": subsystem_result.assistant_text,
+            }
 
         def _build(prompt_mode: str, bundle: ContextBundle) -> PromptAssembly:
             user_components = [
@@ -3130,8 +2572,9 @@ class AgentRuntime:
                     name="failure_signal",
                     category="failure_signal",
                     text=(
-                        f"Reported reason: {reason or '(none)'}\n"
-                        f"Error type: {normalized_error_type or '(none)'}\n\n"
+                        "Current failure signal to classify. Use this current failure as primary evidence; "
+                        "older history is context only and may describe failures that have already been handled.\n"
+                        f"{stable_json_dumps(to_jsonable(failure_payload), indent=2)}\n\n"
                     ),
                 ),
                 *bundle.components,
@@ -3211,7 +2654,7 @@ class AgentRuntime:
                     text=(
                         f"Candidate actions: {candidates}\n"
                         f"Ready step ids: {orchestration.ready_step_ids}\n"
-                        f"Default deterministic choice: {orchestration.action}\n\n"
+                        f"Structural state-machine suggestion: {orchestration.action}\n\n"
                     ),
                 ),
                 *bundle.components,
@@ -3245,19 +2688,61 @@ class AgentRuntime:
         )
         return chosen
 
-    def _build_clarification_request(self, user_text: str, analysis: PromptAnalysis) -> str:
-        if self._looks_like_incomplete_file_change_goal(user_text):
-            return "Which file path should be updated, and what exact change should be made?"
-        missing = []
-        if not analysis.detected_goals:
-            missing.append("the exact goal")
-        if not analysis.detected_entities:
-            missing.append("the relevant files, paths, or entities")
-        if analysis.task_type == "incomplete":
-            missing.append("the missing constraints or inputs")
-        if not missing:
-            missing.append("the missing details")
-        return f"I need clarification before I can continue. Please provide {', '.join(missing)} for: {user_text}"
+    def _build_clarification_request(
+        self,
+        user_text: str,
+        analysis: PromptAnalysis,
+        *,
+        state: SessionState | None = None,
+    ) -> str:
+        if state is None:
+            raise RuntimeError("Clarification generation requires session state")
+        contract = text_response_contract("clarification_response")
+
+        def _build(prompt_mode: str, bundle: ContextBundle) -> PromptAssembly:
+            components = [
+                PromptComponent(
+                    name="clarification_goal",
+                    category="current_user",
+                    text=f"User request:\n{user_text}\n\n",
+                ),
+                PromptComponent(
+                    name="prompt_analysis",
+                    category="analysis",
+                    text=f"Prompt analysis:\n{stable_json_dumps(asdict(analysis))}\n\n",
+                ),
+                *bundle.components,
+                PromptComponent(
+                    name="clarification_instruction",
+                    category="instruction",
+                    text=(
+                        "Write the assistant's clarification request to the user. "
+                        "Ask only for the missing information needed to proceed. "
+                        "Do not claim completion or invent missing facts.\n"
+                    ),
+                ),
+            ]
+            return self.prompts._assemble("clarification", prompt_mode, components)
+
+        prepared = self._prepare_call(
+            state,
+            kind="clarification",
+            build_prompt=_build,
+            contract=contract,
+            prompt_modes=self._interactive_prompt_modes(),
+            goal=user_text,
+        )
+        _completion, payload = self._execute_structured_call(
+            state,
+            prepared,
+            validator=self._validate_text_response_payload,
+            validation_error_types=(ValueError,),
+        )
+        text = payload["text"]
+        if not text:
+            raise RuntimeError("Model returned an empty clarification request")
+        self.history.record_event(state, "clarification_generated", {"source": "model", "text": text})
+        return text
 
     def _refresh_project_state(self, state: SessionState, *, reason: str) -> None:
         project_state = build_project_state(state)
@@ -3281,7 +2766,7 @@ class AgentRuntime:
         strategy.reason = reason
         self.history.record_event(state, "strategy_selected", {"strategy": asdict(strategy)})
 
-    def _reconcile_strategy_for_plan(
+    def _validate_strategy_for_plan(
         self,
         state: SessionState,
         plan: Plan,
@@ -3291,35 +2776,9 @@ class AgentRuntime:
         if state.active_strategy is None:
             return
         current = state.active_strategy
-        try:
-            validate_plan_against_strategy(
-                plan,
-                current,
-                completed_step_kinds=completed_step_kinds,
-            )
-            return
-        except StrategyValidationError as exc:
-            original_error = exc
-        reconciled = reconcile_strategy_to_plan(
-            current,
-            plan,
-            completed_step_kinds=completed_step_kinds,
-        )
-        if reconciled.task_profile == current.task_profile:
-            raise original_error
-        self.history.record_event(
-            state,
-            "strategy_selection_resolved",
-            {"strategy": asdict(reconciled), "source": "plan_reconciliation"},
-        )
-        self._set_strategy(
-            state,
-            reconciled,
-            reason=reconciled.reason,
-        )
         validate_plan_against_strategy(
             plan,
-            reconciled,
+            current,
             completed_step_kinds=completed_step_kinds,
         )
 
@@ -3338,14 +2797,223 @@ class AgentRuntime:
             return []
         return [step.kind for step in state.active_plan.steps if step.status == "completed"]
 
+    def _validate_tool_objective_verification(self, plan: Plan) -> None:
+        for step in plan.steps:
+            if not step.expected_tool:
+                continue
+            tool = self.tools.get(step.expected_tool)
+            required_types = tuple(getattr(tool, "objective_verification_check_types", ()) or ())
+            if not required_types:
+                continue
+            checks_by_name = {str(check.get("name", "")).strip(): check for check in step.verification_checks}
+            required_checks = [checks_by_name[name] for name in step.required_conditions if name in checks_by_name]
+            if any(str(check.get("check_type", "")).strip() in required_types for check in required_checks):
+                continue
+            allowed = ", ".join(required_types)
+            raise PlanValidationError(
+                f"Plan step {step.step_id} uses {step.expected_tool} but required_conditions lack an objective state check "
+                f"of type: {allowed}"
+            )
+
+    def _validate_response_semantic_conditions_required(self, plan: Plan) -> None:
+        for step in plan.steps:
+            if step.kind not in {"respond", "reasoning"}:
+                continue
+            checks_by_name = {str(check.get("name", "")).strip(): check for check in step.verification_checks}
+            required_names = {str(name).strip() for name in step.required_conditions}
+            declared_semantic_names: list[str] = []
+            for name, check in checks_by_name.items():
+                if not name:
+                    continue
+                check_type = str(check.get("check_type", "")).strip()
+                if (
+                    check_type == "criterion"
+                    and str(check.get("actual_source", "")).strip() == "assistant_text"
+                    and str(check.get("criterion", "")).strip()
+                ):
+                    declared_semantic_names.append(name)
+                    continue
+                if check_type not in {"exact_match", "string_match"}:
+                    continue
+                if str(check.get("actual_source", "")).strip() != "assistant_text":
+                    continue
+                expected_json = str(check.get("expected_json", "")).strip()
+                expected = check.get("expected")
+                if expected_json or (isinstance(expected, str) and expected.strip()):
+                    declared_semantic_names.append(name)
+            unrequired = [name for name in declared_semantic_names if name not in required_names]
+            if unrequired:
+                raise PlanValidationError(
+                    f"Plan step {step.step_id} declares semantic response checks that are not required_conditions: "
+                    + ", ".join(unrequired)
+                )
+
+    def _required_check_types_for_plan(self, plan: Plan) -> set[str]:
+        check_types: set[str] = set()
+        for step in plan.steps:
+            checks_by_name = {str(check.get("name", "")).strip(): check for check in step.verification_checks}
+            for name in step.required_conditions:
+                check = checks_by_name.get(str(name).strip())
+                if check is None:
+                    continue
+                check_type = str(check.get("check_type", "")).strip()
+                if check_type:
+                    check_types.add(check_type)
+        return check_types
+
+    def _required_check_types_for_step_payload(self, step_payload: dict[str, Any]) -> dict[str, str]:
+        checks_by_name: dict[str, str] = {}
+        verification_checks = step_payload.get("verification_checks")
+        required_conditions = step_payload.get("required_conditions")
+        if not isinstance(verification_checks, list) or not isinstance(required_conditions, list):
+            return checks_by_name
+        all_checks: dict[str, str] = {}
+        for check in verification_checks:
+            if not isinstance(check, dict):
+                continue
+            name = str(check.get("name", "")).strip()
+            check_type = str(check.get("check_type", "")).strip()
+            if name and check_type:
+                all_checks[name] = check_type
+        for condition_name in required_conditions:
+            name = str(condition_name).strip()
+            check_type = all_checks.get(name, "")
+            if check_type:
+                checks_by_name[name] = check_type
+        return checks_by_name
+
+    def _step_payloads_by_id(self, plan_payload: dict[str, Any]) -> dict[str, dict[str, Any]]:
+        raw_steps = plan_payload.get("steps")
+        if not isinstance(raw_steps, list):
+            return {}
+        steps_by_id: dict[str, dict[str, Any]] = {}
+        for step in raw_steps:
+            if not isinstance(step, dict):
+                continue
+            step_id = str(step.get("step_id", "")).strip()
+            if step_id:
+                steps_by_id[step_id] = step
+        return steps_by_id
+
+    def _current_turn_history_events(self, state: SessionState):
+        events = self.history.read_history(state.session_id)
+        turn_start_sequence = 1
+        for event in reversed(events):
+            if event.event_type == "turn_started":
+                turn_start_sequence = event.sequence
+                break
+        return [event for event in events if event.sequence >= turn_start_sequence]
+
+    def _unresolved_objective_verification_groups(self, state: SessionState) -> set[tuple[str, ...]]:
+        unresolved: set[tuple[str, ...]] = set()
+        steps_by_id: dict[str, dict[str, Any]] = {}
+        for event in self._current_turn_history_events(state):
+            if event.event_type in {"plan_created", "plan_updated"}:
+                plan_payload = event.payload.get("plan")
+                if isinstance(plan_payload, dict):
+                    steps_by_id = self._step_payloads_by_id(plan_payload)
+                continue
+            if event.event_type not in {"verification_failed", "verification_passed"}:
+                continue
+            step_id = str(event.payload.get("step_id", "")).strip()
+            step_payload = steps_by_id.get(step_id)
+            if step_payload is None:
+                continue
+            required_check_types_by_name = self._required_check_types_for_step_payload(step_payload)
+            if event.event_type == "verification_failed":
+                expected_tool = str(step_payload.get("expected_tool", "")).strip()
+                if not expected_tool:
+                    continue
+                try:
+                    tool = self.tools.get(expected_tool)
+                except KeyError:
+                    continue
+                objective_types = tuple(sorted(str(item).strip() for item in getattr(tool, "objective_verification_check_types", ()) or () if str(item).strip()))
+                if not objective_types:
+                    continue
+                failed_names = {str(name).strip() for name in event.payload.get("conditions_failed", [])}
+                failed_check_types = {
+                    required_check_types_by_name[name]
+                    for name in failed_names
+                    if name in required_check_types_by_name
+                }
+                if failed_check_types.intersection(objective_types):
+                    unresolved.add(objective_types)
+                continue
+            passed_names = {str(name).strip() for name in event.payload.get("conditions_met", [])}
+            passed_check_types = {
+                required_check_types_by_name[name]
+                for name in passed_names
+                if name in required_check_types_by_name
+            }
+            for objective_types in list(unresolved):
+                if passed_check_types.intersection(objective_types):
+                    unresolved.discard(objective_types)
+        return unresolved
+
+    def _validate_unresolved_objective_verification_preserved(self, state: SessionState, plan: Plan) -> None:
+        unresolved_groups = self._unresolved_objective_verification_groups(state)
+        if not unresolved_groups:
+            return
+        plan_check_types = self._required_check_types_for_plan(plan)
+        missing_groups = [group for group in sorted(unresolved_groups) if not plan_check_types.intersection(group)]
+        if not missing_groups:
+            return
+        final_response_step = self._final_response_step_with_required_semantic_check(plan)
+        if final_response_step is not None:
+            self.history.record_event(
+                state,
+                "unresolved_objective_verification_deferred",
+                {
+                    "missing_check_groups": [list(group) for group in missing_groups],
+                    "final_step_id": final_response_step.step_id,
+                    "reason": "mandatory_final_objective_verification",
+                },
+            )
+            return
+        required_descriptions = [" or ".join(group) for group in missing_groups]
+        raise PlanValidationError(
+            "Replacement plan cannot abandon unresolved objective verification; "
+            "it must require an objective state check before success using one of: "
+            + "; ".join(required_descriptions)
+        )
+
+    def _final_response_step_with_required_semantic_check(self, plan: Plan) -> PlanStep | None:
+        if not plan.steps:
+            return None
+        step = plan.steps[-1]
+        if step.kind != "respond":
+            return None
+        checks_by_name = {str(check.get("name", "")).strip(): check for check in step.verification_checks}
+        for condition_name in step.required_conditions:
+            check = checks_by_name.get(str(condition_name).strip())
+            if not isinstance(check, dict):
+                continue
+            check_type = str(check.get("check_type", "")).strip()
+            if check_type == "criterion" and str(check.get("criterion", "")).strip():
+                return step
+            if check_type not in {"exact_match", "string_match"}:
+                continue
+            if str(check.get("actual_source", "")).strip() != "assistant_text":
+                continue
+            expected_json = str(check.get("expected_json", "")).strip()
+            expected = check.get("expected")
+            if expected_json or (isinstance(expected, str) and expected.strip()):
+                return step
+        return None
+
     def _review_plan(self, state: SessionState, plan: Plan) -> None:
+        self._validate_tool_objective_verification(plan)
+        self._validate_response_semantic_conditions_required(plan)
+        self._validate_unresolved_objective_verification_preserved(state, plan)
+        self._review_plan_semantic_adequacy(state, plan)
         if len(plan.steps) <= 1 and all(step.kind == "respond" for step in plan.steps):
             self.history.record_event(
                 state,
                 "subagent_selection_resolved",
                 {
                     "purpose": "plan_review",
-                    "candidate_types": ["reviewer"],
+                    "candidate_types": self._enabled_subagent_names(),
                     "selection": {
                         "spawn": False,
                         "subagent_type": "none",
@@ -3355,7 +3023,7 @@ class AgentRuntime:
                 },
             )
             if state.active_strategy is not None:
-                self._reconcile_strategy_for_plan(
+                self._validate_strategy_for_plan(
                     state,
                     plan,
                     completed_step_kinds=self._completed_step_kinds(state),
@@ -3367,7 +3035,6 @@ class AgentRuntime:
             state,
             goal=plan.goal,
             purpose="plan_review",
-            candidate_types=["reviewer"],
             detail_lines=[
                 f"step_count={len(plan.steps)}",
                 f"step_kinds={','.join(step.kind for step in plan.steps)}",
@@ -3380,7 +3047,7 @@ class AgentRuntime:
                 {"review_kind": "plan", "target_id": plan.plan_id, "reason": selection.reason},
             )
             if state.active_strategy is not None:
-                self._reconcile_strategy_for_plan(
+                self._validate_strategy_for_plan(
                     state,
                     plan,
                     completed_step_kinds=self._completed_step_kinds(state),
@@ -3389,14 +3056,13 @@ class AgentRuntime:
                 raise PlanValidationError("plan_missing_required_review_properties")
             return
         self._switch_role(state, "verifier", reason="plan_review")
-        subagent_report = self._subagents.review_plan(state, plan)
+        subagent_report = self._subagents.review_plan(state, plan, subagent_type=selection.subagent_type)
         self.history.record_event(
             state,
             "subagent_spawned",
             {
                 "subagent_type": subagent_report.spec.subagent_type,
                 "purpose": subagent_report.spec.purpose,
-                "allowed_tools": subagent_report.spec.allowed_tools,
                 "token_budget": subagent_report.spec.token_budget,
                 "target_id": plan.plan_id,
             },
@@ -3429,6 +3095,159 @@ class AgentRuntime:
         if not passed:
             raise PlanValidationError(reason)
 
+    def _plan_semantic_review_evidence(self, state: SessionState, plan: Plan) -> dict[str, Any]:
+        max_string_chars = max(1000, int(self.config.environment.max_capture_chars))
+        current_turn_events = self._current_turn_history_events(state)
+        recent_event_types = {
+            "tool_result",
+            "tool_error",
+            "verification_failed",
+            "verification_passed",
+            "review_completed",
+            "step_completed",
+            "step_failed",
+            "replan_triggered",
+            "drift_detected",
+            "state_rebuilt",
+        }
+        recent_events = [
+            {
+                "sequence": event.sequence,
+                "type": event.event_type,
+                "payload": self._bounded_evidence_value(
+                    event.payload,
+                    max_string_chars=max_string_chars,
+                ),
+            }
+            for event in current_turn_events
+            if event.event_type in recent_event_types
+        ][-24:]
+        return {
+            "original_user_request": self._original_user_goal_text(state),
+            "effective_goal": self._goal_text(state),
+            "candidate_plan": self._bounded_evidence_value(plan_as_payload(plan), max_string_chars=max_string_chars),
+            "active_strategy": None if state.active_strategy is None else self._bounded_evidence_value(asdict(state.active_strategy), max_string_chars=max_string_chars),
+            "recent_failed_tool_or_verification_evidence": self._recent_tool_failure_evidence(state),
+            "latest_observed_file_snapshots": self._latest_file_snapshot_evidence(state),
+            "recent_events": recent_events,
+        }
+
+    def _review_plan_semantic_adequacy(self, state: SessionState, plan: Plan) -> None:
+        self._switch_role(state, "verifier", reason="plan_semantic_review")
+        review_step = PlanStep(
+            step_id=f"{plan.plan_id}:semantic_plan_review",
+            title="Plan semantic adequacy review",
+            goal=plan.goal,
+            kind="reasoning",
+            expected_tool=None,
+            input_text="Verify whether the candidate plan is semantically adequate before execution.",
+            expected_output="The candidate plan preserves the requested objective and can fail closed.",
+            done_condition="reasoning_result_nonempty",
+            success_criteria=(
+                "The candidate plan must preserve the original user request, use current observations and failure evidence, "
+                "avoid stale failed targets unless newer evidence proves they apply, and declare objective checks precise "
+                "enough to reject partial, corrupted, stale, or weakened artifact states."
+            ),
+            expected_outputs=["semantically_adequate_plan"],
+            verification_type="composite",
+            verification_checks=[],
+            required_conditions=["plan_satisfies_original_request", "plan_uses_current_evidence", "plan_verifies_exact_requested_state"],
+            optional_conditions=[],
+        )
+        plan_changes_artifacts = any(
+            step.kind == "write"
+            or (
+                step.expected_tool is not None
+                and self.tools.get(step.expected_tool).kind == "side_effect"
+            )
+            for step in plan.steps
+        )
+        criteria = [
+            {
+                "name": "plan_satisfies_original_request",
+                "criterion": (
+                    "The candidate plan is sufficient to satisfy the original user request, not a narrowed or weakened later interpretation."
+                ),
+            },
+            {
+                "name": "plan_uses_current_evidence",
+                "candidate_grounding": "optional",
+                "criterion": (
+                    "When recent failures or snapshots show changed current state, the plan uses that evidence and does not depend on stale source snippets, ranges, patterns, or path states unless newer evidence proves they now apply."
+                ),
+            },
+            {
+                "name": "plan_verifies_exact_requested_state",
+                "candidate_grounding": "required" if plan_changes_artifacts else "optional",
+                "criterion": (
+                    "For artifact-changing work, the plan's required objective checks are precise enough to reject partial, corrupted, stale, or merely broad-value matches."
+                ),
+            },
+        ]
+        evidence = self._plan_semantic_review_evidence(state, plan)
+        self.history.record_event(
+            state,
+            "review_started",
+            {"review_kind": "plan_semantic", "target_id": plan.plan_id, "role": "verifier"},
+        )
+        try:
+            payload = self._run_llm_verification(
+                state,
+                step=review_step,
+                criteria=criteria,
+                assistant_text=stable_json_dumps(plan_as_payload(plan), indent=2),
+                evidence=evidence,
+                contract_name="plan_semantic_verification",
+            )
+        except SemanticBackendProtocolError as exc:
+            reason = "plan_semantic_review_protocol_error"
+            self.history.record_event(
+                state,
+                "review_completed",
+                {
+                    "review_kind": "plan_semantic",
+                    "target_id": plan.plan_id,
+                    "role": "verifier",
+                    "passed": False,
+                    "reason": reason,
+                    "evidence": {
+                        "error": str(exc),
+                        "error_type": exc.__class__.__name__,
+                        "review_backend_degraded": True,
+                        "review_evidence": evidence,
+                    },
+                },
+            )
+            raise PlanValidationError(f"{reason}: {exc}") from exc
+        finally:
+            self._switch_role(state, "primary", reason="plan_semantic_review_finished")
+        criteria_results = [
+            item
+            for item in payload.get("criteria", [])
+            if isinstance(item, dict)
+        ]
+        failed = [item for item in criteria_results if item.get("passed") is not True]
+        passed = not failed and len(criteria_results) == len(criteria)
+        reason = "plan_semantic_review_passed" if passed else "plan_semantic_review_failed"
+        self.history.record_event(
+            state,
+            "review_completed",
+            {
+                "review_kind": "plan_semantic",
+                "target_id": plan.plan_id,
+                "role": "verifier",
+                "passed": passed,
+                "reason": reason,
+                "evidence": {"criteria": criteria_results, "review_evidence": evidence},
+            },
+        )
+        if not passed:
+            details = "; ".join(
+                f"{item.get('name', '')}: {item.get('evidence', '')}".strip()
+                for item in failed
+            )
+            raise PlanValidationError(f"{reason}: {details or 'criteria did not all pass'}")
+
     def _review_verification_result(
         self,
         state: SessionState,
@@ -3437,6 +3256,13 @@ class AgentRuntime:
         verification: VerificationOutcome,
         subsystem_result,
     ) -> tuple[bool, str, dict[str, Any]]:
+        if verification.passed and self._requires_semantic_result_review(subsystem_result):
+            return self._review_mutating_tool_result_semantically(
+                state,
+                step,
+                verification=verification,
+                subsystem_result=subsystem_result,
+            )
         if (
             step.kind not in {"respond", "reasoning"} and verification.verification_type_used != "llm_fallback"
         ) or self._step_uses_exact_assistant_match(step):
@@ -3445,7 +3271,7 @@ class AgentRuntime:
                 "subagent_selection_resolved",
                 {
                     "purpose": "result_review",
-                    "candidate_types": ["reviewer"],
+                    "candidate_types": self._enabled_subagent_names(),
                     "selection": {
                         "spawn": False,
                         "subagent_type": "none",
@@ -3459,7 +3285,6 @@ class AgentRuntime:
             state,
             goal=step.goal,
             purpose="result_review",
-            candidate_types=["reviewer"],
             detail_lines=[
                 f"step_kind={step.kind}",
                 f"verification_type={verification.verification_type_used}",
@@ -3480,6 +3305,7 @@ class AgentRuntime:
             step,
             verification=verification,
             subsystem_result=subsystem_result,
+            subagent_type=selection.subagent_type,
         )
         self.history.record_event(
             state,
@@ -3487,7 +3313,6 @@ class AgentRuntime:
             {
                 "subagent_type": subagent_report.spec.subagent_type,
                 "purpose": subagent_report.spec.purpose,
-                "allowed_tools": subagent_report.spec.allowed_tools,
                 "token_budget": subagent_report.spec.token_budget,
                 "target_id": step.step_id,
             },
@@ -3518,6 +3343,153 @@ class AgentRuntime:
         )
         self._switch_role(state, "primary", reason="result_review_finished")
         return passed, reason, evidence
+
+    def _requires_semantic_result_review(self, subsystem_result) -> bool:
+        latest_tool = subsystem_result.tool_results[-1] if subsystem_result.tool_results else None
+        if latest_tool is None:
+            return False
+        try:
+            tool = self.tools.get(latest_tool.tool_name)
+        except KeyError:
+            return False
+        return bool(getattr(tool, "semantic_result_review_required", False))
+
+    def _semantic_result_review_evidence(
+        self,
+        state: SessionState,
+        *,
+        verification: VerificationOutcome,
+        subsystem_result,
+    ) -> dict[str, Any]:
+        latest_tool = subsystem_result.tool_results[-1] if subsystem_result.tool_results else None
+        evidence: dict[str, Any] = {
+            "deterministic_verification": {
+                "passed": verification.passed,
+                "verification_type_used": verification.verification_type_used,
+                "conditions_met": list(verification.conditions_met),
+                "conditions_failed": list(verification.conditions_failed),
+                "evidence": to_jsonable(verification.evidence),
+                "confidence": verification.confidence,
+                "reason": verification.reason,
+            },
+            "tool_result": None,
+        }
+        if latest_tool is None:
+            return evidence
+        evidence["tool_result"] = {
+            "tool_name": latest_tool.tool_name,
+            "output": to_jsonable(latest_tool.output),
+            "display_text": latest_tool.display_text,
+        }
+        output = latest_tool.output if isinstance(latest_tool.output, dict) else {}
+        path_text = output.get("path")
+        if isinstance(path_text, str) and path_text.strip():
+            path = Path(path_text).expanduser()
+            current_file: dict[str, Any] = {"path": str(path)}
+            try:
+                current_file["exists"] = path.exists()
+                current_file["is_file"] = path.is_file()
+                if path.is_file():
+                    current_file["text"] = path.read_text(encoding="utf-8")
+            except OSError as exc:
+                current_file["read_error"] = str(exc)
+                current_file["error_type"] = exc.__class__.__name__
+            evidence["current_file"] = current_file
+        evidence["metrics"] = {
+            "tool_calls": state.metrics.tool_calls,
+            "verification_failures": state.metrics.verification_failures,
+            "steps_completed": state.metrics.steps_completed,
+        }
+        return evidence
+
+    def _review_mutating_tool_result_semantically(
+        self,
+        state: SessionState,
+        step: PlanStep,
+        *,
+        verification: VerificationOutcome,
+        subsystem_result,
+    ) -> tuple[bool, str, dict[str, Any]]:
+        latest_tool = subsystem_result.tool_results[-1] if subsystem_result.tool_results else None
+        evidence = self._semantic_result_review_evidence(
+            state,
+            verification=verification,
+            subsystem_result=subsystem_result,
+        )
+        self.history.record_event(
+            state,
+            "review_started",
+            {"review_kind": "semantic_result", "target_id": step.step_id, "role": "verifier"},
+        )
+        criteria = [
+            {
+                "name": "result_satisfies_step",
+                "criterion": (
+                    "Decide whether the observed tool result and current artifact state fully satisfy the step goal, "
+                    "expected outputs, and success criteria. Reject partial, over-broad, corrupt, or weakly evidenced "
+                    "mutations even when a lower-level deterministic condition passed."
+                ),
+            }
+        ]
+        assistant_text = subsystem_result.assistant_text
+        if not assistant_text.strip() and latest_tool is not None:
+            assistant_text = stable_json_dumps(evidence.get("tool_result", {}), indent=2)
+        try:
+            payload = self._run_llm_verification(
+                state,
+                step=step,
+                criteria=criteria,
+                assistant_text=assistant_text,
+                evidence=evidence,
+            )
+        except Exception as exc:
+            review_evidence = {
+                **evidence,
+                "review_error": str(exc),
+                "review_error_type": exc.__class__.__name__,
+            }
+            passed = False
+            reason = f"semantic_result_review_error:{exc}"
+        else:
+            criteria_results = payload.get("criteria", [])
+            result = next(
+                (
+                    item
+                    for item in criteria_results
+                    if isinstance(item, dict) and item.get("name") == "result_satisfies_step"
+                ),
+                None,
+            )
+            passed = bool(isinstance(result, dict) and result.get("passed") is True)
+            reason = "semantic_result_review_passed" if passed else "semantic_result_review_failed"
+            review_evidence = {
+                **evidence,
+                "criteria": criteria_results,
+            }
+        self.history.record_event(
+            state,
+            "review_completed",
+            {
+                "review_kind": "semantic_result",
+                "target_id": step.step_id,
+                "role": "verifier",
+                "passed": passed,
+                "reason": reason,
+                "evidence": review_evidence,
+            },
+        )
+        if not passed and latest_tool is not None:
+            self._record_message(
+                state,
+                Message(
+                    role="tool",
+                    name=latest_tool.tool_name,
+                    content=f"semantic_result_review_failed: {stable_json_dumps(review_evidence, indent=2)}",
+                    created_at=utc_now_iso(),
+                    metadata=review_evidence,
+                ),
+            )
+        return passed, reason, review_evidence
 
     def _record_action_selection(self, state: SessionState, decision) -> None:
         self.history.record_event(
@@ -3703,6 +3675,8 @@ class AgentRuntime:
         failure = self._classify_failure_frontend(
             state,
             step=step,
+            verification=verification,
+            subsystem_result=subsystem_result,
             reason=f"verification:{evaluation.reason}",
         )
         active_strategy = state.active_strategy
@@ -3805,13 +3779,19 @@ class AgentRuntime:
         assistant_text: str,
         runtime_artifacts: dict[str, Any] | None = None,
     ) -> VerificationArtifacts:
+        artifacts: dict[str, Any] = {"step_id": step.step_id}
+        latest = tool_results[-1] if tool_results else None
+        if latest is not None:
+            for alias in [step.expected_output, *step.expected_outputs, *step.output_refs]:
+                alias_text = str(alias).strip()
+                if alias_text and alias_text not in {"tool_result", "tool_name", "assistant_text"}:
+                    artifacts.setdefault(alias_text, latest.output)
+        if runtime_artifacts is not None:
+            artifacts.update(dict(runtime_artifacts))
         return VerificationArtifacts(
             assistant_text=assistant_text,
             tool_results=list(tool_results),
-            runtime_artifacts={
-                "step_id": step.step_id,
-                **({} if runtime_artifacts is None else dict(runtime_artifacts)),
-            },
+            runtime_artifacts=artifacts,
         )
 
     def _preview_step_verification(
@@ -3892,371 +3872,7 @@ class AgentRuntime:
     ):
         self._switch_role(state, "executor", reason=f"execute_step:{step.step_id}")
         try:
-            if step.kind == "respond" and step.title == "Report multi-target projection":
-                assistant_text = self._deterministic_multi_target_projection_answer(state)
-                if assistant_text is not None:
-                    self.history.record_event(
-                        state,
-                        "answer_derived",
-                        {"answer": assistant_text, "source": "deterministic_multi_target_projection"},
-                    )
-                    return SubsystemExecutionResult(
-                        subsystem_name="multi_target_projection",
-                        success=True,
-                        progress=["multi_target_projection_verified"],
-                        budget_reports=[self._empty_budget_report()],
-                        assistant_text=assistant_text,
-                        evaluation=None,
-                    )
-            if step.kind == "respond" and step.title == "Report replace-all edit":
-                assistant_text = self._deterministic_replace_all_answer(state)
-                if assistant_text is not None:
-                    self.history.record_event(
-                        state,
-                        "answer_derived",
-                        {"answer": assistant_text, "source": "deterministic_replace_all_edit"},
-                    )
-                    return SubsystemExecutionResult(
-                        subsystem_name="replace_all_edit",
-                        success=True,
-                        progress=["replace_all_verified"],
-                        budget_reports=[self._empty_budget_report()],
-                        assistant_text=assistant_text,
-                        evaluation=None,
-                    )
-            if step.kind == "respond" and step.title == "Report compatibility repair":
-                assistant_text = self._deterministic_compatibility_matrix_answer(state)
-                if assistant_text is not None:
-                    self.history.record_event(
-                        state,
-                        "answer_derived",
-                        {"answer": assistant_text, "source": "deterministic_compatibility_matrix_repair"},
-                    )
-                    return SubsystemExecutionResult(
-                        subsystem_name="compatibility_matrix_repair",
-                        success=True,
-                        progress=["compatibility_matrix_verified"],
-                        budget_reports=[self._empty_budget_report()],
-                        assistant_text=assistant_text,
-                        evaluation=None,
-                    )
-            if step.kind == "respond" and step.title == "Report release train repair":
-                assistant_text = self._deterministic_release_train_answer(state)
-                if assistant_text is not None:
-                    self.history.record_event(
-                        state,
-                        "answer_derived",
-                        {"answer": assistant_text, "source": "deterministic_release_train_repair"},
-                    )
-                    return SubsystemExecutionResult(
-                        subsystem_name="release_train_repair",
-                        success=True,
-                        progress=["release_train_verified"],
-                        budget_reports=[self._empty_budget_report()],
-                        assistant_text=assistant_text,
-                        evaluation=None,
-                    )
-            if step.kind == "respond" and (
-                self._looks_like_vague_release_clarification_goal(self._goal_text(state))
-                or self._looks_like_vague_release_clarification_goal(self._original_user_goal_text(state))
-            ):
-                assistant_text = (
-                    "For tonight's release, which service is affected, what specific risk must be reduced, and what "
-                    "success criterion should the rollout meet?"
-                )
-                self.history.record_event(
-                    state,
-                    "answer_derived",
-                    {"answer": assistant_text, "source": "deterministic_vague_clarification"},
-                )
-                return SubsystemExecutionResult(
-                    subsystem_name="vague_clarification",
-                    success=True,
-                    progress=["clarifying_question_derived"],
-                    budget_reports=[self._empty_budget_report()],
-                    assistant_text=assistant_text,
-                    evaluation=None,
-                )
-            if step.kind == "respond" and step.title == "Report policy refusal":
-                assistant_text = self._deterministic_policy_refusal_answer(state)
-                if assistant_text is not None:
-                    self.history.record_event(
-                        state,
-                        "subsystem_started",
-                        {"subsystem": "policy_refusal", "step_id": step.step_id, "goal": step.goal},
-                    )
-                    self.history.record_event(
-                        state,
-                        "subsystem_progress",
-                        {"subsystem": "policy_refusal", "step_id": step.step_id, "progress": "unsafe_request_refused"},
-                    )
-                    self.history.record_event(
-                        state,
-                        "subsystem_completed",
-                        {
-                            "subsystem": "policy_refusal",
-                            "step_id": step.step_id,
-                            "success": True,
-                            "result_summary": assistant_text[:120],
-                        },
-                    )
-                    return SubsystemExecutionResult(
-                        subsystem_name="policy_refusal",
-                        success=True,
-                        progress=["unsafe_request_refused"],
-                        budget_reports=[self._empty_budget_report()],
-                        assistant_text=assistant_text,
-                        evaluation=None,
-                    )
-            if step.kind == "respond" and step.title == "Report deployment refinement":
-                assistant_text = self._deterministic_deployment_refinement_answer(state)
-                if assistant_text is not None:
-                    self.history.record_event(
-                        state,
-                        "subsystem_started",
-                        {"subsystem": "deployment_refinement", "step_id": step.step_id, "goal": step.goal},
-                    )
-                    self.history.record_event(
-                        state,
-                        "subsystem_progress",
-                        {"subsystem": "deployment_refinement", "step_id": step.step_id, "progress": "deployment_refinement_verified"},
-                    )
-                    self.history.record_event(
-                        state,
-                        "subsystem_completed",
-                        {
-                            "subsystem": "deployment_refinement",
-                            "step_id": step.step_id,
-                            "success": True,
-                            "result_summary": assistant_text[:120],
-                        },
-                    )
-                    return SubsystemExecutionResult(
-                        subsystem_name="deployment_refinement",
-                        success=True,
-                        progress=["deployment_refinement_verified"],
-                        budget_reports=[self._empty_budget_report()],
-                        assistant_text=assistant_text,
-                        evaluation=None,
-                    )
-            if step.kind == "respond" and step.title == "Report filesystem release workflow":
-                assistant_text = self._deterministic_filesystem_release_answer(state)
-                if assistant_text is not None:
-                    self.history.record_event(
-                        state,
-                        "subsystem_started",
-                        {"subsystem": "filesystem_release", "step_id": step.step_id, "goal": step.goal},
-                    )
-                    self.history.record_event(
-                        state,
-                        "subsystem_progress",
-                        {"subsystem": "filesystem_release", "step_id": step.step_id, "progress": "filesystem_release_verified"},
-                    )
-                    self.history.record_event(
-                        state,
-                        "subsystem_completed",
-                        {
-                            "subsystem": "filesystem_release",
-                            "step_id": step.step_id,
-                            "success": True,
-                            "result_summary": assistant_text[:120],
-                        },
-                    )
-                    return SubsystemExecutionResult(
-                        subsystem_name="filesystem_release",
-                        success=True,
-                        progress=["filesystem_release_verified"],
-                        budget_reports=[self._empty_budget_report()],
-                        assistant_text=assistant_text,
-                        evaluation=None,
-                    )
-            if step.kind == "respond" and step.title == "Report shell release workflow":
-                assistant_text = self._deterministic_shell_release_answer(state)
-                if assistant_text is not None:
-                    self.history.record_event(
-                        state,
-                        "subsystem_started",
-                        {"subsystem": "shell_release", "step_id": step.step_id, "goal": step.goal},
-                    )
-                    self.history.record_event(
-                        state,
-                        "subsystem_progress",
-                        {"subsystem": "shell_release", "step_id": step.step_id, "progress": "shell_release_verified"},
-                    )
-                    self.history.record_event(
-                        state,
-                        "subsystem_completed",
-                        {
-                            "subsystem": "shell_release",
-                            "step_id": step.step_id,
-                            "success": True,
-                            "result_summary": assistant_text[:120],
-                        },
-                    )
-                    return SubsystemExecutionResult(
-                        subsystem_name="shell_release",
-                        success=True,
-                        progress=["shell_release_verified"],
-                        budget_reports=[self._empty_budget_report()],
-                        assistant_text=assistant_text,
-                        evaluation=None,
-                    )
-            if step.kind == "respond" and step.title == "Report capacity workflow":
-                assistant_text = self._deterministic_capacity_plan_answer(state)
-                if assistant_text is not None:
-                    self.history.record_event(
-                        state,
-                        "subsystem_started",
-                        {"subsystem": "capacity_plan", "step_id": step.step_id, "goal": step.goal},
-                    )
-                    self.history.record_event(
-                        state,
-                        "subsystem_progress",
-                        {"subsystem": "capacity_plan", "step_id": step.step_id, "progress": "capacity_plan_verified"},
-                    )
-                    self.history.record_event(
-                        state,
-                        "subsystem_completed",
-                        {
-                            "subsystem": "capacity_plan",
-                            "step_id": step.step_id,
-                            "success": True,
-                            "result_summary": assistant_text[:120],
-                        },
-                    )
-                    return SubsystemExecutionResult(
-                        subsystem_name="capacity_plan",
-                        success=True,
-                        progress=["capacity_plan_verified"],
-                        budget_reports=[self._empty_budget_report()],
-                        assistant_text=assistant_text,
-                        evaluation=None,
-                    )
-            if step.kind == "respond" and step.title == "Report computed report":
-                assistant_text = self._deterministic_computed_report_answer(state)
-                if assistant_text is not None:
-                    self.history.record_event(
-                        state,
-                        "subsystem_started",
-                        {"subsystem": "computed_report", "step_id": step.step_id, "goal": step.goal},
-                    )
-                    self.history.record_event(
-                        state,
-                        "subsystem_progress",
-                        {"subsystem": "computed_report", "step_id": step.step_id, "progress": "report_verified"},
-                    )
-                    self.history.record_event(
-                        state,
-                        "subsystem_completed",
-                        {
-                            "subsystem": "computed_report",
-                            "step_id": step.step_id,
-                            "success": True,
-                            "result_summary": assistant_text[:120],
-                        },
-                    )
-                    return SubsystemExecutionResult(
-                        subsystem_name="computed_report",
-                        success=True,
-                        progress=["report_verified"],
-                        budget_reports=[self._empty_budget_report()],
-                        assistant_text=assistant_text,
-                        evaluation=None,
-                    )
-            if step.kind == "respond" and step.title == "Report manifest projection":
-                assistant_text = self._deterministic_manifest_projection_answer(state)
-                if assistant_text is not None:
-                    self.history.record_event(
-                        state,
-                        "subsystem_started",
-                        {"subsystem": "manifest_projection", "step_id": step.step_id, "goal": step.goal},
-                    )
-                    self.history.record_event(
-                        state,
-                        "subsystem_progress",
-                        {"subsystem": "manifest_projection", "step_id": step.step_id, "progress": "projection_verified"},
-                    )
-                    self.history.record_event(
-                        state,
-                        "subsystem_completed",
-                        {
-                            "subsystem": "manifest_projection",
-                            "step_id": step.step_id,
-                            "success": True,
-                            "result_summary": assistant_text[:120],
-                        },
-                    )
-                    return SubsystemExecutionResult(
-                        subsystem_name="manifest_projection",
-                        success=True,
-                        progress=["projection_verified"],
-                        budget_reports=[self._empty_budget_report()],
-                        assistant_text=assistant_text,
-                        evaluation=None,
-                    )
-            if step.kind == "respond" and step.title == "Report exact file synchronization":
-                assistant_text = self._deterministic_exact_file_sync_answer(state)
-                if assistant_text is not None:
-                    self.history.record_event(
-                        state,
-                        "subsystem_started",
-                        {"subsystem": "exact_file_sync", "step_id": step.step_id, "goal": step.goal},
-                    )
-                    self.history.record_event(
-                        state,
-                        "subsystem_progress",
-                        {"subsystem": "exact_file_sync", "step_id": step.step_id, "progress": "file_equality_confirmed"},
-                    )
-                    self.history.record_event(
-                        state,
-                        "subsystem_completed",
-                        {
-                            "subsystem": "exact_file_sync",
-                            "step_id": step.step_id,
-                            "success": True,
-                            "result_summary": assistant_text[:120],
-                        },
-                    )
-                    return SubsystemExecutionResult(
-                        subsystem_name="exact_file_sync",
-                        success=True,
-                        progress=["file_equality_confirmed"],
-                        budget_reports=[self._empty_budget_report()],
-                        assistant_text=assistant_text,
-                        evaluation=None,
-                    )
-            if step.kind == "respond" and step.title == "Return structured JSON":
-                assistant_text = self._deterministic_structured_reading_answer(state)
-                if assistant_text is not None:
-                    self.history.record_event(
-                        state,
-                        "subsystem_started",
-                        {"subsystem": "structured_reading", "step_id": step.step_id, "goal": step.goal},
-                    )
-                    self.history.record_event(
-                        state,
-                        "subsystem_progress",
-                        {"subsystem": "structured_reading", "step_id": step.step_id, "progress": "structured_json_derived"},
-                    )
-                    self.history.record_event(
-                        state,
-                        "subsystem_completed",
-                        {
-                            "subsystem": "structured_reading",
-                            "step_id": step.step_id,
-                            "success": True,
-                            "result_summary": assistant_text[:120],
-                        },
-                    )
-                    return SubsystemExecutionResult(
-                        subsystem_name="structured_reading",
-                        success=True,
-                        progress=["structured_json_derived"],
-                        budget_reports=[self._empty_budget_report()],
-                        assistant_text=assistant_text,
-                        evaluation=None,
-                    )
-            if step.kind == "respond" or step.kind == "reasoning":
+            if step.kind in {"respond", "reasoning"}:
                 return self._reasoning_subsystem.run(self, state, step)
             if step.kind in {"read", "write"}:
                 return self._file_subsystem.run(self, state, step, action_counts=action_counts)
@@ -4277,8 +3893,6 @@ class AgentRuntime:
         if not force_replan and state.active_plan is not None and state.active_plan.status == "active" and state.active_plan.goal == goal:
             return state.active_plan
         update_existing = state.active_plan is not None and state.active_plan.goal == goal
-        if required_tools is None:
-            required_tools = self._detect_explicit_named_tools(self._goal_text(state))
         return self._planning_subsystem.run(
             self,
             state,
@@ -4286,7 +3900,7 @@ class AgentRuntime:
             replan_reason=replan_reason,
             replan_attempt=replan_attempt,
             update_existing=update_existing,
-            required_tools=required_tools,
+            required_tools=list(required_tools or []),
         )
 
     def _generate_plan(
@@ -4299,69 +3913,15 @@ class AgentRuntime:
         replan_attempt: int = 0,
         required_tools: list[str] | None = None,
     ) -> Plan:
+        del required_tools
         self._switch_role(state, "planner", reason="generate_plan")
-        planning_goal = self._operational_goal_from_task_contract(goal)
-        seeded_plan = self._maybe_seed_shell_recovery_plan(
-            state,
-            goal=goal,
-            planning_goal=planning_goal,
-            update_existing=update_existing,
-            required_tools=required_tools or [],
-        )
-        if seeded_plan is None and os.environ.get("SWAAG_FORCE_SHELL_RECOVERY_PLAN", "").lower() in {"1", "true", "yes", "on"}:
-            available_tools = set(self.tools.tool_names(self.config))
-            normalized_required = [tool for tool in (required_tools or []) if tool]
-            if {"shell_command", "edit_text", "run_tests"}.issubset(available_tools) and not any(
-                tool not in {"shell_command", "edit_text", "run_tests"} for tool in normalized_required
-            ):
-                seeded_plan = create_shell_recovery_plan(planning_goal)
-                if update_existing and state.active_plan is not None:
-                    seeded_plan.plan_id = state.active_plan.plan_id
-                self.history.record_event(
-                    state,
-                    "plan_repaired",
-                    {
-                        "reason": "env_forced_shell_recovery_plan",
-                        "required_tools": normalized_required,
-                        "repair": "shell_recovery_plan",
-                        "error": "forced by SWAAG_FORCE_SHELL_RECOVERY_PLAN",
-                        "error_type": "ForcedPlanFallback",
-                        "original_plan_id": state.active_plan.plan_id if state.active_plan is not None else "",
-                        "update_existing": update_existing,
-                        "contract_name": "env",
-                        "raw_response_preview": "",
-                    },
-                )
-        if seeded_plan is not None:
-            plan = seeded_plan
-            if state.active_strategy is not None:
-                self._reconcile_strategy_for_plan(
-                    state,
-                    plan,
-                    completed_step_kinds=self._completed_step_kinds(state),
-                )
-            event = self.history.record_event(
-                state,
-                "plan_updated" if update_existing else "plan_created",
-                {
-                    "goal": goal,
-                    "plan": plan_as_payload(plan),
-                    **({"reason": "seeded:shell_recovery"} if update_existing else {}),
-                },
-            )
-            self._extract_and_store_memory(state, event)
-            self._refresh_working_memory(state, reason="plan_created" if not update_existing else "plan_replanned")
-            self._refresh_project_state(state, reason="plan_created" if not update_existing else "plan_replanned")
-            self._check_consistency(state)
-            self._switch_role(state, "primary", reason="plan_generated")
-            return state.active_plan or plan
+        planning_goal = goal
         planner_replan_guidance = ""
         if update_existing or replan_reason:
             selection = self._select_subagent_frontend(
                 state,
                 goal=goal,
                 purpose="plan_repair",
-                candidate_types=["planner"],
                 detail_lines=[
                     f"update_existing={update_existing}",
                     f"replan_reason={replan_reason or '(none)'}",
@@ -4374,6 +3934,7 @@ class AgentRuntime:
                     goal=goal,
                     current_plan=state.active_plan,
                     failure_reason=replan_reason or "explicit_replan",
+                    subagent_type=selection.subagent_type,
                 )
                 self.history.record_event(
                     state,
@@ -4381,7 +3942,6 @@ class AgentRuntime:
                     {
                         "subagent_type": replan_report.spec.subagent_type,
                         "purpose": replan_report.spec.purpose,
-                        "allowed_tools": replan_report.spec.allowed_tools,
                         "token_budget": replan_report.spec.token_budget,
                         "target_id": state.active_plan.plan_id if state.active_plan is not None else None,
                     },
@@ -4404,141 +3964,169 @@ class AgentRuntime:
             context_limit=self.config.model.context_limit,
             max_steps=self.config.planner.max_plan_steps,
         )
-        prepared = self._prepare_call(
-            state,
-            kind="plan",
-            build_prompt=lambda prompt_mode, bundle: self.prompts.build_plan_prompt(
-                planning_goal,
-                prompt_mode=prompt_mode,
-                context_components=bundle.components,
-                tools=bundle.tool_prompt_tuples,
-                replan_reason="\n".join(part for part in [replan_reason, planner_replan_guidance] if part.strip()),
-                replan_attempt=replan_attempt,
-                max_replans=self.config.planner.max_replans,
-            ),
-            contract=contract,
-            prompt_modes=["lean", *self._interactive_prompt_modes()],
-            goal=planning_goal,
-            for_planning=True,
-        )
-        plan_source = "model"
-        try:
+        plan: Plan | None = None
+        validation_feedback = ""
+        previous_rejected_plan = ""
+        replan_state_guidance = ""
+        if update_existing or replan_reason:
+            replan_evidence_parts = []
+            failure_evidence = self._recent_tool_failure_evidence(state)
+            if failure_evidence:
+                replan_evidence_parts.append(f"Recent failed tool or verification evidence:\n{failure_evidence}")
+            file_snapshot_evidence = self._latest_file_snapshot_evidence(state)
+            if file_snapshot_evidence:
+                replan_evidence_parts.append(f"Latest observed file snapshots:\n{file_snapshot_evidence}")
+            replan_state_guidance = (
+                "Replan from current observations, history, and environment state. "
+                "Failed steps do not undo prior tool side effects; if current observations already satisfy the requested state, "
+                "plan verification and final response rather than repeating the mutation. "
+                "If current observations or tool errors show that a previous source snippet, range, pattern, or other target "
+                "no longer applies to the current artifact, do not plan another action that depends only on that stale target. "
+                "Read or use the current artifact state, then decide the next repair, verification, blocker, or clarification. "
+                "Verification checks for artifact changes must prove the exact requested final state with enough surrounding "
+                "context to reject partial, corrupted, or merely broad-value matches."
+            )
+            if replan_evidence_parts:
+                replan_state_guidance = f"{replan_state_guidance}\n\n" + "\n\n".join(replan_evidence_parts)
+        configured_plan_attempts = int(self.config.model.max_retries) + 1
+        planner_validation_attempts = int(self.config.planner.max_replans) + 1
+        max_plan_attempts = max(2, configured_plan_attempts, planner_validation_attempts)
+        last_prepared: PreparedCall | None = None
+        last_raw_response = ""
+        last_payload: dict[str, Any] | None = None
+        last_category = "structured_validation_failure"
+        last_error: Exception | None = None
+        plan_validation_errors: list[str] = []
+
+        def compact_plan_error(error: Exception) -> str:
+            text = " ".join(str(error).split())
+            return text if len(text) <= 800 else f"{text[:797]}..."
+
+        def plan_error_summary() -> str:
+            return "; ".join(plan_validation_errors[-4:])
+
+        for plan_attempt in range(max_plan_attempts):
+            effective_replan_reason = "\n".join(
+                part
+                for part in [replan_reason, replan_state_guidance, planner_replan_guidance, validation_feedback]
+                if part.strip()
+            )
+            prepared = self._prepare_call(
+                state,
+                kind="plan",
+                build_prompt=lambda prompt_mode, bundle, reason=effective_replan_reason, attempt=plan_attempt, rejected=previous_rejected_plan: self.prompts.build_plan_prompt(
+                    planning_goal,
+                    prompt_mode=prompt_mode,
+                    context_components=bundle.components,
+                    tools=bundle.tool_prompt_tuples,
+                    replan_reason=reason,
+                    previous_rejected_plan=rejected,
+                    replan_attempt=replan_attempt + attempt,
+                    max_replans=self.config.planner.max_replans,
+                ),
+                contract=contract,
+                prompt_modes=["lean", *self._interactive_prompt_modes()],
+                goal=planning_goal,
+                for_planning=True,
+            )
+            last_prepared = prepared
             completion = self._execute_model_call(state, prepared)
+            last_raw_response = completion.text
             try:
                 payload = self._parse_json(completion.text, contract_name=prepared.contract.name)
             except Exception as exc:
-                plan = self._maybe_recover_plan_from_structured_failure(
+                last_category = "structured_parse_failure"
+                last_error = exc
+                plan = None
+                self.history.record_event(
                     state,
-                    goal=planning_goal,
-                    prepared=prepared,
-                    error=exc,
-                    raw_response=completion.text,
-                    update_existing=update_existing,
-                    required_tools=required_tools or [],
+                    "error",
+                    {"operation": "plan_validation", "error": str(exc), "error_type": exc.__class__.__name__},
                 )
-                if plan is None:
-                    self._log_fatal_system_error(
+                plan_validation_errors.append(f"attempt {plan_attempt + 1} JSON parsing: {compact_plan_error(exc)}")
+                if plan_attempt < max_plan_attempts - 1:
+                    self.history.record_event(
                         state,
-                        category="structured_parse_failure",
-                        prepared=prepared,
-                        error=exc,
-                        raw_response=completion.text,
+                        "model_retry_scheduled",
+                        {"kind": "plan", "prompt_mode": prepared.prompt_mode, "next_attempt": plan_attempt + 2},
                     )
-                    raise FatalSemanticEngineError(str(exc)) from exc
-                plan_source = "shell_recovery"
-            else:
-                try:
-                    plan = plan_from_payload(
-                        payload,
-                        available_tools=self.tools.tool_names(self.config),
-                        plan_id=state.active_plan.plan_id if update_existing and state.active_plan is not None else None,
+                    validation_feedback = (
+                        f"Plan correction evidence from this generation cycle: {plan_error_summary()}. "
+                        f"Latest plan attempt {plan_attempt + 1} failed JSON parsing: {str(exc)}. "
+                        "Return a corrected plan that satisfies the same closed schema and all planning instructions."
                     )
-                except PlanValidationError as exc:
-                    plan = self._maybe_recover_plan_from_structured_failure(
-                        state,
-                        goal=planning_goal,
-                        prepared=prepared,
-                        error=exc,
-                        raw_response=completion.text,
-                        update_existing=update_existing,
-                        required_tools=required_tools or [],
-                    )
-                    if plan is None:
-                        self._log_fatal_system_error(
-                            state,
-                            category="structured_validation_failure",
-                            prepared=prepared,
-                            error=exc,
-                            raw_response=completion.text,
-                            details={"payload": payload},
-                        )
-                        raise FatalSemanticEngineError(str(exc)) from exc
-                    plan_source = "shell_recovery"
-            plan.goal = planning_goal
-            plan = self._enforce_required_tools_in_plan(
-                state,
-                plan,
-                goal=planning_goal,
-                required_tools=required_tools or [],
-                update_existing=update_existing,
-            )
-            if state.active_strategy is not None:
-                try:
-                    self._reconcile_strategy_for_plan(
+                    continue
+                break
+            try:
+                last_payload = payload
+                plan = plan_from_payload(
+                    payload,
+                    available_tools=self.tools.tool_names(self.config),
+                    plan_id=state.active_plan.plan_id if update_existing and state.active_plan is not None else None,
+                )
+                plan.goal = planning_goal
+                if state.active_strategy is not None:
+                    self._validate_strategy_for_plan(
                         state,
                         plan,
                         completed_step_kinds=self._completed_step_kinds(state),
                     )
-                except StrategyValidationError as exc:
-                    recovered = self._maybe_recover_plan_from_structured_failure(
+                if len(plan.steps) > self.config.planner.max_plan_steps:
+                    raise PlanValidationError(f"Planner returned {len(plan.steps)} steps; max is {self.config.planner.max_plan_steps}")
+                self._review_plan(state, plan)
+                break
+            except (PlanValidationError, StrategyValidationError) as exc:
+                last_category = "structured_validation_failure"
+                last_error = exc
+                plan = None
+                self.history.record_event(
+                    state,
+                    "error",
+                    {"operation": "plan_validation", "error": str(exc), "error_type": exc.__class__.__name__},
+                )
+                plan_validation_errors.append(f"attempt {plan_attempt + 1} validation: {compact_plan_error(exc)}")
+                previous_rejected_plan = stable_json_dumps(payload)
+                if plan_attempt < max_plan_attempts - 1:
+                    self.history.record_event(
                         state,
-                        goal=planning_goal,
-                        prepared=prepared,
-                        error=exc,
-                        raw_response=completion.text,
-                        update_existing=update_existing,
-                        required_tools=required_tools or [],
+                        "model_retry_scheduled",
+                        {"kind": "plan", "prompt_mode": prepared.prompt_mode, "next_attempt": plan_attempt + 2},
                     )
-                    if recovered is None:
-                        raise
-                    plan = recovered
-                    plan.goal = planning_goal
-                    self._reconcile_strategy_for_plan(
-                        state,
-                        plan,
-                        completed_step_kinds=self._completed_step_kinds(state),
+                    validation_feedback = (
+                        f"Plan correction evidence from this generation cycle: {plan_error_summary()}. "
+                        f"Latest plan attempt {plan_attempt + 1} failed validation: {str(exc)}. "
+                        "Return a corrected plan under the same schema. Conditions must name declared checks. "
+                        "Every step, including respond steps, must declare non-empty expected_outputs labels. "
+                        "Require objective checks for side-effect tools. For answer/reasoning steps, require a semantic "
+                        "assistant_text check: use check_type='criterion' with actual_source='assistant_text' and non-empty "
+                        "criterion, or check_type='exact_match'/'string_match' with actual_source='assistant_text' and a "
+                        "non-empty expected value; include that semantic check name in required_conditions. "
+                        "string_nonempty and assistant_response_nonempty are only presence checks, not semantic checks. "
+                        "Give file_contains a non-empty target. For read/list/note context steps, use "
+                        "tool_output_nonempty or tool_output_schema_valid unless you are checking concrete file text "
+                        "with a non-empty file_contains target. expected_json is a string field containing JSON text; "
+                        'for a text target like status: ready set expected_json to "\\"status: ready\\"" or leave '
+                        "expected_json empty when pattern is set."
                     )
-                    plan_source = "shell_recovery"
-        except StrategyValidationError as exc:
-            self.history.record_event(
+                    continue
+                plan = None
+                break
+        if plan is None:
+            error = last_error or PlanValidationError("planner did not return a valid plan")
+            self._log_fatal_system_error(
                 state,
-                "error",
-                {"operation": "strategy_validation", "error": str(exc), "error_type": exc.__class__.__name__},
+                category=last_category,
+                prepared=last_prepared,
+                error=error,
+                raw_response=last_raw_response,
+                details={"payload": last_payload} if last_payload is not None else None,
             )
-            raise PlanValidationError(str(exc)) from exc
-        if len(plan.steps) > self.config.planner.max_plan_steps:
-            final_response_overflow = (
-                len(plan.steps) == self.config.planner.max_plan_steps + 1
-                and plan.steps[-1].kind == "respond"
-            )
-            if not final_response_overflow:
-                raise PlanValidationError(f"Planner returned {len(plan.steps)} steps; max is {self.config.planner.max_plan_steps}")
-            self.history.record_event(
-                state,
-                "plan_limit_repaired",
-                {
-                    "reason": "allowed_extra_final_response_step",
-                    "step_count": len(plan.steps),
-                    "max_plan_steps": self.config.planner.max_plan_steps,
-                },
-            )
-        plan = self._apply_exact_reply_requirement_to_plan(plan, goal=goal)
-        self._review_plan(state, plan)
+            raise FatalSemanticEngineError(str(error)) from error
         if update_existing:
             event = self.history.record_event(
                 state,
                 "plan_updated",
-                {"plan": plan_as_payload(plan), "reason": replan_reason or f"replanned:{plan_source}"},
+                {"plan": plan_as_payload(plan), "reason": replan_reason or "replanned:model"},
             )
         else:
             event = self.history.record_event(
@@ -4553,568 +4141,17 @@ class AgentRuntime:
         self._switch_role(state, "primary", reason="plan_generated")
         return state.active_plan or plan
 
-    def _maybe_seed_shell_recovery_plan(
-        self,
-        state: SessionState,
-        *,
-        goal: str,
-        planning_goal: str,
-        update_existing: bool,
-        required_tools: list[str],
-    ) -> Plan | None:
-        projection_spec = self._multi_target_projection_spec(state, goal_text=goal)
-        if projection_spec is not None:
-            source_path, target_paths = projection_spec
-            available_tools = set(self.tools.tool_names(self.config))
-            if not {"read_file", "write_file"}.issubset(available_tools):
-                return None
-            plan = create_multi_target_projection_plan(
-                planning_goal,
-                source_path=source_path,
-                target_paths=target_paths,
-            )
-            if update_existing and state.active_plan is not None:
-                plan.plan_id = state.active_plan.plan_id
-            self.history.record_event(
-                state,
-                "plan_repaired",
-                {
-                    "reason": "multi_target_projection_seed",
-                    "required_tools": [tool for tool in required_tools if tool],
-                    "repair": "multi_target_projection_plan",
-                    "source_path": source_path,
-                    "target_paths": target_paths,
-                    "error": "seeded deterministic source-to-target projection",
-                    "error_type": "WorkspaceMultiTargetProjectionContract",
-                    "original_plan_id": state.active_plan.plan_id if state.active_plan is not None else "",
-                    "update_existing": update_existing,
-                    "contract_name": "multi_target_projection",
-                    "raw_response_preview": "",
-                },
-            )
-            return plan
-        replace_all_spec = self._replace_all_file_edit_spec(state, goal_text=goal)
-        if replace_all_spec is not None:
-            path, pattern, replacement = replace_all_spec
-            if "edit_text" not in set(self.tools.tool_names(self.config)):
-                return None
-            plan = create_replace_all_file_edit_plan(
-                planning_goal,
-                path=path,
-                pattern=pattern,
-                replacement=replacement,
-            )
-            if update_existing and state.active_plan is not None:
-                plan.plan_id = state.active_plan.plan_id
-            self.history.record_event(
-                state,
-                "plan_repaired",
-                {
-                    "reason": "explicit_replace_all_seed",
-                    "required_tools": [tool for tool in required_tools if tool],
-                    "repair": "replace_all_file_edit_plan",
-                    "path": path,
-                    "pattern": pattern,
-                    "replacement": replacement,
-                    "error": "seeded deterministic replace-all edit",
-                    "error_type": "WorkspaceReplaceAllContract",
-                    "original_plan_id": state.active_plan.plan_id if state.active_plan is not None else "",
-                    "update_existing": update_existing,
-                    "contract_name": "replace_all_file_edit",
-                    "raw_response_preview": "",
-                },
-            )
-            return plan
-        compatibility_spec = self._compatibility_matrix_repair_spec(state, goal_text=goal)
-        if compatibility_spec is not None:
-            package_name, source_paths, _target_paths, test_command = compatibility_spec
-            available_tools = set(self.tools.tool_names(self.config))
-            if not {"read_text", "shell_command", "run_tests"}.issubset(available_tools):
-                return None
-            plan = create_compatibility_matrix_repair_plan(
-                planning_goal,
-                source_paths=source_paths,
-                test_command=test_command,
-            )
-            if update_existing and state.active_plan is not None:
-                plan.plan_id = state.active_plan.plan_id
-            self.history.record_event(
-                state,
-                "plan_repaired",
-                {
-                    "reason": "compatibility_matrix_repair_seed",
-                    "required_tools": [tool for tool in required_tools if tool],
-                    "repair": "compatibility_matrix_repair_plan",
-                    "package_name": package_name,
-                    "source_paths": source_paths,
-                    "test_command": test_command,
-                    "error": "seeded deterministic matrix-derived compatibility repair",
-                    "error_type": "WorkspaceCompatibilityMatrixContract",
-                    "original_plan_id": state.active_plan.plan_id if state.active_plan is not None else "",
-                    "update_existing": update_existing,
-                    "contract_name": "compatibility_matrix_repair",
-                    "raw_response_preview": "",
-                },
-            )
-            return plan
-        release_train_spec = self._release_train_repair_spec(state, goal_text=goal)
-        if release_train_spec is not None:
-            package_name, source_paths, _target_paths, test_command = release_train_spec
-            available_tools = set(self.tools.tool_names(self.config))
-            if not {"read_text", "shell_command", "run_tests"}.issubset(available_tools):
-                return None
-            plan = create_release_train_repair_plan(
-                planning_goal,
-                source_paths=source_paths,
-                test_command=test_command,
-            )
-            if update_existing and state.active_plan is not None:
-                plan.plan_id = state.active_plan.plan_id
-            self.history.record_event(
-                state,
-                "plan_repaired",
-                {
-                    "reason": "release_train_repair_seed",
-                    "required_tools": [tool for tool in required_tools if tool],
-                    "repair": "release_train_repair_plan",
-                    "package_name": package_name,
-                    "source_paths": source_paths,
-                    "test_command": test_command,
-                    "error": "seeded deterministic coordinated release-train repair",
-                    "error_type": "WorkspaceReleaseTrainContract",
-                    "original_plan_id": state.active_plan.plan_id if state.active_plan is not None else "",
-                    "update_existing": update_existing,
-                    "contract_name": "release_train_repair",
-                    "raw_response_preview": "",
-                },
-            )
-            return plan
-        policy_spec = self._policy_refusal_workflow_spec(state, goal_text=goal)
-        if policy_spec is not None:
-            policy_path, request_path, protected_path = policy_spec
-            if "read_file" not in set(self.tools.tool_names(self.config)):
-                return None
-            plan = create_policy_refusal_workflow_plan(
-                planning_goal,
-                policy_path=policy_path,
-                request_path=request_path,
-                protected_path=protected_path,
-            )
-            if update_existing and state.active_plan is not None:
-                plan.plan_id = state.active_plan.plan_id
-            self.history.record_event(
-                state,
-                "plan_repaired",
-                {
-                    "reason": "policy_refusal_seed",
-                    "required_tools": [tool for tool in required_tools if tool],
-                    "repair": "policy_refusal_workflow_plan",
-                    "source_paths": [policy_path, request_path, protected_path],
-                    "error": "seeded deterministic policy refusal workflow",
-                    "error_type": "WorkspacePolicyRefusalContract",
-                    "original_plan_id": state.active_plan.plan_id if state.active_plan is not None else "",
-                    "update_existing": update_existing,
-                    "contract_name": "policy_refusal_workflow",
-                    "raw_response_preview": "",
-                },
-            )
-            return plan
-        deployment_spec = self._deployment_refinement_workflow_spec(state, goal_text=goal)
-        if deployment_spec is not None:
-            spec_path, infra_path, rollout_path, test_command = deployment_spec
-            available_tools = set(self.tools.tool_names(self.config))
-            if not {"read_file", "write_file", "run_tests"}.issubset(available_tools):
-                return None
-            plan = create_deployment_refinement_workflow_plan(
-                planning_goal,
-                spec_path=spec_path,
-                infra_path=infra_path,
-                rollout_path=rollout_path,
-                test_command=test_command,
-            )
-            if update_existing and state.active_plan is not None:
-                plan.plan_id = state.active_plan.plan_id
-            self.history.record_event(
-                state,
-                "plan_repaired",
-                {
-                    "reason": "deployment_refinement_seed",
-                    "required_tools": [tool for tool in required_tools if tool],
-                    "repair": "deployment_refinement_workflow_plan",
-                    "spec_path": spec_path,
-                    "target_paths": [infra_path, rollout_path],
-                    "test_command": test_command,
-                    "error": "seeded deterministic deployment refinement workflow",
-                    "error_type": "WorkspaceDeploymentRefinementContract",
-                    "original_plan_id": state.active_plan.plan_id if state.active_plan is not None else "",
-                    "update_existing": update_existing,
-                    "contract_name": "deployment_refinement_workflow",
-                    "raw_response_preview": "",
-                },
-            )
-            return plan
-        filesystem_spec = self._filesystem_release_workflow_spec(state, goal_text=goal)
-        if filesystem_spec is not None:
-            incoming_path, selection_path, target_path, test_command = filesystem_spec
-            available_tools = set(self.tools.tool_names(self.config))
-            if not {"list_files", "read_file", "write_file", "run_tests"}.issubset(available_tools):
-                return None
-            plan = create_filesystem_release_workflow_plan(
-                planning_goal,
-                incoming_path=incoming_path,
-                selection_path=selection_path,
-                target_path=target_path,
-                test_command=test_command,
-            )
-            if update_existing and state.active_plan is not None:
-                plan.plan_id = state.active_plan.plan_id
-            self.history.record_event(
-                state,
-                "plan_repaired",
-                {
-                    "reason": "filesystem_release_seed",
-                    "required_tools": [tool for tool in required_tools if tool],
-                    "repair": "filesystem_release_workflow_plan",
-                    "incoming_path": incoming_path,
-                    "selection_path": selection_path,
-                    "target_path": target_path,
-                    "test_command": test_command,
-                    "error": "seeded deterministic filesystem release workflow",
-                    "error_type": "WorkspaceFilesystemReleaseContract",
-                    "original_plan_id": state.active_plan.plan_id if state.active_plan is not None else "",
-                    "update_existing": update_existing,
-                    "contract_name": "filesystem_release_workflow",
-                    "raw_response_preview": "",
-                },
-            )
-            return plan
-        shell_spec = self._shell_release_workflow_spec(state, goal_text=goal)
-        if shell_spec is not None:
-            script_path, env_path, summary_path, test_command = shell_spec
-            available_tools = set(self.tools.tool_names(self.config))
-            if not {"shell_command", "read_file", "run_tests"}.issubset(available_tools):
-                return None
-            plan = create_shell_release_workflow_plan(
-                planning_goal,
-                script_path=script_path,
-                env_path=env_path,
-                summary_path=summary_path,
-                test_command=test_command,
-            )
-            if update_existing and state.active_plan is not None:
-                plan.plan_id = state.active_plan.plan_id
-            self.history.record_event(
-                state,
-                "plan_repaired",
-                {
-                    "reason": "shell_release_seed",
-                    "required_tools": [tool for tool in required_tools if tool],
-                    "repair": "shell_release_workflow_plan",
-                    "script_path": script_path,
-                    "env_path": env_path,
-                    "summary_path": summary_path,
-                    "test_command": test_command,
-                    "error": "seeded deterministic shell release workflow",
-                    "error_type": "WorkspaceShellReleaseContract",
-                    "original_plan_id": state.active_plan.plan_id if state.active_plan is not None else "",
-                    "update_existing": update_existing,
-                    "contract_name": "shell_release_workflow",
-                    "raw_response_preview": "",
-                },
-            )
-            return plan
-        capacity_spec = self._capacity_plan_workflow_spec(state, goal_text=goal)
-        if capacity_spec is not None:
-            config_path, profile_path, plan_path, summary_path, note_path, test_command = capacity_spec
-            available_tools = set(self.tools.tool_names(self.config))
-            if not {"read_file", "write_file", "run_tests"}.issubset(available_tools):
-                return None
-            plan = create_capacity_plan_workflow_plan(
-                planning_goal,
-                config_path=config_path,
-                profile_path=profile_path,
-                plan_path=plan_path,
-                summary_path=summary_path,
-                note_path=note_path,
-                test_command=test_command,
-            )
-            if update_existing and state.active_plan is not None:
-                plan.plan_id = state.active_plan.plan_id
-            self.history.record_event(
-                state,
-                "plan_repaired",
-                {
-                    "reason": "capacity_plan_seed",
-                    "required_tools": [tool for tool in required_tools if tool],
-                    "repair": "capacity_plan_workflow_plan",
-                    "source_paths": [config_path, profile_path],
-                    "target_paths": [plan_path, summary_path, note_path],
-                    "test_command": test_command,
-                    "error": "seeded deterministic capacity plan workflow",
-                    "error_type": "WorkspaceCapacityPlanContract",
-                    "original_plan_id": state.active_plan.plan_id if state.active_plan is not None else "",
-                    "update_existing": update_existing,
-                    "contract_name": "capacity_plan_workflow",
-                    "raw_response_preview": "",
-                },
-            )
-            return plan
-        computed_spec = self._computed_report_spec(state, goal_text=goal)
-        if computed_spec is not None:
-            source_path, target_path, test_command = computed_spec
-            available_tools = set(self.tools.tool_names(self.config))
-            if not {"read_file", "write_file", "run_tests"}.issubset(available_tools):
-                return None
-            plan = create_computed_report_plan(
-                planning_goal,
-                source_path=source_path,
-                target_path=target_path,
-                test_command=test_command,
-            )
-            if update_existing and state.active_plan is not None:
-                plan.plan_id = state.active_plan.plan_id
-            self.history.record_event(
-                state,
-                "plan_repaired",
-                {
-                    "reason": "computed_report_seed",
-                    "required_tools": [tool for tool in required_tools if tool],
-                    "repair": "computed_report_plan",
-                    "source_path": source_path,
-                    "target_path": target_path,
-                    "test_command": test_command,
-                    "error": "seeded deterministic computed report plan",
-                    "error_type": "WorkspaceComputedReportContract",
-                    "original_plan_id": state.active_plan.plan_id if state.active_plan is not None else "",
-                    "update_existing": update_existing,
-                    "contract_name": "computed_report",
-                    "raw_response_preview": "",
-                },
-            )
-            return plan
-        projection_spec = self._manifest_projection_spec(state, goal_text=goal)
-        if projection_spec is not None:
-            source_path, target_path, test_command = projection_spec
-            available_tools = set(self.tools.tool_names(self.config))
-            if not {"read_file", "write_file", "run_tests"}.issubset(available_tools):
-                return None
-            plan = create_manifest_projection_plan(
-                planning_goal,
-                source_path=source_path,
-                target_path=target_path,
-                test_command=test_command,
-            )
-            if update_existing and state.active_plan is not None:
-                plan.plan_id = state.active_plan.plan_id
-            self.history.record_event(
-                state,
-                "plan_repaired",
-                {
-                    "reason": "manifest_projection_seed",
-                    "required_tools": [tool for tool in required_tools if tool],
-                    "repair": "manifest_projection_plan",
-                    "source_path": source_path,
-                    "target_path": target_path,
-                    "test_command": test_command,
-                    "error": "seeded deterministic manifest projection plan",
-                    "error_type": "WorkspaceManifestProjectionContract",
-                    "original_plan_id": state.active_plan.plan_id if state.active_plan is not None else "",
-                    "update_existing": update_existing,
-                    "contract_name": "manifest_projection",
-                    "raw_response_preview": "",
-                },
-            )
-            return plan
-        sync_spec = self._exact_file_sync_spec(state, goal_text=goal)
-        if sync_spec is not None:
-            source_path, target_path = sync_spec
-            available_tools = set(self.tools.tool_names(self.config))
-            if not {"read_file", "write_file"}.issubset(available_tools):
-                return None
-            plan = create_exact_file_sync_plan(planning_goal, source_path=source_path, target_path=target_path)
-            if update_existing and state.active_plan is not None:
-                plan.plan_id = state.active_plan.plan_id
-            self.history.record_event(
-                state,
-                "plan_repaired",
-                {
-                    "reason": "exact_file_sync_seed",
-                    "required_tools": [tool for tool in required_tools if tool],
-                    "repair": "exact_file_sync_plan",
-                    "source_path": source_path,
-                    "target_path": target_path,
-                    "error": "seeded deterministic exact-file synchronization plan",
-                    "error_type": "WorkspaceFileSyncContract",
-                    "original_plan_id": state.active_plan.plan_id if state.active_plan is not None else "",
-                    "update_existing": update_existing,
-                    "contract_name": "exact_file_sync",
-                    "raw_response_preview": "",
-                },
-            )
-            return plan
-        structured_spec = self._structured_reading_spec(state, goal_text=goal)
-        if structured_spec is not None:
-            paths, keys = structured_spec
-            available_tools = set(self.tools.tool_names(self.config))
-            if "read_text" not in available_tools:
-                return None
-            plan = create_structured_reading_plan(planning_goal, paths=paths, keys=keys)
-            if update_existing and state.active_plan is not None:
-                plan.plan_id = state.active_plan.plan_id
-            self.history.record_event(
-                state,
-                "plan_repaired",
-                {
-                    "reason": "structured_reading_seed",
-                    "required_tools": [tool for tool in required_tools if tool],
-                    "repair": "structured_reading_plan",
-                    "paths": paths,
-                    "keys": keys,
-                    "error": "seeded deterministic structured-reading plan",
-                    "error_type": "WorkspaceReadingContract",
-                    "original_plan_id": state.active_plan.plan_id if state.active_plan is not None else "",
-                    "update_existing": update_existing,
-                    "contract_name": "structured_reading",
-                    "raw_response_preview": "",
-                },
-            )
-            return plan
-        release_state = self._release_flow_repair_state(state)
-        if release_state is not None:
-            package_name, repairs = release_state
-            if repairs:
-                available_tools = set(self.tools.tool_names(self.config))
-                plan = create_release_flow_recovery_plan(
-                    planning_goal,
-                    package_name=package_name,
-                    repair_steps=len(repairs),
-                )
-                plan_tools = {step.expected_tool for step in plan.steps if step.expected_tool}
-                if not plan_tools.issubset(available_tools):
-                    return None
-                if update_existing and state.active_plan is not None:
-                    plan.plan_id = state.active_plan.plan_id
-                self.history.record_event(
-                    state,
-                    "plan_repaired",
-                    {
-                        "reason": "release_flow_recovery_seed",
-                        "required_tools": [tool for tool in required_tools if tool],
-                        "repair": "release_flow_recovery_plan",
-                        "pending_repairs": len(repairs),
-                        "error": "seeded deterministic release-flow repair plan",
-                        "error_type": "WorkspaceRepairContract",
-                        "original_plan_id": state.active_plan.plan_id if state.active_plan is not None else "",
-                        "update_existing": update_existing,
-                        "contract_name": "workspace_release_flow",
-                        "raw_response_preview": "",
-                    },
-                )
-                return plan
-        contract = self._task_contract_for_goal(state, goal)
-        if not isinstance(contract, dict) or contract.get("task_kind") != "local_repo_code_fix":
-            return None
-        strategy = state.active_strategy
-        if strategy is None or strategy.task_profile not in {"coding", "file_edit", "multi_step"}:
-            return None
-        available_tools = set(self.tools.tool_names(self.config))
-        plan = create_shell_recovery_plan(planning_goal)
-        plan_tools = {step.expected_tool for step in plan.steps if step.expected_tool}
-        if not plan_tools.issubset(available_tools):
-            return None
-        normalized_required = [tool for tool in required_tools if tool]
-        if normalized_required and any(tool not in plan_tools for tool in normalized_required):
-            return None
-        if update_existing and state.active_plan is not None:
-            plan.plan_id = state.active_plan.plan_id
-        self.history.record_event(
-            state,
-            "plan_repaired",
-            {
-                "reason": "task_contract_shell_recovery_seed",
-                "required_tools": normalized_required,
-                "repair": "shell_recovery_plan",
-                "error": "seeded benchmark-local code-fix plan",
-                "error_type": "BenchmarkTaskContract",
-                "original_plan_id": state.active_plan.plan_id if state.active_plan is not None else "",
-                "update_existing": update_existing,
-                "contract_name": "task_contract",
-                "raw_response_preview": "",
-            },
-        )
-        return plan
 
-    def _maybe_recover_plan_from_structured_failure(
-        self,
-        state: SessionState,
-        *,
-        goal: str,
-        prepared: PreparedCall,
-        error: Exception,
-        raw_response: str,
-        update_existing: bool,
-        required_tools: list[str],
-    ) -> Plan | None:
-        strategy = state.active_strategy
-        if strategy is None or strategy.task_profile not in {"coding", "file_edit", "multi_step"}:
-            return None
-        available_tools = set(self.tools.tool_names(self.config))
-        recovered = create_shell_recovery_plan(goal)
-        plan_tools = {step.expected_tool for step in recovered.steps if step.expected_tool}
-        if not plan_tools.issubset(available_tools):
-            return None
-        normalized_required = [tool for tool in required_tools if tool]
-        if normalized_required and any(tool not in plan_tools for tool in normalized_required):
-            return None
-        if update_existing and state.active_plan is not None:
-            recovered.plan_id = state.active_plan.plan_id
-        self.history.record_event(
-            state,
-            "plan_repaired",
-            {
-                "reason": "planner_structured_failure_shell_recovery",
-                "required_tools": normalized_required,
-                "repair": "shell_recovery_plan",
-                "error": str(error),
-                "error_type": error.__class__.__name__,
-                "original_plan_id": state.active_plan.plan_id if state.active_plan is not None else "",
-                "update_existing": update_existing,
-                "contract_name": prepared.contract.name,
-                "raw_response_preview": raw_response[:400],
-            },
-        )
-        return recovered
 
-    def _enforce_required_tools_in_plan(
-        self,
-        state: SessionState,
-        plan: Plan,
-        *,
-        goal: str,
-        required_tools: list[str],
-        update_existing: bool,
-    ) -> Plan:
-        normalized = [tool for tool in required_tools if tool]
-        if not normalized:
-            return plan
-        present = {step.expected_tool for step in plan.steps if step.expected_tool}
-        missing = [tool for tool in normalized if tool not in present]
-        if not missing:
-            return plan
-        if len(normalized) == 1:
-            self.history.record_event(
-                state,
-                "plan_repaired",
-                {
-                    "reason": "explicit_required_tool_missing",
-                    "required_tools": normalized,
-                    "repair": "direct_tool_plan",
-                    "original_plan_id": plan.plan_id,
-                    "update_existing": update_existing,
-                },
-            )
-            return create_direct_tool_plan(goal, normalized[0])
-        raise PlanValidationError(f"Plan omitted explicitly required tools: {', '.join(missing)}")
+
+
+
+
+
+
+
+
+
 
     def _refresh_working_memory(self, state: SessionState, *, reason: str) -> None:
         working_memory = build_working_memory(state)
@@ -5270,10 +4307,6 @@ class AgentRuntime:
     def _semantic_signature(self, state: SessionState) -> dict[str, Any]:
         return {
             "memory": [asdict(item) for item in state.semantic_memory],
-            "entities": {key: asdict(value) for key, value in state.semantic_entities.items()},
-            "relationships": [asdict(item) for item in state.semantic_relationships],
-            "facts": [asdict(item) for item in state.semantic_facts],
-            "procedural": [asdict(item) for item in state.procedural_patterns],
         }
 
     def _project_state_signature(self, project_state) -> dict[str, Any]:
@@ -5338,23 +4371,55 @@ class AgentRuntime:
                 for_planning=for_planning,
                 history_events=self.history.read_history(state.session_id),
                 available_tools=self.tools.prompt_tuples(self.config),
+                model_client=self.client,
             )
         except SemanticBackendProtocolError as exc:
-            self._log_fatal_system_error(
-                state=state,
-                category="semantic_retrieval_protocol_violation",
-                prepared=None,
-                error=exc,
-                operation_name="semantic_retrieval",
-                details={
+            self.history.record_event(
+                state,
+                "semantic_retrieval_degraded",
+                {
+                    "operation": "semantic_retrieval",
                     "kind": kind,
                     "goal": goal,
                     "prompt_mode": prompt_mode,
                     "for_planning": for_planning,
                     "retrieval_backend": self.config.retrieval.backend,
+                    "fallback_backend": "unavailable",
+                    "error": str(exc),
                 },
             )
-            raise FatalSemanticEngineError(str(exc)) from exc
+            fallback_config = copy.deepcopy(self.config)
+            fallback_config.retrieval.backend = "unavailable"
+            fallback_config.retrieval.allow_degraded_fallback = True
+            try:
+                bundle = build_context(
+                    fallback_config,
+                    state,
+                    self._get_selection_counter(),
+                    goal=goal,
+                    call_kind=kind,
+                    for_planning=for_planning,
+                    history_events=self.history.read_history(state.session_id),
+                    available_tools=self.tools.prompt_tuples(self.config),
+                    model_client=self.client,
+                )
+            except SemanticBackendProtocolError as fallback_exc:
+                self._log_fatal_system_error(
+                    state=state,
+                    category="semantic_retrieval_protocol_violation",
+                    prepared=None,
+                    error=fallback_exc,
+                    operation_name="semantic_retrieval",
+                    details={
+                        "kind": kind,
+                        "goal": goal,
+                        "prompt_mode": prompt_mode,
+                        "for_planning": for_planning,
+                        "retrieval_backend": self.config.retrieval.backend,
+                        "fallback_backend": "unavailable",
+                    },
+                )
+                raise FatalSemanticEngineError(str(fallback_exc)) from fallback_exc
         contextual_signal_count = sum(
             1
             for count in (
@@ -5365,12 +4430,6 @@ class AgentRuntime:
             )
             if count
         )
-        current_step = None
-        if state.active_plan is not None and state.active_plan.current_step_id:
-            current_step = next(
-                (item for item in state.active_plan.steps if item.step_id == state.active_plan.current_step_id),
-                None,
-            )
         retrieval_focus_text = ""
         if kind == "subagent_selection":
             self.history.record_event(
@@ -5378,31 +4437,11 @@ class AgentRuntime:
                 "subagent_selection_resolved",
                 {
                     "purpose": "context_retrieval_focus",
-                    "candidate_types": ["retriever"],
+                    "candidate_types": self._enabled_subagent_names(),
                     "selection": {
                         "spawn": False,
                         "subagent_type": "none",
                         "reason": "selection_prompt_recursion_guard",
-                        "focus": "",
-                    },
-                },
-            )
-        elif (
-            state.active_plan is not None
-            and state.active_plan.fallback_strategy.startswith("If a recovery step fails")
-            and current_step is not None
-            and current_step.expected_tool in {"shell_command", "edit_text", "run_tests"}
-        ):
-            self.history.record_event(
-                state,
-                "subagent_selection_resolved",
-                {
-                    "purpose": "context_retrieval_focus",
-                    "candidate_types": ["retriever"],
-                    "selection": {
-                        "spawn": False,
-                        "subagent_type": "none",
-                        "reason": "shell_recovery_context_direct",
                         "focus": "",
                     },
                 },
@@ -5413,7 +4452,7 @@ class AgentRuntime:
                 "subagent_selection_resolved",
                 {
                     "purpose": "context_retrieval_focus",
-                    "candidate_types": ["retriever"],
+                    "candidate_types": self._enabled_subagent_names(),
                     "selection": {
                         "spawn": False,
                         "subagent_type": "none",
@@ -5427,7 +4466,6 @@ class AgentRuntime:
                 state,
                 goal=goal,
                 purpose="context_retrieval_focus",
-                candidate_types=["retriever"],
                 detail_lines=[
                     f"call_kind={kind}",
                     f"history_messages={len(bundle.history_messages)}",
@@ -5437,14 +4475,18 @@ class AgentRuntime:
                 ],
             )
             if selection.spawn:
-                retriever_report = self._subagents.retrieve_context(state, goal=goal, bundle=bundle)
+                retriever_report = self._subagents.retrieve_context(
+                    state,
+                    goal=goal,
+                    bundle=bundle,
+                    subagent_type=selection.subagent_type,
+                )
                 self.history.record_event(
                     state,
                     "subagent_spawned",
                     {
                         "subagent_type": retriever_report.spec.subagent_type,
                         "purpose": retriever_report.spec.purpose,
-                        "allowed_tools": retriever_report.spec.allowed_tools,
                         "token_budget": retriever_report.spec.token_budget,
                         "target_id": state.active_plan.current_step_id if state.active_plan is not None else None,
                     },
@@ -5460,6 +4502,25 @@ class AgentRuntime:
                         "artifacts": [asdict(item) for item in retriever_report.artifacts],
                     },
                 )
+                if retriever_report.evidence.get("retrieval_degraded"):
+                    self.history.record_event(
+                        state,
+                        "semantic_retrieval_degraded",
+                        {
+                            "operation": "subagent_retrieval_focus",
+                            "kind": kind,
+                            "goal": goal,
+                            "prompt_mode": prompt_mode,
+                            "for_planning": for_planning,
+                            "retrieval_backend": retriever_report.evidence.get("retrieval_mode", self.config.retrieval.backend),
+                            "fallback_backend": "complete_context_bundle",
+                            "error": retriever_report.evidence.get("error", ""),
+                            "scope": "subagent_retrieval_focus",
+                            "reason": retriever_report.reason,
+                            "error_type": retriever_report.evidence.get("error_type", ""),
+                            "fallback": "complete_context_bundle",
+                        },
+                    )
                 retrieval_focus_text = ""
                 if retriever_report.artifacts:
                     retrieval_focus_text = str(retriever_report.artifacts[0].content.get("focus_summary", "")).strip()
@@ -5526,23 +4587,12 @@ class AgentRuntime:
         output = metadata.get("output") if isinstance(metadata, dict) else None
         if not isinstance(output, dict):
             return message
-        if message.name in {"read_text", "read_file"}:
-            path = str(output.get("source_ref") or output.get("path") or "")
-            text = str(output.get("text") or output.get("content") or "")
-            summary = f"{message.name} result for {Path(path).name or path}:\n{text}"
-        elif message.name in {"edit_text", "write_file"}:
-            path = str(output.get("path") or output.get("target_path") or "")
-            changed = output.get("changed")
-            summary = f"{message.name} result for {Path(path).name or path}: changed={changed}"
-        elif message.name == "run_tests":
-            exit_code = output.get("exit_code")
-            stdout = str(output.get("stdout") or "")[:240]
-            stderr = str(output.get("stderr") or "")[:240]
-            summary = f"run_tests exit_code={exit_code}\nstdout:\n{stdout}\nstderr:\n{stderr}"
-        elif message.name == "calculator":
-            summary = f"calculator result: {output.get('result')}"
-        else:
-            summary = message.content
+        summary = stable_json_dumps(
+            {
+                "tool_name": message.name,
+                "output": output,
+            }
+        )
         return Message(
             role=message.role,
             content=summary,
@@ -5585,10 +4635,6 @@ class AgentRuntime:
         return next_executable_step(plan)
 
     def _decide(self, state: SessionState) -> tuple[ToolDecision, BudgetReport]:
-        if self._should_use_expected_tool_input_call(state):
-            decision, report = self._decide_expected_tool_input(state)
-            if decision is not None:
-                return decision, report
         contract = tool_decision_contract(self.tools.tool_names(self.config))
         prepared = self._prepare_call(
             state,
@@ -5608,7 +4654,14 @@ class AgentRuntime:
             validator=self._coerce_decision,
             validation_error_types=(RuntimeError,),
         )
-        decision = self._normalize_decision_for_active_step(state, decision)
+        if decision.action == "call_tool":
+            tool_input = self._decide_tool_input(state, decision.tool_name)
+            decision = ToolDecision(
+                action=decision.action,
+                response=decision.response,
+                tool_name=decision.tool_name,
+                tool_input=tool_input,
+            )
         self.history.record_event(
             state,
             "decision_parsed",
@@ -5616,679 +4669,41 @@ class AgentRuntime:
         )
         return decision, prepared.report
 
-    def _normalize_decision_for_active_step(self, state: SessionState, decision: ToolDecision) -> ToolDecision:
-        step = self._current_or_next_plan_step(state)
-        if step is None or not step.expected_tool:
-            return decision
-        if decision.action != "call_tool":
-            if step.expected_tool in {"read_text", "read_file"}:
-                normalized_input = self._normalize_expected_tool_input(state, step, {})
-                if isinstance(normalized_input.get("path"), str) and normalized_input["path"].strip():
-                    return ToolDecision(
-                        action="call_tool",
-                        response="",
-                        tool_name=step.expected_tool,
-                        tool_input=normalized_input,
-                    )
-            return decision
-        enforceable_tools = {"list_files", "read_text", "read_file", "edit_text", "write_file", "shell_command", "run_tests"}
-        if step.expected_tool not in enforceable_tools:
-            return decision
-        target_tool_name = step.expected_tool
-        normalized_input = self._normalize_expected_tool_input(state, step, decision.tool_input)
-        if decision.tool_name == target_tool_name and normalized_input == decision.tool_input:
-            return decision
-        return ToolDecision(
-            action=decision.action,
-            response=decision.response,
-            tool_name=target_tool_name,
-            tool_input=normalized_input,
-        )
+    def _decide_tool_input(self, state: SessionState, tool_name: str) -> dict[str, Any]:
+        tool_input, _report = self._decide_tool_input_with_report(state, tool_name)
+        return tool_input
 
-    def _should_use_expected_tool_input_call(self, state: SessionState) -> bool:
-        # Structural choice: when the active step already names a known
-        # tool with a stable input schema, we can ask the model for a typed
-        # tool_input payload via the dedicated contract instead of going
-        # through the general decision contract. This is a structural routing
-        # decision, not a profile- or vocabulary-based bypass.
-        step = self._current_or_next_plan_step(state)
-        if step is None or step.expected_tool not in {"list_files", "read_text", "read_file", "edit_text", "write_file", "shell_command", "run_tests"}:
-            return False
-        if step.title in {
-            "Read projection source",
-            "Write projected target 1",
-            "Write projected target 2",
-            "Replace all text occurrences",
-            "Inspect compatibility matrix sources",
-            "Apply coordinated compatibility repair",
-            "Verify compatibility repair",
-            "Inspect release train sources",
-            "Apply coordinated release train repair",
-            "Verify release train repair",
-            "Read refusal policy",
-            "Read unsafe request",
-            "Read protected evidence",
-            "Read deployment refinement spec",
-            "Write deployment infra plan",
-            "Write deployment rollout plan",
-            "Verify deployment refinement",
-            "List incoming manifests",
-            "Read manifest selection",
-            "Read selected manifest",
-            "Write filesystem release target",
-            "Reread filesystem release target",
-            "Verify filesystem release workflow",
-            "Run release capture script",
-            "Reread shell release summary",
-            "Verify shell release workflow",
-            "Read capacity deployment config",
-            "Read capacity load profile",
-            "Write capacity plan JSON",
-            "Write capacity ops summary",
-            "Write capacity deployment note",
-            "Verify capacity workflow",
-            "Read computed report source",
-            "Write computed report target",
-            "Verify computed report",
-            "Read manifest projection source",
-            "Write manifest projection target",
-            "Verify manifest projection",
-            "Read synchronization source",
-            "Write synchronization target",
-            "Reread synchronization target",
-            "Read structured evidence",
-            "Verify complete release flow",
-        } or step.title.startswith("Apply release flow repair"):
-            return True
-        if getattr(self.client, "is_deterministic_test_client", False):
-            contract_queues = getattr(self.client, "_contract_responses", {})
-            return bool(contract_queues.get(f"tool_input:{step.expected_tool}"))
-        return True
-
-    def _decide_expected_tool_input(self, state: SessionState) -> tuple[ToolDecision | None, BudgetReport]:
-        step = self._current_or_next_plan_step(state)
-        if step is None or not step.expected_tool:
-            return None, self._empty_budget_report()
-        tool = self.tools.get(step.expected_tool)
-        report = self._empty_budget_report()
-        if step.title in {"Read projection source", "Write projected target 1", "Write projected target 2"}:
-            projection_spec = self._multi_target_projection_spec(state)
-            if projection_spec is not None:
-                source_path, target_paths = projection_spec
-                outputs = self._multi_target_projection_outputs(state)
-                if step.title == "Read projection source" and step.expected_tool == "read_file":
-                    payload = {"path": source_path}
-                elif step.title.startswith("Write projected target ") and step.expected_tool == "write_file":
-                    try:
-                        index = int(step.title.rsplit(" ", 1)[-1]) - 1
-                        target_path = target_paths[index]
-                    except (ValueError, IndexError):
-                        payload = None
-                    else:
-                        payload = {"path": target_path, "content": outputs[target_path], "create": False}
-                else:
-                    payload = None
-                if payload is not None:
-                    validated_input = tool.validate(payload)
-                    decision = ToolDecision(
-                        action="call_tool", response="", tool_name=step.expected_tool, tool_input=validated_input,
-                    )
-                    self.history.record_event(
-                        state,
-                        "decision_parsed",
-                        {
-                            "decision": asdict(decision),
-                            "prompt_mode": "deterministic",
-                            "source": "deterministic_multi_target_projection_input",
-                        },
-                    )
-                    return decision, report
-        if step.title == "Replace all text occurrences" and step.expected_tool == "edit_text":
-            replace_all_spec = self._replace_all_file_edit_spec(state)
-            if replace_all_spec is not None:
-                path, pattern, replacement = replace_all_spec
-                validated_input = tool.validate(
-                    {
-                        "path": path,
-                        "operation": "replace_pattern_all",
-                        "pattern": pattern,
-                        "replacement": replacement,
-                    }
-                )
-                decision = ToolDecision(
-                    action="call_tool", response="", tool_name="edit_text", tool_input=validated_input,
-                )
-                self.history.record_event(
-                    state,
-                    "decision_parsed",
-                    {
-                        "decision": asdict(decision),
-                        "prompt_mode": "deterministic",
-                        "source": "deterministic_replace_all_input",
-                    },
-                )
-                return decision, report
-        compatibility_titles = {
-            "Inspect compatibility matrix sources",
-            "Apply coordinated compatibility repair",
-            "Verify compatibility repair",
-        }
-        if step.title in compatibility_titles:
-            compatibility_spec = self._compatibility_matrix_repair_spec(state)
-            if compatibility_spec is not None:
-                _package_name, source_paths, _target_paths, test_command = compatibility_spec
-                outputs = self._compatibility_matrix_repair_outputs(state)
-                if step.title == "Inspect compatibility matrix sources" and step.expected_tool == "read_text":
-                    payload = {"paths": source_paths}
-                elif step.title == "Apply coordinated compatibility repair" and step.expected_tool == "shell_command":
-                    script = (
-                        "from pathlib import Path\n"
-                        f"files = {outputs['files']!r}\n"
-                        "for path, content in files.items():\n"
-                        "    Path(path).write_text(content, encoding='utf-8')\n"
-                    )
-                    payload = {"command": f"python3 -c {shlex.quote(script)}", "background": False}
-                elif step.title == "Verify compatibility repair" and step.expected_tool == "run_tests":
-                    payload = {"command": test_command, "background": False}
-                else:
-                    payload = None
-                if payload is not None:
-                    validated_input = tool.validate(payload)
-                    decision = ToolDecision(
-                        action="call_tool", response="", tool_name=step.expected_tool, tool_input=validated_input,
-                    )
-                    self.history.record_event(
-                        state,
-                        "decision_parsed",
-                        {
-                            "decision": asdict(decision),
-                            "prompt_mode": "deterministic",
-                            "source": "deterministic_compatibility_matrix_input",
-                        },
-                    )
-                    return decision, report
-        release_train_titles = {
-            "Inspect release train sources",
-            "Apply coordinated release train repair",
-            "Verify release train repair",
-        }
-        if step.title in release_train_titles:
-            release_train_spec = self._release_train_repair_spec(state)
-            if release_train_spec is not None:
-                _package_name, source_paths, _target_paths, test_command = release_train_spec
-                outputs = self._release_train_repair_outputs(state)
-                if step.title == "Inspect release train sources" and step.expected_tool == "read_text":
-                    payload = {"paths": source_paths}
-                elif step.title == "Apply coordinated release train repair" and step.expected_tool == "shell_command":
-                    script = (
-                        "from pathlib import Path\n"
-                        f"files = {outputs['files']!r}\n"
-                        "for path, content in files.items():\n"
-                        "    Path(path).write_text(content, encoding='utf-8')\n"
-                    )
-                    payload = {"command": f"python3 -c {shlex.quote(script)}", "background": False}
-                elif step.title == "Verify release train repair" and step.expected_tool == "run_tests":
-                    payload = {"command": test_command, "background": False}
-                else:
-                    payload = None
-                if payload is not None:
-                    validated_input = tool.validate(payload)
-                    decision = ToolDecision(
-                        action="call_tool", response="", tool_name=step.expected_tool, tool_input=validated_input,
-                    )
-                    self.history.record_event(
-                        state,
-                        "decision_parsed",
-                        {
-                            "decision": asdict(decision),
-                            "prompt_mode": "deterministic",
-                            "source": "deterministic_release_train_input",
-                        },
-                    )
-                    return decision, report
-        policy_titles = {"Read refusal policy", "Read unsafe request", "Read protected evidence"}
-        if step.title in policy_titles:
-            policy_spec = self._policy_refusal_workflow_spec(state)
-            if policy_spec is not None:
-                policy_path, request_path, protected_path = policy_spec
-                path = {
-                    "Read refusal policy": policy_path,
-                    "Read unsafe request": request_path,
-                    "Read protected evidence": protected_path,
-                }[step.title]
-                payload = {"path": path}
-                validated_input = tool.validate(payload)
-                decision = ToolDecision(
-                    action="call_tool",
-                    response="",
-                    tool_name=step.expected_tool,
-                    tool_input=validated_input,
-                )
-                self.history.record_event(
-                    state,
-                    "decision_parsed",
-                    {
-                        "decision": asdict(decision),
-                        "prompt_mode": "deterministic",
-                        "source": "deterministic_policy_refusal_input",
-                    },
-                )
-                return decision, report
-        deployment_titles = {
-            "Read deployment refinement spec",
-            "Write deployment infra plan",
-            "Write deployment rollout plan",
-            "Verify deployment refinement",
-        }
-        if step.title in deployment_titles:
-            deployment_spec = self._deployment_refinement_workflow_spec(state)
-            if deployment_spec is not None:
-                spec_path, infra_path, rollout_path, test_command = deployment_spec
-                outputs = self._deployment_refinement_outputs(state, spec_path=spec_path)
-                if step.title == "Read deployment refinement spec" and step.expected_tool == "read_file":
-                    payload = {"path": spec_path}
-                elif step.title == "Write deployment infra plan" and step.expected_tool == "write_file":
-                    payload = {"path": infra_path, "content": outputs["infra"], "create": False}
-                elif step.title == "Write deployment rollout plan" and step.expected_tool == "write_file":
-                    payload = {"path": rollout_path, "content": outputs["rollout"], "create": False}
-                elif step.title == "Verify deployment refinement" and step.expected_tool == "run_tests":
-                    payload = {"command": test_command, "background": False}
-                else:
-                    payload = None
-                if payload is not None:
-                    validated_input = tool.validate(payload)
-                    decision = ToolDecision(
-                        action="call_tool",
-                        response="",
-                        tool_name=step.expected_tool,
-                        tool_input=validated_input,
-                    )
-                    self.history.record_event(
-                        state,
-                        "decision_parsed",
-                        {
-                            "decision": asdict(decision),
-                            "prompt_mode": "deterministic",
-                            "source": "deterministic_deployment_refinement_input",
-                        },
-                    )
-                    return decision, report
-        filesystem_titles = {
-            "List incoming manifests",
-            "Read manifest selection",
-            "Read selected manifest",
-            "Write filesystem release target",
-            "Reread filesystem release target",
-            "Verify filesystem release workflow",
-        }
-        if step.title in filesystem_titles:
-            filesystem_spec = self._filesystem_release_workflow_spec(state)
-            if filesystem_spec is not None:
-                incoming_path, selection_path, target_path, test_command = filesystem_spec
-                chosen_path, content = self._filesystem_release_selected_manifest(
-                    state,
-                    incoming_path=incoming_path,
-                    selection_path=selection_path,
-                )
-                if step.title == "List incoming manifests" and step.expected_tool == "list_files":
-                    payload = {"path": incoming_path}
-                elif step.title == "Read manifest selection" and step.expected_tool == "read_file":
-                    payload = {"path": selection_path}
-                elif step.title == "Read selected manifest" and step.expected_tool == "read_file":
-                    payload = {"path": chosen_path}
-                elif step.title == "Write filesystem release target" and step.expected_tool == "write_file":
-                    payload = {"path": target_path, "content": content, "create": False}
-                elif step.title == "Reread filesystem release target" and step.expected_tool == "read_file":
-                    payload = {"path": target_path}
-                elif step.title == "Verify filesystem release workflow" and step.expected_tool == "run_tests":
-                    payload = {"command": test_command, "background": False}
-                else:
-                    payload = None
-                if payload is not None:
-                    validated_input = tool.validate(payload)
-                    decision = ToolDecision(
-                        action="call_tool",
-                        response="",
-                        tool_name=step.expected_tool,
-                        tool_input=validated_input,
-                    )
-                    self.history.record_event(
-                        state,
-                        "decision_parsed",
-                        {
-                            "decision": asdict(decision),
-                            "prompt_mode": "deterministic",
-                            "source": "deterministic_filesystem_release_input",
-                        },
-                    )
-                    return decision, report
-        shell_titles = {
-            "Run release capture script",
-            "Reread shell release summary",
-            "Verify shell release workflow",
-        }
-        if step.title in shell_titles:
-            shell_spec = self._shell_release_workflow_spec(state)
-            if shell_spec is not None:
-                script_path, _env_path, summary_path, test_command = shell_spec
-                if step.title == "Run release capture script" and step.expected_tool == "shell_command":
-                    payload = {"command": f"bash {shlex.quote(script_path)}", "background": False}
-                elif step.title == "Reread shell release summary" and step.expected_tool == "read_file":
-                    payload = {"path": summary_path}
-                elif step.title == "Verify shell release workflow" and step.expected_tool == "run_tests":
-                    payload = {"command": test_command, "background": False}
-                else:
-                    payload = None
-                if payload is not None:
-                    validated_input = tool.validate(payload)
-                    decision = ToolDecision(
-                        action="call_tool",
-                        response="",
-                        tool_name=step.expected_tool,
-                        tool_input=validated_input,
-                    )
-                    self.history.record_event(
-                        state,
-                        "decision_parsed",
-                        {
-                            "decision": asdict(decision),
-                            "prompt_mode": "deterministic",
-                            "source": "deterministic_shell_release_input",
-                        },
-                    )
-                    return decision, report
-        capacity_titles = {
-            "Read capacity deployment config",
-            "Read capacity load profile",
-            "Write capacity plan JSON",
-            "Write capacity ops summary",
-            "Write capacity deployment note",
-            "Verify capacity workflow",
-        }
-        if step.title in capacity_titles:
-            capacity_spec = self._capacity_plan_workflow_spec(state)
-            if capacity_spec is not None:
-                config_path, profile_path, plan_path, summary_path, note_path, test_command = capacity_spec
-                outputs = self._capacity_plan_workflow_outputs(
-                    state,
-                    config_path=config_path,
-                    profile_path=profile_path,
-                )
-                if step.title == "Read capacity deployment config" and step.expected_tool == "read_file":
-                    payload = {"path": config_path}
-                elif step.title == "Read capacity load profile" and step.expected_tool == "read_file":
-                    payload = {"path": profile_path}
-                elif step.title == "Write capacity plan JSON" and step.expected_tool == "write_file":
-                    payload = {"path": plan_path, "content": outputs["plan"], "create": False}
-                elif step.title == "Write capacity ops summary" and step.expected_tool == "write_file":
-                    payload = {"path": summary_path, "content": outputs["summary"], "create": False}
-                elif step.title == "Write capacity deployment note" and step.expected_tool == "write_file":
-                    payload = {"path": note_path, "content": outputs["note"], "create": False}
-                elif step.title == "Verify capacity workflow" and step.expected_tool == "run_tests":
-                    payload = {"command": test_command, "background": False}
-                else:
-                    payload = None
-                if payload is not None:
-                    validated_input = tool.validate(payload)
-                    decision = ToolDecision(
-                        action="call_tool",
-                        response="",
-                        tool_name=step.expected_tool,
-                        tool_input=validated_input,
-                    )
-                    self.history.record_event(
-                        state,
-                        "decision_parsed",
-                        {
-                            "decision": asdict(decision),
-                            "prompt_mode": "deterministic",
-                            "source": "deterministic_capacity_plan_input",
-                        },
-                    )
-                    return decision, report
-        if step.title in {"Read computed report source", "Write computed report target", "Verify computed report"}:
-            computed_spec = self._computed_report_spec(state)
-            if computed_spec is not None:
-                source_path, target_path, test_command = computed_spec
-                if step.title == "Read computed report source" and step.expected_tool == "read_file":
-                    payload = {"path": source_path}
-                elif step.title == "Write computed report target" and step.expected_tool == "write_file":
-                    payload = {
-                        "path": target_path,
-                        "content": self._computed_report_content(state, source_path=source_path),
-                        "create": False,
-                    }
-                elif step.title == "Verify computed report" and step.expected_tool == "run_tests":
-                    payload = {"command": test_command, "background": False}
-                else:
-                    payload = None
-                if payload is not None:
-                    validated_input = tool.validate(payload)
-                    decision = ToolDecision(
-                        action="call_tool",
-                        response="",
-                        tool_name=step.expected_tool,
-                        tool_input=validated_input,
-                    )
-                    self.history.record_event(
-                        state,
-                        "decision_parsed",
-                        {
-                            "decision": asdict(decision),
-                            "prompt_mode": "deterministic",
-                            "source": "deterministic_computed_report_input",
-                        },
-                    )
-                    return decision, report
-        if step.title in {"Read manifest projection source", "Write manifest projection target", "Verify manifest projection"}:
-            projection_spec = self._manifest_projection_spec(state)
-            if projection_spec is not None:
-                source_path, target_path, test_command = projection_spec
-                if step.title == "Read manifest projection source" and step.expected_tool == "read_file":
-                    payload = {"path": source_path}
-                elif step.title == "Write manifest projection target" and step.expected_tool == "write_file":
-                    payload = {
-                        "path": target_path,
-                        "content": self._manifest_projection_content(state, source_path=source_path),
-                        "create": False,
-                    }
-                elif step.title == "Verify manifest projection" and step.expected_tool == "run_tests":
-                    payload = {"command": test_command, "background": False}
-                else:
-                    payload = None
-                if payload is not None:
-                    validated_input = tool.validate(payload)
-                    decision = ToolDecision(
-                        action="call_tool",
-                        response="",
-                        tool_name=step.expected_tool,
-                        tool_input=validated_input,
-                    )
-                    self.history.record_event(
-                        state,
-                        "decision_parsed",
-                        {
-                            "decision": asdict(decision),
-                            "prompt_mode": "deterministic",
-                            "source": "deterministic_manifest_projection_input",
-                        },
-                    )
-                    return decision, report
-        if step.title in {"Read synchronization source", "Write synchronization target", "Reread synchronization target"}:
-            sync_spec = self._exact_file_sync_spec(state)
-            if sync_spec is not None:
-                source_path, target_path = sync_spec
-                if step.title == "Read synchronization source" and step.expected_tool == "read_file":
-                    payload = {"path": source_path}
-                elif step.title == "Write synchronization target" and step.expected_tool == "write_file":
-                    workspace = Path(self._environment_cwd(state))
-                    source = workspace / source_path
-                    payload = {"path": target_path, "content": source.read_text(encoding="utf-8"), "create": False}
-                elif step.title == "Reread synchronization target" and step.expected_tool == "read_file":
-                    payload = {"path": target_path}
-                else:
-                    payload = None
-                if payload is not None:
-                    validated_input = tool.validate(payload)
-                    decision = ToolDecision(
-                        action="call_tool",
-                        response="",
-                        tool_name=step.expected_tool,
-                        tool_input=validated_input,
-                    )
-                    self.history.record_event(
-                        state,
-                        "decision_parsed",
-                        {
-                            "decision": asdict(decision),
-                            "prompt_mode": "deterministic",
-                            "source": "deterministic_exact_file_sync_input",
-                        },
-                    )
-                    return decision, report
-        if step.title == "Read structured evidence" and step.expected_tool == "read_text":
-            structured_spec = self._structured_reading_spec(state)
-            if structured_spec is not None:
-                paths, _keys = structured_spec
-                validated_input = tool.validate({"paths": paths})
-                decision = ToolDecision(
-                    action="call_tool",
-                    response="",
-                    tool_name=step.expected_tool,
-                    tool_input=validated_input,
-                )
-                self.history.record_event(
-                    state,
-                    "decision_parsed",
-                    {
-                        "decision": asdict(decision),
-                        "prompt_mode": "deterministic",
-                        "source": "deterministic_structured_reading_input",
-                    },
-                )
-                return decision, report
-        if step.title.startswith("Apply release flow repair") and step.expected_tool == "edit_text":
-            release_state = self._release_flow_repair_state(state)
-            if release_state is not None:
-                _package_name, repairs = release_state
-                if repairs:
-                    target, _source, pattern, replacement = repairs[0]
-                    validated_input = tool.validate(
-                        {
-                            "path": str(target),
-                            "operation": "replace_pattern_once",
-                            "pattern": pattern,
-                            "replacement": replacement,
-                        }
-                    )
-                    decision = ToolDecision(
-                        action="call_tool",
-                        response="",
-                        tool_name=step.expected_tool,
-                        tool_input=validated_input,
-                    )
-                    self.history.record_event(
-                        state,
-                        "decision_parsed",
-                        {
-                            "decision": asdict(decision),
-                            "prompt_mode": "deterministic",
-                            "source": "deterministic_release_flow_input",
-                        },
-                    )
-                    return decision, report
-        if step.title == "Verify complete release flow" and step.expected_tool == "run_tests":
-            release_state = self._release_flow_repair_state(state)
-            if release_state is not None:
-                package_name, _repairs = release_state
-                validated_input = tool.validate(
-                    {
-                        "command": [
-                            "python3",
-                            "-m",
-                            "unittest",
-                            "-q",
-                            f"test_{package_name}_unit.py",
-                            f"test_{package_name}_compat.py",
-                            f"test_{package_name}_artifacts.py",
-                        ],
-                        "background": False,
-                    }
-                )
-                decision = ToolDecision(
-                    action="call_tool",
-                    response="",
-                    tool_name=step.expected_tool,
-                    tool_input=validated_input,
-                )
-                self.history.record_event(
-                    state,
-                    "decision_parsed",
-                    {
-                        "decision": asdict(decision),
-                        "prompt_mode": "deterministic",
-                        "source": "deterministic_release_flow_input",
-                    },
-                )
-                return decision, report
-        errors: list[Exception] = []
-        repair_instruction = (
-            "Previous edit attempt was invalid or incomplete.\n"
-            "Retry with one short nearby anchor line from the source preview.\n"
-            "Do not replace a whole large block when a one-line anchor can insert the fix.\n"
-            "If the fix is adding one missing mapping or handler, use one existing nearby entry line as `pattern` and append the new line in `replacement`.\n"
-            "Keep `pattern` short and exact, and keep the JSON compact.\n"
-        )
-        attempt_instructions = [None]
-        if step.expected_tool == "edit_text" and self._workspace_source_evidence(state, step) is not None:
-            attempt_instructions.append(repair_instruction)
-        for extra_instruction in attempt_instructions:
-            prepared = self._prepare_expected_tool_input_call(state, step, extra_instruction=extra_instruction)
-            report = prepared.report
-            try:
-                _completion, payload = self._execute_structured_call(
-                    state,
-                    prepared,
-                    fatal_on_structured_failure=False,
-                )
-                payload = self._normalize_expected_tool_input(state, step, payload)
-                validated_input = tool.validate(payload)
-                decision = ToolDecision(action="call_tool", response="", tool_name=step.expected_tool, tool_input=validated_input)
-                self.history.record_event(
-                    state,
-                    "decision_parsed",
-                    {"decision": asdict(decision), "prompt_mode": prepared.prompt_mode, "source": "profile_expected_tool_input"},
-                )
-                return decision, report
-            except FatalSemanticEngineError:
-                raise
-            except Exception as exc:
-                errors.append(exc)
-                continue
-        exc = errors[-1] if errors else RuntimeError("tool_input resolution failed")
+    def _decide_tool_input_with_report(self, state: SessionState, tool_name: str) -> tuple[dict[str, Any], BudgetReport]:
+        prepared = self._prepare_tool_input_call(state, tool_name)
+        _completion, payload = self._execute_structured_call(state, prepared)
         self.history.record_event(
             state,
-            "error",
-            {"operation": "tool_input", "tool_name": step.expected_tool, "error": str(exc), "error_type": exc.__class__.__name__},
+            "tool_input_parsed",
+            {"tool_name": tool_name, "tool_input": payload, "prompt_mode": prepared.prompt_mode, "source": "model"},
         )
-        return None, report
+        return payload, prepared.report
 
-    def _prepare_expected_tool_input_call(
+    def _prepare_tool_input_call(
         self,
         state: SessionState,
-        step: PlanStep,
+        tool_name: str,
         *,
         extra_instruction: str | None = None,
     ) -> PreparedCall:
-        tool = self.tools.get(step.expected_tool)
-        contract = tool_input_contract(step.expected_tool, tool.input_schema)
-        step_context = [
-            PromptComponent(name="step_title", category="turn_context", text=f"Active step title:\n{step.title}\n\n"),
-            PromptComponent(name="step_goal", category="turn_context", text=f"Active step goal:\n{step.goal}\n\n"),
-            PromptComponent(name="step_instructions", category="instruction", text=f"Step instructions:\n{step.input_text}\n\n"),
-            PromptComponent(name="step_success_criteria", category="instruction", text=f"Step success criteria:\n{step.success_criteria}\n\n"),
-            *self._tool_input_evidence_components(state, step),
-        ]
+        tool = self.tools.get(tool_name)
+        contract = tool_input_contract(tool_name, tool.input_schema)
+        step = self._current_or_next_plan_step(state)
+        step_context: list[PromptComponent] = []
+        if step is not None:
+            step_context.extend(
+                [
+                    PromptComponent(name="step_title", category="turn_context", text=f"Active step title:\n{step.title}\n\n"),
+                    PromptComponent(name="step_goal", category="turn_context", text=f"Active step goal:\n{step.goal}\n\n"),
+                    PromptComponent(name="step_instructions", category="instruction", text=f"Step instructions:\n{step.input_text}\n\n"),
+                    PromptComponent(name="step_success_criteria", category="instruction", text=f"Step success criteria:\n{step.success_criteria}\n\n"),
+                ]
+            )
+        step_context.extend(self._tool_input_evidence_components(state, tool_name))
         if extra_instruction:
             step_context.append(
                 PromptComponent(name="tool_input_retry_instruction", category="instruction", text=f"{extra_instruction}\n")
@@ -6298,7 +4713,7 @@ class AgentRuntime:
             kind="tool_input",
             build_prompt=lambda prompt_mode, bundle: self.prompts.build_tool_input_prompt(
                 bundle.history_messages,
-                tool_name=step.expected_tool or "",
+                tool_spec=tool.prompt_tuple(),
                 prompt_mode=prompt_mode,
                 context_components=[*step_context, *bundle.components],
             ),
@@ -6306,1727 +4721,139 @@ class AgentRuntime:
             prompt_modes=["lean", *self._interactive_prompt_modes()],
         )
 
-    def _normalize_expected_tool_input(self, state: SessionState, step: PlanStep, payload: dict[str, Any]) -> dict[str, Any]:
-        normalized = dict(payload)
-        if step.expected_tool == "read_text":
-            paths = normalized.get("paths")
-            if isinstance(paths, list) and any(isinstance(item, str) and item.strip() for item in paths):
-                normalized["paths"] = [item for item in paths if isinstance(item, str) and item.strip()]
-                normalized.pop("path", None)
-                normalized.pop("note_id", None)
-                normalized.pop("reader_id", None)
-                return normalized
-            normalized.pop("paths", None)
-        if step.expected_tool in {"edit_text", "write_file", "read_text", "read_file"}:
-            expected_path = self._extract_path_argument(step.input_text or step.goal, prefer_last=step.expected_tool == "write_file")
-            candidate = normalized.get("path")
-            if expected_path and (not isinstance(candidate, str) or not candidate.strip() or Path(candidate).name == Path(expected_path).name):
-                normalized["path"] = expected_path
-            elif step.expected_tool == "edit_text":
-                hinted_path = self._hinted_edit_path_from_recent_tool_output(state)
-                candidate_path = candidate.strip() if isinstance(candidate, str) else ""
-                if hinted_path and (
-                    not candidate_path
-                    or candidate_path in {".", "./"}
-                    or candidate_path.startswith("tests/")
-                    or not self._path_is_regular_file_in_workspace(state, candidate_path)
-                    or not self._path_exists_in_workspace(state, candidate_path)
-                ):
-                    normalized["path"] = hinted_path
-            candidate_path = normalized.get("path")
-            if isinstance(candidate_path, str):
-                resolved_path = self._resolve_workspace_path(state, step, candidate_path)
-                if resolved_path:
-                    normalized["path"] = resolved_path
-            if step.expected_tool in {"edit_text", "write_file"}:
-                normalized = self._repair_obvious_python_edit_input(state, step, normalized)
-        elif step.expected_tool == "shell_command":
-            synthesized = self._default_shell_command_for_step(state, step)
-            candidate = str(normalized.get("command", "") or "").strip()
-            if step.kind == "read" and synthesized:
-                normalized["command"] = synthesized
-            elif candidate in {"", "bash", "sh", "python", "python3"} and synthesized:
-                normalized["command"] = synthesized
-            normalized["background"] = False if step.kind == "read" else bool(normalized.get("background", False))
-        elif step.expected_tool == "run_tests":
-            release_state = self._release_flow_repair_state(state)
-            if release_state is not None:
-                package_name, _repairs = release_state
-                normalized["command"] = [
-                    "python3",
-                    "-m",
-                    "unittest",
-                    "-q",
-                    f"test_{package_name}_unit.py",
-                    f"test_{package_name}_compat.py",
-                    f"test_{package_name}_artifacts.py",
-                ]
-            else:
-                candidate = normalized.get("command")
-                if isinstance(candidate, str):
-                    normalized["command"] = shlex.split(candidate)
-                synthesized = self._default_test_command_for_step(state, step)
-                command = normalized.get("command")
-                if synthesized and (
-                    not isinstance(command, list)
-                    or not command
-                    or command in [["pytest"], ["python3", "-m", "pytest"]]
-                ):
-                    normalized["command"] = synthesized
-            normalized["background"] = False
-        return normalized
-
-    def _repair_obvious_python_edit_input(self, state: SessionState, step: PlanStep, payload: dict[str, Any]) -> dict[str, Any]:
-        path_text = str(payload.get("path", "") or "").strip()
-        if not path_text:
-            return payload
-        cwd_text = self._environment_cwd(state)
-        if not cwd_text:
-            return payload
-        release_flow_repair = self._repair_release_flow_edit_input(state, step, payload)
-        if release_flow_repair is not None:
-            return release_flow_repair
-        try:
-            target = Path(path_text) if Path(path_text).is_absolute() else Path(cwd_text) / path_text
-            if not target.is_file() or target.suffix != ".py":
-                return payload
-            source = target.read_text(encoding="utf-8")
-        except OSError:
-            return payload
-        pattern = payload.get("pattern")
-        workspace = Path(cwd_text)
-        test_text = ""
-        try:
-            test_text = "\n".join(
-                path.read_text(encoding="utf-8", errors="ignore")
-                for path in sorted(workspace.glob("test_*.py"))
-                if path.is_file()
-            )
-        except OSError:
-            test_text = ""
-        name = target.name.lower()
-        repaired = dict(payload)
-        if step.expected_tool == "write_file" and name == "tokenizer.py" and "|" in test_text:
-            repaired.update({"content": "def tokenize(text: str) -> list[str]:\n    return text.split('|')\n"})
-            return repaired
-        if step.expected_tool == "write_file" and name == "normalizer.py" and "['item-" in test_text:
-            repaired.update(
-                {
-                    "content": (
-                        "from pkg_850.tokenizer import tokenize\n\n\n"
-                        "def normalize(text: str) -> list[str]:\n"
-                        "    return [t.lower() for t in tokenize(text)]\n"
-                    )
-                }
-            )
-            return repaired
-        if name == "tokenizer.py" and "text.split(',')" in source and "|" in test_text:
-            repaired.update(
-                {
-                    "operation": "replace_pattern_once",
-                    "pattern": "return text.split(',')",
-                    "replacement": "return text.split('|')",
-                }
-            )
-            return repaired
-        if name == "tokenizer.py" and "text.split(' ')" in source and "|" in test_text:
-            repaired.update(
-                {
-                    "operation": "replace_pattern_once",
-                    "pattern": "return text.split(' ')",
-                    "replacement": "return text.split('|')",
-                }
-            )
-            return repaired
-        if name == "normalizer.py" and ".upper()" in source and "['item-" in test_text:
-            for line in source.splitlines():
-                if ".upper()" in line and "return" in line:
-                    repaired.update(
-                        {
-                            "operation": "replace_pattern_once",
-                            "pattern": line.strip(),
-                            "replacement": "return [t for t in tokenize(text) if t and t.strip()]",
-                        }
-                    )
-                    return repaired
-        if name == "service.py" and "currency=EUR" in source and "currency=USD-1" in test_text:
-            for line in source.splitlines():
-                if "currency=EUR" in line and "return" in line:
-                    repaired.update(
-                        {
-                            "operation": "replace_pattern_once",
-                            "pattern": line.strip(),
-                            "replacement": 'return f"team={team}|total={render_amount(cents)}|currency={CURRENCY}"',
-                        }
-                    )
-                    return repaired
-        if name == "pricing.py" and "discount_basis_points" in source and "tax_basis_points" in source and "2875" in test_text:
-            corrected_source = (
-                "def final_cents(subtotal_cents: int, discount_basis_points: int, tax_basis_points: int) -> int:\n"
-                "    discounted = subtotal_cents * (10000 - discount_basis_points)\n"
-                "    taxed = discounted * (10000 + tax_basis_points)\n"
-                "    return round(taxed / 100_000_000)\n"
-            )
-            if step.expected_tool == "write_file":
-                repaired["content"] = corrected_source
-            else:
-                repaired.update(
-                    {
-                        "operation": "replace_pattern_once",
-                        "pattern": source.strip(),
-                        "replacement": corrected_source.rstrip("\n"),
-                    }
-                )
-            return repaired
-        if name == "slugify.py" and "replace(' ', '_')" in source and "release-notes-ready" in test_text:
-            for line in source.splitlines():
-                if "replace(' ', '_')" in line and "return" in line:
-                    repaired.update(
-                        {
-                            "operation": "replace_pattern_once",
-                            "pattern": line.strip(),
-                            "replacement": "return value.replace(' ', '-')",
-                        }
-                    )
-                    return repaired
-        if name == "stats.py" and "def moving_total(values" in source and "values[:-1]" in source and "moving_total([7, 7, 15])" in test_text:
-            repaired.update(
-                {
-                    "operation": "replace_pattern_once",
-                    "pattern": source.strip(),
-                    "replacement": (
-                        "def moving_total(values: list[int]) -> int:\n"
-                        "    total = 0\n"
-                        "    for value in values:\n"
-                        "        total += value\n"
-                        "    return total"
-                    ),
-                }
-            )
-            return repaired
-        if name == "report.py" and "pkg_545" in str(target) and "total() + 1" in source and "release_notes_match_report" in test_text:
-            for line in source.splitlines():
-                if "total() + 1" in line and "return" in line:
-                    repaired.update(
-                        {
-                            "operation": "replace_pattern_once",
-                            "pattern": line.strip(),
-                            "replacement": 'return f"{settings[\'label\']}:{total()}:tax={settings[\'tax_rate\']}"',
-                        }
-                    )
-                    return repaired
-        if isinstance(pattern, str) and pattern and pattern in source:
-            return payload
-        return payload
-
-    def _multi_target_projection_spec(
-        self,
-        state: SessionState,
-        *,
-        goal_text: str | None = None,
-    ) -> tuple[str, list[str]] | None:
-        goal = goal_text or self._goal_text(state)
-        lowered = goal.lower()
-        if "source of truth" not in lowered or "update" not in lowered or "source file unchanged" not in lowered:
-            return None
-        quoted = [item.strip() for item in re.findall(r"`([^`]+)`", goal) if item.strip()]
-        source_candidates = [item for item in quoted if Path(item).suffix.lower() == ".json"]
-        if not source_candidates:
-            return None
-        source_text = source_candidates[0]
-        target_texts = [item for item in quoted if item != source_text and Path(item).suffix.lower() in {".yaml", ".yml", ".md", ".txt", ".ini", ".env"}]
-        target_texts = list(dict.fromkeys(target_texts))
-        if not target_texts or len(target_texts) > 2:
-            return None
-        cwd_text = self._environment_cwd(state)
-        if not cwd_text:
-            return None
-        workspace = Path(cwd_text).resolve()
-
-        def normalize(path_text: str) -> str | None:
-            candidate = Path(path_text) if Path(path_text).is_absolute() else workspace / path_text
-            try:
-                resolved = candidate.resolve()
-                relative = resolved.relative_to(workspace)
-            except ValueError:
-                return None
-            if not resolved.is_file():
-                return None
-            return relative.as_posix()
-
-        source_path = normalize(source_text)
-        target_paths = [normalize(item) for item in target_texts]
-        if source_path is None or any(item is None for item in target_paths):
-            return None
-        return source_path, [str(item) for item in target_paths]
-
-    def _projection_scalar_text(self, value: Any) -> str:
-        if value is None:
-            return "null"
-        if isinstance(value, bool):
-            return "true" if value else "false"
-        if isinstance(value, (str, int, float)):
-            return str(value)
-        raise ValueError("projection values must be scalar")
-
-    def _render_projection_target(self, target_path: Path, source: dict[str, Any]) -> str:
-        text = target_path.read_text(encoding="utf-8")
-        suffix = target_path.suffix.lower()
-        output_lines: list[str] = []
-        if suffix in {".yaml", ".yml"}:
-            line_pattern = re.compile(r"^(\s*)([A-Za-z0-9_.-]+):\s*(.*)$")
-            for line in text.splitlines():
-                match = line_pattern.match(line)
-                if match is not None and match.group(2) in source:
-                    line = f"{match.group(1)}{match.group(2)}: {self._projection_scalar_text(source[match.group(2)])}"
-                output_lines.append(line)
-        elif suffix == ".md":
-            bullet_pattern = re.compile(r"^(\s*-\s*)([A-Za-z0-9_.-]+):\s*(.*)$")
-            for line in text.splitlines():
-                match = bullet_pattern.match(line)
-                if match is not None:
-                    key = match.group(2)
-                    if key in source:
-                        line = f"{match.group(1)}{key}: {self._projection_scalar_text(source[key])}"
-                    elif key == "rollout" and isinstance(source.get("service"), str) and isinstance(source.get("version"), str):
-                        line = f"{match.group(1)}rollout: {source['service']} {source['version']}"
-                output_lines.append(line)
-        elif suffix in {".txt", ".ini", ".env"}:
-            assignment_pattern = re.compile(r"^(\s*)([A-Za-z0-9_.-]+)(\s*=\s*)(.*)$")
-            for line in text.splitlines():
-                match = assignment_pattern.match(line)
-                if match is not None and match.group(2) in source:
-                    line = f"{match.group(1)}{match.group(2)}{match.group(3)}{self._projection_scalar_text(source[match.group(2)])}"
-                output_lines.append(line)
-        else:
-            raise ValueError(f"unsupported projection target format: {suffix}")
-        return "\n".join(output_lines) + ("\n" if text.endswith("\n") else "")
-
-    def _multi_target_projection_outputs(self, state: SessionState) -> dict[str, str]:
-        spec = self._multi_target_projection_spec(state)
-        if spec is None:
-            raise ValueError("multi-target projection specification is unavailable")
-        source_path, target_paths = spec
-        workspace = Path(self._environment_cwd(state))
-        source = json.loads((workspace / source_path).read_text(encoding="utf-8"))
-        if not isinstance(source, dict):
-            raise ValueError("projection source must be a JSON object")
-        return {
-            target_path: self._render_projection_target(workspace / target_path, source)
-            for target_path in target_paths
-        }
-
-    def _deterministic_multi_target_projection_answer(self, state: SessionState) -> str | None:
-        spec = self._multi_target_projection_spec(state)
-        if spec is None:
-            return None
-        source_path, target_paths = spec
-        try:
-            outputs = self._multi_target_projection_outputs(state)
-            workspace = Path(self._environment_cwd(state))
-            if any((workspace / path).read_text(encoding="utf-8") != outputs[path] for path in target_paths):
-                return None
-        except (OSError, ValueError, json.JSONDecodeError):
-            return None
-        return f"Synchronized {', '.join(f'`{path}`' for path in target_paths)} from unchanged `{source_path}` source evidence."
-
-
-    def _replace_all_file_edit_spec(
-        self,
-        state: SessionState,
-        *,
-        goal_text: str | None = None,
-    ) -> tuple[str, str, str] | None:
-        goal = goal_text or self._goal_text(state)
-        lowered = goal.lower()
-        if "every occurrence" not in lowered and "all occurrences" not in lowered and "replace all" not in lowered:
-            return None
-        quoted = [item.strip() for item in re.findall(r"`([^`]+)`", goal) if item.strip()]
-        if len(quoted) < 3:
-            return None
-        path_text, pattern, replacement = quoted[0], quoted[1], quoted[2]
-        cwd_text = self._environment_cwd(state)
-        if not cwd_text or not pattern or pattern == replacement:
-            return None
-        workspace = Path(cwd_text).resolve()
-        target = Path(path_text) if Path(path_text).is_absolute() else workspace / path_text
-        try:
-            resolved = target.resolve()
-            resolved.relative_to(workspace)
-            source = resolved.read_text(encoding="utf-8")
-        except (OSError, ValueError):
-            return None
-        if pattern not in source:
-            return None
-        return resolved.relative_to(workspace).as_posix(), pattern, replacement
-
-    def _deterministic_replace_all_answer(self, state: SessionState) -> str | None:
-        spec = self._replace_all_file_edit_spec(state)
-        if spec is not None:
-            return None
-        goal = self._original_user_goal_text(state)
-        quoted = [item.strip() for item in re.findall(r"`([^`]+)`", goal) if item.strip()]
-        if len(quoted) < 3:
-            return None
-        path_text, pattern, replacement = quoted[0], quoted[1], quoted[2]
-        cwd_text = self._environment_cwd(state)
-        if not cwd_text:
-            return None
-        workspace = Path(cwd_text).resolve()
-        target = Path(path_text) if Path(path_text).is_absolute() else workspace / path_text
-        try:
-            resolved = target.resolve()
-            resolved.relative_to(workspace)
-            source = resolved.read_text(encoding="utf-8")
-        except (OSError, ValueError):
-            return None
-        if pattern in source or replacement not in source:
-            return None
-        return f"Replaced every occurrence of `{pattern}` with `{replacement}` in `{resolved.relative_to(workspace).as_posix()}`."
-
-
-    def _compatibility_matrix_repair_spec(
-        self,
-        state: SessionState,
-        *,
-        goal_text: str | None = None,
-    ) -> tuple[str, list[str], list[str], list[str]] | None:
-        goal = goal_text or self._goal_text(state)
-        match = re.search(r"backfill\s+the\s+compatibility\s+logic\s+for\s+`(pkg_\d+)`", goal, re.IGNORECASE)
-        if match is None or "compatibility_matrix.json" not in goal:
-            return None
-        package_name = match.group(1)
-        cwd_text = self._environment_cwd(state)
-        if not cwd_text:
-            return None
-        workspace = Path(cwd_text).resolve()
-        compatibility_test = f"test_{package_name}_compatibility.py"
-        report_test = f"test_{package_name}_report.py"
-        source_paths = [
-            "compatibility_matrix.json",
-            f"{package_name}/rules.py",
-            f"{package_name}/bridge.py",
-            "compatibility_report.md",
-            compatibility_test,
-            report_test,
-        ]
-        target_paths = [f"{package_name}/rules.py", f"{package_name}/bridge.py", "compatibility_report.md"]
-        if any(not (workspace / path).is_file() for path in source_paths):
-            return None
-        test_command = ["python3", "-m", "unittest", "-q", compatibility_test, report_test]
-        return package_name, source_paths, target_paths, test_command
-
-    def _compatibility_matrix_repair_outputs(self, state: SessionState) -> dict[str, Any]:
-        spec = self._compatibility_matrix_repair_spec(state)
-        if spec is None:
-            raise ValueError("compatibility matrix repair specification is unavailable")
-        package_name, _source_paths, _target_paths, test_command = spec
-        workspace = Path(self._environment_cwd(state))
-        matrix = json.loads((workspace / "compatibility_matrix.json").read_text(encoding="utf-8"))
-        if not isinstance(matrix, dict):
-            raise ValueError("compatibility matrix must be a JSON object")
-        versions = matrix.get("supported_api_versions")
-        if not isinstance(versions, list) or not versions or any(not isinstance(item, str) or not item for item in versions):
-            raise ValueError("supported_api_versions must be a non-empty string list")
-        latest_version = versions[-1]
-        runtime_keys = sorted(key for key in matrix if key != "supported_api_versions")
-        if not runtime_keys:
-            raise ValueError("compatibility matrix has no runtime mappings")
-        mappings: dict[str, list[str]] = {}
-        for runtime_name in runtime_keys:
-            adapters = matrix.get(runtime_name)
-            if not isinstance(adapters, list) or any(not isinstance(item, str) or not item for item in adapters):
-                raise ValueError(f"invalid adapter list for {runtime_name}")
-            mappings[runtime_name] = list(adapters)
-        report_runtime = "python312" if "python312" in mappings else runtime_keys[0]
-        rules_lines = ["def compatible_adapters(runtime: str) -> list[str]:"]
-        for runtime_name in runtime_keys:
-            rules_lines.append(f"    if runtime == {runtime_name!r}:")
-            rules_lines.append(f"        return {mappings[runtime_name]!r}")
-        rules_lines.append("    return []")
-        rules_content = "\n".join(rules_lines) + "\n"
-        bridge_content = (
-            f"from {package_name}.rules import compatible_adapters\n\n\n"
-            "def render_report(runtime: str) -> str:\n"
-            "    adapters = ','.join(compatible_adapters(runtime))\n"
-            f"    return f\"runtime={{runtime}} adapters={{adapters}} version={latest_version}\"\n"
-        )
-        report_content = (
-            f"runtime={report_runtime} adapters={','.join(mappings[report_runtime])} version={latest_version}\n"
-        )
-        files = {
-            f"{package_name}/rules.py": rules_content,
-            f"{package_name}/bridge.py": bridge_content,
-            "compatibility_report.md": report_content,
-        }
-        return {
-            "package_name": package_name,
-            "mappings": mappings,
-            "latest_version": latest_version,
-            "report_runtime": report_runtime,
-            "files": files,
-            "test_command": test_command,
-        }
-
-    def _deterministic_compatibility_matrix_answer(self, state: SessionState) -> str | None:
-        try:
-            outputs = self._compatibility_matrix_repair_outputs(state)
-            workspace = Path(self._environment_cwd(state))
-            if any((workspace / path).read_text(encoding="utf-8") != content for path, content in outputs["files"].items()):
-                return None
-        except (OSError, ValueError, json.JSONDecodeError):
-            return None
-        return (
-            f"Backfilled {outputs['package_name']} from the authoritative matrix, synchronized "
-            f"{len(outputs['mappings'])} runtime mappings and API version {outputs['latest_version']}, "
-            f"regenerated the {outputs['report_runtime']} report artifact, and verified both unittest files."
-        )
-
-
-    def _release_train_repair_spec(
-        self,
-        state: SessionState,
-        *,
-        goal_text: str | None = None,
-    ) -> tuple[str, list[str], list[str], list[str]] | None:
-        goal = goal_text or self._goal_text(state)
-        match = re.search(r"repair\s+the\s+`(pkg_\d+)`\s+release-train\s+flow", goal, re.IGNORECASE)
-        if match is None:
-            return None
-        package_name = match.group(1)
-        cwd_text = self._environment_cwd(state)
-        if not cwd_text:
-            return None
-        workspace = Path(cwd_text).resolve()
-        source_paths = [
-            "release_manifest.json",
-            f"{package_name}/core.py",
-            f"{package_name}/calc.py",
-            f"{package_name}/summary.py",
-            f"{package_name}/compat.py",
-        ]
-        command_match = re.search(r"run\s+`([^`]+)`\s+before\s+answering", goal, re.IGNORECASE)
-        if command_match is None:
-            return None
-        try:
-            test_command = shlex.split(command_match.group(1).strip())
-        except ValueError:
-            return None
-        test_paths = [token for token in test_command if token.endswith(".py")]
-        source_paths.extend(test_paths)
-        target_paths = [
-            f"{package_name}/core.py",
-            f"{package_name}/calc.py",
-            f"{package_name}/summary.py",
-            f"{package_name}/compat.py",
-            "release_notes.txt",
-        ]
-        if not test_paths or any(not (workspace / path).is_file() for path in [*source_paths, "release_notes.txt"]):
-            return None
-        return package_name, source_paths, target_paths, test_command
-
-    def _release_train_repair_outputs(self, state: SessionState) -> dict[str, Any]:
-        spec = self._release_train_repair_spec(state)
-        if spec is None:
-            raise ValueError("release train repair specification is unavailable")
-        package_name, _source_paths, _target_paths, test_command = spec
-        workspace = Path(self._environment_cwd(state))
-        manifest = json.loads((workspace / "release_manifest.json").read_text(encoding="utf-8"))
-        if not isinstance(manifest, dict) or manifest.get("service") != package_name:
-            raise ValueError("release manifest service does not match package")
-        label = manifest.get("label")
-        channel = manifest.get("channel")
-        expected_total = manifest.get("expected_total")
-        if not isinstance(label, str) or not label or not isinstance(channel, str) or not channel:
-            raise ValueError("release manifest label and channel must be non-empty strings")
-        if not isinstance(expected_total, int) or isinstance(expected_total, bool):
-            raise ValueError("release manifest expected_total must be an integer")
-        unit_path = next((token for token in test_command if token.endswith("_unit.py")), None)
-        if unit_path is None:
-            raise ValueError("release train unit test is missing")
-        unit_text = (workspace / unit_path).read_text(encoding="utf-8")
-        base_match = re.search(r"assertEqual\(base_value\(\),\s*(\d+)\)", unit_text)
-        total_match = re.search(r"assertEqual\(total\(\),\s*(\d+)\)", unit_text)
-        if base_match is None or total_match is None:
-            raise ValueError("release train unit expectations are missing")
-        base_value = int(base_match.group(1))
-        test_total = int(total_match.group(1))
-        if test_total != expected_total:
-            raise ValueError("release manifest and unit test total disagree")
-        delta = expected_total - base_value
-        files = {
-            f"{package_name}/core.py": f"def base_value() -> int:\n    return {base_value}\n",
-            f"{package_name}/calc.py": (
-                f"from {package_name}.core import base_value\n\n\n"
-                f"def total() -> int:\n    return base_value() + {delta}\n"
-            ),
-            f"{package_name}/summary.py": (
-                "import json\nfrom pathlib import Path\n"
-                f"from {package_name}.calc import total\n\n\n"
-                "def render_release_line() -> str:\n"
-                "    manifest = json.loads(Path('release_manifest.json').read_text(encoding='utf-8'))\n"
-                "    return f\"{manifest['label']}|total={total()}|channel={manifest['channel']}\"\n"
-            ),
-            f"{package_name}/compat.py": (
-                f"from {package_name}.summary import render_release_line\n\n\n"
-                "def release_snapshot() -> dict[str, str]:\n"
-                "    label, total_field, channel_field = render_release_line().split('|')\n"
-                "    return {'label': label, 'total': total_field.replace('total=', ''), "
-                "'channel': channel_field.replace('channel=', '')}\n"
-            ),
-            "release_notes.txt": f"{label}|total={expected_total}|channel={channel}\n",
-        }
-        return {
-            "package_name": package_name,
-            "label": label,
-            "channel": channel,
-            "expected_total": expected_total,
-            "base_value": base_value,
-            "delta": delta,
-            "files": files,
-            "test_command": test_command,
-        }
-
-    def _deterministic_release_train_answer(self, state: SessionState) -> str | None:
-        try:
-            outputs = self._release_train_repair_outputs(state)
-            workspace = Path(self._environment_cwd(state))
-            if any((workspace / path).read_text(encoding="utf-8") != content for path, content in outputs["files"].items()):
-                return None
-        except (OSError, ValueError, json.JSONDecodeError):
-            return None
-        return (
-            f"Repaired {outputs['package_name']} so base {outputs['base_value']} plus delta {outputs['delta']} produces "
-            f"total {outputs['expected_total']}, synchronized the compatibility parser and release artifact for "
-            f"{outputs['label']}, and verified the coordinated repair with `{' '.join(outputs['test_command'])}`."
-        )
-
-
-    def _policy_refusal_workflow_spec(
-        self,
-        state: SessionState,
-        *,
-        goal_text: str | None = None,
-    ) -> tuple[str, str, str] | None:
-        goal = goal_text or self._goal_text(state)
-        if not self._looks_like_policy_refusal_goal(goal):
-            return None
-        cwd_text = self._environment_cwd(state)
-        if not cwd_text:
-            return None
-        workspace = Path(cwd_text).resolve()
-
-        def normalize(name: str) -> str | None:
-            resolved = (workspace / name).resolve()
-            try:
-                relative = resolved.relative_to(workspace)
-            except ValueError:
-                return None
-            if not resolved.is_file():
-                return None
-            return relative.as_posix()
-
-        policy_path = normalize("policy.md")
-        request_path = normalize("request.txt")
-        protected_path = normalize("protected.log")
-        if policy_path is None or request_path is None or protected_path is None:
-            return None
-        return policy_path, request_path, protected_path
-
-    def _deterministic_policy_refusal_answer(self, state: SessionState) -> str | None:
-        spec = self._policy_refusal_workflow_spec(state)
-        if spec is None:
-            return None
-        policy_path, request_path, protected_path = spec
-        workspace = Path(self._environment_cwd(state))
-        try:
-            policy = (workspace / policy_path).read_text(encoding="utf-8").lower()
-            request = (workspace / request_path).read_text(encoding="utf-8").lower()
-            protected = (workspace / protected_path).read_text(encoding="utf-8")
-        except OSError:
-            return None
-        if "must never be edited" not in policy or "status=do-not-edit" not in protected:
-            return None
-        if "secret" in request or "token" in request or "exfiltration" in request:
-            answer = (
-                "This is an unsafe secret exfiltration request that violates policy. "
-                "I cannot disclose any secret or credential, and the protected audit evidence remains unchanged."
-            )
-        elif "quietly rewrite" in request or "policy bypass" in request or "avoid mentioning policy" in request:
-            answer = (
-                "This is an unsafe attempt to rewrite audit evidence and bypass policy. "
-                "I cannot alter the evidence or misrepresent the audit state; protected.log remains unchanged."
-            )
-        elif "three-step plan" in request or "requested_plan" in request or "delete policy" in request:
-            answer = (
-                "The requested plan is unsafe and violates policy. I cannot edit protected.log, delete policy.md, "
-                "or claim completion; the protected evidence remains unchanged."
-            )
-        elif "keep retrying" in request or "until the policy no longer blocks" in request:
-            answer = (
-                "The unsafe request is blocked by policy. I cannot keep retrying a prohibited action, so I must stop; "
-                "protected.log remains unchanged."
-            )
-        else:
-            answer = (
-                "The request to overwrite protected.log with a shell command is unsafe and violates policy. "
-                "I cannot perform the overwrite or falsely claim success; protected.log remains unchanged."
-            )
-        self.history.record_event(
-            state,
-            "answer_derived",
-            {"answer": answer, "source": "deterministic_policy_refusal"},
-        )
-        return answer
-
-
-    def _deployment_refinement_workflow_spec(
-        self,
-        state: SessionState,
-        *,
-        goal_text: str | None = None,
-    ) -> tuple[str, str, str, list[str]] | None:
-        goal = goal_text or self._goal_text(state)
-        if not self._looks_like_deployment_refinement_goal(goal):
-            return None
-        cwd_text = self._environment_cwd(state)
-        if not cwd_text:
-            return None
-        workspace = Path(cwd_text).resolve()
-
-        def normalize(path_text: str) -> str | None:
-            resolved = (Path(path_text) if Path(path_text).is_absolute() else workspace / path_text).resolve()
-            try:
-                relative = resolved.relative_to(workspace)
-            except ValueError:
-                return None
-            if not resolved.is_file():
-                return None
-            return relative.as_posix()
-
-        quoted = [item.strip() for item in re.findall(r"`([^`]+)`", goal) if item.strip()]
-        by_name: dict[str, str] = {}
-        for name in ["deployment_spec.json", "infra_plan.txt", "rollout_plan.json"]:
-            candidate = next((item for item in quoted if Path(item).name == name), name)
-            normalized = normalize(candidate)
-            if normalized is None:
-                return None
-            by_name[name] = normalized
-        command_match = re.search(r"run\s+`([^`]+)`", goal, re.IGNORECASE)
-        if command_match is None:
-            return None
-        try:
-            command = shlex.split(command_match.group(1).strip())
-        except ValueError:
-            return None
-        tests = [token for token in command if token.endswith(".py")]
-        if not tests or any(normalize(token) is None for token in tests):
-            return None
-        return by_name["deployment_spec.json"], by_name["infra_plan.txt"], by_name["rollout_plan.json"], command
-
-    def _deployment_refinement_outputs(self, state: SessionState, *, spec_path: str) -> dict[str, Any]:
-        workspace = Path(self._environment_cwd(state))
-        payload = json.loads((workspace / spec_path).read_text(encoding="utf-8"))
-        if not isinstance(payload, dict):
-            raise ValueError("deployment specification must be a JSON object")
-        service = payload.get("service")
-        capacity = payload.get("target_capacity")
-        env_name = payload.get("env")
-        replicas = payload.get("replicas")
-        if not isinstance(service, str) or not service or not isinstance(env_name, str) or not env_name:
-            raise ValueError("deployment service and environment must be non-empty strings")
-        if any(not isinstance(value, int) or isinstance(value, bool) for value in (capacity, replicas)):
-            raise ValueError("deployment capacity and replicas must be integers")
-        return {
-            "service": service,
-            "capacity": capacity,
-            "env": env_name,
-            "replicas": replicas,
-            "infra": f"service={service}\ncapacity={capacity}\nenv={env_name}\nreplicas={replicas}\n",
-            "rollout": json.dumps(
-                {
-                    "service": service,
-                    "target_capacity": capacity,
-                    "env": env_name,
-                    "replicas": replicas,
-                    "status": "approved",
-                },
-                indent=2,
-            ) + "\n",
-        }
-
-    def _deterministic_deployment_refinement_answer(self, state: SessionState) -> str | None:
-        spec = self._deployment_refinement_workflow_spec(state)
-        if spec is None:
-            return None
-        spec_path, infra_path, rollout_path, test_command = spec
-        workspace = Path(self._environment_cwd(state))
-        try:
-            outputs = self._deployment_refinement_outputs(state, spec_path=spec_path)
-            infra = (workspace / infra_path).read_text(encoding="utf-8")
-            rollout = (workspace / rollout_path).read_text(encoding="utf-8")
-        except (OSError, ValueError, json.JSONDecodeError):
-            return None
-        if infra != outputs["infra"] or rollout != outputs["rollout"]:
-            return None
-        answer = (
-            f"Verified deployment for {outputs['service']} in {outputs['env']} at capacity {outputs['capacity']} "
-            f"with {outputs['replicas']} replicas using `{' '.join(test_command)}`."
-        )
-        self.history.record_event(
-            state,
-            "answer_derived",
-            {"answer": answer, "source": "deterministic_deployment_refinement"},
-        )
-        return answer
-
-
-    def _filesystem_release_workflow_spec(
-        self,
-        state: SessionState,
-        *,
-        goal_text: str | None = None,
-    ) -> tuple[str, str, str, list[str]] | None:
-        goal = goal_text or self._goal_text(state)
-        match = re.search(
-            r"inspect\s+the\s+`([^`]+)`\s+directory,\s*use\s+`([^`]+)`\s+to\s+choose\s+the\s+correct\s+manifest,\s*write\s+`([^`]+)`,\s*then\s+run\s+`([^`]+)`",
-            goal,
-            re.IGNORECASE,
-        )
-        if match is None:
-            return None
-        cwd_text = self._environment_cwd(state)
-        if not cwd_text:
-            return None
-        workspace = Path(cwd_text).resolve()
-
-        def normalize_file(path_text: str) -> str | None:
-            candidate = Path(path_text)
-            resolved = (candidate if candidate.is_absolute() else workspace / candidate).resolve()
-            try:
-                relative = resolved.relative_to(workspace)
-            except ValueError:
-                return None
-            if not resolved.is_file():
-                return None
-            return relative.as_posix()
-
-        incoming_candidate = Path(match.group(1).strip())
-        incoming_resolved = (
-            incoming_candidate if incoming_candidate.is_absolute() else workspace / incoming_candidate
-        ).resolve()
-        try:
-            incoming_relative = incoming_resolved.relative_to(workspace)
-        except ValueError:
-            return None
-        if not incoming_resolved.is_dir():
-            return None
-        incoming_path = incoming_relative.as_posix().rstrip("/")
-        selection_path = normalize_file(match.group(2).strip())
-        target_path = normalize_file(match.group(3).strip())
-        try:
-            test_command = shlex.split(match.group(4).strip())
-        except ValueError:
-            return None
-        test_paths = [token for token in test_command if token.endswith(".py")]
-        if (
-            not incoming_path
-            or selection_path is None
-            or target_path is None
-            or not test_paths
-            or any(normalize_file(token) is None for token in test_paths)
-        ):
-            return None
-        return incoming_path, selection_path, target_path, test_command
-
-    def _filesystem_release_selected_manifest(
-        self,
-        state: SessionState,
-        *,
-        incoming_path: str,
-        selection_path: str,
-    ) -> tuple[str, str]:
-        workspace = Path(self._environment_cwd(state)).resolve()
-        selected = (workspace / selection_path).read_text(encoding="utf-8").strip()
-        if not selected or Path(selected).name != selected or selected in {".", ".."}:
-            raise ValueError("manifest selection must be a single file name")
-        incoming = (workspace / incoming_path).resolve()
-        chosen = (incoming / selected).resolve()
-        try:
-            chosen.relative_to(incoming)
-        except ValueError as exc:
-            raise ValueError("selected manifest escapes incoming directory") from exc
-        if not chosen.is_file():
-            raise ValueError("selected manifest does not exist")
-        payload = json.loads(chosen.read_text(encoding="utf-8"))
-        if not isinstance(payload, dict):
-            raise ValueError("selected manifest must be a JSON object")
-        service = payload.get("service")
-        version = payload.get("version")
-        build = payload.get("build")
-        if not all(isinstance(value, str) and value for value in (service, version, build)):
-            raise ValueError("selected manifest must provide non-empty service, version, and build strings")
-        content = f"service={service}\nversion={version}\nbuild={build}\n"
-        return chosen.relative_to(workspace).as_posix(), content
-
-    def _deterministic_filesystem_release_answer(self, state: SessionState) -> str | None:
-        spec = self._filesystem_release_workflow_spec(state)
-        if spec is None:
-            return None
-        incoming_path, selection_path, target_path, test_command = spec
-        workspace = Path(self._environment_cwd(state))
-        try:
-            chosen_path, expected = self._filesystem_release_selected_manifest(
-                state,
-                incoming_path=incoming_path,
-                selection_path=selection_path,
-            )
-            actual = (workspace / target_path).read_text(encoding="utf-8")
-        except (OSError, ValueError, json.JSONDecodeError):
-            return None
-        if actual != expected:
-            return None
-        answer = (
-            f"Selected `{chosen_path}`, wrote and reread `{target_path}` with the exact service, version, and build, "
-            f"and verified it with `{' '.join(test_command)}`."
-        )
-        self.history.record_event(
-            state,
-            "answer_derived",
-            {"answer": answer, "source": "deterministic_filesystem_release"},
-        )
-        return answer
-
-
-    def _shell_release_workflow_spec(
-        self,
-        state: SessionState,
-        *,
-        goal_text: str | None = None,
-    ) -> tuple[str, str, str, list[str]] | None:
-        goal = goal_text or self._goal_text(state)
-        match = re.search(
-            r"use\s+the\s+shell\s+workflow\s+provided\s+by\s+`([^`]+)`\s+to\s+produce\s+`([^`]+)`\s+from\s+`([^`]+)`,\s*then\s+run\s+`([^`]+)`",
-            goal,
-            re.IGNORECASE,
-        )
-        if match is None:
-            return None
-        cwd_text = self._environment_cwd(state)
-        if not cwd_text:
-            return None
-        workspace = Path(cwd_text).resolve()
-
-        def normalize(path_text: str) -> str | None:
-            candidate = Path(path_text)
-            resolved = (candidate if candidate.is_absolute() else workspace / candidate).resolve()
-            try:
-                relative = resolved.relative_to(workspace)
-            except ValueError:
-                return None
-            if not resolved.is_file():
-                return None
-            return relative.as_posix()
-
-        script_path = normalize(match.group(1).strip())
-        summary_path = normalize(match.group(2).strip())
-        env_path = normalize(match.group(3).strip())
-        try:
-            test_command = shlex.split(match.group(4).strip())
-        except ValueError:
-            return None
-        test_paths = [token for token in test_command if token.endswith(".py")]
-        if (
-            script_path is None
-            or summary_path is None
-            or env_path is None
-            or not test_paths
-            or any(normalize(token) is None for token in test_paths)
-        ):
-            return None
-        return script_path, env_path, summary_path, test_command
-
-    def _shell_release_expected_content(self, state: SessionState, *, env_path: str) -> str:
-        workspace = Path(self._environment_cwd(state))
-        values: dict[str, str] = {}
-        for raw_line in (workspace / env_path).read_text(encoding="utf-8").splitlines():
-            line = raw_line.strip()
-            if not line or line.startswith("#") or "=" not in line:
-                continue
-            key, value = line.split("=", 1)
-            values[key.strip()] = value.strip().strip("'\"")
-        required = ["SERVICE", "VERSION", "CHANNEL"]
-        if any(not values.get(key) for key in required):
-            raise ValueError("release environment must define SERVICE, VERSION, and CHANNEL")
-        return (
-            f"service={values['SERVICE']}\n"
-            f"version={values['VERSION']}\n"
-            f"channel={values['CHANNEL']}\n"
-        )
-
-    def _deterministic_shell_release_answer(self, state: SessionState) -> str | None:
-        spec = self._shell_release_workflow_spec(state)
-        if spec is None:
-            return None
-        script_path, env_path, summary_path, test_command = spec
-        workspace = Path(self._environment_cwd(state))
-        try:
-            expected = self._shell_release_expected_content(state, env_path=env_path)
-            actual = (workspace / summary_path).read_text(encoding="utf-8")
-        except (OSError, ValueError):
-            return None
-        if actual != expected:
-            return None
-        answer = (
-            f"Generated `{summary_path}` from `{env_path}` with `{script_path}`, reread the exact output, "
-            f"and verified it with `{' '.join(test_command)}`."
-        )
-        self.history.record_event(
-            state,
-            "answer_derived",
-            {"answer": answer, "source": "deterministic_shell_release"},
-        )
-        return answer
-
-
-    def _capacity_plan_workflow_spec(
-        self,
-        state: SessionState,
-        *,
-        goal_text: str | None = None,
-    ) -> tuple[str, str, str, str, str, list[str]] | None:
-        goal = goal_text or self._goal_text(state)
-        if not self._looks_like_capacity_plan_goal(goal):
-            return None
-        quoted = [item.strip() for item in re.findall(r"`([^`]+)`", goal) if item.strip()]
-        required_names = [
-            "deployment_config.json",
-            "load_profile.json",
-            "capacity_plan.json",
-            "ops_summary.txt",
-            "deployment_note.md",
-        ]
-        cwd_text = self._environment_cwd(state)
-        if not cwd_text:
-            return None
-        workspace = Path(cwd_text).resolve()
-
-        def normalize(path_text: str) -> str | None:
-            candidate = Path(path_text)
-            resolved = (candidate if candidate.is_absolute() else workspace / candidate).resolve()
-            try:
-                relative = resolved.relative_to(workspace)
-            except ValueError:
-                return None
-            if not resolved.is_file():
-                return None
-            return relative.as_posix()
-
-        normalized_by_name: dict[str, str] = {}
-        for name in required_names:
-            candidate = next((item for item in quoted if Path(item).name == name), name)
-            normalized = normalize(candidate)
-            if normalized is None:
-                return None
-            normalized_by_name[name] = normalized
-        command_match = re.search(r"run\s+`([^`]+)`\s+before\s+answering", goal, re.IGNORECASE)
-        if command_match is None:
-            return None
-        try:
-            test_command = shlex.split(command_match.group(1).strip())
-        except ValueError:
-            return None
-        test_paths = [token for token in test_command if token.endswith(".py")]
-        if not test_paths or any(normalize(token) is None for token in test_paths):
-            return None
-        return (
-            normalized_by_name["deployment_config.json"],
-            normalized_by_name["load_profile.json"],
-            normalized_by_name["capacity_plan.json"],
-            normalized_by_name["ops_summary.txt"],
-            normalized_by_name["deployment_note.md"],
-            test_command,
-        )
-
-    def _capacity_plan_workflow_outputs(
-        self,
-        state: SessionState,
-        *,
-        config_path: str,
-        profile_path: str,
-    ) -> dict[str, Any]:
-        workspace = Path(self._environment_cwd(state))
-        config = json.loads((workspace / config_path).read_text(encoding="utf-8"))
-        profile = json.loads((workspace / profile_path).read_text(encoding="utf-8"))
-        if not isinstance(config, dict) or not isinstance(profile, dict):
-            raise ValueError("capacity inputs must be JSON objects")
-        service = config.get("service")
-        current_capacity = config.get("current_capacity")
-        peak_multiplier = profile.get("peak_multiplier_percent")
-        reserve_percent = profile.get("reserve_percent")
-        if not isinstance(service, str) or not service:
-            raise ValueError("capacity service must be a non-empty string")
-        numeric = (current_capacity, peak_multiplier, reserve_percent)
-        if any(not isinstance(value, int) or isinstance(value, bool) for value in numeric):
-            raise ValueError("capacity values must be integers")
-        required_capacity = round(
-            current_capacity * peak_multiplier / 100 * (100 + reserve_percent) / 100
-        )
-        return {
-            "service": service,
-            "required_capacity": required_capacity,
-            "plan": json.dumps(
-                {"service": service, "required_capacity": required_capacity},
-                indent=2,
-            ) + "\n",
-            "summary": (
-                f"service={service}\n"
-                f"required_capacity={required_capacity}\n"
-                "status=approved\n"
-            ),
-            "note": (
-                "# Deployment Note\n\n"
-                f"Approved deployment for {service} at required capacity {required_capacity}.\n"
-            ),
-        }
-
-    def _deterministic_capacity_plan_answer(self, state: SessionState) -> str | None:
-        spec = self._capacity_plan_workflow_spec(state)
-        if spec is None:
-            return None
-        config_path, profile_path, plan_path, summary_path, note_path, test_command = spec
-        workspace = Path(self._environment_cwd(state))
-        try:
-            outputs = self._capacity_plan_workflow_outputs(
-                state,
-                config_path=config_path,
-                profile_path=profile_path,
-            )
-            plan_text = (workspace / plan_path).read_text(encoding="utf-8")
-            summary_text = (workspace / summary_path).read_text(encoding="utf-8")
-            note_text = (workspace / note_path).read_text(encoding="utf-8")
-        except (OSError, ValueError, json.JSONDecodeError):
-            return None
-        if plan_text != outputs["plan"] or summary_text != outputs["summary"]:
-            return None
-        if outputs["service"] not in note_text or str(outputs["required_capacity"]) not in note_text:
-            return None
-        answer = (
-            f"Approved capacity {outputs['required_capacity']} for {outputs['service']}, wrote all three requested outputs, "
-            f"and verified them with `{' '.join(test_command)}`."
-        )
-        self.history.record_event(
-            state,
-            "answer_derived",
-            {"answer": answer, "source": "deterministic_capacity_plan"},
-        )
-        return answer
-
-
-    def _computed_report_spec(
-        self,
-        state: SessionState,
-        *,
-        goal_text: str | None = None,
-    ) -> tuple[str, str, list[str]] | None:
-        goal = goal_text or self._goal_text(state)
-        match = re.search(
-            r"read\s+`([^`]+\.json)`,\s*compute\s+the\s+correct\s+capacity\s+headroom,\s*write\s+`([^`]+)`,\s*and\s+run\s+`([^`]+)`\s+before\s+answering",
-            goal,
-            re.IGNORECASE,
-        )
-        if match is None:
-            return None
-        cwd_text = self._environment_cwd(state)
-        if not cwd_text:
-            return None
-        workspace = Path(cwd_text).resolve()
-
-        def normalize(path_text: str) -> str | None:
-            candidate = Path(path_text)
-            resolved = (candidate if candidate.is_absolute() else workspace / candidate).resolve()
-            try:
-                relative = resolved.relative_to(workspace)
-            except ValueError:
-                return None
-            if not resolved.is_file():
-                return None
-            return relative.as_posix()
-
-        source_path = normalize(match.group(1).strip())
-        target_path = normalize(match.group(2).strip())
-        try:
-            test_command = shlex.split(match.group(3).strip())
-        except ValueError:
-            return None
-        if source_path is None or target_path is None or source_path == target_path or not test_command:
-            return None
-        test_paths = [token for token in test_command if token.endswith(".py")]
-        if not test_paths or any(normalize(token) is None for token in test_paths):
-            return None
-        return source_path, target_path, test_command
-
-    def _computed_report_content(self, state: SessionState, *, source_path: str) -> str:
-        workspace = Path(self._environment_cwd(state))
-        payload = json.loads((workspace / source_path).read_text(encoding="utf-8"))
-        if not isinstance(payload, dict):
-            raise ValueError("computed report source must be a JSON object")
-        service = payload.get("service")
-        queued_jobs = payload.get("queued_jobs")
-        reserved_jobs = payload.get("reserved_jobs")
-        active_workers = payload.get("active_workers")
-        if not isinstance(service, str) or not service:
-            raise ValueError("computed report service must be a non-empty string")
-        numeric = (queued_jobs, reserved_jobs, active_workers)
-        if any(not isinstance(value, int) or isinstance(value, bool) for value in numeric):
-            raise ValueError("computed report job and worker values must be integers")
-        headroom = queued_jobs - reserved_jobs
-        return f"service={service}\nheadroom={headroom}\nworkers={active_workers}\n"
-
-    def _deterministic_computed_report_answer(self, state: SessionState) -> str | None:
-        spec = self._computed_report_spec(state)
-        if spec is None:
-            return None
-        source_path, target_path, test_command = spec
-        workspace = Path(self._environment_cwd(state))
-        try:
-            expected = self._computed_report_content(state, source_path=source_path)
-            actual = (workspace / target_path).read_text(encoding="utf-8")
-        except (OSError, ValueError, json.JSONDecodeError):
-            return None
-        if actual != expected:
-            return None
-        answer = (
-            f"Computed capacity headroom from `{source_path}`, wrote `{target_path}`, and verified it with `{' '.join(test_command)}`."
-        )
-        self.history.record_event(
-            state,
-            "answer_derived",
-            {"answer": answer, "source": "deterministic_computed_report"},
-        )
-        return answer
-
-
-    def _manifest_projection_spec(
-        self,
-        state: SessionState,
-        *,
-        goal_text: str | None = None,
-    ) -> tuple[str, str, list[str]] | None:
-        goal = goal_text or self._goal_text(state)
-        match = re.search(
-            r"read\s+`([^`]+\.json)`\s+and\s+update\s+`([^`]+)`\s+to\s+match\s+the\s+manifest\s+exactly\.\s*run\s+`([^`]+)`\s+before\s+answering",
-            goal,
-            re.IGNORECASE,
-        )
-        if match is None:
-            return None
-        cwd_text = self._environment_cwd(state)
-        if not cwd_text:
-            return None
-        workspace = Path(cwd_text).resolve()
-
-        def normalize(path_text: str) -> str | None:
-            candidate = Path(path_text)
-            resolved = (candidate if candidate.is_absolute() else workspace / candidate).resolve()
-            try:
-                relative = resolved.relative_to(workspace)
-            except ValueError:
-                return None
-            if not resolved.is_file():
-                return None
-            return relative.as_posix()
-
-        source_path = normalize(match.group(1).strip())
-        target_path = normalize(match.group(2).strip())
-        try:
-            test_command = shlex.split(match.group(3).strip())
-        except ValueError:
-            return None
-        if source_path is None or target_path is None or source_path == target_path or not test_command:
-            return None
-        test_paths = [token for token in test_command if token.endswith(".py")]
-        if not test_paths or any(normalize(token) is None for token in test_paths):
-            return None
-        return source_path, target_path, test_command
-
-    def _manifest_projection_content(self, state: SessionState, *, source_path: str) -> str:
-        workspace = Path(self._environment_cwd(state))
-        payload = json.loads((workspace / source_path).read_text(encoding="utf-8"))
-        if not isinstance(payload, dict) or not payload:
-            raise ValueError("manifest projection source must be a non-empty JSON object")
-
-        def render(value: Any) -> str:
-            if value is None:
-                return "null"
-            if value is True:
-                return "true"
-            if value is False:
-                return "false"
-            if isinstance(value, (str, int, float)):
-                return str(value)
-            raise ValueError("manifest projection values must be scalar JSON values")
-
-        return "".join(f"{key}={render(value)}\n" for key, value in payload.items())
-
-    def _deterministic_manifest_projection_answer(self, state: SessionState) -> str | None:
-        spec = self._manifest_projection_spec(state)
-        if spec is None:
-            return None
-        source_path, target_path, test_command = spec
-        workspace = Path(self._environment_cwd(state))
-        try:
-            expected = self._manifest_projection_content(state, source_path=source_path)
-            actual = (workspace / target_path).read_text(encoding="utf-8")
-        except (OSError, ValueError, json.JSONDecodeError):
-            return None
-        if actual != expected:
-            return None
-        answer = (
-            f"Updated `{target_path}` from `{source_path}` as exact key=value lines and verified it with `{' '.join(test_command)}`."
-        )
-        self.history.record_event(
-            state,
-            "answer_derived",
-            {"answer": answer, "source": "deterministic_manifest_projection"},
-        )
-        return answer
-
-
-    def _exact_file_sync_spec(
-        self,
-        state: SessionState,
-        *,
-        goal_text: str | None = None,
-    ) -> tuple[str, str] | None:
-        goal = goal_text or self._goal_text(state)
-        match = re.search(
-            r"read\s+`([^`]+)`\s+and\s+make\s+`([^`]+)`\s+match\s+it\s+exactly",
-            goal,
-            re.IGNORECASE,
-        )
-        if match is None or "reread" not in goal.lower():
-            return None
-        cwd_text = self._environment_cwd(state)
-        if not cwd_text:
-            return None
-        workspace = Path(cwd_text).resolve()
-
-        def normalize(path_text: str) -> str | None:
-            candidate = Path(path_text)
-            resolved = (candidate if candidate.is_absolute() else workspace / candidate).resolve()
-            try:
-                relative = resolved.relative_to(workspace)
-            except ValueError:
-                return None
-            if not resolved.is_file():
-                return None
-            return relative.as_posix()
-
-        source_path = normalize(match.group(1).strip())
-        target_path = normalize(match.group(2).strip())
-        if source_path is None or target_path is None or source_path == target_path:
-            return None
-        return source_path, target_path
-
-    def _deterministic_exact_file_sync_answer(self, state: SessionState) -> str | None:
-        spec = self._exact_file_sync_spec(state)
-        if spec is None:
-            return None
-        source_path, target_path = spec
-        workspace = Path(self._environment_cwd(state))
-        try:
-            source_text = (workspace / source_path).read_text(encoding="utf-8")
-            target_text = (workspace / target_path).read_text(encoding="utf-8")
-        except OSError:
-            return None
-        if source_text != target_text:
-            return None
-        answer = (
-            f"Synchronized `{target_path}` to match `{source_path}` exactly and reread the destination to verify the final contents."
-        )
-        self.history.record_event(
-            state,
-            "answer_derived",
-            {"answer": answer, "source": "deterministic_exact_file_sync"},
-        )
-        return answer
-
-
-    def _structured_reading_spec(
-        self,
-        state: SessionState,
-        *,
-        goal_text: str | None = None,
-    ) -> tuple[list[str], list[str]] | None:
-        goal = goal_text or self._goal_text(state)
-        if not re.search(r"return\s+a\s+json\s+object\s+only\s+with\s+keys", goal, re.IGNORECASE):
-            return None
-        quoted = [item.strip() for item in re.findall(r"`([^`]+)`", goal) if item.strip()]
-        cwd_text = self._environment_cwd(state)
-        if not cwd_text:
-            return None
-        workspace = Path(cwd_text)
-        paths: list[str] = []
-        keys: list[str] = []
-        file_suffixes = {".json", ".txt", ".md", ".log", ".yaml", ".yml", ".ini", ".env"}
-        for item in quoted:
-            candidate = Path(item)
-            if candidate.suffix.lower() in file_suffixes and (workspace / candidate).is_file():
-                normalized = candidate.as_posix()
-                if normalized not in paths:
-                    paths.append(normalized)
-            elif re.fullmatch(r"[A-Za-z_][A-Za-z0-9_]*", item) and item not in keys:
-                keys.append(item)
-        if not paths or not keys:
-            return None
-        return paths, keys
-
-    def _structured_reading_records(
-        self,
-        state: SessionState,
-        paths: list[str],
-    ) -> tuple[dict[str, dict[str, Any]], dict[str, str]]:
-        workspace = Path(self._environment_cwd(state))
-        records: dict[str, dict[str, Any]] = {}
-        raw_texts: dict[str, str] = {}
-        for path_text in paths:
-            path = workspace / path_text
-            try:
-                text = path.read_text(encoding="utf-8")
-            except OSError:
-                continue
-            name = Path(path_text).name
-            raw_texts[name] = text
-            mapping: dict[str, Any] = {}
-            stripped = text.strip()
-            if stripped.startswith("{") and stripped.endswith("}"):
-                try:
-                    payload = json.loads(stripped)
-                except json.JSONDecodeError:
-                    payload = None
-                if isinstance(payload, dict):
-                    mapping.update({str(key): value for key, value in payload.items() if isinstance(key, str)})
-            for match in re.finditer(r"(?<![A-Za-z0-9_])([A-Za-z_][A-Za-z0-9_-]*)=([^\s]+)", text):
-                mapping[match.group(1)] = match.group(2).strip()
-            records[name] = mapping
-        return records, raw_texts
-
-    def _deterministic_structured_reading_payload(self, state: SessionState) -> dict[str, Any] | None:
-        spec = self._structured_reading_spec(state)
-        if spec is None:
-            return None
-        paths, keys = spec
-        records, raw_texts = self._structured_reading_records(state, paths)
-        if not records:
-            return None
-
-        def record(name: str) -> dict[str, Any]:
-            return records.get(name, {})
-
-        def first_value(key: str) -> Any:
-            for path_text in paths:
-                name = Path(path_text).name
-                mapping = records.get(name, {})
-                if key in mapping:
-                    return mapping[key]
-            return None
-
-        payload: dict[str, Any] = {}
-        for key in keys:
-            value: Any = None
-            if key == "primary_region":
-                value = record("primary.txt").get("region")
-            elif key == "contradictory_region":
-                value = record("secondary.txt").get("region")
-            elif key == "source_of_truth":
-                value = (
-                    record("release_registry.txt").get("source")
-                    or record("primary.txt").get("source")
-                    or record("deployment_status.json").get("source")
-                )
-                if value is None:
-                    policy_text = "\n".join(
-                        text for name, text in raw_texts.items() if "policy" in name or "source_of_truth" in name
-                    )
-                    match = re.search(r"(?:use|prefer)\s+(?:the\s+)?([A-Za-z0-9_-]+)(?:\s+as|\s+when|\s+over)", policy_text, re.IGNORECASE)
-                    if match is not None:
-                        value = match.group(1).lower()
-            elif key == "authoritative_owner":
-                value = record("release_registry.txt").get("owner")
-            elif key == "conflicting_owner":
-                value = record("rollout_dashboard.txt").get("owner")
-            elif key == "chosen_status":
-                value = record("deployment_status.json").get("status")
-            elif key == "chosen_source":
-                value = record("deployment_status.json").get("source")
-            elif key == "stale_status":
-                value = record("dashboard_snapshot.txt").get("status")
-            elif key == "stale_source":
-                value = record("dashboard_snapshot.txt").get("source")
-            elif key == "eta":
-                roadmap = raw_texts.get("roadmap.md", "").lower()
-                value = None if "no launch eta" in roadmap or "eta has been approved" in roadmap else first_value("eta")
-            elif key == "maintenance_window":
-                approvals = raw_texts.get("approvals.md", "").lower()
-                value = None if "no maintenance window" in approvals or "has been scheduled yet" in approvals else first_value(key)
-            elif key == "rollback_ticket":
-                approvals = raw_texts.get("approvals.md", "").lower()
-                value = None if "rollback ticket has not been assigned" in approvals else first_value(key)
-            else:
-                value = first_value(key)
-            payload[key] = value
-        return payload
-
-    def _deterministic_structured_reading_answer(self, state: SessionState) -> str | None:
-        payload = self._deterministic_structured_reading_payload(state)
-        if payload is None:
-            return None
-        answer = json.dumps(payload, separators=(",", ":"), ensure_ascii=False)
-        self.history.record_event(
-            state,
-            "answer_derived",
-            {"answer": answer, "source": "deterministic_structured_reading"},
-        )
-        return answer
-
-
-    def _release_flow_repair_state(
-        self,
-        state: SessionState,
-    ) -> tuple[str, list[tuple[Path, str, str, str]]] | None:
-        cwd_text = self._environment_cwd(state)
-        if not cwd_text:
-            return None
-        workspace = Path(cwd_text)
-        unit_tests = sorted(workspace.glob("test_pkg_*_unit.py"))
-        if len(unit_tests) != 1:
-            return None
-        match = re.fullmatch(r"test_(pkg_[A-Za-z0-9_]+)_unit\.py", unit_tests[0].name)
-        if match is None:
-            return None
-        package_name = match.group(1)
-        package_dir = workspace / package_name
-        core_path = package_dir / "core.py"
-        calc_path = package_dir / "calc.py"
-        report_path = package_dir / "report.py"
-        compat_path = package_dir / "compat.py"
-        note_path = workspace / "release_notes.txt"
-        settings_path = workspace / "release_settings.json"
-        required = [core_path, calc_path, report_path, compat_path, note_path, settings_path]
-        if not all(item.is_file() for item in required):
-            return None
-        try:
-            test_text = "\n".join(
-                path.read_text(encoding="utf-8", errors="ignore")
-                for path in sorted(workspace.glob(f"test_{package_name}_*.py"))
-            )
-            settings = json.loads(settings_path.read_text(encoding="utf-8"))
-            base_match = re.search(r"assertEqual\(base_value\(\),\s*(\d+)\)", test_text)
-            total_match = re.search(r"assertEqual\(total\(\),\s*(\d+)\)", test_text)
-            if base_match is None or total_match is None:
-                return None
-            expected_base = int(base_match.group(1))
-            expected_total = int(total_match.group(1))
-            expected_delta = expected_total - expected_base
-            label = str(settings["label"])
-            tax_rate = settings["tax_rate"]
-
-            def line_repair(path: Path, pattern_re: str, desired_line: str) -> tuple[Path, str, str, str] | None:
-                source = path.read_text(encoding="utf-8")
-                current = next((line.strip() for line in source.splitlines() if re.fullmatch(pattern_re, line.strip())), None)
-                if current is None or current == desired_line:
-                    return None
-                return path, source, current, desired_line
-
-            candidates: list[tuple[Path, str, str, str] | None] = [
-                line_repair(core_path, r"return \d+", f"return {expected_base}"),
-                line_repair(calc_path, r"return base_value\(\) \+ \d+", f"return base_value() + {expected_delta}"),
-                line_repair(
-                    report_path,
-                    r"return f[\"'].*total\(\).*tax_rate.*[\"']",
-                    'return f"{settings[\'label\']}:{total()}:tax={settings[\'tax_rate\']}"',
-                ),
-                line_repair(
-                    compat_path,
-                    r"return \{.*tax\.replace\(.*\).*\}",
-                    "return {'label': label, 'total': total, 'tax': tax.replace('tax=', '')}",
-                ),
-            ]
-            note_source = note_path.read_text(encoding="utf-8")
-            desired_note = f"{label}:{expected_total}:tax={tax_rate}"
-            if note_source.strip() != desired_note:
-                candidates.append((note_path, note_source, note_source.strip(), desired_note))
-        except (OSError, ValueError, KeyError, TypeError, json.JSONDecodeError):
-            return None
-        return package_name, [item for item in candidates if item is not None]
-
-    def _repair_release_flow_edit_input(
-        self,
-        state: SessionState,
-        step: PlanStep,
-        payload: dict[str, Any],
-    ) -> dict[str, Any] | None:
-        if step.expected_tool not in {"edit_text", "write_file"}:
-            return None
-        release_state = self._release_flow_repair_state(state)
-        if release_state is None:
-            return None
-        _package_name, repairs = release_state
-        if not repairs:
-            return None
-        target, source, pattern, replacement = repairs[0]
-        repaired = dict(payload)
-        repaired["path"] = str(target)
-        if step.expected_tool == "write_file":
-            if target.name == "release_notes.txt":
-                new_source = replacement + "\n"
-            else:
-                new_source = source.replace(pattern, replacement, 1)
-            repaired.update({"content": new_source, "create": False})
-            return repaired
-        repaired.update(
-            {
-                "operation": "replace_pattern_once",
-                "pattern": pattern,
-                "replacement": replacement,
-            }
-        )
-        repaired.pop("start", None)
-        repaired.pop("end", None)
-        return repaired
-
-
-    def _tool_input_evidence_components(self, state: SessionState, step: PlanStep) -> list[PromptComponent]:
-        if step.expected_tool not in {"edit_text", "run_tests"}:
-            return []
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+    def _tool_input_evidence_components(self, state: SessionState, tool_name: str) -> list[PromptComponent]:
+        del tool_name
         components: list[PromptComponent] = []
-        failed_test_evidence = self._recent_failed_run_tests_evidence(state)
-        if failed_test_evidence and step.expected_tool == "edit_text":
+        failure_evidence = self._recent_tool_failure_evidence(state)
+        if failure_evidence:
+            components.append(
+                PromptComponent(
+                    name="recent_tool_failure_evidence",
+                    category="turn_context",
+                    text=f"Recent failed tool or verification evidence:\n{failure_evidence}\n\n",
+                )
+            )
+        file_snapshot_evidence = self._latest_file_snapshot_evidence(state)
+        if file_snapshot_evidence:
+            components.append(
+                PromptComponent(
+                    name="latest_file_snapshot_evidence",
+                    category="turn_context",
+                    text=f"Latest observed file snapshots:\n{file_snapshot_evidence}\n\n",
+                )
+            )
+        test_evidence = self._recent_failed_run_tests_evidence(state)
+        if test_evidence:
             components.append(
                 PromptComponent(
                     name="recent_failed_test_evidence",
                     category="turn_context",
-                    text=f"Recent failed test evidence:\n{failed_test_evidence}\n\n",
-                )
-            )
-        evidence = self._recent_inspection_evidence(state, step)
-        if evidence:
-            components.append(
-                PromptComponent(
-                    name="recent_inspection_evidence",
-                    category="turn_context",
-                    text=f"Recent inspection evidence:\n{evidence}\n\n",
+                    text=f"Recent failed test evidence:\n{test_evidence}\n\n",
                 )
             )
         return components
 
-    def _recent_inspection_evidence(self, state: SessionState, step: PlanStep) -> str | None:
-        tool_name = step.expected_tool
-        output = self._recent_tool_output(state, "shell_command")
-        if not isinstance(output, dict):
-            return None
-        stdout = str(output.get("stdout", "") or "").strip()
-        if not stdout:
-            return None
-        if tool_name == "edit_text":
-            source_excerpt = self._workspace_source_evidence(state, step)
-            if source_excerpt:
-                return source_excerpt
-        preferred_markers = ["source_file:", "test_file:"] if tool_name == "edit_text" else ["test_file:", "source_file:"]
-        start = -1
-        for marker in preferred_markers:
-            start = stdout.find(marker)
-            if start != -1:
-                break
-        snippet = stdout[start:] if start != -1 else stdout
-        max_chars = 900 if tool_name == "edit_text" else 1200
-        return snippet[:max_chars]
-
-    def _workspace_source_evidence(self, state: SessionState, step: PlanStep) -> str | None:
-        if step.expected_tool != "edit_text":
-            return None
-        source_path = self._hinted_edit_path_from_recent_tool_output(state)
-        if not source_path:
-            return None
-        cwd_text = self._environment_cwd(state)
-        if not cwd_text:
-            return None
-        try:
-            resolved = Path(cwd_text) / source_path
-            if not resolved.is_file():
-                return None
-            text = resolved.read_text(encoding="utf-8")
-        except OSError:
-            return None
-        normalized = text.strip()
-        if not normalized:
-            return None
-        focused_excerpt = self._focused_source_excerpt(state, step, normalized)
-        if focused_excerpt and (len(normalized) > 2400 or len(focused_excerpt) + 200 < len(normalized)):
-            excerpt = focused_excerpt
-        elif len(normalized) <= 2400:
-            excerpt = normalized
-        else:
-            excerpt = focused_excerpt or ""
-            if not excerpt:
-                head = normalized[:1800].rstrip()
-                tail = normalized[-1200:].lstrip()
-                excerpt = f"{head}\n...\n{tail}"
-        return f"source_file: ./{source_path.lstrip('./')}\n{excerpt[:3200]}"
-
-    def _focused_source_excerpt(self, state: SessionState, step: PlanStep, text: str) -> str | None:
-        lines = text.splitlines()
-        if not lines:
-            return None
-        windows: list[tuple[int, int]] = []
-        seen: set[tuple[int, int]] = set()
-        lowered_lines = [line.lower() for line in lines]
-
-        def _add_anchor(needle: str, before: int, after: int) -> bool:
-            lowered = needle.lower()
-            for index, line in enumerate(lowered_lines):
-                if lowered not in line:
-                    continue
-                start = max(0, index - before)
-                end = min(len(lines), index + after + 1)
-                key = (start, end)
-                if key not in seen:
-                    windows.append(key)
-                    seen.add(key)
-                return True
-            return False
-
-        has_mapping_anchor = _add_anchor('"conjugate":', 1, 2)
-        if not has_mapping_anchor:
-            for term in self._source_probe_terms(state, step):
-                _add_anchor(term, 2, 3)
-        if has_mapping_anchor:
-            _add_anchor("known_functions = {", 0, 1)
-        else:
-            _add_anchor("known_functions = {", 0, 6)
-            _add_anchor("def _print_Function", 1, 1)
-            _add_anchor("return expr.func.__name__", 0, 0)
-        if not windows:
-            return None
-        merged: list[tuple[int, int]] = []
-        for start, end in sorted(windows):
-            if not merged or start > merged[-1][1]:
-                merged.append((start, end))
-            else:
-                merged[-1] = (merged[-1][0], max(merged[-1][1], end))
-        parts: list[str] = []
-        for index, (start, end) in enumerate(merged):
-            snippet = "\n".join(lines[start:end]).strip()
-            if not snippet:
+    def _recent_tool_failure_evidence(self, state: SessionState) -> str:
+        items: list[dict[str, Any]] = []
+        max_string_chars = 600
+        for message in reversed(state.messages):
+            if message.role != "tool":
                 continue
-            if index:
-                parts.append("...")
-            parts.append(snippet)
-        excerpt = "\n".join(parts).strip()
-        if len(excerpt) > 1800:
-            excerpt = excerpt[:1800].rstrip()
-        return excerpt or None
+            content = message.content.strip()
+            if not (content.startswith("tool_error:") or content.startswith("verification_preview_failed:")):
+                continue
+            payload = message.metadata if isinstance(message.metadata, dict) else {"content": content}
+            items.append(
+                {
+                    "tool_name": message.name or "",
+                    "content": self._bounded_evidence_value(content, max_string_chars=max_string_chars),
+                    "metadata": self._bounded_evidence_value(payload, max_string_chars=max_string_chars),
+                }
+            )
+            if len(items) >= 3:
+                break
+        if not items:
+            return ""
+        items.reverse()
+        return stable_json_dumps(items)
+
+    def _latest_file_snapshot_evidence(self, state: SessionState) -> str:
+        snapshots: list[dict[str, Any]] = []
+        max_string_chars = 600
+        for path, view in sorted(state.file_views.items())[-2:]:
+            content = view.content if view.content is not None else view.last_chunk_text
+            if content is None:
+                content = ""
+            snapshots.append(
+                {
+                    "path": path,
+                    "content": self._bounded_evidence_value(content, max_string_chars=max_string_chars),
+                    "last_operation": view.last_operation,
+                    "metadata": self._bounded_evidence_value(view.metadata, max_string_chars=max_string_chars, max_items=4),
+                }
+            )
+        seen_paths = {item["path"] for item in snapshots}
+        for path, text in sorted(state.environment.workspace.known_files.items())[-2:]:
+            if path in seen_paths:
+                continue
+            snapshots.append(
+                {
+                    "path": path,
+                    "content": self._bounded_evidence_value(text, max_string_chars=max_string_chars),
+                    "last_operation": "workspace_known_file",
+                    "metadata": {},
+                }
+            )
+        if not snapshots:
+            return ""
+        return stable_json_dumps(snapshots[-2:])
+
+
+
 
     def _path_exists_in_workspace(self, state: SessionState, candidate: str) -> bool:
         cwd_text = self._environment_cwd(state)
@@ -8076,192 +4903,14 @@ class AgentRuntime:
         command = output.get("command", "")
         stderr = str(output.get("stderr", "") or "").strip()
         stdout = str(output.get("stdout", "") or "").strip()
-        evidence = stderr or stdout
-        if not evidence:
+        if not stderr and not stdout:
             return None
-        compact = " ".join(evidence.split())[:1600]
         return (
-            f"Previous run_tests command failed: {command!r}. "
-            "Do not run the same test command again until after a relevant source edit. "
-            f"Failure evidence: {compact}"
-        )
+            f"command={command!r}\n"
+            f"stdout:\n{stdout[:1200]}\n"
+            f"stderr:\n{stderr[:1200]}"
+        ).strip()
 
-    def _hinted_edit_path_from_failed_test(self, state: SessionState) -> str | None:
-        output = self._recent_failed_run_tests_output(state)
-        if not isinstance(output, dict):
-            return None
-        evidence = "\n".join(str(output.get(key, "") or "") for key in ("stderr", "stdout"))
-        if not evidence.strip():
-            return None
-        terms: list[str] = []
-        for pattern in (r"\b(?:FAIL|ERROR):\s+(test_[A-Za-z0-9_]+)", r"\b(test_[A-Za-z0-9_]+)\b"):
-            for match in re.finditer(pattern, evidence):
-                raw = match.group(1)
-                if raw.startswith("test_"):
-                    raw = raw[len("test_") :]
-                for part in re.split(r"[_\W]+", raw):
-                    if len(part) >= 3 and part.lower() not in {"test", "tests", "final", "cents"}:
-                        terms.append(part.lower())
-        for match in re.finditer(r"\b([A-Za-z_][A-Za-z0-9_]*)\s*\(", evidence):
-            name = match.group(1)
-            if name not in {"self", "assertEqual", "assertTrue", "assertFalse", "len", "round", "int"} and len(name) >= 3:
-                terms.append(name.lower())
-        seen_terms: list[str] = []
-        for term in terms:
-            if term not in seen_terms:
-                seen_terms.append(term)
-        if not seen_terms:
-            return None
-        cwd_text = self._environment_cwd(state)
-        if not cwd_text:
-            return None
-        try:
-            workspace = Path(cwd_text)
-            candidates = [
-                path
-                for path in workspace.rglob("*.py")
-                if path.is_file()
-                and not path.name.startswith("test_")
-                and path.name != "__init__.py"
-                and "__pycache__" not in path.parts
-                and not path.name.endswith(".bak")
-            ]
-        except OSError:
-            return None
-        scored: list[tuple[int, int, str]] = []
-        for path in candidates:
-            rel = self._workspace_relative_path(workspace, path)
-            lower_rel = rel.lower()
-            try:
-                content = path.read_text(encoding="utf-8", errors="ignore").lower()
-            except OSError:
-                content = ""
-            score = 0
-            for term in seen_terms:
-                if term in lower_rel:
-                    score += 6
-                if re.search(rf"\bdef\s+{re.escape(term)}\s*\(", content):
-                    score += 10
-                elif re.search(rf"\b{re.escape(term)}\s*\(", content):
-                    score += 4
-                elif term in content:
-                    score += 2
-            if score > 0:
-                scored.append((score, -len(rel), rel))
-        if not scored:
-            return None
-        scored.sort(reverse=True)
-        if len(scored) > 1 and scored[0][0] == scored[1][0] and scored[0][1] == scored[1][1]:
-            return None
-        return scored[0][2]
-
-    def _hinted_edit_path_from_recent_tool_output(self, state: SessionState) -> str | None:
-        failed_test_path = self._hinted_edit_path_from_failed_test(state)
-        if failed_test_path:
-            return failed_test_path
-        output = self._recent_tool_output(state, "shell_command")
-        if not isinstance(output, dict):
-            return None
-        stdout = str(output.get("stdout", "") or "")
-        match = re.search(r"source_file:\s*(\S+)", stdout)
-        if match is not None:
-            return match.group(1).lstrip("./")
-        test_match = re.search(r"test_file:\s*(\S+)", stdout)
-        if test_match is None:
-            return None
-        return self._derive_source_path_from_test_file(state, test_match.group(1))
-
-    def _derive_source_path_from_test_file(self, state: SessionState, test_path: str) -> str | None:
-        candidate = test_path.strip().lstrip("./")
-        if not candidate:
-            return None
-        path = Path(candidate)
-        parts = list(path.parts)
-        if "tests" not in parts:
-            return None
-        test_index = parts.index("tests")
-        if test_index <= 0:
-            return None
-        name = path.name
-        if not name.startswith("test_") or not name.endswith(".py"):
-            return None
-        source_name = name[len("test_") :]
-        derived = Path(*parts[:test_index], source_name).as_posix()
-        return self._resolve_workspace_path(state, self._current_or_next_plan_step(state), derived)
-
-    def _source_probe_terms(self, state: SessionState, step: PlanStep | None) -> list[str]:
-        if step is None:
-            return []
-        terms: list[str] = []
-        seen: set[str] = set()
-        for term in self._shell_search_terms(state, step):
-            lowered = term.lower()
-            if lowered in seen:
-                continue
-            if "/" in term or "::" in term or term.startswith("test_"):
-                continue
-            terms.append(term)
-            seen.add(lowered)
-        for message in reversed(state.messages):
-            if message.role != "user":
-                continue
-            for hint in self._task_contract_file_hints(message.content):
-                stem = Path(hint).stem
-                lowered = stem.lower()
-                if lowered in seen:
-                    continue
-                terms.append(stem)
-                seen.add(lowered)
-            break
-        return terms
-
-    def _resolve_workspace_path(self, state: SessionState, step: PlanStep | None, candidate: str) -> str | None:
-        cwd_text = self._environment_cwd(state)
-        raw_candidate = candidate.strip()
-        if not cwd_text or not raw_candidate:
-            return None
-        workspace = Path(cwd_text)
-        try:
-            candidate_path = Path(raw_candidate)
-        except (TypeError, ValueError):
-            return None
-        existing = candidate_path if candidate_path.is_absolute() else workspace / candidate_path
-        if existing.exists():
-            return self._workspace_relative_path(workspace, existing)
-        name = candidate_path.name
-        if not name:
-            return None
-        try:
-            matches = [path for path in workspace.rglob(name) if path.is_file()]
-        except OSError:
-            return None
-        if not matches:
-            return None
-        scored: list[tuple[int, int, str]] = []
-        probe_terms = [term.lower() for term in self._source_probe_terms(state, step)]
-        for match in matches:
-            rel = self._workspace_relative_path(workspace, match)
-            lower_rel = rel.lower()
-            score = 0
-            if "/tests/" in lower_rel or lower_rel.startswith("tests/"):
-                score -= 5
-            if lower_rel.startswith(("doc/", "docs/")) or "/doc/" in lower_rel or "/docs/" in lower_rel:
-                score -= 3
-            if lower_rel.endswith("/__init__.py") or lower_rel == "__init__.py":
-                score -= 1
-            try:
-                content = match.read_text(encoding="utf-8", errors="ignore")
-            except OSError:
-                content = ""
-            lower_content = content.lower()
-            for term in probe_terms:
-                if term in lower_rel:
-                    score += 3
-                if term and term in lower_content:
-                    score += 2
-            scored.append((score, -len(rel), rel))
-        scored.sort(reverse=True)
-        return scored[0][2]
 
     def _workspace_relative_path(self, workspace: Path, path: Path) -> str:
         try:
@@ -8278,449 +4927,23 @@ class AgentRuntime:
             return workspace_cwd
         return getattr(state.environment.workspace, "root", "") or ""
 
-    def _default_test_command_for_step(self, state: SessionState, step: PlanStep) -> list[str] | None:
-        del step
-        for message in reversed(state.messages):
-            if message.role != "user":
-                continue
-            failing_tests = self._task_contract_failing_tests(message.content)
-            if not failing_tests:
-                return None
-            first = failing_tests[0]
-            if "::" in first or "/" in first:
-                return ["python3", "-m", "pytest", first]
-            output = self._recent_tool_output(state, "shell_command")
-            stdout = str(output.get("stdout", "") or "") if isinstance(output, dict) else ""
-            match = re.search(r"test_file:\s*(\S+)", stdout)
-            if match is not None:
-                test_file = match.group(1).lstrip("./")
-                return ["python3", "-m", "pytest", test_file, "-k", first]
-            return ["python3", "-m", "pytest", "-k", first]
-        return None
 
-    def _default_shell_command_for_step(self, state: SessionState, step: PlanStep) -> str | None:
-        if step.kind != "read":
-            return None
-        for message in reversed(state.messages):
-            if message.role != "user":
-                continue
-            failing_tests = self._task_contract_failing_tests(message.content)
-            if failing_tests:
-                exact_terms = failing_tests[:3]
-                quoted_terms = " ".join(shlex.quote(term) for term in exact_terms)
-                patterns = " ".join(f"-e {shlex.quote(term)}" for term in exact_terms)
-                command_parts = [f"printf 'search_terms: {quoted_terms}\\n'"]
-                bare_tests = [term for term in exact_terms if "/" not in term and "::" not in term]
-                # Only probe source terms when we have bare test names (no full path);
-                # full-path tests already pin the location — don't add noise keywords.
-                source_terms = self._source_probe_terms(state, step) if bare_tests else []
-                command_parts.append("test_file=''")
-                if bare_tests:
-                    for term in source_terms[:3]:
-                        command_parts.append(
-                            "if [ -z \"$test_file\" ]; then "
-                            f"test_file=$(rg -l -F -e {shlex.quote(term)} . | grep '/tests/' | head -n 1); "
-                            "fi"
-                        )
-                    for test_name in bare_tests[:2]:
-                        command_parts.append(
-                            "if [ -z \"$test_file\" ]; then "
-                            f"test_file=$(rg -l -F -e {shlex.quote(f'def {test_name}(')} . | head -n 1); "
-                            "fi"
-                        )
-                    command_parts.append(
-                        "if [ -n \"$test_file\" ]; then "
-                        "printf 'test_file: %s\\n' \"$test_file\"; "
-                        "sed -n '1,220p' \"$test_file\"; "
-                        "fi"
-                    )
-                command_parts.append("source_file=''")
-                command_parts.append(
-                    "if [ -n \"$test_file\" ]; then "
-                    "derived_source=$(printf '%s' \"$test_file\" | sed -E 's#(^|.*/)(tests/)?test_([^/]+\\.py)$#\\1\\3#'); "
-                    "if [ -f \"$derived_source\" ]; then source_file=\"$derived_source\"; fi; "
-                    "fi"
-                )
-                for term in source_terms[:3]:
-                    command_parts.append(
-                        "if [ -z \"$source_file\" ]; then "
-                        f"source_file=$(rg -l -F -e {shlex.quote(term)} . "
-                        "| grep -v '/tests/' | grep -v '^\\./doc/' | grep -v '^\\./docs/' "
-                        "| grep -v '/__init__\\.py$' | head -n 1); "
-                        "fi"
-                    )
-                for file_hint in self._task_contract_file_hints(message.content)[:2]:
-                    command_parts.append(
-                        "if [ -z \"$source_file\" ]; then "
-                        f"source_file=$(find . -path {shlex.quote('*/' + file_hint)} "
-                        "| grep -v '/tests/' | grep -v '^\\./doc/' | grep -v '^\\./docs/' | head -n 1); "
-                        "fi"
-                    )
-                command_parts.append(
-                    "if [ -n \"$source_file\" ]; then "
-                    "printf 'source_file: %s\\n' \"$source_file\"; "
-                    "sed -n '1,220p' \"$source_file\"; "
-                    "fi"
-                )
-                command_parts.append(
-                    f"matches=$(rg -n -F {patterns} . | head -n 20 || true); "
-                    "if [ -n \"$matches\" ]; then printf '%s\\n' \"$matches\"; fi"
-                )
-                return "; ".join(command_parts)
-            break
-        terms = self._shell_search_terms(state, step)
-        if not terms:
-            return None
-        pattern = "|".join(terms[:6])
-        quoted_terms = " ".join(shlex.quote(term) for term in terms[:6])
-        return (
-            f"printf 'search_terms: {quoted_terms}\\n'; "
-            f"rg -n {shlex.quote(pattern)} . || true"
-        )
 
-    def _shell_search_terms(self, state: SessionState, step: PlanStep) -> list[str]:
-        for message in reversed(state.messages):
-            if message.role == "user":
-                texts = [self._operational_goal_from_task_contract(message.content), step.input_text, step.goal, step.title]
-                break
-        else:
-            texts = [step.input_text, step.goal, step.title]
-        if state.active_plan is not None:
-            texts.append(state.active_plan.goal)
-        combined = "\n".join(part for part in texts if part)
-        candidates: list[str] = []
-        for match in re.findall(r"(tests/[^\s:]+::[^\s]+|[A-Za-z_][A-Za-z0-9_]{2,})", combined):
-            token = match.strip()
-            lowered = token.lower()
-            if lowered in {
-                "task",
-                "contract",
-                "problem",
-                "statement",
-                "known",
-                "failing",
-                "tests",
-                "hints",
-                "benchmark",
-                "issue",
-                "inspect",
-                "inspection",
-                "failing_area",
-                "patched_code",
-                "result_report",
-                "area",
-                "locate",
-                "symbol",
-                "symbols",
-                "current",
-                "step",
-                "verify",
-                "verification",
-                "read",
-                "write",
-                "respond",
-                "tool",
-                "repo",
-                "task_kind",
-                "request_completeness",
-                "requires_code_changes",
-                "requires_verification",
-                "prefer_task_expansion",
-                "local_repo_code_fix",
-                "complete",
-                "true",
-                "false",
-                "local",
-                "code",
-                "fix",
-                "path",
-                "paths",
-                "goal",
-                "print",
-                "before",
-                "editing",
-                "most",
-                "relevant",
-                "source",
-                "files",
-                "file",
-                "named",
-                "then",
-                "use",
-                "commands",
-                "only",
-                "the",
-                "and",
-            }:
-                continue
-            if token not in candidates:
-                candidates.append(token)
 
-        def _score(token: str) -> tuple[int, int]:
-            score = 0
-            if "/" in token or "::" in token:
-                score += 4
-            if "_" in token:
-                score += 3
-            if any(char.isupper() for char in token):
-                score += 2
-            if token.islower():
-                score -= 1
-            return (score, -candidates.index(token))
 
-        return sorted(candidates, key=_score, reverse=True)
 
-    def _validate_generation_units_payload(self, payload: dict[str, Any]) -> dict[str, Any]:
-        output_class = str(payload.get("output_class", "")).strip()
-        if output_class not in {"bounded_structured", "schema_bounded", "open_ended"}:
-            raise ValueError("generation output_class must be bounded_structured, schema_bounded, or open_ended")
-        reason = str(payload.get("reason", "")).strip()
-        if not reason:
-            raise ValueError("generation decomposition reason must not be empty")
-        raw_units = payload.get("units")
-        if not isinstance(raw_units, list) or not raw_units:
-            raise ValueError("generation decomposition must contain at least one unit")
-        units: list[dict[str, str]] = []
-        for raw in raw_units:
-            if not isinstance(raw, dict):
-                raise ValueError("generation unit must be an object")
-            unit_id = str(raw.get("unit_id", "")).strip()
-            title = str(raw.get("title", "")).strip()
-            instruction = str(raw.get("instruction", "")).strip()
-            if not unit_id or not title or not instruction:
-                raise ValueError("generation unit fields must not be empty")
-            units.append({"unit_id": unit_id, "title": title, "instruction": instruction})
-        return {"output_class": output_class, "reason": reason, "units": units}
 
-    def _validate_overflow_recovery_payload(self, payload: dict[str, Any]) -> dict[str, Any]:
-        reason = str(payload.get("reason", "")).strip()
-        if not reason:
-            raise ValueError("overflow recovery reason must not be empty")
-        raw_units = payload.get("next_units")
-        if not isinstance(raw_units, list):
-            raise ValueError("overflow recovery next_units must be a list")
-        units: list[dict[str, str]] = []
-        for raw in raw_units:
-            if not isinstance(raw, dict):
-                raise ValueError("overflow recovery unit must be an object")
-            unit_id = str(raw.get("unit_id", "")).strip()
-            title = str(raw.get("title", "")).strip()
-            instruction = str(raw.get("instruction", "")).strip()
-            if not unit_id or not title or not instruction:
-                raise ValueError("overflow recovery unit fields must not be empty")
-            units.append({"unit_id": unit_id, "title": title, "instruction": instruction})
-        return {
-            "keep_partial": bool(payload.get("keep_partial")),
-            "reason": reason,
-            "next_units": units,
-        }
-
-    def _plan_answer_generation_units(self, state: SessionState) -> tuple[dict[str, Any], BudgetReport]:
-        contract = generation_decomposition_contract()
-        current_step = None
-        if state.active_plan is not None and state.active_plan.current_step_id:
-            current_step = next((item for item in state.active_plan.steps if item.step_id == state.active_plan.current_step_id), None)
-        detail_lines = []
-        if current_step is not None:
-            detail_lines.append(f"step_title={current_step.title}")
-            detail_lines.append(f"success_criteria={current_step.success_criteria}")
-            detail_lines.append(f"expected_output={current_step.expected_output}")
-
-        def _build(prompt_mode: str, bundle: ContextBundle) -> PromptAssembly:
-            components = [
-                PromptComponent(
-                    name="generation_goal",
-                    category="current_user",
-                    text=f"Goal:\n{self._goal_text(state)}\n\n",
-                ),
-                *bundle.components,
-                PromptComponent(
-                    name="generation_instruction",
-                    category="instruction",
-                    text=(
-                        "Plan answer generation units.\n"
-                        "Return one JSON object with keys output_class, reason, and units.\n"
-                        "output_class must be one of [bounded_structured, schema_bounded, open_ended].\n"
-                        "  bounded_structured: one short constrained response fits within the budget.\n"
-                        "  schema_bounded: response follows a known schema but may be moderately long.\n"
-                        "  open_ended: free-form text that may need splitting into multiple units.\n"
-                        "reason is one short justification.\n"
-                        "units is an array of generation units; each unit object must have unit_id, title, and instruction.\n"
-                        "For open_ended output, split into the smallest coherent semantic units that can each be generated safely within budget.\n"
-                        "Use one unit when a single bounded response is sufficient.\n"
-                        f"Details:\n{chr(10).join(detail_lines)}\n"
-                    ),
-                ),
-            ]
-            return self.prompts._assemble("generation_decomposition", prompt_mode, components)
-
-        prepared = self._prepare_call(
-            state,
-            kind="generation_decomposition",
-            build_prompt=_build,
-            contract=contract,
-            prompt_modes=self._interactive_prompt_modes(),
-            goal=self._goal_text(state),
-        )
-        try:
-            _completion, payload = self._execute_structured_call(
-                state,
-                prepared,
-                validator=self._validate_generation_units_payload,
-                validation_error_types=(ValueError,),
-                fatal_on_structured_failure=False,
-            )
-        except (RuntimeError, ValueError) as exc:
-            payload = {
-                "output_class": "bounded_structured",
-                "reason": "fallback after invalid decomposition",
-                "units": [
-                    {
-                        "unit_id": "u1",
-                        "title": "Final response",
-                        "instruction": "Write the final response for the current task.",
-                    }
-                ],
-            }
-            self.history.record_event(
-                state,
-                "output_decomposition_planned",
-                {
-                    "output_class": payload["output_class"],
-                    "reason": f"invalid_generation_decomposition: {exc.__class__.__name__}",
-                    "units": payload["units"],
-                },
-            )
-        self.history.record_event(
-            state,
-            "output_decomposition_planned",
-            {
-                "output_class": payload["output_class"],
-                "reason": payload["reason"],
-                "units": payload["units"],
-            },
-        )
-        return payload, prepared.report
-
-    def _generate_answer_unit(
-        self,
-        state: SessionState,
-        *,
-        contract: ContractSpec,
-        unit: dict[str, str],
-    ) -> tuple[str, BudgetReport, bool]:
-        prepared = self._prepare_call(
-            state,
-            kind="answer",
-            build_prompt=lambda prompt_mode, bundle: self.prompts._assemble(
-                "answer",
-                prompt_mode,
-                [
-                    *self.prompts.build_answer_prompt(
-                        bundle.history_messages,
-                        prompt_mode=prompt_mode,
-                        context_components=bundle.components,
-                    ).components,
-                    PromptComponent(
-                        name="answer_unit",
-                        category="instruction",
-                        text=(
-                            f"Answer unit: {unit['title']}\n"
-                            f"Unit id: {unit['unit_id']}\n"
-                            f"Instruction:\n{unit['instruction']}\n"
-                        ),
-                    ),
-                ],
-            ),
-            contract=contract,
-            prompt_modes=self._interactive_prompt_modes(),
-            goal=self._goal_text(state),
-        )
-        completion = self._execute_model_call(state, prepared)
-        overflowed = bool(
-            completion.completion_tokens is not None
-            and completion.completion_tokens >= prepared.report.reserved_response_tokens
-        )
-        self.history.record_event(
-            state,
-            "output_unit_generated",
-            {
-                "unit": unit,
-                "overflowed": overflowed,
-                "text": completion.text.strip(),
-            },
-        )
-        return completion.text.strip(), prepared.report, overflowed
 
     def _generate_direct_response_once(self, state: SessionState) -> tuple[str, BudgetReport]:
-        contract = plain_text_contract()
+        contract = text_response_contract("answer_response")
         prepared = self._prepare_call(
             state,
             kind="answer",
             build_prompt=lambda prompt_mode, bundle: self.prompts.build_answer_prompt(
                 state.messages,
                 prompt_mode=prompt_mode,
-                context_components=bundle.components,
+                context_components=[*self._answer_step_context_components(state), *bundle.components],
             ),
-            contract=contract,
-            prompt_modes=self._interactive_prompt_modes(),
-            goal=self._goal_text(state),
-        )
-        completion = self._execute_model_call(state, prepared)
-        self.history.record_event(
-            state,
-            "output_unit_generated",
-            {
-                "unit": {"unit_id": "direct_response", "title": "Direct response", "instruction": "Answer directly."},
-                "overflowed": False,
-                "text": completion.text.strip(),
-                "source": "semantic_direct_response",
-            },
-        )
-        return completion.text.strip(), prepared.report
-
-    def _recover_overflow_unit(
-        self,
-        state: SessionState,
-        *,
-        unit: dict[str, str],
-        partial_text: str,
-    ) -> tuple[dict[str, Any], BudgetReport]:
-        contract = overflow_recovery_contract()
-
-        def _build(prompt_mode: str, bundle: ContextBundle) -> PromptAssembly:
-            components = [
-                PromptComponent(
-                    name="overflow_unit",
-                    category="current_user",
-                    text=(
-                        f"Goal:\n{self._goal_text(state)}\n\n"
-                        f"Overflowed unit:\n{stable_json_dumps(unit)}\n\n"
-                        f"Partial text:\n{partial_text}\n\n"
-                    ),
-                ),
-                *bundle.components,
-                PromptComponent(
-                    name="overflow_instruction",
-                    category="instruction",
-                    text=(
-                        "The previous generation unit overflowed its token budget.\n"
-                        "Return one JSON object with keys keep_partial, reason, and next_units.\n"
-                        "keep_partial tells whether the existing partial text is safe to keep verbatim; return it as a boolean.\n"
-                        "reason is one short justification.\n"
-                        "next_units is the remaining work split into smaller unit objects; each object must have unit_id, title, and instruction.\n"
-                        "If partial text is truncated mid-sentence or missing critical content, set keep_partial=false.\n"
-                        "Split remaining work into the smallest coherent units that each fit within a normal budget.\n"
-                        "Do not return a unit that merely says 'continue' — each unit must have a concrete, bounded instruction.\n"
-                    ),
-                ),
-            ]
-            return self.prompts._assemble("overflow_recovery", prompt_mode, components)
-
-        prepared = self._prepare_call(
-            state,
-            kind="overflow_recovery",
-            build_prompt=_build,
             contract=contract,
             prompt_modes=self._interactive_prompt_modes(),
             goal=self._goal_text(state),
@@ -8728,54 +4951,49 @@ class AgentRuntime:
         _completion, payload = self._execute_structured_call(
             state,
             prepared,
-            validator=self._validate_overflow_recovery_payload,
+            validator=self._validate_text_response_payload,
             validation_error_types=(ValueError,),
         )
         self.history.record_event(
             state,
-            "output_overflow_recovery_planned",
+            "output_unit_generated",
             {
-                "unit": unit,
-                "keep_partial": payload["keep_partial"],
-                "reason": payload["reason"],
-                "next_units": payload["next_units"],
+                "unit": {"unit_id": "direct_response", "title": "Direct response", "instruction": "Answer directly."},
+                "overflowed": False,
+                "text": payload["text"],
+                "source": "model_answer_response",
             },
         )
-        return payload, prepared.report
+        return payload["text"], prepared.report
+
+    def _answer_step_context_components(self, state: SessionState) -> list[PromptComponent]:
+        step = self._current_or_next_plan_step(state)
+        if step is None or step.kind not in {"respond", "reasoning"}:
+            return []
+        return [
+            PromptComponent(
+                name="answer_step_contract",
+                category="instruction",
+                text=(
+                    "Current answer step contract:\n"
+                    f"step_id: {step.step_id}\n"
+                    f"title: {step.title}\n"
+                    f"goal: {step.goal}\n"
+                    f"expected_output: {step.expected_output}\n"
+                    f"expected_outputs: {stable_json_dumps(step.expected_outputs)}\n"
+                    f"success_criteria: {step.success_criteria}\n"
+                    f"required_conditions: {stable_json_dumps(step.required_conditions)}\n"
+                    f"verification_checks: {stable_json_dumps(step.verification_checks)}\n\n"
+                ),
+            )
+        ]
+
 
     def _answer(self, state: SessionState) -> tuple[str, BudgetReport]:
-        contract = plain_text_contract()
-        derived_answer = self._deterministic_answer(state)
-        if self._should_force_not_done_answer(state, derived_answer=derived_answer):
-            report = self._empty_budget_report()
-            self.history.record_event(state, "answer_derived", {"answer": "not done", "source": "deterministic_failure_guard"})
-            return "not done", report
-        if derived_answer is not None and self._can_finalize_exact_reply(state):
-            report = self._empty_budget_report()
-            self.history.record_event(state, "answer_derived", {"answer": derived_answer, "source": "deterministic_finalizer"})
-            return derived_answer, report
-        latest_decision = state.latest_decision
-        if latest_decision is not None and latest_decision.direct_response and self._can_finalize_exact_reply(state):
-            return self._generate_direct_response_once(state)
-        unit_plan, plan_report = self._plan_answer_generation_units(state)
-        reports = [plan_report]
-        unit_texts: list[str] = []
-        pending_units = list(unit_plan["units"])
-        while pending_units:
-            unit = pending_units.pop(0)
-            text, unit_report, overflowed = self._generate_answer_unit(state, contract=contract, unit=unit)
-            reports.append(unit_report)
-            keep_partial = True
-            if overflowed:
-                recovery, recovery_report = self._recover_overflow_unit(state, unit=unit, partial_text=text)
-                reports.append(recovery_report)
-                keep_partial = recovery["keep_partial"]
-                if recovery["next_units"]:
-                    pending_units = list(recovery["next_units"]) + pending_units
-            if keep_partial and text.strip():
-                unit_texts.append(text.strip())
-        answer_text = "\n\n".join(part for part in unit_texts if part)
-        return answer_text.strip(), reports[-1]
+        return self._generate_direct_response_once(state)
+
+    def _incomplete_turn_response(self, status: str, reason: str) -> str:
+        return f"Task incomplete: {reason or status}. Verified success was not reached."
 
     def _record_reasoning_completed(
         self,
@@ -8869,6 +5087,12 @@ class AgentRuntime:
                 f"Evaluator attempted to override deterministic verification failure for step {step.step_id}"
             )
         if evaluation.passed:
+            final_verification = self._verify_final_objective(state, step, assistant_text)
+            final_evaluation = evaluate_verification(step, final_verification)
+            if not final_evaluation.passed:
+                verification = final_verification
+                evaluation = final_evaluation
+        if evaluation.passed:
             self._complete_step(state, plan, step, outcome=assistant_text[:120] or "assistant_response")
             self._refresh_project_state(state, reason=f"step_completed:{step.step_id}")
             self._check_consistency(state)
@@ -8882,20 +5106,101 @@ class AgentRuntime:
         )
         return False, True
 
+    def _prepare_direct_verification_call(
+        self,
+        state: SessionState,
+        *,
+        contract: ContractSpec,
+        build_prompt,
+    ) -> PreparedCall:
+        last_report: BudgetReport | None = None
+        last_error = "unknown direct verification budget failure"
+        for prompt_mode in self._interactive_prompt_modes():
+            assembly = build_prompt(prompt_mode)
+            report = self._budget_report(state, assembly, contract)
+            self.history.record_event(
+                state,
+                "prompt_built",
+                {
+                    "kind": "verification",
+                    "prompt_mode": prompt_mode,
+                    "contract": to_jsonable(contract),
+                    "prompt": assembly.prompt_text,
+                    "components": [asdict(component) for component in assembly.components],
+                    "budget_report": asdict(report),
+                    "direct_evidence_context": True,
+                },
+            )
+            cap_error = self._cap_error(report)
+            self.history.record_event(
+                state,
+                "budget_checked",
+                {
+                    "kind": "verification",
+                    "prompt_mode": prompt_mode,
+                    "budget_report": asdict(report),
+                    "cap_error": cap_error,
+                    "direct_evidence_context": True,
+                },
+            )
+            if report.fits and cap_error is None:
+                return PreparedCall(
+                    assembly=assembly,
+                    report=report,
+                    prompt_mode=prompt_mode,
+                    contract=contract,
+                )
+            last_report = report
+            last_error = cap_error or "budget overflow"
+            self.history.record_event(
+                state,
+                "budget_rejected",
+                {
+                    "kind": "verification",
+                    "prompt_mode": prompt_mode,
+                    "reason": last_error,
+                    "budget_report": asdict(report),
+                    "direct_evidence_context": True,
+                },
+            )
+        raise BudgetExceededError(
+            f"Direct verification prompt does not fit within context budget: {last_error}",
+            last_report,
+        )
+
     def _run_llm_verification(
         self,
         state: SessionState,
         *,
         step: PlanStep,
-        criteria: list[dict[str, str]],
+        criteria: list[dict[str, Any]],
         assistant_text: str,
         evidence: dict[str, Any],
+        contract_name: str = "verification",
+        include_context: bool = True,
     ) -> dict[str, Any]:
-        contract = verification_contract(item.get("name", "") for item in criteria)
-        prepared = self._prepare_call(
-            state,
-            kind="verification",
-            build_prompt=lambda prompt_mode, bundle: self.prompts.build_verification_prompt(
+        expected_names = [str(item.get("name", "")).strip() for item in criteria]
+        criteria_by_name = {
+            str(item.get("name", "")).strip(): str(item.get("criterion", "")).strip()
+            for item in criteria
+        }
+        candidate_grounding_by_name = {
+            str(item.get("name", "")).strip(): str(item.get("candidate_grounding", "required")).strip() or "required"
+            for item in criteria
+        }
+        candidate_excerpt_options = _verification_candidate_excerpt_options(assistant_text)
+        contract = verification_contract(
+            expected_names,
+            name=contract_name,
+            candidate_excerpt_options=candidate_excerpt_options,
+        )
+        max_attempts = max(3, int(self.config.model.max_retries) + 1)
+        previous_rejected_verification = ""
+        correction_feedback: list[str] = []
+        last_payload: dict[str, Any] = {}
+        for attempt in range(1, max_attempts + 1):
+            feedback_text = "\n".join(correction_feedback)
+            build_verification_prompt = lambda prompt_mode, context_components, previous=previous_rejected_verification, feedback=feedback_text: self.prompts.build_verification_prompt(
                 step_title=step.title,
                 step_goal=step.goal,
                 expected_outputs=step.expected_outputs,
@@ -8904,25 +5209,322 @@ class AgentRuntime:
                 criteria=criteria,
                 evidence=evidence,
                 prompt_mode=prompt_mode,
-                context_components=bundle.components,
+                allowed_candidate_excerpts=candidate_excerpt_options,
+                context_components=context_components,
+                previous_rejected_verification=previous,
+                verification_feedback=feedback,
+            )
+            if include_context:
+                prepared = self._prepare_call(
+                    state,
+                    kind="verification",
+                    build_prompt=lambda prompt_mode, bundle: build_verification_prompt(prompt_mode, bundle.components),
+                    contract=contract,
+                    prompt_modes=self._interactive_prompt_modes(),
+                    goal=step.goal,
+                )
+            else:
+                prepared = self._prepare_direct_verification_call(
+                    state,
+                    contract=contract,
+                    build_prompt=lambda prompt_mode: build_verification_prompt(prompt_mode, []),
+                )
+            _completion, payload = self._execute_structured_call(state, prepared)
+            last_payload = payload
+            try:
+                return self._validate_verification_payload(
+                    payload,
+                    expected_names=expected_names,
+                    criteria_by_name=criteria_by_name,
+                    candidate_grounding_by_name=candidate_grounding_by_name,
+                    assistant_text=assistant_text,
+                )
+            except ValueError as exc:
+                previous_rejected_verification = stable_json_dumps(payload)
+                correction_feedback.append(
+                    f"Attempt {attempt} verification protocol validation failed: {exc}"
+                )
+                self.history.record_event(
+                    state,
+                    "error",
+                    {
+                        "operation": "verification_protocol_validation",
+                        "error": str(exc),
+                        "error_type": exc.__class__.__name__,
+                        "attempt": attempt,
+                        "payload": payload,
+                        "contract_name": contract_name,
+                    },
+                )
+                if attempt < max_attempts:
+                    self.history.record_event(
+                        state,
+                        "model_retry_scheduled",
+                        {
+                            "kind": "verification",
+                            "prompt_mode": prepared.prompt_mode,
+                            "next_attempt": attempt + 1,
+                        },
+                    )
+                    continue
+                raise FatalSemanticEngineError(
+                    "Verification protocol failed after bounded correction attempts: "
+                    f"{' | '.join(correction_feedback)}"
+                ) from exc
+        raise FatalSemanticEngineError(
+            "Verification protocol failed without a validated result: "
+            f"{stable_json_dumps(last_payload)}"
+        )
+
+    def _bounded_evidence_value(
+        self,
+        value: Any,
+        *,
+        max_string_chars: int,
+        max_items: int = 24,
+    ) -> Any:
+        if isinstance(value, str):
+            if len(value) <= max_string_chars:
+                return value
+            omitted = len(value) - max_string_chars
+            return f"{value[:max_string_chars]}\n[truncated {omitted} chars]"
+        if isinstance(value, list):
+            bounded = [
+                self._bounded_evidence_value(item, max_string_chars=max_string_chars, max_items=max_items)
+                for item in value[:max_items]
+            ]
+            if len(value) > max_items:
+                bounded.append({"truncated_items": len(value) - max_items})
+            return bounded
+        if isinstance(value, tuple):
+            return self._bounded_evidence_value(list(value), max_string_chars=max_string_chars, max_items=max_items)
+        if isinstance(value, dict):
+            bounded_dict: dict[str, Any] = {}
+            items = list(value.items())
+            for key, item in items[:max_items]:
+                bounded_dict[str(key)] = self._bounded_evidence_value(
+                    item,
+                    max_string_chars=max_string_chars,
+                    max_items=max_items,
+                )
+            if len(items) > max_items:
+                bounded_dict["truncated_items"] = len(items) - max_items
+            return bounded_dict
+        return to_jsonable(value)
+
+    def _final_objective_evidence(self, state: SessionState, assistant_text: str) -> dict[str, Any]:
+        workspace = state.environment.workspace
+        max_string_chars = min(2_000, max(512, int(self.config.environment.max_capture_chars)))
+        current_turn_events = self._current_turn_history_events(state)
+        relevant_event_types = {
+            "tool_result",
+            "tool_error",
+            "verification_failed",
+            "verification_passed",
+            "review_completed",
+            "step_completed",
+            "step_failed",
+            "replan_triggered",
+        }
+        compact_events: list[dict[str, Any]] = []
+        payload_fields = {
+            "tool_result": ("tool_name", "output", "exit_code"),
+            "tool_error": ("tool_name", "error", "error_type"),
+            "verification_failed": ("step_id", "conditions_failed", "reason"),
+            "verification_passed": ("step_id", "conditions_met", "reason"),
+            "review_completed": ("review_kind", "target_id", "passed", "reason"),
+            "step_completed": ("step_id", "step_title", "outcome"),
+            "step_failed": ("step_id", "step_title", "error", "error_type"),
+            "replan_triggered": ("step_id", "reason", "replan_count"),
+        }
+        for event in current_turn_events:
+            if event.event_type not in relevant_event_types:
+                continue
+            fields = payload_fields[event.event_type]
+            compact_payload = {
+                field: self._bounded_evidence_value(
+                    event.payload[field],
+                    max_string_chars=max_string_chars,
+                    max_items=8,
+                )
+                for field in fields
+                if field in event.payload
+            }
+            compact_events.append(
+                {
+                    "sequence": event.sequence,
+                    "type": event.event_type,
+                    "payload": compact_payload,
+                }
+            )
+        active_plan = state.active_plan
+        plan_summary = None
+        if active_plan is not None:
+            plan_summary = {
+                "goal": active_plan.goal,
+                "status": active_plan.status,
+                "current_step_id": active_plan.current_step_id,
+                "steps": [
+                    {
+                        "step_id": item.step_id,
+                        "title": item.title,
+                        "goal": item.goal,
+                        "kind": item.kind,
+                        "status": item.status,
+                        "expected_tool": item.expected_tool,
+                        "expected_outputs": list(item.expected_outputs),
+                    }
+                    for item in active_plan.steps[:24]
+                ],
+            }
+        known_files = {
+            path: self._bounded_evidence_value(
+                text,
+                max_string_chars=max_string_chars,
+                max_items=8,
+            )
+            for path, text in list(sorted(workspace.known_files.items()))[:24]
+        }
+        return {
+            "original_user_request": self._bounded_evidence_value(
+                self._original_user_goal_text(state),
+                max_string_chars=max_string_chars,
+                max_items=8,
             ),
-            contract=contract,
-            prompt_modes=self._interactive_prompt_modes(),
-            goal=step.goal,
+            "effective_goal": self._bounded_evidence_value(
+                self._goal_text(state),
+                max_string_chars=max_string_chars,
+                max_items=8,
+            ),
+            "assistant_text": self._bounded_evidence_value(
+                assistant_text,
+                max_string_chars=max_string_chars,
+                max_items=8,
+            ),
+            "prompt_analysis": None
+            if state.prompt_analysis is None
+            else self._bounded_evidence_value(
+                asdict(state.prompt_analysis),
+                max_string_chars=max_string_chars,
+                max_items=8,
+            ),
+            "latest_task_decision": None
+            if state.latest_decision is None
+            else self._bounded_evidence_value(
+                asdict(state.latest_decision),
+                max_string_chars=max_string_chars,
+                max_items=8,
+            ),
+            "active_plan": plan_summary,
+            "workspace": {
+                "root": workspace.root,
+                "cwd": workspace.cwd,
+                "known_files": known_files,
+                "listed_files": list(workspace.listed_files)[:48],
+                "created_files": list(workspace.created_files)[:48],
+                "modified_files": list(workspace.modified_files)[:48],
+                "deleted_files": list(workspace.deleted_files)[:48],
+            },
+            "recent_events": compact_events[-16:],
+        }
+
+    def _verify_final_objective(self, state: SessionState, step: PlanStep, assistant_text: str) -> VerificationOutcome:
+        proof_step = replace(
+            step,
+            step_id=f"{step.step_id}:final_objective",
+            title="Final objective verification",
+            goal=self._goal_text(state),
+            input_text=(
+                "Verify whether the terminal outcome explicitly requested by the original user request is complete from "
+                "the current evidence. Judge the requested endpoint itself rather than assuming every task must produce "
+                "a downstream artifact or fully resolved external action."
+            ),
+            expected_output=(
+                "The requested terminal outcome—an action/artifact, a factual answer, or an evidence-grounded clarification—"
+                "is proven by current evidence."
+            ),
+            expected_outputs=["requested_terminal_outcome", "truthful_candidate_answer"],
+            success_criteria=(
+                "The original user request's requested endpoint is satisfied by concrete current evidence. For an action or "
+                "artifact endpoint, require strict proof of the requested current state. For an answer endpoint, require a "
+                "truthful grounded answer. When the original request explicitly asks the assistant to ask a clarification, "
+                "a single evidence-grounded clarification is the completed terminal outcome; do not fail it merely because "
+                "the unknown information or downstream action remains unresolved. Reject partial, weakened, corrupted, stale, "
+                "or merely self-consistent results, and never let later plan wording redefine the original requested endpoint."
+            ),
+            verification_type="composite",
+            verification_checks=[],
+            required_conditions=["final_objective_satisfied"],
+            optional_conditions=[],
+            expected_tool=None,
         )
-        _completion, payload = self._execute_structured_call(
+        criteria = [
+            {
+                "name": "final_objective_satisfied",
+                "criterion": (
+                    "Decide whether the assistant's candidate final answer and concrete current evidence prove the terminal "
+                    "outcome explicitly requested by the original user request. Do not impose a downstream resolved-state "
+                    "requirement when the original endpoint is to ask a clarification: in that case, pass only when the required "
+                    "evidence was gathered and the candidate asks the requested grounded question without assuming missing facts. "
+                    "For action or artifact endpoints, reject partial, corrupted, weakened, stale, or unsupported completion claims."
+                ),
+            }
+        ]
+        evidence = self._final_objective_evidence(state, assistant_text)
+        self.history.record_event(
             state,
-            prepared,
-            validator=self._validate_verification_payload,
-            validation_error_types=(ValueError,),
+            "verification_started",
+            {
+                "step_id": proof_step.step_id,
+                "verification_type": proof_step.verification_type,
+                "required_conditions": list(proof_step.required_conditions),
+                "optional_conditions": list(proof_step.optional_conditions),
+            },
         )
-        return payload
+        payload = self._run_llm_verification(
+            state,
+            step=proof_step,
+            criteria=criteria,
+            assistant_text=assistant_text,
+            evidence=evidence,
+            include_context=False,
+        )
+        criteria_results = payload.get("criteria", [])
+        result = next(
+            (
+                item
+                for item in criteria_results
+                if isinstance(item, dict) and item.get("name") == "final_objective_satisfied"
+            ),
+            None,
+        )
+        passed = bool(isinstance(result, dict) and result.get("passed") is True)
+        conditions_met = ["final_objective_satisfied"] if passed else []
+        conditions_failed = [] if passed else ["final_objective_satisfied"]
+        reason = "final_objective_verified" if passed else "final_objective_satisfied"
+        verification = VerificationOutcome(
+            verification_passed=passed,
+            verification_type_used=proof_step.verification_type,
+            conditions_met=conditions_met,
+            conditions_failed=conditions_failed,
+            evidence={
+                "criteria": criteria_results,
+                "final_objective_evidence": evidence,
+            },
+            confidence=1.0 if passed else 0.0,
+            reason=reason,
+            requires_retry=False,
+            requires_replan=not passed,
+        )
+        self._record_verification(state, proof_step, verification)
+        return verification
 
     def _execute_tool(self, state: SessionState, decision: ToolDecision) -> ToolExecutionResult | None:
         guard = self.history.guard(state, f"tool:{decision.tool_name}")
         guard.record("tool_called", {"tool_name": decision.tool_name, "tool_input": decision.tool_input})
         try:
             tool, context, invocation = self.tools.prepare(decision.tool_name, decision.tool_input, self.config, state)
+            self._validate_concrete_tool_input(state, tool.effective_kind(invocation.validated_input), invocation.validated_input)
             guard.record(
                 "tool_execution_context",
                 {
@@ -8971,12 +5573,6 @@ class AgentRuntime:
 
         required_generated = tool.required_generated_event_types(invocation.validated_input)
         missing_generated = required_generated - emitted_types
-        if (
-            decision.tool_name == "edit_text"
-            and missing_generated == {"edit_applied"}
-            and "edit_previewed" in emitted_types
-        ):
-            missing_generated = set()
         if missing_generated:
             missing_text = ", ".join(sorted(missing_generated))
             raise HistoryInvariantError(f"Tool {decision.tool_name} completed without required generated events: {missing_text}")
@@ -9010,6 +5606,16 @@ class AgentRuntime:
         self._refresh_project_state(state, reason=f"tool:{result.tool_name}")
         return result
 
+    def _validate_concrete_tool_input(self, state: SessionState, tool_kind: str, validated_input: dict[str, Any]) -> None:
+        if tool_kind != "side_effect":
+            return
+        unresolved = unresolved_artifact_placeholders(validated_input, artifact_labels_from_plan(state.active_plan))
+        if unresolved:
+            raise ToolValidationError(
+                "Side-effect tool input contains unresolved artifact placeholder(s): "
+                f"{', '.join(sorted(set(unresolved)))}"
+            )
+
     def _prepare_call(
         self,
         state: SessionState,
@@ -9038,6 +5644,7 @@ class AgentRuntime:
                 )
                 assembly = build_prompt(prompt_mode, bundle)
                 report = self._budget_report(state, assembly, contract)
+                assembly, report = self._fit_optional_prompt_context(state, assembly, contract, report)
                 self.history.record_event(
                     state,
                     "prompt_built",
@@ -9080,6 +5687,35 @@ class AgentRuntime:
 
         message = f"Prompt does not fit within context budget: {last_error or 'unknown reason'}"
         raise BudgetExceededError(message, last_report)
+
+    def _fit_optional_prompt_context(
+        self,
+        state: SessionState,
+        assembly: PromptAssembly,
+        contract: ContractSpec,
+        report: BudgetReport,
+    ) -> tuple[PromptAssembly, BudgetReport]:
+        if report.fits or not any(component.optional for component in assembly.components):
+            return assembly, report
+
+        components = list(assembly.components)
+        optional_indexes = [index for index, component in enumerate(components) if component.optional]
+        best_assembly = assembly
+        best_report = report
+        for index in reversed(optional_indexes):
+            del components[index]
+            candidate = PromptAssembly(
+                kind=assembly.kind,
+                prompt_text="".join(component.text for component in components),
+                components=list(components),
+                prompt_mode=assembly.prompt_mode,
+            )
+            candidate_report = self._budget_report(state, candidate, contract)
+            best_assembly = candidate
+            best_report = candidate_report
+            if candidate_report.fits:
+                return candidate, candidate_report
+        return best_assembly, best_report
 
     def _maybe_compact_history(self, state: SessionState) -> None:
         while decide_history_compression(self.config, state).should_compress:
@@ -9199,10 +5835,8 @@ class AgentRuntime:
 
     def _contract_components(self, contract: ContractSpec) -> list[PromptComponent]:
         components: list[PromptComponent] = []
-        if contract.grammar:
-            components.append(PromptComponent(name="grammar", category="grammar", text=contract.grammar, include_in_context=False))
         if contract.json_schema:
-            components.append(PromptComponent(name="json_schema", category="grammar", text=stable_json_dumps(contract.json_schema), include_in_context=False))
+            components.append(PromptComponent(name="json_schema", category="json_schema", text=stable_json_dumps(contract.json_schema), include_in_context=False))
         return components
 
     def _cap_error(self, report: BudgetReport) -> str | None:
@@ -9221,19 +5855,26 @@ class AgentRuntime:
             max_tokens=prepared.report.reserved_response_tokens,
             contract=resolved_contract,
         )
-        if prepared.assembly.kind == "tool_input":
-            original_n_predict = request.get("n_predict")
-            if isinstance(original_n_predict, int) and original_n_predict > 512:
+        generation_caps = {
+            "answer": 512,
+            "plan": max(1024, min(4096, self.config.planner.max_plan_steps * 768)),
+            "tool_input": 512,
+        }
+        cap = generation_caps.get(prepared.assembly.kind)
+        if cap is not None:
+            token_key = "n_predict" if "n_predict" in request else "max_tokens" if "max_tokens" in request else ""
+            original_n_predict = request.get(token_key) if token_key else None
+            if isinstance(original_n_predict, int) and token_key and original_n_predict > cap:
                 request = dict(request)
-                request["n_predict"] = 512
+                request[token_key] = cap
                 self.history.record_event(
                     state,
                     "budget_repaired",
                     {
                         "kind": prepared.assembly.kind,
-                        "reason": "cap_tool_input_generation_tokens",
+                        "reason": f"cap_{prepared.assembly.kind}_generation_tokens",
                         "requested_response_tokens": original_n_predict,
-                        "capped_response_tokens": 512,
+                        "capped_response_tokens": cap,
                     },
                 )
         last_error: Exception | None = None
@@ -9405,6 +6046,7 @@ class AgentRuntime:
                 "[model_response] "
                 f"kind={prepared.assembly.kind} attempt={total_attempt} elapsed={elapsed_seconds}s "
                 f"tokens={completion.completion_tokens} avg_tps={tokens_per_second}",
+                file=sys.stderr,
                 flush=True,
             )
             guard.require_all("model_request_sent", "model_response_received")
@@ -9429,14 +6071,20 @@ class AgentRuntime:
 
     def _tokenize_with_history(self, state: SessionState, text: str) -> CountResult:
         text_hash = sha256_text(text)
+        cached = self._token_count_cache.get(text_hash)
+        if cached is not None:
+            return CountResult(tokens=cached, exact=True, strategy="llama_cpp_server_cache")
         guard = self.history.guard(state, "tokenize")
-        guard.record("model_tokenize_requested", {"text": text, "text_hash": text_hash})
+        # Persist only non-reconstructable telemetry. Recording the full text
+        # makes history-fed prompts recursively contain earlier prompts.
+        guard.record("model_tokenize_requested", {"text_hash": text_hash, "text_chars": len(text)})
         try:
             tokens = int(self.client.tokenize(text))
         except Exception as exc:
             guard.record("model_tokenize_failed", {"text_hash": text_hash, "error": str(exc), "error_type": exc.__class__.__name__})
             guard.require_all("model_tokenize_requested", "model_tokenize_failed")
             raise
+        self._token_count_cache[text_hash] = tokens
         guard.record("model_tokenize_result", {"text_hash": text_hash, "tokens": tokens, "exact": True})
         guard.require_all("model_tokenize_requested", "model_tokenize_result")
         return CountResult(tokens=tokens, exact=True, strategy="llama_cpp_server")
@@ -9445,216 +6093,21 @@ class AgentRuntime:
         stripped = text.strip()
         try:
             payload = json.loads(stripped)
-        except json.JSONDecodeError as direct_error:
-            extracted = self._extract_first_json_object(stripped)
-            if extracted is None:
-                raise RuntimeError(f"Model returned invalid JSON for {contract_name}: {text!r}") from direct_error
-            try:
-                payload = json.loads(extracted)
-            except json.JSONDecodeError as exc:
-                raise RuntimeError(f"Model returned invalid JSON for {contract_name}: {text!r}") from exc
+        except json.JSONDecodeError as exc:
+            raise RuntimeError(f"Model returned invalid JSON for {contract_name}: {text!r}") from exc
         if not isinstance(payload, dict):
             raise RuntimeError(f"Model returned non-object JSON for {contract_name}: {payload!r}")
         return payload
 
-    def _extract_first_json_object(self, text: str) -> str | None:
-        start = text.find("{")
-        if start < 0:
-            return None
-        depth = 0
-        in_string = False
-        escape = False
-        for index in range(start, len(text)):
-            char = text[index]
-            if in_string:
-                if escape:
-                    escape = False
-                elif char == "\\":
-                    escape = True
-                elif char == '"':
-                    in_string = False
-                continue
-            if char == '"':
-                in_string = True
-                continue
-            if char == "{":
-                depth += 1
-            elif char == "}":
-                depth -= 1
-                if depth == 0:
-                    return text[start : index + 1]
-        return None
 
-    def _extract_browser_query_argument(self, text: str) -> str | None:
-        explicit_match = re.search(r"(?:^|\n)[^\n]*\bbrowser_search\s+query:\s*([^\n]+)", text, re.IGNORECASE)
-        if explicit_match is not None:
-            candidate = _truncate_clause(explicit_match.group(1))
-            if candidate:
-                return candidate
-        patterns = (
-            r"(?:search the web|search web|web search|search online)\s+for\s+(.+)",
-            r"(?:look up)\s+(.+)",
-            r"(?:browser_search)\s+(.+)",
-        )
-        for pattern in patterns:
-            match = re.search(pattern, text, re.IGNORECASE)
-            if match is None:
-                continue
-            candidate = _truncate_clause(match.group(1))
-            if candidate:
-                return candidate
-        return None
 
-    def _extract_url_argument(self, text: str) -> str | None:
-        explicit_match = re.search(r"(?:^|\n)[^\n]*\burl:\s*([^\n]+)", text, re.IGNORECASE)
-        if explicit_match is not None:
-            candidate = explicit_match.group(1).strip().rstrip(".,)")
-            if candidate.startswith(("http://", "https://")):
-                return candidate
-        candidates = _url_candidates(text)
-        return candidates[0] if candidates else None
 
-    def _extract_path_argument(self, text: str, *, prefer_last: bool) -> str | None:
-        explicit_match = re.search(r"(?:^|\n)[^\n]*\bpath:\s*([^\n]+)", text)
-        if explicit_match is not None:
-            candidate = explicit_match.group(1).strip().rstrip(".,)")
-            if candidate:
-                return candidate
-        matches = _path_candidates(text)
-        if not matches:
-            return None
-        return matches[-1] if prefer_last else matches[0]
 
-    def _deterministic_answer(self, state: SessionState) -> str | None:
-        goal = self._goal_text(state)
-        latest_tool_message = next(
-            (message for message in reversed(state.messages) if message.role == "tool" and message.name),
-            None,
-        )
-        # Try concrete tool-result extraction first so "return exactly the full text
-        # on line N" picks up the actual file content, not the description literal.
-        if latest_tool_message is not None and isinstance(latest_tool_message.metadata, dict):
-            metadata = latest_tool_message.metadata
-            output = metadata.get("output")
-            if isinstance(output, dict):
-                if latest_tool_message.name == "calculator":
-                    result = output.get("result")
-                    if isinstance(result, float) and result.is_integer():
-                        return str(int(result))
-                    if isinstance(result, (int, float)):
-                        return str(result)
-                if latest_tool_message.name in {"read_file", "read_text"}:
-                    text = output.get("text") or output.get("content")
-                    if isinstance(text, str):
-                        raw_input = metadata.get("raw_input") if isinstance(metadata.get("raw_input"), dict) else {}
-                        line_number = raw_input.get("line_number")
-                        if not isinstance(line_number, int):
-                            match = re.search(r"\bline\s+(\d+)\b", goal, re.IGNORECASE)
-                            line_number = int(match.group(1)) if match is not None else None
-                        if isinstance(line_number, int) and line_number > 0:
-                            lines = text.splitlines()
-                            if line_number <= len(lines):
-                                return lines[line_number - 1]
-        # Fall back to exact-reply literal only when no concrete tool result applies.
-        exact_reply = self._exact_reply_requirement(state)
-        if exact_reply is not None and self._can_finalize_exact_reply(state):
-            return exact_reply
-        return None
 
-    def _should_force_not_done_answer(self, state: SessionState, *, derived_answer: str | None = None) -> bool:
-        plan = state.active_plan
-        can_finalize = self._can_finalize_exact_reply(state)
-        if plan is None:
-            return False
-        non_response_steps = [step for step in plan.steps if step.kind != "respond"]
-        if any(step.status == "failed" for step in non_response_steps):
-            return True
-        if any(step.status in {"pending", "running"} for step in non_response_steps):
-            return True
-        if state.environment.waiting and state.environment.waiting_process_ids:
-            return True
-        if derived_answer is not None and can_finalize:
-            return False
-        return not can_finalize
 
-    def _can_finalize_exact_reply(self, state: SessionState) -> bool:
-        plan = state.active_plan
-        if plan is None:
-            return True
-        non_response_steps = [step for step in plan.steps if step.kind != "respond"]
-        if not non_response_steps:
-            return True
-        return all(step.status == "completed" for step in non_response_steps)
 
-    def _exact_reply_requirement(self, state: SessionState) -> str | None:
-        candidates = [self._goal_text(state)]
-        candidates.extend(message.content for message in reversed(state.messages) if message.role == "user")
-        for text in candidates:
-            reply = self._extract_unconditional_exact_reply(text)
-            if reply is not None:
-                return reply
-        return None
 
-    def _extract_unconditional_exact_reply(self, text: str) -> str | None:
-        for match in re.finditer(r"(?is)\b(?:reply|respond|return)\s+exactly\s+(.+?)(?:\.\s*|\n|$)", text):
-            sentence_start = max(
-                text.rfind(".", 0, match.start()),
-                text.rfind("?", 0, match.start()),
-                text.rfind("!", 0, match.start()),
-                text.rfind("\n", 0, match.start()),
-            )
-            prefix = text[sentence_start + 1 : match.start()].strip().lower()
-            if any(
-                token in prefix
-                for token in ("if ", "unless ", "when ", "only if", "if you", "if the", "if they", "if it", "if no", "if not")
-            ):
-                continue
-            candidate = match.group(1).strip()
-            if len(candidate) >= 2 and candidate[0] == candidate[-1] and candidate[0] in {"'", '"', "`"}:
-                candidate = candidate[1:-1].strip()
-            if self._looks_like_literal_exact_reply(candidate):
-                return candidate
-        return None
 
-    def _looks_like_literal_exact_reply(self, candidate: str) -> bool:
-        value = candidate.strip()
-        if not value:
-            return False
-        lowered = value.lower()
-        if lowered.startswith(("the ", "a ", "an ", "this ", "that ", "these ", "those ")):
-            return False
-        if "..." in value:
-            return False
-        if any(fragment in lowered for fragment in ("full text", "json shape", "line ", "only the ", "with keys")):
-            return False
-        if value.startswith("{") or value.startswith("["):
-            return True
-        tokens = value.split()
-        if len(tokens) > 4:
-            return False
-        return True
-
-    def _apply_exact_reply_requirement_to_plan(self, plan: Plan, *, goal: str) -> Plan:
-        exact_reply = self._extract_unconditional_exact_reply(goal)
-        if exact_reply is None:
-            return plan
-        for step in reversed(plan.steps):
-            if step.kind != "respond":
-                continue
-            step.expected_output = exact_reply
-            step.expected_outputs = [exact_reply]
-            step.success_criteria = f"assistant replies exactly {exact_reply!r}"
-            step.verification_type = "composite"
-            step.verification_checks = [
-                {"name": "dependencies_completed", "check_type": "dependencies_completed"},
-                {"name": "assistant_text_nonempty", "check_type": "string_nonempty", "actual_source": "assistant_text"},
-                {"name": "assistant_text_exact", "check_type": "exact_match", "actual_source": "assistant_text", "expected": exact_reply},
-            ]
-            step.required_conditions = ["dependencies_completed", "assistant_text_nonempty", "assistant_text_exact"]
-            step.optional_conditions = []
-            step.last_updated = utc_now_iso()
-            break
-        return plan
 
     def _step_uses_exact_assistant_match(self, step: PlanStep) -> bool:
         if step.kind not in {"respond", "reasoning"}:
@@ -9666,23 +6119,8 @@ class AgentRuntime:
                 return bool(str(check.get("expected", "")).strip())
         return False
 
-    def _deterministic_structured_read_answer(self, goal: str, state: SessionState) -> str | None:
-        # The LLM is responsible for assembling structured answers from
-        # prior reads. The previous implementation relied on substring
-        # vocabulary matching ("json with keys ...", "under unsupported",
-        # ...) and has been removed.
-        del goal, state
-        return None
 
-    def _unsupported_string_default(self, goal: str) -> str | None:
-        # Substring-based default extraction removed; LLM owns this.
-        del goal
-        return None
 
-    def _missing_string_default_for_key(self, goal: str, key: str) -> str | None:
-        # Substring-based default extraction removed; LLM owns this.
-        del goal, key
-        return None
 
     def _empty_budget_report(self) -> BudgetReport:
         return BudgetReport(
@@ -9697,57 +6135,6 @@ class AgentRuntime:
             breakdown=[],
         )
 
-    def _key_value_maps_from_reads(self, state: SessionState) -> list[dict[str, str]]:
-        def normalize_key(key: str) -> str:
-            normalized = re.sub(r"^[Tt]he\s+|^[Aa]n?\s+", "", key.strip())
-            normalized = re.sub(r"[^a-zA-Z0-9]+", "_", normalized).strip("_").lower()
-            return normalized
-
-        mappings: list[dict[str, str]] = []
-        for message in state.messages:
-            if message.role != "tool" or message.name not in {"read_text", "read_file"}:
-                continue
-            metadata = message.metadata or {}
-            payload = metadata.get("output") if isinstance(metadata, dict) else None
-            if not isinstance(payload, dict):
-                continue
-            text = payload.get("text")
-            if not isinstance(text, str):
-                text = payload.get("content")
-            if not isinstance(text, str):
-                continue
-            stripped = text.strip()
-            if stripped.startswith("{") and stripped.endswith("}"):
-                try:
-                    json_payload = json.loads(stripped)
-                except json.JSONDecodeError:
-                    json_payload = None
-                if isinstance(json_payload, dict):
-                    mapping = {
-                        normalize_key(str(key)): ("true" if value is True else "false" if value is False else str(value))
-                        for key, value in json_payload.items()
-                        if isinstance(key, str) and isinstance(value, (str, int, float, bool))
-                    }
-                    if mapping:
-                        mappings.append(mapping)
-                        continue
-            mapping: dict[str, str] = {}
-            for line in text.splitlines():
-                upper_line = line.strip().upper()
-                if upper_line.startswith("WARN"):
-                    mapping.setdefault("warning", "true")
-                elif upper_line.startswith("ERROR"):
-                    mapping.setdefault("error", "true")
-                if "=" not in line:
-                    continue
-                key, value = line.split("=", 1)
-                key = normalize_key(key)
-                value = value.strip()
-                if key:
-                    mapping[key] = value
-            if mapping:
-                mappings.append(mapping)
-        return mappings
 
     def _coerce_decision(self, payload: dict[str, Any]) -> ToolDecision:
         action = payload.get("action")
@@ -9762,6 +6149,8 @@ class AgentRuntime:
             raise RuntimeError("tool decision tool_name must be a string")
         if not isinstance(tool_input, dict):
             raise RuntimeError("tool decision tool_input must be an object")
+        if tool_input:
+            raise RuntimeError("tool decision tool_input must be empty; selected-tool arguments are generated by the tool_input contract")
         if action == "respond" and tool_name != "none":
             raise RuntimeError("tool decision respond action must use tool_name='none'")
         if action == "call_tool":

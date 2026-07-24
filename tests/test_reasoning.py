@@ -90,22 +90,39 @@ def test_reasoning_loop_stops_at_max_steps_and_falls_back(make_config) -> None:
                 ],
             ),
             json.dumps({"action": "call_tool", "response": "", "tool_name": "calculator", "tool_input": {"expression": "2 + 2"}}),
-            "fallback final answer",
         ]
     )
     runtime = AgentRuntime(config, model_client=fake_client)
     result = runtime.run_turn(goal)
     events = runtime.history.read_history(result.session_id)
 
-    assert result.assistant_text == "4"
+    assert result.assistant_text == "Task incomplete: max_iterations_reached. Verified success was not reached."
     completed = next(event for event in events if event.event_type == "reasoning_completed")
     assert completed.payload["reason"] == "max_iterations_reached"
+    assert not any(request["contract"] == "answer_response" for request in fake_client.requests)
 
 
 def test_failing_step_triggers_replan(make_config) -> None:
-    config = make_config(runtime__max_reasoning_steps=4, planner__max_replans=1)
+    config = make_config(runtime__max_reasoning_steps=4, runtime__max_tool_steps=2, planner__max_replans=1)
     goal = "Use the calculator tool to compute 2 + 2."
     fake_client = FakeModelClient(
+        contract_responses={
+            "failure_classification": [
+                json.dumps(
+                    {
+                        "kind": "verification_failure",
+                        "retryable": False,
+                        "requires_replan": True,
+                        "suggested_strategy_mode": "recovery",
+                        "wait_seconds": 0.0,
+                        "reason": "the selected tool did not satisfy the step",
+                    }
+                )
+            ],
+            "action_selection": [
+                json.dumps({"action": "replan", "reason": "the failed step requires a new plan"})
+            ],
+        },
         responses=[
             plan_response(
                 goal=goal,
@@ -115,6 +132,7 @@ def test_failing_step_triggers_replan(make_config) -> None:
                 ],
             ),
             json.dumps({"action": "call_tool", "response": "", "tool_name": "echo", "tool_input": {"text": "wrong"}}),
+            json.dumps({"action": "call_tool", "response": "", "tool_name": "echo", "tool_input": {"text": "still wrong"}}),
             plan_response(
                 goal=goal,
                 steps=[
@@ -131,7 +149,8 @@ def test_failing_step_triggers_replan(make_config) -> None:
     events = runtime.history.read_history(result.session_id)
 
     assert result.assistant_text == "4"
-    assert any(event.event_type == "tool_graph_rejected" for event in events)
+    assert any(event.event_type == "tool_error" and event.payload.get("tool_name") == "calculator" for event in events)
+    assert not any(event.event_type == "tool_mismatch_rejected" for event in events)
     assert any(event.event_type == "step_failed" for event in events)
     assert not any(
         event.event_type == "verification_failed"
@@ -142,7 +161,7 @@ def test_failing_step_triggers_replan(make_config) -> None:
     assert any(event.event_type == "replan_triggered" for event in events)
 
 
-def test_tool_subsystem_can_chain_helper_tool_before_expected_tool(make_config) -> None:
+def test_tool_subsystem_uses_expected_tool_without_helper_tool_selection(make_config) -> None:
     config = make_config(runtime__max_reasoning_steps=5, runtime__max_tool_steps=4)
     goal = "Inspect src/app.py and use tools to compute 2 + 2."
     fake_client = FakeModelClient(
@@ -164,16 +183,46 @@ def test_tool_subsystem_can_chain_helper_tool_before_expected_tool(make_config) 
     events = runtime.history.read_history(result.session_id)
 
     assert result.assistant_text == "4"
-    assert [item.tool_name for item in result.tool_results] == ["notes", "calculator"]
+    assert [item.tool_name for item in result.tool_results] == ["calculator"]
     assert any(event.event_type == "tool_chain_started" for event in events)
     assert sum(1 for event in events if event.event_type == "tool_chain_step") == 2
-    assert any(event.event_type == "tool_graph_planned" for event in events)
+    assert any(event.event_type == "tool_error" and event.payload.get("tool_name") == "calculator" for event in events)
+    assert not any(event.event_type == "tool_mismatch_rejected" for event in events)
+    assert not any(event.event_type.startswith("tool_graph") for event in events)
 
 
 def test_repeated_failures_trigger_drift_recovery(make_config) -> None:
-    config = make_config(runtime__max_reasoning_steps=4, runtime__max_tool_steps=2, planner__max_replans=2)
+    config = make_config(runtime__max_reasoning_steps=10, runtime__max_tool_steps=2, planner__max_replans=2)
     goal = "Use the calculator tool to compute 2 + 2."
     fake_client = FakeModelClient(
+        contract_responses={
+            "failure_classification": [
+                json.dumps(
+                    {
+                        "kind": "verification_failure",
+                        "retryable": False,
+                        "requires_replan": True,
+                        "suggested_strategy_mode": "recovery",
+                        "wait_seconds": 0.0,
+                        "reason": "the first tool result failed verification",
+                    }
+                ),
+                json.dumps(
+                    {
+                        "kind": "verification_failure",
+                        "retryable": False,
+                        "requires_replan": True,
+                        "suggested_strategy_mode": "recovery",
+                        "wait_seconds": 0.0,
+                        "reason": "the second tool result failed verification",
+                    }
+                ),
+            ],
+            "action_selection": [
+                json.dumps({"action": "replan", "reason": "retry with a new plan"}),
+                json.dumps({"action": "replan", "reason": "recover after repeated failure"}),
+            ],
+        },
         responses=[
             plan_response(
                 goal=goal,
@@ -183,6 +232,7 @@ def test_repeated_failures_trigger_drift_recovery(make_config) -> None:
                 ],
             ),
             json.dumps({"action": "call_tool", "response": "", "tool_name": "echo", "tool_input": {"text": "wrong"}}),
+            json.dumps({"action": "call_tool", "response": "", "tool_name": "echo", "tool_input": {"text": "still wrong"}}),
             plan_response(
                 goal=goal,
                 steps=[
@@ -190,7 +240,8 @@ def test_repeated_failures_trigger_drift_recovery(make_config) -> None:
                     plan_step("step_answer_two", "Answer the user", "respond", expected_output="Final answer", success_criteria="The user sees the value.", depends_on=["step_calc_two"]),
                 ],
             ),
-            json.dumps({"action": "call_tool", "response": "", "tool_name": "echo", "tool_input": {"text": "still wrong"}}),
+            json.dumps({"action": "call_tool", "response": "", "tool_name": "echo", "tool_input": {"text": "wrong again"}}),
+            json.dumps({"action": "call_tool", "response": "", "tool_name": "echo", "tool_input": {"text": "still wrong again"}}),
             plan_response(
                 goal=goal,
                 steps=[
@@ -206,7 +257,7 @@ def test_repeated_failures_trigger_drift_recovery(make_config) -> None:
     result = runtime.run_turn(goal)
     events = runtime.history.read_history(result.session_id)
 
-    assert result.assistant_text == "4"
+    assert result.assistant_text == "fallback"
     assert any(event.event_type == "drift_detected" for event in events)
     assert any(event.event_type == "recovery_triggered" and event.payload["reason"] == "drift_detected" for event in events)
 
@@ -224,7 +275,6 @@ def test_runtime_stops_when_no_progress_is_possible(make_config) -> None:
                 ],
             ),
             json.dumps({"action": "respond", "response": "wrong", "tool_name": "none", "tool_input": {}}),
-            "fallback",
         ]
     )
     runtime = AgentRuntime(config, model_client=fake_client)
@@ -232,6 +282,7 @@ def test_runtime_stops_when_no_progress_is_possible(make_config) -> None:
     result = runtime.run_turn(goal)
     events = runtime.history.read_history(result.session_id)
 
-    assert result.assistant_text == "not done"
+    assert result.assistant_text == "Task incomplete: no_progress_possible. Verified success was not reached."
     completed = next(event for event in events if event.event_type == "reasoning_completed")
     assert completed.payload["reason"] == "no_progress_possible"
+    assert not any(request["contract"] == "answer_response" for request in fake_client.requests)

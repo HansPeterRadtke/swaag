@@ -191,21 +191,21 @@ def _schema_upper_bound_instance(schema: dict[str, Any], *, depth: int = 0) -> A
         item_schema = schema.get("items")
         if not isinstance(item_schema, dict):
             return []
-        max_items = schema.get("maxItems", schema.get("minItems", 1))
+        raw_items = schema.get("maxItems", schema.get("minItems"))
         try:
-            count = int(max_items)
+            count = int(raw_items)
         except (TypeError, ValueError):
-            count = 1
-        count = max(1, min(count, 8 if depth == 0 else 3))
+            count = 4 if depth <= 1 else 3
+        count = max(1, min(count, 8 if depth == 0 else 4))
         item_value = _schema_upper_bound_instance(item_schema, depth=depth + 1)
         return [item_value for _ in range(count)]
     if schema_type == "string":
-        max_length = schema.get("maxLength", schema.get("minLength", 16))
+        max_length = schema.get("maxLength", schema.get("minLength", 64))
         try:
             length = int(max_length)
         except (TypeError, ValueError):
             length = 16
-        length = max(1, min(length, 160))
+        length = max(1, min(length, 256))
         # Use a token-dense placeholder rather than a repeated character. A
         # repeated "xxxx..." string badly underestimates worst-case token
         # usage on the active tokenizer because it compresses into very few
@@ -238,8 +238,6 @@ def structured_output_token_floor(
     counter: TokenCounter,
     call_kind: str,
 ) -> int:
-    if contract.mode == "plain":
-        return 0
     if contract.json_schema:
         sample_instance = _schema_upper_bound_instance(contract.json_schema)
         instance_tokens = max(counter.count_text(stable_json_dumps(sample_instance)).tokens, 1)
@@ -252,11 +250,10 @@ def structured_output_token_floor(
             ),
         )
         bounded_tokens = int(round(instance_tokens * factor))
-        return max(int(config.budget_policy.structured_output_json_floor_tokens), min(bounded_tokens, schema_tokens))
-    if contract.mode == "gbnf" and contract.grammar:
-        grammar_tokens = max(counter.count_text(contract.grammar).tokens, 1)
-        return max(
-            int(config.budget_policy.structured_output_grammar_floor_tokens),
-            int(round(grammar_tokens * float(config.budget_policy.structured_output_grammar_factor))),
+        context_floor_cap = max(
+            int(config.context.reserved_response_tokens),
+            int(round(max(int(config.model.context_limit), 1) * 0.25)),
         )
+        effective_floor = min(int(config.budget_policy.structured_output_json_floor_tokens), context_floor_cap)
+        return max(effective_floor, min(bounded_tokens, schema_tokens))
     return 0

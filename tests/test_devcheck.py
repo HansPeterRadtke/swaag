@@ -67,7 +67,7 @@ def test_finalproof_builds_required_commands() -> None:
     flattened = [" ".join(command) for command in commands]
     assert any("tests/test_imports.py" in command for command in flattened)
     assert any("swaag.manual_validation" in command for command in flattened)
-    assert any("--validation-subset" in command for command in flattened)
+    assert any("--full-catalog" in command for command in flattened)
     assert any(f"--structured-output-mode {recommendation.structured_output_mode}" in command for command in flattened)
     assert any(f"--model-profile {recommendation.model_profile}" in command for command in flattened)
     assert any(f"--seeds {','.join(str(seed) for seed in recommendation.seeds)}" in command for command in flattened)

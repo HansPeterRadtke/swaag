@@ -43,10 +43,6 @@ class _CleanRoomHandler(BaseHTTPRequestHandler):
             self._json_response({"error": "not found"}, status=404)
             return
 
-        if "grammar" in body:
-            self._json_response({"content": "yes", "stop": True, "tokens_evaluated": 2, "tokens_predicted": 1})
-            return
-
         schema = body.get("json_schema") or {}
         if not schema:
             prompt = str(body.get("prompt", ""))
@@ -78,7 +74,13 @@ class _CleanRoomHandler(BaseHTTPRequestHandler):
             return
         properties = set((schema.get("properties") or {}).keys())
         payload: dict
-        if {"task_type", "completeness", "requires_expansion", "requires_decomposition", "confidence", "detected_entities", "detected_goals"} <= properties:
+        if properties == {"answer"}:
+            payload = {"answer": "yes"}
+        elif properties == {"text"}:
+            payload = {"text": "42"}
+        elif properties == {"expression"}:
+            payload = {"expression": "6 * 7"}
+        elif {"task_type", "completeness", "requires_expansion", "requires_decomposition", "confidence", "detected_entities", "detected_goals"} <= properties:
             payload = {
                 "task_type": "structured",
                 "completeness": "complete",
@@ -95,6 +97,9 @@ class _CleanRoomHandler(BaseHTTPRequestHandler):
                 "ask_user": False,
                 "assume_missing": False,
                 "generate_ideas": False,
+                "direct_response": False,
+                "execution_mode": "full_plan",
+                "preferred_tool_name": "",
                 "confidence": 0.99,
                 "reason": "structured calculator task",
             }
@@ -164,9 +169,30 @@ class _CleanRoomHandler(BaseHTTPRequestHandler):
                 "reason": "keep the current partial answer",
                 "next_units": [],
             }
-        elif properties == {"scores"}:
-            count = int(schema["properties"]["scores"].get("minItems", 0))
+        elif properties and all(key.startswith("score_") for key in properties):
+            payload = {key: 1.0 for key in properties}
+        elif properties == {"scores"}:  # legacy transport compatibility
+            prompt = str(body.get("prompt", ""))
+            if not prompt and isinstance(body.get("messages"), list):
+                prompt = "\n".join(str(item.get("content", "")) for item in body["messages"] if isinstance(item, dict))
+            count = sum(1 for line in prompt.splitlines() if line.startswith("[") and "]" in line)
             payload = {"scores": [1.0] * count}
+        elif {
+            "decision_matches_request",
+            "decision_is_internally_consistent",
+            "required_evidence_sources",
+            "minimum_evidence_call_count",
+            "selected_mode_and_tool_can_cover_declared_count",
+            "feedback",
+        } <= properties:
+            payload = {
+                "decision_matches_request": True,
+                "decision_is_internally_consistent": True,
+                "required_evidence_sources": [],
+                "minimum_evidence_call_count": 0,
+                "selected_mode_and_tool_can_cover_declared_count": True,
+                "feedback": "clean-room decision is internally consistent",
+            }
         elif {"kind", "retryable", "requires_replan", "suggested_strategy_mode", "wait_seconds", "reason"} <= properties:
             payload = {
                 "kind": "deterministic_permanent",
@@ -183,12 +209,24 @@ class _CleanRoomHandler(BaseHTTPRequestHandler):
                 "action": "call_tool",
                 "response": "",
                 "tool_name": "calculator",
-                "tool_input": {"expression": "6 * 7"},
+                "tool_input": {},
             }
         elif properties == {"criteria"}:
-            names = schema["properties"]["criteria"]["items"]["properties"]["name"]["enum"]
+            item_properties = schema["properties"]["criteria"]["items"]["properties"]
+            names = item_properties["name"]["enum"]
+            excerpt_items = item_properties.get("candidate_excerpts", {}).get("items", {})
+            allowed_excerpts = excerpt_items.get("enum", []) if isinstance(excerpt_items, dict) else []
+            excerpt = allowed_excerpts[0] if allowed_excerpts else ""
             payload = {
-                "criteria": [{"name": name, "passed": True, "evidence": "criterion met"} for name in names]
+                "criteria": [
+                    {
+                        "name": name,
+                        "passed": True,
+                        "evidence": "criterion met",
+                        "candidate_excerpts": [excerpt] if excerpt else [],
+                    }
+                    for name in names
+                ]
             }
         elif properties == {"summary"}:
             payload = {"summary": "summary"}
@@ -218,6 +256,13 @@ def _venv_python(venv_dir: Path) -> Path:
     return venv_dir / "bin" / "python"
 
 
+def _clean_python_subprocess_env() -> dict[str, str]:
+    env = os.environ.copy()
+    env.pop("PYTHONHOME", None)
+    env.pop("PYTHONPATH", None)
+    return env
+
+
 def _create_clean_room(tmp_path: Path) -> tuple[Path, Path, dict[str, str], HTTPServer, threading.Thread]:
     repo_root = Path(__file__).resolve().parents[1]
     workspace = tmp_path / "workspace"
@@ -225,19 +270,31 @@ def _create_clean_room(tmp_path: Path) -> tuple[Path, Path, dict[str, str], HTTP
     venv_dir = tmp_path / "venv"
 
     builder = venv.EnvBuilder(with_pip=True, system_site_packages=True)
-    builder.create(venv_dir)
+    base_executable = str(Path(getattr(sys, "_base_executable", sys.executable)).resolve())
+    with pytest.MonkeyPatch.context() as monkeypatch:
+        monkeypatch.delenv("PYTHONHOME", raising=False)
+        monkeypatch.delenv("PYTHONPATH", raising=False)
+        monkeypatch.setattr(sys, "_base_executable", base_executable, raising=False)
+        builder.create(venv_dir)
     python = _venv_python(venv_dir)
 
+    subprocess.run(
+        [str(python), "-m", "pip", "install", "-q", "setuptools>=68", "wheel"],
+        check=True,
+        cwd=workspace,
+        env=_clean_python_subprocess_env(),
+    )
     subprocess.run(
         [str(python), "-m", "pip", "install", "-q", "--no-build-isolation", str(repo_root)],
         check=True,
         cwd=workspace,
+        env=_clean_python_subprocess_env(),
     )
 
     server = HTTPServer(("127.0.0.1", 0), _CleanRoomHandler)
     thread = threading.Thread(target=server.serve_forever, daemon=True)
     thread.start()
-    env = os.environ.copy()
+    env = _clean_python_subprocess_env()
     env.update(
         {
             "SWAAG__MODEL__BASE_URL": f"http://127.0.0.1:{server.server_port}",
@@ -261,7 +318,7 @@ def test_package_installs_and_cli_runs_from_clean_venv(tmp_path: Path) -> None:
         )
         doctor_payload = json.loads(doctor.stdout)
         assert doctor_payload["health"]["status"] == "ok"
-        assert doctor_payload["grammar_probe"] == "yes"
+        assert doctor_payload["json_probe"] == "yes"
 
         ask = subprocess.run(
             [str(python), "-m", "swaag", "ask", "Use calculator to compute 6 * 7"],
@@ -318,9 +375,9 @@ def test_package_installs_and_cli_runs_from_clean_venv(tmp_path: Path) -> None:
         )
         assert "tests/test_scaled_catalog.py" in finalproof.stdout
         assert "swaag.manual_validation" in finalproof.stdout
-        assert "--validation-subset" in finalproof.stdout
+        assert "--full-catalog" in finalproof.stdout
         assert "--model-profile small_fast" in finalproof.stdout
-        assert "--structured-output-mode post_validate" in finalproof.stdout
+        assert "--structured-output-mode server_schema" in finalproof.stdout
         assert "--seeds 11,23,37" in finalproof.stdout
 
         live_subset_catalog = subprocess.run(

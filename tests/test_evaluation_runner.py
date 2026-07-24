@@ -199,9 +199,11 @@ def test_run_test_category_evaluation_stops_when_code_correctness_fails(monkeypa
 
 
 def test_run_manual_validation_is_not_a_test_category(monkeypatch, tmp_path: Path) -> None:
-    monkeypatch.setattr(
-        "swaag.manual_validation.runner.run_benchmarks",
-        lambda **kwargs: {
+    observed: dict[str, object] = {}
+
+    def fake_run_benchmarks(**kwargs):
+        observed.update(kwargs)
+        return {
             "summary": {
                 "average_task_score_percent": 91.5,
                 "total_tasks": 1,
@@ -214,14 +216,16 @@ def test_run_manual_validation_is_not_a_test_category(monkeypatch, tmp_path: Pat
                 },
             },
             "tasks": [{"task_id": "manual-demo", "difficulty": "normal", "score_percent": 92.0}],
-        },
-    )
+        }
+
+    monkeypatch.setattr("swaag.manual_validation.runner.run_benchmarks", fake_run_benchmarks)
 
     payload = run_manual_validation(output_dir=tmp_path / "manual", benchmark_task_ids=["manual-demo"])
 
     assert payload["is_test_category"] is False
     assert payload["category"] == "manual_validation"
     assert payload["percent"] == 91.5
+    assert observed["agent_behavior_mode"] == "cached"
     assert (tmp_path / "manual" / "manual_validation_results.json").exists()
     assert (tmp_path / "manual" / "manual_validation_report.md").exists()
 

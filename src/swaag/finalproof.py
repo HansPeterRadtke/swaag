@@ -28,7 +28,7 @@ def build_finalproof_commands(*, benchmark_output: Path, manual_validation_outpu
             "-m",
             "swaag.manual_validation",
             "--clean",
-            "--validation-subset",
+            "--full-catalog",
             "--model-profile",
             live.model_profile,
             "--structured-output-mode",

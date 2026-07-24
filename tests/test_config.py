@@ -38,13 +38,13 @@ def test_model_profile_and_structured_output_env_overrides_are_loaded(tmp_path: 
     env = {
         "SWAAG__SESSIONS__ROOT": str(tmp_path / "sessions"),
         "SWAAG__MODEL__PROFILE_NAME": "mid_context",
-        "SWAAG__MODEL__STRUCTURED_OUTPUT_MODE": "post_validate",
+        "SWAAG__MODEL__STRUCTURED_OUTPUT_MODE": "server_schema",
         "SWAAG__MODEL__PROGRESS_POLL_SECONDS": "2.5",
     }
     config = load_config(env=env)
 
     assert config.model.profile_name == "mid_context"
-    assert config.model.structured_output_mode == "post_validate"
+    assert config.model.structured_output_mode == "server_schema"
     assert config.model.progress_poll_seconds == 2.5
 
 
@@ -54,6 +54,14 @@ def test_default_model_profile_and_mode_match_documented_live_profile(tmp_path: 
 
     assert config.model.profile_name == recommendation.model_profile
     assert config.model.structured_output_mode == recommendation.structured_output_mode
+    assert config.model.cache_enabled is True
+    assert config.model.cache_mode == "record"
+
+
+def test_visible_editor_backups_are_disabled_by_default() -> None:
+    config = load_config()
+
+    assert config.editor.create_backups is False
 
 
 def test_selection_policy_retrieval_weights_are_loaded_from_defaults() -> None:

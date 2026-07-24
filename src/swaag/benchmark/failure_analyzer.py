@@ -29,14 +29,14 @@ class FailureAnalyzer:
     ) -> FailureAnalysis:
         event_types = [event.event_type for event in events]
         last_reason = state.metrics.last_reasoning_reason or ""
-        if any(event.event_type == "tool_graph_rejected" for event in events):
-            rejected = next(event for event in events if event.event_type == "tool_graph_rejected")
+        if any(event.event_type == "tool_mismatch_rejected" for event in events):
+            rejected = next(event for event in events if event.event_type == "tool_mismatch_rejected")
             return FailureAnalysis(
                 category="wrong_tool_usage",
-                reason="Selected tool did not satisfy the expected tool graph.",
+                reason="Selected tool did not exactly match the model-authored plan step.",
                 evidence={"selected_tool": rejected.payload.get("selected_tool"), "expected_tool": rejected.payload.get("expected_tool")},
                 subsystem="tooling",
-                improvement_hints=["Tighten tool selection policy for the task type.", "Increase tool graph constraints for file and coding tasks."],
+                improvement_hints=["Return mismatch evidence to the model and require a corrected constrained tool call."],
             )
         if any(event.event_type == "duplicate_action_detected" for event in events):
             duplicate = next(event for event in events if event.event_type == "duplicate_action_detected")

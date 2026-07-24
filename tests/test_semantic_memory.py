@@ -29,13 +29,10 @@ def test_trusted_tool_result_promotes_to_semantic_memory(make_config) -> None:
     result = runtime.run_turn(goal)
     state = runtime.history.rebuild_from_history(result.session_id)
 
-    assert any("6 * 7 = 42" in item.content for item in state.semantic_memory)
-    assert state.semantic_entities
-    assert state.semantic_relationships
-    assert state.semantic_facts
-    item = next(item for item in state.semantic_memory if "6 * 7 = 42" in item.content)
-    assert item.metadata["outcome"] == "calculation_completed"
-    assert item.metadata["confidence"] == 1.0
+    assert any(item.metadata.get("source_event_type") == "tool_result" for item in state.semantic_memory)
+    assert any('"tool_name":"calculator"' in item.content for item in state.semantic_memory)
+    item = next(item for item in state.semantic_memory if item.metadata.get("source_event_type") == "tool_result")
+    assert item.metadata["raw_event"]["payload"]["tool_name"] == "calculator"
     events = runtime.history.read_history(result.session_id)
     assert any(event.event_type == "memory_extracted" for event in events)
     assert any(event.event_type == "memory_stored" for event in events)
@@ -90,15 +87,11 @@ def test_consistency_checker_recovers_semantic_memory(make_config) -> None:
     result = runtime.run_turn(goal)
     state = runtime.history.rebuild_from_history(result.session_id)
     state.semantic_memory.clear()
-    state.semantic_entities.clear()
-    state.semantic_relationships.clear()
-    state.semantic_facts.clear()
 
     runtime._check_consistency(state)
     events = runtime.history.read_history(result.session_id)
 
     assert state.semantic_memory
-    assert state.semantic_entities
     assert any(event.event_type == "consistency_failed" and event.payload["component"] == "semantic_memory" for event in events)
     assert any(event.event_type == "recovery_triggered" for event in events)
 
@@ -128,5 +121,4 @@ def test_step_completion_is_promoted_to_derived_semantic_memory(make_config) -> 
     result = runtime.run_turn(goal)
     state = runtime.history.rebuild_from_history(result.session_id)
 
-    assert any(item.metadata.get("outcome") == "step_completed" for item in state.semantic_memory)
-    assert any(fact.fact_type == "outcome" for fact in state.semantic_facts)
+    assert any(item.metadata.get("source_event_type") == "step_completed" for item in state.semantic_memory)

@@ -16,6 +16,37 @@ from swaag.types import DeferredTask, Plan, PlanStep
 from tests.helpers import FakeModelClient, plan_response, plan_step
 
 
+def _calculator_plan_response(goal: str, expected: str) -> str:
+    return plan_response(
+        goal=goal,
+        steps=[
+            plan_step(
+                "calculate",
+                "Calculate",
+                "tool",
+                expected_tool="calculator",
+                expected_output=expected,
+                success_criteria=f"The calculator returns {expected}.",
+            ),
+            plan_step(
+                "answer",
+                "Answer",
+                "respond",
+                expected_output=expected,
+                success_criteria="Return the calculator result.",
+                depends_on=["calculate"],
+                verification_type="composite",
+                verification_checks=[
+                    {"name": "dependencies_completed", "check_type": "dependencies_completed"},
+                    {"name": "answer_exact", "check_type": "exact_match", "actual_source": "assistant_text", "expected": expected},
+                ],
+                required_conditions=["dependencies_completed", "answer_exact"],
+                optional_conditions=[],
+            ),
+        ],
+    )
+
+
 def test_runtime_recovered_answer_is_not_blocked_by_stale_failed_turn_state(make_config) -> None:
     failing_config = make_config(runtime__tool_call_budget=0, planner__max_replans=0)
     success_config = make_config(planner__max_replans=0)
@@ -31,12 +62,12 @@ def test_runtime_recovered_answer_is_not_blocked_by_stale_failed_turn_state(make
                         plan_step("step_calc", "Compute", "tool", expected_tool="calculator", expected_output="value", success_criteria="calculator returns a value"),
                         plan_step("step_answer", "Answer", "respond", expected_output="answer", success_criteria="answer returned", depends_on=["step_calc"]),
                     ],
-                )
+                ),
             ]
         ),
     )
     first = failing_runtime.run_turn(goal)
-    assert first.assistant_text == "not done"
+    assert first.assistant_text == "Task incomplete: tool_call_budget_reached. Verified success was not reached."
 
     success_runtime = AgentRuntime(
         success_config,
@@ -58,9 +89,13 @@ def test_runtime_recovered_answer_is_not_blocked_by_stale_failed_turn_state(make
                             "reason": "one calculator call is sufficient",
                         }
                     )
-                ]
+                ],
+                "task_plan": [_calculator_plan_response(goal, "4")],
             },
-            responses=[json.dumps({"action": "call_tool", "response": "", "tool_name": "calculator", "tool_input": {"expression": "2 + 2"}})],
+            responses=[
+                json.dumps({"action": "call_tool", "response": "", "tool_name": "calculator", "tool_input": {"expression": "2 + 2"}}),
+                "4",
+            ],
         ),
     )
     second = success_runtime.run_turn(goal, session_id=first.session_id)
@@ -70,6 +105,7 @@ def test_runtime_recovered_answer_is_not_blocked_by_stale_failed_turn_state(make
 
 def test_runtime_processes_continue_control_without_stopping_current_work(make_config) -> None:
     config = make_config(planner__max_replans=0)
+    goal = "Use the calculator tool to compute 6 * 7."
     no_spawn = json.dumps({"spawn": False, "subagent_type": "none", "reason": "not needed", "focus": ""})
     runtime = AgentRuntime(
         config,
@@ -105,6 +141,7 @@ def test_runtime_processes_continue_control_without_stopping_current_work(make_c
                     )
                 ],
                 "subagent_selection": [no_spawn] * 4,
+                "task_plan": [_calculator_plan_response(goal, "42")],
             },
             responses=[None],
         ),
@@ -115,8 +152,8 @@ def test_runtime_processes_continue_control_without_stopping_current_work(make_c
         runtime.history.enqueue_control_message(state.session_id, "Also make the answer digits only.", source="test")
         return json.dumps({"action": "call_tool", "response": "", "tool_name": "calculator", "tool_input": {"expression": "6 * 7"}})
 
-    runtime.client._responses = [_tool_decision]
-    result = runtime.run_turn_in_session(state, "Use the calculator tool to compute 6 * 7.")
+    runtime.client._responses = [_tool_decision, "42"]
+    result = runtime.run_turn_in_session(state, goal)
     rebuilt = runtime.history.rebuild_from_history(state.session_id, write_projections=False)
     events = runtime.history.read_history(state.session_id)
 

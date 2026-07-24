@@ -6,8 +6,8 @@ Authoritative test categories:
 1. code_correctness
 2. agent_test
 
-Uncached real-model execution is manual validation / real usage, not a test
-category.
+Manual validation / real usage is not a test category. It is cache-first by
+default; --uncached-live is the explicit cache bypass.
 
 Commands
 --------
@@ -25,7 +25,7 @@ Artifact-producing combined run:
   python3 -m swaag.benchmark test-categories --clean --output /tmp/swaag-test-categories
 
 Manual validation, not tests:
-  python3 -m swaag.benchmark manual-validation --clean --validation-subset --output /tmp/swaag-manual-validation
+  python3 -m swaag.benchmark manual-validation --clean --full-catalog --output /tmp/swaag-manual-validation
 
 Artifacts
 ---------

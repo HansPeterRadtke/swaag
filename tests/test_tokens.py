@@ -5,8 +5,8 @@ from swaag.tokens import (
     ExactTokenCounter,
     admission_check,
     build_budget,
-    count_grammar,
     count_message_list,
+    count_schema_contract,
     count_text,
     count_tool_descriptions,
     reserve_for_response,
@@ -28,11 +28,11 @@ def test_conservative_counter_counts_empty_text() -> None:
     assert result.exact is False
 
 
-def test_message_tool_and_grammar_counting(make_config) -> None:
+def test_message_tool_and_schema_contract_counting(make_config) -> None:
     counter = ExactTokenCounter(lambda text: len(text.split()) if text.strip() else 0)
     assert count_message_list(counter, "alpha beta").tokens == 2
     assert count_tool_descriptions(counter, "tool schema text").tokens == 3
-    assert count_grammar(counter, 'root ::= "yes"').tokens == 3
+    assert count_schema_contract(counter, '{"type":"object"}').tokens == 1
     assert reserve_for_response(make_config().context) == make_config().context.reserved_response_tokens
 
 
@@ -72,7 +72,7 @@ def test_budget_tracks_wrapper_and_non_context_components(make_config) -> None:
         counter,
         [
             PromptComponent(name="wrapper", text="abcd", category="wrapper"),
-            PromptComponent(name="schema", text="abcdefgh", category="grammar", include_in_context=False),
+            PromptComponent(name="schema", text="abcdefgh", category="json_schema", include_in_context=False),
         ],
         config.context,
         config.model.context_limit,

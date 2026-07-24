@@ -4,8 +4,11 @@ import sys
 import time
 from pathlib import Path
 
+import pytest
+
 from swaag.context_builder import build_context
 from swaag.environment.environment import AgentEnvironment
+from swaag.environment.filesystem import FilesystemError
 from swaag.runtime import AgentRuntime
 from swaag.tokens import ConservativeEstimator
 from swaag.tools.base import ToolContext
@@ -88,14 +91,10 @@ def test_shell_command_invalid_syntax_preserves_session_state(make_config, tmp_p
         {"command": "git apply -v <patch_file> && git diff --cached"},
     )
 
-    assert run.tool_result is None
+    assert run.tool_result is not None
+    assert run.tool_result.output["exit_code"] != 0
     events = runtime.history.read_history(run.session_id)
-    error_event = next(
-        event
-        for event in events
-        if event.event_type == "tool_error" and event.payload.get("tool_name") == "shell_command"
-    )
-    assert "placeholder" in error_event.payload["error"]
+    assert any(event.event_type == "shell_command_completed" for event in events)
 
     rebuilt = runtime.history.rebuild_from_history(run.session_id)
     assert rebuilt.environment.shell.cwd == runtime.create_or_load_session(run.session_id).environment.shell.cwd
@@ -155,7 +154,7 @@ def test_shell_command_workspace_snapshot_records_only_delta(make_config, tmp_pa
     assert "untouched.txt" not in rebuilt.environment.workspace.known_files
 
 
-def test_context_builder_selects_relevant_environment_files(make_config, tmp_path: Path) -> None:
+def test_context_builder_includes_bounded_environment_files_without_lexical_relevance(make_config, tmp_path: Path) -> None:
     config = make_config(
         context_builder__max_environment_files=1,
     )
@@ -180,8 +179,7 @@ def test_context_builder_selects_relevant_environment_files(make_config, tmp_pat
     component_names = [component.name for component in bundle.components if component.text]
     assert "environment" in component_names
     assert "environment_files" in component_names
-    assert "src/app.py" in bundle.relevant_files_text
-    assert "README.md" not in bundle.relevant_files_text
+    assert any(path in bundle.relevant_files_text for path in ("src/app.py", "README.md"))
     assert any(item.item_type == "environment_file" and item.selected for item in bundle.selection_trace)
 
 
@@ -409,7 +407,7 @@ def test_environment_kill_background_shell_command_terminates_child_process(make
     assert not target.exists()
 
 
-def test_environment_repairs_missing_test_file_argument(make_config, tmp_path: Path) -> None:
+def test_environment_does_not_repair_missing_test_file_argument(make_config, tmp_path: Path) -> None:
     config = make_config(runtime__tool_timeout_seconds=10)
     state = SessionState(session_id="s", created_at="t", updated_at="t", config_fingerprint="cfg", model_base_url="http://example.test")
     environment = AgentEnvironment(config, state)
@@ -417,35 +415,31 @@ def test_environment_repairs_missing_test_file_argument(make_config, tmp_path: P
 
     result = environment.run_tests([sys.executable, "-m", "pytest", "pkg_261/tests/test_slugify.py"], background=False)
 
-    assert result.output["passed"] is True
-    assert result.output["command"][-1] == "test_pkg_261_slugify.py"
+    assert result.output["passed"] is False
+    assert result.output["command"][-1] == "pkg_261/tests/test_slugify.py"
 
 
-def test_environment_repairs_missing_read_file_path_by_unique_basename(make_config, tmp_path: Path) -> None:
+def test_environment_requires_exact_read_file_path(make_config, tmp_path: Path) -> None:
     config = make_config()
     state = SessionState(session_id="s", created_at="t", updated_at="t", config_fingerprint="cfg", model_base_url="http://example.test")
     environment = AgentEnvironment(config, state)
     (tmp_path / "test_pkg_492.py").write_text("content", encoding="utf-8")
 
-    result = environment.read_file("pkg_492/test_pkg_492.py")
-
-    assert result.output["relative_path"] == "test_pkg_492.py"
-    assert result.output["text"] == "content"
+    with pytest.raises(FilesystemError):
+        environment.read_file("pkg_492/test_pkg_492.py")
 
 
-def test_environment_repairs_package_local_test_file_without_tests_dir(make_config, tmp_path: Path) -> None:
+def test_environment_read_text_chunk_requires_exact_path(make_config, tmp_path: Path) -> None:
     config = make_config()
     state = SessionState(session_id="s", created_at="t", updated_at="t", config_fingerprint="cfg", model_base_url="http://example.test")
     environment = AgentEnvironment(config, state)
     (tmp_path / "test_pkg_261_slugify.py").write_text("content", encoding="utf-8")
 
-    result = environment.read_text_chunk(
-        {"path": "pkg_261/test_slugify.py", "paths": None, "note_id": None, "reader_id": None, "chunk_chars": 1000, "overlap_chars": None},
-        ToolContext(config=config, session_state=state, environment=environment),
-    )
-
-    assert result.output["source_kind"] == "file"
-    assert result.output["text"] == "content"
+    with pytest.raises(FilesystemError):
+        environment.read_text_chunk(
+            {"path": "pkg_261/test_slugify.py", "paths": None, "note_id": None, "reader_id": None, "chunk_chars": 1000, "overlap_chars": None},
+            ToolContext(config=config, session_state=state, environment=environment),
+        )
 
 
 def test_environment_read_text_chunk_combines_multiple_paths(make_config, tmp_path: Path) -> None:
@@ -467,7 +461,7 @@ def test_environment_read_text_chunk_combines_multiple_paths(make_config, tmp_pa
     assert "B = 2" in result.output["text"]
 
 
-def test_environment_repairs_absolute_nested_package_test_path_with_source_present(make_config, tmp_path: Path) -> None:
+def test_environment_rejects_absolute_nested_missing_test_path(make_config, tmp_path: Path) -> None:
     config = make_config()
     state = SessionState(session_id="s", created_at="t", updated_at="t", config_fingerprint="cfg", model_base_url="http://example.test")
     environment = AgentEnvironment(config, state)
@@ -476,17 +470,14 @@ def test_environment_repairs_absolute_nested_package_test_path_with_source_prese
     (package_dir / "slugify.py").write_text("source", encoding="utf-8")
     (tmp_path / "test_pkg_261_slugify.py").write_text("content", encoding="utf-8")
 
-    result = environment.read_text_chunk(
-        {"path": str(package_dir / "tests" / "test_slugify.py"), "paths": None, "note_id": None, "reader_id": None, "chunk_chars": 1000, "overlap_chars": None},
-        ToolContext(config=config, session_state=state, environment=environment),
-    )
-
-    assert result.output["source_kind"] == "file"
-    assert result.output["source_ref"].endswith("test_pkg_261_slugify.py")
-    assert result.output["text"] == "content"
+    with pytest.raises(FilesystemError):
+        environment.read_text_chunk(
+            {"path": str(package_dir / "tests" / "test_slugify.py"), "paths": None, "note_id": None, "reader_id": None, "chunk_chars": 1000, "overlap_chars": None},
+            ToolContext(config=config, session_state=state, environment=environment),
+        )
 
 
-def test_environment_repairs_root_tests_directory_path_with_source_present(make_config, tmp_path: Path) -> None:
+def test_environment_rejects_root_tests_directory_missing_path(make_config, tmp_path: Path) -> None:
     config = make_config()
     state = SessionState(session_id="s", created_at="t", updated_at="t", config_fingerprint="cfg", model_base_url="http://example.test")
     environment = AgentEnvironment(config, state)
@@ -495,26 +486,42 @@ def test_environment_repairs_root_tests_directory_path_with_source_present(make_
     (package_dir / "slugify.py").write_text("source", encoding="utf-8")
     (tmp_path / "test_pkg_261_slugify.py").write_text("content", encoding="utf-8")
 
-    result = environment.read_text_chunk(
-        {"path": str(tmp_path / "tests" / "test_slugify.py"), "paths": None, "note_id": None, "reader_id": None, "chunk_chars": 1000, "overlap_chars": None},
-        ToolContext(config=config, session_state=state, environment=environment),
-    )
-
-    assert result.output["source_kind"] == "file"
-    assert result.output["source_ref"].endswith("test_pkg_261_slugify.py")
-    assert result.output["text"] == "content"
+    with pytest.raises(FilesystemError):
+        environment.read_text_chunk(
+            {"path": str(tmp_path / "tests" / "test_slugify.py"), "paths": None, "note_id": None, "reader_id": None, "chunk_chars": 1000, "overlap_chars": None},
+            ToolContext(config=config, session_state=state, environment=environment),
+        )
 
 
-def test_environment_repairs_missing_test_path_by_similar_filename(make_config, tmp_path: Path) -> None:
+def test_environment_rejects_similar_filename_missing_path(make_config, tmp_path: Path) -> None:
     config = make_config()
     state = SessionState(session_id="s", created_at="t", updated_at="t", config_fingerprint="cfg", model_base_url="http://example.test")
     environment = AgentEnvironment(config, state)
     (tmp_path / "test_pkg_261_slugify.py").write_text("content", encoding="utf-8")
 
-    result = environment.read_text_chunk(
-        {"path": "pkg_261/tests/test_slugify.py", "paths": None, "note_id": None, "reader_id": None, "chunk_chars": 1000, "overlap_chars": None},
-        ToolContext(config=config, session_state=state, environment=environment),
-    )
+    with pytest.raises(FilesystemError):
+        environment.read_text_chunk(
+            {"path": "pkg_261/tests/test_slugify.py", "paths": None, "note_id": None, "reader_id": None, "chunk_chars": 1000, "overlap_chars": None},
+            ToolContext(config=config, session_state=state, environment=environment),
+        )
 
-    assert result.output["source_kind"] == "file"
-    assert result.output["text"] == "content"
+
+def test_filesystem_snapshot_excludes_runtime_owned_session_and_model_cache_files(make_config, tmp_path: Path) -> None:
+    from swaag.environment.filesystem import FilesystemManager
+
+    sessions = tmp_path / "sessions"
+    cache = tmp_path / "llm-model-cache.json"
+    config = make_config(
+        sessions__root=str(sessions),
+        model__cache_path=str(cache),
+        tools__read_roots=[str(tmp_path)],
+    )
+    (tmp_path / "user.txt").write_text("user data", encoding="utf-8")
+    sessions.mkdir()
+    (sessions / "history.jsonl").write_text("runtime state", encoding="utf-8")
+    cache.write_text("cache", encoding="utf-8")
+    (tmp_path / "llm-model-cache.json.lock").write_text("lock", encoding="utf-8")
+
+    snapshot = FilesystemManager(config, tmp_path).snapshot()
+
+    assert snapshot == {"user.txt": "user data"}

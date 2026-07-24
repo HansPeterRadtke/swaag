@@ -6,21 +6,6 @@ import pytest
 
 from swaag.planner import (
     PlanValidationError,
-    create_shell_recovery_plan,
-    create_multi_target_projection_plan,
-    create_replace_all_file_edit_plan,
-    create_compatibility_matrix_repair_plan,
-    create_release_train_repair_plan,
-    create_policy_refusal_workflow_plan,
-    create_deployment_refinement_workflow_plan,
-    create_filesystem_release_workflow_plan,
-    create_shell_release_workflow_plan,
-    create_capacity_plan_workflow_plan,
-    create_computed_report_plan,
-    create_manifest_projection_plan,
-    create_exact_file_sync_plan,
-    create_structured_reading_plan,
-    create_release_flow_recovery_plan,
     plan_from_payload,
     ready_steps,
     transition_step,
@@ -30,32 +15,18 @@ from swaag.runtime import AgentRuntime, FatalSemanticEngineError
 from tests.helpers import FakeModelClient, plan_response, plan_step
 
 
+def _payload(goal: str, steps: list[dict]) -> dict:
+    return json.loads(plan_response(goal=goal, steps=steps))
+
+
 def test_plan_from_payload_validates_ordered_steps(make_config) -> None:
-    config = make_config()
-    payload = json.loads(
-        plan_response(
-            goal="Read a file, update it, then answer.",
-            steps=[
-                plan_step("step_read", "Read the file", "read", expected_tool="read_text", expected_output="File contents", success_criteria="The file is read."),
-                plan_step(
-                    "step_write",
-                    "Edit the file",
-                    "write",
-                    expected_tool="edit_text",
-                    expected_output="Updated file",
-                    success_criteria="The file is updated.",
-                    depends_on=["step_read"],
-                ),
-                plan_step(
-                    "step_answer",
-                    "Answer the user",
-                    "respond",
-                    expected_output="Final answer",
-                    success_criteria="The user receives the result.",
-                    depends_on=["step_write"],
-                ),
-            ],
-        )
+    payload = _payload(
+        "Read a file, update it, then answer.",
+        [
+            plan_step("step_read", "Read the file", "read", expected_tool="read_text", expected_output="File contents", success_criteria="The file is read."),
+            plan_step("step_write", "Edit the file", "write", expected_tool="edit_text", expected_output="Updated file", success_criteria="The file is updated.", depends_on=["step_read"]),
+            plan_step("step_answer", "Answer the user", "respond", expected_output="Final answer", success_criteria="The user receives the result.", depends_on=["step_write"]),
+        ],
     )
 
     plan = plan_from_payload(payload, available_tools=["read_text", "edit_text", "notes", "calculator"])
@@ -67,308 +38,76 @@ def test_plan_from_payload_validates_ordered_steps(make_config) -> None:
         transition_step(plan, "step_write", "running")
 
 
-def test_plan_from_payload_removes_redundant_write_after_applying_edit() -> None:
-    payload = json.loads(
-        plan_response(
-            goal="Fix pkg_261/slugify.py and run tests.",
-            steps=[
-                plan_step("read", "Read pkg_261/slugify.py", "read", expected_tool="read_text", expected_output="source", success_criteria="read"),
-                plan_step("edit", "Edit pkg_261/slugify.py", "write", expected_tool="edit_text", expected_output="edited", success_criteria="edited", depends_on=["read"]),
-                plan_step("write", "Write pkg_261/slugify.py", "write", expected_tool="write_file", expected_output="written", success_criteria="written", depends_on=["edit"]),
-                plan_step("test", "Test pkg_261/slugify.py", "tool", expected_tool="run_tests", expected_output="tests pass", success_criteria="tests pass", depends_on=["write"]),
-                plan_step("answer", "Answer", "respond", expected_output="done", success_criteria="done", depends_on=["test"]),
-            ],
-        )
+def test_plan_from_payload_preserves_model_declared_steps_without_semantic_repair() -> None:
+    payload = _payload(
+        "Fix pkg_261/slugify.py and run tests.",
+        [
+            plan_step("read", "Read pkg_261/slugify.py", "read", expected_tool="read_text", expected_output="source", success_criteria="read"),
+            plan_step("edit", "Edit pkg_261/slugify.py", "write", expected_tool="edit_text", expected_output="edited", success_criteria="edited", depends_on=["read"]),
+            plan_step("write", "Write pkg_261/slugify.py", "write", expected_tool="write_file", expected_output="written", success_criteria="written", depends_on=["edit"]),
+            plan_step("test", "Test pkg_261/slugify.py", "tool", expected_tool="run_tests", expected_output="tests pass", success_criteria="tests pass", depends_on=["write"]),
+            plan_step("answer", "Answer", "respond", expected_output="done", success_criteria="done", depends_on=["test"]),
+        ],
     )
 
     plan = plan_from_payload(payload, available_tools=["read_text", "edit_text", "write_file", "run_tests"])
 
-    assert [step.expected_tool for step in plan.steps[:-1]] == ["read_text", "edit_text", "run_tests"]
+    assert [step.expected_tool for step in plan.steps[:-1]] == ["read_text", "edit_text", "write_file", "run_tests"]
     test_step = next(step for step in plan.steps if step.step_id == "test")
-    assert test_step.depends_on == ["edit"]
+    assert test_step.depends_on == ["write"]
 
 
-def test_plan_from_payload_rejects_invalid_tool(make_config) -> None:
-    payload = json.loads(
-        plan_response(
-            goal="Try an invalid tool.",
-            steps=[
-                plan_step("step_bad", "Run missing tool", "tool", expected_tool="missing_tool", expected_output="x", success_criteria="x"),
-                plan_step("step_answer", "Answer", "respond", expected_output="done", success_criteria="done", depends_on=["step_bad"]),
-            ],
-        )
+def test_plan_from_payload_keeps_placeholder_like_input_text_as_instruction() -> None:
+    payload = _payload(
+        "Edit a file and answer.",
+        [
+            plan_step(
+                "edit",
+                "Edit file",
+                "write",
+                expected_tool="edit_text",
+                input_text=json.dumps({"instruction": "Use prior content {{edited_file_content}} only as context."}),
+                expected_output="edited_file_content",
+                success_criteria="file edited",
+                output_refs=["edited_file_content"],
+            ),
+            plan_step("answer", "Answer", "respond", expected_output="done", success_criteria="done", depends_on=["edit"]),
+        ],
+    )
+
+    plan = plan_from_payload(payload, available_tools=["edit_text"])
+
+    edit_step = next(step for step in plan.steps if step.step_id == "edit")
+    assert "{{edited_file_content}}" in edit_step.input_text
+
+
+def test_plan_from_payload_rejects_invalid_tool() -> None:
+    payload = _payload(
+        "Try an invalid tool.",
+        [
+            plan_step("step_bad", "Run missing tool", "tool", expected_tool="missing_tool", expected_output="x", success_criteria="x"),
+            plan_step("step_answer", "Answer", "respond", expected_output="done", success_criteria="done", depends_on=["step_bad"]),
+        ],
     )
 
     with pytest.raises(PlanValidationError):
         plan_from_payload(payload, available_tools=["calculator"])
 
 
-def test_create_shell_recovery_plan_builds_read_write_respond_flow() -> None:
-    plan = create_shell_recovery_plan("Fix the failing repository test.")
-
-    assert [step.kind for step in plan.steps] == ["read", "write", "tool", "respond"]
-    assert [step.expected_tool for step in plan.steps[:-1]] == ["shell_command", "edit_text", "run_tests"]
-    assert plan.steps[-1].expected_tool is None
-    assert plan.steps[1].depends_on == [plan.steps[0].step_id]
-    assert plan.steps[2].depends_on == [plan.steps[1].step_id]
-    assert plan.steps[3].depends_on == [plan.steps[2].step_id]
-    assert any(check["name"] == "command_exit_zero" for check in plan.steps[0].verification_checks)
-    assert any(check["name"] == "tool_files_changed" for check in plan.steps[1].verification_checks)
-    assert any(check["name"] == "command_exit_zero" for check in plan.steps[2].verification_checks)
-    assert "exact failing test name first" in plan.steps[0].input_text
-    assert "Prefer replace_pattern_once or replace_range" in plan.steps[1].input_text
-
-
-def test_create_shell_recovery_plan_reads_explicit_named_source_without_shell() -> None:
-    plan = create_shell_recovery_plan(
-        "Repository root: /tmp/work. Fix `pkg_261/slugify.py` so tests/test_slugify.py passes."
+def test_plan_from_payload_rejects_missing_terminal_response_step() -> None:
+    payload = _payload(
+        "Inspect a file and edit it.",
+        [
+            plan_step("step_read", "Read the file", "read", expected_tool="read_text", expected_output="File contents", success_criteria="The file is read."),
+            plan_step("step_edit", "Edit the file", "write", expected_tool="edit_text", expected_output="Edited file", success_criteria="The file is edited.", depends_on=["step_read"]),
+        ],
     )
 
-    assert [step.expected_tool for step in plan.steps[:-1]] == ["read_text", "edit_text", "run_tests"]
-    assert plan.steps[0].input_text == "pkg_261/slugify.py"
-    assert plan.steps[0].done_condition == "tool_result:read_text"
-    assert "pkg_261/slugify.py" in plan.steps[1].input_text
+    with pytest.raises(PlanValidationError, match="end with a respond step"):
+        plan_from_payload(payload, available_tools=["read_text", "edit_text"])
 
 
-def test_create_multi_target_projection_plan_reads_writes_and_reports() -> None:
-    plan = create_multi_target_projection_plan(
-        "Project one source.",
-        source_path="decision.json",
-        target_paths=["deployment.yaml", "notes.md"],
-    )
-    assert [step.expected_tool for step in plan.steps] == ["read_file", "write_file", "write_file", None]
-    assert [step.kind for step in plan.steps] == ["read", "write", "write", "respond"]
-
-
-def test_create_replace_all_file_edit_plan_uses_single_write_then_response() -> None:
-    plan = create_replace_all_file_edit_plan(
-        "Replace every occurrence.",
-        path="deployment.ini",
-        pattern="24-legacy",
-        replacement="24-current",
-    )
-    assert [step.expected_tool for step in plan.steps] == ["edit_text", None]
-    assert [step.kind for step in plan.steps] == ["write", "respond"]
-
-
-def test_create_compatibility_matrix_repair_plan_is_four_step_coding_flow() -> None:
-    plan = create_compatibility_matrix_repair_plan(
-        "Backfill compatibility.",
-        source_paths=["compatibility_matrix.json", "pkg_001/rules.py", "test_pkg_001_compatibility.py"],
-        test_command=["python3", "-m", "unittest", "-q", "test_pkg_001_compatibility.py"],
-    )
-    assert [step.expected_tool for step in plan.steps] == ["read_text", "shell_command", "run_tests", None]
-    assert [step.kind for step in plan.steps] == ["read", "write", "tool", "respond"]
-
-
-def test_create_release_train_repair_plan_is_four_step_coding_flow() -> None:
-    plan = create_release_train_repair_plan(
-        "Repair release train.",
-        source_paths=["release_manifest.json", "pkg_001/core.py", "test_pkg_001_unit.py"],
-        test_command=["python3", "-m", "unittest", "-q", "test_pkg_001_unit.py"],
-    )
-    assert [step.expected_tool for step in plan.steps] == ["read_text", "shell_command", "run_tests", None]
-    assert [step.kind for step in plan.steps] == ["read", "write", "tool", "respond"]
-    assert [step.title for step in plan.steps] == [
-        "Inspect release train sources",
-        "Apply coordinated release train repair",
-        "Verify release train repair",
-        "Report release train repair",
-    ]
-
-
-def test_create_policy_refusal_workflow_plan_reads_and_refuses() -> None:
-    plan = create_policy_refusal_workflow_plan(
-        "Refuse unsafe request.",
-        policy_path="policy.md",
-        request_path="request.txt",
-        protected_path="protected.log",
-    )
-    assert [step.expected_tool for step in plan.steps] == ["read_file", "read_file", "read_file", None]
-    assert [step.title for step in plan.steps] == [
-        "Read refusal policy",
-        "Read unsafe request",
-        "Read protected evidence",
-        "Report policy refusal",
-    ]
-
-
-def test_create_deployment_refinement_workflow_plan_is_canonical() -> None:
-    plan = create_deployment_refinement_workflow_plan(
-        "Refine deployment.",
-        spec_path="deployment_spec.json",
-        infra_path="infra_plan.txt",
-        rollout_path="rollout_plan.json",
-        test_command=["python3", "-m", "unittest", "-q", "test_deployment_consistency_56.py"],
-    )
-    assert [step.expected_tool for step in plan.steps] == ["read_file", "write_file", "write_file", "run_tests", None]
-    assert [step.title for step in plan.steps] == [
-        "Read deployment refinement spec",
-        "Write deployment infra plan",
-        "Write deployment rollout plan",
-        "Verify deployment refinement",
-        "Report deployment refinement",
-    ]
-
-
-def test_create_filesystem_release_workflow_plan_lists_reads_writes_rereads_tests_and_reports() -> None:
-    plan = create_filesystem_release_workflow_plan(
-        "Select manifest.",
-        incoming_path="incoming",
-        selection_path="selection.txt",
-        target_path="filesystem_release.txt",
-        test_command=["python3", "-m", "unittest", "-q", "test_filesystem_release_27.py"],
-    )
-
-    assert [step.expected_tool for step in plan.steps] == [
-        "list_files", "read_file", "read_file", "write_file", "read_file", "run_tests", None
-    ]
-    assert [step.title for step in plan.steps] == [
-        "List incoming manifests",
-        "Read manifest selection",
-        "Read selected manifest",
-        "Write filesystem release target",
-        "Reread filesystem release target",
-        "Verify filesystem release workflow",
-        "Report filesystem release workflow",
-    ]
-    assert all(plan.steps[index].depends_on == [plan.steps[index - 1].step_id] for index in range(1, len(plan.steps)))
-
-
-def test_create_shell_release_workflow_plan_runs_rereads_tests_and_reports() -> None:
-    plan = create_shell_release_workflow_plan(
-        "Capture release.",
-        script_path="capture_release.sh",
-        env_path="release.env",
-        summary_path="shell_release_summary.txt",
-        test_command=["python3", "-m", "unittest", "-q", "test_shell_release_46.py"],
-    )
-
-    assert [step.expected_tool for step in plan.steps] == ["shell_command", "read_file", "run_tests", None]
-    assert [step.title for step in plan.steps] == [
-        "Run release capture script",
-        "Reread shell release summary",
-        "Verify shell release workflow",
-        "Report shell release workflow",
-    ]
-    assert all(plan.steps[index].depends_on == [plan.steps[index - 1].step_id] for index in range(1, len(plan.steps)))
-
-
-def test_create_capacity_plan_workflow_plan_has_all_required_steps() -> None:
-    plan = create_capacity_plan_workflow_plan(
-        "Build capacity plan.",
-        config_path="deployment_config.json",
-        profile_path="load_profile.json",
-        plan_path="capacity_plan.json",
-        summary_path="ops_summary.txt",
-        note_path="deployment_note.md",
-        test_command=["python3", "-m", "unittest", "-q", "test_capacity_65.py"],
-    )
-
-    assert [step.expected_tool for step in plan.steps] == [
-        "read_file",
-        "read_file",
-        "write_file",
-        "write_file",
-        "write_file",
-        "run_tests",
-        None,
-    ]
-    assert all(plan.steps[index].depends_on == [plan.steps[index - 1].step_id] for index in range(1, len(plan.steps)))
-    assert plan.steps[-1].title == "Report capacity workflow"
-
-
-def test_create_computed_report_plan_reads_writes_tests_and_reports() -> None:
-    plan = create_computed_report_plan(
-        "Compute report.",
-        source_path="inputs.json",
-        target_path="capacity_report.txt",
-        test_command=["python3", "-m", "unittest", "-q", "test_capacity_43.py"],
-    )
-
-    assert [step.expected_tool for step in plan.steps] == ["read_file", "write_file", "run_tests", None]
-    assert [step.title for step in plan.steps] == [
-        "Read computed report source",
-        "Write computed report target",
-        "Verify computed report",
-        "Report computed report",
-    ]
-
-
-def test_create_manifest_projection_plan_reads_writes_tests_and_reports() -> None:
-    plan = create_manifest_projection_plan(
-        "Project manifest.",
-        source_path="manifest.json",
-        target_path="release_notes.txt",
-        test_command=["python3", "-m", "unittest", "-q", "test_release_20.py"],
-    )
-
-    assert [step.expected_tool for step in plan.steps] == ["read_file", "write_file", "run_tests", None]
-    assert [step.title for step in plan.steps] == [
-        "Read manifest projection source",
-        "Write manifest projection target",
-        "Verify manifest projection",
-        "Report manifest projection",
-    ]
-    assert all(plan.steps[index].depends_on == [plan.steps[index - 1].step_id] for index in range(1, len(plan.steps)))
-
-
-def test_create_exact_file_sync_plan_reads_writes_and_rereads() -> None:
-    plan = create_exact_file_sync_plan(
-        "Synchronize files.",
-        source_path="staging.env",
-        target_path="release.env",
-    )
-
-    assert [step.expected_tool for step in plan.steps] == ["read_file", "write_file", "read_file", None]
-    assert [step.title for step in plan.steps] == [
-        "Read synchronization source",
-        "Write synchronization target",
-        "Reread synchronization target",
-        "Report exact file synchronization",
-    ]
-    assert all(plan.steps[index].depends_on == [plan.steps[index - 1].step_id] for index in range(1, len(plan.steps)))
-    assert plan.steps[-1].verification_type == "composite"
-
-
-def test_create_structured_reading_plan_is_two_step_and_deterministic() -> None:
-    plan = create_structured_reading_plan(
-        "Read files and return JSON.",
-        paths=["facts.json", "roadmap.md", "stale_note.txt"],
-        keys=["service", "owner", "status", "eta"],
-    )
-
-    assert [step.expected_tool for step in plan.steps] == ["read_text", None]
-    assert plan.steps[0].title == "Read structured evidence"
-    assert plan.steps[1].title == "Return structured JSON"
-    assert plan.steps[1].verification_type == "composite"
-    assert plan.steps[1].required_conditions == ["dependencies_completed", "assistant_text_nonempty"]
-
-
-def test_create_release_flow_recovery_plan_sequences_all_repairs() -> None:
-    plan = create_release_flow_recovery_plan(
-        "Repair the pkg_545 release flow.",
-        package_name="pkg_545",
-        repair_steps=5,
-    )
-
-    assert [step.expected_tool for step in plan.steps] == [
-        "read_text",
-        "edit_text",
-        "edit_text",
-        "edit_text",
-        "edit_text",
-        "edit_text",
-        "run_tests",
-        None,
-    ]
-    assert all(plan.steps[index].depends_on == [plan.steps[index - 1].step_id] for index in range(1, len(plan.steps)))
-    assert "test_pkg_545_unit.py" in plan.steps[-2].input_text
-    assert "test_pkg_545_compat.py" in plan.steps[-2].input_text
-    assert "test_pkg_545_artifacts.py" in plan.steps[-2].input_text
-
-
-def test_plan_from_payload_derives_missing_verification_contract() -> None:
+def test_plan_from_payload_rejects_missing_verification_contract() -> None:
     payload = {
         "goal": "Do something",
         "success_criteria": "done",
@@ -400,42 +139,15 @@ def test_plan_from_payload_derives_missing_verification_contract() -> None:
                 "done_condition": "assistant_response_nonempty",
                 "success_criteria": "done",
                 "depends_on": ["step_1"],
-            }
+            },
         ],
     }
-    plan = plan_from_payload(payload, available_tools=["calculator"])
 
-    step = plan.steps[0]
-    assert step.expected_outputs == ["4"]
-    assert step.verification_type == "composite"
-    assert any(check["name"] == "tool_result_present" for check in step.verification_checks)
-    assert "tool_result_present" in step.required_conditions
+    with pytest.raises(PlanValidationError, match="must declare expected_outputs"):
+        plan_from_payload(payload, available_tools=["calculator"])
 
 
-def test_plan_from_payload_normalizes_invalid_verification_type() -> None:
-    payload = json.loads(
-        plan_response(
-            goal="Compute",
-            steps=[
-                plan_step(
-                    "step_calc",
-                    "Compute",
-                    "tool",
-                    expected_tool="calculator",
-                    expected_output="4",
-                    success_criteria="tool returns 4",
-                    verification_type="nonsense",
-                ),
-                plan_step("step_answer", "Answer", "respond", expected_output="done", success_criteria="done", depends_on=["step_calc"]),
-            ],
-        )
-    )
-    plan = plan_from_payload(payload, available_tools=["calculator"])
-
-    assert plan.steps[0].verification_type == "composite"
-
-
-def test_plan_from_payload_normalizes_sparse_step_fields_and_condition_refs() -> None:
+def test_plan_from_payload_rejects_sparse_step_fields_and_condition_refs() -> None:
     payload = {
         "goal": "Reply with exactly 17.",
         "success_criteria": "The user receives exactly 17.",
@@ -458,7 +170,7 @@ def test_plan_from_payload_normalizes_sparse_step_fields_and_condition_refs() ->
                     {"name": "tool_result_present", "check_type": "artifact_present", "artifact": "tool_result"},
                     {"name": "tool_name_matches", "check_type": "tool_name_equals", "expected": "calculator"},
                 ],
-                "required_conditions": ["goal:Reply with exactly 17."],
+                "required_conditions": ["unknown"],
                 "optional_conditions": ["tool_result_present", "unknown_check"],
                 "input_refs": [],
                 "output_refs": ["calculator"],
@@ -488,103 +200,455 @@ def test_plan_from_payload_normalizes_sparse_step_fields_and_condition_refs() ->
         ],
     }
 
+    with pytest.raises(PlanValidationError, match="missing required model fields"):
+        plan_from_payload(payload, available_tools=["calculator"])
+
+
+@pytest.mark.parametrize(
+    ("check", "message"),
+    [
+        ({"name": "schema", "check_type": "json_schema_valid", "actual_source": "tool_output", "schema_json": ""}, "non-empty schema_json"),
+        ({"name": "function", "check_type": "function_exists", "path": "module.py", "function_name": ""}, "non-empty function_name"),
+        ({"name": "symbol", "check_type": "symbol_exists", "path": "module.py", "symbol": ""}, "non-empty symbol"),
+        ({"name": "value", "check_type": "exact_match", "actual_source": "tool_output.result", "expected": ""}, "non-empty expected"),
+        ({"name": "number", "check_type": "numeric_tolerance", "actual_source": "tool_output.result", "expected": "not-a-number", "tolerance": 0.1}, "expected must be numeric text"),
+    ],
+)
+def test_plan_from_payload_rejects_incomplete_verification_check_payloads(check, message) -> None:
+    payload = _payload(
+        "Read and verify.",
+        [
+            plan_step(
+                "step_read",
+                "Read",
+                "read",
+                expected_tool="read_file",
+                expected_output="contents",
+                success_criteria="verified",
+                verification_checks=[check],
+                required_conditions=[check["name"]],
+                optional_conditions=[],
+            ),
+            plan_step("answer", "Answer", "respond", expected_output="done", success_criteria="done", depends_on=["step_read"]),
+        ],
+    )
+    with pytest.raises(PlanValidationError, match=message):
+        plan_from_payload(payload, available_tools=["read_file"])
+
+
+def test_plan_from_payload_rejects_tool_name_equals_without_expected_tool() -> None:
+    payload = _payload(
+        "Read a file and answer.",
+        [
+            plan_step(
+                "step_read",
+                "Read the file",
+                "read",
+                expected_tool="read_text",
+                expected_output="contents",
+                success_criteria="The file is read.",
+                verification_checks=[
+                    {"name": "tool_result_present", "check_type": "artifact_present", "artifact": "tool_result"},
+                    {"name": "tool_name_matches", "check_type": "tool_name_equals"},
+                ],
+                required_conditions=["tool_result_present", "tool_name_matches"],
+                optional_conditions=[],
+            ),
+            plan_step("step_answer", "Answer", "respond", expected_output="done", success_criteria="done", depends_on=["step_read"]),
+        ],
+    )
+
+    with pytest.raises(PlanValidationError, match="must declare a non-empty expected tool name"):
+        plan_from_payload(payload, available_tools=["read_text"])
+
+
+def test_plan_from_payload_rejects_tool_name_equals_that_contradicts_step_tool() -> None:
+    payload = _payload(
+        "Read a file and answer.",
+        [
+            plan_step(
+                "step_read",
+                "Read the file",
+                "read",
+                expected_tool="read_text",
+                expected_output="contents",
+                success_criteria="The file is read.",
+                verification_checks=[
+                    {"name": "tool_result_present", "check_type": "artifact_present", "artifact": "tool_result"},
+                    {"name": "tool_name_matches", "check_type": "tool_name_equals", "expected": "edit_text"},
+                ],
+                required_conditions=["tool_result_present", "tool_name_matches"],
+                optional_conditions=[],
+            ),
+            plan_step("step_answer", "Answer", "respond", expected_output="done", success_criteria="done", depends_on=["step_read"]),
+        ],
+    )
+
+    with pytest.raises(PlanValidationError, match="but the step declares expected_tool='read_text'"):
+        plan_from_payload(payload, available_tools=["read_text", "edit_text"])
+
+
+def test_plan_from_payload_rejects_tool_llm_fallback_verification() -> None:
+    payload = _payload(
+        "Edit the file and answer.",
+        [
+            plan_step(
+                "step_write",
+                "Write the file",
+                "write",
+                expected_tool="write_file",
+                expected_output="updated",
+                success_criteria="file updated",
+                verification_type="llm_fallback",
+                verification_checks=[{"name": "output_matches", "check_type": "equals", "expected": "updated"}],
+                required_conditions=["output_matches"],
+            ),
+            plan_step("step_answer", "Answer", "respond", expected_output="done", success_criteria="reply done", depends_on=["step_write"]),
+        ],
+    )
+
+    with pytest.raises(PlanValidationError, match="must use composite verification"):
+        plan_from_payload(payload, available_tools=["write_file"])
+
+
+def test_plan_from_payload_rejects_planned_llm_fallback_verification() -> None:
+    payload = _payload(
+        "Answer with the final state.",
+        [
+            plan_step(
+                "step_answer",
+                "Answer",
+                "respond",
+                expected_output="done",
+                success_criteria="The answer describes the final state.",
+                verification_type="llm_fallback",
+                verification_checks=[
+                    {"name": "dependencies_completed", "check_type": "dependencies_completed"},
+                    {"name": "assistant_text_nonempty", "check_type": "string_nonempty", "actual_source": "assistant_text"},
+                    {
+                        "name": "matches_goal",
+                        "check_type": "criterion",
+                        "actual_source": "assistant_text",
+                        "criterion": "The answer describes the final state.",
+                    },
+                ],
+                required_conditions=["dependencies_completed", "assistant_text_nonempty"],
+                optional_conditions=["matches_goal"],
+            ),
+        ],
+    )
+
+    with pytest.raises(PlanValidationError, match="must use composite verification"):
+        plan_from_payload(payload, available_tools=["calculator"])
+
+
+def test_plan_from_payload_accepts_declared_response_criterion_for_runtime_repair() -> None:
+    payload = _payload(
+        "Answer with the final state.",
+        [
+            plan_step(
+                "step_answer",
+                "Answer",
+                "respond",
+                expected_output="done",
+                success_criteria="The answer describes the final state.",
+                verification_type="composite",
+                verification_checks=[
+                    {"name": "dependencies_completed", "check_type": "dependencies_completed"},
+                    {"name": "assistant_text_nonempty", "check_type": "string_nonempty", "actual_source": "assistant_text"},
+                    {
+                        "name": "matches_goal",
+                        "check_type": "criterion",
+                        "actual_source": "assistant_text",
+                        "criterion": "The answer describes the final state.",
+                    },
+                ],
+                required_conditions=["dependencies_completed", "assistant_text_nonempty", "matches_goal"],
+                optional_conditions=[],
+            ),
+        ],
+    )
+
     plan = plan_from_payload(payload, available_tools=["calculator"])
 
-    calc_step, answer_step = plan.steps
-    assert calc_step.goal == "Compute final value"
-    assert calc_step.input_text == "Compute final value"
-    assert calc_step.expected_output == "Compute final value"
-    assert calc_step.done_condition == "tool_result:calculator"
-    assert calc_step.required_conditions == [
-        "dependencies_completed",
-        "tool_result_present",
-        "tool_name_matches",
-    ]
-    assert calc_step.optional_conditions == []
-    assert calc_step.fallback_strategy == "If this step fails, replan from the latest valid state."
-    assert answer_step.goal == "Answer the user"
-    assert answer_step.input_text == "Answer the user"
-    assert answer_step.done_condition == "assistant_response_nonempty"
-    assert answer_step.required_conditions == [
-        "dependencies_completed",
-        "assistant_text_nonempty",
-        "meets_success_criteria",
-        "satisfies_done_condition",
-    ]
-    assert answer_step.verification_checks[1]["name"] == "assistant_text_nonempty"
-    assert answer_step.verification_checks[2]["check_type"] == "criterion"
+    assert plan.steps[0].required_conditions == ["dependencies_completed", "assistant_text_nonempty", "matches_goal"]
+    assert plan.steps[0].optional_conditions == []
 
 
-def test_plan_from_payload_demotes_tool_llm_fallback_to_deterministic_verification() -> None:
-    payload = json.loads(
-        plan_response(
-            goal="Edit the file and answer.",
-            steps=[
-                plan_step(
-                    "step_write",
-                    "Write the file",
-                    "write",
-                    expected_tool="write_file",
-                    expected_output="updated",
-                    success_criteria="file updated",
-                    verification_type="llm_fallback",
-                    verification_checks=[{"name": "output_matches", "check_type": "equals", "expected": "updated"}],
-                    required_conditions=["output_matches"],
-                ),
-                plan_step(
-                    "step_answer",
-                    "Answer",
-                    "respond",
-                    expected_output="done",
-                    success_criteria="reply done",
-                    depends_on=["step_write"],
-                ),
-            ],
-        )
+def test_plan_from_payload_accepts_response_with_intrinsic_success_criteria_semantics() -> None:
+    payload = _payload(
+        "Answer with the final state.",
+        [
+            plan_step(
+                "step_answer",
+                "Answer",
+                "respond",
+                expected_output="done",
+                success_criteria="The answer describes the final state.",
+                verification_type="composite",
+                verification_checks=[
+                    {"name": "dependencies_completed", "check_type": "dependencies_completed"},
+                    {"name": "assistant_text_nonempty", "check_type": "string_nonempty", "actual_source": "assistant_text"},
+                ],
+                required_conditions=["dependencies_completed", "assistant_text_nonempty"],
+                optional_conditions=[],
+            ),
+        ],
     )
 
-    plan = plan_from_payload(payload, available_tools=["write_file"])
+    plan = plan_from_payload(payload, available_tools=["calculator"])
 
-    step = plan.steps[0]
-    assert step.kind == "write"
-    assert step.verification_type == "composite"
-    assert any(check["check_type"] == "tool_output_schema_valid" for check in step.verification_checks)
+    assert plan.steps[0].success_criteria == "The answer describes the final state."
+    assert plan.steps[0].required_conditions == ["dependencies_completed", "assistant_text_nonempty"]
 
 
-def test_plan_from_payload_demotes_tool_execution_verification_to_deterministic_contract() -> None:
-    payload = json.loads(
-        plan_response(
-            goal="Read the file and answer.",
-            steps=[
-                plan_step(
-                    "step_read",
-                    "Read the file",
-                    "read",
-                    expected_tool="read_file",
-                    expected_output="contents",
-                    success_criteria="file contents available",
-                    verification_type="execution",
-                    verification_checks=[{"name": "file_exists", "check_type": "criterion", "criterion": "file exists"}],
-                    required_conditions=["file_exists"],
-                ),
-                plan_step(
-                    "step_answer",
-                    "Answer",
-                    "respond",
-                    expected_output="done",
-                    success_criteria="reply done",
-                    depends_on=["step_read"],
-                ),
-            ],
-        )
+def test_plan_from_payload_accepts_optional_additional_response_semantic_check() -> None:
+    payload = _payload(
+        "Answer with the final state.",
+        [
+            plan_step(
+                "step_answer",
+                "Answer",
+                "respond",
+                expected_output="done",
+                success_criteria="The answer describes the final state.",
+                verification_type="composite",
+                verification_checks=[
+                    {"name": "dependencies_completed", "check_type": "dependencies_completed"},
+                    {"name": "assistant_text_nonempty", "check_type": "string_nonempty", "actual_source": "assistant_text"},
+                    {
+                        "name": "matches_goal",
+                        "check_type": "criterion",
+                        "actual_source": "assistant_text",
+                        "criterion": "The answer describes the final state.",
+                    },
+                ],
+                required_conditions=["dependencies_completed", "assistant_text_nonempty"],
+                optional_conditions=["matches_goal"],
+            ),
+        ],
     )
 
-    plan = plan_from_payload(payload, available_tools=["read_file"])
+    plan = plan_from_payload(payload, available_tools=["calculator"])
 
-    step = plan.steps[0]
-    assert step.kind == "read"
-    assert step.verification_type == "composite"
-    assert any(check["name"] == "tool_result_present" for check in step.verification_checks)
+    assert plan.steps[0].required_conditions == ["dependencies_completed", "assistant_text_nonempty"]
+    assert plan.steps[0].optional_conditions == ["matches_goal"]
+
+
+def test_plan_from_payload_rejects_assistant_response_actual_source_for_response_verification() -> None:
+    payload = _payload(
+        "Answer with the final state.",
+        [
+            plan_step(
+                "step_answer",
+                "Answer",
+                "respond",
+                expected_output="done",
+                success_criteria="The answer describes the final state.",
+                verification_type="composite",
+                verification_checks=[
+                    {"name": "dependencies_completed", "check_type": "dependencies_completed"},
+                    {
+                        "name": "answer_exact",
+                        "check_type": "exact_match",
+                        "actual_source": "assistant_response",
+                        "expected_json": '"done"',
+                    },
+                ],
+                required_conditions=["dependencies_completed", "answer_exact"],
+                optional_conditions=[],
+            ),
+        ],
+    )
+
+    with pytest.raises(PlanValidationError, match="actual_source='assistant_text'"):
+        plan_from_payload(payload, available_tools=["calculator"])
+
+
+def test_plan_from_payload_rejects_file_contains_without_textual_target() -> None:
+    payload = _payload(
+        "Write a report and answer.",
+        [
+            plan_step(
+                "write_report",
+                "Write report",
+                "write",
+                expected_tool="write_file",
+                expected_output="report written",
+                success_criteria="The report contains the model-selected final content.",
+                verification_checks=[
+                    {"name": "dependencies_completed", "check_type": "dependencies_completed"},
+                    {
+                        "name": "file_written",
+                        "check_type": "file_contains",
+                        "expected_json": '{"path":"capacity_report.txt","content":"computed report","create":true}',
+                    },
+                ],
+                required_conditions=["dependencies_completed", "file_written"],
+                optional_conditions=[],
+            ),
+            plan_step("answer", "Answer", "respond", expected_output="done", success_criteria="reply done", depends_on=["write_report"]),
+        ],
+    )
+
+    with pytest.raises(PlanValidationError, match="file_contains check file_written expected_json must decode"):
+        plan_from_payload(payload, available_tools=["write_file"])
+
+
+def test_plan_from_payload_rejects_bare_text_file_contains_expected_json() -> None:
+    payload = _payload(
+        "Write a report and answer.",
+        [
+            plan_step(
+                "write_report",
+                "Write report",
+                "write",
+                expected_tool="write_file",
+                expected_output="report written",
+                success_criteria="The report contains the model-selected final content.",
+                verification_checks=[
+                    {"name": "dependencies_completed", "check_type": "dependencies_completed"},
+                    {"name": "file_written", "check_type": "file_contains", "expected_json": "ready"},
+                ],
+                required_conditions=["dependencies_completed", "file_written"],
+                optional_conditions=[],
+            ),
+            plan_step("answer", "Answer", "respond", expected_output="done", success_criteria="reply done", depends_on=["write_report"]),
+        ],
+    )
+
+    with pytest.raises(PlanValidationError, match="expected_json must be JSON text"):
+        plan_from_payload(payload, available_tools=["write_file"])
+
+
+def test_plan_from_payload_maps_dependency_artifact_conditions_mechanically() -> None:
+    payload = _payload(
+        "Read, edit, answer.",
+        [
+            plan_step(
+                "step_read",
+                "Read",
+                "read",
+                expected_tool="read_file",
+                expected_output="file_content",
+                success_criteria="file read",
+                verification_checks=[{"name": "file_content", "check_type": "tool_output_nonempty"}],
+                required_conditions=["file_content"],
+                optional_conditions=[],
+            ),
+            plan_step(
+                "step_edit",
+                "Edit",
+                "write",
+                expected_tool="edit_text",
+                expected_output="edited_file_content",
+                success_criteria="file edited",
+                depends_on=["step_read"],
+                input_refs=["file_content"],
+                verification_checks=[{"name": "edited_file_content", "check_type": "tool_output_nonempty"}],
+                required_conditions=["file_content"],
+                optional_conditions=[],
+            ),
+            plan_step("step_answer", "Answer", "respond", expected_output="done", success_criteria="reply done", depends_on=["step_edit"]),
+        ],
+    )
+
+    plan = plan_from_payload(payload, available_tools=["read_file", "edit_text"])
+    edit_step = next(step for step in plan.steps if step.step_id == "step_edit")
+
+    assert "dependencies_completed" in edit_step.required_conditions
+    assert "dependencies_completed" in {check["name"] for check in edit_step.verification_checks}
+    assert "file_content" not in edit_step.required_conditions
+
+
+def test_plan_from_payload_rejects_empty_required_conditions_without_repair() -> None:
+    payload = _payload(
+        "Read and answer.",
+        [
+            plan_step(
+                "step_read",
+                "Read",
+                "read",
+                expected_tool="read_file",
+                expected_output="file_content",
+                success_criteria="file read",
+                verification_checks=[
+                    {"name": "tool_result_present", "check_type": "artifact_present", "artifact": "tool_result"},
+                    {"name": "output_nonempty", "check_type": "tool_output_nonempty"},
+                ],
+                required_conditions=[],
+                optional_conditions=[],
+            ),
+            plan_step("step_answer", "Answer", "respond", expected_output="done", success_criteria="reply done", depends_on=["step_read"]),
+        ],
+    )
+
+    with pytest.raises(PlanValidationError, match="must declare required_conditions"):
+        plan_from_payload(payload, available_tools=["read_file"])
+
+
+def test_plan_from_payload_adds_explicit_dependency_condition_check() -> None:
+    payload = _payload(
+        "Read, edit, answer.",
+        [
+            plan_step(
+                "step_read",
+                "Read",
+                "read",
+                expected_tool="read_file",
+                expected_output="file_content",
+                success_criteria="file read",
+            ),
+            plan_step(
+                "step_edit",
+                "Edit",
+                "write",
+                expected_tool="edit_text",
+                expected_output="edited_file_content",
+                success_criteria="file edited",
+                depends_on=["step_read"],
+                verification_checks=[{"name": "edited_file_content", "check_type": "tool_output_nonempty"}],
+                required_conditions=["dependencies_completed", "edited_file_content"],
+                optional_conditions=[],
+            ),
+            plan_step("step_answer", "Answer", "respond", expected_output="done", success_criteria="reply done", depends_on=["step_edit"]),
+        ],
+    )
+
+    plan = plan_from_payload(payload, available_tools=["read_file", "edit_text"])
+    edit_step = next(step for step in plan.steps if step.step_id == "step_edit")
+
+    assert edit_step.required_conditions == ["dependencies_completed", "edited_file_content"]
+    assert "dependencies_completed" in {check["name"] for check in edit_step.verification_checks}
+
+
+def test_ready_steps_returns_all_parallel_ready_nodes() -> None:
+    payload = _payload(
+        "Read and note before answering.",
+        [
+            plan_step("step_read", "Read", "read", expected_tool="read_text", expected_output="text", success_criteria="read"),
+            plan_step("step_note", "Take note", "note", expected_tool="notes", expected_output="note", success_criteria="note"),
+            plan_step("step_answer", "Answer", "respond", expected_output="answer", success_criteria="answer", depends_on=["step_read", "step_note"]),
+        ],
+    )
+    plan = plan_from_payload(payload, available_tools=["read_text", "notes", "calculator"])
+
+    assert [step.step_id for step in ready_steps(plan)] == ["step_read", "step_note"]
+
+
+def test_plan_from_payload_topologically_sorts_out_of_order_dag_steps() -> None:
+    payload = _payload(
+        "Read and answer.",
+        [
+            plan_step("step_answer", "Answer", "respond", expected_output="answer", success_criteria="answer", depends_on=["step_read"], input_refs=["read_text"]),
+            plan_step("step_read", "Read", "read", expected_tool="read_text", expected_output="text", success_criteria="read", output_refs=["read_text"]),
+        ],
+    )
+
+    plan = plan_from_payload(payload, available_tools=["read_text", "notes", "calculator"])
+
+    assert [step.step_id for step in plan.steps] == ["step_read", "step_answer"]
+    assert plan.current_step_id == "step_read"
 
 
 def test_runtime_creates_plan_before_tool_execution(make_config) -> None:
@@ -636,27 +700,25 @@ def test_replay_restores_completed_plan(make_config) -> None:
 
     assert rebuilt.active_plan is not None
     assert rebuilt.active_plan.status == "completed"
-    # The runtime expands the goal via task_expansion before planning, so the
-    # plan's recorded goal includes the expansion suffix.
     assert goal in rebuilt.active_plan.goal
 
 
 def test_runtime_rejects_malformed_plan_and_records_fatal_plan_error(make_config) -> None:
-    config = make_config(planner__max_replans=0)
+    config = make_config(model__max_retries=0, planner__max_replans=0)
     goal = "Read sample.txt and then reply exactly done."
     fake_client = FakeModelClient(
         responses=[
             json.dumps({"goal": goal, "success_criteria": "x", "fallback_strategy": "y", "steps": []}),
+            json.dumps({"goal": goal, "success_criteria": "x", "fallback_strategy": "y", "steps": []}),
         ]
     )
     runtime = AgentRuntime(config, model_client=fake_client)
+
     with pytest.raises(FatalSemanticEngineError):
         runtime.run_turn(goal)
-    session_dirs = sorted(path for path in runtime.history.root.iterdir() if path.is_dir())
-    assert len(session_dirs) == 1
-    session_id = session_dirs[0].name
-    events = runtime.history.read_history(session_id)
 
+    session_id = next(path.name for path in runtime.history.root.iterdir() if path.is_dir())
+    events = runtime.history.read_history(session_id)
     assert any(event.event_type == "fatal_system_error" for event in events)
     assert any(
         event.event_type == "reasoning_completed"
@@ -664,88 +726,3 @@ def test_runtime_rejects_malformed_plan_and_records_fatal_plan_error(make_config
         and event.payload["reason"] == "plan_generation_failed"
         for event in events
     )
-
-
-def test_ready_steps_returns_all_parallel_ready_nodes() -> None:
-    payload = json.loads(
-        plan_response(
-            goal="Read and note before answering.",
-            steps=[
-                plan_step("step_read", "Read", "read", expected_tool="read_text", expected_output="text", success_criteria="read"),
-                plan_step("step_note", "Take note", "note", expected_tool="notes", expected_output="note", success_criteria="note"),
-                plan_step("step_answer", "Answer", "respond", expected_output="answer", success_criteria="answer", depends_on=["step_read", "step_note"]),
-            ],
-        )
-    )
-    plan = plan_from_payload(payload, available_tools=["read_text", "notes", "calculator"])
-
-    assert [step.step_id for step in ready_steps(plan)] == ["step_read", "step_note"]
-
-
-def test_plan_from_payload_topologically_sorts_out_of_order_dag_steps() -> None:
-    payload = json.loads(
-        plan_response(
-            goal="Read and answer.",
-            steps=[
-                plan_step(
-                    "step_answer",
-                    "Answer",
-                    "respond",
-                    expected_output="answer",
-                    success_criteria="answer",
-                    depends_on=["step_read"],
-                    input_refs=["read_text"],
-                ),
-                plan_step(
-                    "step_read",
-                    "Read",
-                    "read",
-                    expected_tool="read_text",
-                    expected_output="text",
-                    success_criteria="read",
-                    output_refs=["read_text"],
-                ),
-            ],
-        )
-    )
-
-    plan = plan_from_payload(payload, available_tools=["read_text", "notes", "calculator"])
-
-    assert [step.step_id for step in plan.steps] == ["step_read", "step_answer"]
-    assert plan.current_step_id == "step_read"
-
-
-def test_plan_from_payload_repairs_missing_final_response_step() -> None:
-    payload = json.loads(
-        plan_response(
-            goal="Inspect a file, edit it, and report the result.",
-            steps=[
-                plan_step("step_read", "Read the file", "read", expected_tool="read_text", expected_output="File contents", success_criteria="The file is read."),
-                plan_step(
-                    "step_edit",
-                    "Edit the file",
-                    "write",
-                    expected_tool="edit_text",
-                    expected_output="Edited file",
-                    success_criteria="The file is edited.",
-                    depends_on=["step_read"],
-                ),
-                plan_step(
-                    "step_verify",
-                    "Verify the file",
-                    "tool",
-                    expected_tool="run_tests",
-                    expected_output="Passing tests",
-                    success_criteria="The verification passes.",
-                    depends_on=["step_edit"],
-                ),
-            ],
-        )
-    )
-
-    plan = plan_from_payload(payload, available_tools=["read_text", "edit_text", "run_tests"])
-
-    assert [step.kind for step in plan.steps] == ["read", "write", "tool", "respond"]
-    assert plan.steps[-1].expected_tool is None
-    assert plan.steps[-1].done_condition == "assistant_response_nonempty"
-    assert plan.steps[-1].depends_on == ["step_verify"]

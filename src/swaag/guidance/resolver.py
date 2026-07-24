@@ -14,6 +14,8 @@ LLM-driven score is the only source of relevance.
 
 from __future__ import annotations
 
+from typing import Any
+
 from swaag.guidance.types import GuidanceBundle, GuidanceItem, GuidanceTraceItem
 from swaag.retrieval.embeddings import build_backend
 
@@ -30,6 +32,7 @@ def resolve_guidance(
     seed: int = 11,
     connect_timeout_seconds: int = 10,
     read_timeout_seconds: int = 60,
+    model_client: Any | None = None,
 ) -> GuidanceBundle:
     backend = build_backend(
         backend_mode,
@@ -37,6 +40,7 @@ def resolve_guidance(
         seed=seed,
         connect_timeout_seconds=connect_timeout_seconds,
         read_timeout_seconds=read_timeout_seconds,
+        model_client=model_client,
     )
     selected: list[GuidanceItem] = []
     trace: list[GuidanceTraceItem] = []
@@ -57,9 +61,8 @@ def resolve_guidance(
         trace.append(GuidanceTraceItem(layer=item.layer, source=item.source, selected=True, reason="always_on", token_cost=token_cost))
 
     remaining = [item for item in items if item.source not in {guidance.source for guidance in selected} and not item.always_on]
-    # Score against the guidance text only, not the filesystem source path
-    # (which can leak directory names into lexical scoring and create
-    # spurious matches in the degraded fallback).
+    # Score against the guidance text only; source paths are structural
+    # metadata and are not part of the semantic relevance request.
     semantic_scores = backend.score_query(
         query_text,
         [f"{item.layer} {item.text}" for item in remaining],
@@ -75,6 +78,17 @@ def resolve_guidance(
             continue
         if used_tokens + token_cost > max_tokens:
             trace.append(GuidanceTraceItem(layer=item.layer, source=item.source, selected=False, reason="token_budget", token_cost=token_cost))
+            continue
+        if backend.degraded:
+            trace.append(
+                GuidanceTraceItem(
+                    layer=item.layer,
+                    source=item.source,
+                    selected=False,
+                    reason="semantic_backend_unavailable",
+                    token_cost=token_cost,
+                )
+            )
             continue
         if has_query and semantic_score <= 0.0:
             trace.append(

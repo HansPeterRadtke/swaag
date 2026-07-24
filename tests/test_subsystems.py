@@ -36,15 +36,12 @@ def test_planning_subsystem_creates_plan_and_records_events(make_config) -> None
     assert any(event.event_type == "subsystem_completed" and event.payload["subsystem"] == "planning" for event in events)
 
 
-def test_tool_subsystem_runs_until_done_condition_is_satisfied(make_config) -> None:
+def test_tool_subsystem_executes_expected_tool_without_reselecting_tool(make_config) -> None:
     config = make_config(runtime__max_tool_steps=4)
     runtime = AgentRuntime(
         config,
         model_client=FakeModelClient(
-            responses=[
-                json.dumps({"action": "call_tool", "response": "", "tool_name": "notes", "tool_input": {"action": "list"}}),
-                json.dumps({"action": "call_tool", "response": "", "tool_name": "calculator", "tool_input": {"expression": "3 + 4"}}),
-            ]
+            contract_responses={"tool_input:calculator": [json.dumps({"expression": "3 + 4"})]}
         ),
     )
     state = runtime.create_or_load_session()
@@ -74,7 +71,10 @@ def test_tool_subsystem_runs_until_done_condition_is_satisfied(make_config) -> N
     events = runtime.history.read_history(state.session_id)
 
     assert result.success is True
-    assert [item.tool_name for item in result.tool_results] == ["notes", "calculator"]
+    assert [item.tool_name for item in result.tool_results] == ["calculator"]
+    assert not any(request["contract"] == "tool_decision" for request in runtime.client.requests)
+    assert any(request["contract"] == "tool_input:calculator" for request in runtime.client.requests)
+    assert not any(event.event_type == "tool_mismatch_rejected" for event in events)
     assert any(event.event_type == "tool_chain_completed" and event.payload["success"] is True for event in events)
 
 
@@ -101,12 +101,11 @@ def test_reasoning_subsystem_requires_nonempty_answer(make_config) -> None:
     assert result.evaluation is None
 
 
-def test_tool_subsystem_treats_read_file_and_read_text_as_equivalent() -> None:
+def test_tool_subsystem_has_no_tool_equivalence_table() -> None:
     subsystem = ToolSubsystem()
 
-    assert subsystem._tools_equivalent("read_text", "read_file") is True
-    assert subsystem._tools_equivalent("read_file", "read_text") is True
-    assert subsystem._tools_equivalent("edit_text", "read_file") is False
+    assert not hasattr(subsystem, "_tools_equivalent")
+    assert not hasattr(subsystem, "_tool_names_equivalent")
 
 
 def test_tool_subsystem_does_not_repeat_failed_command_success_preview() -> None:

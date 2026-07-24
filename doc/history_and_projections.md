@@ -56,7 +56,7 @@ Rebuilt state currently includes:
 - pending writes
 - active plan
 - working memory
-- semantic memory
+- event memory snapshots
 - counters and last event hash
 
 ## Event classes in active use
@@ -67,7 +67,7 @@ History currently records events for:
 - prompt assembly and budget checks
 - model requests, responses, retries, and tokenization
 - planning and reasoning
-- working memory and semantic memory
+- working memory and event memory snapshots
 - tool execution and tool results
 - file reads, edit previews, edit applications, and file writes
 - history summaries and compression

@@ -15,6 +15,8 @@ from swaag.types import Message, SessionState
 import pytest
 import requests
 
+from tests.helpers import FakeModelClient
+
 
 class _RetrievalSemanticBackend(EmbeddingBackend):
     mode = "llm_scoring"
@@ -180,13 +182,13 @@ def test_full_history_retrieval_can_use_arbitrary_event_types(make_config, _sema
     )
 
 
-def test_degraded_retrieval_mode_is_visible(make_config) -> None:
-    config = make_config(retrieval__backend="degraded_lexical")
+def test_unavailable_retrieval_mode_is_visible(make_config) -> None:
+    config = make_config(retrieval__backend="unavailable")
     state = _state_with_messages(Message(role="user", content="hello", created_at="t1"))
 
     bundle = build_context(config, state, ConservativeEstimator(), goal="hello")
 
-    assert bundle.retrieval_mode == "degraded_lexical"
+    assert bundle.retrieval_mode == "unavailable"
     assert bundle.retrieval_degraded is True
     assert any(item.degraded for item in bundle.selection_trace if item.item_type == "history_message")
 
@@ -242,8 +244,8 @@ def test_ranker_uses_semantic_signal_as_primary_decision(make_config) -> None:
         guidance_summary="",
         role_name="primary",
         purpose="execution",
-        dependency_terms=["auth"],
-        terms=["repair", "authentication", "pipeline"],
+        dependency_terms=[],
+        terms=[],
     )
     candidates = [
         RetrievalCandidate(
@@ -316,3 +318,50 @@ def test_llm_scoring_backend_rejects_trailing_text_despite_schema(monkeypatch: p
 
     with pytest.raises(SemanticBackendProtocolError, match="violated the requested schema"):
         backend.score_query("repair config parser", ["config.py handles settings parsing"])
+
+
+def test_llm_scoring_backend_retries_locally_invalid_score_payload(monkeypatch: pytest.MonkeyPatch) -> None:
+    calls: list[int] = []
+
+    class _Response:
+        def raise_for_status(self) -> None:
+            return None
+
+        def json(self) -> dict[str, str]:
+            calls.append(1)
+            if len(calls) == 1:
+                return {"content": json.dumps({"scores": []})}
+            return {"content": json.dumps({"scores": [0.81]})}
+
+    monkeypatch.setattr("requests.post", lambda *args, **kwargs: _Response())
+    backend = LlmScoringBackend(base_url="http://example.test")
+
+    scores = backend.score_query("repair config parser", ["config.py handles settings parsing"])
+
+    assert scores == [0.81]
+    assert len(calls) == 2
+
+
+def test_llm_scoring_backend_uses_shared_constrained_model_client() -> None:
+    client = FakeModelClient(
+        contract_responses={
+            "relevance_scoring": [json.dumps({"score_0": 0.73, "score_1": 0.21})]
+        }
+    )
+    backend = LlmScoringBackend(
+        base_url="",
+        seed=37,
+        model_client=client,
+    )
+
+    scores = backend.score_query("repair parser", ["config parser", "weather report"])
+
+    assert scores == [0.73, 0.21]
+    assert len(client.requests) == 1
+    request = client.requests[0]
+    assert request["contract"] == "relevance_scoring"
+    assert request["seed"] == 37
+    schema = request["json_schema"]
+    assert schema["required"] == ["score_0", "score_1"]
+    assert schema["additionalProperties"] is False
+    assert set(schema["properties"]) == {"score_0", "score_1"}

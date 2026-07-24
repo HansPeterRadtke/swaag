@@ -3,7 +3,8 @@ from __future__ import annotations
 import json
 
 from swaag.context_builder import build_context
-from swaag.planner import create_direct_tool_plan
+from swaag.retrieval.embeddings import SemanticBackendProtocolError
+from swaag.planner import plan_from_payload
 from swaag.runtime import AgentRuntime
 from swaag.subagents import SubagentManager
 from swaag.tokens import ConservativeEstimator
@@ -14,11 +15,45 @@ from swaag.verification import VerificationOutcome
 from tests.helpers import FakeModelClient, plan_response, plan_step
 
 
+def _calculator_plan(goal: str, runtime: AgentRuntime):
+    payload = json.loads(
+        plan_response(
+            goal=goal,
+            steps=[
+                plan_step(
+                    "compute",
+                    "Compute with calculator",
+                    "tool",
+                    expected_tool="calculator",
+                    expected_output="calculator result",
+                    success_criteria="The calculator result satisfies the requested computation.",
+                    verification_checks=[
+                        {"name": "tool_result_present", "check_type": "artifact_present", "artifact": "tool_result"},
+                        {"name": "tool_name_matches", "check_type": "tool_name_equals", "expected": "calculator"},
+                        {"name": "output_nonempty", "check_type": "tool_output_nonempty"},
+                    ],
+                    required_conditions=["tool_result_present", "tool_name_matches", "output_nonempty"],
+                    optional_conditions=[],
+                ),
+                plan_step(
+                    "answer",
+                    "Answer",
+                    "respond",
+                    expected_output="calculator result",
+                    success_criteria="Return the calculator result.",
+                    depends_on=["compute"],
+                ),
+            ],
+        )
+    )
+    return plan_from_payload(payload, available_tools=runtime.tools.tool_names(runtime.config))
+
+
 def test_subagent_manager_scopes_state_isolation(make_config) -> None:
     runtime = AgentRuntime(make_config(), model_client=FakeModelClient())
     state = runtime.create_or_load_session()
     state.messages.append(Message(role="user", content="keep", created_at="t1"))
-    manager = SubagentManager(backend_mode="degraded_lexical")
+    manager = SubagentManager(backend_mode="unavailable")
 
     scoped = manager.scoped_state(state)
     scoped.messages.clear()
@@ -30,7 +65,7 @@ def test_subagent_manager_scopes_state_isolation(make_config) -> None:
 def test_reviewer_subagent_rejects_partial_result(make_config) -> None:
     runtime = AgentRuntime(make_config(), model_client=FakeModelClient())
     state = runtime.create_or_load_session()
-    plan = create_direct_tool_plan("Compute the value", "calculator")
+    plan = _calculator_plan("Compute the value", runtime)
     step = plan.steps[0]
     verification = VerificationOutcome(
         verification_passed=False,
@@ -69,15 +104,18 @@ def test_reviewer_subagent_accepts_exact_literal_expected_output(make_config) ->
         expected_outputs=["written"],
         done_condition="assistant_response_nonempty",
         success_criteria="The assistant replies written.",
-        verification_type="llm_fallback",
-        verification_checks=[{"name": "assistant_text_nonempty", "check_type": "string_nonempty", "actual_source": "assistant_text"}],
-        required_conditions=["assistant_text_nonempty"],
+        verification_type="composite",
+        verification_checks=[
+            {"name": "assistant_text_nonempty", "check_type": "string_nonempty", "actual_source": "assistant_text"},
+            {"name": "answer_exact", "check_type": "exact_match", "actual_source": "assistant_text", "expected": "written"},
+        ],
+        required_conditions=["assistant_text_nonempty", "answer_exact"],
         optional_conditions=[],
     )
     verification = VerificationOutcome(
         verification_passed=True,
-        verification_type_used="llm_fallback",
-        conditions_met=["assistant_text_nonempty", "perspective:reviewer"],
+        verification_type_used="composite",
+        conditions_met=["assistant_text_nonempty", "answer_exact", "perspective:reviewer"],
         conditions_failed=[],
         evidence={"literal_match": True},
         confidence=1.0,
@@ -99,7 +137,25 @@ def test_reviewer_subagent_accepts_exact_literal_expected_output(make_config) ->
 
 def test_runtime_records_subagent_events_during_review(make_config) -> None:
     goal = "Use the calculator tool to compute 2 + 2."
+    no_spawn = json.dumps({"spawn": False, "subagent_type": "none", "reason": "not needed", "focus": ""})
     fake_client = FakeModelClient(
+        contract_responses={
+            "subagent_selection": [
+                no_spawn,
+                no_spawn,
+                json.dumps(
+                    {
+                        "spawn": True,
+                        "subagent_type": "reviewer",
+                        "reason": "review the generated plan",
+                        "focus": "review the plan before execution",
+                    }
+                ),
+                no_spawn,
+                no_spawn,
+                no_spawn,
+            ]
+        },
         responses=[
             plan_response(
                 goal=goal,
@@ -108,7 +164,25 @@ def test_runtime_records_subagent_events_during_review(make_config) -> None:
                     # The step uses the literal expected_output "4" so the
                     # reviewer perspective can deterministically match the
                     # assistant's response without relying on LLM scoring.
-                    plan_step("step_answer", "Answer", "respond", expected_output="4", success_criteria="answer", depends_on=["step_calc"]),
+                    plan_step(
+                        "step_answer",
+                        "Answer",
+                        "respond",
+                        expected_output="4",
+                        success_criteria="answer",
+                        depends_on=["step_calc"],
+                        verification_checks=[
+                            {"name": "dependencies_completed", "check_type": "dependencies_completed"},
+                            {
+                                "name": "answer_exact",
+                                "check_type": "exact_match",
+                                "actual_source": "assistant_text",
+                                "expected": "4",
+                            },
+                        ],
+                        required_conditions=["dependencies_completed", "answer_exact"],
+                        optional_conditions=[],
+                    ),
                 ],
             ),
             json.dumps({"action": "call_tool", "response": "", "tool_name": "calculator", "tool_input": {"expression": "2 + 2"}}),
@@ -124,13 +198,29 @@ def test_runtime_records_subagent_events_during_review(make_config) -> None:
 
 
 def test_runtime_records_retriever_subagent_events_during_context_build(make_config) -> None:
-    runtime = AgentRuntime(make_config(), model_client=FakeModelClient())
+    runtime = AgentRuntime(
+        make_config(),
+        model_client=FakeModelClient(
+            contract_responses={
+                "subagent_selection": [
+                    json.dumps(
+                        {
+                            "spawn": True,
+                            "subagent_type": "retriever",
+                            "reason": "focus retrieval context",
+                            "focus": "older notes and semantic memory",
+                        }
+                    )
+                ]
+            }
+        ),
+    )
     state = runtime.create_or_load_session()
     state.messages.append(Message(role="user", content="The parser bug is described in older notes.", created_at="t1"))
     state.semantic_memory.append(
         SemanticMemoryItem(
             memory_id="m1",
-            memory_kind="semantic",
+            memory_kind="event_snapshot",
             content="config.py contains the parsing bug",
             source_event_id="e1",
             trust_level="trusted",
@@ -159,6 +249,55 @@ def test_runtime_records_retriever_subagent_events_during_context_build(make_con
     )
 
 
+def test_retriever_subagent_protocol_failure_degrades_to_complete_context(make_config) -> None:
+    runtime = AgentRuntime(
+        make_config(retrieval__backend="unavailable"),
+        model_client=FakeModelClient(
+            contract_responses={
+                "subagent_selection": [
+                    json.dumps(
+                        {
+                            "spawn": True,
+                            "subagent_type": "retriever",
+                            "reason": "focus context",
+                            "focus": "relevant evidence",
+                        }
+                    )
+                ]
+            }
+        ),
+    )
+    state = runtime.create_or_load_session()
+    state.messages.append(Message(role="user", content="Read the available evidence.", created_at="t1"))
+
+    class BrokenBackend:
+        mode = "llm_scoring"
+        degraded = False
+
+        def score_query(self, query: str, texts: list[str]) -> list[float]:
+            del query, texts
+            raise SemanticBackendProtocolError("structured relevance response violated schema")
+
+    runtime._subagents._semantic_backend = BrokenBackend()
+    bundle = runtime._build_context_bundle(
+        state,
+        goal="Read the available evidence.",
+        kind="plan",
+        prompt_mode="standard",
+        for_planning=True,
+    )
+
+    assert all(component.name != "retrieval_focus" for component in bundle.components)
+    events = runtime.history.read_history(state.session_id)
+    report = next(event for event in events if event.event_type == "subagent_reported")
+    assert report.payload["accepted"] is False
+    assert report.payload["reason"] == "semantic_retrieval_degraded"
+    degraded = next(event for event in events if event.event_type == "semantic_retrieval_degraded")
+    assert degraded.payload["scope"] == "subagent_retrieval_focus"
+    assert degraded.payload["fallback"] == "complete_context_bundle"
+    assert not any(event.event_type == "fatal_system_error" for event in events)
+
+
 def test_retriever_subagent_produces_focused_artifact(make_config) -> None:
     runtime = AgentRuntime(make_config(), model_client=FakeModelClient())
     state = runtime.create_or_load_session()
@@ -183,7 +322,7 @@ def test_retriever_subagent_produces_focused_artifact(make_config) -> None:
 def test_planner_subagent_replan_artifact_is_explicit(make_config) -> None:
     runtime = AgentRuntime(make_config(), model_client=FakeModelClient())
     state = runtime.create_or_load_session()
-    plan = create_direct_tool_plan("Use the calculator tool to compute 2 + 2.", "calculator")
+    plan = _calculator_plan("Use the calculator tool to compute 2 + 2.", runtime)
     state.active_plan = plan
 
     report = runtime._subagents.replan(state, goal=plan.goal, current_plan=plan, failure_reason="verification_failed")

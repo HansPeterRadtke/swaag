@@ -71,3 +71,12 @@ def remove_file(path: str | os.PathLike[str] | Path, *, missing_ok: bool = False
     except FileNotFoundError:
         if not missing_ok:
             raise
+
+
+def atomic_replace(
+    source: str | os.PathLike[str] | Path,
+    target: str | os.PathLike[str] | Path,
+) -> Path:
+    destination = ensure_parent_dir(target)
+    os.replace(_as_path(source), destination)
+    return destination

@@ -314,7 +314,7 @@ def _cached_benchmark_run_settings() -> dict[str, Any]:
     return {
         "model_base_url": os.environ.get("SWAAG_LIVE_BASE_URL", "http://127.0.0.1:14829"),
         "model_profile": os.environ.get("SWAAG_BENCHMARK_CACHED_PROFILE", "small_fast"),
-        "structured_output_mode": os.environ.get("SWAAG_BENCHMARK_CACHED_STRUCTURED_OUTPUT_MODE", "post_validate"),
+        "structured_output_mode": os.environ.get("SWAAG_BENCHMARK_CACHED_STRUCTURED_OUTPUT_MODE", "server_schema"),
         "connect_timeout_seconds": int(os.environ.get("SWAAG_BENCHMARK_CACHED_CONNECT_TIMEOUT_SECONDS", "5")),
         "timeout_seconds": int(os.environ.get("SWAAG_BENCHMARK_CACHED_TIMEOUT_SECONDS", "15")),
         "progress_poll_seconds": float(os.environ.get("SWAAG_BENCHMARK_CACHED_PROGRESS_POLL_SECONDS", "1.0")),

@@ -23,7 +23,7 @@ from swaag.test_categories import (
 
 @pytest.fixture(autouse=True)
 def _fast_benchmark_backend(monkeypatch: pytest.MonkeyPatch) -> None:
-    monkeypatch.setenv("SWAAG_BENCHMARK_TEST_RETRIEVAL_BACKEND", "degraded_lexical")
+    monkeypatch.setenv("SWAAG_BENCHMARK_TEST_RETRIEVAL_BACKEND", "unavailable")
 
 
 @pytest.fixture()
@@ -33,7 +33,8 @@ def make_config(tmp_path: Path):
             "SWAAG__SESSIONS__ROOT": str(tmp_path / "sessions"),
             "SWAAG__TOOLS__READ_ROOTS": f'["{tmp_path}"]',
             "SWAAG__MODEL__BASE_URL": "http://127.0.0.1:9999",
-            "SWAAG__RETRIEVAL__BACKEND": "degraded_lexical",
+            "SWAAG__MODEL__CACHE_ENABLED": "false",
+            "SWAAG__RETRIEVAL__BACKEND": "unavailable",
         }
         config = load_config(env=env)
         for path, value in overrides.items():

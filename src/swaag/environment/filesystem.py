@@ -3,7 +3,6 @@ from __future__ import annotations
 import os
 import re
 from pathlib import Path
-from typing import Iterable
 
 from swaag.config import AgentConfig
 from swaag.utils import sha256_text
@@ -17,6 +16,32 @@ class FilesystemManager:
     def __init__(self, config: AgentConfig, workspace_root: Path):
         self.config = config
         self.workspace_root = workspace_root.resolve()
+        sessions_root = Path(config.sessions.root).expanduser()
+        if not sessions_root.is_absolute():
+            sessions_root = self.workspace_root / sessions_root
+        self.sessions_root = sessions_root.resolve()
+        configured_cache = str(config.model.cache_path).strip()
+        if configured_cache:
+            cache_path = Path(configured_cache).expanduser()
+            if not cache_path.is_absolute():
+                cache_path = self.workspace_root / cache_path
+        else:
+            cache_path = self.sessions_root.parent / "llm-model-cache.json"
+        self.model_cache_path = cache_path.resolve()
+
+    def _is_runtime_owned_snapshot_path(self, path: Path) -> bool:
+        resolved = path.resolve()
+        if self.sessions_root != self.workspace_root and resolved.is_relative_to(self.sessions_root):
+            return True
+        if resolved.parent != self.model_cache_path.parent:
+            return False
+        name = resolved.name
+        cache_name = self.model_cache_path.name
+        return (
+            name == cache_name
+            or name.startswith(cache_name + ".")
+            or name.startswith("." + cache_name + ".")
+        )
 
     def resolve_path(self, path_text: str, *, cwd: str | None = None) -> Path:
         path = Path(path_text).expanduser()
@@ -52,65 +77,7 @@ class FilesystemManager:
         path = self.resolve_path(path_text, cwd=cwd)
         if path.exists() and path.is_file():
             return path
-        repaired = self._repair_missing_file_path(path_text)
-        if repaired is not None:
-            return repaired
         raise FilesystemError(f"File does not exist: {path}")
-
-    def _repair_missing_file_path(self, path_text: str) -> Path | None:
-        requested_name = Path(path_text).name
-        if not requested_name or requested_name in {".", ".."}:
-            return None
-        candidates = [
-            item
-            for item in self.workspace_root.rglob(requested_name)
-            if item.is_file() and "__pycache__" not in item.parts and ".pytest_cache" not in item.parts
-        ]
-        if len(candidates) == 1:
-            return candidates[0].resolve()
-        all_files = [
-            item
-            for item in self.workspace_root.rglob("*.py")
-            if item.is_file() and "__pycache__" not in item.parts and ".pytest_cache" not in item.parts
-        ]
-        requested_bits = self._filename_bits(requested_name)
-        parts = Path(path_text).parts
-        if requested_name.startswith("test_") and len(parts) >= 2:
-            package_names: list[str] = []
-            if len(parts) >= 3 and parts[-2] in {"test", "tests"}:
-                package_names.append(parts[-3])
-            package_names.append(parts[-2])
-            for package_name in dict.fromkeys(package_names):
-                if package_name in {"", ".", "..", "test", "tests"}:
-                    continue
-                package_candidate = self.workspace_root / f"test_{package_name}_{requested_name[5:]}"
-                if package_candidate.is_file():
-                    return package_candidate.resolve()
-            suffix_candidates = [
-                item
-                for item in self.workspace_root.glob(f"test_*_{requested_name[5:]}")
-                if item.is_file()
-            ]
-            if len(suffix_candidates) == 1:
-                return suffix_candidates[0].resolve()
-        if not requested_bits:
-            return None
-        scored: list[tuple[int, Path]] = []
-        for item in all_files:
-            bits = self._filename_bits(item.name) | self._filename_bits(item.as_posix())
-            overlap = len(requested_bits & bits)
-            if overlap:
-                scored.append((overlap, item))
-        if not scored:
-            return None
-        best = max(score for score, _ in scored)
-        winners = [item for score, item in scored if score == best]
-        return winners[0].resolve() if len(winners) == 1 and best >= min(2, len(requested_bits)) else None
-
-    @staticmethod
-    def _filename_bits(value: str) -> set[str]:
-        stem = Path(value).stem.lower()
-        return {bit for bit in re.split(r"[^a-z0-9]+", stem.replace("test_", "")) if bit}
 
     def read_text(self, path_text: str, *, cwd: str | None = None) -> tuple[Path, str]:
         path = self.resolve_existing_file_path(path_text, cwd=cwd)
@@ -199,6 +166,8 @@ class FilesystemManager:
             return snapshot
         for item in sorted(self.workspace_root.rglob("*")):
             if not item.is_file() or "__pycache__" in item.parts:
+                continue
+            if self._is_runtime_owned_snapshot_path(item):
                 continue
             raw = item.read_bytes()
             rel = self.relative_path(item)

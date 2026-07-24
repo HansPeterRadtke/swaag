@@ -1,9 +1,12 @@
 Evaluate the verification criteria strictly.
 
-Use only the provided evidence.
+Use only the provided candidate result and deterministic evidence.
 Do not invent missing evidence.
 Return one JSON object with the top-level key `criteria`.
-`criteria` is a JSON array; each item must contain:
+`criteria` is a JSON array with exactly one item for every input criterion, in the same order; each item must contain:
   `name` (string): the criterion name matching the input.
   `passed` (boolean): true if the criterion is met, false otherwise.
-  `evidence` (string): a short concrete justification drawn only from the provided evidence.
+  `evidence` (string): a short concrete explanation of how the candidate excerpt satisfies or fails the criterion. Do not copy or paraphrase only the criterion itself.
+  `candidate_excerpts` (array of strings): exact non-empty substrings copied verbatim from the candidate result that ground the judgment. Use multiple excerpts when the criterion depends on separate passages. Each input criterion includes `candidate_grounding`: when it is `required`, return one or more exact excerpts; when it is `optional`, an empty array is allowed only for judgments grounded in deterministic evidence or the absence of a stale/invalid property. Any excerpt you do return must still be copied exactly. If the candidate result is empty, use an empty array.
+
+Every criterion name must appear exactly once. Do not omit, duplicate, or invent criterion names.

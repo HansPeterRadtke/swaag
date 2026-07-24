@@ -9,20 +9,23 @@ Required fields:
 - assume_missing: boolean
 - generate_ideas: boolean
 - direct_response: boolean
-- execution_mode: one of full_plan, single_tool, direct_response
+- execution_mode: one of full_plan, single_tool, direct_response, clarification
 - preferred_tool_name: empty string or one available tool name
+- evidence_required_before_response: boolean
+- evidence_call_count: non-negative integer
 - confidence: number between 0 and 1
 - reason: short string
 
 Rules:
-- do not set ask_user and assume_missing to true at the same time
 - set direct_response=true only when the agent can answer safely in one assistant reply without planning, tools, clarification, or task expansion
 - if direct_response=true then split_task, expand_task, and ask_user must all be false
 - if direct_response=true then execution_mode must be direct_response and preferred_tool_name must be empty
-- use execution_mode=single_tool only when exactly one tool call plus deterministic post-processing is enough
+- use execution_mode=clarification only when the clarification can be asked immediately without reading files, calling tools, or gathering additional evidence; ask_user must be true and preferred_tool_name must be empty
+- when ask_user=true but the request requires evidence gathering first, choose full_plan for multiple tool calls or single_tool for exactly one tool call; the model-authored plan must gather evidence and end with the clarification question
+- use execution_mode=single_tool only when you expect the model-owned plan to need one tool call plus final response, with objective verification still declared in the plan
 - if execution_mode=single_tool then preferred_tool_name must be that tool and direct_response must be false
 - if execution_mode=full_plan then preferred_tool_name must be empty
 - direct_response must be false when the request explicitly requires a named tool, reading or editing files, running tests, browsing, or external verification
-- vague tasks must request expansion
-- structured complete tasks should not ask the user for clarification
 - keep reason terse; one short sentence or phrase
+- set evidence_required_before_response=true when files, tools, browsing, tests, or external state must be inspected before any answer or clarification; then execution_mode must be full_plan or single_tool, never clarification or direct_response
+- evidence_call_count is the number of tool calls required before the response; set it to 0 when evidence_required_before_response=false, at least 1 when true, and use execution_mode=full_plan whenever the count is greater than 1

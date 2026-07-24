@@ -45,6 +45,11 @@ def _build_scenario_runtime(make_config, tmp_path: Path) -> tuple[AgentRuntime, 
                         expected_output="Updated file",
                         success_criteria="The file text is updated.",
                         depends_on=["step_read"],
+                        verification_checks=[
+                            {"name": "file_contains_hi", "check_type": "file_contains", "path": str(sample), "pattern": "hi world"},
+                        ],
+                        required_conditions=["file_contains_hi"],
+                        optional_conditions=[],
                     ),
                     plan_step(
                         "step_calc",
@@ -67,7 +72,7 @@ def _build_scenario_runtime(make_config, tmp_path: Path) -> tuple[AgentRuntime, 
             ),
             json.dumps({"action": "call_tool", "response": "", "tool_name": "notes", "tool_input": {"action": "add", "title": "Todo", "content": "Remember 42"}}),
             json.dumps({"action": "call_tool", "response": "", "tool_name": "read_text", "tool_input": {"path": str(sample)}}),
-            json.dumps({"action": "call_tool", "response": "", "tool_name": "edit_text", "tool_input": {"path": str(sample), "operation": "replace_pattern_all", "pattern": "hello", "replacement": "hi"}}),
+            json.dumps({"action": "call_tool", "response": "", "tool_name": "edit_text", "tool_input": {"path": str(sample), "operation": "replace_pattern_all", "dry_run": False, "start": None, "end": None, "position": None, "expected_text": None, "pattern": "hello", "replacement": "hi", "insertion": None}}),
             json.dumps({"action": "call_tool", "response": "", "tool_name": "calculator", "tool_input": {"expression": "6 * 7"}}),
             "done",
         ]
@@ -105,7 +110,7 @@ def test_history_contains_required_event_types(make_config, tmp_path: Path) -> N
         "budget_checked",
         "model_request_sent",
         "model_response_received",
-        "decision_parsed",
+        "tool_input_parsed",
         "tool_called",
         "tool_result",
         "verification_started",
@@ -233,6 +238,22 @@ def test_history_store_does_not_create_root_until_first_event(tmp_path: Path) ->
     assert not root.exists()
 
 
+def test_clarification_generated_event_has_closed_required_payload(make_config) -> None:
+    from swaag.history import HistoryStore
+
+    store = HistoryStore(make_config().sessions.root)
+    state = store.create(config_fingerprint="abc", model_base_url="http://example.test")
+    event = store.record_event(
+        state,
+        "clarification_generated",
+        {"source": "model", "text": "Which service should this rollout concern?"},
+    )
+
+    assert event.event_type == "clarification_generated"
+    assert event.payload["source"] == "model"
+    assert event.payload["text"].endswith("?")
+
+
 def test_event_factory_rejects_unknown_event_type(make_config) -> None:
     config = make_config()
     from swaag.history import HistoryStore
@@ -251,6 +272,63 @@ def test_event_factory_rejects_missing_required_payload(make_config) -> None:
     state = store.create(config_fingerprint="abc", model_base_url="http://example.test")
     with pytest.raises(EventSchemaError):
         store.record_event(state, "tool_called", {"tool_name": "calculator"})
+
+
+def test_shell_command_file_changes_advance_edit_count(make_config) -> None:
+    config = make_config()
+    from swaag.history import HistoryStore
+
+    store = HistoryStore(config.sessions.root)
+    state = store.create(config_fingerprint="abc", model_base_url="http://example.test")
+    store.record_event(
+        state,
+        "shell_command_completed",
+        {
+            "command": "python3 repair.py",
+            "cwd_before": "/workspace",
+            "cwd_after": "/workspace",
+            "env_overrides": {},
+            "unset_vars": [],
+            "exit_code": 0,
+            "stdout": "",
+            "stderr": "",
+            "created_files": [],
+            "modified_files": ["pkg/module.py"],
+            "deleted_files": [],
+        },
+    )
+
+    rebuilt = store.rebuild_from_history(state.session_id)
+
+    assert state.edit_count == 1
+    assert rebuilt.edit_count == 1
+
+
+def test_workspace_snapshot_file_changes_advance_edit_count(make_config) -> None:
+    config = make_config()
+    from swaag.history import HistoryStore
+
+    store = HistoryStore(config.sessions.root)
+    state = store.create(config_fingerprint="abc", model_base_url="http://example.test")
+    store.record_event(
+        state,
+        "workspace_snapshot",
+        {
+            "workspace_root": "/workspace",
+            "cwd": "/workspace",
+            "files": {"pkg/module.py": "def value():\n    return 1\n"},
+            "created_files": [],
+            "modified_files": ["pkg/module.py"],
+            "deleted_files": [],
+            "captured_at": "2026-01-01T00:00:00+00:00",
+            "snapshot_mode": "delta",
+        },
+    )
+
+    rebuilt = store.rebuild_from_history(state.session_id)
+
+    assert state.edit_count == 1
+    assert rebuilt.edit_count == 1
 
 
 def test_rebuild_cannot_write_projections_directly(make_config) -> None:
@@ -336,7 +414,7 @@ def test_replay_window_rebuilds_prefix_state(make_config, tmp_path: Path) -> Non
 def test_full_system_replay_after_replan_matches_state(make_config, tmp_path: Path) -> None:
     sample = tmp_path / "replan.txt"
     sample.write_text("hello world\n", encoding="utf-8")
-    config = make_config(tools__allow_side_effect_tools=True, runtime__max_tool_steps=6, planner__max_replans=1)
+    config = make_config(tools__allow_side_effect_tools=True, runtime__max_tool_steps=2, planner__max_replans=1)
     goal = "Read the file, compute 6 * 7, edit the file, and answer."
     # NOTE: this test exercises history replay after replan. We deliberately
     # avoid putting an edit_text/write_file step *before* the failing step,
@@ -345,30 +423,71 @@ def test_full_system_replay_after_replan_matches_state(make_config, tmp_path: Pa
     # The failing step (step_calc) uses the calculator tool, which goes
     # through the standard tool_decision contract.
     fake_client = FakeModelClient(
+        contract_responses={
+            "failure_classification": [
+                json.dumps(
+                    {
+                        "kind": "verification_failure",
+                        "retryable": False,
+                        "requires_replan": True,
+                        "suggested_strategy_mode": "recovery",
+                        "wait_seconds": 0.0,
+                        "reason": "wrong tool result requires a new plan",
+                    }
+                )
+            ]
+        },
         responses=[
             plan_response(
                 goal=goal,
                 steps=[
                     plan_step("step_read", "Read the file", "read", expected_tool="read_text", expected_output="File contents", success_criteria="The file contents are available."),
                     plan_step("step_calc", "Compute a number", "tool", expected_tool="calculator", expected_output="Calculated value", success_criteria="The expression is evaluated.", depends_on=["step_read"]),
-                    plan_step("step_edit", "Edit the file", "write", expected_tool="edit_text", expected_output="Updated file", success_criteria="The file text is updated.", depends_on=["step_calc"]),
+                    plan_step(
+                        "step_edit",
+                        "Edit the file",
+                        "write",
+                        expected_tool="edit_text",
+                        expected_output="Updated file",
+                        success_criteria="The file text is updated.",
+                        depends_on=["step_calc"],
+                        verification_checks=[
+                            {"name": "file_contains_hi", "check_type": "file_contains", "path": str(sample), "pattern": "hi world"},
+                        ],
+                        required_conditions=["file_contains_hi"],
+                        optional_conditions=[],
+                    ),
                     plan_step("step_answer", "Answer the user", "respond", expected_output="Final answer", success_criteria="The user receives the result.", depends_on=["step_edit"]),
                 ],
             ),
-            json.dumps({"action": "call_tool", "response": "", "tool_name": "read_text", "tool_input": {"path": str(sample)}}),
-            # Wrong tool for step_calc (echo instead of calculator) — triggers verification failure → replan.
-            json.dumps({"action": "call_tool", "response": "", "tool_name": "echo", "tool_input": {"text": "wrong"}}),
-            plan_response(
+                json.dumps({"action": "call_tool", "response": "", "tool_name": "read_text", "tool_input": {"path": str(sample)}}),
+                # Wrong tool for step_calc (echo instead of calculator) — repeated to exhaust the tool-step guard and trigger replan.
+                json.dumps({"action": "call_tool", "response": "", "tool_name": "echo", "tool_input": {"text": "wrong"}}),
+                json.dumps({"action": "call_tool", "response": "", "tool_name": "echo", "tool_input": {"text": "still wrong"}}),
+                plan_response(
                 goal=goal,
                 steps=[
                     plan_step("step_calc_replan", "Compute a number", "tool", expected_tool="calculator", expected_output="Calculated value", success_criteria="The expression is evaluated."),
-                    plan_step("step_edit_replan", "Edit the file", "write", expected_tool="edit_text", expected_output="Updated file", success_criteria="The file text is updated.", depends_on=["step_calc_replan"]),
+                    plan_step(
+                        "step_edit_replan",
+                        "Edit the file",
+                        "write",
+                        expected_tool="edit_text",
+                        expected_output="Updated file",
+                        success_criteria="The file text is updated.",
+                        depends_on=["step_calc_replan"],
+                        verification_checks=[
+                            {"name": "file_contains_hi", "check_type": "file_contains", "path": str(sample), "pattern": "hi world"},
+                        ],
+                        required_conditions=["file_contains_hi"],
+                        optional_conditions=[],
+                    ),
                     plan_step("step_answer_replan", "Answer the user", "respond", expected_output="Final answer", success_criteria="The user receives the result.", depends_on=["step_edit_replan"]),
                 ],
             ),
             json.dumps({"action": "call_tool", "response": "", "tool_name": "calculator", "tool_input": {"expression": "6 * 7"}}),
             # tool_input:edit_text — runtime extracts the tool_input dict from this wrapped call.
-            json.dumps({"action": "call_tool", "response": "", "tool_name": "edit_text", "tool_input": {"path": str(sample), "operation": "replace_pattern_all", "pattern": "hello", "replacement": "hi"}}),
+            json.dumps({"action": "call_tool", "response": "", "tool_name": "edit_text", "tool_input": {"path": str(sample), "operation": "replace_pattern_all", "dry_run": False, "start": None, "end": None, "position": None, "expected_text": None, "pattern": "hello", "replacement": "hi", "insertion": None}}),
             "done",
         ]
     )
@@ -390,6 +509,7 @@ def test_source_tree_has_no_direct_write_calls_outside_history_module() -> None:
     forbidden_attrs = {"write_text", "write_bytes", "mkdir", "unlink", "rename"}
     allowed_paths = {
         root / "history.py",
+        root / "fsops.py",
         root / "environment" / "environment.py",
         root / "environment" / "process.py",
     }
@@ -484,7 +604,7 @@ def test_event_completeness_matches_observed_operations(make_config, tmp_path: P
     assert event_types.count("model_tokenize_result") == len(runtime.client.tokenize_requests)
     assert event_types.count("tool_called") == 4
     assert event_types.count("tool_result") == 4
-    assert event_types.count("tool_graph_planned") == 4
+    assert not any(event_type.startswith("tool_graph") for event_type in event_types)
     assert event_types.count("verification_started") == event_types.count("verification_completed")
     assert event_types.count("verification_completed") == event_types.count("verification_type_used")
     assert event_types.count("verification_completed") == event_types.count("verification_passed")
@@ -639,12 +759,24 @@ def test_repair_events_are_valid_event_schema() -> None:
     from swaag.events import validate_event_payload
 
     validate_event_payload(
-        "plan_limit_repaired",
-        {"reason": "allowed_extra_final_response_step", "step_count": 7, "max_plan_steps": 6},
-        {},
-    )
-    validate_event_payload(
         "budget_repaired",
         {"kind": "tool_input", "reason": "cap_tool_input_generation_tokens", "requested_response_tokens": 3840, "capped_response_tokens": 512},
         {},
     )
+
+
+def test_tokenize_history_does_not_store_model_visible_text(make_config) -> None:
+    config = make_config()
+    runtime = AgentRuntime(config, model_client=FakeModelClient())
+    state = runtime.create_or_load_session()
+    secret_prompt = "private model-visible prompt that must not enter token telemetry"
+
+    runtime._tokenize_with_history(state, secret_prompt)
+    runtime._tokenize_with_history(state, secret_prompt)
+
+    events = runtime.history.read_history(state.session_id)
+    requested = [event for event in events if event.event_type == "model_tokenize_requested"]
+    assert len(requested) == 1
+    assert requested[0].payload["text_chars"] == len(secret_prompt)
+    assert "text" not in requested[0].payload
+    assert secret_prompt not in runtime.history.history_path(state.session_id).read_text(encoding="utf-8")

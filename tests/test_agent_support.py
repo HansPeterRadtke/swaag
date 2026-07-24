@@ -136,4 +136,26 @@ def test_manual_validation_cli_is_separate_from_tests(monkeypatch, tmp_path: Pat
     assert exit_code == 0
     assert observed["output_dir"] == tmp_path / "manual"
     assert observed["benchmark_task_ids"] == ["demo"]
-    assert observed["validation_subset"] is True
+    assert observed["validation_subset"] is False
+    assert observed["use_cache"] is True
+
+
+def test_manual_validation_cli_can_explicitly_disable_cache(monkeypatch, tmp_path: Path) -> None:
+    from swaag.manual_validation import __main__ as manual_validation_main
+
+    observed: dict[str, object] = {}
+
+    def fake_run_manual_validation(**kwargs):
+        observed.update(kwargs)
+        return {
+            "is_test_category": False,
+            "percent": 100.0,
+            "summary": {"total_tasks": 1, "failed_tasks": 0, "false_positives": 0},
+        }
+
+    monkeypatch.setattr("swaag.manual_validation.runner.run_manual_validation", fake_run_manual_validation)
+    exit_code = manual_validation_main.main(
+        ["--output", str(tmp_path / "manual"), "--task", "demo", "--uncached-live"]
+    )
+    assert exit_code == 0
+    assert observed["use_cache"] is False

@@ -28,7 +28,14 @@ completion_endpoint = "/completion"
 tokenize_endpoint = "/tokenize"
 health_endpoint = "/health"
 profile_name = "small_fast"
-structured_output_mode = "post_validate"
+# Optional explicit model/revision identifier. When empty, SWAAG fingerprints the live server properties.
+model_identity = ""
+structured_output_mode = "server_schema"
+# Cache-first record mode is the normal runtime default. Set cache_enabled=false for an explicitly uncached live run.
+cache_enabled = true
+cache_mode = "record"
+# Empty resolves to <sessions.root parent>/llm-model-cache.json.
+cache_path = ""
 timeout_seconds = 120
 connect_timeout_seconds = 10
 simple_timeout_seconds = 60
@@ -48,16 +55,16 @@ stop = ["<|eot_id|>", "<|end_of_text|>"]
 # Adjust these first when tuning agent behavior for a new task scope.
 # -----------------------------------------------------------
 [runtime]
-max_tool_steps = 4
-tool_call_budget = 6
-max_total_actions = 12
-no_progress_failure_limit = 3
+max_tool_steps = 12
+tool_call_budget = 16
+max_total_actions = 36
+no_progress_failure_limit = 5
 verification_confidence_threshold = 0.7
 capture_model_io = true
 lean_on_overflow = true
 strict_budget = true
 max_repeated_action_occurrences = 2
-max_reasoning_steps = 8
+max_reasoning_steps = 24
 tool_timeout_seconds = 10
 background_poll_seconds = 0.1
 
@@ -80,7 +87,7 @@ allow_side_effect_tools = false
 # -----------------------------------------------------------
 [planner]
 max_plan_steps = 6
-max_replans = 2
+max_replans = 5
 
 # -----------------------------------------------------------
 # [context] — TOKEN RESERVE POLICY  (moderate risk)
@@ -148,7 +155,7 @@ max_chunk_chars = 12000
 # [editor] — FILE EDITOR SETTINGS
 # -----------------------------------------------------------
 [editor]
-create_backups = true
+create_backups = false
 backup_suffix = ".bak"
 allow_writes = true
 
@@ -184,7 +191,7 @@ max_external_text_chars = 8000
 
 # -----------------------------------------------------------
 # [retrieval] — RETRIEVAL BACKEND SELECTION
-# backend: "llm_scoring" (default), "degraded_lexical" (offline/test)
+# backend: "llm_scoring" (default), "unavailable" (neutral offline/test)
 # -----------------------------------------------------------
 [retrieval]
 backend = "llm_scoring"
@@ -239,9 +246,9 @@ summary_template = "summary_user.txt"
 [budget_policy]
 fixed_overhead_min_tokens = 160
 structured_output_json_factor_default = 1.50
-structured_output_json_floor_tokens = 24
-structured_output_grammar_factor = 1.25
-structured_output_grammar_floor_tokens = 16
+structured_output_json_floor_tokens = 192
+structured_output_schema_factor = 1.25
+structured_output_schema_floor_tokens = 16
 safe_input_floor_tokens = 128
 
 [budget_policy.call_classes]
@@ -254,8 +261,6 @@ strategy = "small"
 tool_input = "small"
 decision = "small"
 verification = "small"
-generation_decomposition = "medium"
-overflow_recovery = "medium"
 expansion = "medium"
 plan = "large"
 summary = "medium"
@@ -276,12 +281,10 @@ large = 0.10
 [budget_policy.output_ratio_by_kind]
 tool_input = 0.12
 plan = 0.30
-generation_decomposition = 0.45
 
 [budget_policy.output_floor_ratio_by_kind]
 tool_input = 0.08
 plan = 0.22
-generation_decomposition = 0.30
 
 [budget_policy.structured_output_json_factor_by_contract]
 prompt_analysis = 1.15
@@ -293,8 +296,6 @@ strategy_selection = 1.10
 failure_classification = 1.10
 action_selection = 1.10
 subagent_selection = 1.10
-generation_decomposition = 1.10
-overflow_recovery = 1.10
 verification = 1.10
 
 [budget_policy.safety_ratio]
@@ -449,7 +450,6 @@ notes = 54.0
 retrieval_history_item_token_hint = 96
 retrieval_semantic_item_token_hint = 96
 retrieval_environment_item_token_hint = 256
-skill_nondiscriminative_delta = 0.05
 history_query_max_results = 8
 
 # Structural signal weights used when building ranking candidates.
@@ -538,52 +538,31 @@ replace_max_chars = 1600
 git_remote_base_url = "https://github.com"
 model_name_or_path = "swaag/real-agent-cli"
 prompt_template = """
-You are solving a local SWE-bench benchmark instance inside the current repository checkout.
-Task contract:
-{{"task_kind":"local_repo_code_fix","request_completeness":"complete","requires_code_changes":true,"requires_verification":true,"prefer_task_expansion":false}}
-Treat this benchmark issue as complete enough to start working immediately.
-Do not expand the task just because the prompt includes background context or hints.
-Apply code changes directly to files in the workspace.
-Aim for the smallest reasonable patch that addresses the issue.
-This is a coding task, not a reading-only task.
-You must inspect code, edit files, and verify the fix locally.
-Do not ask for clarification; use the issue text and hints.
-Keep your internal plan short and concrete: prefer read -> edit -> verify -> respond.
-Do the work in the repository instead of replying with a plan-only answer.
-Start by reading the named failing test file or files.
-If the failing test list only gives a test name, search for that exact test name first.
-Then inspect the implementation touched by those tests or by the named symbol in the issue.
-Avoid editing docs, changelogs, vendored code, generated files, or unrelated tests unless the issue explicitly targets them.
-Prefer one source change and then verify the named failing tests.
-Use repo-relative paths only when you mention paths.
-Do not restate the full issue text or large file paths in your plan.
+You are working inside the current repository checkout.
+Decide what the task requires, choose any needed inspection or edits, and keep the final response concise.
+Use repo-relative paths when you mention paths.
 
 Repository: {repo}
 Instance: {instance_id}
 
-Problem statement:
+Task details:
 {problem_statement}
 
-Known failing tests:
+Additional verification context:
 {fail_to_pass_tests}
 
 Hints:
 {hints_text}
 """
 empty_patch_retry_prompt = """
-Task contract:
-{"task_kind":"local_repo_code_fix","request_completeness":"complete","requires_code_changes":true,"requires_verification":true,"prefer_task_expansion":false}
-You have not produced any file changes yet for this SWE-bench instance.
-Make one best-effort concrete code change now in the current repository checkout.
-Do not ask for clarification.
-Keep the plan as short as possible: inspect -> edit -> verify -> respond.
-Prefer one concrete source-file change over wrapper scripts.
-Use real repo-relative file paths and directly executable commands only.
+You have not produced any file changes yet for this repository task.
+Reconsider the task and decide whether a concrete file change is needed.
+Use real repo-relative file paths when you mention paths.
 Repository: {repo}
 Instance: {instance_id}
-Problem statement:
+Task details:
 {problem_statement}
-Known failing tests:
+Additional verification context:
 {fail_to_pass_tests}
 Hints:
 {hints_text}

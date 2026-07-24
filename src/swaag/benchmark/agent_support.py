@@ -123,34 +123,28 @@ def get_agent_support_families() -> list[AgentSupportFamily]:
         ),
         AgentSupportFamily(
             family_id="runtime_recovery_contracts",
-            description="Runtime recovery, retry, and contract repair paths stay stable under replay.",
+            description="Runtime retry and semantic-engine failure paths stay stable under replay.",
             nodeids=(
                 "tests/test_runtime.py::test_runtime_retries_failed_model_request",
                 "tests/test_runtime.py::test_runtime_retries_after_verification_failure",
-                "tests/test_runtime.py::test_runtime_recovers_malformed_coding_plan_with_shell_recovery_plan",
-                "tests/test_runtime.py::test_runtime_recovers_strategy_incompatible_coding_plan_with_shell_recovery_plan",
+                "tests/test_runtime.py::test_runtime_waits_for_semantic_engine_instead_of_using_fake_semantic_fallback",
             ),
         ),
         AgentSupportFamily(
             family_id="direct_response_guardrails",
-            description="Direct-answer shortcuts stay bounded by explicit-tool and exact-reply guardrails.",
+            description="Direct-answer scaffolds remain bounded by model decisions and selected strategy constraints.",
             nodeids=(
-                "tests/test_runtime.py::test_extract_unconditional_exact_reply_ignores_conditional_reply_clauses",
-                "tests/test_runtime.py::test_runtime_finalizes_unconditional_exact_reply_without_final_model_call",
-                "tests/test_runtime.py::test_runtime_bypasses_llm_plan_generation_for_semantic_direct_response",
-                "tests/test_runtime.py::test_runtime_blocks_direct_response_when_prompt_explicitly_requires_named_tool",
+                "tests/test_runtime.py::test_runtime_uses_model_authored_plan_for_model_selected_direct_answer",
                 "tests/test_runtime.py::test_runtime_blocks_direct_response_when_strategy_requires_write_steps",
             ),
         ),
         AgentSupportFamily(
             family_id="tool_routing_context_focus",
-            description="Tool routing, targeted shell recovery, and edit-context focus remain anchored in real evidence.",
+            description="Tool routing uses model-provided plan/tool contracts and structural schema normalization.",
             nodeids=(
-                "tests/test_runtime.py::test_runtime_uses_expected_tool_input_contract_for_shell_command_steps",
-                "tests/test_runtime.py::test_runtime_normalizes_trivial_shell_command_into_repo_search",
-                "tests/test_runtime.py::test_runtime_prefers_recent_source_hint_for_edit_text_step",
-                "tests/test_runtime.py::test_runtime_edit_text_prompt_includes_recent_inspection_evidence",
-                "tests/test_runtime.py::test_runtime_uses_expected_tool_input_contract_for_profile_optimized_edit_steps",
+                "tests/test_runtime.py::test_runtime_logs_fatal_when_selected_tool_input_contract_returns_malformed_json",
+                "tests/test_runtime.py::test_read_text_rejects_conflicting_route_fields",
+                "tests/test_runtime.py::test_runtime_turns_required_read_response_into_tool_call",
             ),
         ),
         AgentSupportFamily(

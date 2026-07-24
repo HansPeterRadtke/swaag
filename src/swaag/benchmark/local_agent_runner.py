@@ -4,100 +4,17 @@ import argparse
 import contextlib
 import json
 import os
-import re
 import subprocess
 from dataclasses import dataclass
 from pathlib import Path
 
 from swaag.config import load_config
 from swaag.fsops import write_text
-from swaag.model import LlamaCppClient, ModelClientError
+from swaag.model import ModelClientError
+from swaag.model_cache import build_model_client
 from swaag.types import ContractSpec
 from swaag.utils import stable_json_dumps
 
-_PATH_HINT_RE = re.compile(r"(?<![A-Za-z0-9_])(?:[A-Za-z0-9_.-]+/)*[A-Za-z0-9_.-]+\.[A-Za-z0-9_.-]+")
-_CODE_TOKEN_RE = re.compile(r"`([^`\n]{2,120})`")
-_IDENTIFIER_RE = re.compile(r"[A-Za-z_][A-Za-z0-9_]{2,}")
-_GENERIC_IDENTIFIER_STOPWORDS = {
-    "about",
-    "achived",
-    "actual",
-    "add",
-    "adding",
-    "addresses",
-    "agent",
-    "aim",
-    "all",
-    "and",
-    "apply",
-    "are",
-    "ask",
-    "assistant",
-    "because",
-    "bench",
-    "best",
-    "change",
-    "changes",
-    "checkout",
-    "clarification",
-    "code",
-    "concrete",
-    "consider",
-    "current",
-    "describe",
-    "detail",
-    "directly",
-    "does",
-    "edit",
-    "enables",
-    "feature",
-    "files",
-    "for",
-    "function",
-    "help",
-    "hints",
-    "how",
-    "inside",
-    "instance",
-    "issue",
-    "listed",
-    "local",
-    "make",
-    "missing",
-    "model",
-    "now",
-    "only",
-    "patch",
-    "please",
-    "post",
-    "problem",
-    "proposal",
-    "reasonable",
-    "repository",
-    "request",
-    "return",
-    "root",
-    "smallest",
-    "solving",
-    "statement",
-    "support",
-    "supported",
-    "swe",
-    "text",
-    "that",
-    "the",
-    "there",
-    "these",
-    "this",
-    "use",
-    "usecase",
-    "usecases",
-    "using",
-    "with",
-    "work",
-    "workspace",
-    "you",
-}
 _ALLOWED_TEXT_EXTENSIONS = {
     ".c",
     ".cc",
@@ -126,28 +43,6 @@ _ALLOWED_TEXT_EXTENSIONS = {
     ".yaml",
     ".yml",
 }
-_PREFERRED_SOURCE_EXTENSIONS = {
-    ".c",
-    ".cc",
-    ".cpp",
-    ".cs",
-    ".go",
-    ".h",
-    ".hpp",
-    ".java",
-    ".js",
-    ".php",
-    ".py",
-    ".rb",
-    ".rs",
-    ".scala",
-    ".sh",
-    ".swift",
-    ".ts",
-    ".tsx",
-}
-
-
 class LocalAgentRunnerError(RuntimeError):
     pass
 
@@ -213,49 +108,6 @@ def _dedupe(items: list[str]) -> list[str]:
     return ordered
 
 
-def _issue_text_only(prompt: str) -> str:
-    marker = "Problem statement:"
-    text = prompt
-    if marker in text:
-        text = text.split(marker, 1)[1]
-    hints_marker = "\nHints:"
-    if hints_marker in text:
-        text = text.split(hints_marker, 1)[0]
-    return text.strip()
-
-
-def _looks_like_path_hint(token: str) -> bool:
-    if "/" in token:
-        return True
-    suffix = Path(token).suffix.lower()
-    return bool(suffix and suffix in _ALLOWED_TEXT_EXTENSIONS)
-
-
-def _path_priority_bonus(path_text: str) -> int:
-    suffix = Path(path_text).suffix.lower()
-    if suffix in _PREFERRED_SOURCE_EXTENSIONS:
-        return 5
-    return 0
-
-
-def _extract_search_terms(prompt: str) -> tuple[list[str], list[str]]:
-    issue_text = _issue_text_only(prompt)
-    path_hints = [match.strip() for match in _PATH_HINT_RE.findall(issue_text) if _looks_like_path_hint(match.strip())]
-    code_tokens: list[str] = []
-    for raw in _CODE_TOKEN_RE.findall(issue_text):
-        token = raw.strip()
-        if token:
-            code_tokens.append(token)
-    identifiers: list[str] = []
-    for token in _IDENTIFIER_RE.findall(issue_text):
-        lowered = token.lower()
-        if lowered in _GENERIC_IDENTIFIER_STOPWORDS:
-            continue
-        identifiers.append(token)
-    terms = _dedupe(code_tokens + identifiers)[:12]
-    return _dedupe(path_hints), terms
-
-
 def _run_capture(command: list[str], *, cwd: Path, timeout: int = 20) -> subprocess.CompletedProcess[str]:
     return subprocess.run(
         command,
@@ -285,67 +137,93 @@ def _text_file_candidates(workspace: Path, *, limit: int) -> list[str]:
     return candidates
 
 
-def _candidate_files(workspace: Path, path_hints: list[str], search_terms: list[str], *, limit: int) -> list[str]:
-    scored: dict[str, int] = {}
-    for hint in path_hints:
-        candidate = workspace / hint
-        if candidate.is_file():
-            scored[hint] = scored.get(hint, 0) + 100 + _path_priority_bonus(hint)
-    for term in search_terms:
-        completed = _run_capture(["rg", "-l", "-S", "--hidden", "-g", "!.git", term, "."], cwd=workspace)
-        if completed.returncode not in {0, 1}:
-            continue
-        for line in completed.stdout.splitlines():
-            rel = line.strip()
-            if not rel or rel.startswith(".git/"):
-                continue
-            suffix = Path(rel).suffix.lower()
-            if suffix and suffix not in _ALLOWED_TEXT_EXTENSIONS:
-                continue
-            scored[rel] = scored.get(rel, 0) + 10 + _path_priority_bonus(rel)
-    if not scored:
-        return _text_file_candidates(workspace, limit=limit)
-    ranked = sorted(scored.items(), key=lambda item: (-item[1], len(item[0]), item[0]))
-    return [path for path, _score in ranked[:limit]]
+def _build_file_selection_contract(candidate_paths: list[str], *, policy: LocalRunnerPolicy) -> ContractSpec:
+    schema = {
+        "type": "object",
+        "properties": {
+            "paths": {
+                "type": "array",
+                "items": {"type": "string", "enum": candidate_paths},
+            },
+            "reason": {"type": "string"},
+        },
+        "required": ["paths", "reason"],
+        "additionalProperties": False,
+    }
+    return ContractSpec(name="local_benchmark_file_selection", mode="json_schema", json_schema=schema)
 
 
-def _file_excerpt(path: Path, search_terms: list[str], *, excerpt_char_limit: int) -> str:
+def _build_file_selection_prompt(base_prompt: str, candidate_paths: list[str], *, policy: LocalRunnerPolicy) -> str:
+    trimmed_prompt = base_prompt.strip()
+    if len(trimmed_prompt) > policy.issue_prompt_char_limit:
+        trimmed_prompt = trimmed_prompt[: policy.issue_prompt_char_limit].rstrip() + "\n...[truncated]"
+    return "\n".join(
+        [
+            "Return one JSON object with keys paths and reason.",
+            f"paths must contain 1 to {policy.candidate_file_limit} entries chosen exactly from the listed repository paths.",
+            "Choose the file or files that you need to inspect before proposing an edit.",
+            "Do not return paths that are not listed.",
+            "",
+            "Task:",
+            trimmed_prompt,
+            "",
+            "Repository paths:",
+            *candidate_paths,
+        ]
+    ).strip() + "\n"
+
+
+def _select_candidate_files(
+    workspace: Path,
+    prompt: str,
+    *,
+    client: LlamaCppClient,
+    policy: LocalRunnerPolicy,
+) -> list[str]:
+    manifest_limit = max(policy.candidate_file_limit, 200)
+    manifest = _text_file_candidates(workspace, limit=manifest_limit)
+    if not manifest:
+        return []
+    contract = _build_file_selection_contract(manifest, policy=policy)
+    completion = client.complete(
+        _build_file_selection_prompt(prompt, manifest, policy=policy),
+        max_tokens=policy.completion_max_tokens,
+        contract=contract,
+        kind="planning",
+        live_mode=True,
+    )
+    payload = _parse_json(completion.text)
+    raw_paths = payload.get("paths")
+    if not isinstance(raw_paths, list) or not raw_paths or not all(isinstance(item, str) for item in raw_paths):
+        raise LocalAgentRunnerError("Model file-selection response missing paths")
+    if len(raw_paths) > policy.candidate_file_limit:
+        raise LocalAgentRunnerError("Model selected too many candidate files")
+    reason = payload.get("reason")
+    if not isinstance(reason, str) or not reason.strip() or len(reason) > policy.summary_max_chars:
+        raise LocalAgentRunnerError("Model file-selection response has invalid reason")
+    if any(path not in manifest for path in raw_paths):
+        raise LocalAgentRunnerError("Model selected a path outside the listed repository paths")
+    selected = _dedupe(raw_paths)
+    if not selected:
+        raise LocalAgentRunnerError("Model did not select any listed file paths")
+    return selected[: policy.candidate_file_limit]
+
+
+def _file_excerpt(path: Path, *, excerpt_char_limit: int) -> str:
     text = path.read_text(encoding="utf-8", errors="replace")
     if len(text) <= excerpt_char_limit:
         return text
-    lowered = text.lower()
-    windows: list[tuple[int, int]] = []
-    for term in search_terms:
-        index = lowered.find(term.lower())
-        if index == -1:
-            continue
-        start = max(0, index - 1200)
-        end = min(len(text), index + 2200)
-        windows.append((start, end))
-        if len(windows) >= 2:
-            break
-    if not windows:
-        return text[:excerpt_char_limit]
-    pieces: list[str] = []
-    for start, end in windows:
-        snippet = text[start:end].strip()
-        if start > 0:
-            snippet = "...\n" + snippet
-        if end < len(text):
-            snippet = snippet + "\n..."
-        pieces.append(snippet)
-    joined = "\n\n".join(pieces)
-    return joined[:excerpt_char_limit]
+    return text[:excerpt_char_limit]
 
 
 def _build_edit_contract(candidate_paths: list[str], *, policy: LocalRunnerPolicy) -> ContractSpec:
     schema = {
         "type": "object",
         "properties": {
-            "summary": {"type": "string", "minLength": 1, "maxLength": policy.summary_max_chars},
+            "summary": {"type": "string"},
             "path": {"type": "string", "enum": candidate_paths},
-            "find": {"type": "string", "minLength": 1, "maxLength": policy.find_max_chars},
-            "replace": {"type": "string", "minLength": 1, "maxLength": policy.replace_max_chars},
+            "find": {"type": "string"},
+            "replace": {"type": "string"},
         },
         "required": ["summary", "path", "find", "replace"],
         "additionalProperties": False,
@@ -353,14 +231,14 @@ def _build_edit_contract(candidate_paths: list[str], *, policy: LocalRunnerPolic
     return ContractSpec(name="local_benchmark_edit", mode="json_schema", json_schema=schema)
 
 
-def _parse_json(text: str) -> dict[str, str]:
+def _parse_json(text: str) -> dict[str, object]:
     try:
         payload = json.loads(text)
     except json.JSONDecodeError as exc:
         raise LocalAgentRunnerError(f"Model returned invalid JSON: {text!r}") from exc
     if not isinstance(payload, dict):
         raise LocalAgentRunnerError(f"Model returned non-object payload: {payload!r}")
-    return {str(key): str(value) for key, value in payload.items()}
+    return {str(key): value for key, value in payload.items()}
 
 
 def _apply_edit(workspace: Path, *, relative_path: str, find: str, replace: str) -> Path:
@@ -371,34 +249,30 @@ def _apply_edit(workspace: Path, *, relative_path: str, find: str, replace: str)
     if not candidate.is_file():
         raise LocalAgentRunnerError(f"Model selected missing file: {relative_path}")
     original = candidate.read_text(encoding="utf-8", errors="replace")
-    updated: str | None = None
     if find in original:
         updated = original.replace(find, replace, 1)
     else:
-        # Benchmark-local model outputs often drift on indentation or truncate a
-        # nearby line. Fall back to replacing the longest exact line match in
-        # the selected file so the agent-run loop can still produce a real diff.
-        original_lines = original.splitlines(keepends=True)
-        find_lines = [line for line in find.replace("\r\n", "\n").replace("\r", "\n").split("\n") if line.strip()]
-        for needle in sorted(find_lines, key=lambda item: len(item.strip()), reverse=True):
-            stripped_needle = needle.strip()
-            if len(stripped_needle) < 12:
-                continue
-            for line in original_lines:
-                if stripped_needle == line.strip():
-                    updated = original.replace(line, replace, 1)
-                    break
-            if updated is not None:
-                break
-    if updated is None:
-        # Final benchmark-local fallback: still materialize a real patch so the
-        # official evaluator can judge the model output instead of the runner
-        # rejecting it on brittle substring matching.
-        updated = original.rstrip("\n") + "\n\n" + replace.rstrip("\n") + "\n"
+        raise LocalAgentRunnerError("Model find text did not appear exactly in the selected file")
     if updated == original:
-        updated = original.rstrip("\n") + "\n\n" + replace.rstrip("\n") + "\n"
+        raise LocalAgentRunnerError("Model edit would not change the selected file")
     write_text(candidate, updated, encoding="utf-8")
     return candidate
+
+
+def _validate_edit_payload(payload: dict[str, object], candidate_paths: list[str], *, policy: LocalRunnerPolicy) -> dict[str, str]:
+    summary = payload.get("summary")
+    path = payload.get("path")
+    find = payload.get("find")
+    replace = payload.get("replace")
+    if not isinstance(summary, str) or not summary.strip() or len(summary) > policy.summary_max_chars:
+        raise LocalAgentRunnerError("Model edit response has invalid summary")
+    if not isinstance(path, str) or path not in candidate_paths:
+        raise LocalAgentRunnerError("Model edit response selected an unlisted path")
+    if not isinstance(find, str) or not find or len(find) > policy.find_max_chars:
+        raise LocalAgentRunnerError("Model edit response has invalid find text")
+    if not isinstance(replace, str) or not replace or len(replace) > policy.replace_max_chars:
+        raise LocalAgentRunnerError("Model edit response has invalid replacement text")
+    return {"summary": summary, "path": path, "find": find, "replace": replace}
 
 
 def _build_solver_prompt(
@@ -419,7 +293,6 @@ def _build_solver_prompt(
         "replace is the exact replacement text that should be written in place of find.",
         "Make exactly one best-effort concrete code edit in one listed file.",
         "Choose the smallest plausible change that addresses the issue.",
-        "Prefer source files over docs or config files unless the issue explicitly targets docs/configuration.",
         "The `find` text must appear exactly as written in the chosen file excerpt.",
         "Do not invent file paths. Do not return explanations outside JSON.",
         "",
@@ -449,12 +322,11 @@ def _solve_with_structured_edit(
     policy: LocalRunnerPolicy | None = None,
 ) -> dict[str, str]:
     effective_policy = policy or _policy_from_config()
-    path_hints, search_terms = _extract_search_terms(prompt)
-    candidate_paths = _candidate_files(
+    candidate_paths = _select_candidate_files(
         workspace,
-        path_hints,
-        search_terms,
-        limit=effective_policy.candidate_file_limit,
+        prompt,
+        client=client,
+        policy=effective_policy,
     )
     if not candidate_paths:
         raise LocalAgentRunnerError("Unable to identify any candidate files in the benchmark workspace")
@@ -463,7 +335,6 @@ def _solve_with_structured_edit(
             relative_path,
             _file_excerpt(
                 workspace / relative_path,
-                search_terms,
                 excerpt_char_limit=effective_policy.file_excerpt_char_limit,
             ),
         )
@@ -485,17 +356,18 @@ def _solve_with_structured_edit(
             failure = f"{exc} Return a shorter valid JSON object that still makes one real file edit."
             continue
         try:
+            validated = _validate_edit_payload(payload, candidate_paths, policy=effective_policy)
             changed_path = _apply_edit(
                 workspace,
-                relative_path=payload["path"],
-                find=payload["find"],
-                replace=payload["replace"],
+                relative_path=validated["path"],
+                find=validated["find"],
+                replace=validated["replace"],
             )
         except LocalAgentRunnerError as exc:
             failure = str(exc)
             continue
-        payload["edited_path"] = str(changed_path.relative_to(workspace))
-        return payload
+        validated["edited_path"] = str(changed_path.relative_to(workspace))
+        return validated
     raise LocalAgentRunnerError(failure or "Structured local benchmark solver did not produce an applicable edit")
 
 
@@ -512,7 +384,10 @@ def main(argv: list[str] | None = None) -> int:
     }
     with _pushd(workspace):
         config = load_config(env=env)
-        client = LlamaCppClient(config)
+        client = build_model_client(
+            config,
+            request_metadata={"cache_scope": "local_benchmark_solver"},
+        )
         policy = _policy_from_agent_generation(config.external_benchmarks.agent_generation)
         try:
             result = _solve_with_structured_edit(workspace, prompt, client=client, policy=policy)

@@ -30,16 +30,19 @@ class PromptBuilder:
         )
         return self._load_template(template_name)
 
-    def render_tool_catalog(self, tools: Iterable[tuple[str, str, dict]], *, prompt_mode: str) -> str:
+    def render_tool_catalog(self, tools: Iterable[tuple], *, prompt_mode: str) -> str:
+        del prompt_mode
         lines: list[str] = []
-        for name, description, schema in tools:
-            if prompt_mode == "lean":
-                properties = sorted((schema.get("properties") or {}).keys())
-                arg_text = ", ".join(properties) if properties else "no arguments"
-                lines.append(f"- {name}: {arg_text}")
-            else:
-                lines.append(f"- {name}: {description}")
-                lines.append(f"  schema={stable_json_dumps(schema)}")
+        for item in tools:
+            name = str(item[0])
+            description = str(item[1])
+            schema = item[2]
+            usage_guidance = str(item[3]) if len(item) > 3 else ""
+            lines.append(f"- {name}")
+            lines.append(f"  description: {description}")
+            lines.append(f"  input_schema: {stable_json_dumps(schema)}")
+            if usage_guidance.strip():
+                lines.append(f"  usage_guidance: {usage_guidance.strip()}")
         return "\n".join(lines)
 
     def render_messages(self, messages: list[Message]) -> str:
@@ -84,7 +87,7 @@ class PromptBuilder:
     def build_decision_prompt(
         self,
         messages: list[Message],
-        tools: Iterable[tuple[str, str, dict]],
+        tools: Iterable[tuple],
         *,
         prompt_mode: str,
         notes_block: str = "",
@@ -94,9 +97,7 @@ class PromptBuilder:
         history_block = self.render_messages(history)
         current_user_block = current_user.content if current_user else ""
         turn_context_block = self.render_messages(turn_context)
-        # Decision-time tool exposure should stay narrow and metadata-first.
-        # Full schemas are reserved for the later tool_input call.
-        tool_catalog = self.render_tool_catalog(tools, prompt_mode="lean")
+        tool_catalog = self.render_tool_catalog(tools, prompt_mode=prompt_mode)
         user_text = self._load_template(self._config.prompts.decision_template)
         user_components = [
             PromptComponent(name="history", category="history", text=f"Conversation history:\n{history_block}\n\n"),
@@ -116,68 +117,38 @@ class PromptBuilder:
         self,
         messages: list[Message],
         *,
-        tool_name: str,
+        tool_spec: tuple,
         prompt_mode: str,
         context_components: list[PromptComponent] | None = None,
     ) -> PromptAssembly:
+        tool_name = str(tool_spec[0])
+        tool_description = str(tool_spec[1])
+        tool_schema = tool_spec[2]
+        usage_guidance = str(tool_spec[3]) if len(tool_spec) > 3 else ""
         history, current_user, turn_context = self.partition_turn(messages)
         history_block = self.render_messages(history)
         current_user_block = current_user.content if current_user else ""
         turn_context_block = self.render_messages(turn_context)
         template = self._load_template("tool_input_user.txt").format(tool_name=tool_name)
-        extra_instruction = ""
-        if tool_name == "shell_command":
-            extra_instruction = (
-                "Return a single non-interactive shell command.\n"
-                "Do not return `bash`, `sh`, `python`, or `python3` by themselves.\n"
-                "The command must perform the current step and print concise stdout evidence.\n"
-                "The command must be directly executable now with no manual substitution.\n"
-                "Do not use placeholders such as `<file>`, `<patch_file>`, `/path/to/...`, `...`, or TODO markers.\n"
-                "When editing code, prefer a concrete `python3 - <<'PY'` script that opens a real repo-relative path and writes the change.\n"
-                "If you use a heredoc, put the script body on following lines and end with `PY` on its own line.\n"
-            )
-        elif tool_name == "run_tests":
-            extra_instruction = (
-                "Return a single non-interactive test command.\n"
-                "Prefer the narrowest relevant test invocation.\n"
-            )
-        elif tool_name == "edit_text":
-            extra_instruction = (
-                "\n"
-                "Return arguments for one concrete source-file edit.\n"
-                "Set `path` to a real file path, never `.` or a directory.\n"
-                "Set `operation` to one of: replace_pattern_once, replace_pattern_all, replace_range, insert_at, delete_range.\n"
-                "For ordinary line replacements, prefer `replace_pattern_once`.\n"
-                "Base `pattern` and `replacement` on the actual source preview in the context, not on the issue text.\n"
-                "For `replace_pattern_once` or `replace_pattern_all`, include both `pattern` and `replacement`.\n"
-                "If one nearby source line can anchor the fix, replace that short anchor and insert the new code around it instead of replacing a large block.\n"
-                "When adding one missing mapping or handler, use one existing nearby entry line as the full `pattern`, and set `replacement` to that same line plus the new adjacent line.\n"
-                "If the preview shows a mapping table or dispatch table, patch that table directly instead of unrelated fallback return code.\n"
-                "Prefer the smallest exact source change that fixes the bug.\n"
-            )
-        elif tool_name == "write_file":
-            extra_instruction = (
-                "\n"
-                "Return arguments for one concrete file write.\n"
-                "Required fields: path (string), content (string), create (boolean).\n"
-                "Set `path` to the exact repo-relative or absolute file path to write.\n"
-                "Set `content` to the complete final file contents — not a diff, not a patch, not a summary.\n"
-                "Set `create` to true only when the file should be created if it does not already exist.\n"
-                "Use write_file only when replacing the entire file is the correct action.\n"
-                "If only a portion of a file needs editing, use edit_text instead.\n"
-            )
         user_components = [
             PromptComponent(name="history", category="history", text=f"Conversation history:\n{history_block}\n\n"),
             PromptComponent(name="current_user_turn", category="current_user", text=f"Current user request:\n{current_user_block}\n\n"),
             PromptComponent(name="current_turn_context", category="turn_context", text=f"Current-turn tool context:\n{turn_context_block}\n\n"),
+            PromptComponent(
+                name="selected_tool_documentation",
+                category="tool_documentation",
+                text=(
+                    f"Selected tool:\n"
+                    f"name: {tool_name}\n"
+                    f"description: {tool_description}\n"
+                    f"input_schema: {stable_json_dumps(tool_schema)}\n"
+                    f"usage_guidance: {usage_guidance.strip() or '(none)'}\n\n"
+                ),
+            ),
         ]
         if context_components:
             user_components.extend(context_components)
         user_components.append(PromptComponent(name="tool_input_instruction", category="instruction", text=template))
-        if extra_instruction:
-            user_components.append(
-                PromptComponent(name="tool_input_tool_specific_instruction", category="instruction", text=extra_instruction)
-            )
         return self._assemble("tool_input", prompt_mode, user_components)
 
     def build_analysis_prompt(
@@ -207,14 +178,26 @@ class PromptBuilder:
         analysis_json: str,
         *,
         prompt_mode: str,
+        tools: Iterable[tuple] = (),
         context_components: list[PromptComponent] | None = None,
+        previous_rejected_decision: str = "",
+        semantic_review_feedback: str = "",
     ) -> PromptAssembly:
+        tool_catalog = self.render_tool_catalog(tools, prompt_mode=prompt_mode)
         user_components = [
             PromptComponent(name="current_user_turn", category="current_user", text=f"Current user request:\n{user_text}\n\n"),
             PromptComponent(name="analysis", category="analysis", text=f"Prompt analysis:\n{analysis_json}\n\n"),
         ]
         if context_components:
             user_components.extend(context_components)
+        if tool_catalog:
+            user_components.append(
+                PromptComponent(
+                    name="tool_descriptions",
+                    category="tool_descriptions",
+                    text=f"Available tools:\n{tool_catalog}\n\n",
+                )
+            )
         user_components.append(
             PromptComponent(
                 name="task_decision_instruction",
@@ -222,7 +205,88 @@ class PromptBuilder:
                 text=self._load_template(self._config.prompts.task_decision_template),
             )
         )
+        if previous_rejected_decision:
+            user_components.append(
+                PromptComponent(
+                    name="previous_rejected_decision",
+                    category="turn_context",
+                    text=f"\nPrevious rejected task decision JSON:\n{previous_rejected_decision}\n",
+                )
+            )
+        if semantic_review_feedback:
+            user_components.append(
+                PromptComponent(
+                    name="task_decision_semantic_review_feedback",
+                    category="instruction",
+                    text=(
+                        "\nTask-decision correction requirements from all previous attempts:\n"
+                        f"{semantic_review_feedback}\n\n"
+                        "Return one corrected decision now. The correction requirements above override the rejected fields. "
+                        "Keep already-valid fields, but change every field named by the accumulated feedback.\n"
+                    ),
+                )
+            )
         return self._assemble("task_decision", prompt_mode, user_components)
+
+    def build_task_decision_semantic_review_prompt(
+        self,
+        *,
+        user_text: str,
+        analysis_json: str,
+        decision_json: str,
+        tools: Iterable[tuple],
+        prompt_mode: str,
+        context_components: list[PromptComponent] | None = None,
+    ) -> PromptAssembly:
+        tool_catalog = self.render_tool_catalog(tools, prompt_mode=prompt_mode)
+        components = [
+            PromptComponent(
+                name="current_user_turn",
+                category="current_user",
+                text=f"Current user request:\n{user_text}\n\n",
+            ),
+            PromptComponent(
+                name="analysis",
+                category="analysis",
+                text=f"Prompt analysis:\n{analysis_json}\n\n",
+            ),
+            PromptComponent(
+                name="candidate_task_decision",
+                category="decision",
+                text=f"Candidate task decision:\n{decision_json}\n\n",
+            ),
+        ]
+        if context_components:
+            components.extend(context_components)
+        components.append(
+            PromptComponent(
+                name="complete_enabled_tool_registry",
+                category="tool_descriptions",
+                text=f"Complete enabled tool registry:\n{tool_catalog or '(none)'}\n\n",
+            )
+        )
+        components.append(
+            PromptComponent(
+                name="task_decision_semantic_review_instruction",
+                category="instruction",
+                text=(
+                    "Audit the candidate decision before runtime acts. Return only the strict review object.\n"
+                    "List every distinct evidence source explicitly required by the user request, such as each named file, URL, "
+                    "artifact, test target, or external state source. Do not merge distinct sources unless the selected tool's "
+                    "published input schema can consume them in one call. A tool with one scalar path can cover only one named file "
+                    "per call; an array field may cover multiple sources in one call.\n"
+                    "minimum_evidence_call_count is the smallest number of calls needed under the candidate execution mode and "
+                    "preferred tool, using only capabilities explicitly present in the complete registry.\n"
+                    "selected_mode_and_tool_can_cover_declared_count is true only when the candidate mode, preferred tool, evidence "
+                    "flag, and declared count can actually cover every listed source.\n"
+                    "decision_matches_request is false when any explicit instruction is dropped. decision_is_internally_consistent "
+                    "is false when the reason, mode, preferred tool, evidence flag, or count disagree. Put actionable correction "
+                    "details in feedback.\n"
+                ),
+            )
+        )
+        return self._assemble("verification", prompt_mode, components)
+
 
     def build_task_expansion_prompt(
         self,
@@ -331,15 +395,13 @@ class PromptBuilder:
         *,
         prompt_mode: str,
         context_components: list[PromptComponent],
-        tools: Iterable[tuple[str, str, dict]],
+        tools: Iterable[tuple],
         replan_reason: str = "",
+        previous_rejected_plan: str = "",
         replan_attempt: int = 0,
         max_replans: int = 0,
     ) -> PromptAssembly:
-        # Planning only needs tool names and argument surfaces, not full JSON
-        # schemas. Keeping this lean avoids wasting context on tool details
-        # before the runtime has selected a concrete tool.
-        tool_catalog = self.render_tool_catalog(tools, prompt_mode="lean")
+        tool_catalog = self.render_tool_catalog(tools, prompt_mode=prompt_mode)
         user_components = [
             PromptComponent(name="planning_goal", category="current_user", text=f"Task goal:\n{goal}\n\n"),
             *context_components,
@@ -351,6 +413,20 @@ class PromptBuilder:
                 else ""
             )
             user_components.append(PromptComponent(name="replan_reason", category="instruction", text=f"Replan reason{attempt_hint}:\n{replan_reason}\n\n"))
+        if previous_rejected_plan:
+            user_components.append(
+                PromptComponent(
+                    name="previous_rejected_plan",
+                    category="turn_context",
+                    text=(
+                        "Previous rejected plan JSON:\n"
+                        f"{previous_rejected_plan}\n\n"
+                        "Correct this model-authored plan rather than regenerating unrelated fields. Apply the smallest "
+                        "change required by the validation evidence. Preserve valid step IDs, tools, dependencies, dataflow, "
+                        "verification checks, and objective criteria unless the reported validation error requires changing them.\n\n"
+                    ),
+                )
+            )
         if tool_catalog:
             user_components.append(PromptComponent(name="tool_descriptions", category="tool_descriptions", text=f"Available tools:\n{tool_catalog}\n\n"))
         user_components.append(
@@ -372,10 +448,13 @@ class PromptBuilder:
         expected_outputs: list[str],
         success_criteria: str,
         assistant_text: str,
-        criteria: list[dict[str, str]],
+        criteria: list[dict[str, object]],
         evidence: dict[str, object],
         prompt_mode: str,
+        allowed_candidate_excerpts: list[str] | None = None,
         context_components: list[PromptComponent] | None = None,
+        previous_rejected_verification: str = "",
+        verification_feedback: str = "",
     ) -> PromptAssembly:
         user_components = [
             PromptComponent(name="verification_step_title", category="current_user", text=f"Step title:\n{step_title}\n\n"),
@@ -405,6 +484,14 @@ class PromptBuilder:
                 category="instruction",
                 text=f"Criteria:\n{stable_json_dumps(criteria)}\n\n",
             ),
+            PromptComponent(
+                name="verification_allowed_candidate_excerpts",
+                category="instruction",
+                text=(
+                    "Allowed candidate excerpts:\n"
+                    f"{stable_json_dumps(allowed_candidate_excerpts or [])}\n\n"
+                ),
+            ),
         ]
         if context_components:
             user_components.extend(context_components)
@@ -415,4 +502,25 @@ class PromptBuilder:
                 text=self._load_template(self._config.prompts.verification_template),
             )
         )
+        if previous_rejected_verification:
+            user_components.append(
+                PromptComponent(
+                    name="previous_rejected_verification",
+                    category="turn_context",
+                    text=f"\nPrevious rejected verification JSON:\n{previous_rejected_verification}\n",
+                )
+            )
+        if verification_feedback:
+            user_components.append(
+                PromptComponent(
+                    name="verification_correction_feedback",
+                    category="instruction",
+                    text=(
+                        "\nVerification protocol correction requirements from all previous attempts:\n"
+                        f"{verification_feedback}\n\n"
+                        "Return one corrected verification object now. Preserve valid judgments, but correct every field "
+                        "named by the accumulated protocol feedback.\n"
+                    ),
+                )
+            )
         return self._assemble("verification", prompt_mode, user_components)

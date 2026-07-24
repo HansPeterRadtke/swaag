@@ -3,16 +3,29 @@ from __future__ import annotations
 import hashlib
 import json
 import os
+import signal
 import shutil
+import time
+from dataclasses import replace
 
 import pytest
 from pathlib import Path
 
 from tests.helpers import FakeModelClient
 
-from swaag.benchmark.benchmark_runner import _build_agent_behavior_model_client, _evaluate_quality, _is_substantive_completion_text, _resolve_live_model_settings, run_benchmarks
+from swaag.benchmark.benchmark_runner import (
+    BenchmarkSeedTimeout,
+    _benchmark_seed_timeout,
+    _build_agent_behavior_model_client,
+    _evaluate_quality,
+    _is_substantive_completion_text,
+    _record_benchmark_timeout_event,
+    _resolve_live_model_settings,
+    run_benchmarks,
+)
 from swaag.benchmark.task_definitions import BenchmarkTaskDefinition, PromptUnderstandingOracle, get_benchmark_tasks, make_benchmark_task
 from swaag.config import load_config
+from swaag.history import HistoryStore
 from swaag.live_runtime_profiles import get_documented_final_live_benchmark_recommendation
 from swaag.testing.llm_record_replay import MissingReplayEntryError
 
@@ -31,6 +44,36 @@ def _full_catalog_cache_key(tasks: list[BenchmarkTaskDefinition]) -> str:
     ]
     raw = json.dumps({"version": 8, "tasks": payload}, sort_keys=True).encode("utf-8")
     return hashlib.sha256(raw).hexdigest()[:16]
+
+
+def test_benchmark_seed_timeout_aborts_wall_clock_overrun() -> None:
+    if not hasattr(signal, "SIGALRM"):
+        pytest.skip("SIGALRM is unavailable on this platform")
+    started = time.monotonic()
+    with pytest.raises(BenchmarkSeedTimeout):
+        with _benchmark_seed_timeout(1):
+            time.sleep(5)
+    assert time.monotonic() - started < 3
+
+
+def test_benchmark_timeout_event_uses_current_history_head(tmp_path: Path) -> None:
+    store = HistoryStore(tmp_path / "sessions", write_projections=False)
+    state = store.create(config_fingerprint="cfg", model_base_url="local")
+    stale_state = replace(state)
+    store.record_event(
+        state,
+        "error",
+        {"operation": "prior_event", "error": "prior", "error_type": "RuntimeError"},
+    )
+
+    runtime = type("Runtime", (), {"history": store})()
+    updated = _record_benchmark_timeout_event(runtime, stale_state, TimeoutError("timed out"))
+
+    events = store.read_history(state.session_id)
+    assert [event.sequence for event in events] == [1, 2, 3]
+    assert events[-1].event_type == "error"
+    assert events[-1].prev_hash == events[-2].hash
+    assert updated.event_count == 3
 
 
 def _valid_full_catalog_report(report_path: Path, tasks: list[BenchmarkTaskDefinition]) -> bool:
@@ -103,7 +146,10 @@ def _run_full_catalog_with_artifact_reuse(output_dir: Path, tasks: list[Benchmar
         "record_if_missing",
         "replay_if_present_record_if_missing",
     }:
-        pytest.skip("no valid full cached benchmark artifact is available; refusing to live-record in cached mode")
+        pytest.fail(
+            "no valid full cached benchmark artifact is available; run the required live/recording benchmark gate "
+            "instead of treating missing benchmark coverage as a skip"
+        )
     _seed_partial_replay_cache(cache_dir)
     report = run_benchmarks(
         output_dir=cache_dir,
@@ -111,7 +157,7 @@ def _run_full_catalog_with_artifact_reuse(output_dir: Path, tasks: list[Benchmar
         agent_behavior_mode="cached",
         model_base_url=os.environ.get("SWAAG_LIVE_BASE_URL", "http://127.0.0.1:14829"),
         model_profile="small_fast",
-        structured_output_mode="post_validate",
+        structured_output_mode="server_schema",
         connect_timeout_seconds=int(os.environ.get("SWAAG_BENCHMARK_CACHED_CONNECT_TIMEOUT_SECONDS", "5")),
         timeout_seconds=int(os.environ.get("SWAAG_BENCHMARK_CACHED_TIMEOUT_SECONDS", "15")),
         progress_poll_seconds=float(os.environ.get("SWAAG_BENCHMARK_CACHED_PROGRESS_POLL_SECONDS", "1.0")),
@@ -143,6 +189,9 @@ def test_benchmark_runner_executes_full_cached_catalog_and_writes_reports(tmp_pa
     assert report["summary"]["total_tasks"] == len(all_tasks)
     assert 0.0 <= report["summary"]["average_task_score_percent"] <= 100.0
     assert report["summary"]["successful_tasks"] + report["summary"]["failed_tasks"] == len(all_tasks)
+    assert report["summary"]["successful_tasks"] == len(all_tasks)
+    assert report["summary"]["failed_tasks"] == 0
+    assert report["summary"]["full_task_success_percent"] == 100.0
     assert report["run_metadata"]["agent_behavior_mode"] == "cached"
     assert report["run_metadata"]["replay_cache_enabled"] is True
     assert 0.0 <= report["aggregate_metrics"]["primary"]["false_positive_rate"] <= 1.0
@@ -186,7 +235,7 @@ def test_benchmark_runner_uses_live_environment_overrides_for_runtime_profile(mo
     monkeypatch.setenv("SWAAG_LIVE_TIMEOUT_SECONDS", "321")
     monkeypatch.setenv("SWAAG_LIVE_CONNECT_TIMEOUT_SECONDS", "11")
     monkeypatch.setenv("SWAAG_LIVE_MODEL_PROFILE", "mid_context")
-    monkeypatch.setenv("SWAAG_LIVE_STRUCTURED_OUTPUT_MODE", "post_validate")
+    monkeypatch.setenv("SWAAG_LIVE_STRUCTURED_OUTPUT_MODE", "server_schema")
     monkeypatch.setenv("SWAAG_LIVE_PROGRESS_POLL_SECONDS", "2.25")
     monkeypatch.setenv("SWAAG_LIVE_SEEDS", "7,13,29")
 
@@ -205,7 +254,7 @@ def test_benchmark_runner_uses_live_environment_overrides_for_runtime_profile(mo
     assert settings["timeout_seconds"] == 321
     assert settings["connect_timeout_seconds"] == 11
     assert settings["model_profile"] == "mid_context"
-    assert settings["structured_output_mode"] == "post_validate"
+    assert settings["structured_output_mode"] == "server_schema"
     assert settings["progress_poll_seconds"] == 2.25
     assert settings["seeds"] == [7, 13, 29]
 
@@ -257,14 +306,14 @@ def test_generated_live_task_defaults_allow_minimal_four_step_agent_flow() -> No
     assert task.config_overrides["runtime_tool_call_budget"] >= 4
 
 
-def test_cached_agent_behavior_is_replay_only_by_default(tmp_path: Path, monkeypatch) -> None:
+def test_cached_agent_behavior_records_missing_entries_by_default(tmp_path: Path, monkeypatch) -> None:
     monkeypatch.delenv("SWAAG_BENCHMARK_CACHED_REPLAY_POLICY", raising=False)
     task = make_benchmark_task(
         task_id="unit_missing_replay",
         task_type="reading",
         difficulty="easy",
         tags=("reading",),
-        description="Replay-only cache behavior check.",
+        description="Record-if-missing cache behavior check.",
     )
     config = load_config()
 
@@ -278,11 +327,9 @@ def test_cached_agent_behavior_is_replay_only_by_default(tmp_path: Path, monkeyp
         live_subset=False,
     )
 
-    assert info["replay_policy"] == "replay_only"
-    assert info["cache_mode"] == "replay"
-    assert client.mode == "replay"
-    with pytest.raises(MissingReplayEntryError):
-        client.send_completion({"prompt": "missing", "n_predict": 1})
+    assert info["replay_policy"] == "record_if_missing"
+    assert info["cache_mode"] == "record"
+    assert client.mode == "record"
 
 
 def test_cached_agent_behavior_can_record_when_explicitly_requested(tmp_path: Path, monkeypatch) -> None:
@@ -335,6 +382,29 @@ def test_default_prompt_understanding_oracle_uses_prompt_schema_vocabulary() -> 
     assert failure is not None and failure.strategy_profile == "generic"
     assert oracle.detected_goals_contains == []
     assert oracle.detected_entities_contains == []
+
+
+def test_vague_clarification_task_requires_grounded_file_reads_and_precise_question(tmp_path: Path) -> None:
+    task = next(item for item in get_benchmark_tasks() if item.task_id == "quality_generated_vague_rollout_risk")
+    scenario = task.create(tmp_path, live_mode=True)
+    contract = scenario.verification_contract
+    oracle = scenario.oracle
+
+    assert contract.expected_answer_contains == ["?", "service", "risk", "success"]
+    assert contract.required_tools_used == ["read_file"]
+    assert contract.required_event_counts == {"tool_called": 2, "filesystem_read": 2}
+    assert contract.min_tool_calls == 2 and contract.max_tool_calls == 2
+    assert oracle is not None
+    assert oracle.task_type == "incomplete"
+    assert oracle.completeness == "incomplete"
+    assert oracle.requires_expansion is False
+    assert oracle.missing_required_information is True
+    assert oracle.evidence_required_before_response is True
+    assert oracle.evidence_call_count == 2
+    assert oracle.strategy_profile == "reading"
+    assert oracle.expand_task is False
+    assert oracle.ask_user is True
+    assert oracle.assume_missing is False
 
 
 def test_quality_oracle_maps_vague_and_decomposed_to_analysis_types() -> None:
@@ -486,8 +556,8 @@ def test_coding_benchmark_tasks_allow_read_edit_verify_plan_room() -> None:
     assert task.config_overrides["planner_max_replans"] >= 2
 
 
-def test_benchmark_false_positive_ignores_failure_sentinel_text() -> None:
-    assert _is_substantive_completion_text("not done") is False
+def test_benchmark_substantive_completion_text_is_structural_only() -> None:
+    assert _is_substantive_completion_text("not done") is True
     assert _is_substantive_completion_text("") is False
     assert _is_substantive_completion_text("Patched the file and verified the test.") is True
 

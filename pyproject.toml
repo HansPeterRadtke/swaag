@@ -35,7 +35,7 @@ semantic-transformers = [
 ]
 official-benchmarks = [
   "swebench>=4,<5",
-  "terminal-bench>=0.2,<0.3"
+  "terminal-bench>=0.2,<0.3; python_version >= '3.12'"
 ]
 publish = [
   "build>=1,<2",
@@ -74,7 +74,7 @@ testpaths = ["tests"]
 filterwarnings = [
   "ignore::requests.exceptions.RequestsDependencyWarning",
   'ignore::DeprecationWarning:google.protobuf.internal.well_known_types',
-  'ignore::sqlalchemy.exc.MovedIn20Warning:terminal_bench.db',
+  'ignore:The ``declarative_base\\(\\)`` function is now available.*:Warning:terminal_bench.db',
 ]
 markers = [
   "code_correctness: deterministic software-correctness tests with no model dependency",

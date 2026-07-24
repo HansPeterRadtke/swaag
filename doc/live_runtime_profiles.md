@@ -1,6 +1,9 @@
 # Live Runtime Profiles
 
-`swaag` runs against the direct local `llama.cpp` server. The profile and output-mode choice is now centralized in `src/swaag/live_runtime_profiles.py`. `finalproof`, the no-cache validation commands, and the validation benchmark subset all read from that same source of truth.
+`swaag` runs against the direct local `llama.cpp` server. The profile and output-mode choice is now centralized in `src/swaag/live_runtime_profiles.py`. `finalproof`, cache-first validation, and explicit `--uncached-live` validation read from that same source of truth.
+
+These profiles are transport settings only. They must not encode benchmark success,
+task-family routing, prompt shortcuts, or semantic recovery behavior.
 
 ## Locally discovered llama.cpp profiles
 
@@ -21,27 +24,27 @@ These are not equivalent. Larger context profiles give more prompt headroom but 
 
 ## Recommended runtime choices
 
-- Fast no-cache validation checks
+- Fast validation checks (cache-first by default; `--uncached-live` for a bypass)
   - profile: `small_fast`
-  - structured mode: `post_validate`
+  - structured mode: `server_schema`
   - fixed seeds: `11,23,37`
   - timeout: `120`
-  - measured no-cache validation checks: `8/8` passed, `0` false positives, `251.77s` total wall clock
-- Final validation benchmark subset
+  - reason: small local context, bounded latency, and generation-time JSON-schema constraints
+- Final validation benchmark catalog
   - profile: `small_fast`
-  - structured mode: `post_validate`
+  - structured mode: `server_schema`
   - fixed seeds: `11,23,37`
   - timeout: `180`
-  - Measured validation subset proof: curated subset passed on the recorded proof run with `0` false positives
-  - reason: the representative validation subset is intentionally bounded to fit the local `2048` context window, so the smaller profile is the measured final-proof path on current hardware
+  - Local transport profile: uses the default `2048` context profile for repeatable live runs
+  - reason: this controls latency, timeout, and schema transport only; it must not add benchmark-specific semantic routing
 - Heavy structured / larger-prompt runs
   - profile: `mid_context`
-  - structured mode: `auto`
+  - structured mode: `server_schema`
   - timeout: `240`
   - use this only when the request no longer fits `small_fast` or when a larger prompt window is worth the latency
 - Slow local hardware fallback
   - profile: `small_fast`
-  - structured mode: `post_validate`
+  - structured mode: `server_schema`
   - timeout: `240`
   - connect timeout: `15`
   - progress poll: `10.0`
@@ -49,29 +52,23 @@ These are not equivalent. Larger context profiles give more prompt headroom but 
 ## Structured output modes
 
 - `server_schema`
-  - strongest direct server constraint
-  - highest latency on weaker hardware
-- `post_validate`
-  - keep generation-time grammar/schema enforcement enabled
-  - validate the returned JSON locally as an additional guard
-  - preferred for the final live proof path on this machine
-- `auto`
-  - reserved for ad hoc human-directed experiments outside the fixed final-proof path
-  - not used by the normal no-cache validation/final-proof loop
+  - required for every live semantic model call
+  - OpenRouter and OpenAI-compatible providers use Chat Completions Structured Outputs
+  - llama.cpp uses its top-level `json_schema` request field
+  - the runtime still validates parsed JSON locally after generation
 
-## Why final proof uses `small_fast` + `post_validate`
+## Why the default uses `small_fast` + `server_schema`
 
-This is the measured final-proof choice on the current machine:
+This is the default transport choice on the current machine:
 
-- the no-cache validation checks complete with a modest local model
-- the representative validation benchmark subset is designed for repeatable no-cache validation runs
-- the subset was designed to stay inside the `small_fast` context envelope
-- `post_validate` keeps generation-time schema enforcement active while adding a second local validation pass
+- local llama.cpp is configured with a modest default context envelope
+- repeatable live runs should not change model profile inside the runtime loop
+- `server_schema` keeps generation-time schema enforcement active for every live semantic call
 
 `finalproof` now exports these settings explicitly:
 
 - `SWAAG_LIVE_MODEL_PROFILE=small_fast`
-- `SWAAG_LIVE_STRUCTURED_OUTPUT_MODE=post_validate`
+- `SWAAG_LIVE_STRUCTURED_OUTPUT_MODE=server_schema`
 - `SWAAG_LIVE_SEEDS=11,23,37`
 - `SWAAG_LIVE_TIMEOUT_SECONDS=180`
 - `SWAAG_LIVE_CONNECT_TIMEOUT_SECONDS=10`
@@ -88,7 +85,7 @@ The runtime no longer treats a long call as a dead call.
 - structured planning / decision calls use the structured timeout
 - verification-heavy calls use the verification timeout
 - benchmark validation runs use the benchmark timeout where appropriate
-- long no-cache validation calls emit `model_request_progress` events during polling
+- long uncached validation calls emit `model_request_progress` events during polling
 
 The benchmark reports include:
 
@@ -97,7 +94,7 @@ The benchmark reports include:
 - slowest task time
 - retry counts
 - timeout failure rate
-- post-validate fallback count
+- unconstrained contract violation count
 - profile / mode used
 
 ## Environment variables
@@ -107,7 +104,7 @@ The benchmark reports include:
 - `SWAAG_LIVE_TIMEOUT_SECONDS=180`
 - `SWAAG_LIVE_CONNECT_TIMEOUT_SECONDS=10`
 - `SWAAG_LIVE_MODEL_PROFILE=small_fast`
-- `SWAAG_LIVE_STRUCTURED_OUTPUT_MODE=post_validate`
+- `SWAAG_LIVE_STRUCTURED_OUTPUT_MODE=server_schema`
 - `SWAAG_LIVE_SEEDS=11,23,37`
 - `SWAAG_LIVE_PROGRESS_POLL_SECONDS=5.0`
 
@@ -118,14 +115,14 @@ The benchmark reports include:
   - runs the smallest deterministic subset based on changed files
 - Final proof loop
   - `python3 -m swaag.finalproof`
-  - runs imports, scaled catalog, runtime verification flow, end-to-end tests, full fast suite, packaging checks, cached agent tests, large benchmark, representative manual-validation subset, and archive proof
+  - runs imports, scaled catalog, runtime verification flow, end-to-end tests, full fast suite, packaging checks, cached agent tests, large benchmark, full manual-validation catalog, and archive proof
 
 ## Practical guidance
 
-- Use `small_fast` for the normal validation suite and the final validation benchmark subset.
+- Use `small_fast` for normal local live runs unless the operator intentionally starts a different server profile.
 - Switch to `mid_context` only when prompt assembly or structured output genuinely needs more room.
 - Reserve `max_context` for ad hoc heavy debugging or unusually large structured calls.
-- Prefer `post_validate` on slower hardware or when strict server-side schema is not worth the latency.
+- Do not downgrade live semantic calls to post-validation-only or unconstrained text output.
 
 ## Model-side concurrency benchmark
 

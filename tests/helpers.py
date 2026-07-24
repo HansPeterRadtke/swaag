@@ -4,11 +4,10 @@ import json
 import re
 from typing import Any
 
-from swaag.expander import expand_task
 from swaag.failure import classify_failure_from_payload
 from swaag.model import CompletionRequestPolicy
 from swaag.strategy import strategy_from_payload
-from swaag.types import CompletionResult, ContractSpec, DecisionOutcome, PromptAnalysis
+from swaag.types import CompletionResult, ContractSpec
 
 
 class FakeModelClient:
@@ -17,6 +16,7 @@ class FakeModelClient:
     def __init__(self, responses: list[Any] | None = None, *, contract_responses: dict[str, list[Any]] | None = None):
         self._responses = list(responses or [])
         self._contract_responses = {key: list(value) for key, value in (contract_responses or {}).items()}
+        self._pending_tool_inputs: dict[str, list[str]] = {}
         self.requests: list[dict[str, Any]] = []
         self.tokenize_requests: list[str] = []
 
@@ -37,8 +37,6 @@ class FakeModelClient:
             "temperature": 0.0 if temperature is None else temperature,
             "contract": contract.name,
         }
-        if contract.grammar:
-            payload["grammar"] = contract.grammar
         if contract.json_schema:
             payload["json_schema"] = contract.json_schema
         return payload
@@ -90,18 +88,28 @@ class FakeModelClient:
         contract_queue = self._contract_responses.get(contract_name)
         if contract_queue:
             response = contract_queue.pop(0)
+        elif contract_name.startswith("tool_input:"):
+            tool_name = contract_name.split(":", 1)[1]
+            pending = self._pending_tool_inputs.get(tool_name, [])
+            if pending:
+                response = pending.pop(0)
+            elif self._contract_responses.get("tool_decision"):
+                response = self._contract_responses["tool_decision"].pop(0)
+            elif self._responses:
+                response = self._responses.pop(0)
         elif contract_name in {
             "prompt_analysis",
             "task_decision",
             "task_expansion",
             "active_session_control",
             "verification",
+            "plan_semantic_verification",
+            "task_decision_semantic_verification",
+            "task_decision_semantic_review",
             "strategy_selection",
             "failure_classification",
             "action_selection",
             "subagent_selection",
-            "generation_decomposition",
-            "overflow_recovery",
         }:
             response = self._auto_frontend_response(payload)
         elif self._responses:
@@ -116,6 +124,38 @@ class FakeModelClient:
             return response
         if not isinstance(response, str):
             raise TypeError(f"Unsupported fake response: {response!r}")
+        if contract_name in {"verification", "plan_semantic_verification", "task_decision_semantic_verification"}:
+            response = _normalize_scripted_verification_response(response, prompt=str(payload.get("prompt", "")))
+        if contract_name == "yes_no":
+            try:
+                parsed = json.loads(response)
+            except json.JSONDecodeError:
+                parsed = None
+            if not isinstance(parsed, dict):
+                response = json.dumps({"answer": response.strip()})
+        if contract_name in {"answer_response", "clarification_response"}:
+            try:
+                parsed = json.loads(response)
+            except json.JSONDecodeError:
+                parsed = None
+            if not isinstance(parsed, dict) or "text" not in parsed:
+                response = json.dumps({"text": response})
+        if contract_name == "tool_decision":
+            try:
+                parsed = json.loads(response)
+            except json.JSONDecodeError:
+                parsed = None
+            if (
+                isinstance(parsed, dict)
+                and parsed.get("action") == "call_tool"
+                and isinstance(parsed.get("tool_name"), str)
+                and isinstance(parsed.get("tool_input"), dict)
+                and parsed["tool_input"]
+            ):
+                tool_name = str(parsed["tool_name"])
+                self._pending_tool_inputs.setdefault(tool_name, []).append(json.dumps(parsed["tool_input"]))
+                parsed["tool_input"] = {}
+                response = json.dumps(parsed)
         if contract_name.startswith("tool_input:"):
             try:
                 parsed = json.loads(response)
@@ -123,13 +163,6 @@ class FakeModelClient:
                 parsed = None
             if isinstance(parsed, dict) and parsed.get("action") == "call_tool" and isinstance(parsed.get("tool_input"), dict):
                 response = json.dumps(parsed["tool_input"])
-        if contract_name == "plain_text" and self._responses:
-            try:
-                parsed = json.loads(response)
-            except json.JSONDecodeError:
-                parsed = None
-            if isinstance(parsed, dict) and parsed.get("action") == "call_tool" and isinstance(parsed.get("tool_input"), dict):
-                response = self._responses.pop(0)
         return CompletionResult(
             text=response,
             raw_request=payload,
@@ -145,76 +178,67 @@ class FakeModelClient:
     def _auto_frontend_response(self, payload: dict[str, Any]) -> str:
         contract_name = str(payload.get("contract", ""))
         prompt = str(payload.get("prompt", ""))
-        current_request = _extract_section(prompt, "Current user request:")
         if contract_name == "prompt_analysis":
-            analysis = _default_prompt_analysis(current_request)
             return json.dumps(
                 {
-                    "task_type": analysis.task_type,
-                    "completeness": analysis.completeness,
-                    "requires_expansion": analysis.requires_expansion,
-                    "requires_decomposition": analysis.requires_decomposition,
-                    "confidence": analysis.confidence,
-                    "detected_entities": analysis.detected_entities,
-                    "detected_goals": analysis.detected_goals,
+                    "task_type": "structured",
+                    "completeness": "complete",
+                    "requires_expansion": False,
+                    "requires_decomposition": False,
+                    "missing_required_information": False,
+                    "confidence": 0.8,
+                    "detected_entities": [],
+                    "detected_goals": [],
                 }
             )
         if contract_name == "task_decision":
-            analysis_payload = json.loads(_extract_section(prompt, "Prompt analysis:"))
-            analysis = _analysis_from_payload(current_request, analysis_payload)
-            analysis.task_type = analysis_payload.get("task_type", analysis.task_type)
-            analysis.completeness = analysis_payload.get("completeness", analysis.completeness)
-            analysis.requires_expansion = bool(analysis_payload.get("requires_expansion", analysis.requires_expansion))
-            analysis.requires_decomposition = bool(analysis_payload.get("requires_decomposition", analysis.requires_decomposition))
-            analysis.confidence = float(analysis_payload.get("confidence", analysis.confidence))
-            analysis.detected_entities = list(analysis_payload.get("detected_entities", analysis.detected_entities))
-            analysis.detected_goals = list(analysis_payload.get("detected_goals", analysis.detected_goals))
-            decision = _decision_from_analysis(analysis)
             return json.dumps(
                 {
-                    "split_task": decision.split_task,
-                    "expand_task": decision.expand_task,
-                    "ask_user": decision.ask_user,
-                    "assume_missing": decision.assume_missing,
-                    "generate_ideas": decision.generate_ideas,
-                    "direct_response": decision.direct_response,
-                    "execution_mode": decision.execution_mode,
-                    "preferred_tool_name": decision.preferred_tool_name,
-                    "confidence": decision.confidence,
-                    "reason": decision.reason,
+                    "split_task": False,
+                    "expand_task": False,
+                    "ask_user": False,
+                    "assume_missing": False,
+                    "generate_ideas": False,
+                    "direct_response": False,
+                    "execution_mode": "full_plan",
+                    "preferred_tool_name": "",
+                    "evidence_required_before_response": False,
+                    "evidence_call_count": 0,
+                    "confidence": 0.8,
+                    "reason": "test scaffold default full-plan decision",
+                }
+            )
+        if contract_name == "task_decision_semantic_review":
+            prompt = str(payload.get("prompt", ""))
+            decision: dict[str, Any] = {}
+            marker = "Candidate task decision:\n"
+            if marker in prompt:
+                candidate_text = prompt.split(marker, 1)[1]
+                try:
+                    decision = json.JSONDecoder().raw_decode(candidate_text.lstrip())[0]
+                except (json.JSONDecodeError, TypeError, ValueError):
+                    decision = {}
+            count = int(decision.get("evidence_call_count", 0) or 0)
+            sources = [f"declared_evidence_source_{index + 1}" for index in range(count)]
+            return json.dumps(
+                {
+                    "decision_matches_request": True,
+                    "decision_is_internally_consistent": True,
+                    "required_evidence_sources": sources,
+                    "minimum_evidence_call_count": count,
+                    "selected_mode_and_tool_can_cover_declared_count": True,
+                    "feedback": "default semantic decision review passed",
                 }
             )
         if contract_name == "task_expansion":
-            analysis_payload = json.loads(_extract_section(prompt, "Prompt analysis:"))
-            decision_payload = json.loads(_extract_section(prompt, "Task decision:"))
-            analysis = _analysis_from_payload(current_request, analysis_payload)
-            analysis.task_type = analysis_payload.get("task_type", analysis.task_type)
-            analysis.completeness = analysis_payload.get("completeness", analysis.completeness)
-            analysis.requires_expansion = bool(analysis_payload.get("requires_expansion", analysis.requires_expansion))
-            analysis.requires_decomposition = bool(analysis_payload.get("requires_decomposition", analysis.requires_decomposition))
-            analysis.confidence = float(analysis_payload.get("confidence", analysis.confidence))
-            analysis.detected_entities = list(analysis_payload.get("detected_entities", analysis.detected_entities))
-            analysis.detected_goals = list(analysis_payload.get("detected_goals", analysis.detected_goals))
-            decision = _decision_from_analysis(analysis)
-            decision.split_task = bool(decision_payload.get("split_task", decision.split_task))
-            decision.expand_task = bool(decision_payload.get("expand_task", decision.expand_task))
-            decision.ask_user = bool(decision_payload.get("ask_user", decision.ask_user))
-            decision.assume_missing = bool(decision_payload.get("assume_missing", decision.assume_missing))
-            decision.generate_ideas = bool(decision_payload.get("generate_ideas", decision.generate_ideas))
-            decision.direct_response = bool(decision_payload.get("direct_response", decision.direct_response))
-            decision.execution_mode = str(decision_payload.get("execution_mode", decision.execution_mode))
-            decision.preferred_tool_name = str(decision_payload.get("preferred_tool_name", decision.preferred_tool_name))
-            decision.confidence = float(decision_payload.get("confidence", decision.confidence))
-            decision.reason = str(decision_payload.get("reason", decision.reason))
-            expanded = expand_task(current_request, analysis, decision)
             return json.dumps(
                 {
-                    "original_goal": expanded.original_goal,
-                    "expanded_goal": expanded.expanded_goal,
-                    "scope": expanded.scope,
-                    "constraints": expanded.constraints,
-                    "expected_outputs": expanded.expected_outputs,
-                    "assumptions": expanded.assumptions,
+                    "original_goal": "test fixture goal",
+                    "expanded_goal": "test fixture goal",
+                    "scope": ["model fixture scope"],
+                    "constraints": ["model fixture constraint"],
+                    "expected_outputs": ["model fixture output"],
+                    "assumptions": [],
                 }
             )
         if contract_name == "active_session_control":
@@ -223,22 +247,24 @@ class FakeModelClient:
                     "action": "continue_with_note",
                     "reason": "default control handling continues current work",
                     "response_text": "",
-                    "added_context": current_request.strip(),
+                    "added_context": "",
                     "replacement_goal": "",
                     "queued_task": "",
                     "clarification_question": "",
                 }
             )
-        if contract_name == "verification":
+        if contract_name in {"verification", "plan_semantic_verification", "task_decision_semantic_verification"}:
             criteria = json.loads(_extract_section(prompt, "Criteria:"))
             candidate = _extract_section(prompt, "Candidate result:")
+            excerpt = _allowed_candidate_excerpt(prompt, candidate)
             return json.dumps(
                 {
                     "criteria": [
                         {
                             "name": criterion["name"] if isinstance(criterion, dict) else criterion,
                             "passed": bool(candidate.strip()),
-                            "evidence": "candidate result is non-empty",
+                            "evidence": "The quoted candidate excerpt provides concrete result evidence.",
+                            "candidate_excerpts": [excerpt] if excerpt else [],
                         }
                         for criterion in criteria
                     ]
@@ -271,44 +297,14 @@ class FakeModelClient:
             classify_failure_from_payload(payload)
             return json.dumps(payload)
         if contract_name == "action_selection":
-            match = re.search(r"Default deterministic choice:\s*([a-z_]+)", prompt)
-            action = match.group(1) if match is not None else "execute_step"
-            return json.dumps({"action": action, "reason": "test scaffold action choice"})
+            return json.dumps({"action": "execute_step", "reason": "test scaffold neutral action choice"})
         if contract_name == "subagent_selection":
-            match = re.search(r"Available subagents:\s*([^\n]+)", prompt)
-            available = []
-            if match is not None:
-                available = [item.strip().rstrip(".") for item in match.group(1).split(",") if item.strip()]
-            chosen = next((item for item in available if item != "none"), "none")
-            spawn = chosen != "none"
             return json.dumps(
                 {
-                    "spawn": spawn,
-                    "subagent_type": chosen,
-                    "reason": "test scaffold subagent choice",
-                    "focus": "use the scoped specialist view",
-                }
-            )
-        if contract_name == "generation_decomposition":
-            return json.dumps(
-                {
-                    "output_class": "open_ended",
-                    "reason": "single answer unit is sufficient for the test scaffold",
-                    "units": [
-                        {
-                            "unit_id": "answer_unit_01",
-                            "title": "Final answer",
-                            "instruction": "Provide the final answer for the user request.",
-                        }
-                    ],
-                }
-            )
-        if contract_name == "overflow_recovery":
-            return json.dumps(
-                {
-                    "keep_partial": True,
-                    "reason": "keep the current partial output",
-                    "next_units": [],
+                    "spawn": False,
+                    "subagent_type": "none",
+                    "reason": "test scaffold neutral subagent choice",
+                    "focus": "",
                 }
             )
         raise AssertionError(f"Unsupported automatic frontend contract: {contract_name}")
@@ -324,55 +320,42 @@ def _extract_section(prompt: str, label: str) -> str:
     return ""
 
 
-def _default_prompt_analysis(current_request: str) -> PromptAnalysis:
-    stripped = current_request.strip()
-    if not stripped:
-        return PromptAnalysis(
-            task_type="incomplete",
-            completeness="incomplete",
-            requires_expansion=False,
-            requires_decomposition=False,
-            confidence=0.8,
-            detected_entities=[],
-            detected_goals=[],
-        )
-    return PromptAnalysis(
-        task_type="structured",
-        completeness="complete",
-        requires_expansion=False,
-        requires_decomposition=False,
-        confidence=0.8,
-        detected_entities=[],
-        detected_goals=[],
-    )
+def _allowed_candidate_excerpt(prompt: str, candidate: str) -> str:
+    label = "Allowed candidate excerpts:"
+    raw_options = _extract_section(prompt, label)
+    if raw_options:
+        try:
+            options = json.loads(raw_options)
+        except json.JSONDecodeError:
+            options = []
+        if isinstance(options, list):
+            for option in options:
+                if isinstance(option, str) and option and option in candidate:
+                    return option
+    return candidate.strip()[:160]
 
 
-def _analysis_from_payload(current_request: str, payload: dict[str, Any]) -> PromptAnalysis:
-    base = _default_prompt_analysis(current_request)
-    return PromptAnalysis(
-        task_type=str(payload.get("task_type", base.task_type)),
-        completeness=str(payload.get("completeness", base.completeness)),
-        requires_expansion=bool(payload.get("requires_expansion", base.requires_expansion)),
-        requires_decomposition=bool(payload.get("requires_decomposition", base.requires_decomposition)),
-        confidence=float(payload.get("confidence", base.confidence)),
-        detected_entities=[str(item) for item in payload.get("detected_entities", base.detected_entities)],
-        detected_goals=[str(item) for item in payload.get("detected_goals", base.detected_goals)],
-    )
+def _normalize_scripted_verification_response(response: str, *, prompt: str) -> str:
+    """Keep scripted semantic decisions valid under the production grounding contract.
 
-
-def _decision_from_analysis(analysis: PromptAnalysis) -> DecisionOutcome:
-    return DecisionOutcome(
-        split_task=analysis.requires_decomposition,
-        expand_task=analysis.requires_expansion,
-        ask_user=analysis.completeness == "incomplete" and analysis.task_type != "vague",
-        assume_missing=analysis.task_type == "vague",
-        generate_ideas=analysis.task_type in {"vague", "unstructured"},
-        confidence=analysis.confidence,
-        reason=f"test_scaffold task_type={analysis.task_type} completeness={analysis.completeness}",
-        direct_response=False,
-        execution_mode="full_plan",
-        preferred_tool_name="",
-    )
+    Fake responses often specify only the semantic decision under test. Production
+    constrained decoding also requires exact candidate excerpts, so fill only that
+    structural field while preserving every scripted pass/fail decision and reason.
+    """
+    try:
+        payload = json.loads(response)
+    except json.JSONDecodeError:
+        return response
+    if not isinstance(payload, dict) or not isinstance(payload.get("criteria"), list):
+        return response
+    candidate = _extract_section(prompt, "Candidate result:").strip()
+    excerpt = _allowed_candidate_excerpt(prompt, candidate)
+    changed = False
+    for item in payload["criteria"]:
+        if isinstance(item, dict) and "candidate_excerpts" not in item:
+            item["candidate_excerpts"] = [excerpt] if excerpt else []
+            changed = True
+    return json.dumps(payload) if changed else response
 
 
 def plan_step(
@@ -388,7 +371,7 @@ def plan_step(
     success_criteria: str,
     input_refs: list[str] | None = None,
     output_refs: list[str] | None = None,
-    fallback_strategy: str = "",
+    fallback_strategy: str = "Use the model-declared fallback for this step.",
     depends_on: list[str] | None = None,
     verification_type: str | None = None,
     verification_checks: list[dict[str, Any]] | None = None,
@@ -417,7 +400,7 @@ def plan_step(
             required_conditions = [item["name"] for item in verification_checks]
             optional_conditions = []
         else:
-            verification_type = "llm_fallback"
+            verification_type = "composite"
             verification_checks = [
                 {"name": "dependencies_completed", "check_type": "dependencies_completed"},
                 {
@@ -425,13 +408,23 @@ def plan_step(
                     "check_type": "string_nonempty",
                     "actual_source": "assistant_text",
                 },
-                {"name": "meets_success_criteria", "check_type": "criterion", "criterion": success_criteria},
-                {"name": "satisfies_done_condition", "check_type": "criterion", "criterion": done_condition},
+                {
+                    "name": "meets_success_criteria",
+                    "check_type": "criterion",
+                    "actual_source": "assistant_text",
+                    "criterion": success_criteria,
+                },
+                {
+                    "name": "satisfies_done_condition",
+                    "check_type": "criterion",
+                    "actual_source": "assistant_text",
+                    "criterion": done_condition,
+                },
             ]
             required_conditions = [item["name"] for item in verification_checks]
             optional_conditions = []
     if verification_type is None:
-        verification_type = "composite" if kind in {"tool", "read", "write", "note"} else "llm_fallback"
+        verification_type = "composite"
     if verification_checks is None:
         verification_checks = []
     if required_conditions is None:

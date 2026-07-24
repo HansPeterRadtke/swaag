@@ -73,9 +73,9 @@ def test_external_benchmark_defaults_cover_all_required_integrations() -> None:
     assert config.external_benchmarks.agent_generation.find_max_chars == 800
     assert config.external_benchmarks.agent_generation.replace_max_chars == 1600
     assert config.external_benchmarks.agent_generation.git_remote_base_url == "https://github.com"
-    assert "local SWE-bench benchmark instance" in config.external_benchmarks.agent_generation.prompt_template
-    assert "read -> edit -> verify -> respond" in config.external_benchmarks.agent_generation.prompt_template
-    assert "best-effort concrete code change" in config.external_benchmarks.agent_generation.empty_patch_retry_prompt
+    assert "Task details:" in config.external_benchmarks.agent_generation.prompt_template
+    assert "read -> edit -> verify -> respond" not in config.external_benchmarks.agent_generation.prompt_template
+    assert "concrete file change" in config.external_benchmarks.agent_generation.empty_patch_retry_prompt
 
 
 def test_repo_local_benchmark_fixtures_exist_for_bounded_proof() -> None:

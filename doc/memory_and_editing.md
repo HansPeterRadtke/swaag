@@ -12,15 +12,18 @@ It currently tracks:
 It is updated through `working_memory_updated` events and rebuilt from history.
 It is never authoritative.
 
-## Semantic and procedural memory
+## Event Memory
 
-Semantic memory stores trusted or derived facts extracted from history.
-Procedural memory stores plan-strategy summaries.
+The current memory layer stores raw, bounded event snapshots from history.
+It does not extract facts, entities, semantic relationships, procedural
+summaries, or strategy recipes in Python.
 
 Current promotion rules:
-- trusted calculator and time results may be promoted
-- plan events may produce derived procedural memory
-- untrusted tool outputs such as file reads are not promoted when `security.block_untrusted_semantic = true`
+- event snapshots retain trust metadata
+- untrusted tool outputs such as file reads are not promoted when
+  `security.block_untrusted_semantic = true`
+- retrieval is recency/mechanics-first unless an explicit model scorer is
+  available
 
 Relevant retrieval is explicit and recorded with `memory_retrieved`.
 

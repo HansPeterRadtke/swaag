@@ -75,10 +75,10 @@ def test_irrelevant_skills_are_not_fully_loaded(make_config, _semantic_skill_bac
 
     assert "Coding Patch" in bundle.skill_instructions_text
     assert "Browser Research" not in bundle.skill_instructions_text
-    assert "browser_search" not in bundle.exposed_tool_names
+    assert "browser_search" in bundle.exposed_tool_names
 
 
-def test_selected_skill_narrows_tool_disclosure_and_reduces_prompt_size(make_config, _semantic_skill_backend) -> None:
+def test_selected_skill_does_not_narrow_tool_disclosure(make_config, _semantic_skill_backend) -> None:
     config = make_config(retrieval__backend="llm_scoring")
     state = _state()
     tools = [
@@ -99,11 +99,12 @@ def test_selected_skill_narrows_tool_disclosure_and_reduces_prompt_size(make_con
     builder = PromptBuilder(config)
 
     full_catalog = builder.render_tool_catalog(tools, prompt_mode="standard")
-    narrowed_catalog = builder.render_tool_catalog(bundle.tool_prompt_tuples, prompt_mode="standard")
+    exposed_catalog = builder.render_tool_catalog(bundle.tool_prompt_tuples, prompt_mode="standard")
 
-    assert len(narrowed_catalog) < len(full_catalog)
+    assert exposed_catalog == full_catalog
     assert {"read_text", "edit_text", "run_tests"}.issubset(set(bundle.exposed_tool_names))
-    assert "browser_search" not in bundle.exposed_tool_names
+    assert "browser_search" in bundle.exposed_tool_names
+    assert "browser_browse" in bundle.exposed_tool_names
 
 
 def test_skill_selection_is_not_just_trigger_term_count(make_config, _semantic_skill_backend) -> None:
@@ -144,7 +145,6 @@ def test_skill_selection_uses_metadata_not_full_instructions(make_config, _seman
             title="Coding Patch",
             selection_blurb="Repair code and verify the behavior with deterministic checks.",
             full_instructions="Normal coding workflow.",
-            allowed_tools=["edit_text", "run_tests"],
             expected_outputs=["code change"],
             verifier_hints=["tests pass"],
         ),
@@ -153,7 +153,6 @@ def test_skill_selection_uses_metadata_not_full_instructions(make_config, _seman
             title="Hidden Workflow",
             selection_blurb="Investigate websites and gather external evidence.",
             full_instructions="Use the secret unicorn-repair workflow for parser failures.",
-            allowed_tools=["browser_search"],
             expected_outputs=["web findings"],
             verifier_hints=["browser only"],
         ),
@@ -174,4 +173,3 @@ def test_skill_selection_uses_metadata_not_full_instructions(make_config, _seman
     )
 
     assert [skill.skill_id for skill in selection.selected_skills] == ["coding_patch"]
-    assert "browser_search" not in selection.selected_tool_names

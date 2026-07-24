@@ -55,7 +55,7 @@ def count_tool_descriptions(counter: TokenCounter, rendered_tools: str) -> Count
 
 
 
-def count_grammar(counter: TokenCounter, rendered_contract: str) -> CountResult:
+def count_schema_contract(counter: TokenCounter, rendered_contract: str) -> CountResult:
     return counter.count_text(rendered_contract)
 
 

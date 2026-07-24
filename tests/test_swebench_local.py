@@ -58,7 +58,7 @@ def test_git_raises_immediately_for_non_transient_failure(monkeypatch: pytest.Mo
 
 def test_render_prompt_includes_fail_to_pass_test_names() -> None:
     config = load_config()
-    assert "\"task_kind\":\"local_repo_code_fix\"" in config.external_benchmarks.agent_generation.prompt_template
+    assert "\"task_kind\":\"local_repo_code_fix\"" not in config.external_benchmarks.agent_generation.prompt_template
     prompt = swebench_local._render_prompt(
         {
             "repo": "demo/repo",
@@ -72,7 +72,7 @@ def test_render_prompt_includes_fail_to_pass_test_names() -> None:
     )
 
     assert "tests/test_demo.py::test_fix" in prompt
-    assert "\"task_kind\":\"local_repo_code_fix\"" in prompt
+    assert "\"task_kind\":\"local_repo_code_fix\"" not in prompt
     assert "{{" not in prompt
 
 
@@ -86,7 +86,7 @@ def test_render_prompt_truncates_problem_and_hints_to_policy_budget() -> None:
             "FAIL_TO_PASS": '["tests/test_demo.py::test_fix"]',
             "hints_text": "H" * 1000,
         },
-        "Problem statement:\n{problem_statement}\nKnown failing tests:\n{fail_to_pass_tests}\nHints:\n{hints_text}\n",
+        "Task details:\n{problem_statement}\nAdditional verification context:\n{fail_to_pass_tests}\nHints:\n{hints_text}\n",
         config=config,
     )
 
@@ -94,7 +94,7 @@ def test_render_prompt_truncates_problem_and_hints_to_policy_budget() -> None:
     assert len(prompt) < 1800
 
 
-def test_empty_patch_retry_prompt_preserves_task_contract_and_failing_tests() -> None:
+def test_empty_patch_retry_prompt_preserves_task_data_without_contract_injection() -> None:
     config = load_config()
     prompt = swebench_local._render_empty_patch_retry_prompt(
         {
@@ -108,7 +108,7 @@ def test_empty_patch_retry_prompt_preserves_task_contract_and_failing_tests() ->
         config=config,
     )
 
-    assert "\"task_kind\":\"local_repo_code_fix\"" in prompt
+    assert "\"task_kind\":\"local_repo_code_fix\"" not in prompt
     assert "tests/test_demo.py::test_fix" in prompt
     assert "Check parser.py" in prompt
 

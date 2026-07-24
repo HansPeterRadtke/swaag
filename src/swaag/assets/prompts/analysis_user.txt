@@ -7,6 +7,7 @@ Required fields:
 - completeness: one of complete, partial, incomplete
 - requires_expansion: boolean
 - requires_decomposition: boolean
+- missing_required_information: boolean
 - confidence: number between 0 and 1
 - detected_entities: array of short strings
 - detected_goals: array of short strings
@@ -14,3 +15,7 @@ Required fields:
 Rules:
 - detected_entities must be short atomic items such as filenames, tool names, numbers, or symbols
 - detected_goals must be short paraphrases, not copied long quotes from the user request
+- task_type and completeness describe the user's instruction itself; missing_required_information independently records whether downstream facts or artifacts are absent
+- use task_type=vague only when the goal is broad but can be expanded safely without inventing missing required facts
+- requires_expansion describes whether the instruction needs model-authored expansion; do not infer it solely from missing_required_information
+- set missing_required_information=true whenever required downstream facts are absent, even when the user's instruction is otherwise clear, structured, unstructured, partial, or complete

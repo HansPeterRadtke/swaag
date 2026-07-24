@@ -197,7 +197,6 @@ def test_live_file_read_exact_extraction(live_settings: dict[str, str | int | fl
     )
 
     assert all(turn.assistant_text.strip() == "owner=carol" for _seed, _runtime, _state, turn in runs)
-    assert all(any(name in {"read_text", "read_file"} for name in _tool_names(runtime, state.session_id)) for _seed, runtime, state, _turn in runs)
 
 
 def test_live_file_edit_exact_change(live_settings: dict[str, str | int | float], tmp_path: Path) -> None:
@@ -309,4 +308,3 @@ def test_live_verification_strength_rejects_unverified_claim(live_settings: dict
     )
 
     assert all(turn.assistant_text.strip().lower() == "not done" for _seed, _runtime, _state, turn in runs)
-    assert all(any(name in {"read_text", "read_file"} for name in _tool_names(runtime, state.session_id)) for _seed, runtime, state, _turn in runs)

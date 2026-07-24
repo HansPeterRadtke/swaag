@@ -78,6 +78,9 @@ class PromptUnderstandingOracle:
     ask_user: bool | None = None
     assume_missing: bool | None = None
     generate_ideas: bool | None = None
+    missing_required_information: bool | None = None
+    evidence_required_before_response: bool | None = None
+    evidence_call_count: int | None = None
     strategy_profile: str | None = None
     detected_goals_contains: list[str] = field(default_factory=list)
     detected_entities_contains: list[str] = field(default_factory=list)
@@ -147,25 +150,26 @@ def _default_oracle(
     if task_type not in {"reading", "quality", "multi_step", "failure"}:
         return None
     tag_set = set(tags)
-    requires_expansion = "vague" in tag_set
     asks_for_clarification = bool({"clarification", "incomplete", "ambiguity"} & tag_set)
+    requires_expansion = "vague" in tag_set and not asks_for_clarification
     expected_prompt_type = "structured"
-    if "vague" in tag_set:
-        expected_prompt_type = "vague"
-    elif {"clarification", "incomplete", "ambiguity"} & tag_set:
+    if asks_for_clarification:
         expected_prompt_type = "incomplete"
+    elif "vague" in tag_set:
+        expected_prompt_type = "vague"
     elif "decomposition" in tag_set or "decomposed" in tag_set:
         expected_prompt_type = "already_decomposed"
     return PromptUnderstandingOracle(
         task_type=expected_prompt_type,
         completeness="incomplete" if expected_prompt_type == "incomplete" else "complete",
         requires_expansion=requires_expansion,
-        requires_decomposition=task_type in {"multi_step", "failure"} or difficulty in {"hard", "extremely_hard"},
+        requires_decomposition=task_type in {"multi_step", "failure"},
         expand_task=requires_expansion,
-        split_task=task_type in {"multi_step", "failure"} or difficulty in {"hard", "extremely_hard"},
+        split_task=task_type in {"multi_step", "failure"},
         ask_user=asks_for_clarification,
         assume_missing=False if asks_for_clarification or "hallucination-guard" in tag_set else None,
         generate_ideas=False if task_type in {"quality", "failure"} else None,
+        missing_required_information=True if asks_for_clarification else None,
         strategy_profile={
             "coding": "coding",
             "file_edit": "file_edit",
@@ -2290,13 +2294,13 @@ def _build_quality_scenario(
             "Read `request.txt` and `context.txt`, then ask the single most useful clarifying question before acting. "
             "Do not pretend the task is already fully specified."
         )
-        fragments = ["?", "which", "release"]
+        fragments = ["?", "service", "risk", "success"]
     elif "incomplete" in tag_set or "clarification" in tag_set:
         _write(workspace / "request.txt", "User request: update the file before the review.\n")
         _write(workspace / "ticket.md", "The reviewer cares about the exact file path and the exact textual change.\n")
         prompt = "Read `request.txt` and `ticket.md`. Ask for the missing file path and desired change instead of claiming success."
         fragments = ["file", "change", "?"]
-    elif "debug_reading" in tag_set:
+    elif "debug_reading" in tag_set or "debug-reading" in tag_set:
         _write(
             workspace / "debug.log",
             (
@@ -2313,6 +2317,16 @@ def _build_quality_scenario(
             "Read `request.txt` and `project_note.txt`. The task is already decomposed into steps; preserve that structure and answer with a short numbered plan instead of collapsing it."
         )
         fragments = ["1.", "2.", "3."]
+    oracle = _default_oracle(task_id=task_id, task_type="quality", difficulty=difficulty, tags=tags)
+    if oracle is not None and "vague" in set(tags):
+        oracle.task_type = "incomplete"
+        oracle.completeness = "incomplete"
+        oracle.requires_expansion = False
+        oracle.missing_required_information = True
+        oracle.evidence_required_before_response = True
+        oracle.evidence_call_count = 2
+        oracle.strategy_profile = "reading"
+
     return TaskScenario(
         prompt=prompt,
         workspace=workspace,
@@ -2320,12 +2334,15 @@ def _build_quality_scenario(
         verification_contract=BenchmarkVerificationContract(
             task_type="quality",
             expected_answer_contains=fragments,
-            required_history_events=["reasoning_completed"],
+            required_history_events=["reasoning_completed", "filesystem_read"],
+            required_event_counts={"tool_called": 2, "filesystem_read": 2},
+            required_tools_used=["read_file"],
+            min_tool_calls=2,
             max_tool_calls=2,
-            forbidden_tools_used=["write_file", "edit_text", "run_tests"],
+            forbidden_tools_used=["write_file", "edit_text", "run_tests", "shell_command"],
             forbid_unexpected_workspace_changes=True,
         ),
-        oracle=_default_oracle(task_id=task_id, task_type="quality", difficulty=difficulty, tags=tags),
+        oracle=oracle,
     )
 
 
@@ -2378,7 +2395,7 @@ _BASE_TASK_SPECS: tuple[tuple[str, BenchmarkTaskType, BenchmarkDifficulty, tuple
     ("failure_wrong_tool_usage", "failure", "hard", ("failure", "tooling", "false-positive-killer"), "Fail safely when the model selects the wrong tool."),
     ("failure_bad_planning", "failure", "hard", ("failure", "planning", "false-positive-killer"), "Fail safely when the planner returns an invalid plan."),
     ("failure_repeated_action_trap", "failure", "extremely_hard", ("failure", "loop", "repeated-action", "false-positive-killer"), "Detect repeated tool-helper behavior and stop instead of looping forever."),
-    ("quality_vague_expansion", "quality", "extremely_easy", ("quality", "vague", "prompt-understanding"), "Expand a vague prompt before execution instead of pretending it is already well-defined."),
+    ("quality_vague_expansion", "quality", "extremely_easy", ("quality", "vague", "clarification", "prompt-understanding"), "Expand a vague prompt before execution instead of pretending it is already well-defined."),
     ("quality_already_decomposed_prompt", "quality", "normal", ("quality", "decomposition", "prompt-understanding"), "Preserve an already-decomposed task instead of expanding or collapsing it incorrectly."),
     ("quality_incomplete_clarification", "quality", "extremely_easy", ("quality", "clarification", "false-positive-killer", "prompt-understanding"), "Request clarification instead of claiming success on an incomplete task."),
 )

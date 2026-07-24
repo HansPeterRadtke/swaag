@@ -10,9 +10,12 @@
 - `swaag.prompts`
   - deterministic prompt assembly from explicit components
 - `swaag.grammar`
-  - plain, GBNF, and JSON-schema contract specs
+  - portable JSON-schema contract factories for constrained generation
+- `swaag.schema_portability`
+  - portable schema validation for production generation contracts
 - `swaag.model`
-  - direct llama.cpp client for `/health`, `/tokenize`, and `/completion`
+  - llama.cpp and OpenAI-compatible transport adapters with generation-time
+    JSON-schema constrained decoding
 - `swaag.events`
   - strict event factory, allowed event types, required payload keys, hash generation
 - `swaag.history`
@@ -24,25 +27,25 @@
 - `swaag.planner`
   - model-driven task planning, strict validation, and plan-step transitions
 - `swaag.prompt_analyzer`
-  - prompt classification and completeness analysis
+  - model-returned prompt-analysis contract parsing and validation
 - `swaag.decision`
-  - explicit execution decisions derived from prompt analysis
+  - model-returned task-decision contract parsing and validation
 - `swaag.expander`
-  - deterministic task expansion for vague or incomplete goals
+  - model-returned task-expansion contract parsing and validation
 - `swaag.strategy`
-  - strategy selection for exploration, assumption validation, and fallback behavior
+  - model-returned strategy settings without fixed workflow constraints
 - `swaag.working_memory`
   - derived short-term task state
 - `swaag.memory_semantic`
-  - semantic and procedural memory extraction and retrieval
+  - raw event snapshot storage and recency retrieval
 - `swaag.project_state`
   - derived multi-file project-state model
 - `swaag.context_builder`
-  - deterministic context compiler with scoring, ranking, and selection traces
+  - deterministic context compiler plus optional model-scored retrieval traces
 - `swaag.evaluator`
   - explicit step-result evaluation
 - `swaag.security`
-  - trust classification and semantic-memory promotion policy
+  - trust metadata and raw event-memory promotion policy
 - `swaag.compression`
   - history-summary decisions and summary payload helpers
 - `swaag.notes`
@@ -61,7 +64,7 @@
 - `swaag.runtime`
   - bounded hierarchical runtime orchestration
   - background-process polling, waiting, and resume handling
-  - active-session control-plane classification/application
+  - active-session control-plane model decisions and mechanical application
   - deferred task queue handling
   - code checkpoint create/restore
 - `swaag.subsystems`
@@ -77,27 +80,131 @@
 - replay from `complete_history.jsonl` alone rebuilds state
 - runtime model calls go through explicit budget checks
 - tool execution is bounded and isolated from the live in-memory session object
+- every semantic decision is produced by the model and then mechanically
+  parsed, validated, executed, recorded, and verified
+- every live model call is constrained at generation time with a strict closed
+  JSON-schema contract; semantic text returns `{"text": string}` and is unwrapped
+  only after validation
+- OpenRouter and OpenAI-compatible providers use Chat Completions Structured
+  Outputs; llama.cpp uses top-level `json_schema`
+- every generation schema must pass the portable-schema validator
+- deterministic code must not infer intent, classify prompts, select semantic
+  file roles, install fixed workflows, choose recovery approaches, or generate
+  final semantic content
+- planning, tool-choice, recovery, and semantic delegation prompts receive the
+  complete enabled tool registry, including registered names, descriptions,
+  full input schemas, and usage guidance
+- planning, tool-choice, tool-input, recovery, and response prompts receive
+  relevant observed evidence from prior history and tool results within the
+  context budget; deterministic code may budget and mark trust boundaries, but
+  must not reduce needed file text, command output, verifier evidence, or tool
+  errors to metadata-only summaries
+- recovery prompts and selected-tool argument prompts mechanically expose
+  recent failed tool/verification evidence and latest observed file snapshots
+  when available. If a failed source snippet, range, pattern, or other target is
+  stale against the current artifact, Python reports the evidence and enforces
+  execution validation; the model chooses the repair, reread, clarification, or
+  blocker.
+- task-decision `execution_mode=single_tool` never creates a deterministic
+  direct-tool plan; it is planner context only, and objective verification must
+  come from the model-returned plan
+- schema-valid but locally invalid planner output is retried by the model with
+  validation evidence; Python does not repair plan semantics or verification
+  conditions, and the bounded repair loop is generous enough for multiple
+  distinct structural corrections before failing closed
+- generated plans use `verification_type="composite"` for every step; semantic
+  answer or reasoning verification still requires at least one model-declared
+  `criterion` check in `required_conditions`, unless the model declares a
+  required exact/string match against `assistant_text`; optional-only criteria
+  are rejected because they cannot make semantic answer verification fail closed
+- plan condition normalization is allowed only for structural bookkeeping:
+  dependency artifact names already declared in `input_refs` may map to the
+  generic `dependencies_completed` check, an explicit `dependencies_completed`
+  condition may add that generic structural check object, and empty required
+  lists are rejected with model-visible validation evidence. Python must not
+  invent task-specific checks, expected content, tools, condition importance,
+  or success criteria.
+- plan `input_text` is model-authored instruction context, not executable tool
+  arguments; selected-tool arguments are generated only by the later
+  constrained tool-input call
+- tool identity is exact. If a plan step declares `expected_tool`, the runtime
+  must reject any different registered tool name and return mismatch evidence
+  to the model; Python must not define equivalence tables or special cases for
+  apparently similar tools.
+- verification may expose the latest tool result under the current step's
+  model-declared `expected_output`, `expected_outputs`, and `output_refs`
+  labels; this is structural aliasing only, not content synthesis
+- tools may register required objective verification check types. Runtime plan
+  review requires the model plan to both declare and require a matching check;
+  missing, optional-only, or inconsistent checks are rejected with validation
+  evidence. Python does not promote optional checks, rewrite condition
+  importance, or invent the expected path, text, command, or criterion.
+- `edit_text` prefers portable `replace_exact` edits over raw offsets when the
+  model has observed the current text: `old_text` must match exactly once,
+  `new_text` is applied atomically, and zero or multiple matches fail closed.
+  `replace_range` remains a low-level operation protected by `expected_text`.
+- file-mutating tools require a constrained semantic result review after the
+  mechanical objective checks pass. The model receives the declared step goal,
+  success criteria, deterministic verification evidence, tool output, diff, and
+  current file text, then decides under the `verification` JSON-schema contract
+  whether `result_satisfies_step` is true. Python only enforces the gate,
+  records rejection evidence, and retries or replans.
+- required semantic review fails closed when its backend is unavailable,
+  degraded, or violates the structured schema contract. Only an exact literal
+  assistant-text match declared by the model can be checked without semantic
+  scoring; non-literal relevance requires a constrained model verdict.
+- final response completion requires a constrained model-owned
+  `final_objective_satisfied` verdict over the original request, candidate
+  answer, active plan, recent observations, and current workspace evidence.
+  Failure is fed back through normal verification/replanning rather than
+  reported as success from a narrowed later plan.
+- if an earlier step-level objective check failed but the current workspace
+  evidence may already satisfy the original request, the model may replan to
+  observe the current state and answer. Runtime may mechanically record
+  `unresolved_objective_verification_deferred`, but the final response still
+  cannot complete without the model-owned `final_objective_satisfied` proof.
+- unresolved artifact placeholders in actual side-effect tool arguments are
+  rejected as malformed executable data; Python does not substitute semantic
+  content for them
+- skills add instructions and metadata only; they must not hide, remove, or
+  preselect tools
+- the runtime must keep working through actions, observations, history,
+  recovery, and verification until verified success, explicit clarification, or
+  a genuine blocker/watchdog stop; a reasoning phase ending is not completion
+- unresolved watchdog or safety exits return a mechanical incomplete status
+  instead of a semantic final answer
+- benchmark success is not architectural success; see
+  `doc/model_semantic_authority.md`
 
 ## Runtime flow
 
 1. rebuild or create session
 2. record the incoming user message
-3. analyze the prompt and create an explicit execution decision
-4. expand the task if needed and select a strategy
+3. ask the model for prompt analysis and task decision contracts
+4. ask the model for task expansion if the model requested expansion, then ask
+   the model for strategy settings
 5. create or resume an explicit plan
 6. update working memory and project state
-7. build context from selected recent history, semantic memory, plan, strategy, notes, and active entities
+7. build context from selected recent history, raw memory snapshots, plan,
+   strategy, notes, and active entities
 8. run a bounded subsystem-driven reasoning loop
 9. on each step:
    - poll tracked background jobs and resolve any newly completed steps
    - select the responsible subsystem
    - build prompt and budget report
-   - call model when needed
-   - evaluate the result against the machine-checkable done condition
-   - replan or recover on failure, inconsistency, or drift
+   - call model when needed through constrained JSON-schema contracts
+   - for tool work, ask the model to select the tool from the complete enabled
+     registry, then ask the model for selected-tool arguments with that tool's
+     registered documentation and schema
+  - evaluate the result against the machine-checkable done condition
+  - for registered file-mutation tools, run constrained semantic result review
+    before the step can complete
+  - replan or recover on failure, inconsistency, or drift
    - if only background work remains, enter explicit waiting instead of faking completion
-   - if control messages are queued, classify and apply them between model calls
-10. record final answer and turn completion
+   - if control messages are queued, ask the model for the control action and
+     mechanically apply the selected state transition
+10. record a verified final answer, or record a transparent incomplete status
+    when a safety bound stops unresolved work
 
 ## Evaluation architecture
 
@@ -106,14 +213,16 @@ Evaluation exposes two user-facing test categories:
 - `code_correctness`: deterministic software-correctness checks.
 - `agent_test`: cached agent behavior checks.
 
-Uncached real-model execution is manual validation / real usage, not a test
-category. The category evaluator writes separate JSON and markdown reports for
+Manual validation / real usage is not a test category. It is cache-first by
+default; explicit uncached execution requires `--uncached-live`. The category evaluator writes separate JSON and markdown reports for
 `code_correctness`, `agent_test`, and the combined fail-fast result. The
 correctness category is binary; the agent category reports real benchmark
 quality directly instead of a pytest wrapper status.
 
+Model-output caching is a runtime invariant, not just a test fixture. All semantic subsystems share the same constrained model client. The cache hash includes the complete output-affecting request payload plus model/server identity and caller scope: prompt or messages, strict JSON Schema, seed, temperature and other supplied sampling controls, token limit, stop sequences, endpoint, profile, and model fingerprint. Cache writes are atomic and process-safe, and identical concurrent misses are deduplicated. An offline replay may reuse a recorded model fingerprint only when all non-probed identity fields match exactly.
+
 The authoritative cached benchmark catalog behind `agent_test` is full-catalog
-and record-replay backed. It currently contains 50 realistic tasks across six
+and record-replay backed. It currently contains 59 realistic tasks across six
 families (`coding`, `file_edit`, `reading`, `multi_step`, `failure`, `quality`)
 and all five difficulty tiers, with intentionally asymmetric tier counts so the
 hardest tiers can carry richer scenarios instead of symmetrical filler. Verifiers are
@@ -149,10 +258,8 @@ Manual validation keeps the five difficulty tiers for real-model task scoring:
 
 - episodic memory
   - the canonical append-only history file
-- semantic memory
-  - trusted or derived facts extracted from events
-- procedural memory
-  - strategy-like summaries extracted from plans
+- event memory
+  - raw, bounded event snapshots retained for context and audit
 - working memory
   - current goal, current step, recent results, active entities
   - always derived from history; never authoritative
@@ -214,7 +321,7 @@ Resolution rules:
 Active-session control is separate from the normal work plane:
 
 - control messages are persisted to the session inbox immediately
-- classification uses a dedicated structured control prompt
+- action selection uses a dedicated structured control prompt
 - the current task keeps running unless the control action is explicitly stop,
   cancel, replace, or conflicting enough to require clarification
 - deferred follow-up work is stored as explicit session tasks instead of being
@@ -228,16 +335,18 @@ Generic retrieval is not enough for questions like:
 - what path was written
 - where a file was copied
 
-`HistoryStore.query_history_details(...)` provides a dedicated path for these
-questions:
+`HistoryStore.query_history_details(...)` provides a mechanical path for these
+queries:
 
 - it resolves the target session explicitly
 - scans canonical history as the source of truth
-- ranks matches from full original event payloads, not just previews
+- ranks matches from full original event payloads using configured lexical
+  detail-query weights
 - returns event payloads that the CLI can expose directly
 
-Scoring constants (`token_score`, `exact_score`, `type_bonus`, `preview_chars`) are
-config-backed via `[selection_policy]` and overridable per-deployment.
+This exact-detail query is an inspection utility over persisted machine events.
+It is not used to infer user intent, select strategy, choose tools, or answer
+semantic task questions.
 
 ## Config system
 
@@ -283,26 +392,43 @@ Plan steps are the unit of artifact expectation. `build_project_state` derives:
 - `pending_artifacts` — expected artifacts from steps still pending or running
 - `completed_artifacts` — expected artifacts from successfully completed steps
 
+Artifact labels are bookkeeping and context for the LLM. They are not a runtime
+substitution language. If model output puts an unresolved placeholder such as
+`{{artifact_name}}` where concrete executable input is required, validation
+rejects it and recovery returns to the model.
+
 This state appears in the context bundle's `project_state` component and is
 visible to the LLM during decision and answer calls. `_should_force_not_done_answer`
 uses plan step statuses (the authoritative source) to block premature finalization
 when non-respond steps are still pending, running, or failed.
 
-## Retrieval structural weights
+## Retrieval Boundaries
 
-Structural weights in `[selection_policy]` control the shortlisting bias before
-the LLM ranker applies semantic relevance scores:
+Retrieval shortlisting may use mechanical source-quality signals and bounded
+text excerpts, then optional model scoring provides semantic relevance. Offline
+`unavailable` mode returns neutral scores; it does not fall back to keyword,
+regex, TF-IDF, filename, or language-specific scoring.
+
+If the model-scored retrieval backend violates its structured relevance schema
+after bounded attempts, the runtime records `semantic_retrieval_degraded` and
+rebuilds context with `unavailable` retrieval. This is a mechanical continuity
+fallback, not a semantic scoring replacement.
+
+Structural weights in `[selection_policy]` control source-quality bias before
+the model ranker applies semantic relevance scores:
+
 
 - `retrieval_structural_tool_message` — advantage for tool-result messages (high signal)
 - `retrieval_structural_user_message` — mild advantage for user messages
 - `retrieval_structural_failed_event` — advantage for failure/error events
 - `retrieval_structural_summary_event` — advantage for plan/summary events
 - `retrieval_structural_modified_file` — advantage for recently modified files
-- `retrieval_structural_procedural_memory` — advantage for procedural memory items
-- `retrieval_trust_untrusted_memory` — trust discount for untrusted semantic items
+- `retrieval_structural_procedural_memory` — legacy weight for stored event-memory items
+- `retrieval_trust_untrusted_memory` — legacy trust discount for stored event-memory items
 
-All weights are zero-to-one and additive with the LLM's semantic score. They exist
-to give the shortlister a signal about source quality without replacing the ranker.
+All weights are zero-to-one and additive with the model's semantic score. They
+exist to give the shortlister a source-quality signal without replacing the
+model ranker.
 
 
 ## Test Categories
@@ -312,4 +438,4 @@ SWAAG exposes exactly two authoritative test categories:
 - `code_correctness`: deterministic mechanical checks with no model-server dependency.
 - `agent_test`: cached agent behavior checks using real model responses through the record/replay cache.
 
-Uncached real-model execution is manual validation / real usage. It is not a test category and is launched explicitly with `python3 -m swaag.benchmark manual-validation ...`.
+Manual validation / real usage is not a test category. `python3 -m swaag.benchmark manual-validation ...` replays exact cache hits and records misses by default; `--uncached-live` explicitly bypasses that cache.

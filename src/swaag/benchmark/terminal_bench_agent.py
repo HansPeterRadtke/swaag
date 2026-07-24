@@ -25,7 +25,9 @@ except ModuleNotFoundError as _tb_err:
 
     # Minimal placeholders so this module can be imported without terminal_bench.
     class BaseAgent:  # type: ignore[no-redef]
-        pass
+        @staticmethod
+        def _render_instruction(instruction: str) -> str:
+            return instruction
 
     class AgentResult:  # type: ignore[no-redef]
         def __init__(
@@ -63,6 +65,10 @@ class RealAgentTerminalBenchAgent(BaseAgent):
     @staticmethod
     def name() -> str:
         return "swaag-real-agent"
+
+    @staticmethod
+    def _render_instruction(instruction: str) -> str:
+        return instruction
 
     @staticmethod
     def _repo_root() -> Path:
@@ -155,7 +161,6 @@ class RealAgentTerminalBenchAgent(BaseAgent):
         return bundle_root
 
     def perform_task(self, instruction: str, session, logging_dir: Path | None = None) -> AgentResult:
-        _require_terminal_bench()
         bundle_root = self._build_bundle(instruction)
         try:
             session.copy_to_container(bundle_root, container_dir="/opt")

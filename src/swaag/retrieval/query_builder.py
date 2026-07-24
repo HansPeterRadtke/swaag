@@ -2,7 +2,6 @@ from __future__ import annotations
 
 from dataclasses import dataclass, field
 
-from swaag.retrieval.embeddings import semantic_terms
 from swaag.types import SessionState
 
 
@@ -30,20 +29,6 @@ def build_retrieval_intent(
     environment_summary: str,
     guidance_summary: str,
 ) -> RetrievalIntent:
-    dependency_terms: list[str] = []
-    if state.active_plan is not None and state.active_plan.current_step_id:
-        current_step = next((item for item in state.active_plan.steps if item.step_id == state.active_plan.current_step_id), None)
-        if current_step is not None:
-            dependency_terms.extend(semantic_terms(" ".join(current_step.input_refs)))
-            for dependency_id in current_step.depends_on:
-                dependency_step = next((item for item in state.active_plan.steps if item.step_id == dependency_id), None)
-                if dependency_step is None:
-                    continue
-                dependency_terms.extend(
-                    semantic_terms(
-                        f"{dependency_step.title} {dependency_step.goal} {dependency_step.expected_tool or ''} {' '.join(dependency_step.output_refs)}"
-                    )
-                )
     unresolved_failures: list[str] = []
     recent_messages = state.messages[-6:]
     for message in recent_messages:
@@ -70,6 +55,6 @@ def build_retrieval_intent(
         guidance_summary=guidance_summary,
         role_name=state.active_role,
         purpose=purpose,
-        dependency_terms=dependency_terms,
-        terms=semantic_terms(query_text),
+        dependency_terms=[],
+        terms=[],
     )

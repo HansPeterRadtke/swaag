@@ -6,11 +6,11 @@ Each user turn is handled as:
 
 1. `message_added` for the user input
 2. `turn_started`
-3. `prompt_analyzed`
-4. `decision_made`
-5. optional `task_expanded`
-6. `strategy_selected`
-7. `plan_created` or `plan_updated`
+3. `prompt_analyzed` from a model contract
+4. `decision_made` from a model contract
+5. optional model-returned `task_expanded`
+6. model-returned `strategy_selected`
+7. model-returned `plan_created` or `plan_updated`
 8. `working_memory_updated`
 9. optional `project_state_updated`
 10. `reasoning_started`
@@ -23,8 +23,9 @@ Each user turn is handled as:
 If a session is already active, new user input first enters the control plane:
 
 - the message is queued immediately
-- semantic classification waits until the current model call finishes
-- deterministic state transitions then decide whether to:
+- model control-action selection waits until the current model call finishes
+- deterministic state transitions then mechanically apply the model-selected
+  action to:
   - answer a status/session-summary query
   - add a non-destructive note or constraint
   - queue a deferred follow-up task
@@ -32,8 +33,9 @@ If a session is already active, new user input first enters the control plane:
   - replace the current task
   - ask for clarification if the control intent is ambiguous
 
-The default is conservative: side questions, progress questions, added
-constraints, and clarifications do not stop the current task.
+The control contract may choose to preserve or change the current task.
+Deterministic code records and applies that selected action; it does not infer
+control intent from wording.
 
 ## Reasoning steps
 
@@ -52,12 +54,48 @@ For each reasoning step:
   - tool subsystem
   - file subsystem
 - build context, build a budget report, and call the model only through the guarded runtime path
+- if model-scored retrieval violates its structured contract, record
+  `semantic_retrieval_degraded` and rebuild the context with neutral
+  `unavailable` retrieval instead of applying keyword or filename relevance
+- include relevant observations from prior tool results and generated events in
+  later planning, tool-choice, tool-input, recovery, and response prompts within
+  the configured context budget. Read-file text, command output, verifier
+  evidence, and tool errors are semantic evidence for the model; they must not
+  be replaced by metadata-only summaries when the next model decision depends
+  on their content.
+- on recovery after failed or incomplete mutations, expose recent failed tool
+  inputs, validation errors, verification evidence, and latest observed file
+  snapshots as mechanical evidence. If current observations show that an older
+  source snippet, range, pattern, or path state is stale, the runtime may reject
+  repeated invalid execution and ask the model to continue; it must not infer
+  the repair or downgrade the exact requested final state.
+- include the complete enabled tool registry, with registered names,
+  descriptions, full input schemas, and usage guidance, in every semantic call
+  that can select, preselect, rank, constrain, or delegate tool-capable work,
+  including task decision, planning, direct/tool routing, replanning, recovery,
+  and subagent selection.
 - for tool/file work:
   - record `tool_chain_started`
+  - ask the model to choose the tool from the complete enabled registry
+  - ask the model for the selected tool's arguments using that tool's registered
+    description, complete input schema, and usage guidance
+  - reject a non-tool action or a tool that does not match the
+    model-authored step's `expected_tool`, record the rejection as
+    model-visible execution evidence, and continue within watchdog bounds so
+    the model can choose a valid next action. Matching is by exact registered
+    tool name; the runtime does not treat tools as interchangeable.
+  - detect exact repeated structured actions within the current step using the
+    tool name, closed input object, response field, step id, and expected-tool
+    binding; this guard ignores mutable edit/note counters so an identical
+    side-effect write cannot loop merely because it changed history state
   - run one or more tool calls in an isolated copied session context
   - validate outputs
   - record generated events such as reads, notes, previews, edits, and writes
 - evaluate the result with `evaluation_performed` / `evaluation_failed`
+- before accepting a response step as final success, run constrained
+  model-owned final objective verification against the original request,
+  candidate answer, active plan, recent observations, and current workspace
+  evidence
 - if a tool starts explicit background work:
   - bind the process id to the running step
   - leave that step `running`
@@ -96,7 +134,7 @@ replay can explain why the runtime was blocked.
 
 Active-session control uses a dedicated structured control contract.
 
-- semantic classification is LLM-based
+- control action selection is model-based
 - legality and state transitions are deterministic
 - `continue_with_note` records a note without stopping the current task
 - `queue_after_current` appends a deferred task to session state
@@ -110,21 +148,148 @@ latest session and expects normal user input.
 ## Stop conditions
 
 The reasoning loop stops when one of these happens:
-- the active response step returns a direct response
+- the active response step returns a response, that response verifies, and
+  final objective verification accepts the whole requested result
 - background work is still running and the loop is in an explicit wait cycle
 - `runtime.max_tool_steps` is reached inside a tool or file subsystem
-- `runtime.max_reasoning_steps` is reached
-- the same structured decision repeats too often
-- evaluation fails and replanning is exhausted
+- `runtime.max_reasoning_steps` is reached as a watchdog
+- the same model-returned structured decision repeats too often without state
+  progress
+- evaluation fails and replanning/retry bounds are exhausted
 - consistency or drift recovery fails to restore a valid state
-- a decision call fails or returns malformed output, then the runtime falls back to a final answer call
+- a decision call fails or returns malformed output and the runtime reaches a
+  fatal structured-call error or a transparent incomplete state
 - a budget failure prevents further decision calls
 
-## Fallback behavior
+## Fallback Behavior
 
-The runtime does not spin indefinitely.
-When the reasoning loop stops without a final answer from a response step, it performs one final plain-text answer call.
-If that final call itself cannot fit the budget, the runtime raises `BudgetExceededError`.
+The runtime does not spin indefinitely, but safety bounds are not success
+conditions. If the loop stops without a verified response step, SWAAG returns a
+mechanical incomplete-status message that names the stop reason and states that
+verified success was not reached. It does not perform a fresh semantic answer
+call for unresolved work, because that can convert failed execution into a
+normal-looking final answer.
+
+Semantic final answers are generated only as response/reasoning steps and must
+pass their step verification plus whole-goal final objective verification before
+they are exposed as completion.
+
+`execution_mode=single_tool` from task decision is not a stop condition and not
+a direct execution shortcut. It only adds planner context; the planner model
+must still return an explicit plan with objective verification checks.
+
+Planner validation failures are retryable semantic failures until the bounded
+planner repair budget is exhausted. If the planner returns schema-valid JSON
+that fails local plan validation, the runtime records `plan_validation` evidence
+and asks the planner model for a corrected plan under the same closed schema.
+Python must not repair the plan, fill missing required conditions, choose
+verification checks, or rewrite semantic steps. The retry bound is a generous
+deadlock guard; distinct contract-shape corrections must not be cut off merely
+because planning has taken wall-clock time.
+For semantic response or reasoning verification, the model must declare and
+require at least one `criterion` check under composite verification, unless it
+declares a required exact/string match against `assistant_text`. Optional-only
+criteria are rejected during planning so the runtime does not execute a
+semantic answer step that cannot fail closed.
+When a required semantic reviewer backend is unavailable, degraded, or returns
+output that violates its constrained schema, verification fails and the evidence
+returns to the loop for model-owned recovery. Exact literal assistant-text
+matches declared by the model are the only reviewer path that can pass without
+semantic scoring.
+
+The only condition normalization allowed here is structural. A dependency
+artifact listed in `input_refs` may be treated as the generic
+`dependencies_completed` condition, an explicit `dependencies_completed`
+condition may add that generic structural check object, and an empty
+`required_conditions` list is rejected so the model can correct it. This does
+not create task-specific verification content; it only connects the
+model-declared graph and checks without changing condition importance.
+
+Planner `input_text` is instruction context, not an executable argument object.
+A model may name dependencies through `input_refs`/`output_refs`, and may refer
+to placeholder-looking labels in step instructions. The later selected-tool
+input call is the only place actual tool arguments are generated. Side-effect
+tool inputs must contain concrete values; if the model returns
+`{{artifact_name}}` as an actual side-effect argument value, the runtime records
+validation evidence and lets the model replan or retry. Python does not
+resolve semantic placeholders or treat them as content.
+
+Visible editor backup files are disabled by default. File mutation tools record
+original text, diffs, and write provenance in history; they must not create
+surprise workspace files unless an explicit operator policy enables backups.
+substitute the artifact content.
+Plan dependency edges are model-authored and mechanically validated. A
+`depends_on` entry must name an earlier step that the current step actually
+needs; self-dependencies and cycles are rejected and returned to the planner as
+validation evidence.
+For verification only, the latest tool result is also available through the
+current step's model-declared `expected_output`, `expected_outputs`, and
+`output_refs` labels. This lets the model's `artifact_present` checks reference
+its own labels without Python choosing the label meaning.
+Some tools register objective verification check types that must appear in
+`required_conditions`. For example, a file-mutating tool can require the model
+to declare a resulting-file check. The model must both declare and require that
+check. If the check is missing, optional-only, or inconsistent with
+`required_conditions`, plan review rejects the plan and returns structured
+validation evidence to the planner. Python enforces the presence and type of
+the check but does not promote optional checks, rewrite condition importance,
+or choose the expected content.
+`required_conditions` and `optional_conditions` are lists of check names from
+the same step, not output labels. For mutating tools, `file_exists`,
+`tool_files_changed`, `artifact_present`, and `tool_output_nonempty` do not
+substitute for a registered objective check such as `file_contains` or
+`command_success`.
+File-content verification reads the declared target text from `pattern`,
+`expected`, or `expected_json`. Planner/tool guidance tells the model to use
+targets precise enough to reject partial or corrupt edits. Empty containment
+targets fail mechanically.
+For observed text edits, the selected-tool argument call should use
+`edit_text` operation `replace_exact`: the model supplies `old_text` and
+`new_text`, the editor requires exactly one literal match, dry-run previews
+report objective match evidence, and zero or multiple matches are explicit
+errors. `replace_range` remains available only as a guarded low-level operation
+with `expected_text`.
+For edit execution, an absent replacement pattern is also a mechanical failure,
+not an "already applied" success inferred from replacement text appearing
+elsewhere in the file. The tool error includes current file text so the model
+can choose the recovery edit.
+After a registered file-mutating tool passes those mechanical checks, runtime
+must still run constrained semantic result review before completing the step.
+The review prompt includes the model-declared goal and criteria, deterministic
+verification evidence, the tool result and diff, and the current file text. A
+failed `result_satisfies_step` verdict is recorded as a model-visible
+observation and the loop retries or replans under the normal recovery policy.
+This prevents broad substring checks from becoming deterministic semantic
+success while keeping the actual semantic judgment with the model.
+
+After the final response text is generated and step verification passes, runtime
+asks the verifier model for a `final_objective_satisfied` verdict through the
+same portable `verification` contract. The evidence is assembled mechanically:
+original request, candidate answer, active plan, recent tool/verification
+events, and current workspace state. If the verdict is false, the response step
+fails and normal recovery/replanning continues while budgets allow.
+When a previous step-level objective check remains unresolved, a recovery plan
+does not have to repeat the mutation if the model decides current observations
+already satisfy the request. Runtime may defer that unresolved proof to the
+mandatory final objective verifier and records
+`unresolved_objective_verification_deferred`; a final answer still fails closed
+unless `final_objective_satisfied` passes.
+
+A response returned during a plan step that requires a tool is not a successful
+answer and does not complete the step. Likewise, a tool choice that conflicts
+with the model-authored `expected_tool` is not executed. The runtime records a
+`tool_mismatch_rejected` event with the selected action/tool and expected tool,
+then lets the model choose again under the existing repeated-action and
+tool-step watchdogs. This enforces the model-authored plan without Python
+selecting a recovery tool or inventing answer content.
+
+The repeated-action guard is mechanical. It compares exact structured actions,
+not intent. If a preview has already failed and the model repeats the same
+side-effect action for the same step, the subsystem hands off to normal step
+verification instead of executing the same mutation until the tool-step
+watchdog expires. Different model-authored arguments are still allowed as
+legitimate iterative refinement, and any failed verification is returned to the
+model for recovery or replanning.
 
 ## Recorded reasoning events
 
@@ -140,6 +305,8 @@ The loop records:
 - `subsystem_progress`
 - `subsystem_completed`
 - `tool_chain_started`
+- `decision_parsed`
+- `tool_input_parsed`
 - `tool_chain_step`
 - `tool_chain_completed`
 - `process_started`
@@ -158,6 +325,7 @@ The loop records:
 - `working_memory_updated`
 - `project_state_updated`
 - `context_built`
+- `semantic_retrieval_degraded`
 - `reasoning_started`
 - `step_executed`
 - `step_completed`
@@ -170,7 +338,9 @@ The loop records:
 - `consistency_checked`
 - `consistency_failed`
 - `reasoning_completed`
-- `error` when malformed model output or other runtime failures force fallback
+- `error` when non-semantic runtime failures force fallback
+- `fatal_system_error` when a core constrained semantic model call violates its
+  enforced JSON-schema contract
 
 ## What is bounded
 

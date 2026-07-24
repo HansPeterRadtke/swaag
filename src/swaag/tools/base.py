@@ -33,13 +33,15 @@ class Tool(abc.ABC):
     description: str
     input_schema: dict[str, Any]
     output_schema: dict[str, Any] | None = None
+    usage_guidance: str = ""
     kind: ToolKind = "pure"
     requires_artifacts: tuple[str, ...] = ()
     provides_artifacts: tuple[str, ...] = ()
-    allowed_followers: tuple[str, ...] = ()
+    objective_verification_check_types: tuple[str, ...] = ()
+    semantic_result_review_required: bool = False
 
-    def prompt_tuple(self) -> tuple[str, str, dict[str, Any]]:
-        return self.name, self.description, self.input_schema
+    def prompt_tuple(self) -> tuple[str, str, dict[str, Any], str]:
+        return self.name, self.description, self.input_schema, self.usage_guidance
 
     def effective_kind(self, validated_input: dict[str, Any]) -> ToolKind:
         return self.kind
@@ -54,6 +56,17 @@ class Tool(abc.ABC):
         if self.output_schema is None:
             return
         _validate_schema_value(output, self.output_schema, path=f"{self.name}.output")
+
+    def verify_effect(
+        self,
+        result: ToolExecutionResult,
+        environment: "AgentEnvironment",
+    ) -> tuple[bool, dict[str, Any]]:
+        del environment
+        return False, {
+            "tool_name": result.tool_name,
+            "reason": "tool_effect_verification_not_supported",
+        }
 
     @abc.abstractmethod
     def validate(self, raw_input: dict[str, Any]) -> dict[str, Any]:

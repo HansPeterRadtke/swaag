@@ -13,6 +13,19 @@ def test_replace_range_and_insert_delete() -> None:
     assert TextEditor.delete_range("abcdef", 2, 4).new_text == "abef"
 
 
+def test_replace_exact_requires_one_literal_match() -> None:
+    preview = TextEditor.replace_exact("status: draft\n", "status: draft", "status: ready")
+
+    assert preview.new_text == "status: ready\n"
+    assert preview.details["match_count"] == 1
+    assert preview.details["precondition"] == "exactly_one_old_text_match"
+
+    with pytest.raises(EditError, match="match_count=0"):
+        TextEditor.replace_exact("status: ready\n", "status: draft", "status: ready")
+    with pytest.raises(EditError, match="match_count=2"):
+        TextEditor.replace_exact("status: draft\nstatus: draft\n", "status: draft", "status: ready")
+
+
 def test_replace_pattern_once_rejects_ambiguous_match() -> None:
     with pytest.raises(EditError):
         TextEditor.replace_pattern_once("abc abc", "abc", "x")
@@ -37,15 +50,13 @@ def test_preview_file_roundtrip(tmp_path: Path) -> None:
     assert file_path.read_text(encoding="utf-8") == "hello"
 
 
-def test_replace_pattern_once_is_idempotent_when_replacement_is_already_present() -> None:
-    preview = TextEditor.replace_pattern_once(
-        "def describe():\n    return total()\n",
-        "return total() + 1",
-        "return total()",
-    )
-
-    assert preview.changed is False
-    assert preview.details["already_applied"] is True
+def test_replace_pattern_once_fails_closed_when_only_replacement_is_present() -> None:
+    with pytest.raises(EditError, match="pattern not found"):
+        TextEditor.replace_pattern_once(
+            "def describe():\n    return total()\n",
+            "return total() + 1",
+            "return total()",
+        )
 
 
 def test_replace_pattern_once_matches_block_ignoring_indentation() -> None:

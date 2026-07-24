@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from dataclasses import dataclass, field
+from typing import Any
 
 from swaag.budgeting import compute_call_budget, compute_section_budgets
 from swaag.config import AgentConfig
@@ -44,7 +45,7 @@ class ContextBundle:
     skill_instructions_text: str
     selected_skill_ids: list[str]
     exposed_tool_names: list[str]
-    tool_prompt_tuples: list[tuple[str, str, dict]]
+    tool_prompt_tuples: list[tuple]
     retrieval_mode: str
     retrieval_degraded: bool
     recent_results_text: str
@@ -187,7 +188,8 @@ def build_context(
     call_kind: str = "decision",
     for_planning: bool = False,
     history_events: list[HistoryEvent] | None = None,
-    available_tools: list[tuple[str, str, dict]] | None = None,
+    available_tools: list[tuple] | None = None,
+    model_client: Any | None = None,
 ) -> ContextBundle:
     working_memory = build_working_memory(state)
     # Use the caller-provided counter so selection traces and intermediate
@@ -287,6 +289,7 @@ def build_context(
             seed=config.model.seed,
             connect_timeout_seconds=config.model.connect_timeout_seconds,
             read_timeout_seconds=config.model.simple_timeout_seconds,
+            model_client=model_client,
         )
         guidance_text = guidance_bundle.merged_text
         guidance_sources = [item.source for item in guidance_bundle.items]
@@ -312,7 +315,7 @@ def build_context(
         retrieval_degraded = False
         retrieval_trace: list[ContextTraceItem] = []
     else:
-        retriever = HybridRetriever(config)
+        retriever = HybridRetriever(config, model_client=model_client)
         retrieval = retriever.retrieve(
             state,
             counter=selection_counter,
@@ -345,12 +348,11 @@ def build_context(
             ),
         ]
     )
-    enabled_tool_names = [name for name, _, _ in (available_tools or [])]
+    enabled_tool_names = [str(item[0]) for item in (available_tools or [])]
     if call_kind in _MINIMAL_FRONTEND_KINDS | _LIGHT_CONTEXT_KINDS or not enabled_tool_names:
         skill_selection = SkillSelection(
             selected_skills=[],
             metadata_skills=[],
-            selected_tool_names=[],
             trace=[],
         )
     else:
@@ -365,12 +367,12 @@ def build_context(
             max_full_instructions=dynamic_full_skills,
             max_metadata_items=dynamic_metadata_skills,
             backend_mode=config.retrieval.backend,
-            nondiscriminative_delta=config.selection_policy.skill_nondiscriminative_delta,
             base_url=config.model.base_url,
             seed=config.model.seed,
             connect_timeout_seconds=config.model.connect_timeout_seconds,
             read_timeout_seconds=config.model.simple_timeout_seconds,
             max_text_chars=config.selection_policy.retrieval_scoring_text_chars,
+            model_client=model_client,
         )
     recent_results = working_memory.recent_results[-dynamic_recent_results:]
     recent_results_text = "\n".join(f"- {item}" for item in recent_results)
@@ -384,9 +386,6 @@ def build_context(
     skill_metadata_text = render_skill_metadata(skill_selection.metadata_skills)
     skill_instructions_text = render_skill_instructions(skill_selection.selected_skills)
     tool_prompt_tuples = list(available_tools or [])
-    if skill_selection.selected_tool_names:
-        allowed = set(skill_selection.selected_tool_names)
-        tool_prompt_tuples = [item for item in tool_prompt_tuples if item[0] in allowed]
     working_memory_text = (
         f"Active goal: {working_memory.active_goal}\n"
         f"Current step: {working_memory.current_step_title or '(none)'}\n"
@@ -412,7 +411,7 @@ def build_context(
         skill_metadata_text=skill_metadata_text,
         skill_instructions_text=skill_instructions_text,
         selected_skill_ids=[item.skill_id for item in skill_selection.selected_skills],
-        exposed_tool_names=[name for name, _, _ in tool_prompt_tuples],
+        exposed_tool_names=[str(item[0]) for item in tool_prompt_tuples],
         tool_prompt_tuples=tool_prompt_tuples,
         retrieval_mode=retrieval_mode,
         retrieval_degraded=retrieval_degraded,
@@ -438,19 +437,19 @@ def build_context(
     )
     component_priorities = config.context_policy.component_priorities
     component_specs = [
-        (float(component_priorities["working_memory"]), "always_on", PromptComponent(name="working_memory", category="working_memory", text=bundle.working_memory_text + "\n\n" if bundle.working_memory_text else "")),
-        (float(component_priorities["plan"]), "always_on", PromptComponent(name="plan", category="plan", text=f"Active plan:\n{bundle.plan_text}\n\n" if bundle.plan_text else "")),
-        (float(component_priorities["strategy"]), "always_on", PromptComponent(name="strategy", category="strategy", text=f"Execution strategy:\n{bundle.strategy_text}\n\n" if bundle.strategy_text else "")),
-        (float(component_priorities["guidance"]), "llm_relevance", PromptComponent(name="guidance", category="guidance", text=f"Active guidance:\n{bundle.guidance_text}\n\n" if bundle.guidance_text else "")),
-        (float(component_priorities["environment"]), "environment_state", PromptComponent(name="environment", category="environment", text=f"Environment state:\n{bundle.environment_text}\n\n" if bundle.environment_text else "")),
-        (float(component_priorities["environment_files"]), "retrieval_selected", PromptComponent(name="environment_files", category="environment_files", text=f"Relevant workspace files:\n{bundle.relevant_files_text}\n\n" if bundle.relevant_files_text else "")),
-        (float(component_priorities["semantic_memory"]), "retrieval_selected", PromptComponent(name="semantic_memory", category="semantic_memory", text=f"Relevant memory:\n{_render_memory_text(bundle.semantic_items)}\n\n" if bundle.semantic_items else "")),
-        (float(component_priorities["skills"]), "skill_selected", PromptComponent(name="skills", category="skills", text=f"Selected skill instructions:\n{bundle.skill_instructions_text}\n\n" if bundle.skill_instructions_text else "")),
-        (float(component_priorities["project_state"]), "project_context", PromptComponent(name="project_state", category="project_state", text=f"Project state:\n{bundle.project_state_text}\n\n" if bundle.project_state_text else "")),
-        (float(component_priorities["skill_metadata"]), "skill_metadata", PromptComponent(name="skill_metadata", category="skills", text=f"Relevant skill metadata:\n{bundle.skill_metadata_text}\n\n" if bundle.skill_metadata_text else "")),
-        (float(component_priorities["recent_results"]), "recent_progress", PromptComponent(name="recent_results", category="recent_results", text=f"Recent results:\n{bundle.recent_results_text}\n\n" if bundle.recent_results_text else "")),
-        (float(component_priorities["active_entities"]), "entity_context", PromptComponent(name="active_entities", category="active_entities", text=f"Active entities:\n{bundle.active_entities_text}\n\n" if bundle.active_entities_text else "")),
-        (float(component_priorities["notes"]), "selected_notes", PromptComponent(name="notes", category="notes", text=f"Working notes:\n{bundle.notes_text}\n\n" if bundle.notes_text else "")),
+        (float(component_priorities["working_memory"]), "always_on", PromptComponent(name="working_memory", category="working_memory", text=bundle.working_memory_text + "\n\n" if bundle.working_memory_text else "", optional=True)),
+        (float(component_priorities["plan"]), "always_on", PromptComponent(name="plan", category="plan", text=f"Active plan:\n{bundle.plan_text}\n\n" if bundle.plan_text else "", optional=True)),
+        (float(component_priorities["strategy"]), "always_on", PromptComponent(name="strategy", category="strategy", text=f"Execution strategy:\n{bundle.strategy_text}\n\n" if bundle.strategy_text else "", optional=True)),
+        (float(component_priorities["guidance"]), "llm_relevance", PromptComponent(name="guidance", category="guidance", text=f"Active guidance:\n{bundle.guidance_text}\n\n" if bundle.guidance_text else "", optional=True)),
+        (float(component_priorities["environment"]), "environment_state", PromptComponent(name="environment", category="environment", text=f"Environment state:\n{bundle.environment_text}\n\n" if bundle.environment_text else "", optional=True)),
+        (float(component_priorities["environment_files"]), "retrieval_selected", PromptComponent(name="environment_files", category="environment_files", text=f"Relevant workspace files:\n{bundle.relevant_files_text}\n\n" if bundle.relevant_files_text else "", optional=True)),
+        (float(component_priorities["semantic_memory"]), "retrieval_selected", PromptComponent(name="semantic_memory", category="semantic_memory", text=f"Relevant memory:\n{_render_memory_text(bundle.semantic_items)}\n\n" if bundle.semantic_items else "", optional=True)),
+        (float(component_priorities["skills"]), "skill_selected", PromptComponent(name="skills", category="skills", text=f"Selected skill instructions:\n{bundle.skill_instructions_text}\n\n" if bundle.skill_instructions_text else "", optional=True)),
+        (float(component_priorities["project_state"]), "project_context", PromptComponent(name="project_state", category="project_state", text=f"Project state:\n{bundle.project_state_text}\n\n" if bundle.project_state_text else "", optional=True)),
+        (float(component_priorities["skill_metadata"]), "skill_metadata", PromptComponent(name="skill_metadata", category="skills", text=f"Relevant skill metadata:\n{bundle.skill_metadata_text}\n\n" if bundle.skill_metadata_text else "", optional=True)),
+        (float(component_priorities["recent_results"]), "recent_progress", PromptComponent(name="recent_results", category="recent_results", text=f"Recent results:\n{bundle.recent_results_text}\n\n" if bundle.recent_results_text else "", optional=True)),
+        (float(component_priorities["active_entities"]), "entity_context", PromptComponent(name="active_entities", category="active_entities", text=f"Active entities:\n{bundle.active_entities_text}\n\n" if bundle.active_entities_text else "", optional=True)),
+        (float(component_priorities["notes"]), "selected_notes", PromptComponent(name="notes", category="notes", text=f"Working notes:\n{bundle.notes_text}\n\n" if bundle.notes_text else "", optional=True)),
     ]
     if call_kind in _MINIMAL_FRONTEND_KINDS:
         component_specs = [

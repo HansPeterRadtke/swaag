@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 from dataclasses import dataclass, field
-from typing import Iterable
+from typing import Any, Iterable
 
 from swaag.config import AgentConfig
 from swaag.retrieval.embeddings import build_backend
@@ -42,7 +42,7 @@ class HybridRetriever:
        (via the configured backend) for the actual relevance judgement.
     """
 
-    def __init__(self, config: AgentConfig):
+    def __init__(self, config: AgentConfig, *, model_client: Any | None = None):
         self._config = config
         self._backend = build_backend(
             config.retrieval.backend,
@@ -51,6 +51,7 @@ class HybridRetriever:
             connect_timeout_seconds=config.model.connect_timeout_seconds,
             read_timeout_seconds=config.model.simple_timeout_seconds,
             max_text_chars=config.selection_policy.retrieval_scoring_text_chars,
+            model_client=model_client,
         )
         if self._backend.degraded and not config.retrieval.allow_degraded_fallback:
             raise RuntimeError("Configured retrieval backend is unavailable and degraded fallback is disabled")

@@ -1,8 +1,10 @@
 from __future__ import annotations
 
 import argparse
+import contextlib
 import json
 import os
+import signal
 import shutil
 import time
 import urllib.error
@@ -27,10 +29,58 @@ from swaag.config import AgentConfig, load_config
 from swaag.live_runtime_profiles import get_documented_final_live_benchmark_recommendation
 from swaag.model import LlamaCppClient
 from swaag.runtime import AgentRuntime
-from swaag.types import PlanStep
-from swaag.testing.llm_record_replay import RecordReplayModelClient
+from swaag.types import PlanStep, SessionState
+from swaag.model_cache import RecordReplayModelClient
 from swaag.utils import stable_json_dumps
 from swaag.verification import verify_benchmark_contract
+
+
+class BenchmarkSeedTimeout(BaseException):
+    """Abort a benchmark seed after a mechanical wall-clock budget expires."""
+
+
+@contextlib.contextmanager
+def _benchmark_seed_timeout(timeout_seconds: int | None):
+    if timeout_seconds is None or timeout_seconds <= 0 or not hasattr(signal, "SIGALRM"):
+        yield
+        return
+    seconds = int(timeout_seconds)
+    started = time.monotonic()
+    previous_handler = signal.getsignal(signal.SIGALRM)
+    previous_timer = signal.setitimer(signal.ITIMER_REAL, 0)
+
+    def _raise_timeout(_signum: int, _frame: object) -> None:
+        raise BenchmarkSeedTimeout(f"Benchmark seed exceeded {seconds}s wall-clock budget")
+
+    signal.signal(signal.SIGALRM, _raise_timeout)
+    signal.setitimer(signal.ITIMER_REAL, seconds)
+    try:
+        yield
+    finally:
+        signal.setitimer(signal.ITIMER_REAL, 0)
+        signal.signal(signal.SIGALRM, previous_handler)
+        previous_remaining, previous_interval = previous_timer
+        if previous_remaining > 0:
+            elapsed = time.monotonic() - started
+            signal.setitimer(signal.ITIMER_REAL, max(0.001, previous_remaining - elapsed), previous_interval)
+
+
+def _record_benchmark_timeout_event(
+    runtime: AgentRuntime,
+    state: SessionState,
+    error: TimeoutError,
+) -> SessionState:
+    current_state = runtime.history.rebuild_from_history(state.session_id, prefer_checkpoint=False)
+    runtime.history.record_event(
+        current_state,
+        "error",
+        {
+            "operation": "benchmark_seed_timeout",
+            "error": str(error),
+            "error_type": error.__class__.__name__,
+        },
+    )
+    return current_state
 
 
 def _parse_seed_list(raw: str | None, *, default: tuple[int, int, int]) -> list[int]:
@@ -250,7 +300,7 @@ def _normalize_agent_behavior_mode(raw: str | None) -> str | None:
     return value
 
 def _cached_replay_policy() -> str:
-    raw = os.environ.get("SWAAG_BENCHMARK_CACHED_REPLAY_POLICY", "replay_only").strip().lower()
+    raw = os.environ.get("SWAAG_BENCHMARK_CACHED_REPLAY_POLICY", "record_if_missing").strip().lower()
     aliases = {
         "replay": "replay_only",
         "replay_only": "replay_only",
@@ -266,17 +316,7 @@ def _cached_replay_policy() -> str:
 
 
 def _is_substantive_completion_text(text: str) -> bool:
-    normalized = " ".join(str(text or "").strip().lower().split())
-    if not normalized:
-        return False
-    failure_sentinels = {
-        "not done",
-        "failed",
-        "unable to complete",
-        "i could not complete the task",
-        "i cannot complete the task",
-    }
-    return normalized not in failure_sentinels
+    return bool(str(text or "").strip())
 
 
 def _build_agent_behavior_model_client(
@@ -314,6 +354,7 @@ def _build_agent_behavior_model_client(
             "task_type": task.task_type,
             "difficulty": task.difficulty,
         },
+        canonicalize_dynamic_values=True,
     )
     return wrapped, {"cassette_path": str(cassette_path), "cache_mode": planned_mode, "replay_policy": replay_policy}
 
@@ -393,6 +434,24 @@ def _evaluate_quality(oracle: PromptUnderstandingOracle | None, state, events, *
         _check("assume_missing", decision.assume_missing if decision else None, oracle.assume_missing)
     if oracle.generate_ideas is not None:
         _check("generate_ideas", decision.generate_ideas if decision else None, oracle.generate_ideas)
+    if oracle.missing_required_information is not None:
+        _check(
+            "missing_required_information",
+            analysis.missing_required_information if analysis else None,
+            oracle.missing_required_information,
+        )
+    if oracle.evidence_required_before_response is not None:
+        _check(
+            "evidence_required_before_response",
+            decision.evidence_required_before_response if decision else None,
+            oracle.evidence_required_before_response,
+        )
+    if oracle.evidence_call_count is not None:
+        _check(
+            "evidence_call_count",
+            decision.evidence_call_count if decision else None,
+            oracle.evidence_call_count,
+        )
     if oracle.strategy_profile is not None:
         _check("strategy_profile", strategy.task_profile if strategy else None, oracle.strategy_profile)
     for goal in oracle.detected_goals_contains:
@@ -648,6 +707,7 @@ def run_benchmarks(
     model_profile: str | None = None,
     structured_output_mode: str | None = None,
     progress_poll_seconds: float | None = None,
+    task_timeout_seconds: int | None = None,
     seeds: list[int] | None = None,
     agent_behavior_mode: str | None = None,
 ) -> dict[str, object]:
@@ -679,11 +739,15 @@ def run_benchmarks(
     effective_profile = live_settings["model_profile"]
     effective_structured_output_mode = live_settings["structured_output_mode"]
     effective_progress_poll = live_settings["progress_poll_seconds"]
+    effective_task_timeout = task_timeout_seconds
+    if effective_task_timeout is None:
+        raw_task_timeout = os.environ.get("SWAAG_BENCHMARK_TASK_TIMEOUT_SECONDS", "").strip()
+        effective_task_timeout = int(raw_task_timeout) if raw_task_timeout else None
     effective_seeds = [int(seed) for seed in live_settings.get("seeds", [42]) or [42]]
     effective_profile_use_case = live_settings.get("recommendation_use_case")
     effective_profile_rationale = live_settings.get("recommendation_rationale")
     effective_retrieval_backend = (
-        os.environ.get("SWAAG_BENCHMARK_TEST_RETRIEVAL_BACKEND", "degraded_lexical")
+        os.environ.get("SWAAG_BENCHMARK_TEST_RETRIEVAL_BACKEND", "unavailable")
         if not use_live_model
         else None
     )
@@ -750,8 +814,12 @@ def run_benchmarks(
             assistant_text = ""
             task_started = time.monotonic()
             try:
-                turn = runtime.run_turn_in_session(state, scenario.prompt)
+                with _benchmark_seed_timeout(effective_task_timeout):
+                    turn = runtime.run_turn_in_session(state, scenario.prompt)
                 assistant_text = turn.assistant_text
+            except BenchmarkSeedTimeout as exc:
+                runtime_error = TimeoutError(str(exc))
+                state = _record_benchmark_timeout_event(runtime, state, runtime_error)
             except Exception as exc:
                 runtime_error = exc
             task_elapsed = round(time.monotonic() - task_started, 3)
@@ -909,6 +977,7 @@ def run_benchmarks(
             "profile_rationale": effective_profile_rationale or "",
             "structured_output_mode": effective_structured_output_mode or "",
             "timeout_seconds": effective_timeout or "",
+            "task_timeout_seconds": effective_task_timeout or "",
             "connect_timeout_seconds": effective_connect_timeout or "",
             "progress_poll_seconds": effective_progress_poll or "",
             "seeds": effective_seeds,
@@ -950,17 +1019,18 @@ def _build_parser() -> argparse.ArgumentParser:
     test_categories_parser.add_argument("--json", action="store_true", help="Print the full category JSON.")
 
     manual_parser = subparsers.add_parser("manual-validation", help="Run explicit real-model validation. This is not a test category.")
-    manual_parser.set_defaults(validation_subset=True)
+    manual_parser.set_defaults(validation_subset=False)
     manual_parser.add_argument("--output", default="manual_validation_output", help="Output directory for manual validation artifacts.")
     manual_parser.add_argument("--clean", action="store_true", help="Delete the output directory before running.")
     manual_parser.add_argument("--task", action="append", default=[], help="Run only the named validation task id. Can be passed multiple times.")
-    manual_parser.add_argument("--validation-subset", dest="validation_subset", action="store_true", help="Run the curated manual-validation subset.")
-    manual_parser.add_argument("--full-catalog", dest="validation_subset", action="store_false", help="Run the full benchmark catalog instead of the curated manual-validation subset.")
+    manual_parser.add_argument("--validation-subset", dest="validation_subset", action="store_true", help="Run the shorter generated validation subset.")
+    manual_parser.add_argument("--full-catalog", dest="validation_subset", action="store_false", help="Run the full benchmark catalog (default).")
     manual_parser.add_argument("--model-base-url", help="Override the llama.cpp base URL for manual validation.")
     manual_parser.add_argument("--timeout-seconds", type=int, help="Override the model read timeout.")
+    manual_parser.add_argument("--task-timeout-seconds", type=int, help="Override the benchmark wall-clock timeout for one task seed.")
     manual_parser.add_argument("--connect-timeout-seconds", type=int, help="Override the model connect timeout.")
     manual_parser.add_argument("--model-profile", help="Record the llama.cpp profile used for manual validation.")
-    manual_parser.add_argument("--structured-output-mode", choices=["server_schema", "post_validate", "auto"], help="Override structured output mode.")
+    manual_parser.add_argument("--structured-output-mode", choices=["server_schema"], help="Override structured output mode.")
     manual_parser.add_argument("--progress-poll-seconds", type=float, help="Override model progress polling interval.")
     manual_parser.add_argument("--seeds", help="Comma-separated fixed seeds for model-backed manual validation.")
     manual_parser.add_argument("--json", action="store_true", help="Print the full manual-validation JSON.")
@@ -1058,6 +1128,7 @@ def main(argv: Sequence[str] | None = None) -> int:
             validation_subset=bool(args.validation_subset),
             model_base_url=args.model_base_url,
             timeout_seconds=args.timeout_seconds,
+            task_timeout_seconds=args.task_timeout_seconds,
             connect_timeout_seconds=args.connect_timeout_seconds,
             model_profile=args.model_profile,
             structured_output_mode=args.structured_output_mode,

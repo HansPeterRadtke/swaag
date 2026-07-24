@@ -9,7 +9,8 @@ import pytest
 import requests
 
 from swaag.grammar import tool_decision_contract, yes_no_contract
-from swaag.model import LlamaCppClient, ModelClientError
+from swaag.model import LlamaCppClient, ModelClientError, completion_url
+from swaag.types import ContractSpec
 
 
 class _Handler(BaseHTTPRequestHandler):
@@ -48,8 +49,10 @@ class _Handler(BaseHTTPRequestHandler):
             if type(self).malformed:
                 self._json_response({"unexpected": True})
                 return
-            if "grammar" in body:
-                self._json_response({"content": "yes", "stop": True, "tokens_evaluated": 3, "tokens_predicted": 1})
+            schema = body.get("json_schema") or {}
+            properties = set((schema.get("properties") or {}).keys())
+            if properties == {"answer"}:
+                self._json_response({"content": json.dumps({"answer": "yes"}), "stop": True, "tokens_evaluated": 3, "tokens_predicted": 4})
                 return
             self._json_response({"content": json.dumps({"action": "respond", "response": "ok", "tool_name": "none", "tool_input": {}}), "stop": True, "tokens_evaluated": 6, "tokens_predicted": 8})
             return
@@ -65,22 +68,53 @@ def test_llama_cpp_client_request_construction(make_config) -> None:
         client = LlamaCppClient(config)
         assert client.health()["status"] == "ok"
         assert client.tokenize("one two three") == 3
-        grammar_request = client.build_completion_request("prompt", max_tokens=4, contract=yes_no_contract())
-        assert "grammar" in grammar_request
-        assert grammar_request["temperature"] == config.model.temperature
-        assert grammar_request["seed"] == config.model.seed
-        grammar_result = client.send_completion(grammar_request)
-        assert grammar_result.text == "yes"
+        yes_no_request = client.build_completion_request("prompt", max_tokens=4, contract=yes_no_contract())
+        assert "json_schema" in yes_no_request
+        assert yes_no_request["temperature"] == config.model.temperature
+        assert yes_no_request["seed"] == config.model.seed
+        yes_no_result = client.send_completion(yes_no_request)
+        assert json.loads(yes_no_result.text)["answer"] == "yes"
         schema_request = client.build_completion_request("prompt", max_tokens=32, contract=tool_decision_contract(["echo"]))
         assert "json_schema" in schema_request
         schema_result = client.send_completion(schema_request)
         assert json.loads(schema_result.text)["response"] == "ok"
         completion_requests = [body for path, body in _Handler.requests if path == "/completion"]
-        assert any("grammar" in item for item in completion_requests)
+        assert any((item.get("json_schema") or {}).get("properties", {}).keys() == {"answer"} for item in completion_requests)
         assert any("json_schema" in item for item in completion_requests)
+        assert not any("grammar" in item for item in completion_requests)
     finally:
         server.shutdown()
         thread.join(timeout=5)
+
+
+def test_openai_compatible_request_uses_chat_completions_structured_outputs(make_config) -> None:
+    config = make_config(
+        model__base_url="https://openrouter.ai/api/v1",
+        model__profile_name="openai/gpt-4o-mini",
+    )
+    client = LlamaCppClient(config)
+    contract = tool_decision_contract(["echo"])
+
+    request = client.build_completion_request("prompt", max_tokens=64, contract=contract)
+
+    assert completion_url(config.model.base_url, config.model.completion_endpoint) == "https://openrouter.ai/api/v1/chat/completions"
+    assert request["model"] == "openai/gpt-4o-mini"
+    assert request["messages"] == [{"role": "user", "content": "prompt"}]
+    assert request["max_tokens"] == 64
+    assert request["response_format"]["type"] == "json_schema"
+    assert request["response_format"]["json_schema"]["strict"] is True
+    assert request["response_format"]["json_schema"]["schema"] == contract.json_schema
+    assert request["provider"] == {"require_parameters": True}
+    assert "json_schema" not in request
+    assert "grammar" not in request
+
+
+def test_live_model_client_rejects_unconstrained_contracts(make_config) -> None:
+    client = LlamaCppClient(make_config())
+    contract = ContractSpec(name="bad", mode="plain")  # type: ignore[arg-type]
+
+    with pytest.raises(ModelClientError, match="json_schema"):
+        client.build_completion_request("prompt", max_tokens=4, contract=contract)
 
 
 def test_llama_cpp_client_rejects_malformed_response(make_config) -> None:
@@ -133,6 +167,40 @@ def test_llama_cpp_client_surfaces_timeout(make_config, monkeypatch) -> None:
         client.send_completion(client.build_completion_request("prompt", max_tokens=4, contract=yes_no_contract()))
 
 
+def test_llama_cpp_client_stream_timeout_uses_policy_timeout(make_config, monkeypatch) -> None:
+    config = make_config(model__connect_timeout_seconds=3)
+    client = LlamaCppClient(config)
+    seen: dict[str, object] = {}
+
+    def _timeout(*args, **kwargs):
+        seen["timeout"] = kwargs.get("timeout")
+        raise requests.Timeout("boom")
+
+    monkeypatch.delenv("SWAAG_MODEL_TOKEN_TIMEOUT_SECONDS", raising=False)
+    monkeypatch.setattr(requests, "post", _timeout)
+    with pytest.raises(requests.Timeout):
+        client.send_completion(client.build_completion_request("prompt", max_tokens=4, contract=yes_no_contract()), timeout_seconds=180)
+
+    assert seen["timeout"] == (3, 180.0)
+
+
+def test_llama_cpp_client_stream_timeout_env_override_wins(make_config, monkeypatch) -> None:
+    config = make_config(model__connect_timeout_seconds=3)
+    client = LlamaCppClient(config)
+    seen: dict[str, object] = {}
+
+    def _timeout(*args, **kwargs):
+        seen["timeout"] = kwargs.get("timeout")
+        raise requests.Timeout("boom")
+
+    monkeypatch.setenv("SWAAG_MODEL_TOKEN_TIMEOUT_SECONDS", "7.5")
+    monkeypatch.setattr(requests, "post", _timeout)
+    with pytest.raises(requests.Timeout):
+        client.send_completion(client.build_completion_request("prompt", max_tokens=4, contract=yes_no_contract()), timeout_seconds=180)
+
+    assert seen["timeout"] == (3, 7.5)
+
+
 def test_request_policy_selects_timeout_by_contract_kind_and_profile(make_config) -> None:
     config = make_config(model__profile_name="small_fast", model__timeout_seconds=30, model__simple_timeout_seconds=20, model__structured_timeout_seconds=40, model__verification_timeout_seconds=50)
     client = LlamaCppClient(config)
@@ -145,8 +213,8 @@ def test_request_policy_selects_timeout_by_contract_kind_and_profile(make_config
     assert plain.profile_name == "small_fast"
 
 
-def test_post_validate_mode_keeps_server_schema_enforcement(make_config) -> None:
-    config = make_config(model__structured_output_mode="post_validate")
+def test_server_schema_mode_uses_schema_enforcement(make_config) -> None:
+    config = make_config(model__structured_output_mode="server_schema")
     client = LlamaCppClient(config)
     original = tool_decision_contract(["echo"])
 
@@ -159,28 +227,9 @@ def test_post_validate_mode_keeps_server_schema_enforcement(make_config) -> None
     assert "json_schema" in request
 
 
-def test_auto_mode_keeps_server_schema_on_mid_context_profile(make_config) -> None:
-    config = make_config(model__profile_name="mid_context", model__structured_output_mode="auto")
+def test_non_server_schema_mode_is_rejected(make_config) -> None:
+    config = make_config(model__structured_output_mode="auto")
     client = LlamaCppClient(config)
-    original = tool_decision_contract(["echo"])
 
-    resolved, policy = client.resolve_contract(original, kind="decision", prompt="Return JSON only.", max_tokens=32)
-    request = client.build_completion_request("Return JSON only.", max_tokens=32, contract=resolved)
-
-    assert resolved.mode == "json_schema"
-    assert policy.effective_contract_mode == "json_schema"
-    assert "json_schema" in request
-
-
-def test_auto_mode_keeps_server_schema_on_small_fast_for_large_prompt(make_config) -> None:
-    config = make_config(model__profile_name="small_fast", model__structured_output_mode="auto")
-    client = LlamaCppClient(config)
-    original = tool_decision_contract(["echo"])
-    prompt = "Return JSON only. " + ("x" * 1400)
-
-    resolved, policy = client.resolve_contract(original, kind="decision", prompt=prompt, max_tokens=128)
-    request = client.build_completion_request(prompt, max_tokens=128, contract=resolved)
-
-    assert resolved.mode == "json_schema"
-    assert policy.effective_contract_mode == "json_schema"
-    assert "json_schema" in request
+    with pytest.raises(ModelClientError, match="server_schema"):
+        client.resolve_contract(tool_decision_contract(["echo"]), kind="decision", prompt="Return JSON only.", max_tokens=32)

@@ -15,15 +15,17 @@ def run_manual_validation(
     *,
     output_dir: Path,
     benchmark_task_ids: list[str] | None = None,
-    validation_subset: bool = True,
+    validation_subset: bool = False,
     model_base_url: str | None = None,
     timeout_seconds: int | None = None,
+    task_timeout_seconds: int | None = None,
     connect_timeout_seconds: int | None = None,
     model_profile: str | None = None,
     structured_output_mode: str | None = None,
     progress_poll_seconds: float | None = None,
     seeds: list[int] | None = None,
     clean: bool = False,
+    use_cache: bool = True,
 ) -> dict[str, Any]:
 
     if clean and output_dir.exists():
@@ -37,12 +39,13 @@ def run_manual_validation(
         use_live_model=True,
         model_base_url=model_base_url,
         timeout_seconds=timeout_seconds,
+        task_timeout_seconds=task_timeout_seconds,
         connect_timeout_seconds=connect_timeout_seconds,
         model_profile=model_profile,
         structured_output_mode=structured_output_mode,
         progress_poll_seconds=progress_poll_seconds,
         seeds=seeds,
-        agent_behavior_mode=None,
+        agent_behavior_mode="cached" if use_cache else None,
     )
     difficulty_scores = {
         difficulty: float(report["summary"].get("score_by_difficulty", {}).get(difficulty, 0.0))

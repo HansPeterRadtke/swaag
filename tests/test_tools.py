@@ -8,7 +8,7 @@ import pytest
 
 from swaag.notes import make_note
 from swaag.tools.base import Tool, ToolContext, ToolValidationError, _validate_schema_value
-from swaag.tools.builtin import EditTextTool, ReadTextTool, RunTestsTool
+from swaag.tools.builtin import EditTextTool, ReadTextTool, RunTestsTool, ShellCommandTool, WriteFileTool
 from swaag.tools.registry import ToolRegistry
 from swaag.types import SessionState, ToolExecutionResult
 
@@ -81,11 +81,183 @@ def test_edit_tool_dry_run_preview(make_config, tmp_path: Path) -> None:
     config = make_config(tools__allow_side_effect_tools=False)
     _, result = registry.dispatch(
         "edit_text",
-        {"path": str(path), "operation": "replace_pattern_all", "pattern": "hello", "replacement": "world", "dry_run": True},
+        {"path": str(path), "operation": "replace_exact", "old_text": "hello", "new_text": "world", "dry_run": True},
         config,
         _empty_state(),
     )
     assert any(event.event_type == "edit_previewed" for event in result.generated_events)
+    assert path.read_text(encoding="utf-8") == "hello"
+
+
+def test_edit_tool_guidance_explains_full_match_replacement() -> None:
+    assert "Prefer replace_exact" in EditTextTool.usage_guidance
+    assert "exactly one match" in EditTextTool.usage_guidance
+    assert "replace the entire matched text" in EditTextTool.usage_guidance
+    assert "expected_text" in EditTextTool.usage_guidance
+    assert "Use replace_range only as a low-level fallback" in EditTextTool.usage_guidance
+    assert "absence fails closed" in EditTextTool.usage_guidance
+    assert "tool_effect_verified" in EditTextTool.usage_guidance
+    assert "current file exactly matches" in EditTextTool.usage_guidance
+
+
+def test_edit_tool_applies_exact_replacement_without_offsets(make_config, tmp_path: Path) -> None:
+    path = tmp_path / "release.yaml"
+    path.write_text("name: report-62\nstatus: draft\nowner: team-6\n", encoding="utf-8")
+    registry = ToolRegistry()
+
+    _, result = registry.dispatch(
+        "edit_text",
+        {
+            "path": str(path),
+            "operation": "replace_exact",
+            "dry_run": False,
+            "old_text": "status: draft",
+            "new_text": "status: ready",
+        },
+        make_config(tools__allow_side_effect_tools=True, editor__allow_writes=True),
+        _empty_state(),
+    )
+
+    assert result.output["changed"] is True
+    assert result.output["before_sha256"] != result.output["after_sha256"]
+    assert result.output["details"]["match_count"] == 1
+    assert result.output["details"]["precondition"] == "exactly_one_old_text_match"
+    applied = next(event for event in result.generated_events if event.event_type == "edit_applied")
+    assert applied.derived_writes
+    assert applied.derived_writes[0].content == "name: report-62\nstatus: ready\nowner: team-6\n"
+    assert path.read_text(encoding="utf-8") == "name: report-62\nstatus: draft\nowner: team-6\n"
+
+
+def test_edit_tool_exact_replacement_fails_closed_on_zero_or_multiple_matches(make_config, tmp_path: Path) -> None:
+    path = tmp_path / "release.yaml"
+    original = "status: draft\nstatus: draft\n"
+    path.write_text(original, encoding="utf-8")
+    registry = ToolRegistry()
+    config = make_config(tools__allow_side_effect_tools=True, editor__allow_writes=True)
+
+    with pytest.raises(ToolValidationError, match="old_text is ambiguous; match_count=2"):
+        registry.dispatch(
+            "edit_text",
+            {
+                "path": str(path),
+                "operation": "replace_exact",
+                "dry_run": False,
+                "old_text": "status: draft",
+                "new_text": "status: ready",
+            },
+            config,
+            _empty_state(),
+        )
+
+    with pytest.raises(ToolValidationError, match="old_text not found; match_count=0"):
+        registry.dispatch(
+            "edit_text",
+            {
+                "path": str(path),
+                "operation": "replace_exact",
+                "dry_run": False,
+                "old_text": "status: missing",
+                "new_text": "status: ready",
+            },
+            config,
+            _empty_state(),
+        )
+
+    assert path.read_text(encoding="utf-8") == original
+
+
+def test_edit_tool_rejects_range_when_expected_text_mismatches(make_config, tmp_path: Path) -> None:
+    path = tmp_path / "release.yaml"
+    original = "name: report-62\nstatus: draft\nowner: team-6\n"
+    path.write_text(original, encoding="utf-8")
+    registry = ToolRegistry()
+
+    with pytest.raises(
+        ToolValidationError,
+        match=r"selected='s: dr'.*expected='draft'.*range_units=zero_based_character_offsets.*expected_text_matching_ranges=\[{\"end\":29,\"start\":24}\]",
+    ):
+        registry.dispatch(
+            "edit_text",
+            {
+                "path": str(path),
+                "operation": "replace_range",
+                "dry_run": False,
+                "start": 21,
+                "end": 26,
+                "position": None,
+                "expected_text": "draft",
+                "replacement": "ready",
+                "insertion": None,
+                "pattern": None,
+            },
+            make_config(tools__allow_side_effect_tools=True, editor__allow_writes=True),
+            _empty_state(),
+        )
+
+    assert path.read_text(encoding="utf-8") == original
+
+
+def test_edit_tool_applies_range_when_expected_text_matches(make_config, tmp_path: Path) -> None:
+    path = tmp_path / "release.yaml"
+    path.write_text("name: report-62\nstatus: draft\nowner: team-6\n", encoding="utf-8")
+    registry = ToolRegistry()
+
+    _, result = registry.dispatch(
+        "edit_text",
+        {
+            "path": str(path),
+            "operation": "replace_range",
+            "dry_run": False,
+            "start": 24,
+            "end": 29,
+            "position": None,
+            "expected_text": "draft",
+            "replacement": "ready",
+            "insertion": None,
+            "pattern": None,
+        },
+        make_config(tools__allow_side_effect_tools=True, editor__allow_writes=True),
+        _empty_state(),
+    )
+
+    assert result.output["changed"] is True
+    assert "+status: ready" in result.output["diff"]
+
+
+def test_edit_tool_pattern_not_found_exposes_current_text_for_model_recovery(make_config, tmp_path: Path) -> None:
+    path = tmp_path / "release.yaml"
+    path.write_text("name: report-62\nready\nowner: team-6\n", encoding="utf-8")
+    registry = ToolRegistry()
+
+    with pytest.raises(ToolValidationError) as excinfo:
+        registry.dispatch(
+            "edit_text",
+            {
+                "path": str(path),
+                "operation": "replace_pattern_once",
+                "dry_run": False,
+                "start": None,
+                "end": None,
+                "position": None,
+                "expected_text": None,
+                "replacement": "ready",
+                "insertion": None,
+                "pattern": "status: draft",
+            },
+            make_config(tools__allow_side_effect_tools=True),
+            _empty_state(),
+        )
+
+    error = str(excinfo.value)
+    assert "pattern not found" in error
+    assert "current_text" in error
+    assert "name: report-62\\nready\\nowner: team-6\\n" in error
+    assert path.read_text(encoding="utf-8") == "name: report-62\nready\nowner: team-6\n"
+
+
+def test_write_file_guidance_rejects_file_exists_as_objective_proof() -> None:
+    assert "required file_contains or command_success check" in WriteFileTool.usage_guidance
+    assert "file_exists is not enough" in WriteFileTool.usage_guidance
 
 
 
@@ -125,17 +297,10 @@ def test_malformed_arguments_raise_validation_error(make_config) -> None:
         ToolRegistry().dispatch("calculator", {"expression": "__import__('os')"}, make_config(), _empty_state())
 
 
-def test_shell_command_rejects_placeholder_text(make_config) -> None:
-    registry = ToolRegistry()
-    config = make_config(tools__allow_side_effect_tools=True)
+def test_shell_command_validation_does_not_classify_placeholder_like_text() -> None:
+    validated = ShellCommandTool().validate({"command": "git apply -v <patch_file> && git diff --cached"})
 
-    with pytest.raises(ToolValidationError, match="placeholder"):
-        registry.dispatch(
-            "shell_command",
-            {"command": "git apply -v <patch_file> && git diff --cached"},
-            config,
-            _empty_state(),
-        )
+    assert validated == {"command": "git apply -v <patch_file> && git diff --cached", "background": False}
 
 
 class MutatingTool(Tool):
@@ -209,42 +374,10 @@ def test_tool_timeout_is_enforced(make_config) -> None:
         registry.dispatch("slow", {}, config, _empty_state())
 
 
-def test_tool_registry_exposes_capability_graph(make_config) -> None:
+def test_tool_registry_has_no_semantic_tool_chain_helpers(make_config) -> None:
     registry = ToolRegistry()
-    config = make_config(tools__allow_side_effect_tools=True)
-
-    graph = registry.capability_graph(config)
-
-    assert "edit_text" in graph["read_text"]
-    assert "calculator" in graph["notes"]
-
-
-def test_invalid_tool_chain_is_rejected(make_config) -> None:
-    registry = ToolRegistry()
-    config = make_config()
-
-    with pytest.raises(ValueError):
-        registry.validate_tool_chain(["calculator", "read_text"], config)
-
-
-def test_tool_graph_planner_returns_shortest_valid_chain(make_config) -> None:
-    registry = ToolRegistry()
-    config = make_config(tools__allow_side_effect_tools=True)
-
-    plan = registry.plan_tool_graph(selected_tool="read_text", expected_tool="edit_text", config=config)
-
-    assert plan.valid is True
-    assert plan.chain == ["read_text", "edit_text"]
-
-
-def test_tool_graph_planner_rejects_unreachable_chain(make_config) -> None:
-    registry = ToolRegistry()
-    config = make_config()
-
-    plan = registry.plan_tool_graph(selected_tool="calculator", expected_tool="read_text", config=config)
-
-    assert plan.valid is False
-    assert plan.reason.startswith("no_capability_path:")
+    for name in ["capability_graph", "can_chain", "shortest_chain", "plan_tool_graph", "validate_tool_chain"]:
+        assert not hasattr(registry, name)
 
 
 def test_run_tests_tool_normalizes_bare_pytest_to_current_python() -> None:
@@ -252,10 +385,9 @@ def test_run_tests_tool_normalizes_bare_pytest_to_current_python() -> None:
     assert validated["command"] == [sys.executable, "-m", "pytest", "test_sample.py", "-q"]
 
 
-def test_read_text_prefers_explicit_path_over_stale_reader_id() -> None:
-    validated = ReadTextTool().validate({"path": "policy.md", "reader_id": "stale_reader", "chunk_chars": 100})
-    assert validated["path"] == "policy.md"
-    assert validated["reader_id"] is None
+def test_read_text_rejects_explicit_path_with_stale_reader_id() -> None:
+    with pytest.raises(ToolValidationError, match="exactly one"):
+        ReadTextTool().validate({"path": "policy.md", "reader_id": "stale_reader", "chunk_chars": 100})
 
 
 def test_edit_tool_strips_fields_from_pattern_operations(make_config, tmp_path: Path) -> None:
@@ -310,84 +442,86 @@ def test_edit_tool_decodes_model_escaped_newlines_before_matching(make_config, t
     assert "return total + values[-1]" in result.output["diff"]
 
 
-def test_edit_tool_accepts_replace_alias_for_pattern_replacement(make_config, tmp_path: Path) -> None:
+def test_edit_tool_rejects_replace_alias_for_pattern_replacement(make_config, tmp_path: Path) -> None:
     path = tmp_path / "tokenizer.py"
     path.write_text("def tokenize(text: str):\n    return text.split(',')\n", encoding="utf-8")
     registry = ToolRegistry()
-    _, result = registry.dispatch(
-        "edit_text",
-        {
-            "path": str(path),
-            "operation": "replace",
-            "pattern": "return text.split(',')",
-            "replacement": "return text.split('|')",
-            "start": 0,
-            "end": 64,
-        },
-        make_config(tools__allow_side_effect_tools=True, editor__allow_writes=True),
-        _empty_state(),
-    )
-    assert result.output["changed"] is True
-    assert "return text.split('|')" in result.output["diff"]
+    with pytest.raises(ToolValidationError, match="operation is invalid"):
+        registry.dispatch(
+            "edit_text",
+            {
+                "path": str(path),
+                "operation": "replace",
+                "pattern": "return text.split(',')",
+                "replacement": "return text.split('|')",
+                "start": 0,
+                "end": 64,
+            },
+            make_config(tools__allow_side_effect_tools=True, editor__allow_writes=True),
+            _empty_state(),
+        )
 
 
-def test_read_text_prefers_explicit_path_over_stale_note_and_reader() -> None:
+def test_read_text_rejects_explicit_path_with_stale_note_and_reader() -> None:
     tool = ReadTextTool()
 
-    validated = tool.validate({"path": "pkg/file.py", "note_id": "note_old", "reader_id": "reader_old"})
-
-    assert validated["path"] == "pkg/file.py"
-    assert validated["note_id"] is None
-    assert validated["reader_id"] is None
+    with pytest.raises(ToolValidationError, match="exactly one"):
+        tool.validate({"path": "pkg/file.py", "note_id": "note_old", "reader_id": "reader_old"})
 
 
-def test_edit_tool_accepts_replace_pattern_alias(make_config, tmp_path: Path) -> None:
+def test_edit_tool_rejects_replace_pattern_alias(make_config, tmp_path: Path) -> None:
     path = tmp_path / "formatter.py"
     path.write_text("CURRENCY = 'USD-1'\n", encoding="utf-8")
     registry = ToolRegistry()
-    _, result = registry.dispatch(
-        "edit_text",
-        {
-            "path": str(path),
-            "operation": "replace_pattern",
-            "pattern": "CURRENCY = 'USD-1'",
-            "replacement": "CURRENCY = 'USD'",
-        },
-        make_config(tools__allow_side_effect_tools=True, editor__allow_writes=True),
-        _empty_state(),
-    )
-    assert result.output["changed"] is True
-    assert "CURRENCY = 'USD'" in result.output["diff"]
+    with pytest.raises(ToolValidationError, match="operation is invalid"):
+        registry.dispatch(
+            "edit_text",
+            {
+                "path": str(path),
+                "operation": "replace_pattern",
+                "pattern": "CURRENCY = 'USD-1'",
+                "replacement": "CURRENCY = 'USD'",
+            },
+            make_config(tools__allow_side_effect_tools=True, editor__allow_writes=True),
+            _empty_state(),
+        )
 
 
 def test_read_text_accepts_path_list_for_multi_file_buffer() -> None:
     tool = ReadTextTool()
 
-    validated = tool.validate({"path": ["pkg/a.py", "pkg/b.py"], "chunk_chars": 1000})
-
-    assert validated["paths"] == ["pkg/a.py", "pkg/b.py"]
-    assert validated["note_id"] is None
-    assert validated["reader_id"] is None
-
-
-def test_read_text_prefers_paths_over_conflicting_path_field() -> None:
-    tool = ReadTextTool()
-
     validated = tool.validate(
         {
-            "path": "pkg/a.py\npkg/b.py",
+            "path": None,
             "paths": ["pkg/a.py", "pkg/b.py"],
             "note_id": None,
             "reader_id": None,
-            "chunk_chars": None,
+            "chunk_chars": 1000,
             "overlap_chars": None,
+            "start_offset": None,
+            "end_offset": None,
         }
     )
 
     assert validated["paths"] == ["pkg/a.py", "pkg/b.py"]
-    assert validated["path"] == "pkg/a.py\npkg/b.py"
     assert validated["note_id"] is None
     assert validated["reader_id"] is None
+
+
+def test_read_text_rejects_paths_with_conflicting_path_field() -> None:
+    tool = ReadTextTool()
+
+    with pytest.raises(ToolValidationError, match="exactly one"):
+        tool.validate(
+            {
+                "path": "pkg/a.py\npkg/b.py",
+                "paths": ["pkg/a.py", "pkg/b.py"],
+                "note_id": None,
+                "reader_id": None,
+                "chunk_chars": None,
+                "overlap_chars": None,
+            }
+        )
 
 
 def test_read_text_accepts_paths_alias(tmp_path, make_config) -> None:

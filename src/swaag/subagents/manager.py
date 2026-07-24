@@ -23,8 +23,9 @@ synonymous with the expected answer") must be made elsewhere by the LLM.
 from __future__ import annotations
 
 import copy
+from typing import Any
 
-from swaag.retrieval.embeddings import build_backend
+from swaag.retrieval.embeddings import SemanticBackendProtocolError, SemanticBackendUnavailableError, build_backend
 from swaag.strategy import StrategyValidationError, validate_plan_against_strategy
 from swaag.context_builder import ContextBundle
 from swaag.subagents.protocol import SubagentArtifact, SubagentReport
@@ -42,6 +43,7 @@ class SubagentManager:
         seed: int = 11,
         connect_timeout_seconds: int = 10,
         read_timeout_seconds: int = 60,
+        model_client: Any | None = None,
     ) -> None:
         self._specs = default_subagent_specs()
         self._semantic_backend = build_backend(
@@ -50,16 +52,27 @@ class SubagentManager:
             seed=seed,
             connect_timeout_seconds=connect_timeout_seconds,
             read_timeout_seconds=read_timeout_seconds,
+            model_client=model_client,
         )
 
     def spec(self, subagent_type: str) -> SubagentSpec:
         return copy.deepcopy(self._specs[subagent_type])
 
+    def enabled_specs(self) -> list[SubagentSpec]:
+        return [self.spec(name) for name in sorted(self._specs)]
+
     def scoped_state(self, state: SessionState) -> SessionState:
         return copy.deepcopy(state)
 
-    def retrieve_context(self, state: SessionState, *, goal: str, bundle: ContextBundle) -> SubagentReport:
-        spec = self.spec("retriever")
+    def retrieve_context(
+        self,
+        state: SessionState,
+        *,
+        goal: str,
+        bundle: ContextBundle,
+        subagent_type: str = "retriever",
+    ) -> SubagentReport:
+        spec = self.spec(subagent_type)
         scoped_state = self.scoped_state(state)
         scoped_query = "\n".join(
             part
@@ -80,11 +93,44 @@ class SubagentManager:
             focus_candidates.append((f"environment_file:{relative_path}", "environment_file", f"{relative_path}\n{content}"))
         if bundle.guidance_text.strip():
             focus_candidates.append(("guidance:active", "guidance", bundle.guidance_text))
-        scores = (
-            self._semantic_backend.score_query(scoped_query, [text for _, _, text in focus_candidates])
-            if focus_candidates
-            else []
-        )
+        try:
+            scores = (
+                self._semantic_backend.score_query(scoped_query, [text for _, _, text in focus_candidates])
+                if focus_candidates
+                else []
+            )
+        except (SemanticBackendProtocolError, SemanticBackendUnavailableError) as exc:
+            evidence = {
+                "goal": goal,
+                "active_role": scoped_state.active_role,
+                "selected_item_count": len(focus_candidates),
+                "focused_item_ids": [],
+                "coverage": {"history": 0, "memory": 0, "guidance": 0, "environment": 0},
+                "retrieval_mode": getattr(self._semantic_backend, "mode", "unknown"),
+                "retrieval_degraded": True,
+                "scoped_query": scoped_query,
+                "error": str(exc),
+                "error_type": exc.__class__.__name__,
+                "fallback": "complete_context_bundle",
+            }
+            return SubagentReport(
+                spec=spec,
+                accepted=False,
+                reason="semantic_retrieval_degraded",
+                evidence=evidence,
+                recommended_action="continue_with_complete_context",
+                artifacts=[
+                    SubagentArtifact(
+                        artifact_type="retrieval_focus",
+                        content={
+                            "focus_summary": "",
+                            "focused_item_ids": [],
+                            "coverage": evidence["coverage"],
+                            "scoped_query": scoped_query,
+                        },
+                    )
+                ],
+            )
         ranked = sorted(
             [
                 (score, item_id, item_type, text)
@@ -136,8 +182,8 @@ class SubagentManager:
             ],
         )
 
-    def review_plan(self, state: SessionState, plan: Plan) -> SubagentReport:
-        spec = self.spec("planner")
+    def review_plan(self, state: SessionState, plan: Plan, *, subagent_type: str = "planner") -> SubagentReport:
+        spec = self.spec(subagent_type)
         scoped_state = self.scoped_state(state)
         completed_step_kinds = (
             [step.kind for step in scoped_state.active_plan.steps if step.status == "completed"]
@@ -168,8 +214,16 @@ class SubagentManager:
             artifacts=[SubagentArtifact(artifact_type="plan_review", content=evidence)],
         )
 
-    def replan(self, state: SessionState, *, goal: str, current_plan: Plan | None, failure_reason: str) -> SubagentReport:
-        spec = self.spec("planner")
+    def replan(
+        self,
+        state: SessionState,
+        *,
+        goal: str,
+        current_plan: Plan | None,
+        failure_reason: str,
+        subagent_type: str = "planner",
+    ) -> SubagentReport:
+        spec = self.spec(subagent_type)
         scoped_state = self.scoped_state(state)
         pending_steps = []
         failed_steps = []
@@ -207,6 +261,7 @@ class SubagentManager:
         *,
         verification: VerificationOutcome,
         subsystem_result,
+        subagent_type: str = "reviewer",
     ) -> SubagentReport:
         """Reviewer subagent.
 
@@ -225,7 +280,7 @@ class SubagentManager:
         used. Semantic equivalence judgements belong to the LLM.
         """
 
-        spec = self.spec("reviewer")
+        spec = self.spec(subagent_type)
         _ = self.scoped_state(state)
         latest_tool = subsystem_result.tool_results[-1] if subsystem_result.tool_results else None
         latest_output = latest_tool.output if latest_tool is not None else {}

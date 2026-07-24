@@ -6,7 +6,7 @@ from typing import Any, Literal
 from swaag.environment.state import EnvironmentState
 
 Role = Literal["user", "assistant", "tool", "summary"]
-ContractMode = Literal["plain", "gbnf", "json_schema"]
+ContractMode = Literal["json_schema"]
 ModelCallKind = Literal[
     "analysis",
     "task_decision",
@@ -23,8 +23,6 @@ ModelCallKind = Literal[
     "plan",
     "verification",
     "subagent_selection",
-    "generation_decomposition",
-    "overflow_recovery",
 ]
 ToolAction = Literal["respond", "call_tool"]
 ToolKind = Literal["pure", "stateful", "side_effect"]
@@ -33,7 +31,7 @@ TrustLevel = Literal["trusted", "untrusted", "derived"]
 PlanStepKind = Literal["tool", "respond", "read", "write", "reasoning", "note"]
 PlanStepStatus = Literal["pending", "running", "completed", "failed", "skipped"]
 PlanStatus = Literal["active", "completed", "failed"]
-MemoryKind = Literal["semantic", "procedural"]
+MemoryKind = Literal["event_snapshot"]
 PromptTaskType = Literal["structured", "unstructured", "vague", "incomplete", "already_decomposed"]
 PromptCompleteness = Literal["complete", "partial", "incomplete"]
 ExecutionAction = Literal["execute_step", "retry_step", "replan", "wait", "stop", "answer_directly"]
@@ -130,32 +128,6 @@ class PlanStep:
     def __post_init__(self) -> None:
         if not self.expected_outputs and self.expected_output:
             self.expected_outputs = [self.expected_output]
-        if not self.verification_checks:
-            if self.kind in {"tool", "read", "write", "note"}:
-                self.verification_type = "composite"
-                self.verification_checks = [
-                    {"name": "dependencies_completed", "check_type": "dependencies_completed"},
-                    {"name": "tool_result_present", "check_type": "artifact_present", "artifact": "tool_result"},
-                    {"name": "tool_name_matches", "check_type": "tool_name_equals", "expected": self.expected_tool or ""},
-                    {"name": "output_nonempty", "check_type": "tool_output_nonempty"},
-                    {"name": "output_schema_valid", "check_type": "tool_output_schema_valid"},
-                ]
-                self.required_conditions = [item["name"] for item in self.verification_checks]
-                self.optional_conditions = []
-            else:
-                self.verification_type = "composite"
-                self.verification_checks = [
-                    {"name": "dependencies_completed", "check_type": "dependencies_completed"},
-                    {
-                        "name": "assistant_text_nonempty" if self.kind == "respond" else "reasoning_text_nonempty",
-                        "check_type": "string_nonempty",
-                        "actual_source": "assistant_text",
-                    },
-                ]
-                self.required_conditions = [item["name"] for item in self.verification_checks]
-                self.optional_conditions = []
-        elif not self.required_conditions:
-            self.required_conditions = [str(item.get("name", "")).strip() for item in self.verification_checks if str(item.get("name", "")).strip()]
 
 
 @dataclass(slots=True)
@@ -190,40 +162,6 @@ class SemanticMemoryItem:
     trust_level: TrustLevel
     tags: list[str] = field(default_factory=list)
     created_at: str = ""
-    metadata: dict[str, Any] = field(default_factory=dict)
-
-
-@dataclass(slots=True)
-class MemoryEntity:
-    entity_id: str
-    name: str
-    entity_type: str
-    source_event_id: str
-    trust_level: TrustLevel
-    confidence: float
-    metadata: dict[str, Any] = field(default_factory=dict)
-
-
-@dataclass(slots=True)
-class MemoryRelationship:
-    relationship_id: str
-    source_entity_id: str
-    relation_type: str
-    target_entity_id: str
-    source_event_id: str
-    trust_level: TrustLevel
-    confidence: float
-    metadata: dict[str, Any] = field(default_factory=dict)
-
-
-@dataclass(slots=True)
-class MemoryFact:
-    fact_id: str
-    fact_type: str
-    content: str
-    source_event_id: str
-    trust_level: TrustLevel
-    confidence: float
     metadata: dict[str, Any] = field(default_factory=dict)
 
 
@@ -281,7 +219,6 @@ class PromptAssembly:
 class ContractSpec:
     name: str
     mode: ContractMode
-    grammar: str | None = None
     json_schema: dict[str, Any] | None = None
 
 
@@ -354,6 +291,7 @@ class PromptAnalysis:
     requires_expansion: bool
     requires_decomposition: bool
     confidence: float
+    missing_required_information: bool = False
     detected_entities: list[str] = field(default_factory=list)
     detected_goals: list[str] = field(default_factory=list)
 
@@ -368,8 +306,10 @@ class DecisionOutcome:
     confidence: float
     reason: str
     direct_response: bool = False
-    execution_mode: Literal["full_plan", "single_tool", "direct_response"] = "full_plan"
+    execution_mode: Literal["full_plan", "single_tool", "direct_response", "clarification"] = "full_plan"
     preferred_tool_name: str = ""
+    evidence_required_before_response: bool = False
+    evidence_call_count: int = 0
 
 
 @dataclass(slots=True)
@@ -397,7 +337,6 @@ class StrategySelection:
     replan_after_failures: int = 1
     confidence_floor: float = 0.5
     task_profile: str = "generic"
-    allowed_tools: list[str] = field(default_factory=list)
     required_step_kinds: list[str] = field(default_factory=list)
     expected_flow: list[str] = field(default_factory=list)
 
@@ -439,7 +378,7 @@ class SessionMetrics:
     llm_fallback_rate: float = 0.0
     model_request_progress_events: int = 0
     model_retry_events: int = 0
-    post_validate_fallbacks: int = 0
+    unconstrained_contract_violations: int = 0
     server_schema_requests: int = 0
     verification_type_distribution: dict[str, int] = field(default_factory=dict)
     last_reasoning_status: str = ""
@@ -520,10 +459,6 @@ class SessionState:
     active_strategy: StrategySelection | None = None
     working_memory: WorkingMemory = field(default_factory=WorkingMemory)
     semantic_memory: list[SemanticMemoryItem] = field(default_factory=list)
-    semantic_entities: dict[str, MemoryEntity] = field(default_factory=dict)
-    semantic_relationships: list[MemoryRelationship] = field(default_factory=list)
-    semantic_facts: list[MemoryFact] = field(default_factory=list)
-    procedural_patterns: list[SemanticMemoryItem] = field(default_factory=list)
     project_state: ProjectState = field(default_factory=ProjectState)
     environment: EnvironmentState = field(default_factory=EnvironmentState)
     deferred_tasks: list[DeferredTask] = field(default_factory=list)

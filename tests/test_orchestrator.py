@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+from swaag.failure import FailureClassification
 from swaag.orchestrator import choose_next_step, select_action
 from swaag.types import Plan, PlanStep, SessionMetrics, SessionState, StrategySelection, WorkingMemory
 from swaag.verifier import VerificationOutcome
@@ -127,6 +128,71 @@ def test_orchestrator_prefers_replan_after_repeat_limit() -> None:
     )
 
     assert decision.action == "replan"
+
+
+def test_orchestrator_replans_when_model_disallows_same_step_retry() -> None:
+    step = PlanStep(
+        step_id="edit",
+        title="Edit",
+        goal="Edit",
+        kind="write",
+        expected_tool="edit_text",
+        input_text="file",
+        expected_output="edited",
+        done_condition="tool_result:edit_text",
+        success_criteria="done",
+        status="running",
+    )
+    plan = Plan(
+        plan_id="p",
+        goal="goal",
+        steps=[step],
+        success_criteria="done",
+        fallback_strategy="replan",
+        status="active",
+        created_at="t0",
+        updated_at="t0",
+        current_step_id="edit",
+    )
+    state = SessionState(
+        session_id="s",
+        created_at="t0",
+        updated_at="t0",
+        config_fingerprint="cfg",
+        model_base_url="http://x",
+        working_memory=WorkingMemory(current_step_id="edit"),
+    )
+
+    decision = select_action(
+        state=state,
+        plan=plan,
+        strategy=_strategy(),
+        verification=VerificationOutcome(
+            verification_passed=False,
+            verification_type_used="composite",
+            conditions_met=["file_contains"],
+            conditions_failed=["review_failed"],
+            evidence={"review": {"passed": False}},
+            confidence=0.9,
+            reason="verified;semantic_result_review_failed",
+            requires_retry=True,
+            requires_replan=False,
+        ),
+        failure=FailureClassification(
+            kind="verification_failure",
+            retryable=False,
+            requires_replan=False,
+            suggested_strategy_mode="conservative",
+            reason="model says the same action is not retryable",
+        ),
+        repeated_action_count=1,
+        iteration=1,
+        max_iterations=6,
+        current_step=step,
+    )
+
+    assert decision.action == "replan"
+    assert any(score.reason == "model_disallowed_retry=verification_failure" for score in decision.scores)
 
 
 def test_orchestrator_stops_when_tool_call_budget_is_reached() -> None:

@@ -18,7 +18,11 @@ class ModelConfig:
     tokenize_endpoint: str
     health_endpoint: str
     profile_name: str
+    model_identity: str
     structured_output_mode: str
+    cache_enabled: bool
+    cache_mode: str
+    cache_path: str
     timeout_seconds: int
     connect_timeout_seconds: int
     simple_timeout_seconds: int
@@ -204,8 +208,8 @@ class BudgetPolicyConfig:
     structured_output_json_factor_by_contract: dict[str, float]
     structured_output_json_factor_default: float
     structured_output_json_floor_tokens: int
-    structured_output_grammar_factor: float
-    structured_output_grammar_floor_tokens: int
+    structured_output_schema_factor: float
+    structured_output_schema_floor_tokens: int
     safe_input_floor_tokens: int
 
 
@@ -225,7 +229,6 @@ class SelectionPolicyConfig:
     retrieval_history_item_token_hint: int
     retrieval_semantic_item_token_hint: int
     retrieval_environment_item_token_hint: int
-    skill_nondiscriminative_delta: float
     history_query_max_results: int
     # Structural signal weights for ranking candidate shortlisting
     retrieval_structural_tool_message: float
@@ -459,8 +462,8 @@ def _coerce_config(data: dict[str, Any]) -> AgentConfig:
         },
         structured_output_json_factor_default=float(data["budget_policy"]["structured_output_json_factor_default"]),
         structured_output_json_floor_tokens=int(data["budget_policy"]["structured_output_json_floor_tokens"]),
-        structured_output_grammar_factor=float(data["budget_policy"]["structured_output_grammar_factor"]),
-        structured_output_grammar_floor_tokens=int(data["budget_policy"]["structured_output_grammar_floor_tokens"]),
+        structured_output_schema_factor=float(data["budget_policy"]["structured_output_schema_factor"]),
+        structured_output_schema_floor_tokens=int(data["budget_policy"]["structured_output_schema_floor_tokens"]),
         safe_input_floor_tokens=int(data["budget_policy"]["safe_input_floor_tokens"]),
     )
     context_policy = ContextPolicyConfig(
@@ -476,7 +479,6 @@ def _coerce_config(data: dict[str, Any]) -> AgentConfig:
         retrieval_history_item_token_hint=int(data["selection_policy"]["retrieval_history_item_token_hint"]),
         retrieval_semantic_item_token_hint=int(data["selection_policy"]["retrieval_semantic_item_token_hint"]),
         retrieval_environment_item_token_hint=int(data["selection_policy"]["retrieval_environment_item_token_hint"]),
-        skill_nondiscriminative_delta=float(data["selection_policy"]["skill_nondiscriminative_delta"]),
         history_query_max_results=int(data["selection_policy"]["history_query_max_results"]),
         retrieval_structural_tool_message=float(data["selection_policy"]["retrieval_structural_tool_message"]),
         retrieval_structural_user_message=float(data["selection_policy"]["retrieval_structural_user_message"]),
@@ -572,8 +574,10 @@ def _coerce_config(data: dict[str, Any]) -> AgentConfig:
     _validate_positive("model.benchmark_timeout_seconds", model.benchmark_timeout_seconds)
     if model.progress_poll_seconds <= 0:
         raise ValueError("model.progress_poll_seconds must be positive")
-    if model.structured_output_mode not in {"server_schema", "post_validate", "auto"}:
-        raise ValueError("model.structured_output_mode must be one of: server_schema, post_validate, auto")
+    if model.structured_output_mode != "server_schema":
+        raise ValueError("model.structured_output_mode must be server_schema")
+    if model.cache_mode not in {"record", "replay"}:
+        raise ValueError("model.cache_mode must be record or replay")
     _validate_positive("context.reserved_response_tokens", context.reserved_response_tokens)
     _validate_positive("context.reserved_summary_tokens", context.reserved_summary_tokens)
     _validate_non_negative("context.safety_margin_tokens", context.safety_margin_tokens)
@@ -607,12 +611,12 @@ def _coerce_config(data: dict[str, Any]) -> AgentConfig:
     _validate_positive("memory.max_retrieved_items", memory.max_retrieved_items)
     _validate_positive("budget_policy.fixed_overhead_min_tokens", budget_policy.fixed_overhead_min_tokens)
     _validate_positive("budget_policy.structured_output_json_floor_tokens", budget_policy.structured_output_json_floor_tokens)
-    _validate_positive("budget_policy.structured_output_grammar_floor_tokens", budget_policy.structured_output_grammar_floor_tokens)
+    _validate_positive("budget_policy.structured_output_schema_floor_tokens", budget_policy.structured_output_schema_floor_tokens)
     _validate_positive("budget_policy.safe_input_floor_tokens", budget_policy.safe_input_floor_tokens)
     if budget_policy.structured_output_json_factor_default <= 0:
         raise ValueError("budget_policy.structured_output_json_factor_default must be positive")
-    if budget_policy.structured_output_grammar_factor <= 0:
-        raise ValueError("budget_policy.structured_output_grammar_factor must be positive")
+    if budget_policy.structured_output_schema_factor <= 0:
+        raise ValueError("budget_policy.structured_output_schema_factor must be positive")
     _validate_positive("context_policy.guidance_item_token_hint", context_policy.guidance_item_token_hint)
     _validate_positive("context_policy.skill_metadata_token_hint", context_policy.skill_metadata_token_hint)
     _validate_positive("context_policy.skill_instruction_token_hint", context_policy.skill_instruction_token_hint)
@@ -741,9 +745,9 @@ def _coerce_config(data: dict[str, Any]) -> AgentConfig:
     _validate_positive("compression.max_messages_before_compress", compression.max_messages_before_compress)
     _validate_positive("compression.summary_chars", compression.summary_chars)
     _validate_positive("security.max_external_text_chars", security.max_external_text_chars)
-    if retrieval.backend not in {"llm_scoring", "transformer_local", "local_semantic", "degraded_lexical"}:
+    if retrieval.backend not in {"llm_scoring", "transformer_local", "unavailable"}:
         raise ValueError(
-            "retrieval.backend must be llm_scoring, transformer_local, local_semantic, or degraded_lexical"
+            "retrieval.backend must be llm_scoring, transformer_local, or unavailable"
         )
     _validate_positive("retrieval.max_candidates_per_source", retrieval.max_candidates_per_source)
     _validate_positive("guidance.max_items", guidance.max_items)

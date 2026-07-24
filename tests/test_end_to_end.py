@@ -92,8 +92,14 @@ def test_end_to_end_file_edit_task_verifies_written_content(make_config, tmp_pat
                         "tool_input": {
                             "path": str(sample),
                             "operation": "replace_pattern_all",
+                            "dry_run": False,
+                            "start": None,
+                            "end": None,
+                            "position": None,
+                            "expected_text": None,
                             "pattern": "hello",
                             "replacement": "hi",
+                            "insertion": None,
                         },
                     }
                 ),

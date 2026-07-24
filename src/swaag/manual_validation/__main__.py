@@ -3,7 +3,7 @@
 Usage:
     python -m swaag.manual_validation [options]
 
-Run the curated manual-validation subset against a live llama.cpp server.
+Run the full benchmark catalog against a live llama.cpp server by default.
 This is NOT a test category — it requires a running model server and produces
 real-usage artifacts, not test results.
 """
@@ -36,19 +36,24 @@ def main(argv: list[str] | None = None) -> int:
             "This is NOT a test category."
         ),
     )
-    parser.set_defaults(validation_subset=True)
+    parser.set_defaults(validation_subset=False)
     parser.add_argument("--output", default="manual_validation_output", help="Output directory for manual validation artifacts.")
     parser.add_argument("--clean", action="store_true", help="Delete the output directory before running.")
     parser.add_argument("--task", action="append", default=[], help="Run only the named validation task id. Can be passed multiple times.")
-    parser.add_argument("--validation-subset", dest="validation_subset", action="store_true", help="Run the curated manual-validation subset (default).")
-    parser.add_argument("--full-catalog", dest="validation_subset", action="store_false", help="Run the full benchmark catalog instead of the curated subset.")
+    parser.add_argument("--validation-subset", dest="validation_subset", action="store_true", help="Run the shorter generated validation subset.")
+    parser.add_argument("--full-catalog", dest="validation_subset", action="store_false", help="Run the full benchmark catalog (default).")
     parser.add_argument("--model-base-url", help="Override the llama.cpp base URL.")
     parser.add_argument("--timeout-seconds", type=int, help="Override the model read timeout.")
     parser.add_argument("--connect-timeout-seconds", type=int, help="Override the model connect timeout.")
     parser.add_argument("--model-profile", help="Record the llama.cpp profile used for validation.")
-    parser.add_argument("--structured-output-mode", choices=["server_schema", "post_validate", "auto"], help="Override structured output mode.")
+    parser.add_argument("--structured-output-mode", choices=["server_schema"], help="Override structured output mode.")
     parser.add_argument("--progress-poll-seconds", type=float, help="Override model progress polling interval.")
     parser.add_argument("--seeds", help="Comma-separated fixed seeds.")
+    parser.add_argument(
+        "--uncached-live",
+        action="store_true",
+        help="Bypass model-output cache for an explicitly uncached live validation run.",
+    )
     parser.add_argument("--json", action="store_true", help="Print the full result JSON.")
     args = parser.parse_args(argv)
 
@@ -70,6 +75,7 @@ def main(argv: list[str] | None = None) -> int:
         structured_output_mode=args.structured_output_mode,
         progress_poll_seconds=args.progress_poll_seconds,
         seeds=seeds,
+        use_cache=not bool(args.uncached_live),
     )
     if args.json:
         print(stable_json_dumps(report, indent=2))

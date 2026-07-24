@@ -11,9 +11,9 @@ semantic decisions:
   limit exceeded → stop, tool-call budget exhausted → stop, repeated no-
   progress failures → stop;
 * a small structural state machine over verification/failure outcomes:
-  verification failed-and-requires-retry → retry, failure requires replan →
-  replan, repeated-action-limit exceeded → replan, otherwise → execute the
-  next ready step.
+  verification failed-and-requires-retry plus model-classified retryable →
+  retry, model/verification requires replan → replan, repeated-action-limit
+  exceeded → replan, otherwise → execute the next ready step.
 
 When the structural state machine is ambiguous (more than one candidate
 remains), the runtime is expected to escalate to the LLM via
@@ -175,10 +175,14 @@ def select_action(
         candidates.append("replan")
         scores.append(ActionScore("replan", reason="repeated_action_limit_exceeded"))
 
+    retry_allowed_by_failure = failure is None or (failure.retryable and not failure.requires_replan)
     if verification is not None and not verification.passed:
-        if verification.requires_retry:
+        if verification.requires_retry and retry_allowed_by_failure:
             candidates.append("retry_step")
             scores.append(ActionScore("retry_step", reason=f"verification_failed={verification.reason}"))
+        if verification.requires_retry and not retry_allowed_by_failure:
+            candidates.append("replan")
+            scores.append(ActionScore("replan", reason=f"model_disallowed_retry={failure.kind if failure is not None else 'unknown'}"))
         if verification.requires_replan:
             if "replan" not in candidates:
                 candidates.append("replan")
@@ -196,8 +200,10 @@ def select_action(
     # ── Pick the action ───────────────────────────────────────────────────
     if forced_replan:
         chosen: ExecutionAction = "replan"
-    elif verification is not None and not verification.passed and verification.requires_retry:
+    elif verification is not None and not verification.passed and verification.requires_retry and retry_allowed_by_failure:
         chosen = "retry_step"
+    elif verification is not None and not verification.passed and verification.requires_retry and not retry_allowed_by_failure:
+        chosen = "replan"
     elif verification is not None and not verification.passed and verification.requires_replan:
         chosen = "replan"
     elif failure is not None and failure.requires_replan:
@@ -205,7 +211,12 @@ def select_action(
     else:
         chosen = default_action
 
-    requires_llm = len(candidates) > 1 and not forced_replan
+    deterministic_failure_transition = forced_replan or bool(
+        verification is not None
+        and not verification.passed
+        and (verification.requires_retry or verification.requires_replan)
+    ) or bool(failure is not None and failure.requires_replan)
+    requires_llm = len(candidates) > 1 and not deterministic_failure_transition
     return OrchestrationDecision(
         action=chosen,
         step=step,

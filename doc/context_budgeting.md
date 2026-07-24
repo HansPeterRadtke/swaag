@@ -12,7 +12,8 @@ Instead it:
 3. derives an output ceiling from that call kind,
 4. derives a safety margin from context size plus call kind,
 5. computes a safe input budget,
-6. asks the semantic-selection layers what context is relevant,
+6. asks model-owned selection layers what context is relevant when semantic
+   relevance is needed,
 7. packs the resulting sections by exact token cost until the budget is full.
 
 The human-editable policy source is:
@@ -63,7 +64,7 @@ Structured-output reserve policy is also config-backed now:
 
 - per-contract JSON reserve multipliers live under
   `[budget_policy.structured_output_json_factor_by_contract]`
-- default JSON and grammar reserve factors live in `[budget_policy]`
+- default JSON-schema reserve factors live in `[budget_policy]`
 - hard lower floors for structured reserves are explicit config values rather
   than hidden constants in code
 
@@ -74,7 +75,7 @@ budget across optional context groups:
 
 - history
 - workspace files
-- semantic memory
+- event memory
 - guidance
 - skills
 - notes
@@ -82,21 +83,22 @@ budget across optional context groups:
 These are proportional allocations derived from the safe input budget, not
 small absolute caps tied to a single context size.
 
-## Semantic selection first, exact packing second
+## Model Selection First, Exact Packing Second
 
 The runtime separates two concerns:
 
-1. Semantic relevance
-   - retrieval picks relevant history, memory, and files
-   - guidance resolution picks relevant guidance layers
-   - skill selection picks relevant skills and tool exposure
+1. Semantic relevance, when needed
+   - model-scored retrieval ranks relevant history, memory, and files
+   - guidance resolution can use model scoring for relevant guidance layers
+   - skill selection uses explicit skill metadata and optional model scoring
 2. Deterministic packing
    - exact token counting is used whenever possible
    - sections are packed until `safe_input_budget` is exhausted
    - lower-priority sections are dropped when they do not fit
 
-This keeps semantic choice with the LLM-driven selectors and keeps exact
-budget enforcement in deterministic code.
+This keeps semantic choice with model-driven selectors and keeps exact budget
+enforcement in deterministic code. Offline unavailable retrieval returns
+neutral scores instead of replacing model relevance with lexical scoring.
 
 ## Exact vs conservative counting
 

@@ -5,36 +5,7 @@ import pytest
 from swaag.prompt_analyzer import (
     PromptAnalysisValidationError,
     analysis_from_payload,
-    analyze_prompt_emergency_fallback,
 )
-
-
-def test_prompt_analyzer_emergency_fallback_returns_neutral_unstructured_analysis() -> None:
-    """Emergency fallback never claims semantic understanding."""
-
-    analysis = analyze_prompt_emergency_fallback("Build a Python tool that reads src/app.py and writes tests for it.")
-
-    assert analysis.task_type == "unstructured"
-    assert analysis.completeness == "partial"
-    assert analysis.requires_expansion is True
-    assert analysis.requires_decomposition is True
-    assert any(token.endswith(".py") for token in analysis.detected_entities)
-
-
-def test_prompt_analyzer_emergency_fallback_handles_empty_prompt_as_incomplete() -> None:
-    analysis = analyze_prompt_emergency_fallback("   ")
-
-    assert analysis.task_type == "incomplete"
-    assert analysis.completeness == "incomplete"
-    assert analysis.requires_expansion is True
-
-
-def test_prompt_analyzer_emergency_fallback_is_deterministic() -> None:
-    prompt = "Read app.py and update tests"
-    first = analyze_prompt_emergency_fallback(prompt)
-    second = analyze_prompt_emergency_fallback(prompt)
-
-    assert first == second
 
 
 def test_prompt_analysis_from_payload_validates_bounds() -> None:
@@ -44,6 +15,7 @@ def test_prompt_analysis_from_payload_validates_bounds() -> None:
             "completeness": "complete",
             "requires_expansion": False,
             "requires_decomposition": True,
+            "missing_required_information": False,
             "confidence": 0.9,
             "detected_entities": ["src/app.py"],
             "detected_goals": ["build"],
@@ -84,7 +56,7 @@ def test_prompt_analysis_rejects_unknown_task_type() -> None:
         )
 
 
-def test_prompt_analysis_repairs_vague_without_expansion() -> None:
+def test_prompt_analysis_preserves_model_declared_expansion_flag() -> None:
     analysis = analysis_from_payload(
         {
             "task_type": "vague",
@@ -97,4 +69,30 @@ def test_prompt_analysis_repairs_vague_without_expansion() -> None:
         }
     )
 
+    assert analysis.requires_expansion is False
+
+
+def test_prompt_analysis_missing_information_is_independent_of_shape_labels() -> None:
+    analysis = analysis_from_payload({
+        "task_type": "unstructured", "completeness": "partial",
+        "requires_expansion": False, "requires_decomposition": False,
+        "missing_required_information": True, "confidence": 0.9,
+        "detected_entities": ["request.txt", "context.txt"],
+        "detected_goals": ["read evidence and clarify"],
+    })
+
+    assert analysis.task_type == "unstructured"
+    assert analysis.completeness == "partial"
+    assert analysis.missing_required_information is True
+
+
+def test_prompt_analysis_allows_missing_information_with_expansion_when_model_declares_both() -> None:
+    analysis = analysis_from_payload({
+        "task_type": "vague", "completeness": "partial",
+        "requires_expansion": True, "requires_decomposition": False,
+        "missing_required_information": True, "confidence": 0.8,
+        "detected_entities": [], "detected_goals": ["clarify and expand"],
+    })
+
     assert analysis.requires_expansion is True
+    assert analysis.missing_required_information is True

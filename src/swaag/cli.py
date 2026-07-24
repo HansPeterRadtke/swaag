@@ -80,7 +80,9 @@ def _build_parser() -> argparse.ArgumentParser:
     edit_parser = subparsers.add_parser("edit-dry-run", help="Preview a text edit without writing the file.")
     edit_parser.add_argument("--session", help="Session name or id.")
     edit_parser.add_argument("path")
-    edit_parser.add_argument("operation", choices=["replace_range", "insert_at", "delete_range", "replace_pattern_once", "replace_pattern_all"])
+    edit_parser.add_argument("operation", choices=["replace_exact", "replace_range", "insert_at", "delete_range", "replace_pattern_once", "replace_pattern_all"])
+    edit_parser.add_argument("--old-text")
+    edit_parser.add_argument("--new-text")
     edit_parser.add_argument("--start", type=int)
     edit_parser.add_argument("--end", type=int)
     edit_parser.add_argument("--position", type=int)
@@ -185,7 +187,7 @@ def _run_doctor(runtime: AgentRuntime, emit_json: bool, session_ref: str | None)
         print(f"session_id={report['session_id']}")
         print(f"health={stable_json_dumps(report['health'])}")
         print(f"tokenize_probe_tokens={report['tokenize_probe_tokens']}")
-        print(f"grammar_probe={report['grammar_probe']}")
+        print(f"json_probe={report['json_probe']}")
         print(f"schema_probe={stable_json_dumps(report['schema_probe'])}")
     return 0
 
@@ -372,7 +374,7 @@ def _run_edit_dry_run(runtime: AgentRuntime, args) -> int:
         "operation": args.operation,
         "dry_run": True,
     }
-    for key in ["start", "end", "position", "replacement", "insertion", "pattern"]:
+    for key in ["start", "end", "position", "replacement", "insertion", "pattern", "old_text", "new_text"]:
         value = getattr(args, key)
         if value is not None:
             raw_input[key] = value

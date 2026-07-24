@@ -48,19 +48,37 @@ def test_decision_prompt_omits_tool_section_when_no_tools(make_config) -> None:
 def test_tool_input_prompt_uses_tool_input_kind(make_config) -> None:
     builder = PromptBuilder(make_config())
     messages = [Message(role="user", content="edit sample.py", created_at="t1")]
-    prompt = builder.build_tool_input_prompt(messages, tool_name="edit_text", prompt_mode="lean")
+    prompt = builder.build_tool_input_prompt(
+        messages,
+        tool_spec=("edit_text", "Edit text", {"type": "object", "properties": {}, "required": [], "additionalProperties": False}, "Registered guidance."),
+        prompt_mode="lean",
+    )
 
     assert prompt.kind == "tool_input"
 
 
-def test_tool_input_prompt_explains_write_file_arguments(make_config) -> None:
+def test_tool_input_prompt_uses_registered_tool_documentation(make_config) -> None:
     builder = PromptBuilder(make_config())
     messages = [Message(role="user", content="rewrite sample.py", created_at="t1")]
-    prompt = builder.build_tool_input_prompt(messages, tool_name="write_file", prompt_mode="lean")
+    schema = {
+        "type": "object",
+        "properties": {
+            "path": {"type": "string"},
+            "content": {"type": "string"},
+            "create": {"type": "boolean"},
+        },
+        "required": ["path", "content", "create"],
+        "additionalProperties": False,
+    }
+    prompt = builder.build_tool_input_prompt(
+        messages,
+        tool_spec=("write_file", "Registered write description", schema, "Registered write guidance."),
+        prompt_mode="lean",
+    )
 
-    assert "`path`" in prompt.prompt_text
-    assert "`content`" in prompt.prompt_text
-    assert "`create`" in prompt.prompt_text
+    assert "Registered write description" in prompt.prompt_text
+    assert "Registered write guidance" in prompt.prompt_text
+    assert '"create":{"type":"boolean"}' in prompt.prompt_text
 
 
 def test_summary_prompt_contains_history(make_config) -> None:
@@ -108,15 +126,29 @@ def test_analysis_prompt_contains_current_user_request(make_config) -> None:
 
 def test_task_decision_prompt_contains_analysis(make_config) -> None:
     builder = PromptBuilder(make_config())
+    tools = [
+        (
+            "read_text",
+            "Read exact text from a file.",
+            {"type": "object", "properties": {"path": {"type": "string"}}, "required": ["path"], "additionalProperties": False},
+            "Use before answering from files.",
+        )
+    ]
     prompt = builder.build_task_decision_prompt(
         "build a tool",
         '{"task_type":"structured"}',
         prompt_mode="lean",
+        tools=tools,
     )
 
     assert prompt.kind == "task_decision"
     assert "Prompt analysis:" in prompt.prompt_text
     assert '"task_type":"structured"' in prompt.prompt_text
+    assert "Available tools:" in prompt.prompt_text
+    assert "read_text" in prompt.prompt_text
+    assert "Read exact text from a file." in prompt.prompt_text
+    assert '"additionalProperties":false' in prompt.prompt_text
+    assert "Use before answering from files." in prompt.prompt_text
 
 
 def test_task_expansion_prompt_contains_decision(make_config) -> None:

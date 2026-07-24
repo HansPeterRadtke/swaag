@@ -27,6 +27,7 @@ def test_prompt_understanding_benchmark_tasks_define_oracles_without_model_fixtu
             scenario = task.create(root)
             assert scenario.model_client is None
             assert scenario.oracle is not None
-            assert scenario.oracle.completeness == "complete"
+            expected_completeness = "incomplete" if scenario.oracle.task_type == "incomplete" else "complete"
+            assert scenario.oracle.completeness == expected_completeness
             assert "marker" not in scenario.prompt.lower()
             assert any(path.is_file() for path in scenario.workspace.rglob("*"))

@@ -17,9 +17,6 @@ from swaag.types import (
     DerivedFileWrite,
     FileView,
     HistoryEvent,
-    MemoryEntity,
-    MemoryFact,
-    MemoryRelationship,
     Message,
     Note,
     Plan,
@@ -669,7 +666,6 @@ class HistoryStore:
                 "edit_count": state.edit_count,
                 "active_plan_id": state.active_plan.plan_id if state.active_plan is not None else None,
                 "semantic_memory_count": len(state.semantic_memory),
-                "semantic_fact_count": len(state.semantic_facts),
                 "checkpoint_event_count": state.event_count,
                 "deferred_task_count": len(state.deferred_tasks),
                 "code_checkpoint_count": len(state.code_checkpoints),
@@ -929,6 +925,8 @@ class HistoryStore:
             state.environment.workspace.modified_files = [str(item) for item in payload.get("modified_files", [])]
             state.environment.workspace.deleted_files = [str(item) for item in payload.get("deleted_files", [])]
             state.environment.workspace.last_snapshot_at = str(payload.get("captured_at", event.timestamp))
+            if state.environment.workspace.created_files or state.environment.workspace.modified_files or state.environment.workspace.deleted_files:
+                state.edit_count += 1
             state.environment.last_updated = event.timestamp
             return
 
@@ -940,6 +938,8 @@ class HistoryStore:
             state.environment.shell.last_command = str(payload["command"])
             state.environment.shell.last_exit_code = int(payload.get("exit_code", 0))
             state.environment.shell.updated_at = event.timestamp
+            if payload.get("created_files") or payload.get("modified_files") or payload.get("deleted_files"):
+                state.edit_count += 1
             state.environment.last_updated = event.timestamp
             return
 
@@ -1089,46 +1089,6 @@ class HistoryStore:
             item = SemanticMemoryItem(**payload["memory"])
             state.semantic_memory = [existing for existing in state.semantic_memory if existing.memory_id != item.memory_id]
             state.semantic_memory.append(item)
-            metadata = item.metadata if isinstance(item.metadata, dict) else {}
-            for entity_payload in metadata.get("entities", []):
-                entity = MemoryEntity(
-                    entity_id=str(entity_payload["entity_id"]),
-                    name=str(entity_payload["name"]),
-                    entity_type=str(entity_payload["entity_type"]),
-                    source_event_id=item.source_event_id,
-                    trust_level=item.trust_level,
-                    confidence=float(metadata.get("confidence", 1.0)),
-                    metadata={"memory_id": item.memory_id},
-                )
-                state.semantic_entities[entity.entity_id] = entity
-            for relationship_payload in metadata.get("relationships", []):
-                relationship = MemoryRelationship(
-                    relationship_id=str(relationship_payload["relationship_id"]),
-                    source_entity_id=str(relationship_payload["source_entity_id"]),
-                    relation_type=str(relationship_payload["relation_type"]),
-                    target_entity_id=str(relationship_payload["target_entity_id"]),
-                    source_event_id=item.source_event_id,
-                    trust_level=item.trust_level,
-                    confidence=float(metadata.get("confidence", 1.0)),
-                    metadata={"memory_id": item.memory_id},
-                )
-                if all(existing.relationship_id != relationship.relationship_id for existing in state.semantic_relationships):
-                    state.semantic_relationships.append(relationship)
-            for fact_payload in metadata.get("facts", []):
-                fact = MemoryFact(
-                    fact_id=str(fact_payload["fact_id"]),
-                    fact_type=str(fact_payload["fact_type"]),
-                    content=str(fact_payload["content"]),
-                    source_event_id=item.source_event_id,
-                    trust_level=item.trust_level,
-                    confidence=float(metadata.get("confidence", 1.0)),
-                    metadata={"memory_id": item.memory_id},
-                )
-                if all(existing.fact_id != fact.fact_id for existing in state.semantic_facts):
-                    state.semantic_facts.append(fact)
-            if item.memory_kind == "procedural":
-                state.procedural_patterns = [existing for existing in state.procedural_patterns if existing.memory_id != item.memory_id]
-                state.procedural_patterns.append(item)
             return
 
         if event.event_type == "project_state_updated":
@@ -1145,8 +1105,8 @@ class HistoryStore:
         payload = event.payload
         if event.event_type == "model_request_sent" and payload.get("kind") != "doctor_health":
             metrics.model_calls += 1
-            if str(payload.get("requested_contract_mode", "")) == "json_schema" and str(payload.get("effective_contract_mode", "")) == "plain":
-                metrics.post_validate_fallbacks += 1
+            if str(payload.get("requested_contract_mode", "")) == "json_schema" and str(payload.get("effective_contract_mode", "")) != "json_schema":
+                metrics.unconstrained_contract_violations += 1
             if str(payload.get("effective_contract_mode", "")) == "json_schema":
                 metrics.server_schema_requests += 1
         elif event.event_type == "tool_called":
@@ -1328,10 +1288,6 @@ def _state_from_payload(payload: dict[str, Any]) -> SessionState:
         active_strategy=StrategySelection(**payload["active_strategy"]) if payload.get("active_strategy") else None,
         working_memory=WorkingMemory(**payload.get("working_memory", {})),
         semantic_memory=[SemanticMemoryItem(**item) for item in payload.get("semantic_memory", [])],
-        semantic_entities={key: MemoryEntity(**value) for key, value in payload.get("semantic_entities", {}).items()},
-        semantic_relationships=[MemoryRelationship(**item) for item in payload.get("semantic_relationships", [])],
-        semantic_facts=[MemoryFact(**item) for item in payload.get("semantic_facts", [])],
-        procedural_patterns=[SemanticMemoryItem(**item) for item in payload.get("procedural_patterns", [])],
         project_state=ProjectState(**payload.get("project_state", {})),
         environment=_environment_from_payload(payload.get("environment", {})),
         deferred_tasks=[DeferredTask(**item) for item in payload.get("deferred_tasks", [])],

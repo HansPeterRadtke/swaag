@@ -10,13 +10,15 @@ from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any
 
-from swaag.retrieval.embeddings import build_backend
+from swaag.environment.environment import AgentEnvironment
+from swaag.retrieval.embeddings import SemanticBackendProtocolError, build_backend
 from swaag.tools.base import ToolValidationError, _validate_schema_value
 from swaag.types import HistoryEvent, Plan, PlanStep, SessionState, ToolExecutionResult, VerificationType
 
 _EXECUTION_ALLOWLIST = frozenset({"python", "python3", "pytest"})
 _BENIGN_WORKSPACE_ARTIFACT_DIRS = frozenset({".pytest_cache", "__pycache__", ".mypy_cache", ".ruff_cache", ".hypothesis"})
 _BENIGN_WORKSPACE_ARTIFACT_SUFFIXES = (".pyc", ".pyo")
+_INTRINSIC_SUCCESS_CRITERION_NAME = "__contract_success_criteria__"
 
 
 def _is_benign_workspace_artifact(path_text: str) -> bool:
@@ -64,14 +66,6 @@ class VerificationArtifacts:
         return self.tool_results[-1] if self.tool_results else None
 
 
-def _tool_names_equivalent(actual: str | None, expected: str | None) -> bool:
-    if expected in {None, ""}:
-        return True
-    if actual == expected:
-        return True
-    return {actual, expected} <= {"read_file", "read_text"}
-
-
 class VerificationEngine:
     def __init__(
         self,
@@ -82,20 +76,22 @@ class VerificationEngine:
         semantic_seed: int = 11,
         semantic_connect_timeout_seconds: int = 10,
         semantic_read_timeout_seconds: int = 60,
+        semantic_model_client: Any | None = None,
     ):
         self._command_allowlist = frozenset(command_allowlist or _EXECUTION_ALLOWLIST)
         backend_mode = semantic_backend_mode
         # Standalone deterministic verification tests often construct the
         # engine without a live semantic endpoint. That should degrade
         # explicitly instead of crashing during initialization.
-        if backend_mode == "llm_scoring" and not semantic_base_url:
-            backend_mode = "degraded_lexical"
+        if backend_mode == "llm_scoring" and not semantic_base_url and semantic_model_client is None:
+            backend_mode = "unavailable"
         self._semantic_backend = build_backend(
             backend_mode,
             base_url=semantic_base_url,
             seed=semantic_seed,
             connect_timeout_seconds=semantic_connect_timeout_seconds,
             read_timeout_seconds=semantic_read_timeout_seconds,
+            model_client=semantic_model_client,
         )
 
     def _expected_parts(self, step: PlanStep) -> list[str]:
@@ -171,6 +167,15 @@ class VerificationEngine:
                     conditions_met.append(name)
                 else:
                     conditions_failed.append(name)
+            self._apply_intrinsic_success_criterion(
+                runtime=runtime,
+                state=state,
+                step=step,
+                artifacts=artifacts,
+                evidence=evidence,
+                conditions_met=conditions_met,
+                conditions_failed=conditions_failed,
+            )
             self._apply_perspectives(
                 state=state,
                 plan=plan,
@@ -186,6 +191,15 @@ class VerificationEngine:
             run_named_condition(name)
         for name in step.optional_conditions:
             run_named_condition(name)
+        self._apply_intrinsic_success_criterion(
+            runtime=runtime,
+            state=state,
+            step=step,
+            artifacts=artifacts,
+            evidence=evidence,
+            conditions_met=conditions_met,
+            conditions_failed=conditions_failed,
+        )
         self._apply_perspectives(
             state=state,
             plan=plan,
@@ -196,6 +210,47 @@ class VerificationEngine:
             conditions_failed=conditions_failed,
         )
         return self._finalize(step, evidence, conditions_met, conditions_failed)
+
+    def _apply_intrinsic_success_criterion(
+        self,
+        *,
+        runtime,
+        state: SessionState,
+        step: PlanStep,
+        artifacts: VerificationArtifacts,
+        evidence: dict[str, Any],
+        conditions_met: list[str],
+        conditions_failed: list[str],
+    ) -> None:
+        if not self._requires_intrinsic_success_criterion(step):
+            return
+        check = {
+            "name": _INTRINSIC_SUCCESS_CRITERION_NAME,
+            "check_type": "criterion",
+            "actual_source": "assistant_text",
+            "criterion": step.success_criteria.strip(),
+        }
+        results = self._run_llm_fallback(
+            runtime=runtime,
+            state=state,
+            step=step,
+            artifacts=artifacts,
+            checks=[check],
+        )
+        if not results:
+            evidence[_INTRINSIC_SUCCESS_CRITERION_NAME] = {
+                "criterion": step.success_criteria,
+                "error": "missing_criterion_result",
+            }
+            conditions_failed.append(_INTRINSIC_SUCCESS_CRITERION_NAME)
+            return
+        _name, passed, criterion_evidence = results[0]
+        evidence[_INTRINSIC_SUCCESS_CRITERION_NAME] = criterion_evidence
+        if passed:
+            conditions_met.append(_INTRINSIC_SUCCESS_CRITERION_NAME)
+        else:
+            conditions_failed.append(_INTRINSIC_SUCCESS_CRITERION_NAME)
+
 
     def _apply_perspectives(
         self,
@@ -230,18 +285,39 @@ class VerificationEngine:
         latest = artifacts.latest_tool_result
         if latest is not None and latest.tool_name in {"read_file", "write_file", "read_text", "edit_text", "run_tests", "shell_command"}:
             required.add("structural")
-        # llm_fallback respond/reasoning steps already include an isolated
-        # semantic review pass through the criterion contract. The reviewer
-        # perspective still runs for traceability, but it is advisory rather
-        # than gating so generic expected_output placeholders do not create a
-        # second contradictory semantic judge.
+        # Respond/reasoning steps with explicit criterion checks already run a
+        # model-owned semantic review through the criterion contract. The
+        # reviewer perspective still runs for traceability, but it is advisory
+        # rather than a second semantic gate.
         if (
             step.kind in {"respond", "reasoning"}
-            and step.verification_type != "llm_fallback"
-            and not self._uses_exact_assistant_match(step)
+            and not self._has_required_assistant_semantic_check(step)
+            and not self._requires_intrinsic_success_criterion(step)
         ):
             required.add("reviewer")
         return required
+
+    def _has_required_assistant_semantic_check(self, step: PlanStep) -> bool:
+        required = set(step.required_conditions)
+        for check in step.verification_checks:
+            if str(check.get("name", "")).strip() not in required:
+                continue
+            check_type = str(check.get("check_type", "")).strip()
+            if check_type == "criterion" and str(check.get("criterion", "")).strip():
+                return True
+            if check_type in {"exact_match", "string_match"} and str(check.get("actual_source", "")).strip() == "assistant_text":
+                expected = check.get("expected")
+                if isinstance(expected, str) and expected.strip():
+                    return True
+        return False
+
+    def _requires_intrinsic_success_criterion(self, step: PlanStep) -> bool:
+        return (
+            step.verification_type == "composite"
+            and step.kind in {"respond", "reasoning"}
+            and bool(step.success_criteria.strip())
+            and not self._has_required_assistant_semantic_check(step)
+        )
 
     def _run_perspectives(
         self,
@@ -297,19 +373,19 @@ class VerificationEngine:
         literal_match = bool(normalized_actual and normalized_literal and normalized_actual == normalized_literal)
         if not expected_text and not literal_match:
             return "reviewer", True, {"checked": False}
-        # When the configured semantic backend is one of the degraded
-        # lexical fallbacks, we cannot get an LLM-driven relevance score.
-        # Producing a fail/pass on a TF-IDF cosine would be exactly the
-        # kind of magic-number heuristic the new design forbids. The
-        # reviewer therefore records the absence of an LLM judgement and
-        # passes structurally — production deployments use a real model
-        # so this fallback never gates a real run.
+        if literal_match:
+            return "reviewer", True, {
+                "checked": False,
+                "reason": "exact_literal_match",
+                "expected_text": expected_text,
+                "actual_text": actual_text,
+                "literal_match": True,
+            }
         backend_unavailable = self._semantic_backend.degraded or self._semantic_backend.mode in {
-            "degraded_lexical",
-            "heuristic_fallback",
+            "unavailable",
         }
         if backend_unavailable:
-            return "reviewer", bool(actual_text), {
+            return "reviewer", False, {
                 "checked": False,
                 "reason": "semantic_backend_unavailable",
                 "review_backend_mode": self._semantic_backend.mode,
@@ -318,9 +394,22 @@ class VerificationEngine:
                 "actual_text": actual_text,
                 "literal_match": literal_match,
             }
-        relevance_scores = (
-            self._semantic_backend.score_query(expected_text, [actual_text]) if expected_text and actual_text else [0.0]
-        )
+        try:
+            relevance_scores = (
+                self._semantic_backend.score_query(expected_text, [actual_text]) if expected_text and actual_text else [0.0]
+            )
+        except SemanticBackendProtocolError as exc:
+            self._semantic_backend.degraded = True
+            return "reviewer", False, {
+                "checked": False,
+                "reason": "semantic_backend_protocol_error",
+                "error": str(exc),
+                "review_backend_mode": self._semantic_backend.mode,
+                "review_backend_degraded": True,
+                "expected_text": expected_text,
+                "actual_text": actual_text,
+                "literal_match": literal_match,
+            }
         relevance = float(relevance_scores[0]) if relevance_scores else 0.0
         evidence = {
             "checked": True,
@@ -334,9 +423,8 @@ class VerificationEngine:
         }
         # Decision rule: an exact-literal match always passes; otherwise the
         # LLM relevance score must be at least 0.5 (the LLM's own midpoint
-        # between "irrelevant" and "matches"). The threshold is structural
-        # — the LLM produced the score; we are not picking a magic number
-        # to compensate for a lexical formula.
+        # between "irrelevant" and "matches"). The threshold is structural:
+        # the LLM produced the score.
         passed = bool(actual_text) and (literal_match or relevance >= 0.5)
         return "reviewer", passed, evidence
 
@@ -350,7 +438,7 @@ class VerificationEngine:
         completed = {item.step_id for item in plan.steps if item.status == "completed"}
         missing_dependencies = [dependency for dependency in step.depends_on if dependency not in completed]
         latest = artifacts.latest_tool_result
-        tool_matches = latest is None or _tool_names_equivalent(latest.tool_name, step.expected_tool)
+        tool_matches = latest is None or step.expected_tool in {None, ""} or latest.tool_name == step.expected_tool
         tool_output = latest.output if latest is not None else {}
         exit_code_consistent = True
         if latest is not None and latest.tool_name == "run_tests":
@@ -430,10 +518,18 @@ class VerificationEngine:
         conditions_met: list[str],
         conditions_failed: list[str],
     ) -> VerificationOutcome:
-        total = len(step.required_conditions) + len(step.optional_conditions)
-        confidence = 0.0 if total == 0 else len(conditions_met) / total
+        required_conditions = list(step.required_conditions)
+        if self._requires_intrinsic_success_criterion(step):
+            required_conditions.append(_INTRINSIC_SUCCESS_CRITERION_NAME)
+        perspective_conditions = {
+            name
+            for name in [*conditions_met, *conditions_failed]
+            if name.startswith("perspective:")
+        }
+        total = len(required_conditions) + len(step.optional_conditions) + len(perspective_conditions)
+        confidence = 0.0 if total == 0 else min(1.0, len(set(conditions_met)) / total)
         perspective_failures = [name for name in conditions_failed if name.startswith("perspective:")]
-        passed = not any(name in conditions_failed for name in step.required_conditions) and not perspective_failures
+        passed = not any(name in conditions_failed for name in required_conditions) and not perspective_failures
         reason = "verified" if passed else ";".join(sorted(conditions_failed))
         requires_replan = any(name == "dependencies_completed" for name in conditions_failed)
         requires_retry = not passed and not requires_replan
@@ -461,6 +557,8 @@ class VerificationEngine:
         check: dict[str, Any],
     ) -> tuple[bool, dict[str, Any]]:
         check_type = str(check.get("check_type", "")).strip()
+        if check_type == "tool_effect_verified":
+            return self._run_tool_effect_check(runtime=runtime, state=state, artifacts=artifacts)
         if verification_type == "execution":
             return self._run_execution_check(check)
         if verification_type == "structural":
@@ -475,7 +573,17 @@ class VerificationEngine:
             if check_type in {"artifact_present", "tool_name_equals", "tool_output_nonempty", "tool_files_changed", "string_nonempty", "exact_match", "numeric_tolerance", "string_match"}:
                 return self._run_value_check(check, artifacts=artifacts)
             if check_type == "criterion":
-                raise VerificationError(f"Criterion check {check.get('name')} may only be used with llm_fallback")
+                results = self._run_llm_fallback(
+                    runtime=runtime,
+                    state=state,
+                    step=step,
+                    artifacts=artifacts,
+                    checks=[check],
+                )
+                if not results:
+                    return False, {"criterion": str(check.get("criterion", "")), "error": "missing_criterion_result"}
+                _name, passed, evidence = results[0]
+                return passed, evidence
         if verification_type == "llm_fallback":
             if check_type == "criterion":
                 raise VerificationError("Criterion checks must be executed through llm fallback")
@@ -483,6 +591,27 @@ class VerificationEngine:
                 return self._run_structural_check(check, artifacts=artifacts, plan=plan, step=step)
             return self._run_value_check(check, artifacts=artifacts)
         raise VerificationError(f"Unsupported verification type/check combination: {verification_type}/{check_type}")
+
+    def _run_tool_effect_check(
+        self,
+        *,
+        runtime,
+        state: SessionState,
+        artifacts: VerificationArtifacts,
+    ) -> tuple[bool, dict[str, Any]]:
+        latest = artifacts.latest_tool_result
+        if latest is None:
+            return False, {"reason": "missing_tool_result"}
+        registry = getattr(runtime, "tools", None)
+        config = getattr(runtime, "config", None)
+        if registry is None or config is None:
+            return False, {"tool_name": latest.tool_name, "reason": "runtime_tool_registry_unavailable"}
+        try:
+            tool = registry.get(latest.tool_name)
+        except KeyError as exc:
+            return False, {"tool_name": latest.tool_name, "reason": "unregistered_tool", "error": str(exc)}
+        environment = AgentEnvironment(config, state)
+        return tool.verify_effect(latest, environment)
 
     def _run_execution_check(self, check: dict[str, Any]) -> tuple[bool, dict[str, Any]]:
         command = check.get("command")
@@ -568,21 +697,35 @@ class VerificationEngine:
             missing = [dependency for dependency in step.depends_on if dependency not in completed]
             return not missing, {"completed_dependencies": sorted(completed), "missing_dependencies": missing}
         if check_type == "file_exists":
-            path = Path(str(check.get("path", ""))).expanduser()
+            path, path_evidence = self._resolve_filesystem_check_path(check, artifacts=artifacts)
+            if path is None:
+                return False, path_evidence
             return path.exists(), {"path": str(path), "exists": path.exists()}
         if check_type == "file_contains":
-            path = Path(str(check.get("path", ""))).expanduser()
+            path, path_evidence = self._resolve_filesystem_check_path(check, artifacts=artifacts)
+            if path is None:
+                return False, path_evidence
             if not path.exists():
                 return False, {"path": str(path), "exists": False}
+            if path.is_dir():
+                return False, {"path": str(path), "exists": True, "matched": False, "reason": "path_is_directory"}
             text = path.read_text(encoding="utf-8")
-            pattern = str(check.get("pattern", ""))
+            pattern = self._file_contains_pattern(check)
+            if not pattern:
+                return False, {"path": str(path), "exists": True, "matched": False, "reason": "empty_expected_text"}
             regex = bool(check.get("regex", False))
             matched = bool(re.search(pattern, text, re.MULTILINE)) if regex else pattern in text
             return matched, {"path": str(path), "exists": True, "matched": matched}
         if check_type == "json_schema_valid":
             schema = check.get("schema")
             if not isinstance(schema, dict):
-                raise VerificationError("json_schema_valid check requires a schema object")
+                schema_json = str(check.get("schema_json", "")).strip()
+                try:
+                    schema = json.loads(schema_json)
+                except json.JSONDecodeError as exc:
+                    raise VerificationError("json_schema_valid check requires valid schema_json object text") from exc
+                if not isinstance(schema, dict):
+                    raise VerificationError("json_schema_valid schema_json must decode to an object")
             actual = self._resolve_actual(check, artifacts=artifacts)
             try:
                 _validate_schema_value(actual, schema, path="verification")
@@ -617,6 +760,41 @@ class VerificationEngine:
             return True, {"tool_name": latest.tool_name, "output": latest.output}
         raise VerificationError(f"Unsupported structural check type: {check_type}")
 
+    def _resolve_filesystem_check_path(
+        self,
+        check: dict[str, Any],
+        *,
+        artifacts: VerificationArtifacts,
+    ) -> tuple[Path | None, dict[str, Any]]:
+        path_text = str(check.get("path", "")).strip()
+        if path_text:
+            return Path(path_text).expanduser(), {"path": path_text, "path_source": "check"}
+        latest = artifacts.latest_tool_result
+        output = latest.output if latest is not None else None
+        if isinstance(output, dict):
+            output_path = output.get("path")
+            if isinstance(output_path, str) and output_path.strip():
+                return Path(output_path).expanduser(), {"path": output_path, "path_source": "latest_tool_result"}
+        return None, {"exists": False, "reason": "missing_path"}
+
+    def _file_contains_pattern(self, check: dict[str, Any]) -> str:
+        pattern = check.get("pattern")
+        if isinstance(pattern, str) and pattern:
+            return pattern
+        expected = check.get("expected")
+        if isinstance(expected, str):
+            return expected
+        if expected is not None:
+            return str(expected)
+        expected_json = str(check.get("expected_json", "")).strip()
+        if not expected_json:
+            return ""
+        try:
+            parsed = json.loads(expected_json)
+        except json.JSONDecodeError:
+            return expected_json
+        return parsed if isinstance(parsed, str) else str(parsed)
+
     def _run_value_check(self, check: dict[str, Any], *, artifacts: VerificationArtifacts) -> tuple[bool, dict[str, Any]]:
         check_type = str(check.get("check_type", "")).strip()
         if check_type == "artifact_present":
@@ -627,8 +805,8 @@ class VerificationEngine:
         if check_type == "tool_name_equals":
             latest = artifacts.latest_tool_result
             actual = latest.tool_name if latest is not None else None
-            expected = str(check.get("expected", ""))
-            return _tool_names_equivalent(actual, expected), {"actual": actual, "expected": expected}
+            expected = str(check.get("expected", "")).strip()
+            return bool(expected) and actual == expected, {"actual": actual, "expected": expected}
         if check_type == "tool_output_nonempty":
             latest = artifacts.latest_tool_result
             output = latest.output if latest is not None else None
@@ -779,7 +957,7 @@ def verify_benchmark_contract(
     events: list[HistoryEvent],
     workspace_before: dict[str, str] | None = None,
     workspace_after: dict[str, str] | None = None,
-    semantic_backend_mode: str = "degraded_lexical",
+    semantic_backend_mode: str = "unavailable",
     semantic_base_url: str | None = None,
     semantic_seed: int = 11,
     semantic_connect_timeout_seconds: int = 10,
