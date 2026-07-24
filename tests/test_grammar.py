@@ -152,3 +152,17 @@ def test_verification_contract_constrains_short_ids_without_embedding_long_excer
         "type": "string",
         "enum": ["", "E01", "E02"],
     }
+
+
+def test_plan_contract_places_required_status_on_each_check_without_cross_reference_lists() -> None:
+    contract = plan_contract(["edit_text"])
+    schema = contract.json_schema
+    assert schema is not None
+    step_properties = schema["properties"]["steps"]["items"]["properties"]
+    assert "required_conditions" not in step_properties
+    assert "optional_conditions" not in step_properties
+    check_properties = step_properties["verification_checks"]["items"]["properties"]
+    assert check_properties["condition"] == {
+        "type": "string",
+        "enum": ["required", "optional"],
+    }

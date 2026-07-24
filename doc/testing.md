@@ -139,18 +139,20 @@ real tool results, so successful reads or edits do not fail merely because the
 model named the output `file_content` or another arbitrary label.
 Tests must also prove that tools with registered objective-verification
 requirements cannot pass with only artifact-exists checks after a mutation.
-They must also prove that a model-declared objective check omitted from
-`required_conditions`, listed only as optional, or otherwise inconsistent is
-rejected with model-visible validation evidence, while a corrected
-model-authored plan can continue through execution and verification.
+They must also prove that a model-declared objective check marked optional, or
+omitted entirely, is rejected with model-visible validation evidence, while a
+corrected model-authored plan with that check marked required can continue
+through execution and verification.
 Tests must prove exact tool identity. If a model-authored plan declares
 `expected_tool`, executing a different registered tool name must fail
 verification or be rejected as mismatch evidence; tests must not encode
 read-tool or other tool-pair equivalence as a success condition.
-Regression tests must cover that `required_conditions` names are verification
-check names, not output labels, and that `file_exists`, `tool_files_changed`,
+Regression tests must cover that every model-facing verification check has a
+local required/optional condition status, that dataflow labels cannot occupy
+that status field, and that `file_exists`, `tool_files_changed`,
 `artifact_present`, or `tool_output_nonempty` alone cannot satisfy a mutating
-tool's registered objective-verification requirement.
+tool's registered objective-verification requirement. Legacy saved plans with
+internal condition-name lists must remain readable.
 They must also prove that semantic response or reasoning plans are rejected
 before execution unless at least one model-declared `criterion` check or
 exact/string assistant-text match is required; optional-only semantic criteria

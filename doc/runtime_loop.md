@@ -197,13 +197,13 @@ returns to the loop for model-owned recovery. Exact literal assistant-text
 matches declared by the model are the only reviewer path that can pass without
 semantic scoring.
 
-The only condition normalization allowed here is structural. A dependency
-artifact listed in `input_refs` may be treated as the generic
-`dependencies_completed` condition, an explicit `dependencies_completed`
-condition may add that generic structural check object, and an empty
-`required_conditions` list is rejected so the model can correct it. This does
-not create task-specific verification content; it only connects the
-model-declared graph and checks without changing condition importance.
+The live constrained plan schema puts `condition="required"` or
+`condition="optional"` directly on every verification check. The parser
+mechanically converts those model-authored statuses into internal required and
+optional check-name lists for execution and history; it does not change their
+importance. A plan with no required check is rejected so the model can correct
+it. Legacy saved payloads with separate lists remain readable, but Python does
+not create task-specific verification content.
 
 Planner `input_text` is instruction context, not an executable argument object.
 A model may name dependencies through `input_refs`/`output_refs`, and may refer
@@ -226,19 +226,15 @@ For verification only, the latest tool result is also available through the
 current step's model-declared `expected_output`, `expected_outputs`, and
 `output_refs` labels. This lets the model's `artifact_present` checks reference
 its own labels without Python choosing the label meaning.
-Some tools register objective verification check types that must appear in
-`required_conditions`. For example, a file-mutating tool can require the model
-to declare a resulting-file check. The model must both declare and require that
-check. If the check is missing, optional-only, or inconsistent with
-`required_conditions`, plan review rejects the plan and returns structured
-validation evidence to the planner. Python enforces the presence and type of
-the check but does not promote optional checks, rewrite condition importance,
-or choose the expected content.
-`required_conditions` and `optional_conditions` are lists of check names from
-the same step, not output labels. For mutating tools, `file_exists`,
-`tool_files_changed`, `artifact_present`, and `tool_output_nonempty` do not
-substitute for a registered objective check such as `file_contains` or
-`command_success`.
+Some tools register objective verification check types that the model must
+mark with `condition="required"`. For example, a file-mutating tool can require
+the model to declare a resulting-file check. If the check is missing or marked
+optional, plan review rejects the plan and returns structured validation
+evidence to the planner. Python enforces the presence and type of the check but
+does not promote optional checks, rewrite condition importance, or choose the
+expected content. The condition field is not an output label. For mutating
+tools, `file_exists`, `tool_files_changed`, `artifact_present`, and
+`tool_output_nonempty` do not substitute for the registered objective check.
 File-content verification reads the declared target text from `pattern`,
 `expected`, or `expected_json`. Planner/tool guidance tells the model to use
 targets precise enough to reject partial or corrupt edits. Empty containment

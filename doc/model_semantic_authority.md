@@ -158,25 +158,24 @@ That aliasing is mechanical graph bookkeeping so `artifact_present` can refer
 to the model's own labels; Python must not use it to invent or transform
 semantic content.
 Tool definitions may declare required objective verification check types, such
-as a resulting-file check for file-mutating tools. The model plan must declare
-and require a matching check. If that check is missing, optional-only, or not
-named in `required_conditions`, plan review rejects the plan with structured
-validation evidence and asks the model for a corrected constrained plan. Python
-must not promote optional checks, rewrite condition importance, or synthesize
-the expected text, path, command, or criterion.
-`required_conditions` and `optional_conditions` must name checks declared in
-the same step; they are not artifact, input, output, or expected-output labels.
-For mutating tools, existence and nonempty-output checks are mechanical
-evidence but not objective proof unless the model also declares and requires the
-tool's registered objective check type.
+as a resulting-file check for file-mutating tools. The model plan must declare a
+matching check with `condition="required"`. If that check is missing or marked
+optional, plan review rejects the plan with structured validation evidence and
+asks the model for a corrected constrained plan. Python must not promote
+optional checks, rewrite condition importance, or synthesize the expected text,
+path, command, or criterion. Each model-authored check carries its own local
+condition status; artifact, input, output, and expected-output labels remain in
+their dedicated dataflow fields. For mutating tools, existence and
+nonempty-output checks are mechanical evidence but not objective proof unless
+the model also declares the tool's registered objective check type as required.
 Original file contents, diffs, and write provenance are mechanical history
 records. Visible backup files are disabled by default because creating extra
 workspace files is a user-visible side effect that can violate tasks requiring
 no unrelated changes.
 For semantic response or reasoning checks, at least one model-declared
-`criterion` check must be listed in `required_conditions`, unless the model
-declares a required exact/string match against `assistant_text`. A criterion
-that is only optional, or a required list containing only dependency/nonempty
+`criterion` check must carry `condition="required"`, unless the model declares a
+required exact/string match against `assistant_text`. A criterion that is only
+optional, or a plan whose required checks contain only dependency/nonempty
 checks, cannot prove a semantic response and must be rejected before the step
 executes.
 For file-mutating tools, a passing objective check still does not by itself
@@ -206,16 +205,13 @@ still choose to observe the current state and answer when the evidence already
 appears sufficient. Python may record that the unresolved step-level check is
 deferred, but it must not decide semantic sufficiency; only the constrained
 `final_objective_satisfied` verifier can discharge the whole objective.
-Plan condition normalization is limited to structural bookkeeping. If a model
-puts a declared dependency artifact from `input_refs` into `required_conditions`,
-the runtime may treat that as the structural `dependencies_completed` check
-because the dependency relationship was already explicitly declared by the
-model. If the model explicitly names `dependencies_completed` but omits the
-matching generic check object, the runtime may add that structural check. If
-the model declares verification checks but leaves `required_conditions` empty,
-the plan is invalid and the model must correct it. Python must not invent
-task-specific checks, expected content, tools, success criteria, or condition
-importance.
+Live plan condition status is local to each verification check, so the model
+cannot create a mismatched check-name cross-reference. The parser mechanically
+translates those explicit statuses into internal required and optional lists for
+execution and persisted history. Legacy saved plans may still be normalized for
+structural dependency bookkeeping, but live plans with no required check are
+invalid and the model must correct them. Python must not invent task-specific
+checks, expected content, tools, success criteria, or condition importance.
 Dependency validation is also mechanical. Python may reject self-dependencies
 and cycles because they make a declared plan graph impossible to execute, but
 it must return that evidence to the model rather than choosing a corrected

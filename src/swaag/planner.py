@@ -258,6 +258,28 @@ def _ensure_dependencies_check(verification_checks: list[dict[str, object]]) -> 
     verification_checks.insert(0, {"name": "dependencies_completed", "check_type": "dependencies_completed"})
 
 
+def _conditions_from_local_check_status(
+    verification_checks: list[dict[str, object]],
+) -> tuple[list[str], list[str]] | None:
+    statuses = [check.get("condition") for check in verification_checks]
+    if not any(status is not None for status in statuses):
+        return None
+    if not all(status in {"required", "optional"} for status in statuses):
+        raise PlanValidationError(
+            "every verification check must declare condition as required or optional when local condition status is used"
+        )
+    required_conditions: list[str] = []
+    optional_conditions: list[str] = []
+    for check in verification_checks:
+        name = str(check["name"])
+        status = str(check.pop("condition"))
+        if status == "required":
+            required_conditions.append(name)
+        else:
+            optional_conditions.append(name)
+    return required_conditions, optional_conditions
+
+
 def _normalize_conditions(
     raw_required: object,
     raw_optional: object,
@@ -361,13 +383,17 @@ def _normalize_step_payload(
     input_refs = _normalize_ref_list(raw_step.get("input_refs", []))
     output_refs = _normalize_ref_list(raw_step.get("output_refs", []))
     depends_on = _normalize_ref_list(raw_step.get("depends_on", []))
-    required_conditions, optional_conditions = _normalize_conditions(
-        raw_step.get("required_conditions", []),
-        raw_step.get("optional_conditions", []),
-        verification_checks=verification_checks,
-        input_refs=input_refs,
-        depends_on=depends_on,
-    )
+    local_conditions = _conditions_from_local_check_status(verification_checks)
+    if local_conditions is None:
+        required_conditions, optional_conditions = _normalize_conditions(
+            raw_step.get("required_conditions", []),
+            raw_step.get("optional_conditions", []),
+            verification_checks=verification_checks,
+            input_refs=input_refs,
+            depends_on=depends_on,
+        )
+    else:
+        required_conditions, optional_conditions = local_conditions
     required_set = set(required_conditions)
     overlap = sorted(name for name in optional_conditions if name in required_set)
     if overlap:

@@ -202,6 +202,7 @@ def plan_contract(
         {
             "name": _string(),
             "check_type": {"type": "string", "enum": check_types},
+            "condition": {"type": "string", "enum": ["required", "optional"]},
             "artifact": _string(),
             "actual_source": _string(),
             "expected": _string(),
@@ -233,8 +234,6 @@ def plan_contract(
             "success_criteria": _string(),
             "verification_type": {"type": "string", "enum": verification_types},
             "verification_checks": _array(check_schema),
-            "required_conditions": _array(_string()),
-            "optional_conditions": _array(_string()),
             "input_refs": _array(_string()),
             "output_refs": _array(_string()),
             "fallback_strategy": _string(),

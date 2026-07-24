@@ -726,3 +726,63 @@ def test_runtime_rejects_malformed_plan_and_records_fatal_plan_error(make_config
         and event.payload["reason"] == "plan_generation_failed"
         for event in events
     )
+
+
+def test_plan_parser_derives_internal_condition_lists_from_local_check_status() -> None:
+    payload = {
+        "goal": "edit and verify",
+        "success_criteria": "the edit is verified",
+        "fallback_strategy": "replan",
+        "steps": [
+            {
+                "step_id": "edit",
+                "title": "Edit file",
+                "goal": "persist the edit",
+                "kind": "write",
+                "expected_tool": "edit_text",
+                "input_text": "edit the target",
+                "expected_output": "edited file",
+                "expected_outputs": ["edited file"],
+                "done_condition": "tool_result:edit_text",
+                "success_criteria": "the edit is persisted",
+                "verification_type": "composite",
+                "verification_checks": [
+                    {"name": "dependencies_completed", "check_type": "dependencies_completed", "condition": "optional"},
+                    {"name": "tool_effect", "check_type": "tool_effect_verified", "condition": "required"},
+                ],
+                "input_refs": [],
+                "output_refs": [],
+                "fallback_strategy": "replan",
+                "depends_on": [],
+            },
+            {
+                "step_id": "answer",
+                "title": "Answer",
+                "goal": "report completion",
+                "kind": "respond",
+                "expected_tool": "",
+                "input_text": "answer from the verified result",
+                "expected_output": "completion response",
+                "expected_outputs": ["completion response"],
+                "done_condition": "assistant_response_nonempty",
+                "success_criteria": "the response reports completion",
+                "verification_type": "composite",
+                "verification_checks": [
+                    {
+                        "name": "answer_nonempty",
+                        "check_type": "string_nonempty",
+                        "condition": "required",
+                        "actual_source": "assistant_text",
+                    }
+                ],
+                "input_refs": [],
+                "output_refs": [],
+                "fallback_strategy": "replan",
+                "depends_on": ["edit"],
+            },
+        ],
+    }
+    plan = plan_from_payload(payload, available_tools=["edit_text"])
+    assert plan.steps[0].required_conditions == ["tool_effect"]
+    assert plan.steps[0].optional_conditions == ["dependencies_completed"]
+    assert all("condition" not in check for check in plan.steps[0].verification_checks)

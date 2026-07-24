@@ -83,11 +83,16 @@ plan validation, SWAAG retries the planner with validation evidence under the
 same constrained schema; it does not fill missing conditions or rewrite the plan
 in Python. The repair budget is a correctness guard, not a latency target: it
 must allow multiple distinct contract corrections before failing closed.
-Generated plans use `verification_type="composite"` for every step. Semantic
-answer or reasoning verification is still model-owned: the plan must include a
-model-declared `criterion` check in `required_conditions`, unless the model
-declares a required exact/string match against `assistant_text`. An optional-only
-criterion cannot prove a semantic answer or reasoning step.
+Generated plans use `verification_type="composite"` for every step. Every
+model-authored verification check declares `condition="required"` or
+`condition="optional"` directly on that check; the constrained wire schema has
+no duplicate condition-name arrays. Semantic answer or reasoning verification
+is still model-owned: the plan must include a model-declared `criterion` check
+with `condition="required"`, unless the model declares a required exact/string
+match against `assistant_text`. An optional-only criterion cannot prove a
+semantic answer or reasoning step. The parser translates those local statuses
+into internal required and optional check-name lists without changing the
+model's choices.
 
 Model-declared artifact references are not executable content. Plan
 `input_text` is instruction context; selected-tool arguments are generated only
@@ -95,17 +100,17 @@ by the constrained selected-tool input call. If actual side-effect tool input
 contains an unresolved artifact placeholder such as `{{artifact_name}}`, SWAAG
 rejects it mechanically and returns the failure to the model for recovery.
 Tools may register required objective verification check types; when they do,
-the model plan must declare and require a matching check. If the check is
-missing, optional-only, or inconsistent with `required_conditions`, runtime
-review rejects the plan with structured validation evidence and asks the model
-for a corrected constrained plan. Python must not promote optional checks,
-rewrite condition importance, or synthesize verification semantics. Objective
-file-content verification must declare concrete expected text precise enough to
-reject partial or corrupt edits; an empty containment target is a failed check,
-not a successful match. Condition lists contain verification-check names only;
-output labels such as `file_content` or existence checks such as `file_exists`
-are not objective proof for mutating tools unless the model also declares and
-requires the tool's registered objective check type.
+the model plan must declare a matching check with `condition="required"`. If the
+check is missing or optional-only, runtime review rejects the plan with
+structured validation evidence and asks the model for a corrected constrained
+plan. Python must not promote optional checks, rewrite condition importance, or
+synthesize verification semantics. Objective file-content verification must
+declare concrete expected text precise enough to reject partial or corrupt
+edits; an empty containment target is a failed check, not a successful match.
+The `condition` field is only the check's required/optional status; output labels
+such as `file_content` belong in dataflow fields, and existence checks such as
+`file_exists` are not objective proof for mutating tools unless the model also
+declares the tool's registered objective check type as required.
 For observed text edits, `edit_text` exposes `replace_exact` as the preferred
 operation: the model supplies `old_text` and `new_text`, the editor requires
 exactly one literal match by default, and zero or multiple matches fail closed.

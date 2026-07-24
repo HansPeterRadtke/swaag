@@ -8,7 +8,7 @@ from swaag.retrieval.embeddings import EmbeddingBackend, SemanticBackendProtocol
 from swaag.runtime import AgentRuntime
 from swaag.utils import stable_json_dumps
 
-from tests.helpers import FakeModelClient, plan_response, plan_step
+from tests.helpers import FakeModelClient, _normalize_scripted_plan_response, plan_response, plan_step
 
 
 class _CodingSkillBackend(EmbeddingBackend):
@@ -2155,8 +2155,8 @@ def test_real_loop_continues_after_multiple_distinct_plan_contract_repairs(make_
     assert "Plan correction evidence from this generation cycle" in plan_requests[-1]["prompt"]
     assert "Previous rejected plan JSON:" in plan_requests[1]["prompt"]
     assert "Correct this model-authored plan rather than regenerating unrelated fields" in plan_requests[1]["prompt"]
-    assert stable_json_dumps(json.loads(invalid_file_contains_repr)) in plan_requests[1]["prompt"]
-    assert stable_json_dumps(json.loads(invalid_empty_reasoning_criterion)) in plan_requests[-1]["prompt"]
+    assert stable_json_dumps(json.loads(_normalize_scripted_plan_response(invalid_file_contains_repr))) in plan_requests[1]["prompt"]
+    assert stable_json_dumps(json.loads(_normalize_scripted_plan_response(invalid_empty_reasoning_criterion))) in plan_requests[-1]["prompt"]
     assert "attempt 1 validation:" in plan_requests[-1]["prompt"]
     assert "attempt 2 validation:" in plan_requests[-1]["prompt"]
     assert any(

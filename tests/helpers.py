@@ -124,6 +124,8 @@ class FakeModelClient:
             return response
         if not isinstance(response, str):
             raise TypeError(f"Unsupported fake response: {response!r}")
+        if contract_name == "task_plan":
+            response = _normalize_scripted_plan_response(response)
         if contract_name in {"verification", "plan_semantic_verification", "task_decision_semantic_verification"}:
             response = _normalize_scripted_verification_response(response, prompt=str(payload.get("prompt", "")))
         if contract_name == "yes_no":
@@ -320,6 +322,30 @@ def _extract_section(prompt: str, label: str) -> str:
         if match.group("label").strip() == label.rstrip(":"):
             return match.group("body").strip()
     return ""
+
+
+def _normalize_scripted_plan_response(response: str) -> str:
+    try:
+        payload = json.loads(response)
+    except json.JSONDecodeError:
+        return response
+    if not isinstance(payload, dict) or not isinstance(payload.get("steps"), list):
+        return response
+    changed = False
+    for step in payload["steps"]:
+        if not isinstance(step, dict) or not isinstance(step.get("verification_checks"), list):
+            continue
+        had_legacy_lists = "required_conditions" in step or "optional_conditions" in step
+        required = {str(item) for item in step.pop("required_conditions", [])}
+        optional = {str(item) for item in step.pop("optional_conditions", [])}
+        changed = changed or had_legacy_lists
+        for check in step["verification_checks"]:
+            if not isinstance(check, dict) or "condition" in check:
+                continue
+            name = str(check.get("name", ""))
+            check["condition"] = "required" if name in required else "optional"
+            changed = True
+    return json.dumps(payload) if changed else response
 
 
 def _candidate_excerpt_catalog(prompt: str) -> dict[str, str]:

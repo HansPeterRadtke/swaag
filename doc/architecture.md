@@ -112,18 +112,19 @@
   validation evidence; Python does not repair plan semantics or verification
   conditions, and the bounded repair loop is generous enough for multiple
   distinct structural corrections before failing closed
-- generated plans use `verification_type="composite"` for every step; semantic
-  answer or reasoning verification still requires at least one model-declared
-  `criterion` check in `required_conditions`, unless the model declares a
-  required exact/string match against `assistant_text`; optional-only criteria
-  are rejected because they cannot make semantic answer verification fail closed
-- plan condition normalization is allowed only for structural bookkeeping:
-  dependency artifact names already declared in `input_refs` may map to the
-  generic `dependencies_completed` check, an explicit `dependencies_completed`
-  condition may add that generic structural check object, and empty required
-  lists are rejected with model-visible validation evidence. Python must not
-  invent task-specific checks, expected content, tools, condition importance,
-  or success criteria.
+- generated plans use `verification_type="composite"` for every step; every
+  check declares its own `condition="required"` or `condition="optional"` in the
+  constrained model wire schema. Semantic answer or reasoning verification still
+  requires at least one model-declared `criterion` check marked required, unless
+  the model declares a required exact/string match against `assistant_text`;
+  optional-only criteria are rejected because they cannot make semantic answer
+  verification fail closed
+- the parser mechanically converts each check's local status into the internal
+  required and optional check-name lists used by execution and history. Legacy
+  saved payloads with the old lists remain readable, but live constrained output
+  cannot create a mismatched cross-reference. Python must not invent
+  task-specific checks, expected content, tools, condition importance, or
+  success criteria.
 - plan `input_text` is model-authored instruction context, not executable tool
   arguments; selected-tool arguments are generated only by the later
   constrained tool-input call
