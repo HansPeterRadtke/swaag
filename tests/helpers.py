@@ -256,7 +256,7 @@ class FakeModelClient:
         if contract_name in {"verification", "plan_semantic_verification", "task_decision_semantic_verification"}:
             criteria = json.loads(_extract_section(prompt, "Criteria:"))
             candidate = _extract_section(prompt, "Candidate result:")
-            excerpt = _allowed_candidate_excerpt(prompt, candidate)
+            excerpt_id = _allowed_candidate_excerpt_id(prompt, candidate)
             return json.dumps(
                 {
                     "criteria": [
@@ -264,7 +264,9 @@ class FakeModelClient:
                             "name": criterion["name"] if isinstance(criterion, dict) else criterion,
                             "passed": bool(candidate.strip()),
                             "evidence": "The quoted candidate excerpt provides concrete result evidence.",
-                            "candidate_excerpts": [excerpt] if excerpt else [],
+                            "candidate_excerpt_id_1": excerpt_id,
+                            "candidate_excerpt_id_2": "",
+                            "candidate_excerpt_id_3": "",
                         }
                         for criterion in criteria
                     ]
@@ -320,28 +322,33 @@ def _extract_section(prompt: str, label: str) -> str:
     return ""
 
 
-def _allowed_candidate_excerpt(prompt: str, candidate: str) -> str:
-    label = "Allowed candidate excerpts:"
-    raw_options = _extract_section(prompt, label)
-    if raw_options:
-        try:
-            options = json.loads(raw_options)
-        except json.JSONDecodeError:
-            options = []
-        if isinstance(options, list):
-            for option in options:
-                if isinstance(option, str) and option and option in candidate:
-                    return option
-    return candidate.strip()[:160]
+def _candidate_excerpt_catalog(prompt: str) -> dict[str, str]:
+    label = "Candidate excerpt ID catalog:"
+    raw_catalog = _extract_section(prompt, label)
+    if not raw_catalog:
+        return {}
+    try:
+        catalog = json.loads(raw_catalog)
+    except json.JSONDecodeError:
+        return {}
+    if not isinstance(catalog, dict):
+        return {}
+    return {
+        str(key): value
+        for key, value in catalog.items()
+        if isinstance(key, str) and isinstance(value, str) and key and value
+    }
+
+
+def _allowed_candidate_excerpt_id(prompt: str, candidate: str) -> str:
+    for excerpt_id, excerpt in _candidate_excerpt_catalog(prompt).items():
+        if excerpt in candidate:
+            return excerpt_id
+    return ""
 
 
 def _normalize_scripted_verification_response(response: str, *, prompt: str) -> str:
-    """Keep scripted semantic decisions valid under the production grounding contract.
-
-    Fake responses often specify only the semantic decision under test. Production
-    constrained decoding also requires exact candidate excerpts, so fill only that
-    structural field while preserving every scripted pass/fail decision and reason.
-    """
+    """Convert normalized scripted excerpts into the bounded production wire IDs."""
     try:
         payload = json.loads(response)
     except json.JSONDecodeError:
@@ -349,12 +356,42 @@ def _normalize_scripted_verification_response(response: str, *, prompt: str) -> 
     if not isinstance(payload, dict) or not isinstance(payload.get("criteria"), list):
         return response
     candidate = _extract_section(prompt, "Candidate result:").strip()
-    excerpt = _allowed_candidate_excerpt(prompt, candidate)
+    catalog = _candidate_excerpt_catalog(prompt)
+    default_id = next((key for key, excerpt in catalog.items() if excerpt in candidate), "")
+    reverse_catalog = {excerpt: key for key, excerpt in catalog.items()}
     changed = False
     for item in payload["criteria"]:
-        if isinstance(item, dict) and "candidate_excerpts" not in item:
-            item["candidate_excerpts"] = [excerpt] if excerpt else []
-            changed = True
+        if not isinstance(item, dict):
+            continue
+        if all(field in item for field in ("candidate_excerpt_id_1", "candidate_excerpt_id_2", "candidate_excerpt_id_3")):
+            continue
+        raw_excerpts = item.pop("candidate_excerpts", None)
+        if raw_excerpts is None:
+            selected_ids = [default_id] if default_id else []
+        elif isinstance(raw_excerpts, list):
+            selected_ids = []
+            for excerpt in raw_excerpts:
+                if not isinstance(excerpt, str):
+                    selected_ids.append("INVALID_EXCERPT_ID")
+                    continue
+                excerpt_id = reverse_catalog.get(excerpt)
+                if excerpt_id is None and excerpt in candidate:
+                    excerpt_id = next(
+                        (
+                            key
+                            for key, catalog_excerpt in catalog.items()
+                            if excerpt in catalog_excerpt or catalog_excerpt in excerpt
+                        ),
+                        None,
+                    )
+                selected_ids.append(excerpt_id or "INVALID_EXCERPT_ID")
+        else:
+            selected_ids = ["INVALID_EXCERPT_ID"]
+        selected_ids = list(dict.fromkeys(selected_ids))[:3]
+        item["candidate_excerpt_id_1"] = selected_ids[0] if len(selected_ids) > 0 else ""
+        item["candidate_excerpt_id_2"] = selected_ids[1] if len(selected_ids) > 1 else ""
+        item["candidate_excerpt_id_3"] = selected_ids[2] if len(selected_ids) > 2 else ""
+        changed = True
     return json.dumps(payload) if changed else response
 
 

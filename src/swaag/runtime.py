@@ -117,8 +117,8 @@ _STRUCTURAL_EXCERPTS = {"{", "}", "[", "]", "},", "],"}
 def _verification_candidate_excerpt_options(
     candidate: str,
     *,
-    max_options: int = 64,
-    max_chars: int = 220,
+    max_options: int = 48,
+    max_chars: int = 160,
 ) -> list[str]:
     """Return exact, stable candidate substrings for constrained evidence selection."""
     text = candidate.strip()
@@ -153,6 +153,45 @@ def _verification_candidate_excerpt_options(
     if not options:
         options.append(text[:max_chars])
     return options[:max_options]
+
+
+def _verification_candidate_excerpt_catalog(candidate: str) -> dict[str, str]:
+    return {
+        f"E{index:02d}": excerpt
+        for index, excerpt in enumerate(_verification_candidate_excerpt_options(candidate), start=1)
+    }
+
+
+def _normalize_verification_excerpt_ids(
+    payload: dict[str, Any],
+    catalog: dict[str, str],
+) -> dict[str, Any]:
+    criteria = payload.get("criteria")
+    if not isinstance(criteria, list):
+        return payload
+    normalized_items: list[Any] = []
+    for raw_item in criteria:
+        if not isinstance(raw_item, dict):
+            normalized_items.append(raw_item)
+            continue
+        item = dict(raw_item)
+        selected_ids = [
+            item.pop("candidate_excerpt_id_1", None),
+            item.pop("candidate_excerpt_id_2", None),
+            item.pop("candidate_excerpt_id_3", None),
+        ]
+        excerpts: list[str] = []
+        for excerpt_id in selected_ids:
+            if excerpt_id in {None, ""}:
+                continue
+            if not isinstance(excerpt_id, str) or excerpt_id not in catalog:
+                raise ValueError(f"Unknown candidate excerpt ID: {excerpt_id!r}")
+            excerpt = catalog[excerpt_id]
+            if excerpt not in excerpts:
+                excerpts.append(excerpt)
+        item["candidate_excerpts"] = excerpts
+        normalized_items.append(item)
+    return {**payload, "criteria": normalized_items}
 
 
 class BudgetExceededError(RuntimeError):
@@ -5188,11 +5227,11 @@ class AgentRuntime:
             str(item.get("name", "")).strip(): str(item.get("candidate_grounding", "required")).strip() or "required"
             for item in criteria
         }
-        candidate_excerpt_options = _verification_candidate_excerpt_options(assistant_text)
+        candidate_excerpt_catalog = _verification_candidate_excerpt_catalog(assistant_text)
         contract = verification_contract(
             expected_names,
             name=contract_name,
-            candidate_excerpt_options=candidate_excerpt_options,
+            candidate_excerpt_ids=candidate_excerpt_catalog,
         )
         max_attempts = max(3, int(self.config.model.max_retries) + 1)
         previous_rejected_verification = ""
@@ -5209,7 +5248,7 @@ class AgentRuntime:
                 criteria=criteria,
                 evidence=evidence,
                 prompt_mode=prompt_mode,
-                allowed_candidate_excerpts=candidate_excerpt_options,
+                candidate_excerpt_catalog=candidate_excerpt_catalog,
                 context_components=context_components,
                 previous_rejected_verification=previous,
                 verification_feedback=feedback,
@@ -5229,7 +5268,42 @@ class AgentRuntime:
                     contract=contract,
                     build_prompt=lambda prompt_mode: build_verification_prompt(prompt_mode, []),
                 )
-            _completion, payload = self._execute_structured_call(state, prepared)
+            _completion, wire_payload = self._execute_structured_call(state, prepared)
+            try:
+                payload = _normalize_verification_excerpt_ids(wire_payload, candidate_excerpt_catalog)
+            except ValueError as exc:
+                payload = wire_payload
+                previous_rejected_verification = stable_json_dumps(wire_payload)
+                correction_feedback.append(
+                    f"Attempt {attempt} verification evidence-ID validation failed: {exc}"
+                )
+                self.history.record_event(
+                    state,
+                    "error",
+                    {
+                        "operation": "verification_evidence_id_validation",
+                        "error": str(exc),
+                        "error_type": exc.__class__.__name__,
+                        "attempt": attempt,
+                        "payload": wire_payload,
+                        "contract_name": contract_name,
+                    },
+                )
+                if attempt < max_attempts:
+                    self.history.record_event(
+                        state,
+                        "model_retry_scheduled",
+                        {
+                            "kind": "verification",
+                            "prompt_mode": prepared.prompt_mode,
+                            "next_attempt": attempt + 1,
+                        },
+                    )
+                    continue
+                raise FatalSemanticEngineError(
+                    "Verification evidence-ID protocol failed after bounded correction attempts: "
+                    f"{' | '.join(correction_feedback)}"
+                ) from exc
             last_payload = payload
             try:
                 return self._validate_verification_payload(

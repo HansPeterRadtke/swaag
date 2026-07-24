@@ -2196,3 +2196,66 @@ def test_final_objective_uses_bounded_direct_evidence_context(make_config) -> No
     assert "y" * 200 not in prompts[0]
     assert "x" * 2_100 not in prompts[0]
     assert not any(request["contract"] == "subagent_selection" for request in runtime.client.requests)
+
+
+def test_verification_wire_ids_resolve_to_exact_candidate_excerpts(make_config) -> None:
+    candidate = "alpha evidence\nbeta evidence\ngamma evidence"
+
+    def verify(payload: dict[str, Any]) -> str:
+        schema = payload["json_schema"]
+        item = schema["properties"]["criteria"]["items"]
+        allowed = item["properties"]["candidate_excerpt_id_1"]["enum"]
+        selected = next(value for value in allowed if value)
+        assert all(len(value) <= 3 for value in allowed)
+        assert "alpha evidence" not in json.dumps(schema)
+        return json.dumps(
+            {
+                "criteria": [
+                    {
+                        "name": "grounded",
+                        "passed": True,
+                        "evidence": "The selected ID points to exact candidate evidence.",
+                        "candidate_excerpt_id_1": selected,
+                        "candidate_excerpt_id_2": "",
+                        "candidate_excerpt_id_3": "",
+                    }
+                ]
+            }
+        )
+
+    runtime = AgentRuntime(
+        make_config(),
+        model_client=FakeModelClient(contract_responses={"verification": [verify]}),
+    )
+    state = runtime.create_or_load_session()
+    step = plan_from_payload(
+        json.loads(
+            plan_response(
+                goal="verify bounded evidence IDs",
+                steps=[
+                    plan_step(
+                        "verify",
+                        "Verify",
+                        "respond",
+                        expected_output="grounded result",
+                        success_criteria="The result is grounded.",
+                    )
+                ],
+            )
+        ),
+        available_tools=[],
+    ).steps[0]
+
+    result = runtime._run_llm_verification(
+        state,
+        step=step,
+        criteria=[{"name": "grounded", "criterion": "The result is grounded."}],
+        assistant_text=candidate,
+        evidence={},
+        include_context=False,
+    )
+
+    excerpts = result["criteria"][0]["candidate_excerpts"]
+    assert excerpts
+    assert all(excerpt in candidate for excerpt in excerpts)
+    assert all("candidate_excerpt_id_" not in item for item in result["criteria"])

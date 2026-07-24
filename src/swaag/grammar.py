@@ -346,21 +346,21 @@ def verification_contract(
     criteria_names: Iterable[str],
     *,
     name: str = "verification",
-    candidate_excerpt_options: Iterable[str] | None = None,
+    candidate_excerpt_ids: Iterable[str] | None = None,
 ) -> ContractSpec:
     ordered = list(dict.fromkeys(str(item).strip() for item in criteria_names if str(item).strip()))
-    excerpt_options = list(
-        dict.fromkeys(str(item) for item in (candidate_excerpt_options or []) if isinstance(item, str) and item)
+    excerpt_ids = list(
+        dict.fromkeys(str(item).strip() for item in (candidate_excerpt_ids or []) if isinstance(item, str) and item.strip())
     )
-    excerpt_schema: dict[str, Any] = _string()
-    if excerpt_options:
-        excerpt_schema = {"type": "string", "enum": excerpt_options}
+    excerpt_id_schema = {"type": "string", "enum": ["", *excerpt_ids]}
     criterion_schema = _closed_object(
         {
             "name": {"type": "string", "enum": ordered},
             "passed": _boolean(),
             "evidence": _string(),
-            "candidate_excerpts": _array(excerpt_schema),
+            "candidate_excerpt_id_1": excerpt_id_schema,
+            "candidate_excerpt_id_2": excerpt_id_schema,
+            "candidate_excerpt_id_3": excerpt_id_schema,
         }
     )
     schema = _closed_object({"criteria": _array(criterion_schema)})

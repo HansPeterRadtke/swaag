@@ -451,7 +451,7 @@ class PromptBuilder:
         criteria: list[dict[str, object]],
         evidence: dict[str, object],
         prompt_mode: str,
-        allowed_candidate_excerpts: list[str] | None = None,
+        candidate_excerpt_catalog: dict[str, str] | None = None,
         context_components: list[PromptComponent] | None = None,
         previous_rejected_verification: str = "",
         verification_feedback: str = "",
@@ -485,11 +485,11 @@ class PromptBuilder:
                 text=f"Criteria:\n{stable_json_dumps(criteria)}\n\n",
             ),
             PromptComponent(
-                name="verification_allowed_candidate_excerpts",
+                name="verification_candidate_excerpt_catalog",
                 category="instruction",
                 text=(
-                    "Allowed candidate excerpts:\n"
-                    f"{stable_json_dumps(allowed_candidate_excerpts or [])}\n\n"
+                    "Candidate excerpt ID catalog:\n"
+                    f"{stable_json_dumps(candidate_excerpt_catalog or {})}\n\n"
                 ),
             ),
         ]

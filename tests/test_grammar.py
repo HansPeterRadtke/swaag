@@ -1,3 +1,4 @@
+import json
 import pytest
 
 from swaag.grammar import plan_contract, prompt_analysis_contract, task_decision_contract, tool_input_contract, task_decision_semantic_review_contract, verification_contract
@@ -80,15 +81,14 @@ def test_edit_text_operation_requirements_are_validated_locally() -> None:
         )
 
 
-def test_verification_contract_supports_multiple_exact_candidate_excerpts() -> None:
-    contract = verification_contract(["criterion_a"])
+def test_verification_contract_supports_three_bounded_exact_candidate_evidence_ids() -> None:
+    contract = verification_contract(["criterion_a"], candidate_excerpt_ids=["E01", "E02"])
     assert contract.json_schema is not None
     item = contract.json_schema["properties"]["criteria"]["items"]
-    assert item["properties"]["candidate_excerpts"] == {
-        "type": "array", "items": {"type": "string"}
-    }
-    assert "candidate_excerpts" in item["required"]
-    assert "candidate_excerpt" not in item["properties"]
+    for field in ("candidate_excerpt_id_1", "candidate_excerpt_id_2", "candidate_excerpt_id_3"):
+        assert item["properties"][field] == {"type": "string", "enum": ["", "E01", "E02"]}
+        assert field in item["required"]
+    assert "candidate_excerpts" not in item["properties"]
 
 
 def test_task_decision_semantic_review_contract_is_closed_and_portable() -> None:
@@ -138,15 +138,17 @@ def test_plan_contract_includes_registered_tool_effect_check_type() -> None:
     assert "tool_effect_verified" in check_type["enum"]
 
 
-def test_verification_contract_constrains_candidate_excerpts_to_exact_options() -> None:
+def test_verification_contract_constrains_short_ids_without_embedding_long_excerpts() -> None:
     contract = verification_contract(
         ["criterion_a"],
-        candidate_excerpt_options=["exact evidence one", "exact evidence two"],
+        candidate_excerpt_ids=["E01", "E02"],
     )
     schema = contract.json_schema
     assert schema is not None
+    encoded = json.dumps(schema, sort_keys=True)
+    assert "exact evidence" not in encoded
     item_schema = schema["properties"]["criteria"]["items"]
-    assert item_schema["properties"]["candidate_excerpts"]["items"] == {
+    assert item_schema["properties"]["candidate_excerpt_id_1"] == {
         "type": "string",
-        "enum": ["exact evidence one", "exact evidence two"],
+        "enum": ["", "E01", "E02"],
     }

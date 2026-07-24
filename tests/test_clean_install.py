@@ -214,16 +214,18 @@ class _CleanRoomHandler(BaseHTTPRequestHandler):
         elif properties == {"criteria"}:
             item_properties = schema["properties"]["criteria"]["items"]["properties"]
             names = item_properties["name"]["enum"]
-            excerpt_items = item_properties.get("candidate_excerpts", {}).get("items", {})
-            allowed_excerpts = excerpt_items.get("enum", []) if isinstance(excerpt_items, dict) else []
-            excerpt = allowed_excerpts[0] if allowed_excerpts else ""
+            id_schema = item_properties.get("candidate_excerpt_id_1", {})
+            allowed_ids = id_schema.get("enum", []) if isinstance(id_schema, dict) else []
+            excerpt_id = next((item for item in allowed_ids if item), "")
             payload = {
                 "criteria": [
                     {
                         "name": name,
                         "passed": True,
                         "evidence": "criterion met",
-                        "candidate_excerpts": [excerpt] if excerpt else [],
+                        "candidate_excerpt_id_1": excerpt_id,
+                        "candidate_excerpt_id_2": "",
+                        "candidate_excerpt_id_3": "",
                     }
                     for name in names
                 ]
