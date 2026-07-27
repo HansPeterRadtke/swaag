@@ -226,6 +226,7 @@ def test_run_manual_validation_is_not_a_test_category(monkeypatch, tmp_path: Pat
     assert payload["category"] == "manual_validation"
     assert payload["percent"] == 91.5
     assert observed["agent_behavior_mode"] == "cached"
+    assert observed["clean"] is False
     assert (tmp_path / "manual" / "manual_validation_results.json").exists()
     assert (tmp_path / "manual" / "manual_validation_report.md").exists()
 

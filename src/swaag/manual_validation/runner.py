@@ -34,7 +34,9 @@ def run_manual_validation(
     report = run_benchmarks(
         output_dir=output_dir / "manual_validation",
         task_ids=benchmark_task_ids,
-        clean=True,
+        # The outer clean flag already controls destructive cleanup. Keeping the
+        # inner directory preserves preseeded replay cassettes for cache-first runs.
+        clean=False,
         live_subset=validation_subset,
         use_live_model=True,
         model_base_url=model_base_url,
