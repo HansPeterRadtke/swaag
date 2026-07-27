@@ -108,7 +108,9 @@ For each reasoning step:
 
 ## Background execution and waiting
 
-Background execution is explicit, not automatic.
+Background execution is explicit, not automatic. A foreground `run_tests`
+result may intentionally be diagnostic: coherent failing output is structurally
+valid unless the model explicitly requires a `command_success` objective check.
 
 - today the practical backgroundable tools are:
   - `shell_command`
@@ -198,7 +200,9 @@ matches declared by the model are the only reviewer path that can pass without
 semantic scoring.
 
 The live constrained plan schema puts `condition="required"` or
-`condition="optional"` directly on every verification check. The parser
+`condition="optional"` directly on every ordinary verification check. It derives
+step completion conditions from kind and exact expected tool, while a separate
+compact model-named objective slot carries the required objective proof. The parser
 mechanically converts those model-authored statuses into internal required and
 optional check-name lists for execution and history; it does not change their
 importance. A plan with no required check is rejected so the model can correct
@@ -226,10 +230,11 @@ For verification only, the latest tool result is also available through the
 current step's model-declared `expected_output`, `expected_outputs`, and
 `output_refs` labels. This lets the model's `artifact_present` checks reference
 its own labels without Python choosing the label meaning.
-Some tools register objective verification check types that the model must
-mark with `condition="required"`. For example, a file-mutating tool can require
-the model to declare a resulting-file check. If the check is missing or marked
-optional, plan review rejects the plan and returns structured validation
+Some tools register objective verification check types. For such steps the model
+fills a compact `objective_verification_check` with its chosen registered type,
+model-authored name, and applicable path/pattern or command fields. Runtime makes
+that translated check required; mechanical-only checks cannot substitute. If the
+check is missing or malformed, plan review rejects the plan and returns structured validation
 evidence to the planner. Python enforces the presence and type of the check but
 does not promote optional checks, rewrite condition importance, or choose the
 expected content. The condition field is not an output label. For mutating

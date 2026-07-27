@@ -786,3 +786,67 @@ def test_plan_parser_derives_internal_condition_lists_from_local_check_status() 
     assert plan.steps[0].required_conditions == ["tool_effect"]
     assert plan.steps[0].optional_conditions == ["dependencies_completed"]
     assert all("condition" not in check for check in plan.steps[0].verification_checks)
+
+
+def test_plan_parser_derives_done_condition_when_live_wire_omits_it() -> None:
+    payload = {
+        "goal": "read then answer",
+        "success_criteria": "answered",
+        "fallback_strategy": "replan",
+        "steps": [
+            {
+                "step_id": "read",
+                "title": "Read",
+                "goal": "read",
+                "kind": "read",
+                "expected_tool": "read_file",
+                "input_text": "read the file",
+                "expected_output": "contents",
+                "expected_outputs": ["contents"],
+                "success_criteria": "contents returned",
+                "verification_type": "composite",
+                "objective_verification_check": _none_objective_check(),
+                "verification_checks": [
+                    {"name": "tool", "check_type": "tool_name_equals", "condition": "required", "expected": "read_file"}
+                ],
+                "input_refs": [],
+                "output_refs": ["contents"],
+                "fallback_strategy": "replan",
+                "depends_on": [],
+            },
+            {
+                "step_id": "answer",
+                "title": "Answer",
+                "goal": "answer",
+                "kind": "respond",
+                "expected_tool": "",
+                "input_text": "answer",
+                "expected_output": "response",
+                "expected_outputs": ["response"],
+                "success_criteria": "response supplied",
+                "verification_type": "composite",
+                "objective_verification_check": _none_objective_check(),
+                "verification_checks": [
+                    {"name": "answer", "check_type": "string_nonempty", "condition": "required", "actual_source": "assistant_text"}
+                ],
+                "input_refs": ["contents"],
+                "output_refs": ["response"],
+                "fallback_strategy": "replan",
+                "depends_on": ["read"],
+            },
+        ],
+    }
+    plan = plan_from_payload(payload, available_tools=["read_file"])
+    assert plan.steps[0].done_condition == "tool_result:read_file"
+    assert plan.steps[1].done_condition == "assistant_response_nonempty"
+
+
+def _none_objective_check() -> dict[str, object]:
+    return {
+        "name": "",
+        "check_type": "none",
+        "path": "",
+        "pattern": "",
+        "command": [],
+        "cwd": "",
+    }

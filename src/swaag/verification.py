@@ -330,7 +330,7 @@ class VerificationEngine:
         perspectives = [self._run_consistency_perspective(plan=plan, step=step, artifacts=artifacts)]
         latest = artifacts.latest_tool_result
         if latest is not None and latest.tool_name in {"read_file", "write_file", "read_text", "edit_text", "run_tests", "shell_command"}:
-            perspectives.append(self._run_structural_perspective(state=state, artifacts=artifacts))
+            perspectives.append(self._run_structural_perspective(state=state, step=step, artifacts=artifacts))
         if (
             step.kind in {"respond", "reasoning"}
             and artifacts.assistant_text.strip()
@@ -459,6 +459,7 @@ class VerificationEngine:
         self,
         *,
         state: SessionState,
+        step: PlanStep,
         artifacts: VerificationArtifacts,
     ) -> tuple[str, bool, dict[str, Any]]:
         latest = artifacts.latest_tool_result
@@ -491,10 +492,25 @@ class VerificationEngine:
             stderr = output.get("stderr", "")
             exit_code = output.get("exit_code")
             passed = output.get("passed")
+            required_names = set(step.required_conditions)
+            requires_success = any(
+                str(check.get("name", "")).strip() in required_names
+                and str(check.get("check_type", "")).strip() == "command_success"
+                for check in step.verification_checks
+            )
             evidence["has_output"] = isinstance(stdout, str) and isinstance(stderr, str)
             evidence["passed"] = passed
             evidence["exit_code"] = exit_code
-            return "structural", evidence["has_output"] and passed is True and exit_code == 0, evidence
+            evidence["requires_success"] = requires_success
+            structurally_valid = (
+                evidence["has_output"]
+                and isinstance(exit_code, int)
+                and isinstance(passed, bool)
+                and ((exit_code == 0) == passed)
+            )
+            if requires_success:
+                structurally_valid = structurally_valid and passed is True and exit_code == 0
+            return "structural", structurally_valid, evidence
         return "structural", True, evidence
 
     def _check_index(self, step: PlanStep) -> dict[str, dict[str, Any]]:

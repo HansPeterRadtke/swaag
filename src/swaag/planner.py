@@ -347,6 +347,45 @@ def _normalize_step_kind(kind: str, expected_tool: str | None) -> PlanStepKind:
     return kind  # type: ignore[return-value]
 
 
+_OBJECTIVE_CHECK_TYPES = {"tool_effect_verified", "file_contains", "command_success"}
+
+
+def _derived_done_condition(kind: PlanStepKind, expected_tool: str | None) -> str:
+    if kind in _TOOL_REQUIRED_KINDS:
+        return f"tool_result:{expected_tool or ''}"
+    if kind == "respond":
+        return "assistant_response_nonempty"
+    return "reasoning_result_nonempty"
+
+
+def _objective_check_from_wire(raw_value: object) -> dict[str, object] | None:
+    if raw_value is None:
+        return None
+    if not isinstance(raw_value, dict):
+        raise PlanValidationError("objective_verification_check must be an object")
+    check_type = str(raw_value.get("check_type", "")).strip()
+    if check_type == "none":
+        return None
+    if check_type not in _OBJECTIVE_CHECK_TYPES:
+        raise PlanValidationError(
+            "objective_verification_check must use none, tool_effect_verified, file_contains, or command_success"
+        )
+    check_name = str(raw_value.get("name", "")).strip() or f"objective_{check_type}"
+    check: dict[str, object] = {
+        "name": check_name,
+        "check_type": check_type,
+        "condition": "required",
+    }
+    if check_type == "file_contains":
+        check["path"] = str(raw_value.get("path", ""))
+        check["pattern"] = str(raw_value.get("pattern", ""))
+    elif check_type == "command_success":
+        command = raw_value.get("command", [])
+        check["command"] = command if isinstance(command, list) else []
+        check["cwd"] = str(raw_value.get("cwd", ""))
+    return check
+
+
 def _normalize_step_payload(
     raw_step: dict[str, object],
     *,
@@ -358,7 +397,8 @@ def _normalize_step_payload(
     goal = str(raw_step.get("goal", "")).strip()
     input_text = str(raw_step.get("input_text", "")).strip()
     expected_output = str(raw_step.get("expected_output", "")).strip()
-    done_condition = str(raw_step.get("done_condition", "")).strip()
+    supplied_done_condition = str(raw_step.get("done_condition", "")).strip()
+    done_condition = supplied_done_condition or _derived_done_condition(kind, expected_tool)
     success_criteria = str(raw_step.get("success_criteria", "")).strip()
     fallback_strategy = str(raw_step.get("fallback_strategy", "")).strip()
     missing = [
@@ -368,7 +408,6 @@ def _normalize_step_payload(
             "goal": goal,
             "input_text": input_text,
             "expected_output": expected_output,
-            "done_condition": done_condition,
             "success_criteria": success_criteria,
             "fallback_strategy": fallback_strategy,
         }.items()
@@ -379,7 +418,14 @@ def _normalize_step_payload(
     expected_outputs = _normalize_ref_list(raw_step.get("expected_outputs", []))
     if not expected_outputs:
         raise PlanValidationError(f"Plan step {step_label} must declare expected_outputs")
-    verification_checks = _normalize_check_list(raw_step.get("verification_checks", []))
+    raw_checks = raw_step.get("verification_checks", [])
+    if not isinstance(raw_checks, list):
+        raise PlanValidationError("verification_checks must be a list")
+    checks_with_objective = [dict(item) if isinstance(item, dict) else item for item in raw_checks]
+    objective_check = _objective_check_from_wire(raw_step.get("objective_verification_check"))
+    if objective_check is not None:
+        checks_with_objective.append(objective_check)
+    verification_checks = _normalize_check_list(checks_with_objective)
     input_refs = _normalize_ref_list(raw_step.get("input_refs", []))
     output_refs = _normalize_ref_list(raw_step.get("output_refs", []))
     depends_on = _normalize_ref_list(raw_step.get("depends_on", []))

@@ -113,8 +113,10 @@
   conditions, and the bounded repair loop is generous enough for multiple
   distinct structural corrections before failing closed
 - generated plans use `verification_type="composite"` for every step; every
-  check declares its own `condition="required"` or `condition="optional"` in the
-  constrained model wire schema. Semantic answer or reasoning verification still
+  ordinary check declares its own `condition="required"` or
+  `condition="optional"` in the constrained model wire schema. Completion
+  conditions are derived mechanically from step kind and exact expected tool.
+  Semantic answer or reasoning verification still
   requires at least one model-declared `criterion` check marked required, unless
   the model declares a required exact/string match against `assistant_text`;
   optional-only criteria are rejected because they cannot make semantic answer
@@ -135,11 +137,12 @@
 - verification may expose the latest tool result under the current step's
   model-declared `expected_output`, `expected_outputs`, and `output_refs`
   labels; this is structural aliasing only, not content synthesis
-- tools may register required objective verification check types. Runtime plan
-  review requires the model plan to both declare and require a matching check;
-  missing, optional-only, or inconsistent checks are rejected with validation
-  evidence. Python does not promote optional checks, rewrite condition
-  importance, or invent the expected path, text, command, or criterion.
+- tools may register required objective verification check types. The live wire
+  exposes one compact, model-named `objective_verification_check` per step; its
+  type is constrained to the registered objective family and it is translated
+  into a required internal check. Mechanical-only evidence cannot occupy this
+  slot. Missing or malformed objective checks are rejected with validation
+  evidence. Python does not choose the type or invent expected text or commands.
 - `edit_text` prefers portable `replace_exact` edits over raw offsets when the
   model has observed the current text: `old_text` must match exactly once,
   `new_text` is applied atomically, and zero or multiple matches fail closed.

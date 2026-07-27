@@ -324,6 +324,44 @@ def _extract_section(prompt: str, label: str) -> str:
     return ""
 
 
+def _empty_objective_check() -> dict[str, Any]:
+    return {
+        "name": "",
+        "check_type": "none",
+        "path": "",
+        "pattern": "",
+        "command": [],
+        "cwd": "",
+    }
+
+
+def _objective_check_from_scripted_check(check: dict[str, Any]) -> dict[str, Any]:
+    objective = _empty_objective_check()
+    check_type = str(check.get("check_type", ""))
+    objective["name"] = str(check.get("name", ""))
+    objective["check_type"] = check_type
+    if check_type == "file_contains":
+        objective["path"] = str(check.get("path", ""))
+        pattern = str(check.get("pattern", ""))
+        if not pattern:
+            expected_json = str(check.get("expected_json", ""))
+            if expected_json:
+                try:
+                    decoded = json.loads(expected_json)
+                except json.JSONDecodeError:
+                    decoded = ""
+                if isinstance(decoded, str):
+                    pattern = decoded
+        if not pattern:
+            pattern = str(check.get("expected", ""))
+        objective["pattern"] = pattern
+    elif check_type == "command_success":
+        command = check.get("command", [])
+        objective["command"] = command if isinstance(command, list) else []
+        objective["cwd"] = str(check.get("cwd", ""))
+    return objective
+
+
 def _normalize_scripted_plan_response(response: str) -> str:
     try:
         payload = json.loads(response)
@@ -332,9 +370,13 @@ def _normalize_scripted_plan_response(response: str) -> str:
     if not isinstance(payload, dict) or not isinstance(payload.get("steps"), list):
         return response
     changed = False
+    objective_types = {"tool_effect_verified", "file_contains", "command_success"}
     for step in payload["steps"]:
         if not isinstance(step, dict) or not isinstance(step.get("verification_checks"), list):
             continue
+        if "done_condition" in step:
+            step.pop("done_condition", None)
+            changed = True
         had_legacy_lists = "required_conditions" in step or "optional_conditions" in step
         required = {str(item) for item in step.pop("required_conditions", [])}
         optional = {str(item) for item in step.pop("optional_conditions", [])}
@@ -344,6 +386,23 @@ def _normalize_scripted_plan_response(response: str) -> str:
                 continue
             name = str(check.get("name", ""))
             check["condition"] = "required" if name in required else "optional"
+            changed = True
+        if "objective_verification_check" not in step:
+            objective_index = next(
+                (
+                    index
+                    for index, check in enumerate(step["verification_checks"])
+                    if isinstance(check, dict)
+                    and check.get("condition") == "required"
+                    and str(check.get("check_type", "")) in objective_types
+                ),
+                None,
+            )
+            if objective_index is None:
+                step["objective_verification_check"] = _empty_objective_check()
+            else:
+                objective = dict(step["verification_checks"].pop(objective_index))
+                step["objective_verification_check"] = _objective_check_from_scripted_check(objective)
             changed = True
     return json.dumps(payload) if changed else response
 

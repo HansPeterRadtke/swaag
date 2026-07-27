@@ -166,3 +166,20 @@ def test_plan_contract_places_required_status_on_each_check_without_cross_refere
         "type": "string",
         "enum": ["required", "optional"],
     }
+
+
+def test_plan_contract_derives_done_condition_and_has_dedicated_objective_check() -> None:
+    contract = plan_contract(["read_file", "edit_text"])
+    schema = contract.json_schema
+    assert schema is not None
+    step_properties = schema["properties"]["steps"]["items"]["properties"]
+    assert "done_condition" not in step_properties
+    objective = step_properties["objective_verification_check"]
+    assert set(objective["properties"]) == {"name", "check_type", "path", "pattern", "command", "cwd"}
+    assert objective["properties"]["check_type"]["enum"] == [
+        "none",
+        "tool_effect_verified",
+        "file_contains",
+        "command_success",
+    ]
+    assert "tool_files_changed" not in objective["properties"]["check_type"]["enum"]

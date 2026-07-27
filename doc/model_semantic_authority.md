@@ -158,9 +158,11 @@ That aliasing is mechanical graph bookkeeping so `artifact_present` can refer
 to the model's own labels; Python must not use it to invent or transform
 semantic content.
 Tool definitions may declare required objective verification check types, such
-as a resulting-file check for file-mutating tools. The model plan must declare a
-matching check with `condition="required"`. If that check is missing or marked
-optional, plan review rejects the plan with structured validation evidence and
+as a resulting-file check for file-mutating tools. The model plan selects a
+compact, model-named `objective_verification_check`; runtime translates that
+choice into a required internal check. The constrained slot excludes
+mechanical-only substitutes. If that check is missing or malformed, plan review
+rejects the plan with structured validation evidence and
 asks the model for a corrected constrained plan. Python must not promote
 optional checks, rewrite condition importance, or synthesize the expected text,
 path, command, or criterion. Each model-authored check carries its own local
@@ -205,8 +207,9 @@ still choose to observe the current state and answer when the evidence already
 appears sufficient. Python may record that the unresolved step-level check is
 deferred, but it must not decide semantic sufficiency; only the constrained
 `final_objective_satisfied` verifier can discharge the whole objective.
-Live plan condition status is local to each verification check, so the model
-cannot create a mismatched check-name cross-reference. The parser mechanically
+Live plan condition status is local to each ordinary verification check, so the
+model cannot create a mismatched check-name cross-reference. Structural done
+conditions are derived from step kind and expected tool. The parser mechanically
 translates those explicit statuses into internal required and optional lists for
 execution and persisted history. Legacy saved plans may still be normalized for
 structural dependency bookkeeping, but live plans with no required check are

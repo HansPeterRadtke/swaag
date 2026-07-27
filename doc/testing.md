@@ -147,12 +147,15 @@ Tests must prove exact tool identity. If a model-authored plan declares
 `expected_tool`, executing a different registered tool name must fail
 verification or be rejected as mismatch evidence; tests must not encode
 read-tool or other tool-pair equivalence as a success condition.
-Regression tests must cover that every model-facing verification check has a
-local required/optional condition status, that dataflow labels cannot occupy
-that status field, and that `file_exists`, `tool_files_changed`,
+Regression tests must cover that every ordinary model-facing verification check
+has a local required/optional condition status, that the dedicated compact
+objective slot preserves the model-authored check name, and that dataflow labels
+cannot occupy condition fields. They must also prove `file_exists`, `tool_files_changed`,
 `artifact_present`, or `tool_output_nonempty` alone cannot satisfy a mutating
-tool's registered objective-verification requirement. Legacy saved plans with
-internal condition-name lists must remain readable.
+tool's registered objective-verification requirement. Legacy saved plans with internal condition-name lists and explicit done
+conditions must remain readable, while live plans derive done conditions
+mechanically. Diagnostic `run_tests` failures must be accepted as observations
+unless the plan explicitly requires `command_success`.
 They must also prove that semantic response or reasoning plans are rejected
 before execution unless at least one model-declared `criterion` check or
 exact/string assistant-text match is required; optional-only semantic criteria

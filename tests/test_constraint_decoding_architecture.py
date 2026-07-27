@@ -155,6 +155,7 @@ def test_planning_and_tool_choice_prompts_include_full_enabled_registry(make_con
     assert "Allowed check_type values are:" in plan_prompt.prompt_text
     assert "Do not invent check_type values" in plan_prompt.prompt_text
     assert "tool_effect_verified" in plan_prompt.prompt_text
+    assert "objective_verification_check" in plan_prompt.prompt_text
     assert "set expected exactly equal to that step's expected_tool" in plan_prompt.prompt_text
     assert "artifact and expected_json are not substitutes for expected" in plan_prompt.prompt_text
     assert "For json_schema_valid, set actual_source and schema_json" in plan_prompt.prompt_text
@@ -166,10 +167,10 @@ def test_planning_and_tool_choice_prompts_include_full_enabled_registry(make_con
     assert "never artifact/input/output labels" in plan_prompt.prompt_text
     assert "file_exists, tool_files_changed, artifact_present, and tool_output_nonempty are not substitutes" in plan_prompt.prompt_text
     assert "depends_on names only earlier step_id values" in plan_prompt.prompt_text
-    assert "Non-empty: input_text, expected_output, expected_outputs, done_condition, success_criteria, fallback_strategy" in plan_prompt.prompt_text
+    assert "runtime derives the structural done condition" in plan_prompt.prompt_text
     assert "expected_outputs is a non-empty list of output labels for the step, including respond steps" in plan_prompt.prompt_text
     assert 'actual_source must be exactly "assistant_text"' in plan_prompt.prompt_text
-    assert "assistant_response_nonempty is only the respond done_condition" in plan_prompt.prompt_text
+    assert "runtime-derived respond completion condition" in plan_prompt.prompt_text
     assert "success_criteria field is the authoritative semantic criterion" in plan_prompt.prompt_text
     assert "Do not duplicate success_criteria as a criterion check" in plan_prompt.prompt_text
     assert "weaken the requested final state" in plan_prompt.prompt_text

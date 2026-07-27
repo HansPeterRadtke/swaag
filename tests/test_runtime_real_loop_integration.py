@@ -1761,15 +1761,15 @@ def test_real_loop_rejects_malformed_file_contains_check_then_accepts_corrected_
     assert _tool_names(events) == ["write_file"]
     assert any(
         event.event_type == "error"
-        and "file_contains check file_written expected_json must be JSON text" in event.payload.get("error", "")
+        and "file_contains check file_written must declare a non-empty pattern or textual expected_json" in event.payload.get("error", "")
         for event in events
     )
     assert any(event.event_type == "model_retry_scheduled" and event.payload.get("kind") == "plan" for event in events)
     plan_requests = [request for request in runtime.client.requests if request["contract"] == "task_plan"]
     assert len(plan_requests) == 2
-    assert "file_contains check file_written expected_json must be JSON text" in plan_requests[1]["prompt"]
-    assert "expected_json is a string field containing JSON text" in plan_requests[1]["prompt"]
-    assert 'set expected_json to "\\"status: ready\\""' in plan_requests[1]["prompt"]
+    assert "file_contains check file_written must declare a non-empty pattern or textual expected_json" in plan_requests[1]["prompt"]
+    assert "objective_verification_check" in plan_requests[1]["prompt"]
+    assert "Preserve a concise model-authored name for a real objective check" in plan_requests[1]["prompt"]
     write_verifications = [
         event for event in events if event.event_type == "verification_completed" and event.payload["step_id"] == "write_report"
     ]
@@ -1948,12 +1948,9 @@ def test_real_loop_retries_schema_valid_but_locally_invalid_plan(make_config, tm
     plan_requests = [request for request in runtime.client.requests if request["contract"] == "task_plan"]
     assert len(plan_requests) == 3
     assert "never artifact/input/output labels" in plan_requests[1]["prompt"]
-    assert (
-        "Non-empty: input_text, expected_output, expected_outputs, done_condition, success_criteria, fallback_strategy"
-        in plan_requests[1]["prompt"]
-    )
+    assert "runtime derives the structural done condition" in plan_requests[1]["prompt"]
     assert 'actual_source must be exactly "assistant_text"' in plan_requests[1]["prompt"]
-    assert "assistant_response_nonempty is only the respond done_condition" in plan_requests[1]["prompt"]
+    assert "runtime-derived respond completion condition" in plan_requests[1]["prompt"]
     assert "string_nonempty is only a presence check" in plan_requests[1]["prompt"]
     assert "success_criteria field is the authoritative semantic criterion" in plan_requests[1]["prompt"]
     assert "Do not duplicate success_criteria as a criterion check" in plan_requests[1]["prompt"]

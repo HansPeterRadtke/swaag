@@ -332,7 +332,7 @@ def test_structural_verification_supports_schema_and_symbol_checks(tmp_path: Pat
     assert result.verification_passed is True
 
 
-def test_composite_verification_fails_failed_run_tests_even_without_exit_zero_check() -> None:
+def test_composite_verification_accepts_failed_diagnostic_run_tests_without_success_check() -> None:
     step = PlanStep(
         step_id="step_tests",
         title="Run tests",
@@ -370,9 +370,10 @@ def test_composite_verification_fails_failed_run_tests_even_without_exit_zero_ch
         ]
     )
     result = VerificationEngine().verify_step(runtime=_RuntimeStub(), state=_state(), plan=_plan(step), step=step, artifacts=artifacts)
-    assert result.verification_passed is False
-    assert "perspective:structural" in result.conditions_failed
+    assert result.verification_passed is True
+    assert "perspective:structural" in result.conditions_met
     assert result.evidence["perspectives"]["structural"]["passed"] is False
+    assert result.evidence["perspectives"]["structural"]["requires_success"] is False
 
 
 def test_composite_verification_allows_optional_failure(tmp_path: Path) -> None:
@@ -1201,3 +1202,39 @@ def test_benchmark_contract_accepts_live_semantic_backend_configuration() -> Non
         semantic_read_timeout_seconds=1,
     )
     assert report.passed is True
+
+
+def test_composite_verification_requires_passing_run_tests_when_command_success_is_required() -> None:
+    step = PlanStep(
+        step_id="step_tests",
+        title="Run tests",
+        goal="Verify tests pass",
+        kind="tool",
+        expected_tool="run_tests",
+        input_text="run tests",
+        expected_output="passing test output",
+        done_condition="tool_result:run_tests",
+        success_criteria="tests pass",
+        verification_type="composite",
+        verification_checks=[
+            {"name": "tool_name", "check_type": "tool_name_equals", "expected": "run_tests"},
+            {"name": "tests_pass", "check_type": "command_success", "command": ["python", "-c", "raise SystemExit(1)"]},
+        ],
+        required_conditions=["tool_name", "tests_pass"],
+        optional_conditions=[],
+    )
+    artifacts = VerificationArtifacts(
+        tool_results=[
+            ToolExecutionResult(
+                tool_name="run_tests",
+                output={"stdout": "", "stderr": "FAILED", "exit_code": 1, "passed": False},
+                display_text="failed",
+            )
+        ]
+    )
+    result = VerificationEngine().verify_step(
+        runtime=_RuntimeStub(), state=_state(), plan=_plan(step), step=step, artifacts=artifacts
+    )
+    assert result.verification_passed is False
+    assert "perspective:structural" in result.conditions_failed
+    assert result.evidence["perspectives"]["structural"]["requires_success"] is True

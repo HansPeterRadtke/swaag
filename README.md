@@ -84,9 +84,11 @@ same constrained schema; it does not fill missing conditions or rewrite the plan
 in Python. The repair budget is a correctness guard, not a latency target: it
 must allow multiple distinct contract corrections before failing closed.
 Generated plans use `verification_type="composite"` for every step. Every
-model-authored verification check declares `condition="required"` or
+ordinary model-authored verification check declares `condition="required"` or
 `condition="optional"` directly on that check; the constrained wire schema has
-no duplicate condition-name arrays. Semantic answer or reasoning verification
+no duplicate condition-name arrays. Structural completion conditions are derived
+from the step kind and exact expected tool rather than repeated by the model.
+Semantic answer or reasoning verification
 is still model-owned: the plan must include a model-declared `criterion` check
 with `condition="required"`, unless the model declares a required exact/string
 match against `assistant_text`. An optional-only criterion cannot prove a
@@ -100,8 +102,11 @@ by the constrained selected-tool input call. If actual side-effect tool input
 contains an unresolved artifact placeholder such as `{{artifact_name}}`, SWAAG
 rejects it mechanically and returns the failure to the model for recovery.
 Tools may register required objective verification check types; when they do,
-the model plan must declare a matching check with `condition="required"`. If the
-check is missing or optional-only, runtime review rejects the plan with
+the model selects a dedicated compact `objective_verification_check`, preserves
+its model-authored name, and supplies only the payload fields applicable to that
+objective type. This slot is always required and cannot select mechanical-only
+checks such as `tool_files_changed`. If the check is missing or malformed,
+runtime review rejects the plan with
 structured validation evidence and asks the model for a corrected constrained
 plan. Python must not promote optional checks, rewrite condition importance, or
 synthesize verification semantics. Objective file-content verification must

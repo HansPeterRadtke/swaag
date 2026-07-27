@@ -198,11 +198,11 @@ def plan_contract(
         "string_match",
         "criterion",
     ]
-    check_schema = _closed_object(
-        {
+
+    def check_properties(check_type_schema: dict[str, Any], *, include_condition: bool) -> dict[str, Any]:
+        properties: dict[str, Any] = {
             "name": _string(),
-            "check_type": {"type": "string", "enum": check_types},
-            "condition": {"type": "string", "enum": ["required", "optional"]},
+            "check_type": check_type_schema,
             "artifact": _string(),
             "actual_source": _string(),
             "expected": _string(),
@@ -219,6 +219,25 @@ def plan_contract(
             "regex": _boolean(),
             "mode": _string(),
         }
+        if include_condition:
+            properties["condition"] = {"type": "string", "enum": ["required", "optional"]}
+        return properties
+
+    check_schema = _closed_object(
+        check_properties({"type": "string", "enum": check_types}, include_condition=True)
+    )
+    objective_check_schema = _closed_object(
+        {
+            "name": _string(),
+            "check_type": {
+                "type": "string",
+                "enum": ["none", "tool_effect_verified", "file_contains", "command_success"],
+            },
+            "path": _string(),
+            "pattern": _string(),
+            "command": _array(_string()),
+            "cwd": _string(),
+        }
     )
     step_schema = _closed_object(
         {
@@ -230,9 +249,9 @@ def plan_contract(
             "input_text": _string(),
             "expected_output": _string(),
             "expected_outputs": _array(_string()),
-            "done_condition": _string(),
             "success_criteria": _string(),
             "verification_type": {"type": "string", "enum": verification_types},
+            "objective_verification_check": objective_check_schema,
             "verification_checks": _array(check_schema),
             "input_refs": _array(_string()),
             "output_refs": _array(_string()),
@@ -249,7 +268,6 @@ def plan_contract(
         }
     )
     return _contract("task_plan", schema)
-
 
 def strategy_selection_contract() -> ContractSpec:
     schema = _closed_object(
