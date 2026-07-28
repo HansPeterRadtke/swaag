@@ -850,3 +850,90 @@ def _none_objective_check() -> dict[str, object]:
         "command": [],
         "cwd": "",
     }
+
+
+def _duplicate_objective_payload() -> dict:
+    return _payload(
+        "Read a file and answer.",
+        [
+            plan_step(
+                "read",
+                "Read file",
+                "read",
+                expected_tool="read_file",
+                expected_output="contents",
+                success_criteria="contents returned",
+                verification_checks=[
+                    {
+                        "name": "tool_name",
+                        "check_type": "tool_name_equals",
+                        "condition": "required",
+                        "expected": "read_file",
+                    },
+                    {
+                        "name": "effect",
+                        "check_type": "tool_effect_verified",
+                        "condition": "required",
+                    },
+                ],
+                required_conditions=["tool_name", "effect"],
+                optional_conditions=[],
+            ),
+            plan_step(
+                "answer",
+                "Answer",
+                "respond",
+                expected_output="response",
+                success_criteria="response supplied",
+                depends_on=["read"],
+                verification_checks=[
+                    {
+                        "name": "answer_nonempty",
+                        "check_type": "string_nonempty",
+                        "condition": "required",
+                        "actual_source": "assistant_text",
+                    }
+                ],
+                required_conditions=["answer_nonempty"],
+                optional_conditions=[],
+            ),
+        ],
+    )
+
+
+def test_plan_parser_collapses_exact_objective_check_duplicate() -> None:
+    payload = _duplicate_objective_payload()
+    step = payload["steps"][0]
+    step["objective_verification_check"] = {
+        "name": "effect",
+        "check_type": "tool_effect_verified",
+        "path": "",
+        "pattern": "",
+        "command": [],
+        "cwd": "",
+    }
+    step["verification_checks"].append(
+        {"name": "effect", "check_type": "tool_effect_verified", "condition": "required"}
+    )
+    plan = plan_from_payload(payload, available_tools=["read_file"])
+    checks = [check for check in plan.steps[0].verification_checks if check["name"] == "effect"]
+    assert len(checks) == 1
+    assert plan.steps[0].required_conditions.count("effect") == 1
+
+
+def test_plan_parser_rejects_conflicting_objective_check_duplicate() -> None:
+    payload = _duplicate_objective_payload()
+    step = payload["steps"][0]
+    step["objective_verification_check"] = {
+        "name": "effect",
+        "check_type": "tool_effect_verified",
+        "path": "",
+        "pattern": "",
+        "command": [],
+        "cwd": "",
+    }
+    step["verification_checks"].append(
+        {"name": "effect", "check_type": "string_nonempty", "condition": "required", "actual_source": "tool_output"}
+    )
+    with pytest.raises(PlanValidationError, match="duplicate verification check name effect"):
+        plan_from_payload(payload, available_tools=["read_file"])

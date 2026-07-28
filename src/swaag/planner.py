@@ -386,6 +386,53 @@ def _objective_check_from_wire(raw_value: object) -> dict[str, object] | None:
     return check
 
 
+def _objective_duplicate_matches(
+    raw_check: dict[str, object],
+    objective_check: dict[str, object],
+) -> bool:
+    if str(raw_check.get("name", "")).strip() != str(objective_check.get("name", "")).strip():
+        return False
+    check_type = str(objective_check.get("check_type", "")).strip()
+    if str(raw_check.get("check_type", "")).strip() != check_type:
+        return False
+    if str(raw_check.get("condition", "")).strip() not in {"", "required"}:
+        return False
+    if check_type == "file_contains":
+        return (
+            str(raw_check.get("path", "")) == str(objective_check.get("path", ""))
+            and str(raw_check.get("pattern", "")) == str(objective_check.get("pattern", ""))
+        )
+    if check_type == "command_success":
+        return (
+            raw_check.get("command", []) == objective_check.get("command", [])
+            and str(raw_check.get("cwd", "")) == str(objective_check.get("cwd", ""))
+        )
+    return check_type == "tool_effect_verified"
+
+
+def _merge_objective_check(
+    raw_checks: list[object],
+    objective_check: dict[str, object] | None,
+) -> list[object]:
+    checks = [dict(item) if isinstance(item, dict) else item for item in raw_checks]
+    if objective_check is None:
+        return checks
+    objective_name = str(objective_check.get("name", "")).strip()
+    filtered: list[object] = []
+    for raw_check in checks:
+        if not isinstance(raw_check, dict):
+            filtered.append(raw_check)
+            continue
+        if str(raw_check.get("name", "")).strip() != objective_name:
+            filtered.append(raw_check)
+            continue
+        if _objective_duplicate_matches(raw_check, objective_check):
+            continue
+        raise PlanValidationError(f"duplicate verification check name {objective_name}")
+    filtered.append(objective_check)
+    return filtered
+
+
 def _normalize_step_payload(
     raw_step: dict[str, object],
     *,
@@ -421,11 +468,8 @@ def _normalize_step_payload(
     raw_checks = raw_step.get("verification_checks", [])
     if not isinstance(raw_checks, list):
         raise PlanValidationError("verification_checks must be a list")
-    checks_with_objective = [dict(item) if isinstance(item, dict) else item for item in raw_checks]
     objective_check = _objective_check_from_wire(raw_step.get("objective_verification_check"))
-    if objective_check is not None:
-        checks_with_objective.append(objective_check)
-    verification_checks = _normalize_check_list(checks_with_objective)
+    verification_checks = _normalize_check_list(_merge_objective_check(raw_checks, objective_check))
     input_refs = _normalize_ref_list(raw_step.get("input_refs", []))
     output_refs = _normalize_ref_list(raw_step.get("output_refs", []))
     depends_on = _normalize_ref_list(raw_step.get("depends_on", []))
