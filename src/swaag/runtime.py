@@ -2842,10 +2842,21 @@ class AgentRuntime:
                 continue
             tool = self.tools.get(step.expected_tool)
             required_types = tuple(getattr(tool, "objective_verification_check_types", ()) or ())
-            if not required_types:
-                continue
             checks_by_name = {str(check.get("name", "")).strip(): check for check in step.verification_checks}
             required_checks = [checks_by_name[name] for name in step.required_conditions if name in checks_by_name]
+            unsupported_tool_effects = [
+                str(check.get("name", "")).strip()
+                for check in required_checks
+                if str(check.get("check_type", "")).strip() == "tool_effect_verified"
+                and "tool_effect_verified" not in required_types
+            ]
+            if unsupported_tool_effects:
+                raise PlanValidationError(
+                    f"Plan step {step.step_id} uses {step.expected_tool} but tool_effect_verified is not supported by that tool; "
+                    'objective_verification_check must use check_type="none" or a tool-registered type'
+                )
+            if not required_types:
+                continue
             if any(str(check.get("check_type", "")).strip() in required_types for check in required_checks):
                 continue
             allowed = ", ".join(required_types)

@@ -1778,6 +1778,79 @@ def test_real_loop_rejects_malformed_file_contains_check_then_accepts_corrected_
     assert "file_written" in write_verifications[-1].payload["conditions_met"]
 
 
+def test_real_loop_rejects_unsupported_read_tool_effect_before_execution(make_config, tmp_path: Path) -> None:
+    target = tmp_path / "sample.txt"
+    target.write_text("status=ready\n", encoding="utf-8")
+    goal = f"Read {target} and answer observed."
+
+    invalid_read = plan_step(
+        "read_target",
+        "Read target",
+        "read",
+        expected_tool="read_file",
+        expected_output="file contents",
+        success_criteria="The file is read successfully.",
+        output_refs=["file_contents"],
+        verification_checks=[
+            {"name": "tool_name", "check_type": "tool_name_equals", "expected": "read_file"},
+            {"name": "file_contents", "check_type": "tool_effect_verified"},
+        ],
+        required_conditions=["tool_name", "file_contents"],
+        optional_conditions=[],
+    )
+    valid_read = plan_step(
+        "read_target",
+        "Read target",
+        "read",
+        expected_tool="read_file",
+        expected_output="file contents",
+        success_criteria="The file is read successfully.",
+        output_refs=["file_contents"],
+        verification_checks=[
+            {"name": "tool_name", "check_type": "tool_name_equals", "expected": "read_file"},
+            {"name": "file_contents", "check_type": "tool_output_nonempty"},
+        ],
+        required_conditions=["tool_name", "file_contents"],
+        optional_conditions=[],
+    )
+    answer = _exact_answer_step("answer", "observed", depends_on=["read_target"])
+    client = FakeModelClient(
+        contract_responses={
+            "task_plan": [
+                plan_response(goal=goal, steps=[invalid_read, answer]),
+                plan_response(goal=goal, steps=[valid_read, answer]),
+            ],
+            "tool_input:read_file": [json.dumps({"path": str(target)})],
+            "answer_response": ["observed"],
+        }
+    )
+    runtime = AgentRuntime(
+        make_config(
+            model__context_limit=32_000,
+            model__max_retries=1,
+            tools__allow_stateful_tools=True,
+        ),
+        model_client=client,
+    )
+
+    result = runtime.run_turn(goal)
+    events = runtime.history.read_history(result.session_id)
+    plan_requests = [request for request in client.requests if request["contract"] == "task_plan"]
+
+    assert result.assistant_text == "observed"
+    assert [event.payload.get("tool_name") for event in events if event.event_type == "tool_called"] == ["read_file"]
+    assert len(plan_requests) == 2
+    assert any(
+        event.event_type == "error"
+        and event.payload.get("operation") == "plan_validation"
+        and "tool_effect_verified is not supported by that tool" in event.payload.get("error", "")
+        for event in events
+    )
+    assert "tool_effect_verified is not supported by that tool" in plan_requests[1]["prompt"]
+    assert "Never use tool_effect_verified for a tool that does not register it" in plan_requests[1]["prompt"]
+    assert any(event.event_type == "verification_passed" and event.payload.get("step_id") == "read_target" for event in events)
+
+
 def test_real_loop_repairs_missing_tool_name_expected_before_execution(make_config, tmp_path: Path) -> None:
     release = tmp_path / "release.yaml"
     release.write_text("name: report-62\nstatus: draft\nowner: team-6\n", encoding="utf-8")
