@@ -200,14 +200,15 @@ matches declared by the model are the only reviewer path that can pass without
 semantic scoring.
 
 The live constrained plan schema puts `condition="required"` or
-`condition="optional"` directly on every ordinary verification check. It derives
-step completion conditions from kind and exact expected tool, while a separate
-compact model-named objective slot carries the required objective proof. The parser
-mechanically converts those model-authored statuses into internal required and
-optional check-name lists for execution and history; it does not change their
-importance. A plan with no required check is rejected so the model can correct
-it. Legacy saved payloads with separate lists remain readable, but Python does
-not create task-specific verification content.
+`condition="optional"` directly on every model-authored verification check and
+derives step completion conditions from kind and exact expected tool. It omits
+the former dedicated objective slot and does not allow the model to emit
+`tool_effect_verified`. The parser mechanically converts local statuses into
+internal required and optional check-name lists. Runtime then installs any exact
+automatic mechanical check registered by the selected tool before plan review.
+This does not change model-authored importance or create task-specific semantic
+content. Exact duplicate checks collapse; conflicting same-name checks fail.
+Legacy saved payloads with separate lists and objective slots remain readable.
 
 Planner `input_text` is instruction context, not an executable argument object.
 A model may name dependencies through `input_refs`/`output_refs`, and may refer
@@ -230,16 +231,16 @@ For verification only, the latest tool result is also available through the
 current step's model-declared `expected_output`, `expected_outputs`, and
 `output_refs` labels. This lets the model's `artifact_present` checks reference
 its own labels without Python choosing the label meaning.
-Some tools register objective verification check types. For such steps the model
-fills a compact `objective_verification_check` with its chosen registered type,
-model-authored name, and applicable path/pattern or command fields. Runtime makes
-that translated check required; mechanical-only checks cannot substitute. If the
-check is missing or malformed, plan review rejects the plan and returns structured validation
-evidence to the planner. Python enforces the presence and type of the check but
-does not promote optional checks, rewrite condition importance, or choose the
-expected content. The condition field is not an output label. For mutating
-tools, `file_exists`, `tool_files_changed`, `artifact_present`, and
-`tool_output_nonempty` do not substitute for the registered objective check.
+Some tools register an automatic mechanical objective-verification type.
+Runtime installs that exact registered check after parsing and makes it required;
+the model does not emit or name it. This registry-driven operation cannot choose
+semantic expected content. Mutating tools without an automatic default must
+supply required model-authored `file_contains` or `command_success` checks with
+concrete payload, and plan review rejects missing or malformed proof. Python does
+not promote optional checks, rewrite condition importance, or invent expected
+content. The condition field is not an output label. `file_exists`,
+`tool_files_changed`, `artifact_present`, and `tool_output_nonempty` do not
+substitute for required objective proof.
 File-content verification reads the declared target text from `pattern`,
 `expected`, or `expected_json`. Planner/tool guidance tells the model to use
 targets precise enough to reject partial or corrupt edits. Empty containment

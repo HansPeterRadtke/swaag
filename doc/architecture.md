@@ -137,12 +137,15 @@
 - verification may expose the latest tool result under the current step's
   model-declared `expected_output`, `expected_outputs`, and `output_refs`
   labels; this is structural aliasing only, not content synthesis
-- tools may register required objective verification check types. The live wire
-  exposes one compact, model-named `objective_verification_check` per step; its
-  type is constrained to the registered objective family and it is translated
-  into a required internal check. Mechanical-only evidence cannot occupy this
-  slot. Missing or malformed objective checks are rejected with validation
-  evidence. Python does not choose the type or invent expected text or commands.
+- tools may register one automatic mechanical objective-verification type.
+  Runtime installs that exact registered check after parsing and before plan
+  review; the live wire does not expose `tool_effect_verified` or a separate
+  objective slot. This is registry-driven structural compilation, not semantic
+  plan repair: Python does not invent tools, paths, expected text, commands,
+  success criteria, or task-specific checks. Tools without an automatic default
+  still rely on required model-authored `file_contains` or `command_success`
+  proof with concrete payload. Exact duplicate checks collapse mechanically;
+  conflicting same-name checks remain invalid.
 - `edit_text` prefers portable `replace_exact` edits over raw offsets when the
   model has observed the current text: `old_text` must match exactly once,
   `new_text` is applied atomically, and zero or multiple matches fail closed.

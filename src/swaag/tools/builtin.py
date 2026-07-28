@@ -364,11 +364,12 @@ class EditTextTool(Tool):
         "Use replace_range only as a low-level fallback when exact text replacement is unsuitable; it needs start, end, expected_text, and replacement. delete_range needs start, end, and expected_text. "
         "expected_text must exactly equal the current file text in the selected range; range offsets are zero-based character offsets. "
         "insert_at needs position and insertion. "
-        "Plans using this tool should require tool_effect_verified as the mechanical objective check; it verifies that the current file exactly matches this tool result's after-hash. "
+        "The runtime automatically installs the registered tool_effect_verified mechanical objective check; it verifies that the current file exactly matches this tool result's after-hash, so do not duplicate it in the plan. "
         "Use file_contains or command_success only for a distinct additional objective with a concrete non-empty payload."
     )
     kind = "side_effect"
     objective_verification_check_types = ("tool_effect_verified", "file_contains", "command_success")
+    automatic_objective_verification_check_type = "tool_effect_verified"
     semantic_result_review_required = True
     requires_artifacts = ("path", "text")
     provides_artifacts = ("edited_text", "path")

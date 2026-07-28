@@ -157,19 +157,18 @@ model-declared `expected_output`, `expected_outputs`, and `output_refs` names.
 That aliasing is mechanical graph bookkeeping so `artifact_present` can refer
 to the model's own labels; Python must not use it to invent or transform
 semantic content.
-Tool definitions may declare required objective verification check types, such
-as a resulting-file check for file-mutating tools. The model plan selects a
-compact, model-named `objective_verification_check`; runtime translates that
-choice into a required internal check. The constrained slot excludes
-mechanical-only substitutes. If that check is missing or malformed, plan review
-rejects the plan with structured validation evidence and
-asks the model for a corrected constrained plan. Python must not promote
-optional checks, rewrite condition importance, or synthesize the expected text,
-path, command, or criterion. Each model-authored check carries its own local
+Tool definitions may declare one automatic mechanical objective-verification
+type. Runtime installs that exact registered check after parsing and before plan
+review, while the live constrained model wire omits `tool_effect_verified` and
+the former dedicated objective slot. This registry-driven compilation is
+mechanical: Python does not choose tools, expected text, paths, commands,
+criteria, or condition importance. Mutating tools without an automatic default
+still require a model-authored, required `file_contains` or `command_success`
+check with concrete payload. Each model-authored check carries its own local
 condition status; artifact, input, output, and expected-output labels remain in
-their dedicated dataflow fields. For mutating tools, existence and
-nonempty-output checks are mechanical evidence but not objective proof unless
-the model also declares the tool's registered objective check type as required.
+their dedicated dataflow fields. Existence and nonempty-output checks remain
+mechanical evidence rather than objective proof. Exact duplicate checks may be
+collapsed mechanically, but conflicting same-name checks are rejected.
 Original file contents, diffs, and write provenance are mechanical history
 records. Visible backup files are disabled by default because creating extra
 workspace files is a user-visible side effect that can violate tasks requiring

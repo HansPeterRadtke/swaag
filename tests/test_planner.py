@@ -937,3 +937,24 @@ def test_plan_parser_rejects_conflicting_objective_check_duplicate() -> None:
     )
     with pytest.raises(PlanValidationError, match="duplicate verification check name effect"):
         plan_from_payload(payload, available_tools=["read_file"])
+
+
+def test_plan_parser_collapses_exact_regular_check_duplicate() -> None:
+    payload = _duplicate_objective_payload()
+    step = payload["steps"][0]
+    duplicate = dict(step["verification_checks"][0])
+    step["verification_checks"].append(duplicate)
+    plan = plan_from_payload(payload, available_tools=["read_file"])
+    name = duplicate["name"]
+    assert [check["name"] for check in plan.steps[0].verification_checks].count(name) == 1
+    assert plan.steps[0].required_conditions.count(name) == 1
+
+
+def test_plan_parser_rejects_conflicting_regular_check_duplicate() -> None:
+    payload = _duplicate_objective_payload()
+    step = payload["steps"][0]
+    duplicate = dict(step["verification_checks"][0])
+    duplicate["check_type"] = "tool_output_nonempty"
+    step["verification_checks"].append(duplicate)
+    with pytest.raises(PlanValidationError, match=f"duplicate verification check name {duplicate['name']}"):
+        plan_from_payload(payload, available_tools=["read_file"])

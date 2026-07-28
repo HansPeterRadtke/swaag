@@ -137,25 +137,26 @@ prove empty containment targets fail rather than passing every existing file.
 Tests must prove that model-declared output-ref artifact aliases verify against
 real tool results, so successful reads or edits do not fail merely because the
 model named the output `file_content` or another arbitrary label.
-Tests must also prove that tools with registered objective-verification
-requirements cannot pass with only artifact-exists checks after a mutation.
-They must also prove that a model-declared objective check marked optional, or
-omitted entirely, is rejected with model-visible validation evidence, while a
-corrected model-authored plan with that check marked required can continue
-through execution and verification.
+Tests must prove that registry-declared automatic mechanical objective checks
+are installed exactly once before plan review and cannot be supplied through the
+live model wire. Mutating tools without an automatic default must not pass with
+only artifact-exists or nonempty-output checks; missing, optional, or malformed
+model-authored `file_contains` or `command_success` proof must be rejected with
+model-visible validation evidence.
 Tests must prove exact tool identity. If a model-authored plan declares
 `expected_tool`, executing a different registered tool name must fail
 verification or be rejected as mismatch evidence; tests must not encode
 read-tool or other tool-pair equivalence as a success condition.
-Regression tests must cover that every ordinary model-facing verification check
-has a local required/optional condition status, that the dedicated compact
-objective slot preserves the model-authored check name, and that dataflow labels
-cannot occupy condition fields. They must also prove `file_exists`, `tool_files_changed`,
-`artifact_present`, or `tool_output_nonempty` alone cannot satisfy a mutating
-tool's registered objective-verification requirement. Legacy saved plans with internal condition-name lists and explicit done
-conditions must remain readable, while live plans derive done conditions
-mechanically. Diagnostic `run_tests` failures must be accepted as observations
-unless the plan explicitly requires `command_success`.
+Regression tests must cover that every live model-facing verification check has
+a local required/optional condition status, that exact duplicate checks collapse
+while conflicting same-name checks fail, and that dataflow labels cannot occupy
+condition fields. They must also prove `file_exists`, `tool_files_changed`,
+`artifact_present`, or `tool_output_nonempty` alone cannot satisfy objective
+proof for a mutating tool. Legacy saved plans with internal condition-name lists,
+explicit done conditions, and the former objective slot must remain readable,
+while live plans derive done conditions and registered automatic mechanical
+checks. Diagnostic `run_tests` failures must be accepted as observations unless
+the plan explicitly requires `command_success`.
 They must also prove that semantic response or reasoning plans are rejected
 before execution unless at least one model-declared `criterion` check or
 exact/string assistant-text match is required; optional-only semantic criteria

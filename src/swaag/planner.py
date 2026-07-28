@@ -29,7 +29,7 @@ def _normalize_check_list(raw_checks: object) -> list[dict[str, object]]:
     if not isinstance(raw_checks, list):
         raise PlanValidationError("verification_checks must be a list")
     normalized: list[dict[str, object]] = []
-    seen_names: set[str] = set()
+    seen_by_name: dict[str, dict[str, object]] = {}
     for index, raw_check in enumerate(raw_checks, start=1):
         if not isinstance(raw_check, dict):
             raise PlanValidationError(f"verification check {index} must be an object")
@@ -39,8 +39,6 @@ def _normalize_check_list(raw_checks: object) -> list[dict[str, object]]:
             raise PlanValidationError(f"verification check {index} is missing name")
         if not check_type:
             raise PlanValidationError(f"verification check {name} is missing check_type")
-        if name in seen_names:
-            raise PlanValidationError(f"duplicate verification check name {name}")
         normalized_check = dict(raw_check)
         normalized_check["name"] = name
         normalized_check["check_type"] = check_type
@@ -51,8 +49,13 @@ def _normalize_check_list(raw_checks: object) -> list[dict[str, object]]:
                     normalized_check["expected"] = json.loads(expected_json)
                 except json.JSONDecodeError:
                     normalized_check["expected"] = expected_json
+        existing = seen_by_name.get(name)
+        if existing is not None:
+            if existing == normalized_check:
+                continue
+            raise PlanValidationError(f"duplicate verification check name {name}")
         normalized.append(normalized_check)
-        seen_names.add(name)
+        seen_by_name[name] = normalized_check
     return normalized
 
 

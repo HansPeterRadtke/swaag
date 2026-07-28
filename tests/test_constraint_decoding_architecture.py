@@ -155,13 +155,13 @@ def test_planning_and_tool_choice_prompts_include_full_enabled_registry(make_con
     assert "Allowed check_type values are:" in plan_prompt.prompt_text
     assert "Do not invent check_type values" in plan_prompt.prompt_text
     assert "tool_effect_verified" in plan_prompt.prompt_text
-    assert "objective_verification_check" in plan_prompt.prompt_text
+    assert "objective_verification_check" not in plan_prompt.prompt_text
+    assert "runtime installs any tool-registered automatic mechanical objective check" in plan_prompt.prompt_text
     assert "set expected exactly equal to that step's expected_tool" in plan_prompt.prompt_text
     assert "artifact and expected_json are not substitutes for expected" in plan_prompt.prompt_text
     assert "For json_schema_valid, set actual_source and schema_json" in plan_prompt.prompt_text
     assert "For function_exists, set path and function_name" in plan_prompt.prompt_text
     assert "For symbol_exists, set path and symbol" in plan_prompt.prompt_text
-    assert "verifies the persisted structured tool effect" in plan_prompt.prompt_text
     assert "A non-dry-run edit_text call atomically persists its edit" in plan_prompt.prompt_text
     assert "do not add a follow-up write_file step for the same file" in plan_prompt.prompt_text
     assert "never artifact/input/output labels" in plan_prompt.prompt_text
@@ -174,7 +174,7 @@ def test_planning_and_tool_choice_prompts_include_full_enabled_registry(make_con
     assert "success_criteria field is the authoritative semantic criterion" in plan_prompt.prompt_text
     assert "Do not duplicate success_criteria as a criterion check" in plan_prompt.prompt_text
     assert "weaken the requested final state" in plan_prompt.prompt_text
-    assert "Add file_contains or command_success only for a distinct additional objective" in plan_prompt.prompt_text
+    assert "add a required file_contains or command_success check" in plan_prompt.prompt_text
     assert "concrete non-empty pattern" in plan_prompt.prompt_text
     assert "use current observations" in plan_prompt.prompt_text
     assert "stale arguments" in plan_prompt.prompt_text
@@ -247,7 +247,9 @@ def test_file_mutation_tools_require_model_owned_result_review(make_config) -> N
     tools = {tool.name: tool for tool in registry.enabled_tools(config)}
 
     assert tools["edit_text"].semantic_result_review_required is True
+    assert tools["edit_text"].automatic_objective_verification_check_type == "tool_effect_verified"
     assert tools["write_file"].semantic_result_review_required is True
+    assert tools["write_file"].automatic_objective_verification_check_type == ""
     assert verification_contract(["result_satisfies_step"]).json_schema is not None
 
 

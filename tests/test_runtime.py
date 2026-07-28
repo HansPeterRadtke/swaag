@@ -2259,3 +2259,40 @@ def test_verification_wire_ids_resolve_to_exact_candidate_excerpts(make_config) 
     assert excerpts
     assert all(excerpt in candidate for excerpt in excerpts)
     assert all("candidate_excerpt_id_" not in item for item in result["criteria"])
+
+
+def test_runtime_installs_registered_mechanical_objective_check_once(make_config) -> None:
+    edit_step = plan_step(
+        "edit",
+        "Edit file",
+        "write",
+        expected_tool="edit_text",
+        expected_output="edited file",
+        success_criteria="The requested edit is applied.",
+        verification_checks=[
+            {"name": "tool_name", "check_type": "tool_name_equals", "expected": "edit_text"},
+        ],
+        required_conditions=["tool_name"],
+        optional_conditions=[],
+    )
+    answer_step = plan_step(
+        "answer",
+        "Answer",
+        "respond",
+        expected_output="summary",
+        success_criteria="The answer summarizes the edit.",
+        depends_on=["edit"],
+    )
+    payload = json.loads(plan_response(goal="Edit the file.", steps=[edit_step, answer_step]))
+    plan = plan_from_payload(payload, available_tools=["edit_text"])
+    runtime = AgentRuntime(
+        make_config(tools__allow_stateful_tools=True, tools__allow_side_effect_tools=True),
+        model_client=FakeModelClient(),
+    )
+
+    runtime._install_registered_mechanical_objective_checks(plan)
+    runtime._install_registered_mechanical_objective_checks(plan)
+
+    checks = [check for check in plan.steps[0].verification_checks if check.get("check_type") == "tool_effect_verified"]
+    assert checks == [{"name": "registered_tool_effect_verified", "check_type": "tool_effect_verified"}]
+    assert plan.steps[0].required_conditions.count("registered_tool_effect_verified") == 1

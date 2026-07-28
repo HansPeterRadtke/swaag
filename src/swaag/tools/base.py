@@ -38,6 +38,7 @@ class Tool(abc.ABC):
     requires_artifacts: tuple[str, ...] = ()
     provides_artifacts: tuple[str, ...] = ()
     objective_verification_check_types: tuple[str, ...] = ()
+    automatic_objective_verification_check_type: str = ""
     semantic_result_review_required: bool = False
 
     def prompt_tuple(self) -> tuple[str, str, dict[str, Any], str]:

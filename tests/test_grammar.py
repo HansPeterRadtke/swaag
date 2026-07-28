@@ -131,11 +131,11 @@ def test_plan_contract_exposes_required_tool_name_expected_field() -> None:
     assert "expected" in check_schema["required"]
 
 
-def test_plan_contract_includes_registered_tool_effect_check_type() -> None:
+def test_plan_contract_excludes_runtime_installed_tool_effect_check_type() -> None:
     contract = plan_contract(["edit_text"])
     assert contract.json_schema is not None
     check_type = contract.json_schema["properties"]["steps"]["items"]["properties"]["verification_checks"]["items"]["properties"]["check_type"]
-    assert "tool_effect_verified" in check_type["enum"]
+    assert "tool_effect_verified" not in check_type["enum"]
 
 
 def test_verification_contract_constrains_short_ids_without_embedding_long_excerpts() -> None:
@@ -168,18 +168,14 @@ def test_plan_contract_places_required_status_on_each_check_without_cross_refere
     }
 
 
-def test_plan_contract_derives_done_condition_and_has_dedicated_objective_check() -> None:
+def test_plan_contract_derives_done_condition_and_omits_runtime_owned_objective_slot() -> None:
     contract = plan_contract(["read_file", "edit_text"])
     schema = contract.json_schema
     assert schema is not None
     step_properties = schema["properties"]["steps"]["items"]["properties"]
     assert "done_condition" not in step_properties
-    objective = step_properties["objective_verification_check"]
-    assert set(objective["properties"]) == {"name", "check_type", "path", "pattern", "command", "cwd"}
-    assert objective["properties"]["check_type"]["enum"] == [
-        "none",
-        "tool_effect_verified",
-        "file_contains",
-        "command_success",
-    ]
-    assert "tool_files_changed" not in objective["properties"]["check_type"]["enum"]
+    assert "objective_verification_check" not in step_properties
+    check_types = step_properties["verification_checks"]["items"]["properties"]["check_type"]["enum"]
+    assert "tool_effect_verified" not in check_types
+    assert "file_contains" in check_types
+    assert "command_success" in check_types

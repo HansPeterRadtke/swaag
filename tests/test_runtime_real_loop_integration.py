@@ -1324,8 +1324,8 @@ def test_real_loop_retries_tool_validation_error_inside_same_step(make_config, t
     assert max(_event_sequences(events, "edit_applied")) < max(_event_sequences(events, "verification_passed", step_id="edit_record"))
 
 
-def test_real_loop_retries_file_mutation_plan_without_objective_state_check(make_config, tmp_path: Path) -> None:
-    """Difficulty: normal. Family: file_edit/failure."""
+def test_real_loop_accepts_edit_text_plan_with_registered_mechanical_check(make_config, tmp_path: Path) -> None:
+    """Difficulty: normal. Family: file_edit/quality."""
     release = tmp_path / "release.yaml"
     release.write_text("name: report-62\nstatus: draft\nowner: team-6\n", encoding="utf-8")
     config = make_config(
@@ -1338,7 +1338,7 @@ def test_real_loop_retries_file_mutation_plan_without_objective_state_check(make
         runtime__max_total_actions=16,
     )
     goal = f"Move {release} from draft to ready and answer repaired."
-    invalid_plan = plan_response(
+    plan = plan_response(
         goal=goal,
         steps=[
             plan_step(
@@ -1358,31 +1358,11 @@ def test_real_loop_retries_file_mutation_plan_without_objective_state_check(make
             _exact_answer_step("answer", "repaired", depends_on=["edit_status"]),
         ],
     )
-    valid_plan = plan_response(
-        goal=goal,
-        steps=[
-            plan_step(
-                "edit_status",
-                "Edit status",
-                "write",
-                expected_tool="edit_text",
-                expected_output="edited_file_content",
-                success_criteria="release.yaml contains status: ready.",
-                output_refs=["edited_file_content"],
-                verification_checks=[
-                    {"name": "file_contains_ready", "check_type": "file_contains", "path": str(release), "pattern": "status: ready"},
-                ],
-                required_conditions=["file_contains_ready"],
-                optional_conditions=[],
-            ),
-            _exact_answer_step("answer", "repaired", depends_on=["edit_status"]),
-        ],
-    )
     runtime = AgentRuntime(
         config,
         model_client=FakeModelClient(
             contract_responses={
-                "task_plan": [invalid_plan, valid_plan],
+                "task_plan": [plan],
                 "tool_decision": [_tool_call("edit_text", _edit_replace_input(release, "status: draft", "status: ready"))],
                 "answer_response": ["repaired"],
             }
@@ -1395,17 +1375,14 @@ def test_real_loop_retries_file_mutation_plan_without_objective_state_check(make
     assert result.assistant_text == "repaired"
     assert release.read_text(encoding="utf-8") == "name: report-62\nstatus: ready\nowner: team-6\n"
     assert _tool_names(events) == ["edit_text"]
-    assert any(
-        event.event_type == "error"
-        and "required_conditions lack an objective state check" in event.payload.get("error", "")
-        for event in events
-    )
+    assert not any(event.event_type == "error" and event.payload.get("operation") == "plan_validation" for event in events)
     plan_requests = [request for request in runtime.client.requests if request["contract"] == "task_plan"]
-    assert len(plan_requests) == 2
-    assert "Plans using this tool must verify the resulting state with a required file_contains or command_success check" in plan_requests[1]["prompt"]
-    assert "Conditions must name declared checks" in plan_requests[1]["prompt"]
-    assert "never artifact/input/output labels" in plan_requests[1]["prompt"]
-    assert "file_exists, tool_files_changed, artifact_present, and tool_output_nonempty are not substitutes" in plan_requests[1]["prompt"]
+    assert len(plan_requests) == 1
+    verification_events = [
+        event for event in events if event.event_type == "verification_completed" and event.payload["step_id"] == "edit_status"
+    ]
+    assert verification_events
+    assert "registered_tool_effect_verified" in verification_events[-1].payload["conditions_met"]
 
 
 def test_real_loop_uses_intrinsic_success_criteria_for_response(make_config, tmp_path: Path) -> None:
@@ -1594,8 +1571,8 @@ def test_real_loop_retry_feedback_repairs_redundant_mutation_step(make_config, t
     assert "Require objective checks for side-effect tools" in retry_prompt
 
 
-def test_real_loop_rejects_objective_check_not_required_then_accepts_corrected_plan(make_config, tmp_path: Path) -> None:
-    """Difficulty: easy. Family: file_edit/quality."""
+def test_real_loop_supersedes_legacy_unrequired_edit_effect_with_registered_check(make_config, tmp_path: Path) -> None:
+    """Difficulty: easy. Family: file_edit/compatibility."""
     release = tmp_path / "release.yaml"
     release.write_text("name: report-62\nstatus: draft\nowner: team-6\n", encoding="utf-8")
     config = make_config(
@@ -1607,7 +1584,7 @@ def test_real_loop_rejects_objective_check_not_required_then_accepts_corrected_p
         runtime__max_total_actions=12,
     )
     goal = f"Edit {release} so status becomes ready and answer repaired."
-    invalid_plan = plan_response(
+    legacy_plan = plan_response(
         goal=goal,
         steps=[
             plan_step(
@@ -1628,32 +1605,11 @@ def test_real_loop_rejects_objective_check_not_required_then_accepts_corrected_p
             _exact_answer_step("answer", "repaired", depends_on=["edit_status"]),
         ],
     )
-    corrected_plan = plan_response(
-        goal=goal,
-        steps=[
-            plan_step(
-                "edit_status",
-                "Edit status",
-                "write",
-                expected_tool="edit_text",
-                expected_output="edited_file_content",
-                success_criteria="release.yaml contains status: ready.",
-                output_refs=["edited_file_content"],
-                verification_checks=[
-                    {"name": "tool_name_matches", "check_type": "tool_name_equals", "expected": "edit_text"},
-                    {"name": "tool_effect", "check_type": "tool_effect_verified"},
-                ],
-                required_conditions=["tool_name_matches", "tool_effect"],
-                optional_conditions=[],
-            ),
-            _exact_answer_step("answer", "repaired", depends_on=["edit_status"]),
-        ],
-    )
     runtime = AgentRuntime(
         config,
         model_client=FakeModelClient(
             contract_responses={
-                "task_plan": [invalid_plan, corrected_plan],
+                "task_plan": [legacy_plan],
                 "tool_decision": [_tool_call("edit_text", _edit_replace_input(release, "status: draft", "status: ready"))],
                 "answer_response": ["repaired"],
             }
@@ -1667,20 +1623,14 @@ def test_real_loop_rejects_objective_check_not_required_then_accepts_corrected_p
     assert release.read_text(encoding="utf-8") == "name: report-62\nstatus: ready\nowner: team-6\n"
     assert _tool_names(events) == ["edit_text"]
     assert not any(event.event_type == "plan_repaired" for event in events)
-    assert any(
-        event.event_type == "error"
-        and event.payload.get("operation") == "plan_validation"
-        and "required_conditions lack an objective state check" in event.payload.get("error", "")
-        for event in events
-    )
+    assert not any(event.event_type == "error" and event.payload.get("operation") == "plan_validation" for event in events)
     plan_requests = [request for request in runtime.client.requests if request["contract"] == "task_plan"]
-    assert len(plan_requests) == 2
-    assert "required_conditions lack an objective state check" in plan_requests[1]["prompt"]
+    assert len(plan_requests) == 1
     verification_events = [
         event for event in events if event.event_type == "verification_completed" and event.payload["step_id"] == "edit_status"
     ]
     assert verification_events
-    assert "tool_effect" in verification_events[-1].payload["conditions_met"]
+    assert "registered_tool_effect_verified" in verification_events[-1].payload["conditions_met"]
 
 
 def test_real_loop_rejects_malformed_file_contains_check_then_accepts_corrected_plan(make_config, tmp_path: Path) -> None:
@@ -1768,8 +1718,8 @@ def test_real_loop_rejects_malformed_file_contains_check_then_accepts_corrected_
     plan_requests = [request for request in runtime.client.requests if request["contract"] == "task_plan"]
     assert len(plan_requests) == 2
     assert "file_contains check file_written must declare a non-empty pattern or textual expected_json" in plan_requests[1]["prompt"]
-    assert "objective_verification_check" in plan_requests[1]["prompt"]
-    assert "Preserve a concise model-authored name for a real objective check" in plan_requests[1]["prompt"]
+    assert "mutating tool whose guidance requires model-authored objective proof" in plan_requests[1]["prompt"]
+    assert "Every step must also fill objective_verification_check" not in plan_requests[1]["prompt"]
     write_verifications = [
         event for event in events if event.event_type == "verification_completed" and event.payload["step_id"] == "write_report"
     ]
@@ -1847,7 +1797,7 @@ def test_real_loop_rejects_unsupported_read_tool_effect_before_execution(make_co
         for event in events
     )
     assert "tool_effect_verified is not supported by that tool" in plan_requests[1]["prompt"]
-    assert "Never use tool_effect_verified for a tool that does not register it" in plan_requests[1]["prompt"]
+    assert "Do not emit tool_effect_verified; it is not part of the live plan wire" in plan_requests[1]["prompt"]
     assert any(event.event_type == "verification_passed" and event.payload.get("step_id") == "read_target" for event in events)
 
 

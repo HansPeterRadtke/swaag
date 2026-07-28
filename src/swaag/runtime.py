@@ -2836,6 +2836,35 @@ class AgentRuntime:
             return []
         return [step.kind for step in state.active_plan.steps if step.status == "completed"]
 
+    def _install_registered_mechanical_objective_checks(self, plan: Plan) -> None:
+        for step in plan.steps:
+            if not step.expected_tool:
+                continue
+            tool = self.tools.get(step.expected_tool)
+            check_type = str(getattr(tool, "automatic_objective_verification_check_type", "")).strip()
+            if not check_type:
+                continue
+            registered_types = tuple(str(item).strip() for item in getattr(tool, "objective_verification_check_types", ()) or ())
+            if check_type not in registered_types:
+                raise PlanValidationError(
+                    f"Tool {tool.name} registers automatic objective check {check_type!r} outside its allowed objective types"
+                )
+            checks_by_name = {str(check.get("name", "")).strip(): check for check in step.verification_checks}
+            for condition_name in step.required_conditions:
+                check = checks_by_name.get(str(condition_name).strip())
+                if check is not None and str(check.get("check_type", "")).strip() == check_type:
+                    break
+            else:
+                base_name = f"registered_{check_type}"
+                name = base_name
+                suffix = 2
+                while name in checks_by_name:
+                    name = f"{base_name}_{suffix}"
+                    suffix += 1
+                step.verification_checks.append({"name": name, "check_type": check_type})
+                step.required_conditions.append(name)
+
+
     def _validate_tool_objective_verification(self, plan: Plan) -> None:
         for step in plan.steps:
             if not step.expected_tool:
@@ -4115,6 +4144,7 @@ class AgentRuntime:
                     plan_id=state.active_plan.plan_id if update_existing and state.active_plan is not None else None,
                 )
                 plan.goal = planning_goal
+                self._install_registered_mechanical_objective_checks(plan)
                 if state.active_strategy is not None:
                     self._validate_strategy_for_plan(
                         state,

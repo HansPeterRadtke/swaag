@@ -184,7 +184,6 @@ def plan_contract(
         "tool_name_equals",
         "tool_output_nonempty",
         "tool_output_schema_valid",
-        "tool_effect_verified",
         "tool_files_changed",
         "file_exists",
         "file_contains",
@@ -226,19 +225,6 @@ def plan_contract(
     check_schema = _closed_object(
         check_properties({"type": "string", "enum": check_types}, include_condition=True)
     )
-    objective_check_schema = _closed_object(
-        {
-            "name": _string(),
-            "check_type": {
-                "type": "string",
-                "enum": ["none", "tool_effect_verified", "file_contains", "command_success"],
-            },
-            "path": _string(),
-            "pattern": _string(),
-            "command": _array(_string()),
-            "cwd": _string(),
-        }
-    )
     step_schema = _closed_object(
         {
             "step_id": _string(),
@@ -251,7 +237,6 @@ def plan_contract(
             "expected_outputs": _array(_string()),
             "success_criteria": _string(),
             "verification_type": {"type": "string", "enum": verification_types},
-            "objective_verification_check": objective_check_schema,
             "verification_checks": _array(check_schema),
             "input_refs": _array(_string()),
             "output_refs": _array(_string()),

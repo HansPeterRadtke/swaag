@@ -101,21 +101,21 @@ Model-declared artifact references are not executable content. Plan
 by the constrained selected-tool input call. If actual side-effect tool input
 contains an unresolved artifact placeholder such as `{{artifact_name}}`, SWAAG
 rejects it mechanically and returns the failure to the model for recovery.
-Tools may register required objective verification check types; when they do,
-the model selects a dedicated compact `objective_verification_check`, preserves
-its model-authored name, and supplies only the payload fields applicable to that
-objective type. This slot is always required and cannot select mechanical-only
-checks such as `tool_files_changed`. If the check is missing or malformed,
-runtime review rejects the plan with
-structured validation evidence and asks the model for a corrected constrained
-plan. Python must not promote optional checks, rewrite condition importance, or
-synthesize verification semantics. Objective file-content verification must
-declare concrete expected text precise enough to reject partial or corrupt
-edits; an empty containment target is a failed check, not a successful match.
-The `condition` field is only the check's required/optional status; output labels
-such as `file_content` belong in dataflow fields, and existence checks such as
-`file_exists` are not objective proof for mutating tools unless the model also
-declares the tool's registered objective check type as required.
+Tools may register an automatic mechanical objective-verification type. The
+runtime installs that exact registered check after parsing the model plan and
+before plan review; the live model wire does not expose mechanical
+`tool_effect_verified` checks or a separate objective slot. This compiler-style
+step follows tool metadata and does not invent paths, expected text, commands,
+tools, success criteria, or semantic meaning. Mutating tools without an
+automatic mechanical default still require a model-authored, required
+`file_contains` or `command_success` check with concrete payload. Objective
+file-content verification must declare expected text precise enough to reject
+partial or corrupt edits; an empty containment target is a failed check, not a
+successful match. The `condition` field is only the check's required/optional
+status; output labels such as `file_content` belong in dataflow fields, and
+existence or nonempty-output checks are not objective proof for mutating tools.
+Exact duplicate checks are mechanically collapsed, while conflicting checks
+with the same name remain invalid.
 For observed text edits, `edit_text` exposes `replace_exact` as the preferred
 operation: the model supplies `old_text` and `new_text`, the editor requires
 exactly one literal match by default, and zero or multiple matches fail closed.
