@@ -177,5 +177,5 @@ def test_plan_contract_derives_done_condition_and_omits_runtime_owned_objective_
     assert "objective_verification_check" not in step_properties
     check_types = step_properties["verification_checks"]["items"]["properties"]["check_type"]["enum"]
     assert "tool_effect_verified" not in check_types
-    assert "file_contains" in check_types
+    assert "file_contains" not in check_types
     assert "command_success" in check_types

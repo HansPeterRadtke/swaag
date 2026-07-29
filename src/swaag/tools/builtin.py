@@ -718,10 +718,11 @@ class WriteFileTool(Tool):
         "Return path, complete final file content, and create as a boolean. "
         "Use this only when replacing or creating the whole file is the intended action with concrete content. "
         "Do not pass artifact placeholders; use observed file text or choose a narrower edit tool when appropriate. "
-        "Plans using this tool must verify the resulting state with a required file_contains or command_success check; file_exists is not enough."
+        "The runtime automatically installs a persisted-hash tool_effect_verified check; use command_success only for a distinct executable correctness test."
     )
     kind = "side_effect"
-    objective_verification_check_types = ("file_contains", "command_success")
+    objective_verification_check_types = ("tool_effect_verified", "file_contains", "command_success")
+    automatic_objective_verification_check_type = "tool_effect_verified"
     semantic_result_review_required = True
     requires_artifacts = ("path", "text")
     provides_artifacts = ("edited_text", "path")
@@ -731,8 +732,12 @@ class WriteFileTool(Tool):
             "path": {"type": "string"},
             "written": {"type": "boolean"},
             "size_chars": {"type": "integer"},
+            "changed": {"type": "boolean"},
+            "existed_before": {"type": "boolean"},
+            "before_sha256": {"type": "string"},
+            "after_sha256": {"type": "string"},
         },
-        "required": ["path", "written", "size_chars"],
+        "required": ["path", "written", "size_chars", "changed", "existed_before", "before_sha256", "after_sha256"],
         "additionalProperties": False,
     }
     input_schema = _closed_input(
@@ -755,6 +760,50 @@ class WriteFileTool(Tool):
 
     def required_generated_event_types(self, validated_input: dict[str, Any]) -> set[str]:
         return {"file_read_for_edit", "edit_applied"}
+
+    def verify_effect(
+        self,
+        result: ToolExecutionResult,
+        environment,
+    ) -> tuple[bool, dict[str, Any]]:
+        output = result.output
+        path_text = output.get("path")
+        changed = output.get("changed")
+        existed_before = output.get("existed_before")
+        before_sha256 = output.get("before_sha256")
+        after_sha256 = output.get("after_sha256")
+        evidence: dict[str, Any] = {
+            "tool_name": result.tool_name,
+            "path": path_text,
+            "changed": changed,
+            "existed_before": existed_before,
+            "before_sha256": before_sha256,
+            "after_sha256": after_sha256,
+        }
+        if result.tool_name != self.name:
+            evidence["reason"] = "tool_name_mismatch"
+            return False, evidence
+        if not isinstance(path_text, str) or not path_text.strip():
+            evidence["reason"] = "missing_path"
+            return False, evidence
+        if not isinstance(before_sha256, str) or not before_sha256 or not isinstance(after_sha256, str) or not after_sha256:
+            evidence["reason"] = "missing_effect_hashes"
+            return False, evidence
+        try:
+            resolved, current_text = environment.filesystem.read_text(path_text, cwd=environment.current_cwd)
+        except Exception as exc:  # noqa: BLE001 - evidence must fail closed for any filesystem error.
+            evidence["reason"] = "current_file_unreadable"
+            evidence["error"] = str(exc)
+            return False, evidence
+        current_sha256 = sha256_text(current_text)
+        evidence["resolved_path"] = str(resolved)
+        evidence["current_sha256"] = current_sha256
+        evidence["persisted"] = current_sha256 == after_sha256
+        evidence["real_change"] = changed is True and (existed_before is False or before_sha256 != after_sha256)
+        passed = bool(evidence["persisted"]) and bool(evidence["real_change"])
+        if not passed:
+            evidence["reason"] = "tool_effect_not_persisted"
+        return passed, evidence
 
     def execute(self, validated_input: dict[str, Any], context: ToolContext) -> ToolExecutionResult:
         return context.environment.write_file(validated_input["path"], validated_input["content"], create=validated_input["create"])

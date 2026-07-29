@@ -1106,9 +1106,8 @@ def test_plan_prompt_uses_configured_max_plan_steps(make_config) -> None:
     assert "at most 4 steps including the final respond step" not in assembly.prompt_text
     assert "success_criteria field is the authoritative semantic criterion" in assembly.prompt_text
     assert "Keep dependencies_completed mechanical" in assembly.prompt_text
-    assert "Do not add file_contains unless" in assembly.prompt_text
-    assert "expected_json is itself a string field containing JSON text" in assembly.prompt_text
-    assert 'set expected_json to "\\"status: ready\\""' in assembly.prompt_text
+    assert "Do not emit tool_effect_verified or file_contains" in assembly.prompt_text
+    assert "allow the registered persisted-effect check and later whole-goal review" in assembly.prompt_text
     assert "expected_outputs is a non-empty list of output labels for the step, including respond steps" in assembly.prompt_text
 
 

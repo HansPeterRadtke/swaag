@@ -2836,6 +2836,11 @@ class AgentRuntime:
             return []
         return [step.kind for step in state.active_plan.steps if step.status == "completed"]
 
+    def _completed_step_ids(self, state: SessionState) -> set[str]:
+        if state.active_plan is None:
+            return set()
+        return {step.step_id for step in state.active_plan.steps if step.status == "completed"}
+
     def _install_registered_mechanical_objective_checks(self, plan: Plan) -> None:
         for step in plan.steps:
             if not step.expected_tool:
@@ -4055,15 +4060,23 @@ class AgentRuntime:
             file_snapshot_evidence = self._latest_file_snapshot_evidence(state)
             if file_snapshot_evidence:
                 replan_evidence_parts.append(f"Latest observed file snapshots:\n{file_snapshot_evidence}")
+            completed_step_ids = sorted(self._completed_step_ids(state))
+            completed_dependency_guidance = (
+                f" Completed prior step ids that may be referenced as already satisfied dependencies: {', '.join(completed_step_ids)}."
+                if completed_step_ids
+                else ""
+            )
             replan_state_guidance = (
-                "Replan from current observations, history, and environment state. "
+                "Replan from current observations, history, and environment state. The replacement plan must be internally acyclic. "
+                "Do not recreate completed work merely to satisfy dependency structure; dependencies on omitted completed prior steps are already satisfied. "
                 "Failed steps do not undo prior tool side effects; if current observations already satisfy the requested state, "
                 "plan verification and final response rather than repeating the mutation. "
                 "If current observations or tool errors show that a previous source snippet, range, pattern, or other target "
                 "no longer applies to the current artifact, do not plan another action that depends only on that stale target. "
-                "Read or use the current artifact state, then decide the next repair, verification, blocker, or clarification. "
-                "Verification checks for artifact changes must prove the exact requested final state with enough surrounding "
-                "context to reject partial, corrupted, or merely broad-value matches."
+                "Read or use the current artifact state before choosing the next action. "
+                "Use registered mechanical effect checks for persisted mutations and executable tests for semantic correctness; "
+                "do not add speculative file-content assertions before the relevant file content has been observed."
+                + completed_dependency_guidance
             )
             if replan_evidence_parts:
                 replan_state_guidance = f"{replan_state_guidance}\n\n" + "\n\n".join(replan_evidence_parts)
@@ -4142,6 +4155,7 @@ class AgentRuntime:
                     payload,
                     available_tools=self.tools.tool_names(self.config),
                     plan_id=state.active_plan.plan_id if update_existing and state.active_plan is not None else None,
+                    satisfied_dependencies=self._completed_step_ids(state) if update_existing or replan_reason else (),
                 )
                 plan.goal = planning_goal
                 self._install_registered_mechanical_objective_checks(plan)
@@ -4182,11 +4196,11 @@ class AgentRuntime:
                         "criterion, or check_type='exact_match'/'string_match' with actual_source='assistant_text' and a "
                         "non-empty expected value; include that semantic check name in required_conditions. "
                         "string_nonempty and assistant_response_nonempty are only presence checks, not semantic checks. "
-                        "Give file_contains a non-empty target. For read/list/note context steps, use "
-                        "tool_output_nonempty or tool_output_schema_valid unless you are checking concrete file text "
-                        "with a non-empty file_contains target. expected_json is a string field containing JSON text; "
-                        'for a text target like status: ready set expected_json to "\\"status: ready\\"" or leave '
-                        "expected_json empty when pattern is set."
+                        "The live plan wire does not support file_contains. For read/list/note context steps, use "
+                        "tool_output_nonempty or tool_output_schema_valid. For mutations, rely on the registered mechanical "
+                        "effect check and add command_success only for a distinct executable correctness test. "
+                        "Replacement plans must be acyclic; omitted completed prior steps may remain in depends_on because "
+                        "the runtime treats those dependencies as already satisfied."
                     )
                     continue
                 plan = None

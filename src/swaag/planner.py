@@ -521,13 +521,14 @@ def _normalize_step_payload(
 
 
 
-def _validate_dependencies(steps: list[PlanStep]) -> None:
+def _validate_dependencies(steps: list[PlanStep], *, satisfied_dependencies: set[str] | None = None) -> None:
+    satisfied = set(satisfied_dependencies or ())
     step_ids = {step.step_id for step in steps}
     if len(step_ids) != len(steps):
         raise PlanValidationError("Plan contains duplicate step ids")
     for step in steps:
         for dependency in step.depends_on:
-            if dependency not in step_ids:
+            if dependency not in step_ids and dependency not in satisfied:
                 raise PlanValidationError(f"Plan step {step.step_id} depends on unknown step {dependency}")
 
     visiting: set[str] = set()
@@ -541,7 +542,8 @@ def _validate_dependencies(steps: list[PlanStep]) -> None:
         visiting.add(step_id)
         step = next(item for item in steps if item.step_id == step_id)
         for dependency in step.depends_on:
-            _walk(dependency)
+            if dependency in step_ids:
+                _walk(dependency)
         visiting.remove(step_id)
         visited.add(step_id)
 
@@ -663,7 +665,13 @@ def _validate_step(step: PlanStep, available_tools: set[str]) -> None:
 
 
 
-def plan_from_payload(payload: dict, *, available_tools: Iterable[str], plan_id: str | None = None) -> Plan:
+def plan_from_payload(
+    payload: dict,
+    *,
+    available_tools: Iterable[str],
+    plan_id: str | None = None,
+    satisfied_dependencies: Iterable[str] = (),
+) -> Plan:
     available_tool_set = set(available_tools)
     goal = str(payload.get("goal", "")).strip()
     if not goal:
@@ -709,7 +717,11 @@ def plan_from_payload(payload: dict, *, available_tools: Iterable[str], plan_id:
         )
         _validate_step(step, available_tool_set)
         steps.append(step)
-    _validate_dependencies(steps)
+    satisfied_dependency_set = {str(item).strip() for item in satisfied_dependencies if str(item).strip()}
+    _validate_dependencies(steps, satisfied_dependencies=satisfied_dependency_set)
+    current_step_ids = {step.step_id for step in steps}
+    for step in steps:
+        step.depends_on = [dependency for dependency in step.depends_on if dependency in current_step_ids]
     steps = _topological_sort(steps)
     if not steps or steps[-1].kind != "respond":
         raise PlanValidationError("Model plan must end with a respond step")

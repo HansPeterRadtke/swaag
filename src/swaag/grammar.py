@@ -186,7 +186,6 @@ def plan_contract(
         "tool_output_schema_valid",
         "tool_files_changed",
         "file_exists",
-        "file_contains",
         "json_schema_valid",
         "function_exists",
         "symbol_exists",

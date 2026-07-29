@@ -159,16 +159,17 @@ to the model's own labels; Python must not use it to invent or transform
 semantic content.
 Tool definitions may declare one automatic mechanical objective-verification
 type. Runtime installs that exact registered check after parsing and before plan
-review, while the live constrained model wire omits `tool_effect_verified` and
-the former dedicated objective slot. This registry-driven compilation is
-mechanical: Python does not choose tools, expected text, paths, commands,
-criteria, or condition importance. Mutating tools without an automatic default
-still require a model-authored, required `file_contains` or `command_success`
-check with concrete payload. Each model-authored check carries its own local
-condition status; artifact, input, output, and expected-output labels remain in
-their dedicated dataflow fields. Existence and nonempty-output checks remain
-mechanical evidence rather than objective proof. Exact duplicate checks may be
-collapsed mechanically, but conflicting same-name checks are rejected.
+review, while the live constrained model wire omits `tool_effect_verified`,
+`file_contains`, and the former dedicated objective slot. This registry-driven
+compilation is mechanical: Python does not choose tools, expected text, paths,
+commands, criteria, or condition importance. `edit_text` and `write_file`
+register persisted-hash verification that proves the current file matches the
+tool result and that a real mutation occurred. A model-authored
+`command_success` check is reserved for a distinct executable correctness test;
+constrained mutation review and final-objective verification decide semantic
+correctness. Each model-authored check carries its own local condition status,
+and dataflow labels remain in their dedicated fields. Exact duplicate checks
+may be collapsed mechanically, but conflicting same-name checks are rejected.
 Original file contents, diffs, and write provenance are mechanical history
 records. Visible backup files are disabled by default because creating extra
 workspace files is a user-visible side effect that can violate tasks requiring
@@ -237,10 +238,12 @@ not choose replacement arguments.
 
 Side-effect tool arguments must be concrete. Python may reject unresolved
 artifact placeholders before mutation because that is a safety validation, but
-it must not decide what the missing content should be. Objective containment
-checks such as `file_contains` must declare concrete expected text through
-`pattern`, `expected`, or `expected_json` and should be precise enough to reject
-partial or corrupt edits. An empty target must fail.
+it must not decide what the missing content should be. The live plan wire does
+not expose speculative containment checks: read steps prove that trustworthy
+output was gathered, mutation steps receive registered persisted-effect checks,
+and executable semantic claims use `command_success` where appropriate. Legacy
+saved `file_contains` checks remain readable for replay compatibility; they must
+declare non-empty expected text and fail closed otherwise.
 For observed text edits, `edit_text` should use the portable `replace_exact`
 operation with model-supplied `old_text` and `new_text`. The editor enforces an
 exactly-one-match precondition, supports dry run, applies atomically through

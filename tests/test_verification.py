@@ -1238,3 +1238,27 @@ def test_composite_verification_requires_passing_run_tests_when_command_success_
     assert result.verification_passed is False
     assert "perspective:structural" in result.conditions_failed
     assert result.evidence["perspectives"]["structural"]["requires_success"] is True
+
+
+def test_relative_file_contains_path_resolves_from_latest_tool_result(tmp_path: Path) -> None:
+    target = tmp_path / "pkg" / "sample.py"
+    target.parent.mkdir()
+    target.write_text("status = 'ready'\n", encoding="utf-8")
+    artifacts = VerificationArtifacts(
+        tool_results=[
+            ToolExecutionResult(
+                tool_name="edit_text",
+                output={"path": str(target)},
+                display_text="edited",
+            )
+        ]
+    )
+    engine = VerificationEngine(semantic_backend_mode="unavailable")
+
+    path, evidence = engine._resolve_filesystem_check_path(
+        {"path": "pkg/sample.py"},
+        artifacts=artifacts,
+    )
+
+    assert path == target
+    assert evidence["path_source"] == "latest_tool_result_for_relative_check"

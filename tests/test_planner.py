@@ -958,3 +958,66 @@ def test_plan_parser_rejects_conflicting_regular_check_duplicate() -> None:
     step["verification_checks"].append(duplicate)
     with pytest.raises(PlanValidationError, match=f"duplicate verification check name {duplicate['name']}"):
         plan_from_payload(payload, available_tools=["read_file"])
+
+
+def test_plan_from_payload_accepts_and_strips_completed_external_dependency() -> None:
+    payload = _payload(
+        "Continue after an already completed edit.",
+        [
+            plan_step(
+                "run_tests",
+                "Run tests",
+                "tool",
+                expected_tool="run_tests",
+                expected_output="test result",
+                success_criteria="Tests run.",
+                depends_on=["completed_edit"],
+            ),
+            plan_step(
+                "answer",
+                "Answer",
+                "respond",
+                expected_output="summary",
+                success_criteria="Summary supplied.",
+                depends_on=["run_tests"],
+            ),
+        ],
+    )
+
+    plan = plan_from_payload(
+        payload,
+        available_tools=["run_tests"],
+        satisfied_dependencies=["completed_edit"],
+    )
+
+    assert plan.steps[0].step_id == "run_tests"
+    assert plan.steps[0].depends_on == []
+    assert plan.steps[1].depends_on == ["run_tests"]
+
+
+def test_plan_from_payload_still_rejects_unknown_external_dependency() -> None:
+    payload = _payload(
+        "Continue after an unknown step.",
+        [
+            plan_step(
+                "run_tests",
+                "Run tests",
+                "tool",
+                expected_tool="run_tests",
+                expected_output="test result",
+                success_criteria="Tests run.",
+                depends_on=["unknown_edit"],
+            ),
+            plan_step(
+                "answer",
+                "Answer",
+                "respond",
+                expected_output="summary",
+                success_criteria="Summary supplied.",
+                depends_on=["run_tests"],
+            ),
+        ],
+    )
+
+    with pytest.raises(PlanValidationError, match="depends on unknown step unknown_edit"):
+        plan_from_payload(payload, available_tools=["run_tests"], satisfied_dependencies=["different_step"])

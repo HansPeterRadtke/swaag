@@ -223,28 +223,28 @@ Visible editor backup files are disabled by default. File mutation tools record
 original text, diffs, and write provenance in history; they must not create
 surprise workspace files unless an explicit operator policy enables backups.
 substitute the artifact content.
-Plan dependency edges are model-authored and mechanically validated. A
-`depends_on` entry must name an earlier step that the current step actually
-needs; self-dependencies and cycles are rejected and returned to the planner as
-validation evidence.
+Plan dependency edges are model-authored and mechanically validated. In an
+initial plan, every `depends_on` entry must name an earlier step in that plan.
+During replacement planning, a dependency may also name a completed prior step
+listed in replan evidence; runtime validates it as already satisfied and strips
+that external edge before topological sorting and execution. Unknown external
+dependencies, self-dependencies, and cycles among replacement-plan steps remain
+invalid and are returned to the planner as validation evidence.
 For verification only, the latest tool result is also available through the
 current step's model-declared `expected_output`, `expected_outputs`, and
 `output_refs` labels. This lets the model's `artifact_present` checks reference
 its own labels without Python choosing the label meaning.
 Some tools register an automatic mechanical objective-verification type.
 Runtime installs that exact registered check after parsing and makes it required;
-the model does not emit or name it. This registry-driven operation cannot choose
-semantic expected content. Mutating tools without an automatic default must
-supply required model-authored `file_contains` or `command_success` checks with
-concrete payload, and plan review rejects missing or malformed proof. Python does
-not promote optional checks, rewrite condition importance, or invent expected
-content. The condition field is not an output label. `file_exists`,
-`tool_files_changed`, `artifact_present`, and `tool_output_nonempty` do not
-substitute for required objective proof.
-File-content verification reads the declared target text from `pattern`,
-`expected`, or `expected_json`. Planner/tool guidance tells the model to use
-targets precise enough to reject partial or corrupt edits. Empty containment
-targets fail mechanically.
+the model does not emit or name it. The live plan wire omits
+`tool_effect_verified` and `file_contains`. `edit_text` and `write_file` register
+persisted-hash checks that prove the current file matches the tool result and a
+real mutation occurred. The model adds `command_success` only for a distinct
+executable correctness test; constrained mutation review and whole-goal review
+retain semantic authority. Python does not promote optional checks, rewrite
+condition importance, or invent expected content. Legacy saved containment
+checks remain readable, resolve matching relative paths from the latest tool
+result, and reject empty targets mechanically.
 For observed text edits, the selected-tool argument call should use
 `edit_text` operation `replace_exact`: the model supplies `old_text` and
 `new_text`, the editor requires exactly one literal match, dry-run previews

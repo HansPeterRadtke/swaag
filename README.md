@@ -103,19 +103,20 @@ contains an unresolved artifact placeholder such as `{{artifact_name}}`, SWAAG
 rejects it mechanically and returns the failure to the model for recovery.
 Tools may register an automatic mechanical objective-verification type. The
 runtime installs that exact registered check after parsing the model plan and
-before plan review; the live model wire does not expose mechanical
-`tool_effect_verified` checks or a separate objective slot. This compiler-style
-step follows tool metadata and does not invent paths, expected text, commands,
-tools, success criteria, or semantic meaning. Mutating tools without an
-automatic mechanical default still require a model-authored, required
-`file_contains` or `command_success` check with concrete payload. Objective
-file-content verification must declare expected text precise enough to reject
-partial or corrupt edits; an empty containment target is a failed check, not a
-successful match. The `condition` field is only the check's required/optional
-status; output labels such as `file_content` belong in dataflow fields, and
-existence or nonempty-output checks are not objective proof for mutating tools.
-Exact duplicate checks are mechanically collapsed, while conflicting checks
-with the same name remain invalid.
+before plan review; the live model wire does not expose `tool_effect_verified`,
+`file_contains`, or a separate objective slot. This compiler-style step follows
+tool metadata and does not invent tools, paths, expected text, commands, success
+criteria, or semantic meaning. Both `edit_text` and `write_file` register a
+persisted-hash check that proves the current file equals the tool result's
+after-hash and that a real mutation occurred. A model may add `command_success`
+only for a distinct executable correctness test; constrained mutation review
+and whole-goal verification retain semantic authority. The `condition` field is
+only the check's required/optional status, and output labels such as
+`file_content` belong in dataflow fields. Exact duplicate checks are
+mechanically collapsed, while conflicting checks with the same name remain
+invalid. Legacy saved plans containing `file_contains` remain readable; empty
+targets fail closed and relative paths may resolve from the matching latest tool
+result.
 For observed text edits, `edit_text` exposes `replace_exact` as the preferred
 operation: the model supplies `old_text` and `new_text`, the editor requires
 exactly one literal match by default, and zero or multiple matches fail closed.

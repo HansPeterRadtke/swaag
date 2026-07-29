@@ -166,7 +166,8 @@ def test_planning_and_tool_choice_prompts_include_full_enabled_registry(make_con
     assert "do not add a follow-up write_file step for the same file" in plan_prompt.prompt_text
     assert "never artifact/input/output labels" in plan_prompt.prompt_text
     assert "file_exists, tool_files_changed, artifact_present, and tool_output_nonempty are not substitutes" in plan_prompt.prompt_text
-    assert "depends_on names only earlier step_id values" in plan_prompt.prompt_text
+    assert "in an initial plan depends_on names only earlier step_id values" in plan_prompt.prompt_text
+    assert "completed prior step id supplied in replan evidence" in plan_prompt.prompt_text
     assert "runtime derives the structural done condition" in plan_prompt.prompt_text
     assert "expected_outputs is a non-empty list of output labels for the step, including respond steps" in plan_prompt.prompt_text
     assert 'actual_source must be exactly "assistant_text"' in plan_prompt.prompt_text
@@ -174,14 +175,12 @@ def test_planning_and_tool_choice_prompts_include_full_enabled_registry(make_con
     assert "success_criteria field is the authoritative semantic criterion" in plan_prompt.prompt_text
     assert "Do not duplicate success_criteria as a criterion check" in plan_prompt.prompt_text
     assert "weaken the requested final state" in plan_prompt.prompt_text
-    assert "add a required file_contains or command_success check" in plan_prompt.prompt_text
-    assert "concrete non-empty pattern" in plan_prompt.prompt_text
-    assert "use current observations" in plan_prompt.prompt_text
-    assert "stale arguments" in plan_prompt.prompt_text
-    assert "Empty file_contains is invalid" in plan_prompt.prompt_text
-    assert "expected_json is itself a string field containing JSON text" in plan_prompt.prompt_text
-    assert 'set expected_json to "\\"status: ready\\""' in plan_prompt.prompt_text
-    assert "use tool_output_nonempty or tool_output_schema_valid to prove context was gathered" in plan_prompt.prompt_text
+    assert "add command_success only when there is a distinct executable correctness test" in plan_prompt.prompt_text
+    assert "Do not emit tool_effect_verified or file_contains" in plan_prompt.prompt_text
+    assert "A read step verifies that trustworthy context was gathered" in plan_prompt.prompt_text
+    assert "not that unobserved content matches a guess" in plan_prompt.prompt_text
+    assert "allow the registered persisted-effect check and later whole-goal review" in plan_prompt.prompt_text
+    assert "that dependency is already satisfied and will be removed mechanically" in plan_prompt.prompt_text
     assert "Keep dependencies_completed mechanical" in plan_prompt.prompt_text
 
 
@@ -249,7 +248,7 @@ def test_file_mutation_tools_require_model_owned_result_review(make_config) -> N
     assert tools["edit_text"].semantic_result_review_required is True
     assert tools["edit_text"].automatic_objective_verification_check_type == "tool_effect_verified"
     assert tools["write_file"].semantic_result_review_required is True
-    assert tools["write_file"].automatic_objective_verification_check_type == ""
+    assert tools["write_file"].automatic_objective_verification_check_type == "tool_effect_verified"
     assert verification_contract(["result_satisfies_step"]).json_schema is not None
 
 

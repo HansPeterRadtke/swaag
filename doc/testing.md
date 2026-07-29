@@ -139,24 +139,27 @@ real tool results, so successful reads or edits do not fail merely because the
 model named the output `file_content` or another arbitrary label.
 Tests must prove that registry-declared automatic mechanical objective checks
 are installed exactly once before plan review and cannot be supplied through the
-live model wire. Mutating tools without an automatic default must not pass with
-only artifact-exists or nonempty-output checks; missing, optional, or malformed
-model-authored `file_contains` or `command_success` proof must be rejected with
-model-visible validation evidence.
+live model wire. The live schema must exclude both `tool_effect_verified` and
+`file_contains`. `edit_text` and `write_file` must expose persisted hashes and
+fail their registered effect check for an unpersisted or no-op mutation. A
+model-authored `command_success` check is reserved for distinct executable
+correctness, while semantic mutation and whole-goal review remain fail-closed.
+Legacy containment checks must remain readable, reject empty targets, and
+resolve a matching relative path from the latest tool result.
 Tests must prove exact tool identity. If a model-authored plan declares
 `expected_tool`, executing a different registered tool name must fail
 verification or be rejected as mismatch evidence; tests must not encode
 read-tool or other tool-pair equivalence as a success condition.
 Regression tests must cover that every live model-facing verification check has
-a local required/optional condition status, that exact duplicate checks collapse
-while conflicting same-name checks fail, and that dataflow labels cannot occupy
-condition fields. They must also prove `file_exists`, `tool_files_changed`,
-`artifact_present`, or `tool_output_nonempty` alone cannot satisfy objective
-proof for a mutating tool. Legacy saved plans with internal condition-name lists,
-explicit done conditions, and the former objective slot must remain readable,
-while live plans derive done conditions and registered automatic mechanical
-checks. Diagnostic `run_tests` failures must be accepted as observations unless
-the plan explicitly requires `command_success`.
+a local required/optional condition status, exact duplicate checks collapse,
+conflicting same-name checks fail, and dataflow labels cannot occupy condition
+fields. Legacy saved plans with internal condition-name lists, explicit done
+conditions, the former objective slot, and containment checks must remain
+readable, while live plans derive done conditions and registered automatic
+mechanical checks. Replacement-plan tests must accept and strip dependencies on
+known completed prior steps while rejecting unknown dependencies and cycles.
+Diagnostic `run_tests` failures remain observations unless the plan explicitly
+requires `command_success`.
 They must also prove that semantic response or reasoning plans are rejected
 before execution unless at least one model-declared `criterion` check or
 exact/string assistant-text match is required; optional-only semantic criteria

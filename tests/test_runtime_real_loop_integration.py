@@ -890,7 +890,8 @@ def test_real_loop_replan_after_stale_source_errors_exposes_current_state_and_re
     assert "Recent failed tool or verification evidence" in plan_requests[1]["prompt"]
     assert "Latest observed file snapshots" in plan_requests[1]["prompt"]
     assert "do not plan another action that depends only on that stale target" in plan_requests[1]["prompt"]
-    assert "broad-value matches" in plan_requests[1]["prompt"]
+    assert "executable tests for semantic correctness" in plan_requests[1]["prompt"]
+    assert "do not add speculative file-content assertions" in plan_requests[1]["prompt"]
     assert any(
         event.event_type == "tool_error"
         and event.payload.get("tool_name") == "edit_text"
@@ -1464,14 +1465,15 @@ def test_real_loop_retry_feedback_repairs_redundant_mutation_step(make_config, t
     config = make_config(
         model__context_limit=32_000,
         model__max_retries=1,
+        planner__max_replans=2,
         tools__allow_stateful_tools=True,
         tools__allow_side_effect_tools=True,
-        runtime__max_tool_steps=3,
-        runtime__max_reasoning_steps=12,
-        runtime__max_total_actions=16,
+        runtime__max_tool_steps=5,
+        runtime__max_reasoning_steps=16,
+        runtime__max_total_actions=24,
     )
     goal = f"Move {release} from draft to ready and answer repaired."
-    invalid_plan = plan_response(
+    initial_plan = plan_response(
         goal=goal,
         steps=[
             plan_step(
@@ -1493,59 +1495,65 @@ def test_real_loop_retry_feedback_repairs_redundant_mutation_step(make_config, t
                 depends_on=["read_file_content"],
                 input_refs=["file_content"],
                 output_refs=["edited_file_content"],
-                verification_checks=[
-                    {"name": "dependencies_completed", "check_type": "dependencies_completed"},
-                    {"name": "file_contains_ready", "check_type": "file_contains", "path": str(release), "expected_json": "\"status: ready\""},
-                ],
-                required_conditions=["dependencies_completed", "file_contains_ready"],
-                optional_conditions=[],
             ),
             plan_step(
                 "write_file_content",
-                "Write file",
+                "Redundantly write the same file",
                 "write",
                 expected_tool="write_file",
                 expected_output="written_file",
-                success_criteria="release.yaml exists after writing.",
+                success_criteria="release.yaml remains in the requested ready state.",
                 depends_on=["edit_file_content"],
                 input_refs=["edited_file_content"],
                 output_refs=["written_file"],
-                verification_checks=[
-                    {"name": "dependencies_completed", "check_type": "dependencies_completed"},
-                    {"name": "file_exists", "check_type": "file_exists", "path": str(release)},
-                ],
-                required_conditions=["dependencies_completed", "file_exists"],
-                optional_conditions=[],
             ),
-            _exact_answer_step("answer", "repaired", depends_on=["write_file_content"]),
+            _exact_answer_step("unreachable_answer", "repaired", depends_on=["write_file_content"]),
         ],
     )
-    valid_plan = plan_response(
+    recovery_plan = plan_response(
         goal=goal,
         steps=[
             plan_step(
-                "edit_file_content",
-                "Edit file",
-                "write",
-                expected_tool="edit_text",
-                expected_output="edited_file_content",
-                success_criteria="release.yaml contains status: ready.",
-                output_refs=["edited_file_content"],
-                verification_checks=[
-                    {"name": "file_contains_ready", "check_type": "file_contains", "path": str(release), "expected_json": "\"status: ready\""},
-                ],
-                required_conditions=["file_contains_ready"],
-                optional_conditions=[],
+                "read_current",
+                "Read the already repaired file",
+                "read",
+                expected_tool="read_file",
+                expected_output="current_file_content",
+                success_criteria="The current ready file is observed.",
+                depends_on=["edit_file_content"],
+                output_refs=["current_file_content"],
             ),
-            _exact_answer_step("answer", "repaired", depends_on=["edit_file_content"]),
+            _exact_answer_step("answer", "repaired", depends_on=["read_current"]),
         ],
     )
+    ready_text = "name: report-62\nstatus: ready\nowner: team-6\n"
     runtime = AgentRuntime(
         config,
         model_client=FakeModelClient(
             contract_responses={
-                "task_plan": [invalid_plan, valid_plan],
-                "tool_decision": [_tool_call("edit_text", _edit_replace_input(release, "status: draft", "status: ready"))],
+                "task_plan": [initial_plan, recovery_plan],
+                "tool_input:read_file": [
+                    json.dumps({"path": str(release)}),
+                    json.dumps({"path": str(release)}),
+                ],
+                "tool_input:edit_text": [
+                    json.dumps(_edit_replace_input(release, "status: draft", "status: ready")),
+                ],
+                "tool_input:write_file": [
+                    json.dumps(_write_file_input(release, ready_text)),
+                ],
+                "failure_classification": [
+                    json.dumps(
+                        {
+                            "kind": "verification_failure",
+                            "retryable": False,
+                            "requires_replan": True,
+                            "suggested_strategy_mode": "recovery",
+                            "wait_seconds": 0.0,
+                            "reason": "the redundant full-file write was a no-op and must not be repeated",
+                        }
+                    )
+                ],
                 "answer_response": ["repaired"],
             }
         ),
@@ -1555,20 +1563,21 @@ def test_real_loop_retry_feedback_repairs_redundant_mutation_step(make_config, t
     events = runtime.history.read_history(result.session_id)
 
     assert result.assistant_text == "repaired"
-    assert release.read_text(encoding="utf-8") == "name: report-62\nstatus: ready\nowner: team-6\n"
-    assert _tool_names(events) == ["edit_text"]
+    assert release.read_text(encoding="utf-8") == ready_text
+    assert _tool_names(events) == ["read_file", "edit_text", "write_file", "read_file"]
     assert any(
-        event.event_type == "error"
-        and "Plan step write_file_content uses write_file" in event.payload.get("error", "")
+        event.event_type == "verification_failed"
+        and event.payload.get("step_id") == "write_file_content"
+        and "registered_tool_effect_verified" in event.payload.get("conditions_failed", [])
         for event in events
     )
     plan_requests = [request for request in runtime.client.requests if request["contract"] == "task_plan"]
     assert len(plan_requests) == 2
     retry_prompt = plan_requests[1]["prompt"]
-    assert "write_file_content uses write_file" in retry_prompt
-    assert "Return a corrected plan under the same schema" in retry_prompt
-    assert "Conditions must name declared checks" in retry_prompt
-    assert "Require objective checks for side-effect tools" in retry_prompt
+    assert "Completed prior step ids that may be referenced as already satisfied dependencies" in retry_prompt
+    assert "edit_file_content" in retry_prompt
+    assert "dependencies on omitted completed prior steps are already satisfied" in retry_prompt
+    assert "do not add speculative file-content assertions" in retry_prompt
 
 
 def test_real_loop_supersedes_legacy_unrequired_edit_effect_with_registered_check(make_config, tmp_path: Path) -> None:
@@ -1718,7 +1727,8 @@ def test_real_loop_rejects_malformed_file_contains_check_then_accepts_corrected_
     plan_requests = [request for request in runtime.client.requests if request["contract"] == "task_plan"]
     assert len(plan_requests) == 2
     assert "file_contains check file_written must declare a non-empty pattern or textual expected_json" in plan_requests[1]["prompt"]
-    assert "mutating tool whose guidance requires model-authored objective proof" in plan_requests[1]["prompt"]
+    assert "The live plan wire does not support file_contains" in plan_requests[1]["prompt"]
+    assert "rely on the registered mechanical effect check" in plan_requests[1]["prompt"]
     assert "Every step must also fill objective_verification_check" not in plan_requests[1]["prompt"]
     write_verifications = [
         event for event in events if event.event_type == "verification_completed" and event.payload["step_id"] == "write_report"
@@ -1797,7 +1807,7 @@ def test_real_loop_rejects_unsupported_read_tool_effect_before_execution(make_co
         for event in events
     )
     assert "tool_effect_verified is not supported by that tool" in plan_requests[1]["prompt"]
-    assert "Do not emit tool_effect_verified; it is not part of the live plan wire" in plan_requests[1]["prompt"]
+    assert "Do not emit tool_effect_verified or file_contains; neither is part of the live plan wire" in plan_requests[1]["prompt"]
     assert any(event.event_type == "verification_passed" and event.payload.get("step_id") == "read_target" for event in events)
 
 
@@ -2165,13 +2175,13 @@ def test_real_loop_continues_after_multiple_distinct_plan_contract_repairs(make_
     assert "success_criteria field is the authoritative semantic criterion" in plan_requests[-1]["prompt"]
     assert "Do not duplicate success_criteria as a criterion check" in plan_requests[-1]["prompt"]
     assert "Conditions must name declared checks" in plan_requests[-1]["prompt"]
-    assert "Do not add file_contains unless" in plan_requests[-1]["prompt"]
+    assert "Do not emit tool_effect_verified or file_contains" in plan_requests[-1]["prompt"]
     assert "Every step, including respond steps, must declare non-empty expected_outputs labels" in plan_requests[-1]["prompt"]
     assert "For read/list/note context steps" in plan_requests[-1]["prompt"]
-    assert "use tool_output_nonempty or tool_output_schema_valid to prove context was gathered" in plan_requests[-1]["prompt"]
-    assert "Give file_contains a non-empty target" in plan_requests[-1]["prompt"]
-    assert "expected_json is a string field containing JSON text" in plan_requests[-1]["prompt"]
-    assert 'set expected_json to "\\"status: ready\\""' in plan_requests[-1]["prompt"]
+    assert "prefer dependencies_completed, tool_name_equals, tool_output_nonempty, or tool_output_schema_valid" in plan_requests[-1]["prompt"]
+    assert "A read step verifies that trustworthy context was gathered" in plan_requests[-1]["prompt"]
+    assert "allow the registered persisted-effect check and later whole-goal review" in plan_requests[-1]["prompt"]
+    assert "add command_success only when there is a distinct executable correctness test" in plan_requests[-1]["prompt"]
     assert "Plan correction evidence from this generation cycle" in plan_requests[-1]["prompt"]
     assert "Previous rejected plan JSON:" in plan_requests[1]["prompt"]
     assert "Correct this model-authored plan rather than regenerating unrelated fields" in plan_requests[1]["prompt"]

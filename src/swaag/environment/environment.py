@@ -318,8 +318,9 @@ class AgentEnvironment:
 
     def write_file(self, path_text: str, content: str, *, create: bool = True) -> ToolExecutionResult:
         path = self.filesystem.resolve_path(path_text, cwd=self.current_cwd)
+        existed_before = path.exists()
         original_text = ""
-        if path.exists():
+        if existed_before:
             _, original_text = self.filesystem.read_text(str(path), cwd=self.current_cwd)
         elif not create:
             raise ToolValidationError(f"write_file target does not exist: {path}")
@@ -347,7 +348,15 @@ class AgentEnvironment:
                 ],
             ),
         ]
-        output = {"path": str(path), "written": True, "size_chars": len(content)}
+        output = {
+            "path": str(path),
+            "written": True,
+            "size_chars": len(content),
+            "changed": (not existed_before) or original_text != content,
+            "existed_before": existed_before,
+            "before_sha256": sha256_text(original_text),
+            "after_sha256": sha256_text(content),
+        }
         return ToolExecutionResult(tool_name="write_file", output=output, display_text=f"write_file result: {stable_json_dumps(output, indent=2)}", generated_events=generated)
 
     def inspect_diff(self, path_text: str) -> ToolExecutionResult:

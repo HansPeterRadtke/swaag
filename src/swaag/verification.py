@@ -783,10 +783,23 @@ class VerificationEngine:
         artifacts: VerificationArtifacts,
     ) -> tuple[Path | None, dict[str, Any]]:
         path_text = str(check.get("path", "")).strip()
-        if path_text:
-            return Path(path_text).expanduser(), {"path": path_text, "path_source": "check"}
         latest = artifacts.latest_tool_result
         output = latest.output if latest is not None else None
+        if path_text:
+            requested = Path(path_text).expanduser()
+            if requested.is_absolute():
+                return requested, {"path": path_text, "path_source": "check"}
+            if isinstance(output, dict):
+                output_path = output.get("path")
+                if isinstance(output_path, str) and output_path.strip():
+                    resolved_output = Path(output_path).expanduser()
+                    requested_suffix = requested.as_posix().lstrip("./")
+                    if resolved_output.is_absolute() and resolved_output.as_posix().endswith(f"/{requested_suffix}"):
+                        return resolved_output, {
+                            "path": str(resolved_output),
+                            "path_source": "latest_tool_result_for_relative_check",
+                        }
+            return requested, {"path": path_text, "path_source": "check_relative"}
         if isinstance(output, dict):
             output_path = output.get("path")
             if isinstance(output_path, str) and output_path.strip():

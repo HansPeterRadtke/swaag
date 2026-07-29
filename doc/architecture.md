@@ -139,13 +139,16 @@
   labels; this is structural aliasing only, not content synthesis
 - tools may register one automatic mechanical objective-verification type.
   Runtime installs that exact registered check after parsing and before plan
-  review; the live wire does not expose `tool_effect_verified` or a separate
-  objective slot. This is registry-driven structural compilation, not semantic
-  plan repair: Python does not invent tools, paths, expected text, commands,
-  success criteria, or task-specific checks. Tools without an automatic default
-  still rely on required model-authored `file_contains` or `command_success`
-  proof with concrete payload. Exact duplicate checks collapse mechanically;
-  conflicting same-name checks remain invalid.
+  review; the live wire does not expose `tool_effect_verified`, `file_contains`,
+  or a separate objective slot. This is registry-driven structural compilation,
+  not semantic plan repair: Python does not invent tools, paths, expected text,
+  commands, success criteria, or task-specific checks. `edit_text` and
+  `write_file` register persisted-hash verification; `command_success` is
+  model-authored only for a distinct executable correctness test. Constrained
+  mutation review and final-objective verification retain semantic authority.
+  Exact duplicate checks collapse mechanically; conflicting same-name checks
+  remain invalid. Legacy saved containment checks remain readable and fail
+  closed.
 - `edit_text` prefers portable `replace_exact` edits over raw offsets when the
   model has observed the current text: `old_text` must match exactly once,
   `new_text` is applied atomically, and zero or multiple matches fail closed.

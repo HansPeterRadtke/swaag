@@ -6,6 +6,7 @@ from pathlib import Path
 
 import pytest
 
+from swaag.environment.environment import AgentEnvironment
 from swaag.notes import make_note
 from swaag.tools.base import Tool, ToolContext, ToolValidationError, _validate_schema_value
 from swaag.tools.builtin import EditTextTool, ReadTextTool, RunTestsTool, ShellCommandTool, WriteFileTool
@@ -255,10 +256,43 @@ def test_edit_tool_pattern_not_found_exposes_current_text_for_model_recovery(mak
     assert path.read_text(encoding="utf-8") == "name: report-62\nready\nowner: team-6\n"
 
 
-def test_write_file_guidance_rejects_file_exists_as_objective_proof() -> None:
-    assert "required file_contains or command_success check" in WriteFileTool.usage_guidance
-    assert "file_exists is not enough" in WriteFileTool.usage_guidance
+def test_write_file_guidance_uses_registered_persisted_hash_verification() -> None:
+    assert "persisted-hash tool_effect_verified check" in WriteFileTool.usage_guidance
+    assert "command_success only for a distinct executable correctness test" in WriteFileTool.usage_guidance
 
+
+
+
+def test_write_file_reports_and_verifies_persisted_hash(make_config, tmp_path: Path) -> None:
+    target = tmp_path / "sample.txt"
+    target.write_text("before\n", encoding="utf-8")
+    state = _empty_state()
+    config = make_config(tools__allow_side_effect_tools=True)
+    environment = AgentEnvironment(config, state)
+    result = environment.write_file(str(target), "after\n", create=False)
+
+    assert result.output["changed"] is True
+    assert result.output["existed_before"] is True
+    assert result.output["before_sha256"] != result.output["after_sha256"]
+    target.write_text("after\n", encoding="utf-8")
+    passed, evidence = WriteFileTool().verify_effect(result, environment)
+    assert passed is True
+    assert evidence["persisted"] is True
+    assert evidence["real_change"] is True
+
+
+def test_write_file_effect_rejects_noop_write(make_config, tmp_path: Path) -> None:
+    target = tmp_path / "sample.txt"
+    target.write_text("same\n", encoding="utf-8")
+    state = _empty_state()
+    config = make_config(tools__allow_side_effect_tools=True)
+    environment = AgentEnvironment(config, state)
+    result = environment.write_file(str(target), "same\n", create=False)
+
+    passed, evidence = WriteFileTool().verify_effect(result, environment)
+    assert passed is False
+    assert evidence["persisted"] is True
+    assert evidence["real_change"] is False
 
 
 def test_edit_tool_write_blocked_by_editor_policy(make_config, tmp_path: Path) -> None:
