@@ -39,6 +39,7 @@ class Tool(abc.ABC):
     provides_artifacts: tuple[str, ...] = ()
     objective_verification_check_types: tuple[str, ...] = ()
     automatic_objective_verification_check_type: str = ""
+    max_plan_output_refs: int | None = None
     semantic_result_review_required: bool = False
 
     def prompt_tuple(self) -> tuple[str, str, dict[str, Any], str]:

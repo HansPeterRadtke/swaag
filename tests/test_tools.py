@@ -9,7 +9,7 @@ import pytest
 from swaag.environment.environment import AgentEnvironment
 from swaag.notes import make_note
 from swaag.tools.base import Tool, ToolContext, ToolValidationError, _validate_schema_value
-from swaag.tools.builtin import EditTextTool, ReadTextTool, RunTestsTool, ShellCommandTool, WriteFileTool
+from swaag.tools.builtin import EditTextTool, ReadFileTool, ReadTextTool, RunTestsTool, ShellCommandTool, WriteFileTool
 from swaag.tools.registry import ToolRegistry
 from swaag.types import SessionState, ToolExecutionResult
 
@@ -29,6 +29,17 @@ def test_schema_validator_accepts_union_types_and_null() -> None:
     with pytest.raises(ToolValidationError):
         _validate_schema_value([], schema, path="value")
 
+
+
+def test_read_file_guidance_requires_one_file_per_plan_step() -> None:
+    assert ReadFileTool.max_plan_output_refs == 1
+    assert "One file per call and one output_ref per plan step" in ReadFileTool.usage_guidance
+    assert "separate ordered steps" in ReadFileTool.usage_guidance
+
+
+def test_run_tests_guidance_distinguishes_required_success_from_diagnostics() -> None:
+    assert "require command_success" in RunTestsTool.usage_guidance
+    assert "diagnostics where failure is acceptable" in RunTestsTool.usage_guidance
 
 def test_calculator_tool_executes(make_config) -> None:
     registry = ToolRegistry()

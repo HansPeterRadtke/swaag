@@ -549,7 +549,9 @@ class ListFilesTool(Tool):
 class ReadFileTool(Tool):
     name = "read_file"
     description = "Read a full UTF-8 file from the persistent workspace."
+    usage_guidance = "One file per call and one output_ref per plan step; use separate ordered steps for multiple files."
     kind = "stateful"
+    max_plan_output_refs = 1
     requires_artifacts = ("path",)
     provides_artifacts = ("text", "path")
     output_schema = {
@@ -966,7 +968,10 @@ class ShellCommandTool(Tool):
 class RunTestsTool(Tool):
     name = "run_tests"
     description = "Run a test command inside the persistent workspace and capture structured results."
-    usage_guidance = "Return the command as an argv array of strings and background as a boolean."
+    usage_guidance = (
+        "Use an argv array and boolean background. If tests must pass, require command_success; "
+        "output-only verification is for diagnostics where failure is acceptable."
+    )
     kind = "stateful"
     requires_artifacts = ("command",)
     provides_artifacts = ("test_result",)

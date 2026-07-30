@@ -147,8 +147,12 @@
   model-authored only for a distinct executable correctness test. Constrained
   mutation review and final-objective verification retain semantic authority.
   Exact duplicate checks collapse mechanically; conflicting same-name checks
-  remain invalid. Legacy saved containment checks remain readable and fail
-  closed.
+  remain invalid. Tool metadata can constrain logical output cardinality:
+  `read_file` produces one file observation per call, and runtime rejects a plan
+  step that claims multiple independent file outputs from that single call.
+  Step-kind compatibility is mechanical as well: respond and reasoning steps
+  cannot use tool-result checks. Legacy saved containment checks remain readable
+  and fail closed.
 - `edit_text` prefers portable `replace_exact` edits over raw offsets when the
   model has observed the current text: `old_text` must match exactly once,
   `new_text` is applied atomically, and zero or multiple matches fail closed.
@@ -449,3 +453,7 @@ SWAAG exposes exactly two authoritative test categories:
 - `agent_test`: cached agent behavior checks using real model responses through the record/replay cache.
 
 Manual validation / real usage is not a test category. `python3 -m swaag.benchmark manual-validation ...` replays exact cache hits and records misses by default; `--uncached-live` explicitly bypasses that cache.
+
+Completed dependencies in replacement plans are reconstructed from canonical
+`step_completed` events for the current turn, so work completed before an earlier
+replan remains available without recreating that step.

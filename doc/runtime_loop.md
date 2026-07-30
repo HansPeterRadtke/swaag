@@ -226,14 +226,29 @@ substitute the artifact content.
 Plan dependency edges are model-authored and mechanically validated. In an
 initial plan, every `depends_on` entry must name an earlier step in that plan.
 During replacement planning, a dependency may also name a completed prior step
-listed in replan evidence; runtime validates it as already satisfied and strips
-that external edge before topological sorting and execution. Unknown external
-dependencies, self-dependencies, and cycles among replacement-plan steps remain
-invalid and are returned to the planner as validation evidence.
+listed in replan evidence; completed identifiers are reconstructed from canonical
+`step_completed` events for the current turn rather than only from the latest
+replacement plan. Runtime validates such an edge as already satisfied and strips
+it before topological sorting and execution. Unknown external dependencies,
+self-dependencies, and cycles among replacement-plan steps remain invalid and
+are returned to the planner as validation evidence.
 For verification only, the latest tool result is also available through the
 current step's model-declared `expected_output`, `expected_outputs`, and
 `output_refs` labels. This lets the model's `artifact_present` checks reference
 its own labels without Python choosing the label meaning.
+
+Plan review enforces tool-declared logical output cardinality. `read_file` reads
+one file per call, so one step cannot claim multiple independent file-output
+references; multi-file inspection uses separate ordered steps. Respond and
+reasoning steps reject tool-result checks because their evidence source is
+assistant text. A `run_tests` step whose success criteria require passing tests
+must require `command_success`; `tool_output_nonempty` without command success is
+reserved for an explicitly diagnostic baseline whose failure is acceptable.
+Plan semantic review receives compact recent event projections. Prior
+`review_completed` events contribute only review kind, target, role, pass/fail,
+and reason; their embedded review evidence is never reinserted into a later
+review prompt. This prevents recursive evidence growth across repeated replans
+while preserving the outcome needed for recovery.
 Some tools register an automatic mechanical objective-verification type.
 Runtime installs that exact registered check after parsing and makes it required;
 the model does not emit or name it. The live plan wire omits

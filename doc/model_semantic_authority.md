@@ -168,8 +168,12 @@ tool result and that a real mutation occurred. A model-authored
 `command_success` check is reserved for a distinct executable correctness test;
 constrained mutation review and final-objective verification decide semantic
 correctness. Each model-authored check carries its own local condition status,
-and dataflow labels remain in their dedicated fields. Exact duplicate checks
-may be collapsed mechanically, but conflicting same-name checks are rejected.
+and dataflow labels remain in their dedicated fields. Tool metadata may impose
+mechanical cardinality limits without choosing semantics: `read_file` returns one
+file observation, so the model must use separate steps for separate files.
+Respond and reasoning steps use assistant-text verification rather than tool
+result checks. Exact duplicate checks may be collapsed mechanically, but
+conflicting same-name checks are rejected.
 Original file contents, diffs, and write provenance are mechanical history
 records. Visible backup files are disabled by default because creating extra
 workspace files is a user-visible side effect that can violate tasks requiring

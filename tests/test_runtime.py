@@ -8,13 +8,14 @@ import time
 from dataclasses import asdict
 from pathlib import Path
 from typing import Any
+from types import SimpleNamespace
 
 import pytest
 import requests
 
 import swaag.runtime as runtime_module
 from swaag.model import ModelClientError
-from swaag.planner import plan_from_payload
+from swaag.planner import PlanValidationError, plan_from_payload
 from swaag.retrieval.embeddings import SemanticBackendProtocolError
 from swaag.runtime import AgentRuntime, BudgetExceededError, FatalSemanticEngineError
 from swaag.tools.base import ToolValidationError
@@ -1104,9 +1105,9 @@ def test_plan_prompt_uses_configured_max_plan_steps(make_config) -> None:
 
     assert "at most 6 steps including the final respond step" in assembly.prompt_text
     assert "at most 4 steps including the final respond step" not in assembly.prompt_text
-    assert "success_criteria field is the authoritative semantic criterion" in assembly.prompt_text
-    assert "Keep dependencies_completed mechanical" in assembly.prompt_text
-    assert "Do not emit tool_effect_verified or file_contains" in assembly.prompt_text
+    assert "success_criteria is the authoritative semantic criterion" in assembly.prompt_text
+    assert "Require dependencies_completed when dependencies exist" in assembly.prompt_text
+    assert "Never emit tool_effect_verified or file_contains" in assembly.prompt_text
     assert "allow the registered persisted-effect check and later whole-goal review" in assembly.prompt_text
     assert "expected_outputs is a non-empty list of output labels for the step, including respond steps" in assembly.prompt_text
 
@@ -2295,3 +2296,157 @@ def test_runtime_installs_registered_mechanical_objective_check_once(make_config
     checks = [check for check in plan.steps[0].verification_checks if check.get("check_type") == "tool_effect_verified"]
     assert checks == [{"name": "registered_tool_effect_verified", "check_type": "tool_effect_verified"}]
     assert plan.steps[0].required_conditions.count("registered_tool_effect_verified") == 1
+
+
+def test_runtime_rejects_read_file_step_with_multiple_logical_outputs(make_config) -> None:
+    payload = json.loads(
+        plan_response(
+            goal="Read two files and answer.",
+            steps=[
+                plan_step(
+                    "read_both",
+                    "Read both files",
+                    "read",
+                    expected_tool="read_file",
+                    expected_output="both file contents",
+                    success_criteria="Both files are inspected.",
+                    output_refs=["first_file", "second_file"],
+                    verification_checks=[
+                        {"name": "first_file", "check_type": "tool_output_nonempty"},
+                        {"name": "second_file", "check_type": "tool_output_nonempty"},
+                    ],
+                    required_conditions=["first_file", "second_file"],
+                    optional_conditions=[],
+                ),
+                plan_step(
+                    "answer",
+                    "Answer",
+                    "respond",
+                    expected_output="summary",
+                    success_criteria="The answer uses both files.",
+                    depends_on=["read_both"],
+                ),
+            ],
+        )
+    )
+    plan = plan_from_payload(payload, available_tools=["read_file"])
+    runtime = AgentRuntime(make_config(tools__allow_stateful_tools=True), model_client=FakeModelClient())
+
+    with pytest.raises(PlanValidationError, match="at most 1 logical output reference"):
+        runtime._validate_tool_plan_output_cardinality(plan)
+
+
+def test_runtime_rejects_tool_result_check_on_response_step(make_config) -> None:
+    payload = json.loads(
+        plan_response(
+            goal="Answer clearly.",
+            steps=[
+                plan_step(
+                    "answer",
+                    "Answer",
+                    "respond",
+                    expected_output="summary",
+                    success_criteria="A clear summary is returned.",
+                    verification_checks=[
+                        {"name": "assistant_text", "check_type": "tool_output_nonempty"},
+                    ],
+                    required_conditions=["assistant_text"],
+                    optional_conditions=[],
+                )
+            ],
+        )
+    )
+    plan = plan_from_payload(payload, available_tools=[])
+    runtime = AgentRuntime(make_config(), model_client=FakeModelClient())
+
+    with pytest.raises(PlanValidationError, match="declares tool-result verification checks: tool_output_nonempty"):
+        runtime._validate_step_verification_compatibility(plan)
+
+
+def test_completed_step_ids_survive_active_plan_replacement(make_config, monkeypatch) -> None:
+    runtime = AgentRuntime(make_config(), model_client=FakeModelClient())
+    state = runtime.create_or_load_session()
+    state.active_plan = plan_from_payload(
+        json.loads(
+            plan_response(
+                goal="Continue after previous work.",
+                steps=[
+                    plan_step(
+                        "current_answer",
+                        "Answer",
+                        "respond",
+                        expected_output="summary",
+                        success_criteria="The current plan answers.",
+                    )
+                ],
+            )
+        ),
+        available_tools=[],
+    )
+    monkeypatch.setattr(
+        runtime,
+        "_current_turn_history_events",
+        lambda _state: [SimpleNamespace(event_type="step_completed", payload={"step_id": "previous_edit"})],
+    )
+
+    assert runtime._completed_step_ids(state) == {"previous_edit"}
+
+
+def test_plan_semantic_review_evidence_does_not_reembed_prior_review_evidence(make_config, monkeypatch) -> None:
+    runtime = AgentRuntime(make_config(), model_client=FakeModelClient())
+    state = runtime.create_or_load_session()
+    plan = plan_from_payload(
+        json.loads(
+            plan_response(
+                goal="Answer clearly.",
+                steps=[
+                    plan_step(
+                        "answer",
+                        "Answer",
+                        "respond",
+                        expected_output="summary",
+                        success_criteria="A clear summary is returned.",
+                    )
+                ],
+            )
+        ),
+        available_tools=[],
+    )
+    nested = {
+        "review_kind": "plan_semantic",
+        "target_id": "old-plan",
+        "role": "verifier",
+        "passed": True,
+        "reason": "plan_semantic_review_passed",
+        "evidence": {
+            "review_evidence": {
+                "recent_events": [
+                    {"payload": {"evidence": {"review_evidence": {"recursive": "x" * 20_000}}}}
+                ]
+            }
+        },
+    }
+    monkeypatch.setattr(
+        runtime,
+        "_current_turn_history_events",
+        lambda _state: [SimpleNamespace(sequence=7, event_type="review_completed", payload=nested)],
+    )
+
+    evidence = runtime._plan_semantic_review_evidence(state, plan)
+    encoded = json.dumps(evidence["recent_events"], sort_keys=True)
+
+    assert evidence["recent_events"] == [
+        {
+            "sequence": 7,
+            "type": "review_completed",
+            "payload": {
+                "review_kind": "plan_semantic",
+                "target_id": "old-plan",
+                "role": "verifier",
+                "passed": True,
+                "reason": "plan_semantic_review_passed",
+            },
+        }
+    ]
+    assert "review_evidence" not in encoded
+    assert len(encoded) < 500

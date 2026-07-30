@@ -170,18 +170,16 @@ def test_planning_and_tool_choice_prompts_include_full_enabled_registry(make_con
     assert "completed prior step id supplied in replan evidence" in plan_prompt.prompt_text
     assert "runtime derives the structural done condition" in plan_prompt.prompt_text
     assert "expected_outputs is a non-empty list of output labels for the step, including respond steps" in plan_prompt.prompt_text
-    assert 'actual_source must be exactly "assistant_text"' in plan_prompt.prompt_text
-    assert "runtime-derived respond completion condition" in plan_prompt.prompt_text
-    assert "success_criteria field is the authoritative semantic criterion" in plan_prompt.prompt_text
-    assert "Do not duplicate success_criteria as a criterion check" in plan_prompt.prompt_text
+    assert "For respond/reasoning, use assistant_text checks only" in plan_prompt.prompt_text
+    assert "success_criteria is the authoritative semantic criterion" in plan_prompt.prompt_text
     assert "weaken the requested final state" in plan_prompt.prompt_text
-    assert "add command_success only when there is a distinct executable correctness test" in plan_prompt.prompt_text
-    assert "Do not emit tool_effect_verified or file_contains" in plan_prompt.prompt_text
-    assert "A read step verifies that trustworthy context was gathered" in plan_prompt.prompt_text
-    assert "not that unobserved content matches a guess" in plan_prompt.prompt_text
+    assert "require command_success when tests must pass" in plan_prompt.prompt_text
+    assert "Never emit tool_effect_verified or file_contains" in plan_prompt.prompt_text
+    assert "read_file has one file and one output_ref per step" in plan_prompt.prompt_text
+    assert "split multiple files into ordered steps" in plan_prompt.prompt_text
     assert "allow the registered persisted-effect check and later whole-goal review" in plan_prompt.prompt_text
     assert "that dependency is already satisfied and will be removed mechanically" in plan_prompt.prompt_text
-    assert "Keep dependencies_completed mechanical" in plan_prompt.prompt_text
+    assert "Require dependencies_completed when dependencies exist" in plan_prompt.prompt_text
 
 
 def test_tool_input_prompt_uses_registered_docs_and_has_no_tool_name_branches(make_config) -> None:
@@ -249,6 +247,7 @@ def test_file_mutation_tools_require_model_owned_result_review(make_config) -> N
     assert tools["edit_text"].automatic_objective_verification_check_type == "tool_effect_verified"
     assert tools["write_file"].semantic_result_review_required is True
     assert tools["write_file"].automatic_objective_verification_check_type == "tool_effect_verified"
+    assert tools["read_file"].max_plan_output_refs == 1
     assert verification_contract(["result_satisfies_step"]).json_schema is not None
 
 

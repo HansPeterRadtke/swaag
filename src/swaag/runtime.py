@@ -2837,9 +2837,16 @@ class AgentRuntime:
         return [step.kind for step in state.active_plan.steps if step.status == "completed"]
 
     def _completed_step_ids(self, state: SessionState) -> set[str]:
-        if state.active_plan is None:
-            return set()
-        return {step.step_id for step in state.active_plan.steps if step.status == "completed"}
+        completed: set[str] = set()
+        if state.active_plan is not None:
+            completed.update(step.step_id for step in state.active_plan.steps if step.status == "completed")
+        for event in self._current_turn_history_events(state):
+            if event.event_type != "step_completed":
+                continue
+            step_id = str(event.payload.get("step_id", "")).strip()
+            if step_id:
+                completed.add(step_id)
+        return completed
 
     def _install_registered_mechanical_objective_checks(self, plan: Plan) -> None:
         for step in plan.steps:
@@ -2868,6 +2875,50 @@ class AgentRuntime:
                     suffix += 1
                 step.verification_checks.append({"name": name, "check_type": check_type})
                 step.required_conditions.append(name)
+
+
+    def _validate_tool_plan_output_cardinality(self, plan: Plan) -> None:
+        for step in plan.steps:
+            if not step.expected_tool:
+                continue
+            tool = self.tools.get(step.expected_tool)
+            limit = getattr(tool, "max_plan_output_refs", None)
+            if limit is None:
+                continue
+            if len(step.output_refs) <= int(limit):
+                continue
+            raise PlanValidationError(
+                f"Plan step {step.step_id} uses {step.expected_tool}, which can produce at most {limit} logical "
+                f"output reference(s) per tool call, but the step declares {len(step.output_refs)}; split the work "
+                "into separate ordered steps"
+            )
+
+    def _validate_step_verification_compatibility(self, plan: Plan) -> None:
+        tool_result_check_types = {
+            "tool_name_equals",
+            "tool_output_nonempty",
+            "tool_output_schema_valid",
+            "tool_files_changed",
+            "tool_effect_verified",
+            "command_success",
+        }
+        for step in plan.steps:
+            if step.kind not in {"respond", "reasoning"}:
+                continue
+            incompatible = sorted(
+                {
+                    str(check.get("check_type", "")).strip()
+                    for check in step.verification_checks
+                    if str(check.get("check_type", "")).strip() in tool_result_check_types
+                }
+            )
+            if not incompatible:
+                continue
+            raise PlanValidationError(
+                f"Plan step {step.step_id} is {step.kind} but declares tool-result verification checks: "
+                + ", ".join(incompatible)
+                + "; use assistant_text checks such as string_nonempty, exact_match, string_match, or criterion"
+            )
 
 
     def _validate_tool_objective_verification(self, plan: Plan) -> None:
@@ -3087,6 +3138,8 @@ class AgentRuntime:
         return None
 
     def _review_plan(self, state: SessionState, plan: Plan) -> None:
+        self._validate_tool_plan_output_cardinality(plan)
+        self._validate_step_verification_compatibility(plan)
         self._validate_tool_objective_verification(plan)
         self._validate_response_semantic_conditions_required(plan)
         self._validate_unresolved_objective_verification_preserved(state, plan)
@@ -3194,18 +3247,40 @@ class AgentRuntime:
             "drift_detected",
             "state_rebuilt",
         }
-        recent_events = [
-            {
-                "sequence": event.sequence,
-                "type": event.event_type,
-                "payload": self._bounded_evidence_value(
-                    event.payload,
-                    max_string_chars=max_string_chars,
-                ),
+        recent_payload_fields: dict[str, tuple[str, ...]] = {
+            "tool_result": ("tool_name", "output", "exit_code"),
+            "tool_error": ("tool_name", "error", "error_type"),
+            "verification_failed": ("step_id", "conditions_failed", "reason"),
+            "verification_passed": ("step_id", "conditions_met", "reason"),
+            "review_completed": ("review_kind", "target_id", "role", "passed", "reason"),
+            "step_completed": ("step_id", "title", "kind"),
+            "step_failed": ("step_id", "reason", "error_type"),
+            "replan_triggered": ("step_id", "reason", "replan_count"),
+            "drift_detected": ("reason", "failed_steps", "completed_steps"),
+            "state_rebuilt": ("reason", "source"),
+        }
+        recent_events: list[dict[str, Any]] = []
+        for event in current_turn_events:
+            fields = recent_payload_fields.get(event.event_type)
+            if fields is None:
+                continue
+            compact_payload = {
+                field: event.payload[field]
+                for field in fields
+                if field in event.payload
             }
-            for event in current_turn_events
-            if event.event_type in recent_event_types
-        ][-24:]
+            recent_events.append(
+                {
+                    "sequence": event.sequence,
+                    "type": event.event_type,
+                    "payload": self._bounded_evidence_value(
+                        compact_payload,
+                        max_string_chars=max_string_chars,
+                        max_items=12,
+                    ),
+                }
+            )
+        recent_events = recent_events[-24:]
         return {
             "original_user_request": self._original_user_goal_text(state),
             "effective_goal": self._goal_text(state),

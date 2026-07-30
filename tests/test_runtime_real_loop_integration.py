@@ -1807,7 +1807,7 @@ def test_real_loop_rejects_unsupported_read_tool_effect_before_execution(make_co
         for event in events
     )
     assert "tool_effect_verified is not supported by that tool" in plan_requests[1]["prompt"]
-    assert "Do not emit tool_effect_verified or file_contains; neither is part of the live plan wire" in plan_requests[1]["prompt"]
+    assert "Never emit tool_effect_verified or file_contains" in plan_requests[1]["prompt"]
     assert any(event.event_type == "verification_passed" and event.payload.get("step_id") == "read_target" for event in events)
 
 
@@ -1982,11 +1982,9 @@ def test_real_loop_retries_schema_valid_but_locally_invalid_plan(make_config, tm
     assert len(plan_requests) == 3
     assert "never artifact/input/output labels" in plan_requests[1]["prompt"]
     assert "runtime derives the structural done condition" in plan_requests[1]["prompt"]
-    assert 'actual_source must be exactly "assistant_text"' in plan_requests[1]["prompt"]
-    assert "runtime-derived respond completion condition" in plan_requests[1]["prompt"]
-    assert "string_nonempty is only a presence check" in plan_requests[1]["prompt"]
-    assert "success_criteria field is the authoritative semantic criterion" in plan_requests[1]["prompt"]
-    assert "Do not duplicate success_criteria as a criterion check" in plan_requests[1]["prompt"]
+    assert 'For respond/reasoning, use assistant_text checks only' in plan_requests[1]["prompt"]
+    assert "For respond/reasoning, use assistant_text checks only" in plan_requests[1]["prompt"]
+    assert "success_criteria is the authoritative semantic criterion" in plan_requests[1]["prompt"]
     assert any(event.event_type == "error" and event.payload.get("operation") == "plan_validation" for event in events)
     assert any(event.event_type == "model_retry_scheduled" and event.payload.get("kind") == "plan" for event in events)
     assert not any(event.event_type == "fatal_system_error" for event in events)
@@ -2171,17 +2169,17 @@ def test_real_loop_continues_after_multiple_distinct_plan_contract_repairs(make_
     assert _tool_names(events) == ["read_text", "write_file", "run_tests"]
     plan_requests = [request for request in runtime.client.requests if request["contract"] == "task_plan"]
     assert len(plan_requests) == 5
-    assert "Keep dependencies_completed mechanical" in plan_requests[-1]["prompt"]
-    assert "success_criteria field is the authoritative semantic criterion" in plan_requests[-1]["prompt"]
-    assert "Do not duplicate success_criteria as a criterion check" in plan_requests[-1]["prompt"]
+    assert "Require dependencies_completed when dependencies exist" in plan_requests[-1]["prompt"]
+    assert "success_criteria is the authoritative semantic criterion" in plan_requests[-1]["prompt"]
+    assert "For respond/reasoning, use assistant_text checks only" in plan_requests[-1]["prompt"]
     assert "Conditions must name declared checks" in plan_requests[-1]["prompt"]
-    assert "Do not emit tool_effect_verified or file_contains" in plan_requests[-1]["prompt"]
+    assert "Never emit tool_effect_verified or file_contains" in plan_requests[-1]["prompt"]
     assert "Every step, including respond steps, must declare non-empty expected_outputs labels" in plan_requests[-1]["prompt"]
-    assert "For read/list/note context steps" in plan_requests[-1]["prompt"]
-    assert "prefer dependencies_completed, tool_name_equals, tool_output_nonempty, or tool_output_schema_valid" in plan_requests[-1]["prompt"]
-    assert "A read step verifies that trustworthy context was gathered" in plan_requests[-1]["prompt"]
+    assert "For read/list/note steps" in plan_requests[-1]["prompt"]
+    assert "use dependency, tool-name, output-nonempty, or output-schema checks" in plan_requests[-1]["prompt"]
+    assert "read_file has one file and one output_ref per step" in plan_requests[-1]["prompt"]
     assert "allow the registered persisted-effect check and later whole-goal review" in plan_requests[-1]["prompt"]
-    assert "add command_success only when there is a distinct executable correctness test" in plan_requests[-1]["prompt"]
+    assert "require command_success when tests must pass" in plan_requests[-1]["prompt"]
     assert "Plan correction evidence from this generation cycle" in plan_requests[-1]["prompt"]
     assert "Previous rejected plan JSON:" in plan_requests[1]["prompt"]
     assert "Correct this model-authored plan rather than regenerating unrelated fields" in plan_requests[1]["prompt"]

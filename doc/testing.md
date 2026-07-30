@@ -157,9 +157,17 @@ fields. Legacy saved plans with internal condition-name lists, explicit done
 conditions, the former objective slot, and containment checks must remain
 readable, while live plans derive done conditions and registered automatic
 mechanical checks. Replacement-plan tests must accept and strip dependencies on
-known completed prior steps while rejecting unknown dependencies and cycles.
-Diagnostic `run_tests` failures remain observations unless the plan explicitly
-requires `command_success`.
+known completed prior steps reconstructed from canonical turn history, even
+after multiple active-plan replacements, while rejecting unknown dependencies
+and cycles. Tests must reject a `read_file` step that claims multiple logical
+file outputs and reject tool-result checks on respond or reasoning steps. A
+`run_tests` step whose success contract says tests pass must require
+`command_success`; diagnostic failures remain observations only when the plan
+explicitly defines diagnostic output, rather than passing tests, as success.
+Plan semantic-review tests must also prove that prior
+`review_completed` events are projected to outcome metadata only and never
+reinsert their nested review evidence, so repeated replans cannot grow review
+prompts recursively or exhaust the context budget.
 They must also prove that semantic response or reasoning plans are rejected
 before execution unless at least one model-declared `criterion` check or
 exact/string assistant-text match is required; optional-only semantic criteria

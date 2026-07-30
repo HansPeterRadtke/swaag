@@ -114,9 +114,15 @@ and whole-goal verification retain semantic authority. The `condition` field is
 only the check's required/optional status, and output labels such as
 `file_content` belong in dataflow fields. Exact duplicate checks are
 mechanically collapsed, while conflicting checks with the same name remain
-invalid. Legacy saved plans containing `file_contains` remain readable; empty
-targets fail closed and relative paths may resolve from the matching latest tool
-result.
+invalid. Tool metadata may also declare plan-output cardinality: `read_file`
+returns one file observation per call, so a step using it may expose only one
+logical output and multi-file inspection must use separate ordered steps.
+Respond and reasoning steps reject tool-result checks and use assistant-text
+checks instead. Completed step identifiers are reconstructed from canonical turn
+history, so replacement plans can still depend on work completed before an
+earlier replan. Legacy saved plans containing `file_contains` remain readable;
+empty targets fail closed and relative paths may resolve from the matching latest
+tool result.
 For observed text edits, `edit_text` exposes `replace_exact` as the preferred
 operation: the model supplies `old_text` and `new_text`, the editor requires
 exactly one literal match by default, and zero or multiple matches fail closed.
