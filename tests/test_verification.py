@@ -1262,3 +1262,62 @@ def test_relative_file_contains_path_resolves_from_latest_tool_result(tmp_path: 
 
     assert path == target
     assert evidence["path_source"] == "latest_tool_result_for_relative_check"
+
+
+def test_tool_result_success_uses_latest_structured_test_result() -> None:
+    engine = VerificationEngine(semantic_backend_mode="unavailable")
+    artifacts = VerificationArtifacts(
+        tool_results=[
+            ToolExecutionResult(
+                tool_name="run_tests",
+                output={
+                    "command": ["python", "-m", "unittest"],
+                    "cwd": "/tmp/workspace",
+                    "exit_code": 0,
+                    "stdout": "OK",
+                    "stderr": "",
+                    "passed": True,
+                    "background": False,
+                },
+                display_text="tests passed",
+            )
+        ]
+    )
+
+    passed, evidence = engine._run_value_check(
+        {"name": "tests_pass", "check_type": "tool_result_success"},
+        artifacts=artifacts,
+    )
+
+    assert passed is True
+    assert evidence["tool_name"] == "run_tests"
+    assert evidence["passed"] is True
+    assert evidence["exit_code"] == 0
+
+
+def test_tool_result_success_rejects_failed_or_missing_result() -> None:
+    engine = VerificationEngine(semantic_backend_mode="unavailable")
+    failed_artifacts = VerificationArtifacts(
+        tool_results=[
+            ToolExecutionResult(
+                tool_name="run_tests",
+                output={"passed": False, "exit_code": 1},
+                display_text="tests failed",
+            )
+        ]
+    )
+
+    failed, failed_evidence = engine._run_value_check(
+        {"name": "tests_pass", "check_type": "tool_result_success"},
+        artifacts=failed_artifacts,
+    )
+    missing, missing_evidence = engine._run_value_check(
+        {"name": "tests_pass", "check_type": "tool_result_success"},
+        artifacts=VerificationArtifacts(),
+    )
+
+    assert failed is False
+    assert failed_evidence["passed"] is False
+    assert failed_evidence["exit_code"] == 1
+    assert missing is False
+    assert missing_evidence["tool_name"] is None

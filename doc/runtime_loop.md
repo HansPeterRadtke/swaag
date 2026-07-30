@@ -242,7 +242,7 @@ one file per call, so one step cannot claim multiple independent file-output
 references; multi-file inspection uses separate ordered steps. Respond and
 reasoning steps reject tool-result checks because their evidence source is
 assistant text. A `run_tests` step whose success criteria require passing tests
-must require `command_success`; `tool_output_nonempty` without command success is
+must require `tool_result_success`, which checks its actual structured result without rerunning the command; `tool_output_nonempty` without command success is
 reserved for an explicitly diagnostic baseline whose failure is acceptable.
 Plan semantic review receives compact recent event projections. Prior
 `review_completed` events contribute only review kind, target, role, pass/fail,
@@ -254,8 +254,8 @@ Runtime installs that exact registered check after parsing and makes it required
 the model does not emit or name it. The live plan wire omits
 `tool_effect_verified` and `file_contains`. `edit_text` and `write_file` register
 persisted-hash checks that prove the current file matches the tool result and a
-real mutation occurred. The model adds `command_success` only for a distinct
-executable correctness test; constrained mutation review and whole-goal review
+real mutation occurred. The model uses `tool_result_success` for the actual `run_tests` call and adds `command_success` only for a distinct
+independent executable correctness test; constrained mutation review and whole-goal review
 retain semantic authority. Python does not promote optional checks, rewrite
 condition importance, or invent expected content. Legacy saved containment
 checks remain readable, resolve matching relative paths from the latest tool

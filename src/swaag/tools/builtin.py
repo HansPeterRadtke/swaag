@@ -969,7 +969,7 @@ class RunTestsTool(Tool):
     name = "run_tests"
     description = "Run a test command inside the persistent workspace and capture structured results."
     usage_guidance = (
-        "Use an argv array and boolean background. If tests must pass, require command_success; "
+        "Use an argv array and boolean background. If tests must pass, require tool_result_success; "
         "output-only verification is for diagnostics where failure is acceptable."
     )
     kind = "stateful"

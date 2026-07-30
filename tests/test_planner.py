@@ -435,7 +435,7 @@ def test_plan_from_payload_accepts_optional_additional_response_semantic_check()
     assert plan.steps[0].optional_conditions == ["matches_goal"]
 
 
-def test_plan_from_payload_rejects_assistant_response_actual_source_for_response_verification() -> None:
+def test_plan_from_payload_canonicalizes_assistant_response_actual_source() -> None:
     payload = _payload(
         "Answer with the final state.",
         [
@@ -461,8 +461,11 @@ def test_plan_from_payload_rejects_assistant_response_actual_source_for_response
         ],
     )
 
-    with pytest.raises(PlanValidationError, match="actual_source='assistant_text'"):
-        plan_from_payload(payload, available_tools=["calculator"])
+    plan = plan_from_payload(payload, available_tools=["calculator"])
+
+    answer_check = next(check for check in plan.steps[0].verification_checks if check["name"] == "answer_exact")
+    assert answer_check["actual_source"] == "assistant_text"
+    assert answer_check["expected"] == "done"
 
 
 def test_plan_from_payload_rejects_file_contains_without_textual_target() -> None:
@@ -1021,3 +1024,151 @@ def test_plan_from_payload_still_rejects_unknown_external_dependency() -> None:
 
     with pytest.raises(PlanValidationError, match="depends on unknown step unknown_edit"):
         plan_from_payload(payload, available_tools=["run_tests"], satisfied_dependencies=["different_step"])
+
+
+def test_plan_parser_compiles_run_tests_command_success_to_tool_result_success() -> None:
+    payload = _payload(
+        "Run tests and answer.",
+        [
+            plan_step(
+                "run_tests",
+                "Run tests",
+                "write",
+                expected_tool="run_tests",
+                expected_output="test result",
+                success_criteria="The tests pass.",
+                verification_checks=[
+                    {
+                        "name": "tests_pass",
+                        "check_type": "command_success",
+                        "condition": "required",
+                        "command": [],
+                        "cwd": "",
+                    }
+                ],
+                required_conditions=["tests_pass"],
+                optional_conditions=[],
+            ),
+            plan_step(
+                "answer",
+                "Answer",
+                "respond",
+                expected_output="summary",
+                success_criteria="A summary is returned.",
+                depends_on=["run_tests"],
+            ),
+        ],
+    )
+
+    plan = plan_from_payload(payload, available_tools=["run_tests"])
+    check = plan.steps[0].verification_checks[0]
+
+    assert check["name"] == "tests_pass"
+    assert check["check_type"] == "tool_result_success"
+    assert check["command"] == []
+    assert check["cwd"] == ""
+    assert plan.steps[0].required_conditions == ["tests_pass"]
+
+
+def test_plan_parser_compiles_explicit_run_tests_command_to_tool_result_success() -> None:
+    payload = _payload(
+        "Run tests and answer.",
+        [
+            plan_step(
+                "run_tests",
+                "Run tests",
+                "write",
+                expected_tool="run_tests",
+                expected_output="test result",
+                success_criteria="The tests pass.",
+                verification_checks=[
+                    {
+                        "name": "tests_pass",
+                        "check_type": "command_success",
+                        "condition": "required",
+                        "command": ["python3", "-m", "unittest", "-q"],
+                        "cwd": "/tmp/workspace",
+                    }
+                ],
+                required_conditions=["tests_pass"],
+                optional_conditions=[],
+            ),
+            plan_step(
+                "answer",
+                "Answer",
+                "respond",
+                expected_output="summary",
+                success_criteria="A summary is returned.",
+                depends_on=["run_tests"],
+            ),
+        ],
+    )
+
+    plan = plan_from_payload(payload, available_tools=["run_tests"])
+    check = plan.steps[0].verification_checks[0]
+
+    assert check["check_type"] == "tool_result_success"
+    assert check["command"] == []
+    assert check["cwd"] == ""
+
+
+def test_plan_parser_compiles_response_tool_output_check_to_assistant_text() -> None:
+    payload = _payload(
+        "Answer clearly.",
+        [
+            plan_step(
+                "answer",
+                "Answer",
+                "respond",
+                expected_output="summary",
+                success_criteria="A summary is returned.",
+                verification_checks=[
+                    {
+                        "name": "summary",
+                        "check_type": "tool_output_nonempty",
+                        "condition": "required",
+                        "actual_source": "summary",
+                    }
+                ],
+                required_conditions=["summary"],
+                optional_conditions=[],
+            )
+        ],
+    )
+
+    plan = plan_from_payload(payload, available_tools=[])
+    check = plan.steps[0].verification_checks[0]
+
+    assert check["check_type"] == "string_nonempty"
+    assert check["actual_source"] == "assistant_text"
+
+
+def test_plan_parser_compiles_response_value_source_to_assistant_text() -> None:
+    payload = _payload(
+        "Answer exactly.",
+        [
+            plan_step(
+                "answer",
+                "Answer",
+                "respond",
+                expected_output="done",
+                success_criteria="The answer is done.",
+                verification_checks=[
+                    {
+                        "name": "answer_exact",
+                        "check_type": "exact_match",
+                        "condition": "required",
+                        "actual_source": "done",
+                        "expected": "done",
+                    }
+                ],
+                required_conditions=["answer_exact"],
+                optional_conditions=[],
+            )
+        ],
+    )
+
+    plan = plan_from_payload(payload, available_tools=[])
+    check = plan.steps[0].verification_checks[0]
+
+    assert check["actual_source"] == "assistant_text"

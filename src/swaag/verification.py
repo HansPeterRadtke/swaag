@@ -586,7 +586,7 @@ class VerificationEngine:
                 return self._run_execution_check(check)
             if check_type in {"file_exists", "file_contains", "json_schema_valid", "function_exists", "symbol_exists", "dependencies_completed", "tool_output_schema_valid"}:
                 return self._run_structural_check(check, artifacts=artifacts, plan=plan, step=step)
-            if check_type in {"artifact_present", "tool_name_equals", "tool_output_nonempty", "tool_files_changed", "string_nonempty", "exact_match", "numeric_tolerance", "string_match"}:
+            if check_type in {"artifact_present", "tool_name_equals", "tool_output_nonempty", "tool_result_success", "tool_files_changed", "string_nonempty", "exact_match", "numeric_tolerance", "string_match"}:
                 return self._run_value_check(check, artifacts=artifacts)
             if check_type == "criterion":
                 results = self._run_llm_fallback(
@@ -841,6 +841,18 @@ class VerificationEngine:
             output = latest.output if latest is not None else None
             passed = isinstance(output, dict) and bool(output)
             return passed, {"output": output}
+        if check_type == "tool_result_success":
+            latest = artifacts.latest_tool_result
+            output = latest.output if latest is not None else None
+            passed_value = output.get("passed") if isinstance(output, dict) else None
+            exit_code = output.get("exit_code") if isinstance(output, dict) else None
+            passed = passed_value is True and exit_code == 0
+            return passed, {
+                "tool_name": latest.tool_name if latest is not None else None,
+                "passed": passed_value,
+                "exit_code": exit_code,
+                "output": output,
+            }
         if check_type == "tool_files_changed":
             latest = artifacts.latest_tool_result
             output = latest.output if latest is not None else None

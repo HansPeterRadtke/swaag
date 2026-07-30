@@ -190,6 +190,7 @@ def plan_contract(
         "function_exists",
         "symbol_exists",
         "command_success",
+        "tool_result_success",
         "string_nonempty",
         "exact_match",
         "numeric_tolerance",

@@ -1982,8 +1982,8 @@ def test_real_loop_retries_schema_valid_but_locally_invalid_plan(make_config, tm
     assert len(plan_requests) == 3
     assert "never artifact/input/output labels" in plan_requests[1]["prompt"]
     assert "runtime derives the structural done condition" in plan_requests[1]["prompt"]
-    assert 'For respond/reasoning, use assistant_text checks only' in plan_requests[1]["prompt"]
-    assert "For respond/reasoning, use assistant_text checks only" in plan_requests[1]["prompt"]
+    assert 'For respond/reasoning, presence and value checks are compiled to assistant_text' in plan_requests[1]["prompt"]
+    assert "For respond/reasoning, presence and value checks are compiled to assistant_text" in plan_requests[1]["prompt"]
     assert "success_criteria is the authoritative semantic criterion" in plan_requests[1]["prompt"]
     assert any(event.event_type == "error" and event.payload.get("operation") == "plan_validation" for event in events)
     assert any(event.event_type == "model_retry_scheduled" and event.payload.get("kind") == "plan" for event in events)
@@ -2171,7 +2171,7 @@ def test_real_loop_continues_after_multiple_distinct_plan_contract_repairs(make_
     assert len(plan_requests) == 5
     assert "Require dependencies_completed when dependencies exist" in plan_requests[-1]["prompt"]
     assert "success_criteria is the authoritative semantic criterion" in plan_requests[-1]["prompt"]
-    assert "For respond/reasoning, use assistant_text checks only" in plan_requests[-1]["prompt"]
+    assert "For respond/reasoning, presence and value checks are compiled to assistant_text" in plan_requests[-1]["prompt"]
     assert "Conditions must name declared checks" in plan_requests[-1]["prompt"]
     assert "Never emit tool_effect_verified or file_contains" in plan_requests[-1]["prompt"]
     assert "Every step, including respond steps, must declare non-empty expected_outputs labels" in plan_requests[-1]["prompt"]
@@ -2179,7 +2179,7 @@ def test_real_loop_continues_after_multiple_distinct_plan_contract_repairs(make_
     assert "use dependency, tool-name, output-nonempty, or output-schema checks" in plan_requests[-1]["prompt"]
     assert "read_file has one file and one output_ref per step" in plan_requests[-1]["prompt"]
     assert "allow the registered persisted-effect check and later whole-goal review" in plan_requests[-1]["prompt"]
-    assert "require command_success when tests must pass" in plan_requests[-1]["prompt"]
+    assert "require tool_result_success when tests must pass" in plan_requests[-1]["prompt"]
     assert "Plan correction evidence from this generation cycle" in plan_requests[-1]["prompt"]
     assert "Previous rejected plan JSON:" in plan_requests[1]["prompt"]
     assert "Correct this model-authored plan rather than regenerating unrelated fields" in plan_requests[1]["prompt"]

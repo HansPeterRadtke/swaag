@@ -2901,6 +2901,7 @@ class AgentRuntime:
             "tool_files_changed",
             "tool_effect_verified",
             "command_success",
+            "tool_result_success",
         }
         for step in plan.steps:
             if step.kind not in {"respond", "reasoning"}:

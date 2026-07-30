@@ -164,8 +164,8 @@ review, while the live constrained model wire omits `tool_effect_verified`,
 compilation is mechanical: Python does not choose tools, expected text, paths,
 commands, criteria, or condition importance. `edit_text` and `write_file`
 register persisted-hash verification that proves the current file matches the
-tool result and that a real mutation occurred. A model-authored
-`command_success` check is reserved for a distinct executable correctness test;
+tool result and that a real mutation occurred. A `run_tests` step uses `tool_result_success` against its actual structured result. A model-authored
+`command_success` check is reserved for a distinct independent executable correctness test;
 constrained mutation review and final-objective verification decide semantic
 correctness. Each model-authored check carries its own local condition status,
 and dataflow labels remain in their dedicated fields. Tool metadata may impose

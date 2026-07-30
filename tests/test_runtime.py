@@ -2336,7 +2336,7 @@ def test_runtime_rejects_read_file_step_with_multiple_logical_outputs(make_confi
         runtime._validate_tool_plan_output_cardinality(plan)
 
 
-def test_runtime_rejects_tool_result_check_on_response_step(make_config) -> None:
+def test_runtime_accepts_canonicalized_response_presence_check(make_config) -> None:
     payload = json.loads(
         plan_response(
             goal="Answer clearly.",
@@ -2359,8 +2359,11 @@ def test_runtime_rejects_tool_result_check_on_response_step(make_config) -> None
     plan = plan_from_payload(payload, available_tools=[])
     runtime = AgentRuntime(make_config(), model_client=FakeModelClient())
 
-    with pytest.raises(PlanValidationError, match="declares tool-result verification checks: tool_output_nonempty"):
-        runtime._validate_step_verification_compatibility(plan)
+    runtime._validate_step_verification_compatibility(plan)
+
+    assert plan.steps[0].verification_checks == [
+        {"name": "assistant_text", "check_type": "string_nonempty", "actual_source": "assistant_text"}
+    ]
 
 
 def test_completed_step_ids_survive_active_plan_replacement(make_config, monkeypatch) -> None:

@@ -108,8 +108,8 @@ before plan review; the live model wire does not expose `tool_effect_verified`,
 tool metadata and does not invent tools, paths, expected text, commands, success
 criteria, or semantic meaning. Both `edit_text` and `write_file` register a
 persisted-hash check that proves the current file equals the tool result's
-after-hash and that a real mutation occurred. A model may add `command_success`
-only for a distinct executable correctness test; constrained mutation review
+after-hash and that a real mutation occurred. A `run_tests` step uses `tool_result_success` to verify its actual structured result without repeating the command. A model may add `command_success`
+only for a distinct independent executable correctness test; constrained mutation review
 and whole-goal verification retain semantic authority. The `condition` field is
 only the check's required/optional status, and output labels such as
 `file_content` belong in dataflow fields. Exact duplicate checks are

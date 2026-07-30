@@ -38,7 +38,7 @@ def test_read_file_guidance_requires_one_file_per_plan_step() -> None:
 
 
 def test_run_tests_guidance_distinguishes_required_success_from_diagnostics() -> None:
-    assert "require command_success" in RunTestsTool.usage_guidance
+    assert "require tool_result_success" in RunTestsTool.usage_guidance
     assert "diagnostics where failure is acceptable" in RunTestsTool.usage_guidance
 
 def test_calculator_tool_executes(make_config) -> None:

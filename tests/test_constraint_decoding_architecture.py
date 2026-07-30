@@ -170,10 +170,10 @@ def test_planning_and_tool_choice_prompts_include_full_enabled_registry(make_con
     assert "completed prior step id supplied in replan evidence" in plan_prompt.prompt_text
     assert "runtime derives the structural done condition" in plan_prompt.prompt_text
     assert "expected_outputs is a non-empty list of output labels for the step, including respond steps" in plan_prompt.prompt_text
-    assert "For respond/reasoning, use assistant_text checks only" in plan_prompt.prompt_text
+    assert "For respond/reasoning, presence and value checks are compiled to assistant_text" in plan_prompt.prompt_text
     assert "success_criteria is the authoritative semantic criterion" in plan_prompt.prompt_text
     assert "weaken the requested final state" in plan_prompt.prompt_text
-    assert "require command_success when tests must pass" in plan_prompt.prompt_text
+    assert "require tool_result_success when tests must pass" in plan_prompt.prompt_text
     assert "Never emit tool_effect_verified or file_contains" in plan_prompt.prompt_text
     assert "read_file has one file and one output_ref per step" in plan_prompt.prompt_text
     assert "split multiple files into ordered steps" in plan_prompt.prompt_text

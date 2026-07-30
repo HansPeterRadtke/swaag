@@ -160,7 +160,8 @@ mechanical checks. Replacement-plan tests must accept and strip dependencies on
 known completed prior steps reconstructed from canonical turn history, even
 after multiple active-plan replacements, while rejecting unknown dependencies
 and cycles. Tests must reject a `read_file` step that claims multiple logical
-file outputs and reject tool-result checks on respond or reasoning steps. A
+file outputs, compile response presence/value checks to `assistant_text`, and
+reject incompatible tool-result checks on respond or reasoning steps. A
 `run_tests` step whose success contract says tests pass must require
 `command_success`; diagnostic failures remain observations only when the plan
 explicitly defines diagnostic output, rather than passing tests, as success.

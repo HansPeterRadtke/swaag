@@ -13,8 +13,8 @@ For read/list/note steps, use dependency, tool-name, output-nonempty, or output-
 The runtime installs any tool-registered automatic mechanical objective check after parsing, so do not duplicate it. For a mutating step, add command_success only when there is a distinct executable correctness test; otherwise allow the registered persisted-effect check and later whole-goal review to verify the work. A non-dry-run edit_text call atomically persists its edit; do not add a follow-up write_file step for the same file unless the edit_text call is explicitly dry_run=true and a later write is genuinely required. file_exists, tool_files_changed, artifact_present, and tool_output_nonempty are not substitutes for a registered persisted-effect check.
 
 
-For run_tests, require command_success when tests must pass. Output-only checks are allowed only for an explicit diagnostic baseline where failure is acceptable.
+For run_tests, require tool_result_success when tests must pass; it verifies the actual tool result and needs no command payload. Output-only checks are allowed only for an explicit diagnostic baseline where failure is acceptable.
 
 The final step must be kind="respond" and expected_tool="". Do not emit done_condition; the runtime derives tool_result:<expected_tool>, reasoning_result_nonempty, or assistant_response_nonempty mechanically.
 
-For respond/reasoning, use assistant_text checks only; never use tool-result checks. success_criteria is the authoritative semantic criterion and is evaluated automatically. Require dependencies_completed when dependencies exist.
+For respond/reasoning, presence and value checks are compiled to assistant_text; do not use tool-result checks. success_criteria is the authoritative semantic criterion and is evaluated automatically. Require dependencies_completed when dependencies exist.

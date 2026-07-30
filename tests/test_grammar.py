@@ -179,3 +179,10 @@ def test_plan_contract_derives_done_condition_and_omits_runtime_owned_objective_
     assert "tool_effect_verified" not in check_types
     assert "file_contains" not in check_types
     assert "command_success" in check_types
+
+
+def test_plan_contract_includes_tool_result_success_without_payload_requirement() -> None:
+    contract = plan_contract(["run_tests"])
+    assert contract.json_schema is not None
+    check_types = contract.json_schema["properties"]["steps"]["items"]["properties"]["verification_checks"]["items"]["properties"]["check_type"]["enum"]
+    assert "tool_result_success" in check_types

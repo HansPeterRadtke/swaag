@@ -25,6 +25,40 @@ _ALLOWED_TRANSITIONS: dict[PlanStepStatus, set[PlanStepStatus]] = {
 }
 
 
+def _canonicalize_step_checks(
+    raw_checks: list[object],
+    *,
+    kind: PlanStepKind,
+    expected_tool: str | None,
+) -> list[object]:
+    canonical: list[object] = []
+    for raw_check in raw_checks:
+        if not isinstance(raw_check, dict):
+            canonical.append(raw_check)
+            continue
+        check = dict(raw_check)
+        check_type = str(check.get("check_type", "")).strip()
+        if expected_tool == "run_tests" and check_type == "command_success":
+            check["check_type"] = "tool_result_success"
+            check["command"] = []
+            check["cwd"] = ""
+            check_type = "tool_result_success"
+        if kind in {"respond", "reasoning"}:
+            if check_type == "tool_output_nonempty":
+                check["check_type"] = "string_nonempty"
+                check_type = "string_nonempty"
+            if check_type in {
+                "string_nonempty",
+                "exact_match",
+                "string_match",
+                "numeric_tolerance",
+                "json_schema_valid",
+            }:
+                check["actual_source"] = "assistant_text"
+        canonical.append(check)
+    return canonical
+
+
 def _normalize_check_list(raw_checks: object) -> list[dict[str, object]]:
     if not isinstance(raw_checks, list):
         raise PlanValidationError("verification_checks must be a list")
@@ -472,7 +506,10 @@ def _normalize_step_payload(
     if not isinstance(raw_checks, list):
         raise PlanValidationError("verification_checks must be a list")
     objective_check = _objective_check_from_wire(raw_step.get("objective_verification_check"))
-    verification_checks = _normalize_check_list(_merge_objective_check(raw_checks, objective_check))
+    merged_checks = _merge_objective_check(raw_checks, objective_check)
+    verification_checks = _normalize_check_list(
+        _canonicalize_step_checks(merged_checks, kind=kind, expected_tool=expected_tool)
+    )
     input_refs = _normalize_ref_list(raw_step.get("input_refs", []))
     output_refs = _normalize_ref_list(raw_step.get("output_refs", []))
     depends_on = _normalize_ref_list(raw_step.get("depends_on", []))
