@@ -7,14 +7,12 @@ per-section caps. That worked only for one context size and silently
 distorted behavior at other sizes. This module defines a call-type-aware
 budget policy:
 
-1. derive a dynamic output ceiling from the call kind,
-2. derive a dynamic safety margin from context size + call kind,
-3. compute a safe input budget,
-4. distribute that budget across optional context sections by priority.
+1. derive an output reserve from the call kind and context size,
+2. reserve fixed overhead and a safety margin,
+3. compute the maximum safe input budget,
+4. reserve enough output for the constrained JSON schema.
 
-Deterministic exact budgeting still happens later via ``build_budget``; this
-module only decides how much *candidate context* should be built before the
-final exact fit check.
+The runtime performs the final exact fit check with ``build_budget``.
 """
 
 from dataclasses import dataclass
@@ -38,27 +36,6 @@ class CallBudgetPlan:
     safety_margin_tokens: int
     fixed_overhead_tokens: int
     safe_input_budget: int
-
-
-@dataclass(slots=True)
-class SectionBudgets:
-    history_tokens: int
-    environment_files_tokens: int
-    semantic_tokens: int
-    guidance_tokens: int
-    skills_tokens: int
-    notes_tokens: int
-    available_input_tokens: int
-
-    def for_section(self, name: str) -> int:
-        return {
-            "history": self.history_tokens,
-            "environment_files": self.environment_files_tokens,
-            "semantic": self.semantic_tokens,
-            "guidance": self.guidance_tokens,
-            "skills": self.skills_tokens,
-            "notes": self.notes_tokens,
-        }[name]
 
 
 def classify_call_budget(call_kind: str) -> CallBudgetClass:
@@ -107,58 +84,6 @@ def compute_call_budget(
         safety_margin_tokens=safety_margin,
         fixed_overhead_tokens=fixed_overhead,
         safe_input_budget=safe_input_budget,
-    )
-
-
-def compute_section_budgets(
-    config: AgentConfig,
-    *,
-    call_kind: str,
-    safe_input_budget: int,
-) -> SectionBudgets:
-    weights = dict(config.budget_policy.section_priorities.get(call_kind, config.budget_policy.section_priorities["default"]))
-    total_weight = sum(max(value, 0.0) for value in weights.values()) or float(len(weights))
-    floors = {
-        key: max(
-            int(config.budget_policy.section_floor_min_tokens[key]),
-            int(round(safe_input_budget * float(config.budget_policy.section_floor_ratio[key]))),
-        )
-        for key in ("history", "environment_files", "semantic", "guidance", "skills", "notes")
-    }
-
-    allocations: dict[str, int] = {}
-    remaining = safe_input_budget
-    for name in ("history", "environment_files", "semantic", "guidance", "skills", "notes"):
-        share = int(round(safe_input_budget * (weights.get(name, 0.0) / total_weight)))
-        share = max(share, floors[name])
-        allocations[name] = share
-        remaining -= share
-
-    if remaining < 0:
-        deficit = -remaining
-        total_alloc = sum(allocations.values()) or 1
-        for name in list(allocations):
-            reduction = int(round(deficit * (allocations[name] / total_alloc)))
-            allocations[name] = max(floors[name], allocations[name] - reduction)
-        total = sum(allocations.values())
-        if total > safe_input_budget:
-            ordered = sorted(allocations, key=lambda item: allocations[item], reverse=True)
-            index = 0
-            while total > safe_input_budget and ordered:
-                name = ordered[index % len(ordered)]
-                if allocations[name] > floors[name]:
-                    allocations[name] -= 1
-                    total -= 1
-                index += 1
-
-    return SectionBudgets(
-        history_tokens=allocations["history"],
-        environment_files_tokens=allocations["environment_files"],
-        semantic_tokens=allocations["semantic"],
-        guidance_tokens=allocations["guidance"],
-        skills_tokens=allocations["skills"],
-        notes_tokens=allocations["notes"],
-        available_input_tokens=safe_input_budget,
     )
 
 

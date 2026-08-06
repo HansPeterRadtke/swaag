@@ -44,7 +44,7 @@ def test_end_to_end_calculator_task_runs_through_verification(make_config) -> No
         ),
     )
 
-    result = runtime.run_turn(goal)
+    result = runtime.run_turn_legacy(goal)
     events = runtime.history.read_history(result.session_id)
 
     assert result.assistant_text == "42"
@@ -108,7 +108,7 @@ def test_end_to_end_file_edit_task_verifies_written_content(make_config, tmp_pat
         ),
     )
 
-    result = runtime.run_turn(goal)
+    result = runtime.run_turn_legacy(goal)
     events = runtime.history.read_history(result.session_id)
 
     assert result.assistant_text == "done"

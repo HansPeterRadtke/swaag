@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import ast
 import sys
+import time
 from dataclasses import asdict
 from datetime import datetime, timezone
 from pathlib import Path
@@ -44,8 +45,6 @@ class EchoTool(Tool):
     name = "echo"
     description = "Echo back the provided text exactly."
     kind = "pure"
-    requires_artifacts = ("text",)
-    provides_artifacts = ("text",)
     output_schema = {
         "type": "object",
         "properties": {"text": {"type": "string"}},
@@ -73,7 +72,6 @@ class TimeNowTool(Tool):
     name = "time_now"
     description = "Return the current local and UTC time from the machine running the agent."
     kind = "pure"
-    provides_artifacts = ("time_info",)
     output_schema = {
         "type": "object",
         "properties": {
@@ -112,8 +110,6 @@ class CalculatorTool(Tool):
     name = "calculator"
     description = "Evaluate a basic arithmetic expression using +, -, *, /, //, %, **, unary +/-, and parentheses."
     kind = "pure"
-    requires_artifacts = ("expression",)
-    provides_artifacts = ("numeric_result",)
     output_schema = {
         "type": "object",
         "properties": {
@@ -169,8 +165,6 @@ class ReadTextTool(Tool):
     name = "read_text"
     description = "Read a local file or note in bounded sequential chunks with continuation state."
     kind = "stateful"
-    requires_artifacts = ("path_or_reader",)
-    provides_artifacts = ("text", "path")
     output_schema = {
         "type": "object",
         "properties": {
@@ -260,8 +254,6 @@ class NotesTool(Tool):
     name = "notes"
     description = "List, add, replace, and compact durable working notes with strict size limits."
     kind = "stateful"
-    requires_artifacts = ("note_action",)
-    provides_artifacts = ("notes_state", "text")
     output_schema = {
         "type": "object",
         "properties": {
@@ -364,15 +356,9 @@ class EditTextTool(Tool):
         "Use replace_range only as a low-level fallback when exact text replacement is unsuitable; it needs start, end, expected_text, and replacement. delete_range needs start, end, and expected_text. "
         "expected_text must exactly equal the current file text in the selected range; range offsets are zero-based character offsets. "
         "insert_at needs position and insertion. "
-        "The runtime automatically installs the registered tool_effect_verified mechanical objective check; it verifies that the current file exactly matches this tool result's after-hash, so do not duplicate it in the plan. "
-        "Use file_contains or command_success only for a distinct additional objective with a concrete non-empty payload."
+        "After applying an edit, inspect the returned diff and hashes; run a relevant command or test when the task requires additional confirmation."
     )
     kind = "side_effect"
-    objective_verification_check_types = ("tool_effect_verified", "file_contains", "command_success")
-    automatic_objective_verification_check_type = "tool_effect_verified"
-    semantic_result_review_required = True
-    requires_artifacts = ("path", "text")
-    provides_artifacts = ("edited_text", "path")
     output_schema = {
         "type": "object",
         "properties": {
@@ -519,8 +505,6 @@ class ListFilesTool(Tool):
     name = "list_files"
     description = "List files visible in the persistent workspace."
     kind = "stateful"
-    requires_artifacts = ("path",)
-    provides_artifacts = ("file_list",)
     output_schema = {
         "type": "object",
         "properties": {
@@ -549,11 +533,8 @@ class ListFilesTool(Tool):
 class ReadFileTool(Tool):
     name = "read_file"
     description = "Read a full UTF-8 file from the persistent workspace."
-    usage_guidance = "One file per call and one output_ref per plan step; use separate ordered steps for multiple files."
+    usage_guidance = "Read one file per call. Use multiple tool calls when multiple files are needed."
     kind = "stateful"
-    max_plan_output_refs = 1
-    requires_artifacts = ("path",)
-    provides_artifacts = ("text", "path")
     output_schema = {
         "type": "object",
         "properties": {
@@ -589,8 +570,6 @@ class SearchInFileTool(Tool):
     name = "search_in_file"
     description = "Search one workspace file for a literal string or regex and return exact match locations."
     kind = "stateful"
-    requires_artifacts = ("path", "pattern")
-    provides_artifacts = ("matches",)
     output_schema = {
         "type": "object",
         "properties": {
@@ -652,8 +631,6 @@ class SearchRepoTool(Tool):
     name = "search_repo"
     description = "Search across workspace files for a literal string or regex and return exact matches."
     kind = "stateful"
-    requires_artifacts = ("pattern",)
-    provides_artifacts = ("matches", "paths")
     output_schema = {
         "type": "object",
         "properties": {
@@ -723,11 +700,6 @@ class WriteFileTool(Tool):
         "The runtime automatically installs a persisted-hash tool_effect_verified check; use command_success only for a distinct executable correctness test."
     )
     kind = "side_effect"
-    objective_verification_check_types = ("tool_effect_verified", "file_contains", "command_success")
-    automatic_objective_verification_check_type = "tool_effect_verified"
-    semantic_result_review_required = True
-    requires_artifacts = ("path", "text")
-    provides_artifacts = ("edited_text", "path")
     output_schema = {
         "type": "object",
         "properties": {
@@ -815,8 +787,6 @@ class InspectDiffTool(Tool):
     name = "inspect_diff"
     description = "Inspect the current diff for one workspace file against the last remembered environment state."
     kind = "stateful"
-    requires_artifacts = ("path",)
-    provides_artifacts = ("diff",)
     output_schema = {
         "type": "object",
         "properties": {
@@ -853,8 +823,6 @@ class ListChangesTool(Tool):
     name = "list_changes"
     description = "List created, modified, and deleted files from the persistent workspace state."
     kind = "stateful"
-    requires_artifacts = ()
-    provides_artifacts = ("changes",)
     output_schema = {
         "type": "object",
         "properties": {
@@ -882,8 +850,6 @@ class WorkspaceSnapshotTool(Tool):
     name = "workspace_snapshot"
     description = "Return a structured snapshot of the current workspace state."
     kind = "stateful"
-    requires_artifacts = ()
-    provides_artifacts = ("workspace_snapshot",)
     output_schema = {
         "type": "object",
         "properties": {
@@ -918,8 +884,6 @@ class ShellCommandTool(Tool):
         "Do not return only an interpreter name. Set background to true only for work that should continue after the call returns."
     )
     kind = "side_effect"
-    requires_artifacts = ("command",)
-    provides_artifacts = ("command_result",)
     output_schema = {
         "type": "object",
         "properties": {
@@ -969,12 +933,9 @@ class RunTestsTool(Tool):
     name = "run_tests"
     description = "Run a test command inside the persistent workspace and capture structured results."
     usage_guidance = (
-        "Use an argv array and boolean background. If tests must pass, require tool_result_success; "
-        "output-only verification is for diagnostics where failure is acceptable."
+        "Use an argv array and boolean background. Inspect passed, exit_code, stdout, and stderr before deciding the next action."
     )
     kind = "stateful"
-    requires_artifacts = ("command",)
-    provides_artifacts = ("test_result",)
     output_schema = {
         "type": "object",
         "properties": {
@@ -1025,8 +986,6 @@ class BrowserSearchTool(Tool):
     name = "browser_search"
     description = "Search the web through the external aubro browser automation layer and return structured top results."
     kind = "stateful"
-    requires_artifacts = ("search_query",)
-    provides_artifacts = ("search_results",)
     output_schema = {
         "type": "object",
         "properties": {
@@ -1103,8 +1062,6 @@ class BrowserBrowseTool(Tool):
     name = "browser_browse"
     description = "Browse one URL through the external aubro browser automation layer and return a structured page summary."
     kind = "stateful"
-    requires_artifacts = ("url",)
-    provides_artifacts = ("page_summary", "text")
     output_schema = {
         "type": "object",
         "properties": {
@@ -1166,6 +1123,130 @@ class BrowserBrowseTool(Tool):
         return context.environment.browser_browse(url=validated_input["url"])
 
 
+class PollProcessTool(Tool):
+    name = "poll_process"
+    description = "Poll one background process and return its exact current status and captured output."
+    kind = "stateful"
+    usage_guidance = "Use the process_id returned by a background run_tests or shell_command call."
+    input_schema = _closed_input({"process_id": {"type": "string"}})
+
+    def validate(self, raw_input: dict[str, Any]) -> dict[str, Any]:
+        process_id = raw_input.get("process_id")
+        if not isinstance(process_id, str) or not process_id.strip():
+            raise ToolValidationError("poll_process.process_id must be a non-empty string")
+        return {"process_id": process_id.strip()}
+
+    def required_generated_event_types(self, validated_input: dict[str, Any]) -> set[str]:
+        return {"process_polled"}
+
+    def execute(self, validated_input: dict[str, Any], context: ToolContext) -> ToolExecutionResult:
+        update = context.environment.poll_background_process(validated_input["process_id"])
+        record = asdict(update.record)
+        output = {
+            "process_id": update.record.process_id,
+            "status": update.record.status,
+            "completed": update.completed,
+            "return_code": update.record.return_code,
+            "stdout": update.record.stdout,
+            "stderr": update.record.stderr,
+            "record": record,
+            "completed_tool_result": (
+                {
+                    "tool_name": update.tool_result.tool_name,
+                    "output": update.tool_result.output,
+                    "display_text": update.tool_result.display_text,
+                }
+                if update.tool_result is not None
+                else None
+            ),
+        }
+        return ToolExecutionResult(
+            tool_name=self.name,
+            output=output,
+            display_text=tool_result_display(self.name, output),
+            generated_events=update.generated_events,
+        )
+
+
+class KillProcessTool(Tool):
+    name = "kill_process"
+    description = "Terminate one tracked background process by process_id and return the exact resulting state."
+    kind = "side_effect"
+    usage_guidance = "Use only when stopping the tracked process is required by the user or current task."
+    input_schema = _closed_input({"process_id": {"type": "string"}})
+
+    def validate(self, raw_input: dict[str, Any]) -> dict[str, Any]:
+        process_id = raw_input.get("process_id")
+        if not isinstance(process_id, str) or not process_id.strip():
+            raise ToolValidationError("kill_process.process_id must be a non-empty string")
+        return {"process_id": process_id.strip()}
+
+    def required_generated_event_types(self, validated_input: dict[str, Any]) -> set[str]:
+        return {"process_killed"}
+
+    def execute(self, validated_input: dict[str, Any], context: ToolContext) -> ToolExecutionResult:
+        update = context.environment.kill_background_process(validated_input["process_id"])
+        output = {
+            "process_id": update.record.process_id,
+            "status": update.record.status,
+            "completed": update.completed,
+            "return_code": update.record.return_code,
+            "stdout": update.record.stdout,
+            "stderr": update.record.stderr,
+            "record": asdict(update.record),
+        }
+        return ToolExecutionResult(
+            tool_name=self.name,
+            output=output,
+            display_text=tool_result_display(self.name, output),
+            generated_events=update.generated_events,
+        )
+
+
+class WaitSecondsTool(Tool):
+    name = "wait_seconds"
+    description = "Wait synchronously for a bounded number of seconds, then return the measured elapsed duration."
+    kind = "pure"
+    input_schema = _closed_input({"seconds": {"type": "number"}})
+
+    def validate(self, raw_input: dict[str, Any]) -> dict[str, Any]:
+        seconds = raw_input.get("seconds")
+        if not isinstance(seconds, (int, float)) or isinstance(seconds, bool):
+            raise ToolValidationError("wait_seconds.seconds must be a number")
+        if seconds < 0:
+            raise ToolValidationError("wait_seconds.seconds must be non-negative")
+        return {"seconds": float(seconds)}
+
+    def required_generated_event_types(self, validated_input: dict[str, Any]) -> set[str]:
+        return {"wait_entered", "wait_resumed"}
+
+    def execute(self, validated_input: dict[str, Any], context: ToolContext) -> ToolExecutionResult:
+        seconds = float(validated_input["seconds"])
+        maximum = max(0.0, float(context.config.runtime.tool_timeout_seconds) - 1.0)
+        if seconds > maximum:
+            raise ToolValidationError(
+                f"wait_seconds.seconds exceeds the current bounded maximum of {maximum:g} seconds"
+            )
+        started = time.monotonic()
+        entered = ToolGeneratedEvent(
+            "wait_entered",
+            {"reason": f"wait_seconds:{seconds:g}", "process_ids": []},
+        )
+        time.sleep(seconds)
+        elapsed = time.monotonic() - started
+        resumed = ToolGeneratedEvent(
+            "wait_resumed",
+            {"reason": f"wait_seconds:{seconds:g}", "process_ids": []},
+        )
+        output = {"requested_seconds": seconds, "elapsed_seconds": elapsed}
+        return ToolExecutionResult(
+            tool_name=self.name,
+            output=output,
+            display_text=tool_result_display(self.name, output),
+            generated_events=[entered, resumed],
+        )
+
+
 BUILTIN_TOOLS = [
     EchoTool(),
     TimeNowTool(),
@@ -1185,6 +1266,9 @@ BUILTIN_TOOLS = [
     WorkspaceSnapshotTool(),
     RunTestsTool(),
     ShellCommandTool(),
+    PollProcessTool(),
+    KillProcessTool(),
+    WaitSecondsTool(),
 ]
 
 

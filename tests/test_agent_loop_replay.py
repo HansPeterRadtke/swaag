@@ -52,7 +52,7 @@ def test_record_replay_client_replays_runtime_tool_flow(make_config, tmp_path: P
         canonicalize_dynamic_values=True,
     )
     recording_runtime = AgentRuntime(config, model_client=recording_client)
-    recorded_turn = recording_runtime.run_turn(prompt)
+    recorded_turn = recording_runtime.run_turn_legacy(prompt)
 
     assert recorded_turn.assistant_text.strip() == "42"
     assert cassette_path.exists()
@@ -65,7 +65,7 @@ def test_record_replay_client_replays_runtime_tool_flow(make_config, tmp_path: P
         canonicalize_dynamic_values=True,
     )
     replay_runtime = AgentRuntime(config, model_client=replay_client)
-    replayed_turn = replay_runtime.run_turn(prompt)
+    replayed_turn = replay_runtime.run_turn_legacy(prompt)
 
     assert replayed_turn.assistant_text.strip() == "42"
     replayed_events = replay_runtime.history.read_history(replayed_turn.session_id)

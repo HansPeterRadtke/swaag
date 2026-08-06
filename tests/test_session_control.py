@@ -66,7 +66,7 @@ def test_runtime_recovered_answer_is_not_blocked_by_stale_failed_turn_state(make
             ]
         ),
     )
-    first = failing_runtime.run_turn(goal)
+    first = failing_runtime.run_turn_legacy(goal)
     assert first.assistant_text == "Task incomplete: tool_call_budget_reached. Verified success was not reached."
 
     success_runtime = AgentRuntime(
@@ -98,7 +98,7 @@ def test_runtime_recovered_answer_is_not_blocked_by_stale_failed_turn_state(make
             ],
         ),
     )
-    second = success_runtime.run_turn(goal, session_id=first.session_id)
+    second = success_runtime.run_turn_legacy(goal, session_id=first.session_id)
 
     assert second.assistant_text == "4"
 
@@ -153,7 +153,7 @@ def test_runtime_processes_continue_control_without_stopping_current_work(make_c
         return json.dumps({"action": "call_tool", "response": "", "tool_name": "calculator", "tool_input": {"expression": "6 * 7"}})
 
     runtime.client._responses = [_tool_decision, "42"]
-    result = runtime.run_turn_in_session(state, goal)
+    result = runtime.run_turn_in_session_legacy(state, goal)
     rebuilt = runtime.history.rebuild_from_history(state.session_id, write_projections=False)
     events = runtime.history.read_history(state.session_id)
 

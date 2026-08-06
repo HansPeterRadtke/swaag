@@ -311,8 +311,6 @@ def _real_agent_env(
     env["SWAAG__TOOLS__ALLOW_STATEFUL_TOOLS"] = (
         "true" if generation.allow_stateful_tools else "false"
     )
-    env["SWAAG__PLANNER__MAX_PLAN_STEPS"] = str(generation.planner_max_plan_steps)
-    env["SWAAG__PLANNER__MAX_REPLANS"] = str(generation.planner_max_replans)
     env["SWAAG__RUNTIME__MAX_REASONING_STEPS"] = str(generation.runtime_max_reasoning_steps)
     env["SWAAG__RUNTIME__MAX_TOTAL_ACTIONS"] = str(generation.runtime_max_total_actions)
     env["SWAAG__RUNTIME__MAX_TOOL_STEPS"] = str(generation.runtime_max_tool_steps)

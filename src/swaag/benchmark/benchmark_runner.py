@@ -29,10 +29,11 @@ from swaag.config import AgentConfig, load_config
 from swaag.live_runtime_profiles import get_documented_final_live_benchmark_recommendation
 from swaag.model import LlamaCppClient
 from swaag.runtime import AgentRuntime
-from swaag.types import PlanStep, SessionState
+from swaag.types import SessionState
 from swaag.model_cache import RecordReplayModelClient
 from swaag.utils import stable_json_dumps
-from swaag.verification import verify_benchmark_contract
+from swaag.benchmark.semantic_judge import judge_prompt_quality
+from swaag.benchmark.verifier import verify_benchmark_contract
 
 
 class BenchmarkSeedTimeout(BaseException):
@@ -130,7 +131,6 @@ def _build_config(
     structured_output_mode: str | None = None,
     progress_poll_seconds: float | None = None,
     seed: int | None = None,
-    retrieval_backend: str | None = None,
 ) -> AgentConfig:
     env = os.environ.copy()
     env.update(
@@ -162,12 +162,8 @@ def _build_config(
         config.model.progress_poll_seconds = float(progress_poll_seconds)
     if seed is not None:
         config.model.seed = int(seed)
-    if retrieval_backend is not None:
-        config.retrieval.backend = str(retrieval_backend)
     config.tools.allow_side_effect_tools = bool(overrides.get("tools_allow_side_effect_tools", config.tools.allow_side_effect_tools))
     config.tools.allow_stateful_tools = bool(overrides.get("tools_allow_stateful_tools", config.tools.allow_stateful_tools))
-    config.planner.max_replans = int(overrides.get("planner_max_replans", config.planner.max_replans))
-    config.planner.max_plan_steps = int(overrides.get("planner_max_plan_steps", config.planner.max_plan_steps))
     config.runtime.max_reasoning_steps = int(overrides.get("runtime_max_reasoning_steps", config.runtime.max_reasoning_steps))
     config.runtime.max_total_actions = int(overrides.get("runtime_max_total_actions", config.runtime.max_total_actions))
     config.runtime.max_tool_steps = int(overrides.get("runtime_max_tool_steps", config.runtime.max_tool_steps))
@@ -175,73 +171,45 @@ def _build_config(
     return config
 
 
-def _latest_event_payload(events: Sequence[Any], event_type: str) -> dict[str, Any]:
-    for event in reversed(events):
-        if getattr(event, "event_type", None) == event_type:
-            payload = getattr(event, "payload", {})
-            return payload if isinstance(payload, dict) else {}
-    return {}
-
-
 def _task_trace_metrics(events: Sequence[Any]) -> dict[str, Any]:
-    context_payload = _latest_event_payload(events, "context_built")
-    verification_payload = _latest_event_payload(events, "verification_completed")
-    selected_trace = [
-        item
-        for item in context_payload.get("selection_trace", [])
-        if isinstance(item, dict) and item.get("selected")
-    ]
-    dropped_trace = [
-        item
-        for item in context_payload.get("selection_trace", [])
-        if isinstance(item, dict) and not item.get("selected")
-    ]
-    subagent_types = sorted(
-        {
-            str(getattr(event, "payload", {}).get("subagent_type"))
-            for event in events
-            if getattr(event, "event_type", None) in {"subagent_spawned", "subagent_reported"}
-            and isinstance(getattr(event, "payload", {}), dict)
-            and getattr(event, "payload", {}).get("subagent_type")
-        }
-    )
-    environment_event_types = {
-        "shell_command_started",
-        "shell_command_completed",
-        "file_read",
-        "file_write_applied",
-        "edit_applied",
-        "filesystem_search",
-        "repository_searched",
-        "workspace_snapshot_inspected",
-        "changes_listed",
-        "diff_inspected",
-        "tool_called",
-    }
-    environment_counts: dict[str, int] = {}
+    model_call_kinds: dict[str, int] = {}
+    tool_call_names: list[str] = []
+    event_counts: dict[str, int] = {}
+    max_action_occurrence = 0
     for event in events:
-        event_type = getattr(event, "event_type", "")
-        if event_type not in environment_event_types:
-            continue
-        environment_counts[event_type] = environment_counts.get(event_type, 0) + 1
+        event_type = str(getattr(event, "event_type", ""))
+        payload = getattr(event, "payload", {})
+        if not isinstance(payload, dict):
+            payload = {}
+        event_counts[event_type] = event_counts.get(event_type, 0) + 1
+        if event_type == "model_request_sent":
+            kind = str(payload.get("kind", "unknown"))
+            model_call_kinds[kind] = model_call_kinds.get(kind, 0) + 1
+        elif event_type == "tool_called":
+            tool_call_names.append(str(payload.get("tool_name", "")))
+        elif event_type == "agent_action_selected":
+            max_action_occurrence = max(max_action_occurrence, int(payload.get("occurrence", 0)))
     return {
-        "retrieval_trace_sample": selected_trace[:5],
-        "dropped_trace_sample": dropped_trace[:5],
-        "guidance_sources": list(context_payload.get("guidance_sources", [])),
-        "selected_skill_ids": list(context_payload.get("selected_skill_ids", [])),
-        "exposed_tool_names": list(context_payload.get("exposed_tool_names", [])),
-        "relevant_environment_files": list(context_payload.get("relevant_environment_files", [])),
-        "retrieval_mode": context_payload.get("retrieval_mode", ""),
-        "retrieval_degraded": bool(context_payload.get("retrieval_degraded", False)),
-        "subagent_usage": subagent_types,
-        "verification_trace": {
-            "verification_type_used": verification_payload.get("verification_type_used", ""),
-            "conditions_met": list(verification_payload.get("conditions_met", [])),
-            "conditions_failed": list(verification_payload.get("conditions_failed", [])),
-            "reason": verification_payload.get("reason", ""),
-            "confidence": verification_payload.get("confidence", 0.0),
+        "model_call_kinds": model_call_kinds,
+        "model_call_count": sum(model_call_kinds.values()),
+        "action_count": event_counts.get("agent_action_selected", 0),
+        "tool_call_names": tool_call_names,
+        "tool_call_count": len(tool_call_names),
+        "tool_result_count": event_counts.get("tool_result", 0),
+        "tool_error_count": event_counts.get("tool_error", 0),
+        "compaction_count": event_counts.get("history_compacted", 0) + event_counts.get("history_compressed", 0),
+        "max_identical_action_occurrence": max_action_occurrence,
+        "environment_operations_summary": {
+            key: value
+            for key, value in event_counts.items()
+            if key in {
+                "shell_command_started", "shell_command_completed", "file_read_for_edit",
+                "file_write_applied", "edit_applied", "filesystem_listed", "filesystem_read",
+                "repository_searched", "workspace_snapshot", "changes_listed", "diff_inspected",
+                "process_started", "process_polled", "process_completed", "process_killed",
+                "wait_entered", "wait_resumed",
+            }
         },
-        "environment_operations_summary": environment_counts,
     }
 
 
@@ -401,134 +369,60 @@ def _safe_payload(value: Any) -> Any:
         } if hasattr(value, "__dict__") else str(value)
 
 
-def _evaluate_quality(oracle: PromptUnderstandingOracle | None, state, events, *, runtime: Any | None = None, assistant_text: str = "") -> dict[str, Any]:
+def _evaluate_quality(
+    oracle: PromptUnderstandingOracle | None,
+    events,
+    *,
+    runtime: AgentRuntime | None = None,
+    prompt: str = "",
+    assistant_text: str = "",
+) -> dict[str, Any]:
     if oracle is None:
         return {"passed": True, "checks": {}, "evidence": {}, "oracle": {}}
-    checks: dict[str, bool] = {}
-    evidence: dict[str, Any] = {}
-    analysis = state.prompt_analysis
-    decision = state.latest_decision
-    strategy = state.active_strategy
-    expanded_task = state.expanded_task
-    plan = state.active_plan
-
-    def _check(name: str, actual: Any, expected: Any) -> None:
-        checks[name] = actual == expected
-        evidence[name] = {"actual": actual, "expected": expected}
-
-    if oracle.task_type is not None:
-        _check("task_type", analysis.task_type if analysis else None, oracle.task_type)
-    if oracle.completeness is not None:
-        _check("completeness", analysis.completeness if analysis else None, oracle.completeness)
-    if oracle.requires_expansion is not None:
-        _check("requires_expansion", analysis.requires_expansion if analysis else None, oracle.requires_expansion)
-    if oracle.requires_decomposition is not None:
-        _check("requires_decomposition", analysis.requires_decomposition if analysis else None, oracle.requires_decomposition)
-    if oracle.expand_task is not None:
-        _check("expand_task", decision.expand_task if decision else None, oracle.expand_task)
-    if oracle.split_task is not None:
-        _check("split_task", decision.split_task if decision else None, oracle.split_task)
-    if oracle.ask_user is not None:
-        _check("ask_user", decision.ask_user if decision else None, oracle.ask_user)
-    if oracle.assume_missing is not None:
-        _check("assume_missing", decision.assume_missing if decision else None, oracle.assume_missing)
-    if oracle.generate_ideas is not None:
-        _check("generate_ideas", decision.generate_ideas if decision else None, oracle.generate_ideas)
-    if oracle.missing_required_information is not None:
-        _check(
-            "missing_required_information",
-            analysis.missing_required_information if analysis else None,
-            oracle.missing_required_information,
-        )
-    if oracle.evidence_required_before_response is not None:
-        _check(
-            "evidence_required_before_response",
-            decision.evidence_required_before_response if decision else None,
-            oracle.evidence_required_before_response,
-        )
-    if oracle.evidence_call_count is not None:
-        _check(
-            "evidence_call_count",
-            decision.evidence_call_count if decision else None,
-            oracle.evidence_call_count,
-        )
-    if oracle.strategy_profile is not None:
-        _check("strategy_profile", strategy.task_profile if strategy else None, oracle.strategy_profile)
-    for goal in oracle.detected_goals_contains:
-        actual_goals = [] if analysis is None else list(analysis.detected_goals)
-        checks[f"goal:{goal}"] = any(goal.lower() in candidate.lower() for candidate in actual_goals)
-        evidence[f"goal:{goal}"] = {"actual": actual_goals, "expected_contains": goal}
-    for entity in oracle.detected_entities_contains:
-        checks[f"entity:{entity}"] = analysis is not None and any(entity in candidate for candidate in analysis.detected_entities)
-        evidence[f"entity:{entity}"] = {"actual": [] if analysis is None else list(analysis.detected_entities), "expected_contains": entity}
-    if oracle.expand_task is True:
-        checks["expanded_task_present"] = expanded_task is not None
-        evidence["expanded_task_present"] = {"present": expanded_task is not None}
-    if plan is not None:
-        evidence["plan_step_kinds"] = [step.kind for step in plan.steps]
-    payload = _last_payload(events, "strategy_selected")
-    if payload is not None:
-        evidence["strategy_event"] = payload.get("strategy")
-    passed = all(checks.values()) if checks else True
     oracle_payload = asdict(oracle)
-    if not passed and runtime is not None:
-        semantic_evidence = {
-            "oracle": oracle_payload,
-            "checks": checks,
-            "deterministic_evidence": evidence,
-            "prompt_analysis": _safe_payload(analysis),
-            "decision": _safe_payload(decision),
-            "strategy": _safe_payload(strategy),
-            "expanded_task_present": expanded_task is not None,
-            "plan_step_kinds": evidence.get("plan_step_kinds", []),
-            "assistant_text": assistant_text,
-        }
-        judge_step = PlanStep(
-            step_id="benchmark_quality_semantic_judge",
-            title="Judge benchmark prompt-understanding quality semantically",
-            goal="Decide whether the observed prompt understanding, decision, strategy, and final answer satisfy the benchmark quality oracle semantically.",
-            kind="reasoning",
-            expected_tool=None,
-            input_text="benchmark quality oracle",
-            expected_output="semantic pass/fail judgement",
-            done_condition="model_judgement",
-            success_criteria="The observed behavior satisfies the oracle, allowing semantically equivalent labels and explanations instead of exact enum/string equality.",
-            verification_type="llm_fallback",
-            verification_checks=[
-                {
-                    "name": "quality_oracle_satisfied",
-                    "check_type": "criterion",
-                    "criterion": "Return passed=true only if the observed prompt analysis, task decision, strategy, plan shape, and final answer satisfy the oracle semantically. Exact label mismatches are acceptable only when the behavior is clearly equivalent. Do not ignore concrete contradictions in the deterministic evidence.",
-                }
-            ],
-            required_conditions=["quality_oracle_satisfied"],
-            optional_conditions=[],
+    tool_calls = [event for event in events if event.event_type == "tool_called"]
+    checks: dict[str, bool] = {}
+    evidence: dict[str, Any] = {
+        "assistant_text": assistant_text,
+        "tool_names": [str(event.payload.get("tool_name", "")) for event in tool_calls],
+    }
+
+    if oracle.ask_user is True:
+        asked = "?" in assistant_text or any(
+            phrase in assistant_text.lower()
+            for phrase in ("please provide", "please clarify", "which ", "what should", "need you to")
         )
+        checks["asked_user"] = asked
+        evidence["asked_user"] = {"actual": asked, "assistant_text": assistant_text}
+    if oracle.evidence_required_before_response is True:
+        required = max(1, int(oracle.evidence_call_count or 1))
+        checks["evidence_tool_calls"] = len(tool_calls) >= required
+        evidence["evidence_tool_calls"] = {"required": required, "actual": len(tool_calls)}
+    if oracle.evidence_call_count is not None and oracle.evidence_required_before_response is not False:
+        checks["evidence_call_count"] = len(tool_calls) >= int(oracle.evidence_call_count)
+        evidence["evidence_call_count"] = {"required": int(oracle.evidence_call_count), "actual": len(tool_calls)}
+
+    semantic = None
+    if runtime is not None:
         try:
-            judgement = runtime._run_llm_verification(
-                state,
-                step=judge_step,
-                criteria=[
-                    {
-                        "name": "quality_oracle_satisfied",
-                        "criterion": judge_step.verification_checks[0]["criterion"],
-                    }
-                ],
+            semantic = judge_prompt_quality(
+                client=runtime.client,
+                context_limit=runtime.config.model.context_limit,
+                prompt=prompt,
+                oracle=oracle_payload,
                 assistant_text=assistant_text,
-                evidence=semantic_evidence,
+                events=events,
+                timeout_seconds=runtime.config.model.verification_timeout_seconds,
             )
-            criteria = judgement.get("criteria", []) if isinstance(judgement, dict) else []
-            result = next((item for item in criteria if isinstance(item, dict) and item.get("name") == "quality_oracle_satisfied"), None)
-            semantic_passed = bool(result.get("passed")) if isinstance(result, dict) and isinstance(result.get("passed"), bool) else False
-            checks["semantic_quality_judge"] = semantic_passed
-            evidence["semantic_quality_judge"] = {
-                "passed": semantic_passed,
-                "evidence": result.get("evidence") if isinstance(result, dict) else "missing_or_invalid_judgement",
-            }
-            passed = semantic_passed
+            checks["semantic_quality_judge"] = bool(semantic["passed"])
+            evidence["semantic_quality_judge"] = semantic
         except Exception as exc:
             checks["semantic_quality_judge"] = False
-            evidence["semantic_quality_judge"] = {"error": str(exc), "error_type": exc.__class__.__name__}
+            evidence["semantic_quality_judge"] = {
+                "error": str(exc),
+                "error_type": exc.__class__.__name__,
+            }
+    passed = all(checks.values()) if checks else True
     return {
         "passed": passed,
         "checks": checks,
@@ -746,12 +640,6 @@ def run_benchmarks(
     effective_seeds = [int(seed) for seed in live_settings.get("seeds", [42]) or [42]]
     effective_profile_use_case = live_settings.get("recommendation_use_case")
     effective_profile_rationale = live_settings.get("recommendation_rationale")
-    effective_retrieval_backend = (
-        os.environ.get("SWAAG_BENCHMARK_TEST_RETRIEVAL_BACKEND", "unavailable")
-        if not use_live_model
-        else None
-    )
-
     total_tasks = len(selected_tasks)
     for task_index, task in enumerate(selected_tasks, start=1):
         planned_cache_mode = _planned_cache_mode(
@@ -783,7 +671,6 @@ def run_benchmarks(
             scenario_root = workspaces_root if not use_live_model else workspaces_root / f"seed_{seed}"
             scenario = task.create(scenario_root, live_mode=use_live_model)
             before_snapshot = _snapshot_workspace(scenario.workspace)
-            scenario_retrieval_backend = effective_retrieval_backend
             config = _build_config(
                 sessions_root=sessions_root,
                 workspace=scenario.workspace,
@@ -795,7 +682,6 @@ def run_benchmarks(
                 structured_output_mode=effective_structured_output_mode,
                 progress_poll_seconds=effective_progress_poll,
                 seed=seed,
-                retrieval_backend=scenario_retrieval_backend,
             )
             runtime_model_client, replay_cache_info = _build_agent_behavior_model_client(
                 config=config,
@@ -842,7 +728,7 @@ def run_benchmarks(
                 semantic_connect_timeout_seconds=config.model.connect_timeout_seconds,
                 semantic_read_timeout_seconds=config.model.verification_timeout_seconds,
             )
-            quality = _evaluate_quality(scenario.oracle, rebuilt, events, runtime=runtime, assistant_text=final_text)
+            quality = _evaluate_quality(scenario.oracle, events, runtime=runtime, prompt=scenario.prompt, assistant_text=final_text)
             failure = None
             if not verification.passed or scenario.expected_outcome == "expected_failure" or not quality["passed"]:
                 failure = analyzer.analyze(
@@ -940,7 +826,6 @@ def run_benchmarks(
             quality_summary=aggregate_quality_summary or {"passed": True, "checks": {}, "evidence": {}, "oracle": {}},
         )
         failure_label = aggregate_failure.category if aggregate_failure is not None else "none"
-        verification_type = trace_metrics.get("verification_trace", {}).get("verification_type_used", "")
         _print_benchmark_progress(
             current=task_index,
             total=total_tasks,
@@ -948,7 +833,8 @@ def run_benchmarks(
             status=(
                 f"finished success={aggregate_success} false_positive={aggregate_false_positive} "
                 f"score={task_score_percent:.1f} failure={failure_label} "
-                f"verification_type={verification_type or 'unknown'} cache={_actual_cache_mode(seed_results, cached=resolved_agent_behavior_mode == 'cached')}"
+                f"model_calls={trace_metrics.get('model_call_count', 0)} tools={trace_metrics.get('tool_call_count', 0)} "
+                f"cache={_actual_cache_mode(seed_results, cached=resolved_agent_behavior_mode == 'cached')}"
             ),
         )
     if resolved_agent_behavior_mode == "cached":

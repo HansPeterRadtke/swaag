@@ -201,7 +201,7 @@ def test_real_loop_gathers_evidence_before_model_authored_clarification(make_con
     })
     runtime = AgentRuntime(make_config(model__context_limit=32_000, tools__allow_stateful_tools=True), model_client=client)
 
-    result = runtime.run_turn(goal)
+    result = runtime.run_turn_legacy(goal)
     events = runtime.history.read_history(result.session_id)
     contracts = [item["contract"] for item in client.requests]
 
@@ -268,7 +268,7 @@ def test_runtime_task_decision_selector_receives_complete_enabled_registry(make_
         ),
     )
 
-    result = runtime.run_turn("Answer with the words registry observed.")
+    result = runtime.run_turn_legacy("Answer with the words registry observed.")
 
     assert result.assistant_text == "registry observed"
     assert observed["prompt"].count("input_schema:") >= 6
@@ -339,7 +339,7 @@ def test_single_tool_decision_still_requires_model_plan_objective_verification(m
         ),
     )
 
-    result = runtime.run_turn(goal)
+    result = runtime.run_turn_legacy(goal)
     events = runtime.history.read_history(result.session_id)
     plan_requests = [request for request in runtime.client.requests if request["contract"] == "task_plan"]
 
@@ -464,7 +464,7 @@ def test_real_loop_semantic_result_review_rejects_corrupt_partial_file_edit(make
         ),
     )
 
-    result = runtime.run_turn(goal)
+    result = runtime.run_turn_legacy(goal)
     events = runtime.history.read_history(result.session_id)
 
     assert result.assistant_text == "repaired"
@@ -588,7 +588,7 @@ def test_real_loop_model_disallowed_semantic_review_retry_replans_without_stale_
         ),
     )
 
-    result = runtime.run_turn(goal)
+    result = runtime.run_turn_legacy(goal)
     events = runtime.history.read_history(result.session_id)
     plan_requests = [request for request in runtime.client.requests if request["contract"] == "task_plan"]
 
@@ -711,7 +711,7 @@ def test_real_loop_pattern_not_found_after_corrupt_edit_feeds_current_text_and_r
         ),
     )
 
-    result = runtime.run_turn(goal)
+    result = runtime.run_turn_legacy(goal)
     events = runtime.history.read_history(result.session_id)
 
     assert result.assistant_text == "repaired"
@@ -878,7 +878,7 @@ def test_real_loop_replan_after_stale_source_errors_exposes_current_state_and_re
         ),
     )
 
-    result = runtime.run_turn(goal)
+    result = runtime.run_turn_legacy(goal)
     events = runtime.history.read_history(result.session_id)
     plan_requests = [request for request in runtime.client.requests if request["contract"] == "task_plan"]
 
@@ -1120,7 +1120,7 @@ def test_real_loop_model_owned_plan_review_rejects_weak_recovery_plan_before_exe
         ),
     )
 
-    result = runtime.run_turn(goal)
+    result = runtime.run_turn_legacy(goal)
     events = runtime.history.read_history(result.session_id)
 
     assert result.assistant_text == "repaired"
@@ -1207,7 +1207,7 @@ def test_real_loop_retries_plan_when_semantic_plan_review_protocol_fails(make_co
 
     runtime._run_llm_verification = _flaky_plan_review  # type: ignore[method-assign]
 
-    result = runtime.run_turn(goal)
+    result = runtime.run_turn_legacy(goal)
     events = runtime.history.read_history(result.session_id)
 
     assert result.assistant_text == "verified"
@@ -1311,7 +1311,7 @@ def test_real_loop_retries_tool_validation_error_inside_same_step(make_config, t
         ),
     )
 
-    result = runtime.run_turn(goal)
+    result = runtime.run_turn_legacy(goal)
     events = runtime.history.read_history(result.session_id)
 
     assert result.assistant_text == "finished"
@@ -1370,7 +1370,7 @@ def test_real_loop_accepts_edit_text_plan_with_registered_mechanical_check(make_
         ),
     )
 
-    result = runtime.run_turn(goal)
+    result = runtime.run_turn_legacy(goal)
     events = runtime.history.read_history(result.session_id)
 
     assert result.assistant_text == "repaired"
@@ -1440,7 +1440,7 @@ def test_real_loop_uses_intrinsic_success_criteria_for_response(make_config, tmp
         ),
     )
 
-    result = runtime.run_turn(goal)
+    result = runtime.run_turn_legacy(goal)
     events = runtime.history.read_history(result.session_id)
     contracts = [request["contract"] for request in runtime.client.requests]
     verification_prompts = [request["prompt"] for request in runtime.client.requests if request["contract"] == "verification"]
@@ -1559,7 +1559,7 @@ def test_real_loop_retry_feedback_repairs_redundant_mutation_step(make_config, t
         ),
     )
 
-    result = runtime.run_turn(goal)
+    result = runtime.run_turn_legacy(goal)
     events = runtime.history.read_history(result.session_id)
 
     assert result.assistant_text == "repaired"
@@ -1625,7 +1625,7 @@ def test_real_loop_supersedes_legacy_unrequired_edit_effect_with_registered_chec
         ),
     )
 
-    result = runtime.run_turn(goal)
+    result = runtime.run_turn_legacy(goal)
     events = runtime.history.read_history(result.session_id)
 
     assert result.assistant_text == "repaired"
@@ -1712,7 +1712,7 @@ def test_real_loop_rejects_malformed_file_contains_check_then_accepts_corrected_
         ),
     )
 
-    result = runtime.run_turn(goal)
+    result = runtime.run_turn_legacy(goal)
     events = runtime.history.read_history(result.session_id)
 
     assert result.assistant_text == "repaired"
@@ -1793,7 +1793,7 @@ def test_real_loop_rejects_unsupported_read_tool_effect_before_execution(make_co
         model_client=client,
     )
 
-    result = runtime.run_turn(goal)
+    result = runtime.run_turn_legacy(goal)
     events = runtime.history.read_history(result.session_id)
     plan_requests = [request for request in client.requests if request["contract"] == "task_plan"]
 
@@ -1892,7 +1892,7 @@ def test_real_loop_repairs_missing_tool_name_expected_before_execution(make_conf
         model_client=client,
     )
 
-    result = runtime.run_turn(goal)
+    result = runtime.run_turn_legacy(goal)
     events = runtime.history.read_history(result.session_id)
     plan_requests = [request for request in client.requests if request["contract"] == "task_plan"]
 
@@ -1973,7 +1973,7 @@ def test_real_loop_retries_schema_valid_but_locally_invalid_plan(make_config, tm
         ),
     )
 
-    result = runtime.run_turn(goal)
+    result = runtime.run_turn_legacy(goal)
     events = runtime.history.read_history(result.session_id)
 
     assert result.assistant_text == "repaired"
@@ -2161,7 +2161,7 @@ def test_real_loop_continues_after_multiple_distinct_plan_contract_repairs(make_
         ),
     )
 
-    result = runtime.run_turn(goal)
+    result = runtime.run_turn_legacy(goal)
     events = runtime.history.read_history(result.session_id)
 
     assert result.assistant_text == "verified"
@@ -2184,7 +2184,10 @@ def test_real_loop_continues_after_multiple_distinct_plan_contract_repairs(make_
     assert "Previous rejected plan JSON:" in plan_requests[1]["prompt"]
     assert "Correct this model-authored plan rather than regenerating unrelated fields" in plan_requests[1]["prompt"]
     assert stable_json_dumps(json.loads(_normalize_scripted_plan_response(invalid_file_contains_repr))) in plan_requests[1]["prompt"]
-    assert stable_json_dumps(json.loads(_normalize_scripted_plan_response(invalid_empty_reasoning_criterion))) in plan_requests[-1]["prompt"]
+    duplicate_plan_json = stable_json_dumps(json.loads(_normalize_scripted_plan_response(invalid_empty_reasoning_criterion)))
+    assert duplicate_plan_json not in plan_requests[-1]["prompt"]
+    assert "duplicate rejected plan attempt 2" in plan_requests[-1]["prompt"]
+    assert "returning the same plan again is forbidden" in plan_requests[-1]["prompt"]
     assert "attempt 1 validation:" in plan_requests[-1]["prompt"]
     assert "attempt 2 validation:" in plan_requests[-1]["prompt"]
     assert any(
@@ -2239,15 +2242,18 @@ def test_real_loop_plan_retry_feedback_rejects_self_dependency(make_config) -> N
         ),
     )
 
-    result = runtime.run_turn(goal)
+    result = runtime.run_turn_legacy(goal)
     events = runtime.history.read_history(result.session_id)
     plan_requests = [request for request in runtime.client.requests if request["contract"] == "task_plan"]
 
     assert result.assistant_text == "repaired"
     assert len(plan_requests) == 2
-    assert "depends_on names only earlier step_id values" in plan_requests[1]["prompt"]
-    assert "Conditions must name declared checks" in plan_requests[1]["prompt"]
-    assert any(event.event_type == "error" and "Circular dependency detected" in event.payload.get("error", "") for event in events)
+    assert "runtime resolves a unique output label in depends_on to its producing step" in plan_requests[1]["prompt"]
+    assert "removes direct self-dependencies" in plan_requests[1]["prompt"]
+    assert not any(
+        event.event_type == "error" and "Circular dependency detected" in event.payload.get("error", "")
+        for event in events
+    )
     assert not any(event.event_type == "fatal_system_error" for event in events)
 
 
@@ -2296,7 +2302,7 @@ def test_real_loop_treats_plan_input_text_as_instruction_not_executable_json(mak
         ),
     )
 
-    result = runtime.run_turn(goal)
+    result = runtime.run_turn_legacy(goal)
     events = runtime.history.read_history(result.session_id)
 
     assert result.assistant_text == "repaired"
@@ -2357,7 +2363,7 @@ def test_real_loop_verifies_model_declared_tool_output_ref_alias(make_config, tm
         ),
     )
 
-    result = runtime.run_turn(goal)
+    result = runtime.run_turn_legacy(goal)
     events = runtime.history.read_history(result.session_id)
 
     assert result.assistant_text == "read"
@@ -2431,7 +2437,7 @@ def test_real_loop_rejects_unresolved_placeholder_tool_input_and_recovers(make_c
         ),
     )
 
-    result = runtime.run_turn(goal)
+    result = runtime.run_turn_legacy(goal)
     events = runtime.history.read_history(result.session_id)
 
     assert result.assistant_text == "repaired"
@@ -2543,7 +2549,7 @@ def test_real_loop_retry_after_failed_edit_includes_observed_file_text(make_conf
         ),
     )
 
-    result = runtime.run_turn(goal)
+    result = runtime.run_turn_legacy(goal)
     events = runtime.history.read_history(result.session_id)
 
     assert result.assistant_text == "repaired"
@@ -2608,7 +2614,7 @@ def test_real_loop_pathless_file_contains_binds_latest_edit_path_and_refines(mak
         ),
     )
 
-    result = runtime.run_turn(goal)
+    result = runtime.run_turn_legacy(goal)
     events = runtime.history.read_history(result.session_id)
     failed_previews = [
         event
@@ -2682,7 +2688,7 @@ def test_real_loop_expected_tool_step_refines_without_reselecting_tool(make_conf
         ),
     )
 
-    result = runtime.run_turn(goal)
+    result = runtime.run_turn_legacy(goal)
     events = runtime.history.read_history(result.session_id)
     edit_applied_sequences = _event_sequences(events, "edit_applied")
     edit_verified_sequences = _event_sequences(events, "verification_passed", step_id="edit_file")
@@ -2810,7 +2816,7 @@ def test_real_loop_expected_tool_step_rejects_bad_arguments_without_wrong_tool_e
         ),
     )
 
-    result = runtime.run_turn(goal)
+    result = runtime.run_turn_legacy(goal)
     events = runtime.history.read_history(result.session_id)
 
     assert result.assistant_text == "recovered"
@@ -2958,7 +2964,7 @@ def test_real_loop_failure_classifier_uses_latest_verification_signal_after_prio
         ),
     )
 
-    result = runtime.run_turn(goal)
+    result = runtime.run_turn_legacy(goal)
     events = runtime.history.read_history(result.session_id)
     plan_requests = [request for request in runtime.client.requests if request["contract"] == "task_plan"]
 
@@ -3064,7 +3070,7 @@ def test_real_loop_stale_refinement_after_failed_preview_hands_off_for_replan(ma
         ),
     )
 
-    result = runtime.run_turn(goal)
+    result = runtime.run_turn_legacy(goal)
     events = runtime.history.read_history(result.session_id)
     chain_events = [event for event in events if event.event_type == "tool_chain_completed"]
     plan_requests = [request for request in runtime.client.requests if request["contract"] == "task_plan"]
@@ -3191,7 +3197,7 @@ def test_real_loop_hands_off_after_exact_repeated_successful_write_before_max_to
         ),
     )
 
-    result = runtime.run_turn(goal)
+    result = runtime.run_turn_legacy(goal)
     events = runtime.history.read_history(result.session_id)
     first_chain = next(
         event
@@ -3320,7 +3326,7 @@ def test_real_loop_replan_defers_unresolved_objective_to_final_proof_when_state_
         ),
     )
 
-    result = runtime.run_turn(goal)
+    result = runtime.run_turn_legacy(goal)
     events = runtime.history.read_history(result.session_id)
     plan_requests = [request for request in runtime.client.requests if request["contract"] == "task_plan"]
 
@@ -3500,7 +3506,7 @@ def test_real_loop_final_objective_verification_replans_after_weak_read_only_suc
         ),
     )
 
-    result = runtime.run_turn(goal)
+    result = runtime.run_turn_legacy(goal)
     events = runtime.history.read_history(result.session_id)
     plan_requests = [request for request in runtime.client.requests if request["contract"] == "task_plan"]
     final_failure = _event_sequences(events, "verification_failed", step_id="answer_without_repair:final_objective")
@@ -3576,7 +3582,7 @@ def test_real_loop_rejects_wrong_tool_inside_required_tool_step_and_refines(make
         ),
     )
 
-    result = runtime.run_turn(goal)
+    result = runtime.run_turn_legacy(goal)
     events = runtime.history.read_history(result.session_id)
     edit_applied_sequences = _event_sequences(events, "edit_applied")
     edit_verified_sequences = _event_sequences(events, "verification_passed", step_id="edit_file")
@@ -3654,7 +3660,7 @@ def test_real_loop_extremely_easy_exact_edit_reread_and_verified_final_state(mak
         ),
     )
 
-    result = runtime.run_turn(goal)
+    result = runtime.run_turn_legacy(goal)
     events = runtime.history.read_history(result.session_id)
 
     assert result.assistant_text == "done"
@@ -3764,7 +3770,7 @@ def test_real_loop_status_ready_exact_replacement_reread_and_final_objective_pro
         ),
     )
 
-    result = runtime.run_turn(goal)
+    result = runtime.run_turn_legacy(goal)
     events = runtime.history.read_history(result.session_id)
     edit_event = next(event for event in events if event.event_type == "tool_result" and event.payload.get("tool_name") == "edit_text")
     edit_applied = _event_sequences(events, "edit_applied")
@@ -3821,7 +3827,7 @@ def test_real_loop_easy_structured_multi_file_reading_uses_observations(make_con
         ),
     )
 
-    result = runtime.run_turn(goal)
+    result = runtime.run_turn_legacy(goal)
     events = runtime.history.read_history(result.session_id)
     state = runtime.history.rebuild_from_history(result.session_id)
 
@@ -3901,7 +3907,7 @@ def test_real_loop_normal_multistep_read_compute_write_verify_with_distractor_to
         ),
     )
 
-    result = runtime.run_turn(goal)
+    result = runtime.run_turn_legacy(goal)
     events = runtime.history.read_history(result.session_id)
 
     assert result.assistant_text == "written"
@@ -4034,7 +4040,7 @@ def test_real_loop_hard_coding_failed_tests_replans_repairs_and_verifies(make_co
         ),
     )
 
-    result = runtime.run_turn(goal)
+    result = runtime.run_turn_legacy(goal)
     events = runtime.history.read_history(result.session_id)
 
     assert result.assistant_text == "fixed"
@@ -4100,7 +4106,7 @@ def test_real_loop_failure_recovery_after_failed_tool_call_continues_from_histor
         ),
     )
 
-    result = runtime.run_turn(goal)
+    result = runtime.run_turn_legacy(goal)
     events = runtime.history.read_history(result.session_id)
 
     assert result.assistant_text == "recovered"
@@ -4198,7 +4204,7 @@ def test_real_loop_replan_reused_step_ids_do_not_trigger_repeated_action_abort(m
         ),
     )
 
-    result = runtime.run_turn(goal)
+    result = runtime.run_turn_legacy(goal)
     events = runtime.history.read_history(result.session_id)
 
     assert result.assistant_text == "recovered"
@@ -4311,7 +4317,7 @@ def test_real_loop_invalid_arguments_after_failed_preview_hands_off_for_replan(m
         ),
     )
 
-    result = runtime.run_turn(goal)
+    result = runtime.run_turn_legacy(goal)
     events = runtime.history.read_history(result.session_id)
 
     assert result.assistant_text == "recovered"
@@ -4389,7 +4395,7 @@ def test_real_loop_answer_prompt_exposes_model_authored_step_contract(make_confi
         ),
     )
 
-    result = runtime.run_turn(goal)
+    result = runtime.run_turn_legacy(goal)
     events = runtime.history.read_history(result.session_id)
 
     assert result.assistant_text == expected
@@ -4445,7 +4451,7 @@ def test_real_loop_extremely_hard_iterative_refinement_is_not_duplicate_abort(ma
         ),
     )
 
-    result = runtime.run_turn(goal)
+    result = runtime.run_turn_legacy(goal)
     events = runtime.history.read_history(result.session_id)
 
     assert result.assistant_text == "refined"
@@ -4492,7 +4498,7 @@ def test_real_loop_prevents_repeated_action_loop_without_false_success(make_conf
         ),
     )
 
-    result = runtime.run_turn(goal)
+    result = runtime.run_turn_legacy(goal)
     events = runtime.history.read_history(result.session_id)
 
     assert result.assistant_text.startswith("Task incomplete:")
@@ -4527,7 +4533,7 @@ def test_real_loop_skill_selection_adds_instructions_without_hiding_tools(make_c
         ),
     )
 
-    result = runtime.run_turn(goal)
+    result = runtime.run_turn_legacy(goal)
     plan_prompts = [event.payload["prompt"] for event in runtime.history.read_history(result.session_id) if event.event_type == "prompt_built" and event.payload.get("kind") == "plan"]
 
     assert result.assistant_text == "inspected"

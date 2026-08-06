@@ -97,14 +97,7 @@ class ToolConfig:
 class PromptConfig:
     standard_system_template: str
     lean_system_template: str
-    analysis_template: str
-    task_decision_template: str
-    control_template: str
-    expansion_template: str
-    planning_template: str
-    verification_template: str
-    decision_template: str
-    answer_template: str
+    action_template: str
     summary_system_template: str
     summary_template: str
 
@@ -137,59 +130,9 @@ class EditorConfig:
 
 
 @dataclass(slots=True)
-class PlannerConfig:
-    max_plan_steps: int
-    max_replans: int
-
-
-@dataclass(slots=True)
-class MemoryConfig:
-    max_semantic_items: int
-    max_retrieved_items: int
-
-
-@dataclass(slots=True)
-class ContextBuilderConfig:
-    max_history_messages: int
-    max_semantic_items: int
-    max_recent_results: int
-    max_environment_files: int
-
-
-@dataclass(slots=True)
 class CompressionConfig:
     max_messages_before_compress: int
     summary_chars: int
-
-
-@dataclass(slots=True)
-class SecurityConfig:
-    block_untrusted_semantic: bool
-    max_external_text_chars: int
-
-
-@dataclass(slots=True)
-class RetrievalConfig:
-    backend: str
-    allow_degraded_fallback: bool
-    max_candidates_per_source: int
-
-
-@dataclass(slots=True)
-class GuidanceConfig:
-    enabled: bool
-    global_paths: list[str]
-    filenames: list[str]
-    max_items: int
-    max_tokens: int
-
-
-@dataclass(slots=True)
-class SkillsConfig:
-    enabled: bool
-    max_metadata_items: int
-    max_full_instructions: int
-    metadata_only_default: bool
 
 
 @dataclass(slots=True)
@@ -202,9 +145,6 @@ class BudgetPolicyConfig:
     safety_ratio: dict[str, float]
     fixed_overhead_ratio: dict[str, float]
     fixed_overhead_min_tokens: int
-    section_priorities: dict[str, dict[str, float]]
-    section_floor_ratio: dict[str, float]
-    section_floor_min_tokens: dict[str, int]
     structured_output_json_factor_by_contract: dict[str, float]
     structured_output_json_factor_default: float
     structured_output_json_floor_tokens: int
@@ -214,41 +154,12 @@ class BudgetPolicyConfig:
 
 
 @dataclass(slots=True)
-class ContextPolicyConfig:
-    guidance_item_token_hint: int
-    skill_metadata_token_hint: int
-    skill_instruction_token_hint: int
-    recent_result_token_hint: int
-    retrieval_preview_items: int
-    retrieval_preview_chars: int
-    component_priorities: dict[str, float]
-
-
-@dataclass(slots=True)
-class SelectionPolicyConfig:
-    retrieval_history_item_token_hint: int
-    retrieval_semantic_item_token_hint: int
-    retrieval_environment_item_token_hint: int
-    history_query_max_results: int
-    # Structural signal weights for ranking candidate shortlisting
-    retrieval_structural_tool_message: float
-    retrieval_structural_user_message: float
-    retrieval_structural_failed_event: float
-    retrieval_structural_summary_event: float
-    retrieval_structural_modified_file: float
-    retrieval_structural_procedural_memory: float
-    retrieval_trust_untrusted_memory: float
-    # Ranking-text preview lengths for each candidate source
-    retrieval_history_ranking_chars: int
-    retrieval_event_ranking_chars: int
-    retrieval_file_ranking_chars: int
-    # History detail query scoring
-    history_detail_token_score: int
-    history_detail_exact_score: int
-    history_detail_type_bonus: int
-    history_detail_preview_chars: int
-    # LLM scoring backend text truncation
-    retrieval_scoring_text_chars: int
+class HistorySearchConfig:
+    max_results: int
+    token_score: int
+    exact_score: int
+    type_bonus: int
+    preview_chars: int
 
 
 @dataclass(slots=True)
@@ -276,8 +187,6 @@ class ExternalBenchmarkAgentGenerationConfig:
     model_structured_timeout_seconds: int
     allow_stateful_tools: bool
     allow_side_effect_tools: bool
-    planner_max_plan_steps: int
-    planner_max_replans: int
     runtime_max_reasoning_steps: int
     runtime_max_total_actions: int
     runtime_max_tool_steps: int
@@ -335,17 +244,9 @@ class AgentConfig:
     notes: NotesConfig
     reader: ReaderConfig
     editor: EditorConfig
-    planner: PlannerConfig
-    memory: MemoryConfig
-    context_builder: ContextBuilderConfig
     compression: CompressionConfig
-    security: SecurityConfig
-    retrieval: RetrievalConfig
-    guidance: GuidanceConfig
-    skills: SkillsConfig
+    history_search: HistorySearchConfig
     budget_policy: BudgetPolicyConfig
-    context_policy: ContextPolicyConfig
-    selection_policy: SelectionPolicyConfig
     external_benchmarks: ExternalBenchmarksConfig
     raw: dict[str, Any] = field(repr=False)
 
@@ -429,18 +330,7 @@ def _coerce_config(data: dict[str, Any]) -> AgentConfig:
     notes = NotesConfig(**data["notes"])
     reader = ReaderConfig(**data["reader"])
     editor = EditorConfig(**data["editor"])
-    planner = PlannerConfig(**data["planner"])
-    memory = MemoryConfig(**data["memory"])
-    context_builder = ContextBuilderConfig(**data["context_builder"])
     compression = CompressionConfig(**data["compression"])
-    security = SecurityConfig(**data["security"])
-    retrieval = RetrievalConfig(
-        backend=str(data["retrieval"]["backend"]),
-        allow_degraded_fallback=bool(data["retrieval"]["allow_degraded_fallback"]),
-        max_candidates_per_source=int(data["retrieval"]["max_candidates_per_source"]),
-    )
-    guidance = GuidanceConfig(**data["guidance"])
-    skills = SkillsConfig(**data["skills"])
     budget_policy = BudgetPolicyConfig(
         call_classes={str(key): str(value) for key, value in data["budget_policy"]["call_classes"].items()},
         output_ratio={str(key): float(value) for key, value in data["budget_policy"]["output_ratio"].items()},
@@ -450,12 +340,6 @@ def _coerce_config(data: dict[str, Any]) -> AgentConfig:
         safety_ratio={str(key): float(value) for key, value in data["budget_policy"]["safety_ratio"].items()},
         fixed_overhead_ratio={str(key): float(value) for key, value in data["budget_policy"]["fixed_overhead_ratio"].items()},
         fixed_overhead_min_tokens=int(data["budget_policy"]["fixed_overhead_min_tokens"]),
-        section_priorities={
-            str(section): {str(key): float(value) for key, value in values.items()}
-            for section, values in data["budget_policy"]["section_priorities"].items()
-        },
-        section_floor_ratio={str(key): float(value) for key, value in data["budget_policy"]["section_floor_ratio"].items()},
-        section_floor_min_tokens={str(key): int(value) for key, value in data["budget_policy"]["section_floor_min_tokens"].items()},
         structured_output_json_factor_by_contract={
             str(key): float(value)
             for key, value in data["budget_policy"]["structured_output_json_factor_by_contract"].items()
@@ -466,35 +350,12 @@ def _coerce_config(data: dict[str, Any]) -> AgentConfig:
         structured_output_schema_floor_tokens=int(data["budget_policy"]["structured_output_schema_floor_tokens"]),
         safe_input_floor_tokens=int(data["budget_policy"]["safe_input_floor_tokens"]),
     )
-    context_policy = ContextPolicyConfig(
-        guidance_item_token_hint=int(data["context_policy"]["guidance_item_token_hint"]),
-        skill_metadata_token_hint=int(data["context_policy"]["skill_metadata_token_hint"]),
-        skill_instruction_token_hint=int(data["context_policy"]["skill_instruction_token_hint"]),
-        recent_result_token_hint=int(data["context_policy"]["recent_result_token_hint"]),
-        retrieval_preview_items=int(data["context_policy"]["retrieval_preview_items"]),
-        retrieval_preview_chars=int(data["context_policy"]["retrieval_preview_chars"]),
-        component_priorities={str(key): float(value) for key, value in data["context_policy"]["component_priorities"].items()},
-    )
-    selection_policy = SelectionPolicyConfig(
-        retrieval_history_item_token_hint=int(data["selection_policy"]["retrieval_history_item_token_hint"]),
-        retrieval_semantic_item_token_hint=int(data["selection_policy"]["retrieval_semantic_item_token_hint"]),
-        retrieval_environment_item_token_hint=int(data["selection_policy"]["retrieval_environment_item_token_hint"]),
-        history_query_max_results=int(data["selection_policy"]["history_query_max_results"]),
-        retrieval_structural_tool_message=float(data["selection_policy"]["retrieval_structural_tool_message"]),
-        retrieval_structural_user_message=float(data["selection_policy"]["retrieval_structural_user_message"]),
-        retrieval_structural_failed_event=float(data["selection_policy"]["retrieval_structural_failed_event"]),
-        retrieval_structural_summary_event=float(data["selection_policy"]["retrieval_structural_summary_event"]),
-        retrieval_structural_modified_file=float(data["selection_policy"]["retrieval_structural_modified_file"]),
-        retrieval_structural_procedural_memory=float(data["selection_policy"]["retrieval_structural_procedural_memory"]),
-        retrieval_trust_untrusted_memory=float(data["selection_policy"]["retrieval_trust_untrusted_memory"]),
-        retrieval_history_ranking_chars=int(data["selection_policy"]["retrieval_history_ranking_chars"]),
-        retrieval_event_ranking_chars=int(data["selection_policy"]["retrieval_event_ranking_chars"]),
-        retrieval_file_ranking_chars=int(data["selection_policy"]["retrieval_file_ranking_chars"]),
-        history_detail_token_score=int(data["selection_policy"]["history_detail_token_score"]),
-        history_detail_exact_score=int(data["selection_policy"]["history_detail_exact_score"]),
-        history_detail_type_bonus=int(data["selection_policy"]["history_detail_type_bonus"]),
-        history_detail_preview_chars=int(data["selection_policy"]["history_detail_preview_chars"]),
-        retrieval_scoring_text_chars=int(data["selection_policy"]["retrieval_scoring_text_chars"]),
+    history_search = HistorySearchConfig(
+        max_results=int(data["history_search"]["max_results"]),
+        token_score=int(data["history_search"]["token_score"]),
+        exact_score=int(data["history_search"]["exact_score"]),
+        type_bonus=int(data["history_search"]["type_bonus"]),
+        preview_chars=int(data["history_search"]["preview_chars"]),
     )
     external_benchmarks = ExternalBenchmarksConfig(
         root=Path(data["external_benchmarks"]["root"]).expanduser(),
@@ -522,8 +383,6 @@ def _coerce_config(data: dict[str, Any]) -> AgentConfig:
             ),
             allow_stateful_tools=bool(data["external_benchmarks"]["agent_generation"]["allow_stateful_tools"]),
             allow_side_effect_tools=bool(data["external_benchmarks"]["agent_generation"]["allow_side_effect_tools"]),
-            planner_max_plan_steps=int(data["external_benchmarks"]["agent_generation"]["planner_max_plan_steps"]),
-            planner_max_replans=int(data["external_benchmarks"]["agent_generation"]["planner_max_replans"]),
             runtime_max_reasoning_steps=int(data["external_benchmarks"]["agent_generation"]["runtime_max_reasoning_steps"]),
             runtime_max_total_actions=int(data["external_benchmarks"]["agent_generation"]["runtime_max_total_actions"]),
             runtime_max_tool_steps=int(data["external_benchmarks"]["agent_generation"]["runtime_max_tool_steps"]),
@@ -605,10 +464,6 @@ def _coerce_config(data: dict[str, Any]) -> AgentConfig:
     _validate_positive("reader.default_chunk_chars", reader.default_chunk_chars)
     _validate_non_negative("reader.default_overlap_chars", reader.default_overlap_chars)
     _validate_positive("reader.max_chunk_chars", reader.max_chunk_chars)
-    _validate_positive("planner.max_plan_steps", planner.max_plan_steps)
-    _validate_positive("planner.max_replans", planner.max_replans)
-    _validate_positive("memory.max_semantic_items", memory.max_semantic_items)
-    _validate_positive("memory.max_retrieved_items", memory.max_retrieved_items)
     _validate_positive("budget_policy.fixed_overhead_min_tokens", budget_policy.fixed_overhead_min_tokens)
     _validate_positive("budget_policy.structured_output_json_floor_tokens", budget_policy.structured_output_json_floor_tokens)
     _validate_positive("budget_policy.structured_output_schema_floor_tokens", budget_policy.structured_output_schema_floor_tokens)
@@ -617,17 +472,6 @@ def _coerce_config(data: dict[str, Any]) -> AgentConfig:
         raise ValueError("budget_policy.structured_output_json_factor_default must be positive")
     if budget_policy.structured_output_schema_factor <= 0:
         raise ValueError("budget_policy.structured_output_schema_factor must be positive")
-    _validate_positive("context_policy.guidance_item_token_hint", context_policy.guidance_item_token_hint)
-    _validate_positive("context_policy.skill_metadata_token_hint", context_policy.skill_metadata_token_hint)
-    _validate_positive("context_policy.skill_instruction_token_hint", context_policy.skill_instruction_token_hint)
-    _validate_positive("context_policy.recent_result_token_hint", context_policy.recent_result_token_hint)
-    _validate_positive("context_policy.retrieval_preview_items", context_policy.retrieval_preview_items)
-    _validate_positive("context_policy.retrieval_preview_chars", context_policy.retrieval_preview_chars)
-    _validate_positive("selection_policy.retrieval_history_item_token_hint", selection_policy.retrieval_history_item_token_hint)
-    _validate_positive("selection_policy.retrieval_semantic_item_token_hint", selection_policy.retrieval_semantic_item_token_hint)
-    _validate_positive("selection_policy.retrieval_environment_item_token_hint", selection_policy.retrieval_environment_item_token_hint)
-    _validate_positive("selection_policy.history_query_max_results", selection_policy.history_query_max_results)
-    _validate_positive("selection_policy.retrieval_scoring_text_chars", selection_policy.retrieval_scoring_text_chars)
     if not external_benchmarks.targets:
         raise ValueError("external_benchmarks.targets must not be empty")
     _validate_positive("external_benchmarks.smoke_timeout_seconds", external_benchmarks.smoke_timeout_seconds)
@@ -691,14 +535,6 @@ def _coerce_config(data: dict[str, Any]) -> AgentConfig:
         external_benchmarks.agent_generation.runtime_tool_call_budget,
     )
     _validate_positive(
-        "external_benchmarks.agent_generation.planner_max_plan_steps",
-        external_benchmarks.agent_generation.planner_max_plan_steps,
-    )
-    _validate_positive(
-        "external_benchmarks.agent_generation.planner_max_replans",
-        external_benchmarks.agent_generation.planner_max_replans,
-    )
-    _validate_positive(
         "external_benchmarks.agent_generation.candidate_file_limit",
         external_benchmarks.agent_generation.candidate_file_limit,
     )
@@ -738,22 +574,8 @@ def _coerce_config(data: dict[str, Any]) -> AgentConfig:
         raise ValueError("external_benchmarks.agent_generation.prompt_template must not be empty")
     if not external_benchmarks.agent_generation.empty_patch_retry_prompt.strip():
         raise ValueError("external_benchmarks.agent_generation.empty_patch_retry_prompt must not be empty")
-    _validate_positive("context_builder.max_history_messages", context_builder.max_history_messages)
-    _validate_positive("context_builder.max_semantic_items", context_builder.max_semantic_items)
-    _validate_positive("context_builder.max_recent_results", context_builder.max_recent_results)
-    _validate_positive("context_builder.max_environment_files", context_builder.max_environment_files)
     _validate_positive("compression.max_messages_before_compress", compression.max_messages_before_compress)
     _validate_positive("compression.summary_chars", compression.summary_chars)
-    _validate_positive("security.max_external_text_chars", security.max_external_text_chars)
-    if retrieval.backend not in {"llm_scoring", "transformer_local", "unavailable"}:
-        raise ValueError(
-            "retrieval.backend must be llm_scoring, transformer_local, or unavailable"
-        )
-    _validate_positive("retrieval.max_candidates_per_source", retrieval.max_candidates_per_source)
-    _validate_positive("guidance.max_items", guidance.max_items)
-    _validate_positive("guidance.max_tokens", guidance.max_tokens)
-    _validate_positive("skills.max_metadata_items", skills.max_metadata_items)
-    _validate_positive("skills.max_full_instructions", skills.max_full_instructions)
     if reader.default_overlap_chars >= reader.default_chunk_chars:
         raise ValueError("reader.default_overlap_chars must be smaller than reader.default_chunk_chars")
     if not tools.enabled:
@@ -773,17 +595,9 @@ def _coerce_config(data: dict[str, Any]) -> AgentConfig:
         notes=notes,
         reader=reader,
         editor=editor,
-        planner=planner,
-        memory=memory,
-        context_builder=context_builder,
         compression=compression,
-        security=security,
-        retrieval=retrieval,
-        guidance=guidance,
-        skills=skills,
+        history_search=history_search,
         budget_policy=budget_policy,
-        context_policy=context_policy,
-        selection_policy=selection_policy,
         external_benchmarks=external_benchmarks,
         raw=data,
     )

@@ -1,8 +1,0 @@
-Return only the JSON arguments for the `{tool_name}` tool.
-Do not choose another tool.
-Do not add explanation text.
-Use the current request, tool context, and active plan.
-Step instructions are model-authored context, not executable arguments.
-Do not copy unresolved artifact placeholders such as {{{{artifact_name}}}} into tool arguments.
-When a prior artifact is needed, use concrete observed content from the tool context, workspace files, or recent results.
-Generated arguments must be executable against the latest observed state. If recent failures show that a source snippet, range, pattern, path state, or other target is absent or invalid in the current observation, do not repeat arguments that depend only on that stale target unless newer evidence proves it now applies.

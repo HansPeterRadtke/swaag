@@ -82,7 +82,7 @@ def _build_scenario_runtime(make_config, tmp_path: Path) -> tuple[AgentRuntime, 
 
 def test_rebuild_from_history_matches_original_state(make_config, tmp_path: Path) -> None:
     runtime, sample, goal = _build_scenario_runtime(make_config, tmp_path)
-    result = runtime.run_turn(goal)
+    result = runtime.run_turn_legacy(goal)
     state_before = runtime.history.rebuild_from_history(result.session_id)
 
     session_dir = runtime.history.history_path(result.session_id).parent
@@ -98,7 +98,7 @@ def test_rebuild_from_history_matches_original_state(make_config, tmp_path: Path
 
 def test_history_contains_required_event_types(make_config, tmp_path: Path) -> None:
     runtime, _, goal = _build_scenario_runtime(make_config, tmp_path)
-    result = runtime.run_turn(goal)
+    result = runtime.run_turn_legacy(goal)
     events = runtime.history.read_history(result.session_id)
     event_types = {event.event_type for event in events}
 
@@ -129,7 +129,7 @@ def test_history_contains_required_event_types(make_config, tmp_path: Path) -> N
 
 def test_corrupted_projections_do_not_block_recovery(make_config, tmp_path: Path) -> None:
     runtime, _, goal = _build_scenario_runtime(make_config, tmp_path)
-    result = runtime.run_turn(goal)
+    result = runtime.run_turn_legacy(goal)
 
     runtime.history.current_state_path(result.session_id).write_text("not-json", encoding="utf-8")
     runtime.history.notes_path(result.session_id).write_text("not-json", encoding="utf-8")
@@ -180,12 +180,12 @@ def test_only_history_module_writes_files(monkeypatch, make_config, tmp_path: Pa
     monkeypatch.setattr(Path, "mkdir", guarded_mkdir)
     monkeypatch.setattr(os, "replace", guarded_replace)
 
-    runtime.run_turn(goal)
+    runtime.run_turn_legacy(goal)
 
 
 def test_history_replay_recovers_same_final_answer(make_config, tmp_path: Path) -> None:
     runtime, _, goal = _build_scenario_runtime(make_config, tmp_path)
-    result = runtime.run_turn(goal)
+    result = runtime.run_turn_legacy(goal)
     rebuilt = runtime.history.rebuild_from_history(result.session_id)
     assert rebuilt.messages[-1].role == "assistant"
     assert rebuilt.messages[-1].content == result.assistant_text
@@ -193,7 +193,7 @@ def test_history_replay_recovers_same_final_answer(make_config, tmp_path: Path) 
 
 def test_replay_history_function_uses_history_file_only(make_config, tmp_path: Path) -> None:
     runtime, _, goal = _build_scenario_runtime(make_config, tmp_path)
-    result = runtime.run_turn(goal)
+    result = runtime.run_turn_legacy(goal)
     state_before = runtime.history.rebuild_from_history(result.session_id)
     history_file = runtime.history.history_path(result.session_id)
     rebuilt = replay_history(history_file)
@@ -343,7 +343,7 @@ def test_rebuild_cannot_write_projections_directly(make_config) -> None:
 
 def test_history_index_is_derived_and_matches_state(make_config, tmp_path: Path) -> None:
     runtime, _, goal = _build_scenario_runtime(make_config, tmp_path)
-    result = runtime.run_turn(goal)
+    result = runtime.run_turn_legacy(goal)
     state = runtime.history.rebuild_from_history(result.session_id)
     index_payload = json.loads(runtime.history.history_index_path(result.session_id).read_text(encoding="utf-8"))
 
@@ -355,7 +355,7 @@ def test_history_index_is_derived_and_matches_state(make_config, tmp_path: Path)
 
 def test_checkpoint_is_derived_and_rebuilds_same_state(make_config, tmp_path: Path) -> None:
     runtime, _, goal = _build_scenario_runtime(make_config, tmp_path)
-    result = runtime.run_turn(goal)
+    result = runtime.run_turn_legacy(goal)
     checkpoint_path = runtime.history.checkpoint_path(result.session_id)
     assert checkpoint_path.exists()
 
@@ -367,7 +367,7 @@ def test_checkpoint_is_derived_and_rebuilds_same_state(make_config, tmp_path: Pa
 
 def test_corrupted_checkpoint_falls_back_to_history(make_config, tmp_path: Path) -> None:
     runtime, _, goal = _build_scenario_runtime(make_config, tmp_path)
-    result = runtime.run_turn(goal)
+    result = runtime.run_turn_legacy(goal)
     runtime.history.checkpoint_path(result.session_id).write_text("not-json", encoding="utf-8")
 
     rebuilt = runtime.history.rebuild_from_history(result.session_id, prefer_checkpoint=True)
@@ -377,7 +377,7 @@ def test_corrupted_checkpoint_falls_back_to_history(make_config, tmp_path: Path)
 
 def test_read_history_window_returns_ordered_subset(make_config, tmp_path: Path) -> None:
     runtime, _, goal = _build_scenario_runtime(make_config, tmp_path)
-    result = runtime.run_turn(goal)
+    result = runtime.run_turn_legacy(goal)
     events = runtime.history.read_history(result.session_id)
     window = runtime.history.read_history_window(result.session_id, start_sequence=3, limit=5)
 
@@ -387,7 +387,7 @@ def test_read_history_window_returns_ordered_subset(make_config, tmp_path: Path)
 
 def test_iter_history_chunks_preserves_event_order(make_config, tmp_path: Path) -> None:
     runtime, _, goal = _build_scenario_runtime(make_config, tmp_path)
-    result = runtime.run_turn(goal)
+    result = runtime.run_turn_legacy(goal)
     all_events = runtime.history.read_history(result.session_id)
     chunks = list(runtime.history.iter_history_chunks(result.session_id, chunk_size=4))
 
@@ -399,7 +399,7 @@ def test_iter_history_chunks_preserves_event_order(make_config, tmp_path: Path) 
 
 def test_replay_window_rebuilds_prefix_state(make_config, tmp_path: Path) -> None:
     runtime, _, goal = _build_scenario_runtime(make_config, tmp_path)
-    result = runtime.run_turn(goal)
+    result = runtime.run_turn_legacy(goal)
     events = runtime.history.read_history(result.session_id)
     turn_finished = next(event for event in events if event.event_type == "turn_finished")
 
@@ -492,7 +492,7 @@ def test_full_system_replay_after_replan_matches_state(make_config, tmp_path: Pa
         ]
     )
     runtime = AgentRuntime(config, model_client=fake_client)
-    result = runtime.run_turn(goal)
+    result = runtime.run_turn_legacy(goal)
     original = runtime.history.rebuild_from_history(result.session_id)
     session_dir = runtime.history.history_path(result.session_id).parent
     for path in session_dir.iterdir():
@@ -561,7 +561,7 @@ def test_source_tree_creates_history_events_only_via_event_factory() -> None:
 
 def test_history_ids_sequences_and_hashes_are_strict(make_config, tmp_path: Path) -> None:
     runtime, _, goal = _build_scenario_runtime(make_config, tmp_path)
-    result = runtime.run_turn(goal)
+    result = runtime.run_turn_legacy(goal)
     events = runtime.history.read_history(result.session_id)
 
     assert [event.sequence for event in events] == list(range(1, len(events) + 1))
@@ -575,7 +575,7 @@ def test_history_ids_sequences_and_hashes_are_strict(make_config, tmp_path: Path
 
 def test_history_tamper_detection_fails_rebuild(make_config, tmp_path: Path) -> None:
     runtime, _, goal = _build_scenario_runtime(make_config, tmp_path)
-    result = runtime.run_turn(goal)
+    result = runtime.run_turn_legacy(goal)
     history_file = runtime.history.history_path(result.session_id)
     lines = history_file.read_text(encoding="utf-8").splitlines()
     line_index = next(
@@ -594,7 +594,7 @@ def test_history_tamper_detection_fails_rebuild(make_config, tmp_path: Path) -> 
 
 def test_event_completeness_matches_observed_operations(make_config, tmp_path: Path) -> None:
     runtime, sample, goal = _build_scenario_runtime(make_config, tmp_path)
-    result = runtime.run_turn(goal)
+    result = runtime.run_turn_legacy(goal)
     events = runtime.history.read_history(result.session_id)
     event_types = [event.event_type for event in events]
 
@@ -685,7 +685,7 @@ def test_replay_restores_prompt_analysis_and_strategy(make_config) -> None:
         ]
     )
     runtime = AgentRuntime(config, model_client=fake_client)
-    result = runtime.run_turn(goal)
+    result = runtime.run_turn_legacy(goal)
     replayed = replay_history(runtime.history.history_path(result.session_id))
 
     assert replayed.prompt_analysis is not None

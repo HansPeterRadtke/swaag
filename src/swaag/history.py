@@ -9,30 +9,17 @@ from typing import Any, Iterable, Iterator
 
 from swaag.environment.state import EnvironmentState, ProcessRecord, ShellSessionState, WorkspaceState
 from swaag.events import ALLOWED_EVENT_TYPES, EventSchemaError, create_event, verify_event_integrity
-from swaag.planner import mark_step_completed, mark_step_failed, mark_step_in_progress
-from swaag.roles import default_agent_roles
-from swaag.security import with_trust_level
 from swaag.types import (
-    AgentRoleDefinition,
+    CodeCheckpoint,
+    DeferredTask,
     DerivedFileWrite,
     FileView,
     HistoryEvent,
     Message,
     Note,
-    Plan,
-    PlanStep,
-    PromptAnalysis,
-    DecisionOutcome,
-    DeferredTask,
-    ExpandedTask,
-    StrategySelection,
-    ProjectState,
     ReaderState,
-    SemanticMemoryItem,
     SessionMetrics,
     SessionState,
-    CodeCheckpoint,
-    WorkingMemory,
 )
 from swaag.fsops import append_text, ensure_dir, write_text as _fsops_write_text
 from swaag.utils import new_id, stable_json_dumps, to_jsonable, utc_now_iso
@@ -64,7 +51,6 @@ _STATEFUL_REBUILD_EVENT_TYPES = frozenset(
         "code_checkpoint_created",
         "code_checkpoint_restored",
         "note_added",
-        "role_switched",
         "note_replaced",
         "notes_compacted",
         "reader_opened",
@@ -87,20 +73,6 @@ _STATEFUL_REBUILD_EVENT_TYPES = frozenset(
         "edit_applied",
         "file_write_applied",
         "file_write_failed",
-        "plan_created",
-        "plan_updated",
-        "plan_completed",
-        "step_started",
-        "step_completed",
-        "step_failed",
-        "prompt_analyzed",
-        "decision_made",
-        "decision_adjusted",
-        "task_expanded",
-        "strategy_selected",
-        "working_memory_updated",
-        "memory_stored",
-        "project_state_updated",
     }
 )
 
@@ -122,9 +94,6 @@ def _ensure_directory(path: Path) -> Path:
     ensure_dir(path)
     return path
 
-
-def _default_agent_roles() -> list[AgentRoleDefinition]:
-    return default_agent_roles()
 
 
 class HistoryStore:
@@ -349,7 +318,6 @@ class HistoryStore:
                     "updated_at": str(payload.get("updated_at", "")),
                     "turn_count": int(payload.get("turn_count", 0)),
                     "event_count": int(payload.get("event_count", 0)),
-                    "active_plan_id": payload.get("active_plan", {}).get("plan_id") if isinstance(payload.get("active_plan"), dict) else None,
                     "active": self.active_run_path(session_id).exists(),
                 }
         return fallback
@@ -578,7 +546,7 @@ class HistoryStore:
         derived_writes: Iterable[DerivedFileWrite] = (),
     ) -> HistoryEvent:
         payload = to_jsonable(payload)
-        metadata = with_trust_level(event_type, payload, metadata)
+        metadata = to_jsonable(dict(metadata or {}))
         event = self._next_event(state, event_type, payload, metadata)
         self._append_marshaled_event(state, event)
         for write_plan in derived_writes:
@@ -664,8 +632,6 @@ class HistoryStore:
                 "turn_count": state.turn_count,
                 "compaction_count": state.compaction_count,
                 "edit_count": state.edit_count,
-                "active_plan_id": state.active_plan.plan_id if state.active_plan is not None else None,
-                "semantic_memory_count": len(state.semantic_memory),
                 "checkpoint_event_count": state.event_count,
                 "deferred_task_count": len(state.deferred_tasks),
                 "code_checkpoint_count": len(state.code_checkpoints),
@@ -779,113 +745,78 @@ class HistoryStore:
         state.event_count = event.sequence
         state.updated_at = event.timestamp
         state.last_event_hash = event.hash
-        if not state.agent_roles:
-            state.agent_roles = _default_agent_roles()
         self._update_metrics(state, event)
 
         if event.event_type == "session_created":
             state.session_id = str(payload["session_id"])
             state.created_at = str(payload["created_at"])
-            state.updated_at = event.timestamp
             state.config_fingerprint = str(payload["config_fingerprint"])
             state.model_base_url = str(payload["model_base_url"])
             state.session_name = str(payload.get("session_name") or _default_session_name(state.session_id))
             state.session_name_source = str(payload.get("session_name_source") or "placeholder")
-            if not state.agent_roles:
-                state.agent_roles = _default_agent_roles()
             return
-
         if event.event_type == "session_renamed":
             state.session_name = str(payload["new_name"])
             state.session_name_source = str(payload.get("reason") or "explicit")
             return
-
         if event.event_type == "message_added":
             state.messages.append(Message(**payload["message"]))
             return
-
         if event.event_type in {"history_compacted", "history_compressed"}:
             source_count = int(payload["source_message_count"])
             summary_message = Message(**payload["summary_message"])
             state.messages = [summary_message, *state.messages[source_count:]]
             state.compaction_count += 1
             return
-
         if event.event_type == "turn_finished":
             state.turn_count = int(payload["turn_index"])
             return
-
         if event.event_type == "deferred_task_queued":
             task = DeferredTask(**payload["task"])
             state.deferred_tasks = [item for item in state.deferred_tasks if item.task_id != task.task_id]
             state.deferred_tasks.append(task)
             return
-
         if event.event_type == "deferred_task_consumed":
             task_id = str(payload["task_id"])
             state.deferred_tasks = [item for item in state.deferred_tasks if item.task_id != task_id]
             return
-
         if event.event_type == "code_checkpoint_created":
             checkpoint = CodeCheckpoint(**payload["checkpoint"])
             state.code_checkpoints = [item for item in state.code_checkpoints if item.checkpoint_id != checkpoint.checkpoint_id]
             state.code_checkpoints.append(checkpoint)
             return
-
         if event.event_type == "code_checkpoint_restored":
             return
-
         if event.event_type == "note_added":
             note = Note(**payload["note"])
             state.notes = [item for item in state.notes if item.note_id != note.note_id]
             state.notes.append(note)
             return
-
-        if event.event_type == "role_switched":
-            state.active_role = str(payload["new_role"])
-            return
-
         if event.event_type == "note_replaced":
             note = Note(**payload["note"])
-            replaced = False
-            new_notes: list[Note] = []
-            for item in state.notes:
-                if item.note_id == note.note_id:
-                    new_notes.append(note)
-                    replaced = True
-                else:
-                    new_notes.append(item)
-            if not replaced:
-                new_notes.append(note)
-            state.notes = new_notes
+            state.notes = [note if item.note_id == note.note_id else item for item in state.notes]
+            if not any(item.note_id == note.note_id for item in state.notes):
+                state.notes.append(note)
             return
-
         if event.event_type == "notes_compacted":
-            removed_ids = set(payload["removed_note_ids"])
-            compacted_note = Note(**payload["compacted_note"])
-            state.notes = [item for item in state.notes if item.note_id not in removed_ids]
-            state.notes.append(compacted_note)
+            removed = {str(item) for item in payload["removed_note_ids"]}
+            compacted = Note(**payload["compacted_note"])
+            state.notes = [item for item in state.notes if item.note_id not in removed]
+            state.notes.append(compacted)
             return
-
-        if event.event_type == "reader_opened":
+        if event.event_type in {"reader_opened", "reader_chunk_read"}:
             reader = ReaderState(**payload["reader_state"])
             state.reader_states[reader.reader_id] = reader
             return
-
-        if event.event_type == "reader_chunk_read":
-            reader = ReaderState(**payload["reader_state"])
-            state.reader_states[reader.reader_id] = reader
-            return
-
         if event.event_type == "environment_initialized":
+            cwd = str(payload["cwd"])
             state.environment.workspace.root = str(payload["workspace_root"])
-            state.environment.workspace.cwd = str(payload["cwd"])
-            state.environment.shell.cwd = str(payload["cwd"])
-            state.environment.shell.env_overrides = {str(key): str(value) for key, value in payload.get("shell_env_overrides", {}).items()}
+            state.environment.workspace.cwd = cwd
+            state.environment.shell.cwd = cwd
+            state.environment.shell.env_overrides = {str(k): str(v) for k, v in payload.get("shell_env_overrides", {}).items()}
             state.environment.shell.unset_vars = [str(item) for item in payload.get("shell_unset_vars", [])]
             state.environment.last_updated = event.timestamp
             return
-
         if event.event_type == "filesystem_listed":
             listed = [str(item) for item in payload.get("entries", [])]
             state.environment.workspace.cwd = str(payload.get("cwd", state.environment.workspace.cwd))
@@ -893,7 +824,6 @@ class HistoryStore:
             state.environment.workspace.last_snapshot_at = event.timestamp
             state.environment.last_updated = event.timestamp
             return
-
         if event.event_type == "filesystem_read":
             rel = str(payload["relative_path"])
             text_value = str(payload["text"])
@@ -903,36 +833,31 @@ class HistoryStore:
             state.environment.workspace.last_snapshot_at = event.timestamp
             state.environment.last_updated = event.timestamp
             return
-
         if event.event_type == "workspace_snapshot":
-            files_payload = {str(key): str(value) for key, value in payload.get("files", {}).items()}
+            files = {str(k): str(v) for k, v in payload.get("files", {}).items()}
             state.environment.workspace.root = str(payload["workspace_root"])
             state.environment.workspace.cwd = str(payload["cwd"])
-            snapshot_mode = str(payload.get("snapshot_mode") or "full")
-            if snapshot_mode == "delta":
-                known_files = dict(state.environment.workspace.known_files)
-                for key, value in files_payload.items():
-                    known_files[key] = value
+            if str(payload.get("snapshot_mode") or "full") == "delta":
+                known = dict(state.environment.workspace.known_files)
+                known.update(files)
                 for key in payload.get("deleted_files", []):
-                    known_files.pop(str(key), None)
-                state.environment.workspace.known_files = known_files
-                listed_files = sorted(set(state.environment.workspace.listed_files) | set(known_files))
-                state.environment.workspace.listed_files = [item for item in listed_files if item not in payload.get("deleted_files", [])]
+                    known.pop(str(key), None)
+                state.environment.workspace.known_files = known
+                state.environment.workspace.listed_files = sorted(known)
             else:
-                state.environment.workspace.known_files = files_payload
-                state.environment.workspace.listed_files = sorted(files_payload)
+                state.environment.workspace.known_files = files
+                state.environment.workspace.listed_files = sorted(files)
             state.environment.workspace.created_files = [str(item) for item in payload.get("created_files", [])]
             state.environment.workspace.modified_files = [str(item) for item in payload.get("modified_files", [])]
             state.environment.workspace.deleted_files = [str(item) for item in payload.get("deleted_files", [])]
             state.environment.workspace.last_snapshot_at = str(payload.get("captured_at", event.timestamp))
-            if state.environment.workspace.created_files or state.environment.workspace.modified_files or state.environment.workspace.deleted_files:
+            if any((state.environment.workspace.created_files, state.environment.workspace.modified_files, state.environment.workspace.deleted_files)):
                 state.edit_count += 1
             state.environment.last_updated = event.timestamp
             return
-
         if event.event_type == "shell_command_completed":
             state.environment.shell.cwd = str(payload["cwd_after"])
-            state.environment.shell.env_overrides = {str(key): str(value) for key, value in payload.get("env_overrides", {}).items()}
+            state.environment.shell.env_overrides = {str(k): str(v) for k, v in payload.get("env_overrides", {}).items()}
             state.environment.shell.unset_vars = [str(item) for item in payload.get("unset_vars", [])]
             state.environment.shell.command_count += 1
             state.environment.shell.last_command = str(payload["command"])
@@ -942,27 +867,24 @@ class HistoryStore:
                 state.edit_count += 1
             state.environment.last_updated = event.timestamp
             return
-
         if event.event_type in {"process_started", "process_polled", "process_completed", "process_timed_out", "process_killed"}:
             process_id = str(payload["process_id"])
-            state.environment.processes[process_id] = ProcessRecord(**{key: value for key, value in payload.items() if key in ProcessRecord.__dataclass_fields__})
+            fields = ProcessRecord.__dataclass_fields__
+            state.environment.processes[process_id] = ProcessRecord(**{k: v for k, v in payload.items() if k in fields})
             state.environment.last_updated = event.timestamp
             return
-
         if event.event_type == "wait_entered":
             state.environment.waiting = True
             state.environment.waiting_reason = str(payload["reason"])
             state.environment.waiting_process_ids = [str(item) for item in payload.get("process_ids", [])]
             state.environment.last_updated = event.timestamp
             return
-
         if event.event_type == "wait_resumed":
             state.environment.waiting = False
             state.environment.waiting_reason = ""
             state.environment.waiting_process_ids = []
             state.environment.last_updated = event.timestamp
             return
-
         if event.event_type == "file_chunk_read":
             path = str(payload["source_ref"])
             view = state.file_views.get(path) or FileView(path=path)
@@ -974,17 +896,16 @@ class HistoryStore:
             view.updated_at = event.timestamp
             state.file_views[path] = view
             return
-
         if event.event_type == "file_read_for_edit":
             path = str(payload["path"])
+            text_value = str(payload["text"])
             view = state.file_views.get(path) or FileView(path=path)
-            view.content = str(payload["text"])
+            view.content = text_value
             view.last_operation = "file_read_for_edit"
             view.updated_at = event.timestamp
             state.file_views[path] = view
-            _update_environment_file(state, path, str(payload["text"]), event.timestamp)
+            _update_environment_file(state, path, text_value, event.timestamp)
             return
-
         if event.event_type == "edit_previewed":
             path = str(payload["path"])
             view = state.file_views.get(path) or FileView(path=path)
@@ -994,7 +915,6 @@ class HistoryStore:
             view.metadata["last_preview_operation"] = str(payload["operation"])
             state.file_views[path] = view
             return
-
         if event.event_type == "edit_applied":
             path = str(payload["path"])
             state.pending_file_writes[path] = str(payload["new_text"])
@@ -1006,7 +926,6 @@ class HistoryStore:
             state.file_views[path] = view
             state.edit_count += 1
             return
-
         if event.event_type == "file_write_applied":
             path = str(payload["path"])
             view = state.file_views.get(path) or FileView(path=path)
@@ -1019,7 +938,6 @@ class HistoryStore:
             if view.content is not None:
                 _update_environment_file(state, path, view.content, event.timestamp)
             return
-
         if event.event_type == "file_write_failed":
             path = str(payload["path"])
             state.pending_file_writes.pop(path, None)
@@ -1028,76 +946,9 @@ class HistoryStore:
             view.updated_at = event.timestamp
             view.metadata["write_error"] = str(payload["error"])
             state.file_views[path] = view
-            state.environment.last_updated = event.timestamp
             return
-
-        if event.event_type in {"plan_created", "plan_updated"}:
-            state.active_plan = _plan_from_payload(payload["plan"])
-            return
-
-        if event.event_type == "plan_completed":
-            if state.active_plan is not None and state.active_plan.plan_id == str(payload["plan_id"]):
-                state.active_plan.status = str(payload["status"])
-                state.active_plan.updated_at = event.timestamp
-            return
-
-        if event.event_type == "step_started":
-            if state.active_plan is not None and state.active_plan.plan_id == str(payload.get("plan_id", state.active_plan.plan_id)):
-                step_id = str(payload["step_id"])
-                current = next((item for item in state.active_plan.steps if item.step_id == step_id), None)
-                if current is not None and current.status == "pending":
-                    state.active_plan = mark_step_in_progress(state.active_plan, step_id)
-            return
-
-        if event.event_type == "step_completed":
-            if state.active_plan is not None and state.active_plan.plan_id == str(payload.get("plan_id", state.active_plan.plan_id)):
-                step_id = str(payload["step_id"])
-                current = next((item for item in state.active_plan.steps if item.step_id == step_id), None)
-                if current is not None and current.status == "running":
-                    state.active_plan = mark_step_completed(state.active_plan, step_id)
-            return
-
-        if event.event_type == "step_failed":
-            if state.active_plan is not None and state.active_plan.plan_id == str(payload.get("plan_id", state.active_plan.plan_id)):
-                step_id = str(payload["step_id"])
-                current = next((item for item in state.active_plan.steps if item.step_id == step_id), None)
-                if current is not None and current.status == "running":
-                    state.active_plan = mark_step_failed(state.active_plan, step_id)
-            return
-
-        if event.event_type == "prompt_analyzed":
-            state.prompt_analysis = PromptAnalysis(**payload["analysis"])
-            return
-
-        if event.event_type in {"decision_made", "decision_adjusted"}:
-            state.latest_decision = DecisionOutcome(**payload["decision"])
-            return
-
-        if event.event_type == "task_expanded":
-            state.expanded_task = ExpandedTask(**payload["expanded_task"])
-            return
-
-        if event.event_type == "strategy_selected":
-            state.active_strategy = StrategySelection(**payload["strategy"])
-            return
-
-        if event.event_type == "working_memory_updated":
-            state.working_memory = WorkingMemory(**payload["working_memory"])
-            return
-
-        if event.event_type == "memory_stored":
-            item = SemanticMemoryItem(**payload["memory"])
-            state.semantic_memory = [existing for existing in state.semantic_memory if existing.memory_id != item.memory_id]
-            state.semantic_memory.append(item)
-            return
-
-        if event.event_type == "project_state_updated":
-            state.project_state = ProjectState(**payload["project_state"])
-            return
-
         if event.event_type in _IGNORED_REBUILD_EVENT_TYPES:
             return
-
         raise HistoryCorruptionError(f"Unknown event type during rebuild: {event.event_type}")
 
     def _update_metrics(self, state: SessionState, event: HistoryEvent) -> None:
@@ -1112,84 +963,37 @@ class HistoryStore:
         elif event.event_type == "tool_called":
             metrics.tool_calls += 1
         elif event.event_type == "tool_result":
-            tool_name = str(payload.get("tool_name", ""))
-            metrics.tool_success_counts[tool_name] = metrics.tool_success_counts.get(tool_name, 0) + 1
+            name = str(payload.get("tool_name", ""))
+            metrics.tool_success_counts[name] = metrics.tool_success_counts.get(name, 0) + 1
         elif event.event_type == "tool_error":
             metrics.tool_failures += 1
-            tool_name = str(payload.get("tool_name", ""))
-            metrics.tool_failure_counts[tool_name] = metrics.tool_failure_counts.get(tool_name, 0) + 1
-        elif event.event_type == "step_started":
-            metrics.steps_started += 1
-        elif event.event_type == "step_completed":
-            metrics.steps_completed += 1
-        elif event.event_type == "step_failed":
-            metrics.steps_failed += 1
-        elif event.event_type == "verification_passed":
-            metrics.verification_passes += 1
-        elif event.event_type == "verification_failed":
-            metrics.verification_failures += 1
-        elif event.event_type == "verification_type_used":
-            verification_type = str(payload.get("verification_type_used", ""))
-            if verification_type:
-                metrics.verification_type_distribution[verification_type] = (
-                    metrics.verification_type_distribution.get(verification_type, 0) + 1
-                )
+            name = str(payload.get("tool_name", ""))
+            metrics.tool_failure_counts[name] = metrics.tool_failure_counts.get(name, 0) + 1
         elif event.event_type in {"model_request_progress", "model_token_progress"}:
             metrics.model_request_progress_events += 1
         elif event.event_type == "model_retry_scheduled":
             metrics.model_retry_events += 1
         elif event.event_type == "retry_triggered":
             metrics.retries += 1
-        elif event.event_type == "replan_triggered":
-            metrics.replans += 1
         elif event.event_type == "budget_rejected":
             metrics.budget_rejections += 1
         elif event.event_type == "token_estimate_used":
             metrics.token_estimate_uses += 1
-        elif event.event_type == "strategy_selected":
-            metrics.strategy_switches += 1
-        elif event.event_type == "action_selected":
+        elif event.event_type in {"agent_action_selected", "action_selected"}:
             metrics.action_count += 1
-            selected_action = str(payload.get("selected_action", ""))
-            action_costs = {
-                "execute_step": 1.5,
-                "answer_directly": 1.0,
-                "retry_step": 1.25,
-                "replan": 1.75,
-                "stop": 0.25,
-            }
-            metrics.total_cost_units += action_costs.get(selected_action, 1.0)
         elif event.event_type == "prompt_built":
-            budget_report = payload.get("budget_report", {})
-            if isinstance(budget_report, dict):
-                metrics.input_tokens += int(budget_report.get("input_tokens", 0))
-                metrics.reserved_response_tokens += int(budget_report.get("reserved_response_tokens", 0))
-        elif event.event_type == "reasoning_completed":
-            status = str(payload.get("status", ""))
-            reason = str(payload.get("reason", ""))
-            metrics.last_reasoning_status = status
-            metrics.last_reasoning_reason = reason
-            metrics.stop_reason_counts[reason] = metrics.stop_reason_counts.get(reason, 0) + 1
-            if status == "completed":
+            report = payload.get("budget_report", {})
+            if isinstance(report, dict):
+                metrics.input_tokens += int(report.get("input_tokens", 0))
+                metrics.reserved_response_tokens += int(report.get("reserved_response_tokens", 0))
+        elif event.event_type == "turn_finished":
+            if str(payload.get("status", "completed")) == "completed":
                 metrics.successful_turns += 1
             else:
                 metrics.failed_turns += 1
-            if reason == "tool_call_budget_reached":
-                metrics.tool_call_budget_hits += 1
-            if reason == "max_iterations_reached":
-                metrics.max_iteration_stops += 1
-            if reason == "no_progress_possible":
-                metrics.no_progress_stops += 1
-        if event.event_type in {"step_failed", "verification_failed", "tool_error", "error"}:
-            key = payload.get("error_type") or payload.get("failure_kind") or event.event_type
-            key = str(key)
+        if event.event_type in {"tool_error", "error"}:
+            key = str(payload.get("error_type") or event.event_type)
             metrics.failure_counts[key] = metrics.failure_counts.get(key, 0) + 1
-        total_verifications = metrics.verification_passes + metrics.verification_failures
-        if total_verifications > 0:
-            metrics.verification_success_rate = metrics.verification_passes / total_verifications
-            metrics.verification_failure_rate = metrics.verification_failures / total_verifications
-            llm_fallback_count = metrics.verification_type_distribution.get("llm_fallback", 0)
-            metrics.llm_fallback_rate = llm_fallback_count / total_verifications
 
 
 class HistoryGuard:
@@ -1232,41 +1036,6 @@ class HistoryGuard:
             raise HistoryInvariantError(f"Operation {self._operation_name} completed without recording any history event")
 
 
-def _plan_from_payload(payload: dict[str, Any]) -> Plan:
-    normalized_steps = []
-    for step_payload in payload.get("steps", []):
-        step_payload = dict(step_payload)
-        step_payload.setdefault("goal", step_payload.get("title", ""))
-        step_payload.setdefault("input_text", "")
-        step_payload.setdefault("expected_outputs", [step_payload.get("expected_output", "")] if step_payload.get("expected_output") else [])
-        step_payload.setdefault("verification_type", "llm_fallback")
-        step_payload.setdefault("verification_checks", [])
-        step_payload.setdefault("required_conditions", [])
-        step_payload.setdefault("optional_conditions", [])
-        step_payload.setdefault("input_refs", [])
-        step_payload.setdefault("output_refs", [])
-        if "done_condition" not in step_payload:
-            if step_payload.get("kind") == "respond":
-                step_payload["done_condition"] = "assistant_response_nonempty"
-            elif step_payload.get("expected_tool"):
-                step_payload["done_condition"] = f"tool_result:{step_payload['expected_tool']}"
-            else:
-                step_payload["done_condition"] = "reasoning_result_nonempty"
-        normalized_steps.append(step_payload)
-    steps = [PlanStep(**step_payload) for step_payload in normalized_steps]
-    return Plan(
-        plan_id=str(payload["plan_id"]),
-        goal=str(payload["goal"]),
-        steps=steps,
-        success_criteria=str(payload["success_criteria"]),
-        fallback_strategy=str(payload.get("fallback_strategy", "")),
-        status=str(payload["status"]),
-        created_at=str(payload["created_at"]),
-        updated_at=str(payload["updated_at"]),
-        current_step_id=payload.get("current_step_id"),
-    )
-
-
 def _state_from_payload(payload: dict[str, Any]) -> SessionState:
     return SessionState(
         session_id=str(payload["session_id"]),
@@ -1280,21 +1049,15 @@ def _state_from_payload(payload: dict[str, Any]) -> SessionState:
         notes=[Note(**item) for item in payload.get("notes", [])],
         reader_states={key: ReaderState(**value) for key, value in payload.get("reader_states", {}).items()},
         file_views={key: FileView(**value) for key, value in payload.get("file_views", {}).items()},
-        pending_file_writes={str(key): str(value) for key, value in payload.get("pending_file_writes", {}).items()},
-        active_plan=_plan_from_payload(payload["active_plan"]) if payload.get("active_plan") else None,
-        prompt_analysis=PromptAnalysis(**payload["prompt_analysis"]) if payload.get("prompt_analysis") else None,
-        latest_decision=DecisionOutcome(**payload["latest_decision"]) if payload.get("latest_decision") else None,
-        expanded_task=ExpandedTask(**payload["expanded_task"]) if payload.get("expanded_task") else None,
-        active_strategy=StrategySelection(**payload["active_strategy"]) if payload.get("active_strategy") else None,
-        working_memory=WorkingMemory(**payload.get("working_memory", {})),
-        semantic_memory=[SemanticMemoryItem(**item) for item in payload.get("semantic_memory", [])],
-        project_state=ProjectState(**payload.get("project_state", {})),
+        pending_file_writes={str(k): str(v) for k, v in payload.get("pending_file_writes", {}).items()},
         environment=_environment_from_payload(payload.get("environment", {})),
         deferred_tasks=[DeferredTask(**item) for item in payload.get("deferred_tasks", [])],
         code_checkpoints=[CodeCheckpoint(**item) for item in payload.get("code_checkpoints", [])],
-        metrics=SessionMetrics(**payload.get("metrics", {})),
-        agent_roles=[AgentRoleDefinition(**item) for item in payload.get("agent_roles", [])] or _default_agent_roles(),
-        active_role=str(payload.get("active_role", "primary")),
+        metrics=SessionMetrics(**{
+            key: value
+            for key, value in payload.get("metrics", {}).items()
+            if key in SessionMetrics.__dataclass_fields__
+        }),
         turn_count=int(payload.get("turn_count", 0)),
         compaction_count=int(payload.get("compaction_count", 0)),
         event_count=int(payload.get("event_count", 0)),

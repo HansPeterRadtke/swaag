@@ -26,7 +26,7 @@ def test_trusted_tool_result_promotes_to_semantic_memory(make_config) -> None:
         ]
     )
     runtime = AgentRuntime(config, model_client=fake_client)
-    result = runtime.run_turn(goal)
+    result = runtime.run_turn_legacy(goal)
     state = runtime.history.rebuild_from_history(result.session_id)
 
     assert any(item.metadata.get("source_event_type") == "tool_result" for item in state.semantic_memory)
@@ -58,7 +58,7 @@ def test_untrusted_file_content_is_not_promoted_to_semantic_memory(make_config, 
         ]
     )
     runtime = AgentRuntime(config, model_client=fake_client)
-    result = runtime.run_turn(goal)
+    result = runtime.run_turn_legacy(goal)
     state = runtime.history.rebuild_from_history(result.session_id)
     events = runtime.history.read_history(result.session_id)
 
@@ -84,7 +84,7 @@ def test_consistency_checker_recovers_semantic_memory(make_config) -> None:
         ]
     )
     runtime = AgentRuntime(config, model_client=fake_client)
-    result = runtime.run_turn(goal)
+    result = runtime.run_turn_legacy(goal)
     state = runtime.history.rebuild_from_history(result.session_id)
     state.semantic_memory.clear()
 
@@ -118,7 +118,7 @@ def test_step_completion_is_promoted_to_derived_semantic_memory(make_config) -> 
     )
     runtime = AgentRuntime(config, model_client=fake_client)
 
-    result = runtime.run_turn(goal)
+    result = runtime.run_turn_legacy(goal)
     state = runtime.history.rebuild_from_history(result.session_id)
 
     assert any(item.metadata.get("source_event_type") == "step_completed" for item in state.semantic_memory)

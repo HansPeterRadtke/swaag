@@ -28,7 +28,7 @@ def test_build_working_memory_uses_plan_and_recent_results(make_config) -> None:
         ]
     )
     runtime = AgentRuntime(config, model_client=fake_client)
-    result = runtime.run_turn(goal)
+    result = runtime.run_turn_legacy(goal)
     state = runtime.history.rebuild_from_history(result.session_id)
     working_memory = build_working_memory(state)
 
@@ -58,7 +58,7 @@ def test_working_memory_rebuild_matches_original(make_config) -> None:
         ]
     )
     runtime = AgentRuntime(config, model_client=fake_client)
-    result = runtime.run_turn(goal)
+    result = runtime.run_turn_legacy(goal)
     state_before = runtime.history.rebuild_from_history(result.session_id)
     runtime.history.current_state_path(result.session_id).unlink()
     rebuilt = runtime.history.rebuild_from_history(result.session_id)
@@ -85,7 +85,7 @@ def test_consistency_checker_recovers_working_memory(make_config) -> None:
         ]
     )
     runtime = AgentRuntime(config, model_client=fake_client)
-    result = runtime.run_turn(goal)
+    result = runtime.run_turn_legacy(goal)
     state = runtime.history.rebuild_from_history(result.session_id)
     state.working_memory.active_goal = "corrupted"
 

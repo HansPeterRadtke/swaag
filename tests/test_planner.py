@@ -143,7 +143,7 @@ def test_plan_from_payload_rejects_missing_verification_contract() -> None:
         ],
     }
 
-    with pytest.raises(PlanValidationError, match="must declare expected_outputs"):
+    with pytest.raises(PlanValidationError, match="invalid verification_type"):
         plan_from_payload(payload, available_tools=["calculator"])
 
 
@@ -464,8 +464,10 @@ def test_plan_from_payload_canonicalizes_assistant_response_actual_source() -> N
     plan = plan_from_payload(payload, available_tools=["calculator"])
 
     answer_check = next(check for check in plan.steps[0].verification_checks if check["name"] == "answer_exact")
+    assert answer_check["check_type"] == "criterion"
     assert answer_check["actual_source"] == "assistant_text"
-    assert answer_check["expected"] == "done"
+    assert answer_check["criterion"] == "The answer describes the final state."
+    assert answer_check["expected"] == ""
 
 
 def test_plan_from_payload_rejects_file_contains_without_textual_target() -> None:
@@ -671,7 +673,7 @@ def test_runtime_creates_plan_before_tool_execution(make_config) -> None:
         ]
     )
     runtime = AgentRuntime(config, model_client=fake_client)
-    result = runtime.run_turn(goal)
+    result = runtime.run_turn_legacy(goal)
     events = runtime.history.read_history(result.session_id)
 
     plan_created = next(event for event in events if event.event_type == "plan_created")
@@ -698,7 +700,7 @@ def test_replay_restores_completed_plan(make_config) -> None:
         ]
     )
     runtime = AgentRuntime(config, model_client=fake_client)
-    result = runtime.run_turn(goal)
+    result = runtime.run_turn_legacy(goal)
     rebuilt = runtime.history.rebuild_from_history(result.session_id)
 
     assert rebuilt.active_plan is not None
@@ -718,7 +720,7 @@ def test_runtime_rejects_malformed_plan_and_records_fatal_plan_error(make_config
     runtime = AgentRuntime(config, model_client=fake_client)
 
     with pytest.raises(FatalSemanticEngineError):
-        runtime.run_turn(goal)
+        runtime.run_turn_legacy(goal)
 
     session_id = next(path.name for path in runtime.history.root.iterdir() if path.is_dir())
     events = runtime.history.read_history(session_id)
@@ -953,14 +955,20 @@ def test_plan_parser_collapses_exact_regular_check_duplicate() -> None:
     assert plan.steps[0].required_conditions.count(name) == 1
 
 
-def test_plan_parser_rejects_conflicting_regular_check_duplicate() -> None:
+def test_plan_parser_renames_conflicting_local_check_duplicate() -> None:
     payload = _duplicate_objective_payload()
     step = payload["steps"][0]
     duplicate = dict(step["verification_checks"][0])
     duplicate["check_type"] = "tool_output_nonempty"
+    duplicate["artifact"] = "secondary_output"
     step["verification_checks"].append(duplicate)
-    with pytest.raises(PlanValidationError, match=f"duplicate verification check name {duplicate['name']}"):
-        plan_from_payload(payload, available_tools=["read_file"])
+
+    plan = plan_from_payload(payload, available_tools=["read_file"])
+    names = [check["name"] for check in plan.steps[0].verification_checks]
+
+    assert duplicate["name"] in names
+    assert f"{duplicate['name']}__secondary_output" in names
+    assert f"{duplicate['name']}__secondary_output" in plan.steps[0].required_conditions
 
 
 def test_plan_from_payload_accepts_and_strips_completed_external_dependency() -> None:
@@ -1172,3 +1180,286 @@ def test_plan_parser_compiles_response_value_source_to_assistant_text() -> None:
     check = plan.steps[0].verification_checks[0]
 
     assert check["actual_source"] == "assistant_text"
+
+
+def test_plan_from_payload_derives_missing_expected_outputs_from_output_refs() -> None:
+    steps = [
+        plan_step(
+            "read_file",
+            "Read file",
+            "read",
+            expected_tool="read_file",
+            expected_output="file contents",
+            success_criteria="The file is read.",
+            output_refs=["file_content"],
+        ),
+        plan_step(
+            "answer",
+            "Answer",
+            "respond",
+            expected_output="summary",
+            success_criteria="A summary is returned.",
+            depends_on=["read_file"],
+        ),
+    ]
+    steps[0].pop("expected_outputs", None)
+    steps[1].pop("expected_outputs", None)
+
+    plan = plan_from_payload(_payload("Read and answer.", steps), available_tools=["read_file"])
+
+    assert plan.steps[0].expected_outputs == ["file_content"]
+    assert plan.steps[1].expected_outputs == ["summary"]
+
+
+def test_plan_from_payload_removes_direct_self_dependency() -> None:
+    steps = [
+        plan_step(
+            "read_file",
+            "Read file",
+            "read",
+            expected_tool="read_file",
+            expected_output="file contents",
+            success_criteria="The file is read.",
+            depends_on=["read_file"],
+        ),
+        plan_step(
+            "answer",
+            "Answer",
+            "respond",
+            expected_output="summary",
+            success_criteria="A summary is returned.",
+            depends_on=["read_file"],
+        ),
+    ]
+
+    plan = plan_from_payload(_payload("Read and answer.", steps), available_tools=["read_file"])
+
+    assert plan.steps[0].depends_on == []
+    assert plan.steps[1].depends_on == ["read_file"]
+
+
+def test_plan_from_payload_resolves_unique_output_label_dependency() -> None:
+    steps = [
+        plan_step(
+            "run_tests",
+            "Run tests",
+            "write",
+            expected_tool="run_tests",
+            expected_output="test results",
+            success_criteria="The tests pass.",
+            output_refs=["test_results"],
+        ),
+        plan_step(
+            "answer",
+            "Answer",
+            "respond",
+            expected_output="summary",
+            success_criteria="A summary is returned.",
+            depends_on=["test_results"],
+        ),
+    ]
+
+    plan = plan_from_payload(_payload("Test and answer.", steps), available_tools=["run_tests"])
+
+    assert plan.steps[1].depends_on == ["run_tests"]
+
+
+def test_plan_parser_splits_compound_read_file_step() -> None:
+    inspect = plan_step(
+        "inspect_files",
+        "Inspect files",
+        "read",
+        expected_tool="read_file",
+        input_text="Read `pkg/a.py` and `pkg/b.py`.",
+        expected_output="file contents",
+        output_refs=["a_content", "b_content"],
+        success_criteria="Both files are read.",
+        verification_checks=[
+            {"name": "file_read", "check_type": "tool_output_nonempty", "artifact": "a_content", "condition": "required"},
+            {"name": "file_read", "check_type": "tool_output_nonempty", "artifact": "b_content", "condition": "required"},
+        ],
+        required_conditions=["file_read"],
+        optional_conditions=[],
+    )
+    inspect["expected_outputs"] = ["a_content", "b_content"]
+    payload = _payload(
+        "Inspect two files and answer.",
+        [
+            inspect,
+            plan_step(
+                "answer",
+                "Answer",
+                "respond",
+                expected_output="summary",
+                success_criteria="A summary is returned.",
+                depends_on=["inspect_files"],
+            ),
+        ],
+    )
+
+    plan = plan_from_payload(payload, available_tools=["read_file"])
+
+    assert [step.step_id for step in plan.steps] == ["inspect_files__1", "inspect_files", "answer"]
+    assert plan.steps[0].input_text.endswith("pkg/a.py")
+    assert plan.steps[1].input_text.endswith("pkg/b.py")
+    assert plan.steps[0].output_refs == ["a_content"]
+    assert plan.steps[1].output_refs == ["b_content"]
+    assert plan.steps[1].depends_on == ["inspect_files__1"]
+    assert plan.steps[2].depends_on == ["inspect_files"]
+
+
+def test_plan_parser_splits_compound_edit_text_step_using_read_outputs() -> None:
+    inspect = plan_step(
+        "inspect_files",
+        "Inspect files",
+        "read",
+        expected_tool="read_file",
+        input_text="Read `pkg/a.py` and `pkg/b.py`.",
+        expected_output="file contents",
+        output_refs=["a_content", "b_content"],
+        success_criteria="Both files are read.",
+    )
+    inspect["expected_outputs"] = ["a_content", "b_content"]
+    edit = plan_step(
+        "edit_files",
+        "Edit files",
+        "write",
+        expected_tool="edit_text",
+        input_text="Apply the required fixes.",
+        expected_output="edited files",
+        input_refs=["a_content", "b_content"],
+        output_refs=["a_edited", "b_edited"],
+        success_criteria="Both files are edited.",
+        depends_on=["inspect_files"],
+    )
+    edit["expected_outputs"] = ["a_edited", "b_edited"]
+    payload = _payload(
+        "Inspect, edit, test, and answer.",
+        [
+            inspect,
+            edit,
+            plan_step(
+                "answer",
+                "Answer",
+                "respond",
+                expected_output="summary",
+                success_criteria="A summary is returned.",
+                depends_on=["edit_files"],
+            ),
+        ],
+    )
+
+    plan = plan_from_payload(payload, available_tools=["read_file", "edit_text"])
+
+    assert [step.step_id for step in plan.steps] == [
+        "inspect_files__1",
+        "inspect_files",
+        "edit_files__1",
+        "edit_files",
+        "answer",
+    ]
+    assert "pkg/a.py" in plan.steps[2].input_text
+    assert "pkg/b.py" in plan.steps[3].input_text
+    assert plan.steps[2].input_refs == ["a_content"]
+    assert plan.steps[3].input_refs == ["b_content"]
+    assert plan.steps[3].depends_on == ["edit_files__1"]
+    assert plan.steps[4].depends_on == ["edit_files"]
+
+
+def test_plan_parser_converts_nonliteral_response_exact_match_to_criterion() -> None:
+    payload = _payload(
+        "Repair and summarize.",
+        [
+            plan_step(
+                "answer",
+                "Summarize changes",
+                "respond",
+                input_text="Summarize the verified changes.",
+                expected_output="The tokenizer uses pipes and normalization uses lowercase.",
+                success_criteria="The verified changes are accurately summarized.",
+                verification_checks=[
+                    {
+                        "name": "assistant_text",
+                        "check_type": "exact_match",
+                        "actual_source": "assistant_text",
+                        "expected": "The tokenizer uses pipes and normalization uses uppercase.",
+                    }
+                ],
+                required_conditions=["assistant_text"],
+                optional_conditions=[],
+            )
+        ],
+    )
+
+    plan = plan_from_payload(payload, available_tools=[])
+    check = plan.steps[0].verification_checks[0]
+
+    assert check["check_type"] == "criterion"
+    assert check["actual_source"] == "assistant_text"
+    assert check["criterion"] == "The verified changes are accurately summarized."
+    assert check["expected"] == ""
+
+
+def test_plan_parser_preserves_exact_match_for_explicit_literal_response() -> None:
+    payload = _payload(
+        "Return exactly DONE.",
+        [
+            plan_step(
+                "answer",
+                "Return literal answer",
+                "respond",
+                input_text="Reply exactly DONE and nothing else.",
+                expected_output="DONE",
+                success_criteria="The answer must equal DONE exactly.",
+                verification_checks=[
+                    {
+                        "name": "answer_exact",
+                        "check_type": "exact_match",
+                        "actual_source": "assistant_text",
+                        "expected": "DONE",
+                    }
+                ],
+                required_conditions=["answer_exact"],
+                optional_conditions=[],
+            )
+        ],
+    )
+
+    plan = plan_from_payload(payload, available_tools=[])
+    check = plan.steps[0].verification_checks[0]
+
+    assert check["check_type"] == "exact_match"
+    assert check["expected"] == "DONE"
+    assert check["actual_source"] == "assistant_text"
+
+
+def test_plan_parser_preserves_short_literal_requested_without_exactly_keyword() -> None:
+    payload = _payload(
+        "Update the file and answer done.",
+        [
+            plan_step(
+                "answer",
+                "Answer",
+                "respond",
+                input_text="Answer done after verification.",
+                expected_output="done",
+                success_criteria="Answer done after the final state is proven.",
+                verification_checks=[
+                    {
+                        "name": "answer_exact",
+                        "check_type": "exact_match",
+                        "actual_source": "assistant_text",
+                        "expected": "done",
+                    }
+                ],
+                required_conditions=["answer_exact"],
+                optional_conditions=[],
+            )
+        ],
+    )
+
+    plan = plan_from_payload(payload, available_tools=[])
+    check = plan.steps[0].verification_checks[0]
+
+    assert check["check_type"] == "exact_match"
+    assert check["expected"] == "done"

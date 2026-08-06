@@ -231,7 +231,7 @@ def test_runtime_tool_flow_records_budget_reports(make_config) -> None:
         ]
     )
     runtime = AgentRuntime(config, model_client=fake_client)
-    result = runtime.run_turn(goal)
+    result = runtime.run_turn_legacy(goal)
     events = runtime.history.read_history(result.session_id)
 
     assert result.assistant_text == "4"
@@ -505,7 +505,7 @@ def test_runtime_immediate_clarification_mode_does_not_plan_or_call_tools(make_c
     })
     runtime = AgentRuntime(make_config(), model_client=client)
 
-    result = runtime.run_turn("Make the rollout safer.")
+    result = runtime.run_turn_legacy("Make the rollout safer.")
     contracts = [request["contract"] for request in client.requests]
     events = runtime.history.read_history(result.session_id)
 
@@ -575,7 +575,7 @@ def test_runtime_allows_repeated_identical_tool_requests_across_distinct_steps(m
         ]
     )
     runtime = AgentRuntime(config, model_client=fake_client)
-    result = runtime.run_turn(goal)
+    result = runtime.run_turn_legacy(goal)
     events = runtime.history.read_history(result.session_id)
 
     assert result.assistant_text == "4"
@@ -606,7 +606,7 @@ def test_runtime_retries_failed_model_request(make_config) -> None:
         ]
     )
     runtime = AgentRuntime(config, model_client=fake_client)
-    result = runtime.run_turn(goal)
+    result = runtime.run_turn_legacy(goal)
     events = runtime.history.read_history(result.session_id)
 
     assert result.assistant_text == "ok"
@@ -679,7 +679,7 @@ def test_runtime_raises_budget_error_when_compaction_disabled(make_config) -> No
     fake_client = FakeModelClient(responses=[])
     runtime = AgentRuntime(config, model_client=fake_client)
     with pytest.raises(BudgetExceededError):
-        runtime.run_turn("word " * 20)
+        runtime.run_turn_legacy("word " * 20)
 
 
 def test_same_input_and_same_model_responses_produce_identical_requests(make_config) -> None:
@@ -725,7 +725,7 @@ def test_runtime_updates_project_state_for_file_work(make_config, tmp_path: Path
         ]
     )
     runtime = AgentRuntime(config, model_client=fake_client)
-    result = runtime.run_turn(goal)
+    result = runtime.run_turn_legacy(goal)
     state = runtime.history.rebuild_from_history(result.session_id)
     events = runtime.history.read_history(result.session_id)
 
@@ -808,7 +808,7 @@ def test_runtime_keeps_project_state_consistent_when_plan_and_step_status_change
         ]
     )
     runtime = AgentRuntime(config, model_client=fake_client)
-    result = runtime.run_turn(goal)
+    result = runtime.run_turn_legacy(goal)
     events = runtime.history.read_history(result.session_id)
 
     assert not any(
@@ -908,7 +908,7 @@ def test_runtime_retries_after_verification_failure(make_config) -> None:
     )
     runtime = AgentRuntime(config, model_client=fake_client)
 
-    result = runtime.run_turn(goal)
+    result = runtime.run_turn_legacy(goal)
     events = runtime.history.read_history(result.session_id)
 
     assert result.assistant_text == "4"
@@ -988,7 +988,7 @@ def test_runtime_continues_other_ready_work_while_background_process_runs(make_c
     )
     runtime = AgentRuntime(config, model_client=fake_client)
 
-    result = runtime.run_turn(goal)
+    result = runtime.run_turn_legacy(goal)
     events = runtime.history.read_history(result.session_id)
     event_types = [event.event_type for event in events]
 
@@ -1070,7 +1070,7 @@ def test_runtime_enters_wait_state_when_only_background_work_remains(make_config
     )
     runtime = AgentRuntime(config, model_client=fake_client)
 
-    result = runtime.run_turn(goal)
+    result = runtime.run_turn_legacy(goal)
     event_types = [event.event_type for event in runtime.history.read_history(result.session_id)]
 
     assert result.assistant_text == "ready"
@@ -1143,7 +1143,7 @@ def test_runtime_metrics_are_derived_from_history(make_config) -> None:
         ]
     )
     runtime = AgentRuntime(config, model_client=fake_client)
-    result = runtime.run_turn(goal)
+    result = runtime.run_turn_legacy(goal)
     rebuilt = runtime.history.rebuild_from_history(result.session_id)
 
     assert rebuilt.metrics.model_calls >= 3
@@ -1194,7 +1194,7 @@ def test_runtime_records_model_token_progress_for_streaming_calls(make_config) -
         ),
     )
 
-    result = runtime.run_turn(goal)
+    result = runtime.run_turn_legacy(goal)
     events = runtime.history.read_history(result.session_id)
 
     assert result.assistant_text == "17"
@@ -1255,7 +1255,7 @@ def test_runtime_refines_a_write_step_across_multiple_tool_attempts(make_config,
     )
     runtime = AgentRuntime(config, model_client=fake_client)
 
-    result = runtime.run_turn(goal)
+    result = runtime.run_turn_legacy(goal)
     events = runtime.history.read_history(result.session_id)
 
     assert "done" in result.assistant_text
@@ -1322,7 +1322,7 @@ def test_runtime_uses_model_driven_frontend_contracts(make_config) -> None:
     )
     runtime = AgentRuntime(config, model_client=fake_client)
 
-    runtime.run_turn(goal)
+    runtime.run_turn_legacy(goal)
 
     contracts = [request["contract"] for request in fake_client.requests]
     semantic_contracts = [contract for contract in contracts if contract != "subagent_selection"]
@@ -1408,7 +1408,7 @@ def test_runtime_uses_model_authored_plan_for_model_selected_direct_answer(make_
     )
     runtime = AgentRuntime(config, model_client=fake_client)
 
-    result = runtime.run_turn(goal)
+    result = runtime.run_turn_legacy(goal)
     events = runtime.history.read_history(result.session_id)
     contracts = [request["contract"] for request in fake_client.requests]
 
@@ -1536,7 +1536,7 @@ def test_runtime_blocks_direct_response_when_strategy_requires_write_steps(make_
     )
     runtime = AgentRuntime(config, model_client=fake_client)
 
-    result = runtime.run_turn(goal)
+    result = runtime.run_turn_legacy(goal)
     events = runtime.history.read_history(result.session_id)
 
     assert "Patched app.py" in result.assistant_text
@@ -1895,7 +1895,7 @@ def test_runtime_enforces_tool_call_budget(make_config) -> None:
     )
     runtime = AgentRuntime(config, model_client=fake_client)
 
-    result = runtime.run_turn(goal)
+    result = runtime.run_turn_legacy(goal)
     rebuilt = runtime.history.rebuild_from_history(result.session_id)
     events = runtime.history.read_history(result.session_id)
 
@@ -1930,7 +1930,7 @@ def test_runtime_is_deterministic_across_seeded_randomized_calculator_tasks(make
             ]
         )
         runtime = AgentRuntime(config, model_client=fake_client)
-        result = runtime.run_turn(goal)
+        result = runtime.run_turn_legacy(goal)
         rebuilt = runtime.history.rebuild_from_history(result.session_id)
         outputs.append(result.assistant_text)
 
@@ -2002,7 +2002,7 @@ def test_runtime_rejects_evaluator_override_of_deterministic_verification_failur
     )
 
     with pytest.raises(HistoryInvariantError):
-        runtime.run_turn(goal)
+        runtime.run_turn_legacy(goal)
 
 
 
@@ -2453,3 +2453,437 @@ def test_plan_semantic_review_evidence_does_not_reembed_prior_review_evidence(ma
     ]
     assert "review_evidence" not in encoded
     assert len(encoded) < 500
+
+
+def _run_tests_plan_payload(*, check_type: str | None, include_read: bool = False) -> dict[str, Any]:
+    steps: list[dict[str, Any]] = []
+    if include_read:
+        steps.append(
+            plan_step(
+                "inspect_failure",
+                "Inspect failure evidence",
+                "read",
+                expected_tool="read_file",
+                expected_output="current file content",
+                success_criteria="Current implementation evidence is gathered.",
+                output_refs=["current_file_content"],
+            )
+        )
+    checks = [{"name": "dependencies_completed", "check_type": "dependencies_completed"}]
+    required = ["dependencies_completed"]
+    if check_type is not None:
+        checks.append({"name": "test_result", "check_type": check_type})
+        required.append("test_result")
+    steps.append(
+        plan_step(
+            "run_tests",
+            "Run tests",
+            "tool",
+            expected_tool="run_tests",
+            expected_output="test result",
+            success_criteria="The tests pass." if check_type == "tool_result_success" else "Diagnostic test output is captured.",
+            depends_on=["inspect_failure"] if include_read else [],
+            verification_checks=checks,
+            required_conditions=required,
+            optional_conditions=[],
+        )
+    )
+    steps.append(
+        plan_step(
+            "answer",
+            "Answer",
+            "respond",
+            expected_output="summary",
+            success_criteria="A summary is returned.",
+            depends_on=["run_tests"],
+        )
+    )
+    return json.loads(plan_response(goal="Repair and verify.", steps=steps))
+
+
+def test_runtime_requires_run_tests_objective_or_diagnostic_check(make_config) -> None:
+    runtime = AgentRuntime(make_config(tools__allow_stateful_tools=True), model_client=FakeModelClient())
+    plan = plan_from_payload(_run_tests_plan_payload(check_type=None), available_tools=["run_tests"])
+
+    with pytest.raises(PlanValidationError, match="required_conditions lack an objective state check"):
+        runtime._validate_tool_objective_verification(plan)
+
+
+def test_runtime_accepts_explicit_diagnostic_run_tests_check(make_config) -> None:
+    runtime = AgentRuntime(make_config(tools__allow_stateful_tools=True), model_client=FakeModelClient())
+    plan = plan_from_payload(_run_tests_plan_payload(check_type="tool_output_nonempty"), available_tools=["run_tests"])
+
+    runtime._validate_tool_objective_verification(plan)
+
+
+def _failed_test_history_events() -> list[SimpleNamespace]:
+    failed_plan = plan_from_payload(
+        _run_tests_plan_payload(check_type="tool_result_success"),
+        available_tools=["run_tests"],
+    )
+    return [
+        SimpleNamespace(
+            sequence=1,
+            event_type="plan_created",
+            payload={"plan": runtime_module.plan_as_payload(failed_plan)},
+        ),
+        SimpleNamespace(
+            sequence=2,
+            event_type="verification_failed",
+            payload={"step_id": "run_tests", "conditions_failed": ["test_result"], "reason": "test_result"},
+        ),
+    ]
+
+
+def test_failed_test_objective_cannot_be_deferred_to_final_response(make_config, monkeypatch) -> None:
+    runtime = AgentRuntime(make_config(tools__allow_stateful_tools=True), model_client=FakeModelClient())
+    state = runtime.create_or_load_session()
+    monkeypatch.setattr(runtime, "_current_turn_history_events", lambda _state: _failed_test_history_events())
+    response_only = plan_from_payload(
+        json.loads(
+            plan_response(
+                goal="Repair and verify.",
+                steps=[
+                    plan_step(
+                        "answer",
+                        "Answer",
+                        "respond",
+                        expected_output="summary",
+                        success_criteria="The repaired and verified result is summarized.",
+                        verification_checks=[
+                            {
+                                "name": "result_summary",
+                                "check_type": "criterion",
+                                "actual_source": "assistant_text",
+                                "criterion": "The repaired and verified result is summarized.",
+                            }
+                        ],
+                        required_conditions=["result_summary"],
+                        optional_conditions=[],
+                    )
+                ],
+            )
+        ),
+        available_tools=[],
+    )
+
+    with pytest.raises(PlanValidationError, match="cannot defer a failed test objective"):
+        runtime._validate_unresolved_objective_verification_preserved(state, response_only)
+
+
+def test_failed_test_recovery_rejects_bare_rerun(make_config, monkeypatch) -> None:
+    runtime = AgentRuntime(make_config(tools__allow_stateful_tools=True), model_client=FakeModelClient())
+    state = runtime.create_or_load_session()
+    monkeypatch.setattr(runtime, "_current_turn_history_events", lambda _state: _failed_test_history_events())
+    bare_rerun = plan_from_payload(
+        _run_tests_plan_payload(check_type="tool_result_success"),
+        available_tools=["run_tests"],
+    )
+
+    with pytest.raises(PlanValidationError, match="must inspect current failure evidence or change the implementation"):
+        runtime._validate_failed_test_recovery_progress(state, bare_rerun)
+
+
+def test_failed_test_recovery_accepts_new_evidence_before_rerun(make_config, monkeypatch) -> None:
+    runtime = AgentRuntime(make_config(tools__allow_stateful_tools=True), model_client=FakeModelClient())
+    state = runtime.create_or_load_session()
+    monkeypatch.setattr(runtime, "_current_turn_history_events", lambda _state: _failed_test_history_events())
+    recovery = plan_from_payload(
+        _run_tests_plan_payload(check_type="tool_result_success", include_read=True),
+        available_tools=["read_file", "run_tests"],
+    )
+
+    runtime._validate_failed_test_recovery_progress(state, recovery)
+
+
+def test_plan_semantic_review_allows_optional_candidate_excerpts(make_config, monkeypatch) -> None:
+    runtime = AgentRuntime(make_config(tools__allow_side_effect_tools=True), model_client=FakeModelClient())
+    state = runtime.create_or_load_session()
+    plan = plan_from_payload(
+        json.loads(
+            plan_response(
+                goal="Edit and answer.",
+                steps=[
+                    plan_step(
+                        "edit",
+                        "Edit file",
+                        "write",
+                        expected_tool="edit_text",
+                        expected_output="edited file",
+                        success_criteria="The requested edit is persisted.",
+                    ),
+                    plan_step(
+                        "answer",
+                        "Answer",
+                        "respond",
+                        expected_output="summary",
+                        success_criteria="The edit is summarized.",
+                        depends_on=["edit"],
+                    ),
+                ],
+            )
+        ),
+        available_tools=["edit_text"],
+    )
+    captured: dict[str, Any] = {}
+
+    def fake_verification(_state, *, step, criteria, assistant_text, evidence, contract_name):
+        captured["criteria"] = criteria
+        return {
+            "criteria": [
+                {
+                    "name": item["name"],
+                    "passed": True,
+                    "evidence": "The candidate plan and deterministic evidence support this judgment.",
+                    "candidate_excerpts": [],
+                    "candidate_grounding": item.get("candidate_grounding", "required"),
+                }
+                for item in criteria
+            ]
+        }
+
+    monkeypatch.setattr(runtime, "_run_llm_verification", fake_verification)
+    runtime._review_plan_semantic_adequacy(state, plan)
+
+    exact_state = next(item for item in captured["criteria"] if item["name"] == "plan_verifies_exact_requested_state")
+    assert exact_state["candidate_grounding"] == "optional"
+
+
+def test_failed_test_replan_guidance_includes_exact_output(make_config) -> None:
+    runtime = AgentRuntime(make_config(tools__allow_stateful_tools=True), model_client=FakeModelClient())
+    state = runtime.create_or_load_session()
+    runtime._record_message(
+        state,
+        Message(
+            role="tool",
+            name="run_tests",
+            content="run_tests result: failed",
+            created_at="t1",
+            metadata={
+                "output": {
+                    "command": ["python", "-m", "unittest", "-q", "test_pipeline.py"],
+                    "stdout": "FAIL: expected three tokens",
+                    "stderr": "AssertionError: 1 != 3",
+                    "exit_code": 1,
+                    "passed": False,
+                }
+            },
+        ),
+    )
+
+    guidance = runtime._failed_test_replan_guidance(state)
+
+    assert "expected three tokens" in guidance
+    assert "AssertionError: 1 != 3" in guidance
+    assert "inspect relevant current files or change the implementation before run_tests" in guidance
+
+
+def test_duplicate_rejected_plan_feedback_forces_material_change(make_config) -> None:
+    runtime = AgentRuntime(make_config(), model_client=FakeModelClient())
+
+    assert runtime._duplicate_rejected_plan_feedback(1) == ""
+    feedback = runtime._duplicate_rejected_plan_feedback(2)
+    assert "duplicate rejected plan attempt 2" in feedback
+    assert "returning the same plan again is forbidden" in feedback
+    assert "materially different plan" in feedback
+    assert "before run_tests" in feedback
+
+
+def _record_failed_recovery_inputs(runtime: AgentRuntime, state) -> None:
+    runtime._record_message(state, Message(role="user", content="Repair the pipeline and verify it.", created_at="t0"))
+    for index, path_text in enumerate(
+        ["pkg/tokenizer.py", "pkg/normalizer.py", "pkg/pipeline.py"],
+        start=1,
+    ):
+        runtime._record_message(
+            state,
+            Message(
+                role="tool",
+                name="edit_text",
+                content=f"edit_text result for {path_text}",
+                created_at=f"t{index}",
+                metadata={
+                    "output": {
+                        "path": path_text,
+                        "changed": True,
+                        "before_sha256": f"before-{index}",
+                        "after_sha256": f"after-{index}",
+                    }
+                },
+            ),
+        )
+    runtime._record_message(
+        state,
+        Message(
+            role="tool",
+            name="run_tests",
+            content="run_tests result: failed",
+            created_at="t4",
+            metadata={
+                "output": {
+                    "command": ["python", "-m", "unittest", "-q", "test_pipeline.py"],
+                    "cwd": "/tmp/workspace",
+                    "stdout": "FAIL: expected three tokens",
+                    "stderr": "AssertionError: 1 != 3",
+                    "exit_code": 1,
+                    "passed": False,
+                }
+            },
+        ),
+    )
+
+
+def test_compiled_failed_test_recovery_plan_is_bounded_and_fail_closed(make_config) -> None:
+    runtime = AgentRuntime(
+        make_config(
+            planner__max_plan_steps=8,
+            tools__allow_stateful_tools=True,
+            tools__allow_side_effect_tools=True,
+        ),
+        model_client=FakeModelClient(),
+    )
+    state = runtime.create_or_load_session()
+    _record_failed_recovery_inputs(runtime, state)
+
+    plan = runtime._compiled_failed_test_recovery_plan(state, "Repair the pipeline and verify it.")
+
+    assert plan is not None
+    assert len(plan.steps) == 8
+    assert [step.step_id for step in plan.steps[:3]] == [
+        "runtime_recovery_read_1",
+        "runtime_recovery_read_2",
+        "runtime_recovery_read_3",
+    ]
+    assert [step.expected_tool for step in plan.steps[:3]] == ["read_file", "read_file", "read_file"]
+    assert "pkg/tokenizer.py" in plan.steps[0].input_text
+    assert "pkg/normalizer.py" in plan.steps[1].input_text
+    assert "pkg/pipeline.py" in plan.steps[2].input_text
+    edit_steps = plan.steps[3:6]
+    assert [step.expected_tool for step in edit_steps] == ["edit_text", "edit_text", "edit_text"]
+    assert all("expected three tokens" in step.input_text for step in edit_steps)
+    assert all("AssertionError: 1 != 3" in step.input_text for step in edit_steps)
+    assert all("registered_tool_effect_verified" in step.required_conditions for step in edit_steps)
+    test_step = plan.steps[6]
+    assert test_step.expected_tool == "run_tests"
+    assert "['python', '-m', 'unittest', '-q', 'test_pipeline.py']" in test_step.input_text
+    assert "/tmp/workspace" in test_step.input_text
+    assert "test_result_success" in test_step.required_conditions
+    answer_step = plan.steps[7]
+    assert answer_step.kind == "respond"
+    assert answer_step.depends_on == ["runtime_recovery_run_tests"]
+    assert "verified_recovery_summary" in answer_step.required_conditions
+
+
+def test_compiled_failed_test_recovery_uses_only_latest_three_changed_paths(make_config) -> None:
+    runtime = AgentRuntime(
+        make_config(
+            planner__max_plan_steps=8,
+            tools__allow_stateful_tools=True,
+            tools__allow_side_effect_tools=True,
+        ),
+        model_client=FakeModelClient(),
+    )
+    state = runtime.create_or_load_session()
+    runtime._record_message(state, Message(role="user", content="Repair.", created_at="t0"))
+    for index, path_text in enumerate(["old.py", "one.py", "two.py", "three.py"], start=1):
+        runtime._record_message(
+            state,
+            Message(
+                role="tool",
+                name="edit_text",
+                content="edited",
+                created_at=f"t{index}",
+                metadata={"output": {"path": path_text, "changed": True}},
+            ),
+        )
+    runtime._record_message(
+        state,
+        Message(
+            role="tool",
+            name="run_tests",
+            content="failed",
+            created_at="t5",
+            metadata={
+                "output": {
+                    "command": ["python", "-m", "pytest", "-q"],
+                    "cwd": "/tmp/workspace",
+                    "stdout": "failed",
+                    "stderr": "assertion failed",
+                    "exit_code": 1,
+                    "passed": False,
+                }
+            },
+        ),
+    )
+
+    plan = runtime._compiled_failed_test_recovery_plan(state, "Repair.")
+
+    assert plan is not None
+    read_text = "\n".join(step.input_text for step in plan.steps if step.expected_tool == "read_file")
+    assert "old.py" not in read_text
+    assert "one.py" in read_text
+    assert "two.py" in read_text
+    assert "three.py" in read_text
+
+
+def test_generate_plan_falls_back_to_compiled_failed_test_recovery(make_config, monkeypatch) -> None:
+    goal = "Repair the pipeline and verify it."
+    invalid_response_only = plan_response(
+        goal=goal,
+        steps=[
+            plan_step(
+                "answer",
+                "Summarize",
+                "respond",
+                expected_output="summary",
+                success_criteria="The result is summarized.",
+            )
+        ],
+    )
+    runtime = AgentRuntime(
+        make_config(
+            model__max_retries=1,
+            planner__max_replans=1,
+            planner__max_plan_steps=8,
+            tools__allow_stateful_tools=True,
+            tools__allow_side_effect_tools=True,
+        ),
+        model_client=FakeModelClient(contract_responses={"task_plan": [invalid_response_only, invalid_response_only]}),
+    )
+    state = runtime.create_or_load_session()
+    state.active_plan = plan_from_payload(
+        _run_tests_plan_payload(check_type="tool_result_success"),
+        available_tools=["run_tests"],
+    )
+    _record_failed_recovery_inputs(runtime, state)
+    monkeypatch.setattr(runtime, "_current_turn_history_events", lambda _state: _failed_test_history_events())
+
+    plan = runtime._generate_plan(
+        state,
+        goal,
+        update_existing=True,
+        replan_reason="The exact tests failed.",
+    )
+    events = runtime.history.read_history(state.session_id)
+
+    assert plan.steps[0].step_id == "runtime_recovery_read_1"
+    assert plan.steps[-2].step_id == "runtime_recovery_run_tests"
+    assert plan.steps[-1].step_id == "runtime_recovery_answer"
+    assert any(
+        event.event_type == "review_completed"
+        and event.payload.get("review_kind") == "runtime_compiled_failed_test_recovery"
+        for event in events
+    )
+    assert any(
+        event.event_type == "plan_updated"
+        and event.payload.get("reason") == "replanned:runtime_compiled_failed_test_recovery"
+        for event in events
+    )
+    assert not any(event.event_type == "fatal_system_error" for event in events)
+    plan_requests = [request for request in runtime.client.requests if request["contract"] == "task_plan"]
+    assert plan_requests == []
+    assert any(
+        event.event_type == "budget_rejected"
+        and event.payload.get("kind") == "plan"
+        for event in events
+    )

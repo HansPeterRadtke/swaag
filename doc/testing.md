@@ -285,3 +285,6 @@ files.
 To create a pytest-testmon baseline, run the selected deterministic profile once
 without forcing affected-test selection; later runs can use the baseline for
 faster candidate tests.
+Compiled recovery tests must prove that exhausted failed-test planning produces
+read, edit, exact-test, and verified-response steps from recent changed paths and
+that no compiled final response can run before `tool_result_success`.

@@ -139,7 +139,7 @@ def test_runtime_recovers_after_multiple_replans_and_remains_bounded(make_config
         ),
     )
 
-    result = runtime.run_turn(goal)
+    result = runtime.run_turn_legacy(goal)
     state = runtime.history.rebuild_from_history(result.session_id)
     events = runtime.history.read_history(result.session_id)
 

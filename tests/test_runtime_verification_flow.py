@@ -47,7 +47,7 @@ def test_runtime_calls_verification_before_evaluator(make_config, monkeypatch) -
     monkeypatch.setattr(runtime._verification, "verify_step", wrapped_verify)
     monkeypatch.setattr(runtime_module, "evaluate_verification", wrapped_evaluate)
 
-    result = runtime.run_turn(goal)
+    result = runtime.run_turn_legacy(goal)
 
     assert result.assistant_text == "4"
     assert call_order[:2] == ["verify", "evaluate"]
@@ -74,7 +74,7 @@ def test_runtime_records_verification_events_before_evaluation_effects(make_conf
             ]
         ),
     )
-    result = runtime.run_turn(goal)
+    result = runtime.run_turn_legacy(goal)
     events = runtime.history.read_history(result.session_id)
 
     verification_started = next(event for event in events if event.event_type == "verification_started")

@@ -166,7 +166,8 @@ def test_planning_and_tool_choice_prompts_include_full_enabled_registry(make_con
     assert "do not add a follow-up write_file step for the same file" in plan_prompt.prompt_text
     assert "never artifact/input/output labels" in plan_prompt.prompt_text
     assert "file_exists, tool_files_changed, artifact_present, and tool_output_nonempty are not substitutes" in plan_prompt.prompt_text
-    assert "in an initial plan depends_on names only earlier step_id values" in plan_prompt.prompt_text
+    assert "runtime resolves a unique output label in depends_on to its producing step" in plan_prompt.prompt_text
+    assert "removes direct self-dependencies" in plan_prompt.prompt_text
     assert "completed prior step id supplied in replan evidence" in plan_prompt.prompt_text
     assert "runtime derives the structural done condition" in plan_prompt.prompt_text
     assert "expected_outputs is a non-empty list of output labels for the step, including respond steps" in plan_prompt.prompt_text

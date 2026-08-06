@@ -368,3 +368,9 @@ The runtime is bounded by:
 - `runtime.max_repeated_action_occurrences`
 - prompt admission checks
 - summary compaction limits
+When failed-test recovery exhausts model-authored plan retries, runtime compiles
+a bounded fail-closed recovery plan from observed facts. It reads up to three
+recently changed files, requests one corrective edit per file using the exact
+failed stdout and stderr, reruns the exact failed command, and permits a final
+response only after `tool_result_success`. This fallback is structurally
+validated without another semantic planning call.

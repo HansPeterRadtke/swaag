@@ -146,3 +146,8 @@ def test_environment_aubro_overrides_are_loaded(tmp_path: Path) -> None:
     assert config.environment.aubro_max_text_chars == 1234
     assert config.environment.aubro_max_results == 7
     assert config.environment.aubro_max_links == 9
+
+
+def test_default_planner_allows_ten_step_workflows() -> None:
+    config = load_config()
+    assert config.planner.max_plan_steps == 10

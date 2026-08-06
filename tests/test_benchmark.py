@@ -552,7 +552,7 @@ def test_coding_benchmark_tasks_allow_read_edit_verify_plan_room() -> None:
         description="Read multiple files, edit, verify, answer.",
     )
 
-    assert task.config_overrides["planner_max_plan_steps"] >= 6
+    assert task.config_overrides["planner_max_plan_steps"] >= 10
     assert task.config_overrides["planner_max_replans"] >= 2
 
 

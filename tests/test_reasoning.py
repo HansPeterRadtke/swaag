@@ -27,7 +27,7 @@ def test_reasoning_loop_records_plan_and_reasoning_events(make_config) -> None:
         ]
     )
     runtime = AgentRuntime(config, model_client=fake_client)
-    result = runtime.run_turn(goal)
+    result = runtime.run_turn_legacy(goal)
     events = runtime.history.read_history(result.session_id)
     event_types = [event.event_type for event in events]
 
@@ -64,7 +64,7 @@ def test_reasoning_loop_treats_malformed_decision_output_as_fatal(make_config) -
     )
     runtime = AgentRuntime(config, model_client=fake_client)
     with pytest.raises(FatalSemanticEngineError):
-        runtime.run_turn(goal)
+        runtime.run_turn_legacy(goal)
 
     session_id = runtime.history.list_sessions()[0]
     events = runtime.history.read_history(session_id)
@@ -93,7 +93,7 @@ def test_reasoning_loop_stops_at_max_steps_and_falls_back(make_config) -> None:
         ]
     )
     runtime = AgentRuntime(config, model_client=fake_client)
-    result = runtime.run_turn(goal)
+    result = runtime.run_turn_legacy(goal)
     events = runtime.history.read_history(result.session_id)
 
     assert result.assistant_text == "Task incomplete: max_iterations_reached. Verified success was not reached."
@@ -145,7 +145,7 @@ def test_failing_step_triggers_replan(make_config) -> None:
         ]
     )
     runtime = AgentRuntime(config, model_client=fake_client)
-    result = runtime.run_turn(goal)
+    result = runtime.run_turn_legacy(goal)
     events = runtime.history.read_history(result.session_id)
 
     assert result.assistant_text == "4"
@@ -179,7 +179,7 @@ def test_tool_subsystem_uses_expected_tool_without_helper_tool_selection(make_co
         ]
     )
     runtime = AgentRuntime(config, model_client=fake_client)
-    result = runtime.run_turn(goal)
+    result = runtime.run_turn_legacy(goal)
     events = runtime.history.read_history(result.session_id)
 
     assert result.assistant_text == "4"
@@ -254,7 +254,7 @@ def test_repeated_failures_trigger_drift_recovery(make_config) -> None:
         ]
     )
     runtime = AgentRuntime(config, model_client=fake_client)
-    result = runtime.run_turn(goal)
+    result = runtime.run_turn_legacy(goal)
     events = runtime.history.read_history(result.session_id)
 
     assert result.assistant_text == "fallback"
@@ -279,7 +279,7 @@ def test_runtime_stops_when_no_progress_is_possible(make_config) -> None:
     )
     runtime = AgentRuntime(config, model_client=fake_client)
 
-    result = runtime.run_turn(goal)
+    result = runtime.run_turn_legacy(goal)
     events = runtime.history.read_history(result.session_id)
 
     assert result.assistant_text == "Task incomplete: no_progress_possible. Verified success was not reached."

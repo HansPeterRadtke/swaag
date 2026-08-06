@@ -1,4 +1,0 @@
-Return one JSON object with the keys action, response, tool_name, and tool_input.
-If no tool is needed, set action="respond", tool_name="none", tool_input={{}}, and put the final answer in response.
-If a tool is needed, set action="call_tool", choose exactly one tool, set tool_input={{}}, and set response="".
-Tool arguments are generated in the next constrained call from the selected tool's own schema.

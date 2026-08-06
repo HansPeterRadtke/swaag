@@ -253,7 +253,7 @@ def test_runtime_run_turn_executes_browser_search_end_to_end(make_config, tmp_pa
     )
     runtime = AgentRuntime(config, model_client=fake_client)
 
-    result = runtime.run_turn(goal)
+    result = runtime.run_turn_legacy(goal)
 
     assert result.assistant_text == "done"
     assert [item.tool_name for item in result.tool_results] == ["browser_search"]

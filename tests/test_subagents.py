@@ -190,7 +190,7 @@ def test_runtime_records_subagent_events_during_review(make_config) -> None:
         ]
     )
     runtime = AgentRuntime(make_config(), model_client=fake_client)
-    result = runtime.run_turn(goal)
+    result = runtime.run_turn_legacy(goal)
     events = runtime.history.read_history(result.session_id)
 
     assert any(event.event_type == "subagent_spawned" for event in events)

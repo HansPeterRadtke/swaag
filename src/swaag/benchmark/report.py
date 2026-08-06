@@ -167,26 +167,22 @@ def render_benchmark_report(report) -> str:
         lines.append("")
 
     traceful_tasks = [
-        item
-        for item in report.tasks
-        if item.metrics.get("retrieval_trace_sample")
-        or item.metrics.get("guidance_sources")
-        or item.metrics.get("selected_skill_ids")
-        or item.metrics.get("subagent_usage")
+        item for item in report.tasks
+        if item.metrics.get("model_call_count") or item.metrics.get("tool_call_count")
     ][:5]
-    lines.extend(["## Trace Samples", ""])
+    lines.extend(["## Model/Tool Loop Samples", ""])
     if traceful_tasks:
         for item in traceful_tasks:
             lines.extend(
                 [
                     f"### {item.task_id}",
-                    f"- Retrieval mode: `{item.metrics.get('retrieval_mode', '')}`",
-                    f"- Retrieval degraded: `{item.metrics.get('retrieval_degraded', False)}`",
-                    f"- Guidance sources: `{item.metrics.get('guidance_sources', [])}`",
-                    f"- Selected skills: `{item.metrics.get('selected_skill_ids', [])}`",
-                    f"- Exposed tools: `{item.metrics.get('exposed_tool_names', [])}`",
-                    f"- Subagents: `{item.metrics.get('subagent_usage', [])}`",
-                    f"- Verification trace: `{item.metrics.get('verification_trace', {})}`",
+                    f"- Model calls: `{item.metrics.get('model_call_count', 0)}`",
+                    f"- Model call kinds: `{item.metrics.get('model_call_kinds', {})}`",
+                    f"- Constrained actions: `{item.metrics.get('action_count', 0)}`",
+                    f"- Tool calls: `{item.metrics.get('tool_call_names', [])}`",
+                    f"- Tool errors: `{item.metrics.get('tool_error_count', 0)}`",
+                    f"- History compactions: `{item.metrics.get('compaction_count', 0)}`",
+                    f"- Environment operations: `{item.metrics.get('environment_operations_summary', {})}`",
                     "",
                 ]
             )
@@ -207,7 +203,6 @@ def render_benchmark_report(report) -> str:
                     f"- Failure category: `{item.failure_category}`",
                     f"- Failure subsystem: `{item.failure_subsystem}`",
                     f"- Verification reason: `{item.verification_summary.get('reason')}`",
-                    f"- Verification type: `{item.metrics.get('verification_trace', {}).get('verification_type_used', '')}`",
                     f"- Cache mode: `{item.metrics.get('cache_mode_summary', '')}`",
                 ]
             )

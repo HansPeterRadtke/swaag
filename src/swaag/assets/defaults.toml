@@ -75,19 +75,10 @@ background_poll_seconds = 0.1
 # allow_side_effect_tools: set true only if destructive writes are intended.
 # -----------------------------------------------------------
 [tools]
-enabled = ["echo", "time_now", "calculator", "list_files", "read_file", "read_text", "notes", "edit_text", "write_file", "run_tests", "shell_command"]
+enabled = ["echo", "time_now", "calculator", "list_files", "read_file", "read_text", "notes", "edit_text", "write_file", "run_tests", "shell_command", "poll_process", "kill_process", "wait_seconds"]
 read_roots = ["."]
 allow_stateful_tools = true
 allow_side_effect_tools = false
-
-# -----------------------------------------------------------
-# [planner] — PLANNING LIMITS  (commonly tuned)
-# max_plan_steps: cap on steps the planner may propose.
-# max_replans: how many times the runtime may replan on failure.
-# -----------------------------------------------------------
-[planner]
-max_plan_steps = 6
-max_replans = 5
 
 # -----------------------------------------------------------
 # [context] — TOKEN RESERVE POLICY  (moderate risk)
@@ -160,77 +151,17 @@ backup_suffix = ".bak"
 allow_writes = true
 
 # -----------------------------------------------------------
-# [memory] — SEMANTIC MEMORY LIMITS
-# -----------------------------------------------------------
-[memory]
-max_semantic_items = 128
-max_retrieved_items = 6
-
-# -----------------------------------------------------------
-# [context_builder] — CONTEXT ASSEMBLY ITEM LIMITS
-# -----------------------------------------------------------
-[context_builder]
-max_history_messages = 64
-max_semantic_items = 32
-max_recent_results = 16
-max_environment_files = 16
-
-# -----------------------------------------------------------
-# [compression] — HISTORY COMPRESSION SETTINGS
 # -----------------------------------------------------------
 [compression]
 max_messages_before_compress = 12
 summary_chars = 800
 
 # -----------------------------------------------------------
-# [security] — TRUST AND INPUT SAFETY
-# -----------------------------------------------------------
-[security]
-block_untrusted_semantic = true
-max_external_text_chars = 8000
-
-# -----------------------------------------------------------
-# [retrieval] — RETRIEVAL BACKEND SELECTION
-# backend: "llm_scoring" (default), "unavailable" (neutral offline/test)
-# -----------------------------------------------------------
-[retrieval]
-backend = "llm_scoring"
-allow_degraded_fallback = true
-max_candidates_per_source = 12
-
-# -----------------------------------------------------------
-# [guidance] — AGENT GUIDANCE FILE LOADING
-# -----------------------------------------------------------
-[guidance]
-enabled = true
-global_paths = []
-filenames = ["AGENTS.md", ".agent-guidance.md", "SWAAG.md"]
-max_items = 32
-max_tokens = 4096
-
-# -----------------------------------------------------------
-# [skills] — SKILL CATALOG LOADING
-# -----------------------------------------------------------
-[skills]
-enabled = true
-max_metadata_items = 16
-max_full_instructions = 6
-metadata_only_default = true
-
-# -----------------------------------------------------------
-# [prompts] — PROMPT TEMPLATE NAMES  (internal, rarely changed)
 # -----------------------------------------------------------
 [prompts]
 standard_system_template = "system_standard.txt"
 lean_system_template = "system_lean.txt"
-analysis_template = "analysis_user.txt"
-task_decision_template = "task_decision_user.txt"
-control_template = "active_session_control_user.txt"
-expansion_template = "expansion_user.txt"
-planning_template = "planning_user.txt"
-verification_template = "verification_user.txt"
-decision_template = "decision_user.txt"
-answer_template = "answer_user.txt"
+action_template = "agent_action_user.txt"
 summary_system_template = "summary_system.txt"
 summary_template = "summary_user.txt"
 
@@ -252,19 +183,10 @@ structured_output_schema_floor_tokens = 16
 safe_input_floor_tokens = 128
 
 [budget_policy.call_classes]
-analysis = "tiny"
-task_decision = "tiny"
-control = "tiny"
-action = "tiny"
-failure = "small"
-strategy = "small"
-tool_input = "small"
-decision = "small"
-verification = "small"
-expansion = "medium"
-plan = "large"
+action = "large"
 summary = "medium"
-answer = "large"
+doctor = "tiny"
+benchmark_quality_judge = "small"
 
 [budget_policy.output_ratio]
 tiny = 0.04
@@ -279,24 +201,22 @@ medium = 0.07
 large = 0.10
 
 [budget_policy.output_ratio_by_kind]
-tool_input = 0.12
-plan = 0.30
+action = 0.30
+summary = 0.18
+doctor = 0.05
+benchmark_quality_judge = 0.12
 
 [budget_policy.output_floor_ratio_by_kind]
-tool_input = 0.08
-plan = 0.22
+action = 0.22
+summary = 0.10
+doctor = 0.03
+benchmark_quality_judge = 0.08
 
 [budget_policy.structured_output_json_factor_by_contract]
-prompt_analysis = 1.15
-task_decision = 1.15
-active_session_control = 1.10
-task_expansion = 1.15
-task_plan = 1.10
-strategy_selection = 1.10
-failure_classification = 1.10
-action_selection = 1.10
-subagent_selection = 1.10
-verification = 1.10
+agent_action = 1.10
+summary = 1.10
+yes_no = 1.10
+benchmark_quality = 1.10
 
 [budget_policy.safety_ratio]
 tiny = 0.05
@@ -310,189 +230,13 @@ small = 0.18
 medium = 0.16
 large = 0.14
 
-[budget_policy.section_floor_ratio]
-history = 0.08
-environment_files = 0.08
-semantic = 0.05
-guidance = 0.05
-skills = 0.05
-notes = 0.03
+[history_search]
+max_results = 12
+token_score = 4
+exact_score = 8
+type_bonus = 2
+preview_chars = 600
 
-[budget_policy.section_floor_min_tokens]
-history = 24
-environment_files = 24
-semantic = 16
-guidance = 16
-skills = 16
-notes = 12
-
-[budget_policy.section_priorities.default]
-history = 1.00
-environment_files = 0.95
-semantic = 0.70
-guidance = 0.75
-skills = 0.70
-notes = 0.55
-
-[budget_policy.section_priorities.analysis]
-history = 0.75
-environment_files = 0.50
-semantic = 0.35
-guidance = 0.70
-skills = 0.35
-notes = 0.30
-
-[budget_policy.section_priorities.task_decision]
-history = 0.80
-environment_files = 0.55
-semantic = 0.35
-guidance = 0.75
-skills = 0.35
-notes = 0.30
-
-[budget_policy.section_priorities.control]
-history = 0.70
-environment_files = 0.50
-semantic = 0.25
-guidance = 0.55
-skills = 0.20
-notes = 0.25
-
-[budget_policy.section_priorities.strategy]
-history = 0.85
-environment_files = 0.70
-semantic = 0.55
-guidance = 0.85
-skills = 0.70
-notes = 0.35
-
-[budget_policy.section_priorities.plan]
-history = 1.10
-environment_files = 1.00
-semantic = 0.80
-guidance = 0.95
-skills = 0.80
-notes = 0.45
-
-[budget_policy.section_priorities.decision]
-history = 0.95
-environment_files = 0.95
-semantic = 0.65
-guidance = 0.70
-skills = 0.75
-notes = 0.35
-
-[budget_policy.section_priorities.tool_input]
-history = 0.80
-environment_files = 1.10
-semantic = 0.50
-guidance = 0.60
-skills = 0.85
-notes = 0.25
-
-[budget_policy.section_priorities.answer]
-history = 0.90
-environment_files = 0.95
-semantic = 0.80
-guidance = 0.70
-skills = 0.60
-notes = 0.35
-
-[budget_policy.section_priorities.verification]
-history = 0.55
-environment_files = 1.20
-semantic = 0.60
-guidance = 0.35
-skills = 0.30
-notes = 0.10
-
-# -----------------------------------------------------------
-# [context_policy] — CONTEXT ASSEMBLY PRIORITIES AND TOKEN HINTS
-# ADVANCED TUNING — controls which context sections get priority
-# when the input budget is tight.
-# component_priorities: higher = more likely to be included.
-# -----------------------------------------------------------
-[context_policy]
-guidance_item_token_hint = 96
-skill_metadata_token_hint = 96
-skill_instruction_token_hint = 192
-recent_result_token_hint = 80
-retrieval_preview_items = 2
-retrieval_preview_chars = 200
-
-[context_policy.component_priorities]
-working_memory = 100.0
-plan = 96.0
-strategy = 94.0
-guidance = 92.0
-environment = 90.0
-environment_files = 88.0
-semantic_memory = 84.0
-skills = 80.0
-project_state = 72.0
-skill_metadata = 68.0
-recent_results = 62.0
-active_entities = 60.0
-notes = 54.0
-
-# -----------------------------------------------------------
-# [selection_policy] — RETRIEVAL WEIGHTS, SCORING, SKILL SELECTION
-# ADVANCED TUNING — controls the semantic retrieval pipeline.
-#
-# Structural signal weights: zero-to-one values added to candidates
-# before the LLM ranker applies its semantic relevance score.
-# Higher = stronger boost for that source type during shortlisting.
-#
-# retrieval_scoring_text_chars: how many chars of each candidate's text
-# are sent to the LLM relevance scorer per query.
-# -----------------------------------------------------------
-[selection_policy]
-retrieval_history_item_token_hint = 96
-retrieval_semantic_item_token_hint = 96
-retrieval_environment_item_token_hint = 256
-history_query_max_results = 8
-
-# Structural signal weights used when building ranking candidates.
-retrieval_structural_tool_message = 0.75
-retrieval_structural_user_message = 0.35
-retrieval_structural_failed_event = 0.20
-retrieval_structural_summary_event = 0.12
-retrieval_structural_modified_file = 0.50
-retrieval_structural_procedural_memory = 0.50
-retrieval_trust_untrusted_memory = 0.25
-
-# Ranking-text preview lengths (chars) used when building candidate text
-# for the backend ranker. Shorter = faster ranking; longer = more signal.
-retrieval_history_ranking_chars = 280
-retrieval_event_ranking_chars = 240
-retrieval_file_ranking_chars = 400
-
-# Maximum chars of candidate text sent to the LLM relevance scorer per call.
-# Should be >= the largest retrieval_*_ranking_chars value above.
-retrieval_scoring_text_chars = 400
-
-# History detail query scoring constants.
-# token_score: score added per query token found in event payload
-# exact_score: score added per quoted exact phrase found
-# type_bonus: extra score for preferred event types (tool, shell, file)
-# preview_chars: how many payload chars to include in match previews
-history_detail_token_score = 2
-history_detail_exact_score = 4
-history_detail_type_bonus = 1
-history_detail_preview_chars = 320
-
-# -----------------------------------------------------------
-# [external_benchmarks] — OPTIONAL OFFICIAL BENCHMARK HARNESSES
-# ADVANCED / INFRA TUNING — these wire the project to official
-# benchmark runners without hard-coding environment-specific paths.
-#
-# The project-owned command path stays stable:
-#   python -m swaag.benchmark external smoke|run ...
-#
-# The benchmark-specific commands below are the real commands invoked
-# by that harness. They can be overridden in local.toml or via
-# SWAAG__EXTERNAL_BENCHMARKS__TARGETS__... env overrides.
-# -----------------------------------------------------------
 [external_benchmarks]
 root = ".swaag/external_benchmarks"
 smoke_timeout_seconds = 90
@@ -518,11 +262,6 @@ model_timeout_seconds = 180
 model_structured_timeout_seconds = 240
 allow_stateful_tools = true
 allow_side_effect_tools = true
-# Real-agent benchmark runs still need enough room for at least
-# inspect/edit/verify/respond style plans, but large plans make local
-# structured planning much more fragile on bounded contexts.
-planner_max_plan_steps = 4
-planner_max_replans = 1
 runtime_max_reasoning_steps = 16
 runtime_max_total_actions = 40
 runtime_max_tool_steps = 24
