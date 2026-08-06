@@ -2419,7 +2419,7 @@ def make_benchmark_task(
         tags=normalized_tags,
     )
     is_complex = task_type in {"coding", "multi_step"} and difficulty in {"hard", "extremely_hard"}
-    # Keep these limits consistent with the planner prompt and with the
+    # Keep these limits consistent with the action-loop prompt and with the
     # generated live tasks. A normal inspect/edit/verify/respond flow needs
     # four plan steps, and even small file/coding tasks need more than one
     # action once the prompt explicitly says to inspect inputs first.

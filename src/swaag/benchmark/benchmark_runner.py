@@ -18,7 +18,6 @@ from swaag.benchmark import external as external_benchmarks
 from swaag.benchmark.result_collector import BenchmarkTaskResult, ResultCollector
 from swaag.benchmark.scoring import build_task_rubric
 from swaag.benchmark.scaled_catalog import generated_live_subset_tasks, validate_live_subset_catalog
-from swaag.benchmark.system_suite import get_system_benchmark_families, run_system_benchmarks
 from swaag.benchmark.task_definitions import (
     BenchmarkTaskDefinition,
     PromptUnderstandingOracle,
@@ -923,12 +922,6 @@ def _build_parser() -> argparse.ArgumentParser:
     manual_parser.add_argument("--json", action="store_true", help="Print the full manual-validation JSON.")
 
     subparsers.add_parser("list", help="List available benchmark task ids.")
-    system_parser = subparsers.add_parser("system", help="Run deterministic agent-system benchmark families.")
-    system_parser.add_argument("--family", action="append", default=[], help="Benchmark family id to run. Repeat to narrow the run.")
-    system_parser.add_argument("--all", action="store_true", help="Run every configured family.")
-    system_parser.add_argument("--output", default="system_benchmark_output", help="Output directory for system benchmark reports.")
-    system_parser.add_argument("--clean", action="store_true", help="Delete the output directory before running.")
-    system_parser.add_argument("--json", action="store_true", help="Print the full result JSON.")
     external_parser = subparsers.add_parser("external", help="Run optional official external benchmark harness integrations.")
     external_parser.add_argument("external_args", nargs=argparse.REMAINDER, help="Arguments forwarded to the external benchmark runner.")
     return parser
@@ -1029,23 +1022,6 @@ def main(argv: Sequence[str] | None = None) -> int:
             print(f"percent={report['percent']}")
             print(f"task_count={report['summary']['total_tasks']}")
         return 0 if report["summary"].get("failed_tasks", 0) == 0 and report["summary"].get("false_positives", 0) == 0 else 1
-    if args.command == "system":
-        selected_families = list(args.family)
-        if args.all:
-            selected_families = [family.family_id for family in get_system_benchmark_families()]
-        report = run_system_benchmarks(
-            output_dir=Path(args.output),
-            family_ids=selected_families or None,
-            clean=bool(args.clean),
-        )
-        if args.json:
-            print(stable_json_dumps(report, indent=2))
-        else:
-            summary = report["summary"]
-            print(f"total_families={summary['total_families']}")
-            print(f"passed_families={summary['passed_families']}")
-            print(f"failed_families={summary['failed_families']}")
-        return 0 if report["summary"]["failed_families"] == 0 else 1
     if args.command == "external":
         forwarded = list(args.external_args)
         if forwarded and forwarded[0] == "--":

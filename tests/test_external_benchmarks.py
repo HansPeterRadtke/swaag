@@ -58,8 +58,6 @@ def test_external_benchmark_defaults_cover_all_required_integrations() -> None:
     assert config.external_benchmarks.agent_generation.allow_side_effect_tools is True
     assert config.external_benchmarks.agent_generation.model_timeout_seconds == 180
     assert config.external_benchmarks.agent_generation.model_structured_timeout_seconds == 240
-    assert config.external_benchmarks.agent_generation.planner_max_plan_steps == 4
-    assert config.external_benchmarks.agent_generation.planner_max_replans == 1
     assert config.external_benchmarks.agent_generation.runtime_max_reasoning_steps == 16
     assert config.external_benchmarks.agent_generation.runtime_max_total_actions == 40
     assert config.external_benchmarks.agent_generation.runtime_max_tool_steps == 24

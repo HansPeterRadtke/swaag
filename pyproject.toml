@@ -45,9 +45,6 @@ publish = [
 [project.scripts]
 swaag = "swaag.cli:main"
 swaag-benchmark = "swaag.benchmark.benchmark_runner:main"
-swaag-devcheck = "swaag.devcheck:main"
-swaag-finalproof = "swaag.finalproof:main"
-swaag-testprofile = "swaag.testprofile:main"
 
 [build-system]
 requires = ["setuptools>=68", "wheel"]

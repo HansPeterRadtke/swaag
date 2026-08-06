@@ -10,36 +10,18 @@ import swaag
 
 PACKAGE_ROOT = Path(__file__).resolve().parents[1] / "src" / "swaag"
 MANDATORY_MODULES = {
+    "swaag.action",
+    "swaag.budgeting",
     "swaag.compression",
-    "swaag.benchmark",
+    "swaag.config",
+    "swaag.history",
+    "swaag.runtime",
+    "swaag.scheduler",
+    "swaag.tools.registry",
     "swaag.benchmark.benchmark_runner",
-    "swaag.benchmark.external",
     "swaag.benchmark.failure_analyzer",
     "swaag.benchmark.metrics",
     "swaag.benchmark.report",
-    "swaag.benchmark.result_collector",
-    "swaag.benchmark.scaled_catalog",
-    "swaag.benchmark.task_definitions",
-    "swaag.context_builder",
-    "swaag.decision",
-    "swaag.devcheck",
-    "swaag.devcheck_profiles",
-    "swaag.manual_validation",
-    "swaag.test_categories",
-    "swaag.testlane",
-    "swaag.evaluator",
-    "swaag.expander",
-    "swaag.failure",
-    "swaag.finalproof",
-    "swaag.live_runtime_profiles",
-    "swaag.memory_semantic",
-    "swaag.orchestrator",
-    "swaag.planner",
-    "swaag.project_state",
-    "swaag.strategy",
-    "swaag.working_memory",
-    "swaag.verification",
-    "swaag.subsystems",
 }
 
 
@@ -50,10 +32,8 @@ def test_all_swaag_modules_import_cleanly() -> None:
         imported.append(module.__name__)
 
     assert "swaag.runtime" in imported
-    assert "swaag.verification" in imported
-    assert "swaag.subsystems.tooling" in imported
     assert "swaag.tools.registry" in imported
-    assert MANDATORY_MODULES.issubset(set(imported) | {"swaag.subsystems"})
+    assert MANDATORY_MODULES.issubset(set(imported))
 
 
 def test_all_referenced_swaag_modules_exist() -> None:

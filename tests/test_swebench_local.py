@@ -226,7 +226,6 @@ def test_run_agent_turn_uses_real_agent_cli_with_workspace_scoped_env(
     assert env["SWAAG__TOOLS__READ_ROOTS"] == f"[\"{workspace}\"]"
     assert env["SWAAG__TOOLS__ALLOW_SIDE_EFFECT_TOOLS"] == "true"
     assert env["SWAAG__TOOLS__ALLOW_STATEFUL_TOOLS"] == "true"
-    assert env["SWAAG__PLANNER__MAX_PLAN_STEPS"] == str(config.external_benchmarks.agent_generation.planner_max_plan_steps)
     assert env["SWAAG__RUNTIME__MAX_TOOL_STEPS"] == str(config.external_benchmarks.agent_generation.runtime_max_tool_steps)
     assert str(swebench_local._repo_src_root()) in env["PYTHONPATH"]
 

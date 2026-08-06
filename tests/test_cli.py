@@ -21,8 +21,7 @@ def test_cli_budget_demo(capsys) -> None:
     rc = main(["budget-demo", "hello"])
     out = capsys.readouterr().out
     assert rc == 0
-    assert "[decision]" in out
-    assert "[answer]" in out
+    assert "[action]" in out
 
 
 

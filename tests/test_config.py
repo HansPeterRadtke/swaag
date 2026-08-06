@@ -64,42 +64,6 @@ def test_visible_editor_backups_are_disabled_by_default() -> None:
     assert config.editor.create_backups is False
 
 
-def test_selection_policy_retrieval_weights_are_loaded_from_defaults() -> None:
-    """All retrieval structural weights must load from defaults.toml without code fallbacks."""
-    config = load_config()
-
-    pol = config.selection_policy
-    # Structural weights
-    assert pol.retrieval_structural_tool_message == 0.75
-    assert pol.retrieval_structural_user_message == 0.35
-    assert pol.retrieval_structural_failed_event == 0.20
-    assert pol.retrieval_structural_summary_event == 0.12
-    assert pol.retrieval_structural_modified_file == 0.50
-    assert pol.retrieval_structural_procedural_memory == 0.50
-    assert pol.retrieval_trust_untrusted_memory == 0.25
-    # Preview lengths
-    assert pol.retrieval_history_ranking_chars == 280
-    assert pol.retrieval_event_ranking_chars == 240
-    assert pol.retrieval_file_ranking_chars == 400
-    # History detail scoring
-    assert pol.history_detail_token_score == 2
-    assert pol.history_detail_exact_score == 4
-    assert pol.history_detail_type_bonus == 1
-    assert pol.history_detail_preview_chars == 320
-
-
-def test_selection_policy_retrieval_weights_can_be_overridden_via_env() -> None:
-    """Retrieval weights must be overridable via environment variables."""
-    env = {
-        "SWAAG__SELECTION_POLICY__RETRIEVAL_STRUCTURAL_TOOL_MESSAGE": "0.90",
-        "SWAAG__SELECTION_POLICY__HISTORY_DETAIL_TOKEN_SCORE": "3",
-        "SWAAG__SELECTION_POLICY__RETRIEVAL_HISTORY_RANKING_CHARS": "400",
-    }
-    config = load_config(env=env)
-
-    assert config.selection_policy.retrieval_structural_tool_message == 0.90
-    assert config.selection_policy.history_detail_token_score == 3
-    assert config.selection_policy.retrieval_history_ranking_chars == 400
 
 
 def test_budget_policy_safe_input_floor_is_loaded_from_defaults() -> None:
@@ -115,17 +79,6 @@ def test_budget_policy_safe_input_floor_can_be_overridden_via_env() -> None:
     assert config.budget_policy.safe_input_floor_tokens == 64
 
 
-def test_selection_policy_retrieval_scoring_text_chars_is_loaded_from_defaults() -> None:
-    """retrieval_scoring_text_chars must load from defaults.toml."""
-    config = load_config()
-    assert config.selection_policy.retrieval_scoring_text_chars == 400
-
-
-def test_selection_policy_retrieval_scoring_text_chars_can_be_overridden_via_env() -> None:
-    """retrieval_scoring_text_chars must be overridable via environment variable."""
-    env = {"SWAAG__SELECTION_POLICY__RETRIEVAL_SCORING_TEXT_CHARS": "200"}
-    config = load_config(env=env)
-    assert config.selection_policy.retrieval_scoring_text_chars == 200
 
 
 def test_environment_aubro_overrides_are_loaded(tmp_path: Path) -> None:
@@ -146,8 +99,3 @@ def test_environment_aubro_overrides_are_loaded(tmp_path: Path) -> None:
     assert config.environment.aubro_max_text_chars == 1234
     assert config.environment.aubro_max_results == 7
     assert config.environment.aubro_max_links == 9
-
-
-def test_default_planner_allows_ten_step_workflows() -> None:
-    config = load_config()
-    assert config.planner.max_plan_steps == 10

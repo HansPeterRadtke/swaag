@@ -103,8 +103,7 @@ def test_render_benchmark_report_includes_quality_sections() -> None:
     assert "Recommended Next Fixes" in text
     assert "evaluator_mistake" in text
     assert "Per-Seed Success" in text
-    assert "Trace Samples" in text
-    assert "coding_patch" in text
+    assert "Model/Tool Loop Samples" in text
     assert "Score By Difficulty Tier" in text
     assert "Per-Task Scores" in text
     assert "Cache / Replay Summary" in text
