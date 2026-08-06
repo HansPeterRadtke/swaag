@@ -250,3 +250,29 @@ def test_identical_model_tool_response_is_cut_off_mechanically(make_config) -> N
     assert len(client.requests) == 3
     assert len(result.tool_results) == 2
     assert all(item.output["result"] == 2 for item in result.tool_results)
+
+
+def test_failure_analyzer_supports_action_loop_metrics_without_legacy_fields() -> None:
+    from swaag.benchmark.failure_analyzer import FailureAnalyzer
+    from swaag.types import HistoryEvent, SessionState
+
+    state = SessionState(session_id="s", created_at="t", updated_at="t", config_fingerprint="cfg", model_base_url="http://127.0.0.1:14829")
+    state.metrics.action_count = 1
+    events = [HistoryEvent(id="e1", sequence=1, session_id="s", timestamp="t", type="turn_failed", version=1, payload={"reason": "budget_exhausted"})]
+
+    failure = FailureAnalyzer().analyze(state=state, events=events, deterministic_verification_passed=False, runtime_error=None)
+
+    assert failure.category == "premature_termination"
+    assert failure.evidence["last_reason"] == "budget_exhausted"
+
+
+def test_non_live_benchmark_uses_resolvable_local_model_default(monkeypatch) -> None:
+    from swaag.benchmark.benchmark_runner import _resolve_live_model_settings
+
+    monkeypatch.delenv("SWAAG_LIVE_BASE_URL", raising=False)
+    settings = _resolve_live_model_settings(
+        use_live_model=False, model_base_url=None, timeout_seconds=None, connect_timeout_seconds=None,
+        model_profile=None, structured_output_mode=None, progress_poll_seconds=None, seeds=None,
+    )
+
+    assert settings["base_url"] == "http://127.0.0.1:14829"

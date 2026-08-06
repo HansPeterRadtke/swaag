@@ -245,7 +245,7 @@ def _resolve_live_model_settings(
 ) -> dict[str, str | int | float | None]:
     recommendation = get_documented_final_live_benchmark_recommendation()
     return {
-        "base_url": model_base_url or ("http://benchmark.local" if not use_live_model else os.environ.get("SWAAG_LIVE_BASE_URL", "http://127.0.0.1:14829")),
+        "base_url": model_base_url or os.environ.get("SWAAG_LIVE_BASE_URL", "http://127.0.0.1:14829"),
         "timeout_seconds": timeout_seconds if timeout_seconds is not None else (int(os.environ.get("SWAAG_LIVE_TIMEOUT_SECONDS", str(recommendation.timeout_seconds))) if use_live_model else None),
         "connect_timeout_seconds": connect_timeout_seconds if connect_timeout_seconds is not None else (int(os.environ.get("SWAAG_LIVE_CONNECT_TIMEOUT_SECONDS", str(recommendation.connect_timeout_seconds))) if use_live_model else None),
         "model_profile": model_profile or (os.environ.get("SWAAG_LIVE_MODEL_PROFILE", recommendation.model_profile) if use_live_model else None),

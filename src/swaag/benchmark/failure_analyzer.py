@@ -28,7 +28,17 @@ class FailureAnalyzer:
         runtime_error: Exception | None,
     ) -> FailureAnalysis:
         event_types = [event.event_type for event in events]
-        last_reason = state.metrics.last_reasoning_reason or ""
+        metrics = state.metrics
+        last_reason = ""
+        for event in reversed(events):
+            candidate = event.payload.get("reason") or event.payload.get("stop_reason") or event.payload.get("status")
+            if candidate:
+                last_reason = str(candidate)
+                break
+        no_progress_stops = int(getattr(metrics, "no_progress_stops", 0))
+        steps_started = int(getattr(metrics, "steps_started", getattr(metrics, "action_count", 0)))
+        steps_completed = int(getattr(metrics, "steps_completed", getattr(metrics, "successful_turns", 0)))
+        verification_failures = int(getattr(metrics, "verification_failures", 0))
         if any(event.event_type == "tool_mismatch_rejected" for event in events):
             rejected = next(event for event in events if event.event_type == "tool_mismatch_rejected")
             return FailureAnalysis(
@@ -64,11 +74,11 @@ class FailureAnalyzer:
                 subsystem="verification",
                 improvement_hints=["Ensure every executable step reaches verification_completed.", "Treat missing verification evidence as a hard runtime error."],
             )
-        if state.metrics.no_progress_stops > 0 or last_reason in {"no_progress_possible", "max_iterations_reached"}:
+        if no_progress_stops > 0 or last_reason in {"no_progress_possible", "max_iterations_reached"}:
             return FailureAnalysis(
                 category="loop_no_progress",
                 reason="The agent stopped because it could not make further progress.",
-                evidence={"no_progress_stops": state.metrics.no_progress_stops, "last_reason": last_reason},
+                evidence={"no_progress_stops": no_progress_stops, "last_reason": last_reason},
                 subsystem="orchestrator",
                 improvement_hints=["Trigger replanning earlier after duplicate actions.", "Reduce retry budget for repeated verifier failures."],
             )
@@ -93,30 +103,30 @@ class FailureAnalyzer:
             return FailureAnalysis(
                 category="premature_termination",
                 reason="The agent stopped before satisfying the benchmark contract.",
-                evidence={"last_reason": last_reason, "steps_completed": state.metrics.steps_completed, "verification_failures": state.metrics.verification_failures},
+                evidence={"last_reason": last_reason, "steps_completed": steps_completed, "verification_failures": verification_failures},
                 subsystem="runtime",
                 improvement_hints=["Continue repair loops until the benchmark command/contract passes, or surface the exact blocker instead of a generic fallback."],
             )
-        if not deterministic_verification_passed and state.metrics.verification_failures == 0 and state.metrics.steps_completed > 0 and last_reason in {"completed", "all_steps_completed", "response_ready"}:
+        if not deterministic_verification_passed and verification_failures == 0 and steps_completed > 0 and last_reason in {"completed", "all_steps_completed", "response_ready"}:
             return FailureAnalysis(
                 category="evaluator_mistake",
                 reason="The runtime reported successful completion without failing verification, but deterministic benchmark verification failed.",
-                evidence={"steps_completed": state.metrics.steps_completed, "last_reason": last_reason},
+                evidence={"steps_completed": steps_completed, "last_reason": last_reason},
                 subsystem="evaluator",
                 improvement_hints=["Tighten evaluator evidence thresholds.", "Reject completion when deterministic benchmark signals are incomplete."],
             )
-        if not deterministic_verification_passed and state.metrics.steps_completed == 0:
+        if not deterministic_verification_passed and steps_completed == 0:
             return FailureAnalysis(
                 category="prompt_misunderstanding",
                 reason="The task never progressed to a completed step.",
-                evidence={"steps_started": state.metrics.steps_started, "steps_completed": state.metrics.steps_completed},
+                evidence={"steps_started": steps_started, "steps_completed": steps_completed},
                 subsystem="prompt_analyzer",
                 improvement_hints=["Improve prompt understanding for the failing task type.", "Add a stronger clarification/expansion decision for underspecified prompts."],
             )
         return FailureAnalysis(
             category="premature_termination",
             reason="The run ended before satisfying the benchmark verification contract.",
-            evidence={"last_reason": last_reason, "verification_failures": state.metrics.verification_failures},
+            evidence={"last_reason": last_reason, "verification_failures": verification_failures},
             subsystem="runtime",
             improvement_hints=["Inspect the stop reason and verification evidence for early termination."],
         )
