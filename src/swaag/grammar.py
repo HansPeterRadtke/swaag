@@ -41,7 +41,10 @@ def yes_no_contract() -> ContractSpec:
 
 
 def summary_contract() -> ContractSpec:
-    return _contract("summary", _closed_object({"summary": _string()}))
+    return _contract(
+        "summary",
+        _closed_object({"summary": _string(), "preserve_recent_messages": {"type": "integer"}}),
+    )
 
 
 def agent_action_contract(tool_specs: Iterable[tuple]) -> ContractSpec:

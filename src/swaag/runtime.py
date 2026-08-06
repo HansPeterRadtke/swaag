@@ -22,6 +22,7 @@ from swaag.model import LlamaCppClient, ModelClientError
 from swaag.model_cache import build_model_client
 from swaag.notes import select_notes_for_prompt
 from swaag.prompts import PromptBuilder
+from swaag.scheduler import WakeupStore
 from swaag.tokens import ConservativeEstimator, CountResult, ExactTokenCounter, build_budget
 from swaag.tools.registry import ToolRegistry
 from swaag.types import (
@@ -110,6 +111,7 @@ class AgentRuntime:
             session_id=session_id,
         )
         self._ensure_environment_initialized(state)
+        self._deliver_due_wakeups(state)
         return state
 
     def create_or_load_user_session(self, session_ref: str | None = None) -> SessionState:
@@ -120,7 +122,23 @@ class AgentRuntime:
             prefer_latest=True,
         )
         self._ensure_environment_initialized(state)
+        self._deliver_due_wakeups(state)
         return state
+
+
+    def _deliver_due_wakeups(self, state: SessionState) -> None:
+        store = WakeupStore(self.config.sessions.root)
+        for wakeup in store.claim_due(session_id=state.session_id):
+            self.history.record_event(
+                state,
+                "wakeup_due",
+                {"wakeup_id": wakeup.wakeup_id, "wake_at": wakeup.wake_at, "reason": wakeup.reason},
+            )
+            self.history.enqueue_control_message(
+                state.session_id,
+                f"Scheduled wakeup is due: {wakeup.reason} (scheduled for {wakeup.wake_at})",
+                source="scheduler",
+            )
 
     def resolve_session_ref(self, session_ref: str | None, *, latest_if_none: bool = False) -> str | None:
         return self.history.resolve_session_ref(session_ref, latest_if_none=latest_if_none)
@@ -432,6 +450,7 @@ class AgentRuntime:
         state: SessionState,
         counter: ExactTokenCounter | ConservativeEstimator | _HistoryAwareTokenCounter,
     ) -> list[PromptComponent]:
+        wakeup_store = WakeupStore(self.config.sessions.root)
         environment = {
             "workspace_root": state.environment.workspace.root,
             "cwd": state.environment.workspace.cwd,
@@ -441,6 +460,9 @@ class AgentRuntime:
                 process_id: to_jsonable(record)
                 for process_id, record in sorted(state.environment.processes.items())
             },
+            "scheduled_wakeups": [
+                to_jsonable(item) for item in wakeup_store.list(session_id=state.session_id)
+            ],
         }
         components = [
             PromptComponent(
@@ -543,7 +565,12 @@ class AgentRuntime:
         contract = summary_contract()
         for source_count in range(maximum_source, 0, -1):
             source_messages = state.messages[:source_count]
-            assembly = self.prompts.build_summary_prompt(source_messages, prompt_mode="lean")
+            adaptive_cap = min(max(0, source_count - 1), max(0, int(self.config.context.max_recent_messages) * 4))
+            assembly = self.prompts.build_summary_prompt(
+                source_messages,
+                prompt_mode="lean",
+                maximum_preserve_recent_messages=adaptive_cap,
+            )
             report = self._summary_budget_report(state, assembly, contract)
             if not report.fits:
                 continue
@@ -552,20 +579,38 @@ class AgentRuntime:
             summary_text = str(payload.get("summary", "")).strip()
             if not summary_text:
                 raise ValueError("summary must not be empty")
+            preserve_recent = self._validated_preserve_recent_messages(
+                payload.get("preserve_recent_messages", 0),
+                source_count=source_count,
+                maximum=adaptive_cap,
+            )
+            effective_source_count = source_count - preserve_recent
             summary_payload = summary_message_payload(
                 summary_text,
-                source_message_count=source_count,
+                source_message_count=effective_source_count,
                 created_at=utc_now_iso(),
             )
             event_payload = {
-                "source_message_count": source_count,
+                "source_message_count": effective_source_count,
                 "summary_message": summary_payload,
                 "summary_budget_report": asdict(report),
+                "adaptive_preserve_recent_messages": preserve_recent,
+                "candidate_source_message_count": source_count,
             }
             self.history.record_event(state, "summary_created", event_payload)
             self.history.record_event(state, "history_compressed", event_payload)
             return True
         return False
+
+
+    @staticmethod
+    def _validated_preserve_recent_messages(value: Any, *, source_count: int, maximum: int) -> int:
+        if not isinstance(value, int) or isinstance(value, bool):
+            raise ValueError("preserve_recent_messages must be an integer")
+        upper = min(max(0, int(maximum)), max(0, int(source_count) - 1))
+        if value < 0 or value > upper:
+            raise ValueError(f"preserve_recent_messages must be between 0 and {upper}")
+        return value
 
     def _summary_budget_report(
         self,

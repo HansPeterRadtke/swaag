@@ -1,4 +1,6 @@
 Summarize this transcript for future continuation:
 {history_block}
 
-Return one JSON object with the key `summary`.
+Choose `preserve_recent_messages` from 0 through {maximum_preserve_recent_messages}. Use a larger value only when those exact recent messages, tool outputs, code fragments, or user wording must remain verbatim; otherwise use 0. The summary must still cover all messages, including any preserved messages, so replay remains understandable.
+
+Return one JSON object with the keys `summary` and `preserve_recent_messages`.

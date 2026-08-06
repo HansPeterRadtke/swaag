@@ -304,3 +304,119 @@ def test_context_discovery_retries_transient_failures(monkeypatch) -> None:
 
     assert benchmark_runner._discover_server_context_limit("http://127.0.0.1:14829", timeout_seconds=5) == 32000
     assert calls["count"] == 3
+
+
+def test_duration_parser_supports_recording_units() -> None:
+    from swaag.scheduler import parse_duration
+
+    assert parse_duration("30 seconds").total_seconds() == 30
+    assert parse_duration("2 hours").total_seconds() == 7200
+    assert parse_duration("3 days").total_seconds() == 259200
+    assert parse_duration("1 month").total_seconds() == 2629800
+    assert parse_duration("1 year").total_seconds() == 31557600
+
+
+def test_wakeup_store_persists_lists_cancels_and_claims_once(tmp_path) -> None:
+    from datetime import datetime, timedelta, timezone
+    from swaag.scheduler import WakeupStore
+
+    now = datetime(2026, 8, 6, 12, 0, tzinfo=timezone.utc)
+    store = WakeupStore(tmp_path)
+    wakeup = store.schedule(session_id="s", reason="resume benchmark", duration="2 hours", now=now)
+
+    assert WakeupStore(tmp_path).list(session_id="s") == [wakeup]
+    assert WakeupStore(tmp_path).claim_due(session_id="s", now=now + timedelta(hours=1)) == []
+    claimed = WakeupStore(tmp_path).claim_due(session_id="s", now=now + timedelta(hours=3))
+    assert [item.wakeup_id for item in claimed] == [wakeup.wakeup_id]
+    assert claimed[0].status == "delivered"
+    assert WakeupStore(tmp_path).claim_due(session_id="s", now=now + timedelta(hours=4)) == []
+
+    second = store.schedule(session_id="s", reason="later", duration="1 day", now=now)
+    cancelled = store.cancel(session_id="s", wakeup_id=second.wakeup_id, now=now)
+    assert cancelled.status == "cancelled"
+    assert second.wakeup_id not in {item.wakeup_id for item in store.list(session_id="s")}
+
+
+def test_schedule_wakeup_tools_are_registered_and_emit_events(tmp_path) -> None:
+    from swaag.config import load_config
+    from swaag.history import HistoryStore
+    from swaag.tools.registry import ToolRegistry
+
+    config = load_config(env={
+        "SWAAG__SESSIONS__ROOT": str(tmp_path / "sessions"),
+        "SWAAG__TOOLS__ALLOW_STATEFUL_TOOLS": "true",
+    })
+    state = HistoryStore(config.sessions.root).create(config_fingerprint="cfg", model_base_url="http://model")
+    registry = ToolRegistry()
+
+    assert {"schedule_wakeup", "list_wakeups", "cancel_wakeup"} <= set(registry.tool_names(config))
+    invocation, result = registry.dispatch(
+        "schedule_wakeup",
+        {"duration": "2 hours", "wake_at": None, "reason": "resume work"},
+        config,
+        state,
+    )
+    assert invocation.validated_input["duration"] == "2 hours"
+    assert [event.event_type for event in result.generated_events] == ["wakeup_scheduled"]
+
+
+def test_runtime_delivers_due_wakeup_as_control_message_once(tmp_path) -> None:
+    from datetime import datetime, timedelta, timezone
+    from swaag.config import load_config
+    from swaag.history import HistoryStore
+    from swaag.runtime import AgentRuntime
+    from swaag.scheduler import WakeupStore
+
+    config = load_config(env={"SWAAG__SESSIONS__ROOT": str(tmp_path / "sessions")})
+    history = HistoryStore(config.sessions.root)
+    state = history.create(config_fingerprint="cfg", model_base_url="http://model", session_id="s")
+    WakeupStore(config.sessions.root).schedule(
+        session_id="s",
+        reason="continue task",
+        wake_at=(datetime.now(timezone.utc) + timedelta(milliseconds=1)).isoformat(),
+    )
+    import time
+    time.sleep(0.01)
+    runtime = AgentRuntime(config, model_client=object(), history_store=history)
+
+    loaded = runtime.create_or_load_session("s")
+    pending = history.list_pending_control_messages("s")
+    assert len(pending) == 1
+    assert "continue task" in pending[0]["message"]
+    runtime._deliver_due_wakeups(loaded)
+    assert len(history.list_pending_control_messages("s")) == 1
+
+
+def test_summary_contract_requires_adaptive_retention_decision() -> None:
+    from swaag.grammar import summary_contract
+
+    schema = summary_contract().json_schema
+    assert schema is not None
+    assert set(schema["required"]) == {"summary", "preserve_recent_messages"}
+    assert schema["properties"]["preserve_recent_messages"] == {"type": "integer"}
+
+
+def test_adaptive_retention_is_mechanically_bounded() -> None:
+    from swaag.runtime import AgentRuntime
+
+    assert AgentRuntime._validated_preserve_recent_messages(0, source_count=8, maximum=4) == 0
+    assert AgentRuntime._validated_preserve_recent_messages(4, source_count=8, maximum=4) == 4
+    import pytest
+    with pytest.raises(ValueError):
+        AgentRuntime._validated_preserve_recent_messages(5, source_count=8, maximum=4)
+    with pytest.raises(ValueError):
+        AgentRuntime._validated_preserve_recent_messages(True, source_count=8, maximum=4)
+
+
+def test_summary_prompt_exposes_retention_cap(tmp_path) -> None:
+    from swaag.config import load_config
+    from swaag.prompts import PromptBuilder
+    from swaag.types import Message
+
+    config = load_config(env={"SWAAG__SESSIONS__ROOT": str(tmp_path / "sessions")})
+    prompt = PromptBuilder(config).build_summary_prompt(
+        [Message(role="user", content="exact command", created_at="now")],
+        maximum_preserve_recent_messages=7,
+    )
+    assert "from 0 through 7" in prompt.prompt_text
+    assert "preserve_recent_messages" in prompt.prompt_text

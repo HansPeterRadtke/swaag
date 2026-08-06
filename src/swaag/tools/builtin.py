@@ -12,6 +12,7 @@ from swaag.editing import EditError, TextEditor
 from swaag.notes import compact_notes, enforce_limits, make_note, render_notes
 from swaag.reader import ReaderError, SequentialReader
 from swaag.tools.base import Tool, ToolContext, ToolValidationError
+from swaag.scheduler import WakeupStore
 from swaag.types import DerivedFileWrite, ToolExecutionResult, ToolGeneratedEvent
 from swaag.utils import sha256_text, stable_json_dumps
 
@@ -356,7 +357,7 @@ class EditTextTool(Tool):
         "Use replace_range only as a low-level fallback when exact text replacement is unsuitable; it needs start, end, expected_text, and replacement. delete_range needs start, end, and expected_text. "
         "expected_text must exactly equal the current file text in the selected range; range offsets are zero-based character offsets. "
         "insert_at needs position and insertion. "
-        "After applying an edit, inspect the returned diff and hashes; run a relevant command or test when the task requires additional confirmation."
+        "After applying an edit, inspect the returned diff and hashes; require tool_effect_verified evidence that the current file exactly matches the intended result, and run a relevant command or test when the task requires additional confirmation."
     )
     kind = "side_effect"
     output_schema = {
@@ -532,8 +533,9 @@ class ListFilesTool(Tool):
 
 class ReadFileTool(Tool):
     name = "read_file"
+    max_plan_output_refs = 1
     description = "Read a full UTF-8 file from the persistent workspace."
-    usage_guidance = "Read one file per call. Use multiple tool calls when multiple files are needed."
+    usage_guidance = "One file per call and one output_ref per plan step. Use separate ordered steps when multiple files are needed."
     kind = "stateful"
     output_schema = {
         "type": "object",
@@ -931,9 +933,14 @@ class ShellCommandTool(Tool):
 
 class RunTestsTool(Tool):
     name = "run_tests"
+    objective_verification_check_types = (
+        "tool_result_success",
+        "tool_output_nonempty",
+        "tool_output_schema_valid",
+    )
     description = "Run a test command inside the persistent workspace and capture structured results."
     usage_guidance = (
-        "Use an argv array and boolean background. Inspect passed, exit_code, stdout, and stderr before deciding the next action."
+        "Use an argv array and boolean background. For required checks, require tool_result_success. For diagnostics where failure is acceptable, inspect passed, exit_code, stdout, and stderr before deciding the next action."
     )
     kind = "stateful"
     output_schema = {
@@ -1247,6 +1254,87 @@ class WaitSecondsTool(Tool):
         )
 
 
+class ScheduleWakeupTool(Tool):
+    name = "schedule_wakeup"
+    description = "Persist a wakeup for this session using either a human duration or an absolute ISO-8601 time. The wakeup survives process restarts."
+    usage_guidance = "Provide exactly one of duration or wake_at. Durations support seconds, minutes, hours, days, weeks, months, and years."
+    kind = "stateful"
+    input_schema = _closed_input({
+        "duration": _string_or_null(),
+        "wake_at": _string_or_null(),
+        "reason": {"type": "string"},
+    })
+
+    def validate(self, raw_input: dict[str, Any]) -> dict[str, Any]:
+        duration = raw_input.get("duration")
+        wake_at = raw_input.get("wake_at")
+        reason = raw_input.get("reason")
+        if duration is not None and not isinstance(duration, str):
+            raise ToolValidationError("schedule_wakeup.duration must be a string or null")
+        if wake_at is not None and not isinstance(wake_at, str):
+            raise ToolValidationError("schedule_wakeup.wake_at must be a string or null")
+        if not isinstance(reason, str) or not reason.strip():
+            raise ToolValidationError("schedule_wakeup.reason must be a non-empty string")
+        if bool(duration and duration.strip()) == bool(wake_at and wake_at.strip()):
+            raise ToolValidationError("schedule_wakeup requires exactly one of duration or wake_at")
+        return {"duration": duration.strip() if duration else None, "wake_at": wake_at.strip() if wake_at else None, "reason": reason.strip()}
+
+    def required_generated_event_types(self, validated_input: dict[str, Any]) -> set[str]:
+        return {"wakeup_scheduled"}
+
+    def execute(self, validated_input: dict[str, Any], context: ToolContext) -> ToolExecutionResult:
+        wakeup = WakeupStore(context.config.sessions.root).schedule(
+            session_id=context.session_state.session_id, **validated_input
+        )
+        output = asdict(wakeup)
+        event = ToolGeneratedEvent("wakeup_scheduled", {"wakeup_id": wakeup.wakeup_id, "wake_at": wakeup.wake_at, "reason": wakeup.reason})
+        return ToolExecutionResult(tool_name=self.name, output=output, display_text=tool_result_display(self.name, output), generated_events=[event])
+
+
+class ListWakeupsTool(Tool):
+    name = "list_wakeups"
+    description = "List durable wakeups for this session, including whether each wakeup is already due."
+    kind = "pure"
+    input_schema = _closed_input({"include_cancelled": {"type": "boolean"}})
+
+    def validate(self, raw_input: dict[str, Any]) -> dict[str, Any]:
+        value = raw_input.get("include_cancelled", False)
+        if not isinstance(value, bool):
+            raise ToolValidationError("list_wakeups.include_cancelled must be a boolean")
+        return {"include_cancelled": value}
+
+    def execute(self, validated_input: dict[str, Any], context: ToolContext) -> ToolExecutionResult:
+        store = WakeupStore(context.config.sessions.root)
+        items = store.list(session_id=context.session_state.session_id, include_cancelled=validated_input["include_cancelled"])
+        due_ids = {item.wakeup_id for item in store.due(session_id=context.session_state.session_id)}
+        output = {"wakeups": [{**asdict(item), "due": item.wakeup_id in due_ids} for item in items]}
+        return ToolExecutionResult(tool_name=self.name, output=output, display_text=tool_result_display(self.name, output))
+
+
+class CancelWakeupTool(Tool):
+    name = "cancel_wakeup"
+    description = "Cancel a durable wakeup belonging to this session."
+    kind = "stateful"
+    input_schema = _closed_input({"wakeup_id": {"type": "string"}})
+
+    def validate(self, raw_input: dict[str, Any]) -> dict[str, Any]:
+        wakeup_id = raw_input.get("wakeup_id")
+        if not isinstance(wakeup_id, str) or not wakeup_id.strip():
+            raise ToolValidationError("cancel_wakeup.wakeup_id must be a non-empty string")
+        return {"wakeup_id": wakeup_id.strip()}
+
+    def required_generated_event_types(self, validated_input: dict[str, Any]) -> set[str]:
+        return {"wakeup_cancelled"}
+
+    def execute(self, validated_input: dict[str, Any], context: ToolContext) -> ToolExecutionResult:
+        wakeup = WakeupStore(context.config.sessions.root).cancel(
+            session_id=context.session_state.session_id, wakeup_id=validated_input["wakeup_id"]
+        )
+        output = asdict(wakeup)
+        event = ToolGeneratedEvent("wakeup_cancelled", {"wakeup_id": wakeup.wakeup_id, "cancelled_at": wakeup.cancelled_at})
+        return ToolExecutionResult(tool_name=self.name, output=output, display_text=tool_result_display(self.name, output), generated_events=[event])
+
+
 BUILTIN_TOOLS = [
     EchoTool(),
     TimeNowTool(),
@@ -1269,6 +1357,9 @@ BUILTIN_TOOLS = [
     PollProcessTool(),
     KillProcessTool(),
     WaitSecondsTool(),
+    ScheduleWakeupTool(),
+    ListWakeupsTool(),
+    CancelWakeupTool(),
 ]
 
 

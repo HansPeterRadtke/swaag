@@ -177,11 +177,13 @@ class PromptBuilder:
         messages: list[Message],
         *,
         prompt_mode: str = "lean",
+        maximum_preserve_recent_messages: int = 0,
     ) -> PromptAssembly:
         history_block = self.render_messages(messages)
         system_prompt = self._load_template(self._config.prompts.summary_system_template)
         user_text = self._load_template(self._config.prompts.summary_template).format(
-            history_block=history_block
+            history_block=history_block,
+            maximum_preserve_recent_messages=max(0, int(maximum_preserve_recent_messages)),
         )
         components = [
             PromptComponent(name="llama3_begin", category="wrapper", text=LLAMA3_BEGIN),
