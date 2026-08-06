@@ -100,23 +100,24 @@ def _parse_seed_list(raw: str | None, *, default: tuple[int, int, int]) -> list[
 def _discover_server_context_limit(base_url: str, *, timeout_seconds: int) -> int | None:
     normalized = base_url.rstrip("/")
     probes = (f"{normalized}/slots", f"{normalized}/props")
-    for probe_url in probes:
-        request = urllib.request.Request(probe_url, headers={"Accept": "application/json"})
-        try:
-            with urllib.request.urlopen(request, timeout=timeout_seconds) as response:
-                payload = json.loads(response.read().decode("utf-8"))
-        except (OSError, TimeoutError, ValueError, urllib.error.HTTPError, urllib.error.URLError):
-            continue
-        if isinstance(payload, list):
-            for item in payload:
-                if isinstance(item, dict) and isinstance(item.get("n_ctx"), int) and item["n_ctx"] > 0:
-                    return int(item["n_ctx"])
-        if isinstance(payload, dict):
-            settings = payload.get("default_generation_settings")
-            params = settings.get("params") if isinstance(settings, dict) else None
-            n_ctx = params.get("n_ctx") if isinstance(params, dict) else None
-            if isinstance(n_ctx, int) and n_ctx > 0:
-                return int(n_ctx)
+    for _attempt in range(3):
+        for probe_url in probes:
+            request = urllib.request.Request(probe_url, headers={"Accept": "application/json"})
+            try:
+                with urllib.request.urlopen(request, timeout=timeout_seconds) as response:
+                    payload = json.loads(response.read().decode("utf-8"))
+            except (OSError, TimeoutError, ValueError, urllib.error.HTTPError, urllib.error.URLError):
+                continue
+            if isinstance(payload, list):
+                for item in payload:
+                    if isinstance(item, dict) and isinstance(item.get("n_ctx"), int) and item["n_ctx"] > 0:
+                        return int(item["n_ctx"])
+            if isinstance(payload, dict):
+                settings = payload.get("default_generation_settings")
+                params = settings.get("params") if isinstance(settings, dict) else None
+                n_ctx = params.get("n_ctx") if isinstance(params, dict) else None
+                if isinstance(n_ctx, int) and n_ctx > 0:
+                    return int(n_ctx)
     return None
 
 def _build_config(
@@ -141,7 +142,7 @@ def _build_config(
         }
     )
     config = load_config(env=env)
-    discovery_timeout = max(1, min(1, int(connect_timeout_seconds or config.model.connect_timeout_seconds)))
+    discovery_timeout = max(5, min(15, int(connect_timeout_seconds or config.model.connect_timeout_seconds)))
     discovered_context_limit = _discover_server_context_limit(base_url, timeout_seconds=discovery_timeout)
     if discovered_context_limit is not None:
         config.model.context_limit = discovered_context_limit

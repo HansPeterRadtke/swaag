@@ -276,3 +276,31 @@ def test_non_live_benchmark_uses_resolvable_local_model_default(monkeypatch) -> 
     )
 
     assert settings["base_url"] == "http://127.0.0.1:14829"
+
+
+def test_context_discovery_retries_transient_failures(monkeypatch) -> None:
+    import json
+    import urllib.error
+
+    from swaag.benchmark import benchmark_runner
+
+    calls = {"count": 0}
+
+    class Response:
+        def __enter__(self):
+            return self
+        def __exit__(self, *args):
+            return False
+        def read(self):
+            return json.dumps({"default_generation_settings": {"params": {"n_ctx": 32000}}}).encode()
+
+    def fake_urlopen(request, timeout):
+        calls["count"] += 1
+        if calls["count"] < 3:
+            raise urllib.error.URLError("busy")
+        return Response()
+
+    monkeypatch.setattr(benchmark_runner.urllib.request, "urlopen", fake_urlopen)
+
+    assert benchmark_runner._discover_server_context_limit("http://127.0.0.1:14829", timeout_seconds=5) == 32000
+    assert calls["count"] == 3
