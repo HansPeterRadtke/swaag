@@ -3,6 +3,7 @@ from __future__ import annotations
 from dataclasses import dataclass
 import json
 import os
+from urllib.parse import urlparse
 import time
 from pathlib import Path
 from typing import Any, Callable
@@ -67,6 +68,47 @@ class LlamaCppClient:
             raise ModelClientError(f"Unexpected health response: {payload!r}")
         return payload
 
+    def _local_server_process_identity(self) -> dict[str, Any] | None:
+        parsed = urlparse(self.config.model.base_url)
+        if parsed.hostname not in {"127.0.0.1", "localhost", "::1"}:
+            return None
+        port = parsed.port or (443 if parsed.scheme == "https" else 80)
+        proc_root = Path("/proc")
+        try:
+            candidates = []
+            for child in proc_root.iterdir():
+                if not child.name.isdigit():
+                    continue
+                cmdline_path = child / "cmdline"
+                try:
+                    raw = cmdline_path.read_bytes()
+                except OSError:
+                    continue
+                if not raw:
+                    continue
+                args = [part.decode("utf-8", errors="replace") for part in raw.split(b"\0") if part]
+                if not args or "llama-server" not in Path(args[0]).name:
+                    continue
+                matches_port = any(
+                    arg == str(port) and index > 0 and args[index - 1] in {"--port", "-p"}
+                    for index, arg in enumerate(args)
+                )
+                if not matches_port:
+                    continue
+                exe = Path(args[0])
+                executable: dict[str, Any] = {"path": str(exe)}
+                try:
+                    stat = exe.stat()
+                    executable.update({"size": stat.st_size, "mtime_ns": stat.st_mtime_ns})
+                except OSError as exc:
+                    executable["stat_error"] = exc.__class__.__name__
+                candidates.append({"argv": args, "executable": executable})
+            if not candidates:
+                return None
+            return sorted(candidates, key=lambda item: stable_json_dumps(item, indent=None))[0]
+        except OSError:
+            return None
+
     def cache_identity(self) -> dict[str, Any]:
         """Return a stable identity for every model/server fact that can affect output."""
         configured_identity = self.config.model.model_identity.strip()
@@ -93,22 +135,20 @@ class LlamaCppClient:
                     model_file.update({"size": stat.st_size, "mtime_ns": stat.st_mtime_ns})
                 except OSError as exc:
                     model_file["stat_error"] = exc.__class__.__name__
-            output_affecting_props = {
-                "model_alias": props.get("model_alias"),
-                "model_file": model_file,
-                "build_info": props.get("build_info"),
-                "bos_token": props.get("bos_token"),
-                "eos_token": props.get("eos_token"),
-                "chat_template": props.get("chat_template"),
-                "default_generation_settings": props.get("default_generation_settings"),
-                "modalities": props.get("modalities"),
-            }
+            full_props = dict(props)
+            full_props["model_file"] = model_file
             identity["server_properties_sha256"] = sha256_text(
-                stable_json_dumps(output_affecting_props, indent=None)
+                stable_json_dumps(full_props, indent=None)
             )
             identity["model_alias"] = props.get("model_alias")
             identity["model_file"] = model_file
             identity["server_build_info"] = props.get("build_info")
+            local_process_identity = self._local_server_process_identity()
+            if local_process_identity is not None:
+                identity["local_server_process_sha256"] = sha256_text(
+                    stable_json_dumps(local_process_identity, indent=None)
+                )
+                identity["local_server_process"] = local_process_identity
             identity["status"] = "resolved"
         except Exception as exc:
             identity["status"] = "configured_only" if configured_identity else "unresolved"

@@ -149,11 +149,10 @@ class RecordReplayModelClient:
         self.cassette_path = Path(cassette_path)
         self.canonicalize_dynamic_values = bool(canonicalize_dynamic_values)
         self._canonicalize = _normalize_json if self.canonicalize_dynamic_values else _stable_json
+        self._caller_request_metadata = dict(request_metadata or {})
         self._recorded_request_metadata = self._load_recorded_request_metadata()
-        requested_metadata = self._default_request_metadata() | dict(request_metadata or {})
-        self.request_metadata = self._canonicalize(
-            self._resolve_model_identity(requested_metadata)
-        )
+        self.request_metadata = {}
+        self._refresh_request_metadata()
         self._entries = self._load_entries()
         self._replayed_count = 0
         self._recorded_count = 0
@@ -203,6 +202,17 @@ class RecordReplayModelClient:
             metadata["structured_output_mode"] = getattr(model, "structured_output_mode", "")
             metadata["configured_seed"] = getattr(model, "seed", None)
         return metadata
+
+
+    def _refresh_request_metadata(self) -> None:
+        # Refresh both the cassette metadata and live model/server identity before
+        # every lookup. This prevents a long-lived client from replaying an entry
+        # after the model, server build/properties, or local server launch flags change.
+        self._recorded_request_metadata = self._load_recorded_request_metadata()
+        requested_metadata = self._default_request_metadata() | dict(self._caller_request_metadata)
+        self.request_metadata = self._canonicalize(
+            self._resolve_model_identity(requested_metadata)
+        )
 
     def _load_recorded_request_metadata(self) -> dict[str, Any]:
         if not self.cassette_path.exists():
@@ -425,6 +435,7 @@ class RecordReplayModelClient:
         timeout_seconds: int | None = None,
         progress_callback=None,
     ) -> CompletionResult:
+        self._refresh_request_metadata()
         request_hash, request_envelope = self._request_hash(payload, timeout_seconds=timeout_seconds)
         with _exclusive_file_lock(self._cache_lock_path):
             entry = self._reload_and_find(request_hash)
