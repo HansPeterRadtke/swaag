@@ -56,6 +56,7 @@ def test_default_model_profile_and_mode_match_documented_live_profile(tmp_path: 
     assert config.model.structured_output_mode == recommendation.structured_output_mode
     assert config.model.cache_enabled is True
     assert config.model.cache_mode == "record"
+    assert recommendation.timeout_seconds >= 900
 
 
 def test_visible_editor_backups_are_disabled_by_default() -> None:

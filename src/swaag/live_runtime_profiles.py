@@ -99,12 +99,12 @@ _RECOMMENDATIONS: dict[LiveRuntimeUseCase, LiveRuntimeRecommendation] = {
         model_profile="small_fast",
         structured_output_mode="server_schema",
         seeds=(11, 23, 37),
-        timeout_seconds=180,
+        timeout_seconds=900,
         connect_timeout_seconds=10,
         progress_poll_seconds=5.0,
         request_observability_mode="progress_polling",
         rationale=(
-            "Use the local 2048-token profile as the default transport envelope for repeatable live runs. "
+            "Allow enough wall-clock time for large local prompts plus constrained generation on slow hardware. "
             "This setting controls latency, timeout, and schema-transport behavior only; it must not add "
             "task-family, benchmark, or prompt-specific semantic routing."
         ),
