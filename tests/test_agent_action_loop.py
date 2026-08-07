@@ -234,19 +234,25 @@ def test_pending_user_intervention_is_verbatim_on_next_model_call(make_config) -
     assert [item["contract"] for item in client.requests] == ["agent_action", "agent_action"]
 
 
-def test_identical_model_tool_response_is_cut_off_mechanically(make_config) -> None:
+def test_identical_model_tool_response_is_rejected_for_recovery(make_config) -> None:
     repeated = _action(
         tool_calls=[("calculator", {"expression": "1 + 1"})],
         continue_loop=True,
     )
-    runtime, client = _runtime(make_config, [repeated, repeated, repeated])
+    recovered = _action(message="Recovered after duplicate rejection.", continue_loop=False)
+    runtime, client = _runtime(make_config, [repeated, repeated, repeated, recovered])
 
     result = runtime.run_turn("Keep calculating 1 + 1 forever.")
 
-    assert "same constrained response repeated" in result.assistant_text
-    assert len(client.requests) == 3
+    assert result.assistant_text == "Recovered after duplicate rejection."
+    assert len(client.requests) == 4
     assert len(result.tool_results) == 2
-    assert all(item.output["result"] == 2 for item in result.tool_results)
+    events = runtime.history.read_history(result.session_id)
+    assert any(
+        event.event_type == "agent_action_rejected"
+        and "materially different next action" in str(event.payload.get("reason", ""))
+        for event in events
+    )
 
 
 def test_failure_analyzer_supports_action_loop_metrics_without_legacy_fields() -> None:
@@ -503,3 +509,12 @@ def test_benchmark_verifier_uses_current_python_for_python3_commands(tmp_path) -
     assert ok is True
     assert evidence["command"][0] == sys.executable
     assert evidence["stdout"].strip() == sys.executable
+
+
+def test_benchmark_replay_cache_root_is_persistent(monkeypatch, tmp_path) -> None:
+    from swaag.benchmark.benchmark_runner import _benchmark_replay_cache_root
+
+    root = tmp_path / "persistent-cache"
+    monkeypatch.setenv("SWAAG_BENCHMARK_REPLAY_CACHE_ROOT", str(root))
+    assert _benchmark_replay_cache_root() == root
+    assert root.is_dir()

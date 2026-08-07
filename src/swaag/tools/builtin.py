@@ -352,7 +352,7 @@ class EditTextTool(Tool):
         "Return one concrete edit with path, operation, dry_run, and null for inapplicable nullable fields. "
         "dry_run=false applies the edit; do not add write_file just to persist it. "
         "Prefer replace_exact when you have observed the exact current text to replace: set old_text to the current literal text and new_text to the desired replacement; it requires exactly one match and fails closed on zero or multiple matches. "
-        "replace_pattern_once/all replace the entire matched text; preserve needed context in replacement or match a narrower span. "
+        "replace_pattern_once/all replace the entire matched text; replacement is the complete final text for the match, so preserve required syntax such as return, indentation, and delimiters. Prefer replace_exact after you have read the exact text. "
         "If the pattern is absent, choose an edit that matches the current file text; absence fails closed even if replacement text already appears. "
         "Use replace_range only as a low-level fallback when exact text replacement is unsuitable; it needs start, end, expected_text, and replacement. delete_range needs start, end, and expected_text. "
         "expected_text must exactly equal the current file text in the selected range; range offsets are zero-based character offsets. "

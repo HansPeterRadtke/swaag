@@ -201,6 +201,7 @@ class AgentRuntime:
         budget_reports: list[BudgetReport] = []
         action_occurrences: dict[str, int] = {}
         tool_calls_used = 0
+        recovery_feedback = ""
 
         for action_index in range(1, self.config.runtime.max_total_actions + 1):
             pending_payloads = self.history.list_pending_control_messages(state.session_id)
@@ -209,7 +210,8 @@ class AgentRuntime:
                 for item in pending_payloads
                 if str(item.get("message", "")).strip()
             ]
-            validation_feedback = ""
+            validation_feedback = recovery_feedback
+            recovery_feedback = ""
             selected_action: AgentAction | None = None
 
             for validation_attempt in range(1, 4):
@@ -279,12 +281,21 @@ class AgentRuntime:
                 },
             )
             if occurrence > self.config.runtime.max_repeated_action_occurrences:
-                return self._finish_turn(
-                    state,
-                    "I stopped because the same constrained response repeated without any new result.",
-                    tool_results,
-                    budget_reports,
+                recovery_feedback = (
+                    "The previous action was rejected because it exactly repeated an action that already produced no new progress. "
+                    "Choose a materially different next action. Inspect the latest tool/test evidence or current file contents before editing again. "
+                    "Do not repeat the same tool arguments, and do not modify tests or files the user explicitly forbade changing."
                 )
+                self.history.record_event(
+                    state,
+                    "agent_action_rejected",
+                    {
+                        "action_index": action_index,
+                        "validation_attempt": 0,
+                        "reason": recovery_feedback,
+                    },
+                )
+                continue
 
             if selected_action.tool_calls:
                 self._record_message(

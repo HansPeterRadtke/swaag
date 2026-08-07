@@ -266,6 +266,13 @@ def _normalize_agent_behavior_mode(raw: str | None) -> str | None:
         raise SystemExit(f"Unsupported agent behavior test mode: {raw}. The test system only supports cached mode.")
     return value
 
+def _benchmark_replay_cache_root() -> Path:
+    raw = os.environ.get("SWAAG_BENCHMARK_REPLAY_CACHE_ROOT", "/data/var/swaag/benchmark_replay_cache").strip()
+    root = Path(raw).expanduser()
+    root.mkdir(parents=True, exist_ok=True)
+    return root
+
+
 def _cached_replay_policy() -> str:
     raw = os.environ.get("SWAAG_BENCHMARK_CACHED_REPLAY_POLICY", "record_if_missing").strip().lower()
     aliases = {
@@ -304,7 +311,7 @@ def _build_agent_behavior_model_client(
     if delegate is not None and getattr(delegate, "is_record_replay_client", False):
         return delegate, None
     delegate = LlamaCppClient(config) if delegate is None else delegate
-    replay_cache_root = output_dir / "replay_cache" / task.task_id
+    replay_cache_root = _benchmark_replay_cache_root() / task.task_id
     os.makedirs(replay_cache_root, exist_ok=True)
     cassette_path = replay_cache_root / f"seed_{seed}.json"
     replay_policy = _cached_replay_policy()
@@ -443,7 +450,7 @@ def _planned_cache_mode(output_dir: Path, task: BenchmarkTaskDefinition, seeds: 
     policy = _cached_replay_policy()
     modes = []
     for seed in seeds:
-        cassette_path = output_dir / "replay_cache" / task.task_id / f"seed_{seed}.json"
+        cassette_path = _benchmark_replay_cache_root() / task.task_id / f"seed_{seed}.json"
         if cassette_path.exists():
             modes.append("replay")
         else:
@@ -829,7 +836,7 @@ def run_benchmarks(
             "use_live_model": use_live_model,
             "agent_behavior_mode": resolved_agent_behavior_mode or "",
             "replay_cache_enabled": resolved_agent_behavior_mode == "cached",
-            "replay_cache_root": str(output_dir / "replay_cache") if resolved_agent_behavior_mode == "cached" else "",
+            "replay_cache_root": str(_benchmark_replay_cache_root()) if resolved_agent_behavior_mode == "cached" else "",
             "replay_cache_policy": _cached_replay_policy() if resolved_agent_behavior_mode == "cached" else "",
             "request_observability_mode": (
                 "replay_cache_or_progress_polling"
