@@ -54,17 +54,8 @@ class FailureAnalyzer:
                 category="loop_no_progress",
                 reason="The same action repeated without producing new progress.",
                 evidence={"action_key": duplicate.payload.get("action_key"), "count": duplicate.payload.get("count")},
-                subsystem="orchestrator",
-                improvement_hints=["Force replanning earlier after duplicate actions.", "Tighten repeated-action suppression for helper tool loops."],
-            )
-        if any(event.event_type == "error" and str(event.payload.get("operation")) in {"plan", "plan_validation"} for event in events):
-            error = next(event for event in events if event.event_type == "error" and str(event.payload.get("operation")) in {"plan", "plan_validation"})
-            return FailureAnalysis(
-                category="bad_planning",
-                reason=str(error.payload.get("error", "planner returned an invalid plan")),
-                evidence={"operation": error.payload.get("operation"), "error_type": error.payload.get("error_type")},
-                subsystem="planner",
-                improvement_hints=["Improve plan validation before execution.", "Strengthen planner prompt constraints for mandatory steps and verifier contracts."],
+                subsystem="action_loop",
+                improvement_hints=["Force a different action after duplicate actions.", "Tighten repeated-action suppression for helper tool loops."],
             )
         if "verification_started" in event_types and "verification_completed" not in event_types:
             return FailureAnalysis(
@@ -79,8 +70,8 @@ class FailureAnalyzer:
                 category="loop_no_progress",
                 reason="The agent stopped because it could not make further progress.",
                 evidence={"no_progress_stops": no_progress_stops, "last_reason": last_reason},
-                subsystem="orchestrator",
-                improvement_hints=["Trigger replanning earlier after duplicate actions.", "Reduce retry budget for repeated verifier failures."],
+                subsystem="action_loop",
+                improvement_hints=["Change action strategy earlier after duplicate actions.", "Reduce retry budget for repeated verifier failures."],
             )
         if runtime_error is not None:
             return FailureAnalysis(
@@ -88,7 +79,7 @@ class FailureAnalyzer:
                 reason=str(runtime_error),
                 evidence={"error_type": runtime_error.__class__.__name__},
                 subsystem="runtime",
-                improvement_hints=["Classify runtime exceptions earlier and convert recoverable cases into replans."],
+                improvement_hints=["Classify runtime exceptions earlier and return recoverable evidence to the action loop."],
             )
         fallback_reasons = {
             "replan_limit_reached",

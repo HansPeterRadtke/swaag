@@ -444,3 +444,25 @@ def test_benchmark_run_cli_enables_live_model_profile(monkeypatch, tmp_path) -> 
     rc = benchmark_runner.main(["run", "--output", str(tmp_path), "--json"])
     assert rc == 0
     assert captured["use_live_model"] is True
+
+
+def test_benchmark_contracts_require_current_action_loop_events() -> None:
+    from swaag.benchmark.task_definitions import get_benchmark_tasks
+
+    for task in get_benchmark_tasks():
+        import tempfile
+        from pathlib import Path
+        with tempfile.TemporaryDirectory() as tmp:
+            scenario = task.build(Path(tmp) / task.task_id)
+        assert "reasoning_completed" not in scenario.verification_contract.required_history_events
+        if scenario.verification_contract.required_history_events:
+            assert "agent_action_selected" in scenario.verification_contract.required_history_events
+
+
+def test_failure_analyzer_contains_no_planner_specific_classification() -> None:
+    from pathlib import Path
+    import swaag.benchmark.failure_analyzer as module
+
+    source = Path(module.__file__).read_text(encoding="utf-8")
+    assert "plan_validation" not in source
+    assert 'subsystem="planner"' not in source
