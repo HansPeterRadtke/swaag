@@ -921,6 +921,7 @@ def main(argv: Sequence[str] | None = None) -> int:
             clean=bool(args.clean),
             live_subset=False,
             use_live_model=True,
+            agent_behavior_mode="cached",
         )
         if args.json:
             print(stable_json_dumps(report, indent=2))

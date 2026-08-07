@@ -441,6 +441,7 @@ def test_benchmark_run_cli_enables_live_model_profile(monkeypatch, tmp_path) -> 
     rc = benchmark_runner.main(["run", "--output", str(tmp_path), "--json"])
     assert rc == 0
     assert captured["use_live_model"] is True
+    assert captured["agent_behavior_mode"] == "cached"
 
 
 def test_benchmark_contracts_require_current_action_loop_events() -> None:
