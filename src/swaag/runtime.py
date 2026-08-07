@@ -75,6 +75,20 @@ class PreparedCall:
 class AgentRuntime:
     """A constrained model/tool loop with exact history and context admission."""
 
+    _DIAGNOSTIC_TOOL_NAMES = frozenset({
+        "read_file",
+        "read_text",
+        "list_files",
+        "search_in_file",
+        "search_repo",
+        "inspect_diff",
+        "list_changes",
+        "workspace_snapshot",
+        "browser_search",
+        "browser_browse",
+        "poll_process",
+    })
+
     def __init__(
         self,
         config: AgentConfig,
@@ -202,6 +216,8 @@ class AgentRuntime:
         action_occurrences: dict[str, int] = {}
         tool_calls_used = 0
         recovery_feedback = ""
+        verification_failed = False
+        diagnostic_required = False
 
         for action_index in range(1, self.config.runtime.max_total_actions + 1):
             pending_payloads = self.history.list_pending_control_messages(state.session_id)
@@ -239,6 +255,17 @@ class AgentRuntime:
                             raise ActionValidationError(
                                 f"Invalid input for tool {tool_call.tool_name}: {exc}"
                             ) from exc
+                    if verification_failed and not action.tool_calls:
+                        raise ActionValidationError(
+                            "Required verification is still failing. Do not give a final answer until run_tests passes."
+                        )
+                    if diagnostic_required:
+                        names = [call.tool_name for call in action.tool_calls]
+                        if not names or any(name not in self._DIAGNOSTIC_TOOL_NAMES for name in names):
+                            raise ActionValidationError(
+                                "The latest structured verification failed. The next action must gather new diagnostic evidence only "
+                                "using read/search/diff/inspection tools before editing, rerunning tests, or answering."
+                            )
                     return action
 
                 try:
@@ -324,6 +351,7 @@ class AgentRuntime:
                         },
                     )
 
+                diagnostic_satisfied = False
                 for tool_call_index, tool_call in enumerate(selected_action.tool_calls, start=1):
                     result = self._execute_tool(
                         state,
@@ -337,6 +365,19 @@ class AgentRuntime:
                     tool_calls_used += 1
                     if result is not None:
                         tool_results.append(result)
+                        if tool_call.tool_name in self._DIAGNOSTIC_TOOL_NAMES:
+                            diagnostic_satisfied = True
+                        if tool_call.tool_name == "run_tests":
+                            passed = bool(result.output.get("passed", False))
+                            verification_failed = not passed
+                            diagnostic_required = not passed
+                            if passed:
+                                recovery_feedback = ""
+                            else:
+                                recovery_feedback = (
+                                    "Structured verification failed. Read the exact failure evidence and gather fresh diagnostic "
+                                    "evidence about the implicated code before making another edit or rerunning verification."
+                                )
                     self.history.record_event(
                         state,
                         "agent_tool_call_completed",
@@ -347,6 +388,8 @@ class AgentRuntime:
                             "success": result is not None,
                         },
                     )
+                if diagnostic_required and diagnostic_satisfied:
+                    diagnostic_required = False
                 continue
 
             self.history.record_event(

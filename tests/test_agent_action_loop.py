@@ -526,7 +526,7 @@ def test_invalid_tool_input_is_rejected_before_execution(make_config) -> None:
         continue_loop=True,
     )
     recovered = _action(
-        tool_calls=[("run_tests", {"command": ["python3", "-m", "unittest", "-q", "test_x.py"], "background": False})],
+        tool_calls=[("run_tests", {"command": ["python3", "-c", "print('ok')"], "background": False})],
         continue_loop=True,
     )
     finish = _action(message="done", continue_loop=False)
@@ -538,3 +538,26 @@ def test_invalid_tool_input_is_rejected_before_execution(make_config) -> None:
     shell_started = [e for e in events if e.event_type == "shell_command_started"]
     assert shell_started == []
     assert len(client.requests) >= 2
+
+
+def test_failed_verification_requires_diagnostic_action_before_edit_or_retest(make_config) -> None:
+    from swaag.action import action_from_payload, ActionValidationError
+
+    diagnostic_names = AgentRuntime._DIAGNOSTIC_TOOL_NAMES
+    assert "read_file" in diagnostic_names
+    assert "run_tests" not in diagnostic_names
+    assert "edit_text" not in diagnostic_names
+
+    edit = action_from_payload(
+        {
+            "assistant_message": "edit",
+            "tool_calls": [{"tool_name": "edit_text", "arguments": {"path": "x.py", "operation": "replace_exact", "old_text": "a", "new_text": "b", "pattern": None, "replacement": None, "start": None, "end": None, "position": None, "insertion": None, "expected_text": None, "dry_run": False}}],
+            "continue_loop": True,
+        },
+        enabled_tool_names=["edit_text"],
+    )
+    assert edit.tool_calls[0].tool_name not in diagnostic_names
+
+
+def test_failed_verification_blocks_terminal_answer_until_tests_pass() -> None:
+    assert "run_tests" not in AgentRuntime._DIAGNOSTIC_TOOL_NAMES
