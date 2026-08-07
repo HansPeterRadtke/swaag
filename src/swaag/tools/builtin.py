@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import ast
+import re
 import sys
 import time
 from dataclasses import asdict
@@ -916,6 +917,16 @@ class ShellCommandTool(Tool):
         if not isinstance(command, str) or not command.strip():
             raise ToolValidationError("shell_command.command must be a non-empty string")
         stripped = command.strip()
+        lowered = stripped.lower()
+        test_runner_patterns = (
+            r"(?:^|[;&|()\s])(?:pytest|py\.test)(?:$|\s)",
+            r"(?:^|[;&|()\s])(?:python|python3|[^\s/]+/python(?:3(?:\.\d+)?)?)\s+-m\s+(?:pytest|unittest)(?:$|\s)",
+            r"(?:^|[;&|()\s])(?:tox|nox)(?:$|\s)",
+        )
+        if any(re.search(pattern, lowered) for pattern in test_runner_patterns):
+            raise ToolValidationError(
+                "shell_command must not run test runners; use run_tests so pass/fail, exit code, stdout, and stderr are returned as structured verification evidence"
+            )
         background = bool(raw_input.get("background", False))
         return {"command": stripped, "background": background}
 

@@ -232,6 +232,13 @@ class AgentRuntime:
                         raise ActionValidationError(
                             f"tool_calls contains {len(action.tool_calls)} calls but only {remaining} remain in the mechanical budget"
                         )
+                    for tool_call in action.tool_calls:
+                        try:
+                            self.tools.get(tool_call.tool_name).validate(tool_call.arguments)
+                        except (ValueError, TypeError) as exc:
+                            raise ActionValidationError(
+                                f"Invalid input for tool {tool_call.tool_name}: {exc}"
+                            ) from exc
                     return action
 
                 try:

@@ -595,3 +595,18 @@ def test_read_text_accepts_offset_hints(tmp_path) -> None:
     validated = tool.validate({"path": str(path), "start_offset": 0, "end_offset": 5})
 
     assert validated["path"] == str(path)
+
+
+def test_shell_command_rejects_test_runners_in_favor_of_run_tests() -> None:
+    tool = ShellCommandTool()
+    for command in (
+        "pytest -q",
+        "python3 -m pytest -q tests",
+        "python -m unittest -q test_mod.py",
+        "cd pkg && python3 -m unittest test_x",
+        "tox -q",
+        "nox -s tests",
+    ):
+        with pytest.raises(ToolValidationError, match="use run_tests"):
+            tool.validate({"command": command, "background": False})
+    assert tool.validate({"command": "python3 script.py", "background": False})["command"] == "python3 script.py"

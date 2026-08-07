@@ -518,3 +518,23 @@ def test_benchmark_replay_cache_root_is_persistent(monkeypatch, tmp_path) -> Non
     monkeypatch.setenv("SWAAG_BENCHMARK_REPLAY_CACHE_ROOT", str(root))
     assert _benchmark_replay_cache_root() == root
     assert root.is_dir()
+
+
+def test_invalid_tool_input_is_rejected_before_execution(make_config) -> None:
+    bad = _action(
+        tool_calls=[("shell_command", {"command": "python3 -m unittest -q test_x.py", "background": False})],
+        continue_loop=True,
+    )
+    recovered = _action(
+        tool_calls=[("run_tests", {"command": ["python3", "-m", "unittest", "-q", "test_x.py"], "background": False})],
+        continue_loop=True,
+    )
+    finish = _action(message="done", continue_loop=False)
+    runtime, client = _runtime(make_config, [bad, recovered, finish])
+    # The recovery test command itself may fail because the fixture does not exist; the point is that
+    # the invalid shell test command is rejected before any shell execution event is emitted.
+    result = runtime.run_turn("run a test")
+    events = runtime.history.read_history(result.session_id)
+    shell_started = [e for e in events if e.event_type == "shell_command_started"]
+    assert shell_started == []
+    assert len(client.requests) >= 2
