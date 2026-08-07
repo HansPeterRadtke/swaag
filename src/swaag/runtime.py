@@ -98,7 +98,7 @@ class AgentRuntime:
         self._token_counter = token_counter
         self._token_count_cache: dict[str, int] = {}
         self._sleep = time.sleep
-        self._max_model_unavailable_attempts: int | None = None
+        self._max_model_unavailable_attempts: int = max(1, int(self.config.model.max_retries) + 1)
 
     @classmethod
     def from_config_paths(cls, config_paths: list[str] | None = None) -> AgentRuntime:
@@ -755,10 +755,7 @@ class AgentRuntime:
                             "next_attempt": transient_attempts + 1,
                         },
                     )
-                    if (
-                        self._max_model_unavailable_attempts is not None
-                        and transient_attempts > self._max_model_unavailable_attempts
-                    ):
+                    if transient_attempts > self._max_model_unavailable_attempts:
                         raise ModelClientError("model_unavailable") from exc
                     self._sleep(self._model_unavailable_backoff_seconds(transient_attempts - 1))
                     continue

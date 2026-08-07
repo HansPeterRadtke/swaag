@@ -420,3 +420,27 @@ def test_summary_prompt_exposes_retention_cap(tmp_path) -> None:
     )
     assert "from 0 through 7" in prompt.prompt_text
     assert "preserve_recent_messages" in prompt.prompt_text
+
+
+def test_runtime_model_unavailable_retry_cap_is_finite(tmp_path) -> None:
+    from swaag.config import load_config
+    from swaag.runtime import AgentRuntime
+
+    config = load_config(env={"SWAAG__SESSIONS__ROOT": str(tmp_path / "sessions")})
+    runtime = AgentRuntime(config, model_client=object())
+    assert isinstance(runtime._max_model_unavailable_attempts, int)
+    assert runtime._max_model_unavailable_attempts >= 1
+
+
+def test_benchmark_run_cli_enables_live_model_profile(monkeypatch, tmp_path) -> None:
+    from swaag.benchmark import benchmark_runner
+
+    captured = {}
+    def fake_run_benchmarks(**kwargs):
+        captured.update(kwargs)
+        return {"summary": {"total_tasks": 0, "successful_tasks": 0, "failed_tasks": 0, "false_positives": 0}}
+
+    monkeypatch.setattr(benchmark_runner, "run_benchmarks", fake_run_benchmarks)
+    rc = benchmark_runner.main(["run", "--output", str(tmp_path), "--json"])
+    assert rc == 0
+    assert captured["use_live_model"] is True

@@ -941,7 +941,7 @@ def main(argv: Sequence[str] | None = None) -> int:
             task_ids=list(args.task),
             clean=bool(args.clean),
             live_subset=False,
-            use_live_model=False,
+            use_live_model=True,
         )
         if args.json:
             print(stable_json_dumps(report, indent=2))
