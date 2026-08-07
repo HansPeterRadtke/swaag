@@ -979,7 +979,7 @@ class HistoryStore:
             metrics.budget_rejections += 1
         elif event.event_type == "token_estimate_used":
             metrics.token_estimate_uses += 1
-        elif event.event_type in {"agent_action_selected", "action_selected"}:
+        elif event.event_type == "agent_action_selected":
             metrics.action_count += 1
         elif event.event_type == "prompt_built":
             report = payload.get("budget_report", {})

@@ -20,9 +20,9 @@ def _result(*, task_id: str, task_type: str, difficulty: str, success: bool, fal
         verification_summary={"checks": {"command": success}, "evidence": {}, "reason": "ok" if success else "failed"},
         quality_summary={
             "passed": quality_passed,
-            "checks": quality_checks or {"task_type": quality_passed},
-            "evidence": {"decision": {"expand_task": False}},
-            "oracle": {"expand_task": False},
+            "checks": quality_checks or {"observable_behavior": quality_passed},
+            "evidence": {},
+            "oracle": {},
         },
         metrics={
             "action_count": 3,
@@ -56,7 +56,7 @@ def test_compute_benchmark_metrics_tracks_false_positives_and_understanding() ->
 
     assert metrics.primary["task_success_rate"] == 2 / 3
     assert metrics.primary["false_positive_rate"] == 1 / 3
-    assert metrics.primary["correct_task_classification_rate"] == 1.0
+    assert metrics.primary["observable_quality_accuracy"] == 1.0
     assert "environment_usage_correctness" in metrics.benchmark_specific
     assert metrics.secondary["benchmark_coverage_by_task_type"]["coding"] == 1
     assert metrics.coverage_by_difficulty["hard"] == 1

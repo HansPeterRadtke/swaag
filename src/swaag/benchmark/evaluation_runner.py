@@ -369,7 +369,7 @@ def _render_agent_test_category_report(payload: dict[str, Any]) -> str:
             "",
             f"- failure_breakdown: `{aggregate_metrics.get('failure_breakdown', {})}`",
             f"- verifier_weakness_breakdown: `{aggregate_metrics.get('verifier_weakness_breakdown', {})}`",
-            f"- prompt_understanding_mistakes: `{aggregate_metrics.get('prompt_understanding_mistakes', {})}`",
+            f"- behavior_quality_mistakes: `{aggregate_metrics.get('behavior_quality_mistakes', {})}`",
             "",
         ]
     )

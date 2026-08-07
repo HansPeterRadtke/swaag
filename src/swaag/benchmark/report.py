@@ -92,13 +92,12 @@ def render_benchmark_report(report) -> str:
     lines.extend(_kv_lines("Success Rates By Difficulty", metrics.success_by_difficulty))
     lines.extend(_kv_lines("Primary Metrics", metrics.primary))
     lines.extend(_kv_lines("Secondary Metrics", metrics.secondary))
-    lines.extend(_kv_lines("Prompt Understanding Metrics", metrics.understanding))
+    lines.extend(_kv_lines("Observable Behavior Quality", metrics.behavior_quality))
     lines.extend(_kv_lines("Benchmark-Specific Metrics", metrics.benchmark_specific))
     lines.extend(_kv_lines("Failure Breakdown", metrics.failure_breakdown))
     lines.extend(_kv_lines("Subsystem Failure Breakdown", metrics.subsystem_failure_breakdown))
     lines.extend(_kv_lines("Verifier Weakness Breakdown", metrics.verifier_weakness_breakdown))
-    lines.extend(_kv_lines("Prompt Understanding Mistakes", metrics.prompt_understanding_mistakes))
-    lines.extend(_kv_lines("Planning Mistakes", metrics.planning_mistakes))
+    lines.extend(_kv_lines("Behavior Quality Mistakes", metrics.behavior_quality_mistakes))
     lines.extend(_kv_lines("Verification Type Success", {key: value for key, value in metrics.per_verification_type_success.items()}))
     lines.extend(_kv_lines("Stop Reasons", metrics.stop_reason_counts))
     lines.extend(_kv_lines("Coverage By Task Type", metrics.coverage_by_type))
@@ -110,7 +109,7 @@ def render_benchmark_report(report) -> str:
     lines.extend(["## Top Failure Diagnostics", ""])
     top_failure_categories = list(summary.failure_breakdown.items())[:5]
     top_verifier_weaknesses = list(metrics.verifier_weakness_breakdown.items())[:5]
-    top_understanding_mistakes = list(metrics.prompt_understanding_mistakes.items())[:5]
+    top_behavior_quality_mistakes = list(metrics.behavior_quality_mistakes.items())[:5]
     if top_failure_categories:
         lines.append("- Failure categories:")
         for name, count in top_failure_categories:
@@ -119,11 +118,11 @@ def render_benchmark_report(report) -> str:
         lines.append("- Verifier weaknesses:")
         for name, count in top_verifier_weaknesses:
             lines.append(f"  - `{name}`: `{count}`")
-    if top_understanding_mistakes:
-        lines.append("- Understanding mistakes:")
-        for name, count in top_understanding_mistakes:
+    if top_behavior_quality_mistakes:
+        lines.append("- Behavior quality mistakes:")
+        for name, count in top_behavior_quality_mistakes:
             lines.append(f"  - `{name}`: `{count}`")
-    if not top_failure_categories and not top_verifier_weaknesses and not top_understanding_mistakes:
+    if not top_failure_categories and not top_verifier_weaknesses and not top_behavior_quality_mistakes:
         lines.append("- none")
     lines.append("")
 

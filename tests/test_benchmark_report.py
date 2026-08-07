@@ -21,7 +21,7 @@ def test_render_benchmark_report_includes_quality_sections() -> None:
         aggregate_metrics=BenchmarkAggregateMetrics(
             primary={"task_success_rate": 1.0, "false_positive_rate": 0.0},
             secondary={"llm_fallback_rate": 0.0, "average_wall_clock_seconds_per_task": 1.0},
-            understanding={"understanding_success_rate": 1.0},
+            behavior_quality={"observable_quality_success_rate": 1.0},
             benchmark_specific={
                 "environment_usage_correctness": 1.0,
                 "seed_success_by_seed": {"11": 1.0, "23": 1.0, "37": 1.0},
@@ -36,8 +36,7 @@ def test_render_benchmark_report_includes_quality_sections() -> None:
             failure_breakdown={},
             subsystem_failure_breakdown={},
             verifier_weakness_breakdown={},
-            prompt_understanding_mistakes={},
-            planning_mistakes={},
+            behavior_quality_mistakes={},
             improvement_priorities=[{"name": "evaluator_mistake", "count": 1, "kind": "failure_class"}],
         ),
         run_metadata={
@@ -96,7 +95,7 @@ def test_render_benchmark_report_includes_quality_sections() -> None:
     text = render_benchmark_report(report)
 
     assert "Primary Metrics" in text
-    assert "Prompt Understanding Metrics" in text
+    assert "Observable Behavior Quality" in text
     assert "Benchmark-Specific Metrics" in text
     assert "Run Metadata" in text
     assert "False Positive Analysis" in text

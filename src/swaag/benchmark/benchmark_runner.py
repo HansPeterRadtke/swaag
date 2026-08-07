@@ -20,7 +20,7 @@ from swaag.benchmark.scoring import build_task_rubric
 from swaag.benchmark.scaled_catalog import generated_live_subset_tasks, validate_live_subset_catalog
 from swaag.benchmark.task_definitions import (
     BenchmarkTaskDefinition,
-    PromptUnderstandingOracle,
+    ObservableBehaviorOracle,
     get_benchmark_tasks,
     validate_benchmark_catalog,
 )
@@ -31,7 +31,6 @@ from swaag.runtime import AgentRuntime
 from swaag.types import SessionState
 from swaag.model_cache import RecordReplayModelClient
 from swaag.utils import stable_json_dumps
-from swaag.benchmark.semantic_judge import judge_prompt_quality
 from swaag.benchmark.verifier import verify_benchmark_contract
 
 
@@ -370,7 +369,7 @@ def _safe_payload(value: Any) -> Any:
 
 
 def _evaluate_quality(
-    oracle: PromptUnderstandingOracle | None,
+    oracle: ObservableBehaviorOracle | None,
     events,
     *,
     runtime: AgentRuntime | None = None,
@@ -402,26 +401,6 @@ def _evaluate_quality(
         checks["evidence_call_count"] = len(tool_calls) >= int(oracle.evidence_call_count)
         evidence["evidence_call_count"] = {"required": int(oracle.evidence_call_count), "actual": len(tool_calls)}
 
-    semantic = None
-    if runtime is not None:
-        try:
-            semantic = judge_prompt_quality(
-                client=runtime.client,
-                context_limit=runtime.config.model.context_limit,
-                prompt=prompt,
-                oracle=oracle_payload,
-                assistant_text=assistant_text,
-                events=events,
-                timeout_seconds=runtime.config.model.verification_timeout_seconds,
-            )
-            checks["semantic_quality_judge"] = bool(semantic["passed"])
-            evidence["semantic_quality_judge"] = semantic
-        except Exception as exc:
-            checks["semantic_quality_judge"] = False
-            evidence["semantic_quality_judge"] = {
-                "error": str(exc),
-                "error_type": exc.__class__.__name__,
-            }
     passed = all(checks.values()) if checks else True
     return {
         "passed": passed,
@@ -542,13 +521,13 @@ def _print_benchmark_summary(report: dict[str, Any]) -> None:
         print(f"  report_path={run_metadata['report_path']}", flush=True)
     failure_breakdown = dict(summary.get("failure_breakdown", {})) or dict(aggregate_metrics.get("failure_breakdown", {}))
     verifier_weakness = dict(aggregate_metrics.get("verifier_weakness_breakdown", {}))
-    understanding_mistakes = dict(aggregate_metrics.get("prompt_understanding_mistakes", {}))
+    behavior_quality_mistakes = dict(aggregate_metrics.get("behavior_quality_mistakes", {}))
     if failure_breakdown:
         print(f"  top_failure_categories={stable_json_dumps(dict(sorted(failure_breakdown.items())[:5]))}", flush=True)
     if verifier_weakness:
         print(f"  top_verifier_weaknesses={stable_json_dumps(dict(sorted(verifier_weakness.items(), key=lambda item: (-item[1], item[0]))[:5]))}", flush=True)
-    if understanding_mistakes:
-        print(f"  top_understanding_mistakes={stable_json_dumps(dict(sorted(understanding_mistakes.items(), key=lambda item: (-item[1], item[0]))[:5]))}", flush=True)
+    if behavior_quality_mistakes:
+        print(f"  top_behavior_quality_mistakes={stable_json_dumps(dict(sorted(behavior_quality_mistakes.items(), key=lambda item: (-item[1], item[0]))[:5]))}", flush=True)
 
 
 def _print_agent_test_category_cli_summary(report: dict[str, Any]) -> None:

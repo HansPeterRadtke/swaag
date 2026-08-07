@@ -136,10 +136,7 @@ def test_direct_answer_is_one_constrained_model_call_with_all_tools(make_config)
     assert set(schema["properties"]) == {"assistant_message", "tool_calls", "continue_loop"}
     events = runtime.history.read_history(result.session_id)
     assert not any(event.event_type in {"plan_created", "plan_updated"} for event in events)
-    assert not any(
-        event.payload.get("kind") in {"analysis", "task_decision", "plan", "subagent_selection", "verification"}
-        for event in events
-    )
+    assert not any(event.event_type.startswith("plan_") for event in events)
 
 
 def test_multiple_tool_calls_execute_in_order_and_exact_results_reach_next_call(make_config) -> None:
@@ -466,3 +463,42 @@ def test_failure_analyzer_contains_no_planner_specific_classification() -> None:
     source = Path(module.__file__).read_text(encoding="utf-8")
     assert "plan_validation" not in source
     assert 'subsystem="planner"' not in source
+
+
+def test_benchmark_verifier_normalizes_absolute_allowed_paths(tmp_path) -> None:
+    from swaag.benchmark.task_definitions import BenchmarkVerificationContract
+    from swaag.benchmark.verifier import verify_benchmark_contract
+    from swaag.types import SessionState
+
+    workspace = tmp_path / "workspace"
+    workspace.mkdir()
+    target = workspace / "pkg" / "module.py"
+    target.parent.mkdir()
+    target.write_text("fixed\n", encoding="utf-8")
+    contract = BenchmarkVerificationContract(
+        task_type="coding",
+        command_cwd=str(workspace),
+        allowed_modified_files=[str(target)],
+        forbid_unexpected_workspace_changes=True,
+    )
+    state = SessionState(session_id="s", created_at="t", updated_at="t", config_fingerprint="cfg", model_base_url="http://model")
+    report = verify_benchmark_contract(
+        contract,
+        assistant_text="done",
+        state=state,
+        events=[],
+        workspace_before={"pkg/module.py": "broken\n"},
+        workspace_after={"pkg/module.py": "fixed\n"},
+    )
+    assert report.passed is True
+    assert report.evidence["allowed_modified_files"]["allowed"] == ["pkg/module.py", "pkg/module.py.bak"]
+
+
+def test_benchmark_verifier_uses_current_python_for_python3_commands(tmp_path) -> None:
+    import sys
+    from swaag.benchmark.verifier import _run_command
+
+    ok, evidence = _run_command(["python3", "-c", "import sys; print(sys.executable)"], cwd=str(tmp_path))
+    assert ok is True
+    assert evidence["command"][0] == sys.executable
+    assert evidence["stdout"].strip() == sys.executable

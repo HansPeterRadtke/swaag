@@ -3,6 +3,7 @@ from __future__ import annotations
 import json
 import re
 import subprocess
+import sys
 from collections import Counter
 from dataclasses import dataclass
 from pathlib import Path
@@ -37,9 +38,12 @@ def _is_benign_workspace_artifact(path_text: str) -> bool:
 
 
 def _run_command(command: list[str], *, cwd: str | None) -> tuple[bool, dict[str, Any]]:
+    effective_command = list(command)
+    if effective_command and effective_command[0] in {"python", "python3"}:
+        effective_command[0] = sys.executable
     try:
         completed = subprocess.run(
-            command,
+            effective_command,
             cwd=cwd or None,
             capture_output=True,
             text=True,
@@ -47,15 +51,26 @@ def _run_command(command: list[str], *, cwd: str | None) -> tuple[bool, dict[str
             check=False,
         )
     except Exception as exc:
-        return False, {"command": command, "cwd": cwd, "error": str(exc), "error_type": exc.__class__.__name__}
+        return False, {"command": effective_command, "cwd": cwd, "error": str(exc), "error_type": exc.__class__.__name__}
     evidence = {
-        "command": command,
+        "command": effective_command,
         "cwd": cwd,
         "return_code": completed.returncode,
         "stdout": completed.stdout,
         "stderr": completed.stderr,
     }
     return completed.returncode == 0, evidence
+
+
+def _workspace_key(path_text: str, *, workspace_root: str | None) -> str:
+    path = Path(str(path_text))
+    if workspace_root:
+        root = Path(workspace_root)
+        try:
+            return path.resolve().relative_to(root.resolve()).as_posix()
+        except (ValueError, OSError):
+            pass
+    return path.as_posix().lstrip("./")
 
 
 def verify_benchmark_contract(
@@ -183,13 +198,18 @@ def verify_benchmark_contract(
         raw_changed = sorted(path for path in set(before) | set(after) if before.get(path) != after.get(path))
         changed = [path for path in raw_changed if not _is_benign_workspace_artifact(path)]
         evidence["workspace_changes"] = {"changed_files": changed, "ignored_changed_files": [p for p in raw_changed if p not in changed]}
+        workspace_root = getattr(contract, "command_cwd", None)
         allowed = list(getattr(contract, "allowed_modified_files", []) or [])
         if allowed:
-            allowed_set = set(allowed) | {f"{path}.bak" for path in allowed}
+            normalized_allowed = {_workspace_key(path, workspace_root=workspace_root) for path in allowed}
+            allowed_set = normalized_allowed | {f"{path}.bak" for path in normalized_allowed}
             checks["allowed_modified_files"] = set(changed).issubset(allowed_set)
             evidence["allowed_modified_files"] = {"allowed": sorted(allowed_set), "changed_files": changed}
         elif getattr(contract, "forbid_unexpected_workspace_changes", False):
-            expected = set(expected_files) | set(expected_patterns)
+            expected = {
+                _workspace_key(path, workspace_root=workspace_root)
+                for path in set(expected_files) | set(expected_patterns)
+            }
             allowed_set = expected | {f"{path}.bak" for path in expected}
             checks["allowed_modified_files"] = set(changed).issubset(allowed_set)
             evidence["allowed_modified_files"] = {"allowed": sorted(allowed_set), "changed_files": changed}

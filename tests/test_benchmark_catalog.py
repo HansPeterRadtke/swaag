@@ -64,7 +64,6 @@ def test_benchmark_catalog_uses_programmatic_verification_and_anti_tamper_contra
             assert "false-positive-killer" in task.tags
             assert contract.forbid_unexpected_workspace_changes is True
         elif task.task_type == "quality":
-            assert scenario.oracle is not None
             assert contract.expected_answer_contains
             assert contract.forbid_unexpected_workspace_changes is True
 
@@ -113,4 +112,4 @@ def test_extremely_hard_catalog_tasks_have_high_complexity_structure(tmp_path) -
         elif task.task_type == "reading":
             assert scenario.verification_contract.expected_json_schema is not None
         elif task.task_type == "quality":
-            assert scenario.oracle is not None
+            assert scenario.verification_contract.expected_answer_contains

@@ -68,22 +68,10 @@ class BenchmarkVerificationContract:
 
 
 @dataclass(slots=True)
-class PromptUnderstandingOracle:
-    task_type: str | None = None
-    completeness: str | None = None
-    requires_expansion: bool | None = None
-    requires_decomposition: bool | None = None
-    expand_task: bool | None = None
-    split_task: bool | None = None
+class ObservableBehaviorOracle:
     ask_user: bool | None = None
-    assume_missing: bool | None = None
-    generate_ideas: bool | None = None
-    missing_required_information: bool | None = None
     evidence_required_before_response: bool | None = None
     evidence_call_count: int | None = None
-    strategy_profile: str | None = None
-    detected_goals_contains: list[str] = field(default_factory=list)
-    detected_entities_contains: list[str] = field(default_factory=list)
 
 
 @dataclass(slots=True)
@@ -94,7 +82,7 @@ class TaskScenario:
     verification_contract: BenchmarkVerificationContract
     expected_outcome: ExpectedOutcome = "success"
     expected_failure_category: str | None = None
-    oracle: PromptUnderstandingOracle | None = None
+    oracle: ObservableBehaviorOracle | None = None
     history_messages: list[Message] = field(default_factory=list)
 
     def __post_init__(self) -> None:
@@ -146,41 +134,13 @@ def _default_oracle(
     task_type: BenchmarkTaskType,
     difficulty: BenchmarkDifficulty,
     tags: list[str],
-) -> PromptUnderstandingOracle | None:
-    if task_type not in {"reading", "quality", "multi_step", "failure"}:
-        return None
+) -> ObservableBehaviorOracle | None:
+    del task_id, task_type, difficulty
     tag_set = set(tags)
-    asks_for_clarification = bool({"clarification", "incomplete", "ambiguity"} & tag_set)
-    requires_expansion = "vague" in tag_set and not asks_for_clarification
-    expected_prompt_type = "structured"
-    if asks_for_clarification:
-        expected_prompt_type = "incomplete"
-    elif "vague" in tag_set:
-        expected_prompt_type = "vague"
-    elif "decomposition" in tag_set or "decomposed" in tag_set:
-        expected_prompt_type = "already_decomposed"
-    return PromptUnderstandingOracle(
-        task_type=expected_prompt_type,
-        completeness="incomplete" if expected_prompt_type == "incomplete" else "complete",
-        requires_expansion=requires_expansion,
-        requires_decomposition=task_type in {"multi_step", "failure"},
-        expand_task=requires_expansion,
-        split_task=task_type in {"multi_step", "failure"},
-        ask_user=asks_for_clarification,
-        assume_missing=False if asks_for_clarification or "hallucination-guard" in tag_set else None,
-        generate_ideas=False if task_type in {"quality", "failure"} else None,
-        missing_required_information=True if asks_for_clarification else None,
-        strategy_profile={
-            "coding": "coding",
-            "file_edit": "file_edit",
-            "reading": "reading",
-            "quality": "generic",
-            "multi_step": "multi_step",
-            "failure": "generic",
-        }[task_type],
-        detected_goals_contains=[],
-        detected_entities_contains=[],
-    )
+    asks_for_clarification = bool({"clarification", "incomplete", "ambiguity", "vague"} & tag_set)
+    if not asks_for_clarification:
+        return None
+    return ObservableBehaviorOracle(ask_user=True)
 
 
 def _json_schema(required: list[str]) -> dict[str, Any]:
@@ -2319,13 +2279,8 @@ def _build_quality_scenario(
         fragments = ["1.", "2.", "3."]
     oracle = _default_oracle(task_id=task_id, task_type="quality", difficulty=difficulty, tags=tags)
     if oracle is not None and "vague" in set(tags):
-        oracle.task_type = "incomplete"
-        oracle.completeness = "incomplete"
-        oracle.requires_expansion = False
-        oracle.missing_required_information = True
         oracle.evidence_required_before_response = True
         oracle.evidence_call_count = 2
-        oracle.strategy_profile = "reading"
 
     return TaskScenario(
         prompt=prompt,
@@ -2478,10 +2433,6 @@ def _build_history_scenario(
         difficulty=difficulty,
         tags=tag_list,
     )
-    if oracle is not None:
-        oracle.requires_decomposition = False
-        oracle.split_task = False
-        oracle.strategy_profile = "generic"
     return TaskScenario(
         prompt=prompt,
         workspace=workspace,
@@ -2741,8 +2692,8 @@ def validate_benchmark_catalog(tasks: list[BenchmarkTaskDefinition]) -> None:
             if not contract.forbid_unexpected_workspace_changes:
                 raise ValueError(f"Failure task {task.task_id} must forbid unexpected workspace changes")
         if task.task_type == "quality":
-            if scenario.oracle is None or not contract.expected_answer_contains:
-                raise ValueError(f"Quality task {task.task_id} must define an oracle and explicit answer fragments")
+            if not contract.expected_answer_contains:
+                raise ValueError(f"Quality task {task.task_id} must define explicit answer fragments")
             if not contract.forbid_unexpected_workspace_changes:
                 raise ValueError(f"Quality task {task.task_id} must forbid unexpected workspace changes")
         if task.difficulty == "extremely_hard" and task.task_type in {"coding", "multi_step", "failure"}:

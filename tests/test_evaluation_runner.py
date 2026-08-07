@@ -56,7 +56,7 @@ def _fake_benchmark_report() -> dict[str, object]:
             "success_by_difficulty": {"extremely_easy": 0.8},
             "failure_breakdown": {"verification_failure": 12, "wrong_tool": 5},
             "verifier_weakness_breakdown": {"schema_failure": 4},
-            "prompt_understanding_mistakes": {"authority_selection": 3},
+            "behavior_quality_mistakes": {"evidence_tool_calls": 3},
         },
         "run_metadata": {
             "agent_behavior_mode": "cached",
