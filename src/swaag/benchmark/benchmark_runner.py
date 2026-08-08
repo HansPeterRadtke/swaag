@@ -417,6 +417,35 @@ def _evaluate_quality(
     }
 
 
+def _verification_repair_round_limit() -> int:
+    raw = os.environ.get("SWAAG_BENCHMARK_VERIFICATION_REPAIR_ROUNDS", "3").strip()
+    try:
+        value = int(raw)
+    except ValueError:
+        value = 3
+    return max(0, min(value, 10))
+
+
+def _verification_repair_prompt(verification) -> str:
+    failing = [name for name, passed in verification.checks.items() if not passed]
+    evidence = {name: verification.evidence.get(name) for name in failing}
+    payload = stable_json_dumps(
+        {
+            "failed_checks": failing,
+            "reason": verification.reason,
+            "evidence": evidence,
+        },
+        indent=2,
+    )
+    if len(payload) > 12000:
+        payload = payload[:12000] + "\n... verifier evidence truncated mechanically ..."
+    return (
+        "External deterministic verification has not passed yet. Continue the same task and repair the result. "
+        "Do not claim completion until the verifier passes. Use the evidence below exactly; inspect current state before editing when needed.\n"
+        + payload
+    )
+
+
 def _classify_benchmark_task_outcome(
     *,
     scenario: TaskScenario,
@@ -694,6 +723,49 @@ def run_benchmarks(
                 state = _record_benchmark_timeout_event(runtime, state, runtime_error)
             except Exception as exc:
                 runtime_error = exc
+
+            verification = None
+            quality = None
+            repair_rounds_used = 0
+            repair_limit = _verification_repair_round_limit()
+            while True:
+                after_snapshot = _snapshot_workspace(scenario.workspace)
+                rebuilt = runtime.history.rebuild_from_history(state.session_id)
+                events = runtime.history.read_history(state.session_id)
+                final_text = assistant_text or (rebuilt.messages[-1].content if rebuilt.messages and rebuilt.messages[-1].role == "assistant" else "")
+                verification = verify_benchmark_contract(
+                    scenario.verification_contract,
+                    assistant_text=final_text,
+                    state=rebuilt,
+                    events=events,
+                    workspace_before=before_snapshot,
+                    workspace_after=after_snapshot,
+                    workspace_root=str(scenario.workspace),
+                    semantic_backend_mode="llm_scoring",
+                    semantic_base_url=config.model.base_url,
+                    semantic_seed=config.model.seed,
+                    semantic_connect_timeout_seconds=config.model.connect_timeout_seconds,
+                    semantic_read_timeout_seconds=config.model.verification_timeout_seconds,
+                )
+                quality = _evaluate_quality(scenario.oracle, events, runtime=runtime, prompt=scenario.prompt, assistant_text=final_text)
+                if runtime_error is not None or scenario.expected_outcome != "success" or (verification.passed and quality["passed"]):
+                    break
+                if repair_rounds_used >= repair_limit:
+                    break
+                repair_rounds_used += 1
+                repair_prompt = _verification_repair_prompt(verification)
+                try:
+                    with _benchmark_seed_timeout(effective_task_timeout):
+                        repair_turn = runtime.run_turn_in_session(state, repair_prompt)
+                    assistant_text = repair_turn.assistant_text
+                except BenchmarkSeedTimeout as exc:
+                    runtime_error = TimeoutError(str(exc))
+                    state = _record_benchmark_timeout_event(runtime, state, runtime_error)
+                    break
+                except Exception as exc:
+                    runtime_error = exc
+                    break
+
             task_elapsed = round(time.monotonic() - task_started, 3)
             aggregate_wall_clock += task_elapsed
             after_snapshot = _snapshot_workspace(scenario.workspace)
@@ -701,20 +773,8 @@ def run_benchmarks(
             events = runtime.history.read_history(state.session_id)
             trace_metrics = _task_trace_metrics(events)
             final_text = assistant_text or (rebuilt.messages[-1].content if rebuilt.messages and rebuilt.messages[-1].role == "assistant" else "")
-            verification = verify_benchmark_contract(
-                scenario.verification_contract,
-                assistant_text=final_text,
-                state=rebuilt,
-                events=events,
-                workspace_before=before_snapshot,
-                workspace_after=after_snapshot,
-                semantic_backend_mode="llm_scoring",
-                semantic_base_url=config.model.base_url,
-                semantic_seed=config.model.seed,
-                semantic_connect_timeout_seconds=config.model.connect_timeout_seconds,
-                semantic_read_timeout_seconds=config.model.verification_timeout_seconds,
-            )
-            quality = _evaluate_quality(scenario.oracle, events, runtime=runtime, prompt=scenario.prompt, assistant_text=final_text)
+            assert verification is not None
+            assert quality is not None
             failure = None
             if not verification.passed or scenario.expected_outcome == "expected_failure" or not quality["passed"]:
                 failure = analyzer.analyze(
@@ -755,6 +815,9 @@ def run_benchmarks(
                     "failure_category": failure.category if failure is not None else None,
                     "failure_reason": failure.reason if failure is not None else None,
                     "failure_subsystem": failure.subsystem if failure is not None else None,
+                    "verification_summary": {"checks": verification.checks, "evidence": verification.evidence, "reason": verification.reason},
+                    "quality_summary": quality,
+                    "verification_repair_rounds": repair_rounds_used,
                     "wall_clock_seconds": task_elapsed,
                     "replay_cache": replay_cache_info or {},
                 }
@@ -767,8 +830,17 @@ def run_benchmarks(
             aggregate_history_paths.append(str(runtime.history.history_path(state.session_id)))
             aggregate_workspace_paths.append(str(scenario.workspace))
             aggregate_metrics.append(asdict(rebuilt.metrics))
-            aggregate_verification_summary = {"checks": verification.checks, "evidence": verification.evidence, "reason": verification.reason}
-            aggregate_quality_summary = quality
+            aggregate_verification_summary = {
+                "checks": {f"seed_{item['seed']}": bool(item["deterministic_verification_passed"]) for item in seed_results},
+                "evidence": {f"seed_{item['seed']}": item.get("verification_summary", {}) for item in seed_results},
+                "reason": "all_seeds_passed" if all(item["deterministic_verification_passed"] for item in seed_results) else "one_or_more_seeds_failed",
+            }
+            aggregate_quality_summary = {
+                "passed": all(bool(item.get("quality_summary", {}).get("passed", True)) for item in seed_results),
+                "checks": {f"seed_{item['seed']}": bool(item.get("quality_summary", {}).get("passed", True)) for item in seed_results},
+                "evidence": {f"seed_{item['seed']}": item.get("quality_summary", {}) for item in seed_results},
+                "oracle": {},
+            }
             aggregate_session_id = aggregate_session_id or state.session_id
         collector.add(
             BenchmarkTaskResult(

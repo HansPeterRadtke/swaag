@@ -561,3 +561,27 @@ def test_failed_verification_requires_diagnostic_action_before_edit_or_retest(ma
 
 def test_failed_verification_blocks_terminal_answer_until_tests_pass() -> None:
     assert "run_tests" not in AgentRuntime._DIAGNOSTIC_TOOL_NAMES
+
+
+def test_verification_repair_prompt_contains_only_failed_checks() -> None:
+    from types import SimpleNamespace
+    from swaag.benchmark.benchmark_runner import _verification_repair_prompt
+
+    report = SimpleNamespace(
+        checks={"command": True, "expected_files": False},
+        evidence={"command": {"return_code": 0}, "expected_files": {"x": {"actual": "bad", "expected": "good"}}},
+        reason="expected_files",
+    )
+    text = _verification_repair_prompt(report)
+    assert "expected_files" in text
+    assert '"command"' not in text
+    assert "Do not claim completion until the verifier passes" in text
+
+
+def test_benchmark_repair_round_limit_is_bounded(monkeypatch) -> None:
+    from swaag.benchmark.benchmark_runner import _verification_repair_round_limit
+
+    monkeypatch.setenv("SWAAG_BENCHMARK_VERIFICATION_REPAIR_ROUNDS", "99")
+    assert _verification_repair_round_limit() == 10
+    monkeypatch.setenv("SWAAG_BENCHMARK_VERIFICATION_REPAIR_ROUNDS", "-2")
+    assert _verification_repair_round_limit() == 0

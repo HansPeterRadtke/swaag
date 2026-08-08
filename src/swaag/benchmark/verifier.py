@@ -81,6 +81,7 @@ def verify_benchmark_contract(
     events: list[HistoryEvent],
     workspace_before: dict[str, str] | None = None,
     workspace_after: dict[str, str] | None = None,
+    workspace_root: str | None = None,
     **_ignored: Any,
 ) -> BenchmarkVerificationReport:
     checks: dict[str, bool] = {}
@@ -198,16 +199,16 @@ def verify_benchmark_contract(
         raw_changed = sorted(path for path in set(before) | set(after) if before.get(path) != after.get(path))
         changed = [path for path in raw_changed if not _is_benign_workspace_artifact(path)]
         evidence["workspace_changes"] = {"changed_files": changed, "ignored_changed_files": [p for p in raw_changed if p not in changed]}
-        workspace_root = getattr(contract, "command_cwd", None)
+        effective_workspace_root = workspace_root or getattr(contract, "command_cwd", None)
         allowed = list(getattr(contract, "allowed_modified_files", []) or [])
         if allowed:
-            normalized_allowed = {_workspace_key(path, workspace_root=workspace_root) for path in allowed}
+            normalized_allowed = {_workspace_key(path, workspace_root=effective_workspace_root) for path in allowed}
             allowed_set = normalized_allowed | {f"{path}.bak" for path in normalized_allowed}
             checks["allowed_modified_files"] = set(changed).issubset(allowed_set)
             evidence["allowed_modified_files"] = {"allowed": sorted(allowed_set), "changed_files": changed}
         elif getattr(contract, "forbid_unexpected_workspace_changes", False):
             expected = {
-                _workspace_key(path, workspace_root=workspace_root)
+                _workspace_key(path, workspace_root=effective_workspace_root)
                 for path in set(expected_files) | set(expected_patterns)
             }
             allowed_set = expected | {f"{path}.bak" for path in expected}

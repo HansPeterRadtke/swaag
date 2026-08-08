@@ -610,3 +610,15 @@ def test_shell_command_rejects_test_runners_in_favor_of_run_tests() -> None:
         with pytest.raises(ToolValidationError, match="use run_tests"):
             tool.validate({"command": command, "background": False})
     assert tool.validate({"command": "python3 script.py", "background": False})["command"] == "python3 script.py"
+
+
+def test_edit_text_noop_does_not_require_edit_applied_event() -> None:
+    tool = EditTextTool()
+    validated = tool.validate({
+        "path": "x.txt",
+        "operation": "replace_exact",
+        "old_text": "a",
+        "new_text": "a",
+        "dry_run": False,
+    })
+    assert tool.required_generated_event_types(validated) == {"file_read_for_edit"}

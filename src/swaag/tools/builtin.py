@@ -449,12 +449,10 @@ class EditTextTool(Tool):
         return []
 
     def required_generated_event_types(self, validated_input: dict[str, Any]) -> set[str]:
-        required = {"file_read_for_edit"}
-        if validated_input.get("dry_run", False):
-            required.add("edit_previewed")
-        else:
-            required.add("edit_applied")
-        return required
+        # A no-op edit is represented as edit_previewed even when dry_run is false,
+        # while a real write emits edit_applied. The common invariant is that the
+        # current file was read before the edit decision.
+        return {"file_read_for_edit"}
 
     def verify_effect(
         self,
