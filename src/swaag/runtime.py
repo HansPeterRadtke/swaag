@@ -143,15 +143,17 @@ class AgentRuntime:
     def _deliver_due_wakeups(self, state: SessionState) -> None:
         store = WakeupStore(self.config.sessions.root)
         for wakeup in store.claim_due(session_id=state.session_id):
-            self.history.record_event(
-                state,
-                "wakeup_due",
-                {"wakeup_id": wakeup.wakeup_id, "wake_at": wakeup.wake_at, "reason": wakeup.reason},
-            )
-            self.history.enqueue_control_message(
+            control = self.history.enqueue_control_message(
                 state.session_id,
                 f"Scheduled wakeup is due: {wakeup.reason} (scheduled for {wakeup.wake_at})",
                 source="scheduler",
+                control_id=f"wakeup_{wakeup.wakeup_id}",
+            )
+            delivered = store.mark_delivered(wakeup_id=wakeup.wakeup_id)
+            self.history.record_event(
+                state,
+                "wakeup_due",
+                {"wakeup_id": delivered.wakeup_id, "wake_at": delivered.wake_at, "reason": delivered.reason},
             )
 
     def resolve_session_ref(self, session_ref: str | None, *, latest_if_none: bool = False) -> str | None:
@@ -184,20 +186,35 @@ class AgentRuntime:
         run_id = f"{state.session_id}:{new_id('run')}"
         self.history.set_active_run(state.session_id, run_id=run_id, user_text=user_text)
         try:
-            return self._run_model_tool_loop(state, user_text)
+            return self._run_model_tool_loop(state, user_text, record_user_message=True)
         finally:
             self.history.clear_active_run(state.session_id, run_id=run_id)
 
-    def _run_model_tool_loop(self, state: SessionState, user_text: str) -> TurnResult:
+    def run_pending_controls_in_session(self, state: SessionState) -> TurnResult | None:
+        self._deliver_due_wakeups(state)
+        if not self.history.list_pending_control_messages(state.session_id):
+            return None
+        original_request = next((message.content for message in reversed(state.messages) if message.role == "user" and message.content.strip()), "")
+        if not original_request:
+            return None
+        run_id = f"{state.session_id}:{new_id('run')}"
+        self.history.set_active_run(state.session_id, run_id=run_id, user_text=original_request)
+        try:
+            return self._run_model_tool_loop(state, original_request, record_user_message=False)
+        finally:
+            self.history.clear_active_run(state.session_id, run_id=run_id)
+
+    def _run_model_tool_loop(self, state: SessionState, user_text: str, *, record_user_message: bool = True) -> TurnResult:
         original_request = user_text.strip()
         if not original_request:
             raise ValueError("user_text must not be empty")
 
-        self.history.ensure_human_readable_name(state, original_request)
-        self._record_message(
-            state,
-            Message(role="user", content=original_request, created_at=utc_now_iso()),
-        )
+        if record_user_message:
+            self.history.ensure_human_readable_name(state, original_request)
+            self._record_message(
+                state,
+                Message(role="user", content=original_request, created_at=utc_now_iso()),
+            )
         self.history.record_event(
             state,
             "turn_started",
@@ -295,7 +312,7 @@ class AgentRuntime:
                     budget_reports,
                 )
 
-            self._consume_pending_user_messages(
+            self._consume_pending_control_messages(
                 state,
                 pending_payloads=pending_payloads,
                 selected_action=selected_action,
@@ -414,7 +431,7 @@ class AgentRuntime:
             budget_reports,
         )
 
-    def _consume_pending_user_messages(
+    def _consume_pending_control_messages(
         self,
         state: SessionState,
         *,
@@ -426,18 +443,8 @@ class AgentRuntime:
             message = str(payload.get("message", "")).strip()
             if not control_id or not message:
                 continue
-            self._record_message(
-                state,
-                Message(
-                    role="user",
-                    content=message,
-                    created_at=str(payload.get("created_at", "")) or utc_now_iso(),
-                    metadata={
-                        "control_id": control_id,
-                        "source": payload.get("source", "control"),
-                    },
-                ),
-            )
+            # Controls are not user messages. They are injected through the dedicated
+            # pending-control prompt channel and preserved exactly in this event.
             decision = asdict(selected_action)
             self.history.record_event(
                 state,

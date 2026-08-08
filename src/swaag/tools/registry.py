@@ -7,14 +7,17 @@ from typing import Iterable
 from swaag.config import AgentConfig
 from swaag.environment.environment import AgentEnvironment
 from swaag.tools.base import Tool, ToolContext
+from swaag.tools.artifacts import ARTIFACT_TOOLS
 from swaag.tools.builtin import BUILTIN_TOOLS
+from swaag.tools.history import HISTORY_TOOLS
+from swaag.tools.terminal import TERMINAL_TOOLS
 from swaag.types import SessionState, ToolExecutionResult, ToolInvocation
 
 
 class ToolRegistry:
     def __init__(self, tools: Iterable[Tool] | None = None):
         self._tools: dict[str, Tool] = {}
-        for tool in tools or BUILTIN_TOOLS:
+        for tool in tools or [*BUILTIN_TOOLS, *HISTORY_TOOLS, *ARTIFACT_TOOLS, *TERMINAL_TOOLS]:
             self.register(tool)
 
     def register(self, tool: Tool) -> None:

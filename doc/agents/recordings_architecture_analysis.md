@@ -18,11 +18,7 @@ This principle is substantially implemented. SWAAG performs exact or conservativ
 
 Compaction is model-authored. The summary prompt explicitly asks the model to preserve goals, constraints, facts, decisions, file paths, tool results, unresolved work, and exact wording when correctness depends on it. The model can also request a bounded number of recent source messages to remain verbatim through `preserve_recent_messages`. Python validates the requested count and remains authoritative over the hard token limit.
 
-The current design is nevertheless only a partial solution to the recordings’ broader semantic-retention requirement. The model can request a recent suffix to remain exact, but it cannot select arbitrary older events for exact retention during compaction. An old tool result that becomes important again cannot be promoted back into the active prompt by the model through a normal tool call. The complete history remains on disk, but exact history recovery is not yet a first-class model-facing capability.
-
-SWAAG already has a useful internal history query implementation, including ranked event retrieval and exact payload return, but that API is exposed through the runtime/programmatic surface rather than through the enabled agent tool registry. This is a major architectural gap relative to the recordings, which explicitly describe history retrieval as one of the foundational tools.
-
-A future design should expose history search and exact history-window retrieval as normal constrained tools. The important invariant is that summaries remain navigation aids, never replacements for authoritative history. A model should be able to recognize that a summary is insufficient, search the durable history, and pull the exact event or window it needs back into the next prompt.
+The model can now recover arbitrary older exact events through first-class `history_search` and `history_window` tools. Search returns bounded ranked previews and authoritative sequence references; the window tool then returns exact durable event payloads around a selected sequence. This preserves the recordings’ intended division of responsibility: Python bounds and indexes retrieval mechanically while the model decides which old detail matters. Summaries remain navigation aids rather than authorities, and an old exact tool result or user statement can be promoted back into the active reasoning context on demand.
 
 ## Large tool output and semantic triage
 
@@ -34,7 +30,7 @@ The recording proposes model-mediated classification or summarization of tool ou
 
 SWAAG partially mitigates output growth through bounded file-reading tools, structured tools, history compression, exact prompt admission, and background-process polling. However, generic shell output itself does not have a general semantic triage stage before it becomes part of the agent transcript. There is also no general shell-output byte or token admission layer that asks the model what to preserve before the output can dominate the next action call.
 
-This remains an unresolved architecture problem. The robust solution should preserve the raw output durably outside the prompt, place a bounded representation or reference into the immediate transcript, and allow the model to inspect, search, summarize, or request exact slices. The raw result must remain authoritative and retrievable. A deterministic truncation policy alone would not satisfy the recordings because it can destroy the semantically important part of an output.
+This is now implemented through durable text artifacts. Shell, structured test, and completed background-process output is kept bounded in immediate tool/history payloads; whenever output exceeds the capture limit, the exact full stream is persisted under the session runtime tree with its SHA-256, total character count, and artifact ID. The model can use `read_artifact` to retrieve exact bounded slices by offset. Python therefore decides only how much fits immediately, while the model decides whether and where to inspect the raw output.
 
 ## History must be authoritative and always recoverable
 
@@ -46,7 +42,7 @@ The ideal is append-only durable history with derived projections. Summaries and
 
 This is strongly implemented. SWAAG uses append-only event history and can rebuild session state from it. Exact user messages and tool results are explicitly described in the prompt as authoritative. Durable notes are explicitly labeled as navigation aids rather than authorities. Session projections are derived from history rather than treated as primary state.
 
-The remaining gap is model autonomy over retrieval. `HistoryStore.query_history_details` and runtime history-query methods exist, but no `history_search` or `read_history` tool is present in the built-in tool registry. This should be treated as a missing foundational tool rather than an optional convenience.
+Model autonomy over historical retrieval is now implemented. `history_search` exposes ranked bounded discovery and `history_window` exposes exact event windows, both against the same append-only history used for rebuilding session state.
 
 ## The original user request is the highest semantic authority
 
@@ -96,7 +92,7 @@ The recording explicitly calls interactive tools a major topic and says the comm
 
 The shell implementation supports non-interactive commands through a persistent logical shell state, background execution, process polling, killing, workspace snapshots, and tracked environment/cwd changes. This is useful and much stronger than a stateless subprocess wrapper.
 
-It is not yet a fully interactive terminal. The tool guidance explicitly asks for non-interactive commands. There is no model-facing mechanism for writing stdin to a running process or attaching to a PTY-backed interactive program. Background processes can be polled and killed, but they cannot be driven conversationally through an interactive terminal stream. This is a meaningful gap relative to the recordings.
+SWAAG now also exposes a separate persistent `terminal` tool for cases that genuinely require interactive state rather than ordinary one-shot shell execution. It is backed by a detached PTY worker, supports terminal IDs and names, persistent shell cwd/environment across tool calls, incremental bounded output reads, later stdin delivery to interactive child processes, listing, and process-group close semantics. `shell_command` remains the preferred lower-cost interface for ordinary non-interactive work.
 
 The shell also does not need a dedicated man-page tool: the model can already invoke `man`, `--help`, `info`, or other local documentation through `shell_command` when those commands are available. That matches the recording’s preference for using native operating-system documentation rather than duplicating it inside agent schemas.
 
@@ -110,9 +106,7 @@ Durable wakeup parsing supports seconds, minutes, hours, days, weeks, months, an
 
 Synchronous waiting is less expressive. `wait_seconds` accepts only a numeric number of seconds and is bounded by the tool timeout. This is appropriate for short waits, but it does not implement the human-readable-unit interface described in the recording. Milliseconds are not supported by the durable duration parser either.
 
-More importantly, durable wakeups do not yet autonomously reactivate a dormant agent at the due timestamp. The only current `claim_due` call is in the runtime path when a session is invoked. There is no scheduler daemon, timer service, or background dispatcher that watches the wakeup store and resumes the session when a due time arrives. Persistence is implemented; autonomous wake-and-resume is not. This is a substantial gap if SWAAG is intended to support agents that sleep for hours or months and then continue without an external caller.
-
-A complete implementation needs a scheduler/dispatcher process that finds the next due wakeup, atomically claims it, queues the corresponding control message exactly once, and invokes or resumes the appropriate agent session. It must remain restart-safe and preserve the append-only history semantics already used by the runtime.
+Durable wakeups now have an autonomous dispatcher. The wakeup store uses file locking and atomic replacement, separates scheduled/claimed/delivered states, supports reclaiming stale claims after a crash lease, and queues a deterministic control ID before marking delivery. The dispatcher discovers due sessions and resumes the existing session through a control-only runtime turn; scheduler controls are not persisted as fake user messages, so the original user request remains the semantic authority. A systemd deployment unit is included for continuous dispatch.
 
 ## Semantic authority versus deterministic enforcement
 
@@ -130,7 +124,7 @@ The benchmark’s deterministic verifier should likewise provide evidence back t
 
 The recordings imply an architecture with a small deterministic kernel and a model-controlled semantic loop. The durable kernel should own append-only history, exact model-call accounting, tool schemas, execution, persistence, process state, model/server identity, wakeup storage, and hard context ceilings. The model should own task interpretation, action choice, relevance, history/detail retrieval decisions, output triage, and summary content.
 
-The next highest-value architectural work is not another planner. It is improving information access and context control. First, expose exact history search and window retrieval as agent tools. Second, add a raw-output artifact/reference mechanism so large command results can remain exact and durable without flooding the next prompt. Third, let the model inspect or summarize those artifacts on demand. Fourth, develop a truly interactive terminal/process interface. Fifth, add an autonomous durable wakeup dispatcher. Sixth, move the compact user-authority charter into the always-present system prompt while preserving the action prompt’s detailed operational guidance.
+The highest-value architecture work remains context quality rather than adding another planner. The foundational pieces identified in the recordings are now present: exact history retrieval, durable raw-output artifacts with model-controlled inspection, a persistent interactive PTY terminal, an autonomous crash-safe wakeup dispatcher, human-readable waits, and the compact user-authority charter in every system prompt. Future changes should concentrate on measuring and improving semantic context selection while keeping these interfaces small and mechanically bounded.
 
 The tool registry should also be reviewed continuously for prompt cost. Custom tools should remain when they provide runtime invariants or structured evidence that the shell cannot provide cleanly. Ordinary operating-system behavior should default to the shell rather than being duplicated automatically as more schemas.
 
@@ -138,6 +132,6 @@ The tool registry should also be reviewed continuously for prompt cost. Custom t
 
 The current SWAAG architecture is directionally close to the recordings and substantially closer than the removed planner-era design. Its strongest matches are the single model-controlled action loop, verbatim authoritative user input, exact durable history, exact context admission, model-authored compression, bounded adaptive recent-message preservation, durable notes, broad shell/tool capability, and persistent wakeups.
 
-It does not yet fulfill the complete design. The important missing pieces are first-class model-facing history retrieval, arbitrary recovery of older exact details into context, semantic handling of unexpectedly huge command output, a fully interactive terminal, autonomous wake-and-resume scheduling, human-readable synchronous wait units, and an always-present system-level statement of user-request authority. The bespoke-tool surface is also larger than the shell-first philosophy in the recordings would ideally require, although several of those tools are justified by structured evidence and persistence requirements.
+The current implementation now covers the concrete missing capabilities identified by the recordings: model-facing exact history retrieval, recovery of older exact details, bounded durable handling of unexpectedly huge output, persistent interactive terminal state and stdin, autonomous crash-safe wake-and-resume dispatch, human-readable synchronous waits, and an always-present system-level statement of user-request authority. The remaining architectural discipline is continuous rather than a discrete missing subsystem: keep the bespoke-tool surface small, prefer the shell for ordinary operating-system work, and keep semantic relevance decisions with the model while Python enforces only mechanical bounds and persistence invariants.
 
 The central design test remains the one stated in the recordings: for every model call, does the context contain the information necessary to make the correct next decision, in the most useful form available, without ever exceeding the context window and while reserving enough space for the output? Every future subsystem should be judged by whether it improves that property without stealing semantic authority from the model.

@@ -167,6 +167,7 @@ def _build_config(
     config.runtime.max_total_actions = int(overrides.get("runtime_max_total_actions", config.runtime.max_total_actions))
     config.runtime.max_tool_steps = int(overrides.get("runtime_max_tool_steps", config.runtime.max_tool_steps))
     config.runtime.tool_call_budget = int(overrides.get("runtime_tool_call_budget", config.runtime.tool_call_budget))
+    config.environment.max_capture_chars = int(overrides.get("environment_max_capture_chars", config.environment.max_capture_chars))
     return config
 
 

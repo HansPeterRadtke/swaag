@@ -13,7 +13,7 @@ from swaag.editing import EditError, TextEditor
 from swaag.notes import compact_notes, enforce_limits, make_note, render_notes
 from swaag.reader import ReaderError, SequentialReader
 from swaag.tools.base import Tool, ToolContext, ToolValidationError
-from swaag.scheduler import WakeupStore
+from swaag.scheduler import WakeupStore, parse_duration
 from swaag.types import DerivedFileWrite, ToolExecutionResult, ToolGeneratedEvent
 from swaag.utils import sha256_text, stable_json_dumps
 
@@ -894,6 +894,14 @@ class ShellCommandTool(Tool):
             "exit_code": {"type": "integer"},
             "stdout": {"type": "string"},
             "stderr": {"type": "string"},
+            "stdout_chars": {"type": "integer"},
+            "stderr_chars": {"type": "integer"},
+            "stdout_truncated": {"type": "boolean"},
+            "stderr_truncated": {"type": "boolean"},
+            "stdout_artifact_id": {"type": "string"},
+            "stderr_artifact_id": {"type": "string"},
+            "stdout_sha256": {"type": "string"},
+            "stderr_sha256": {"type": "string"},
             "created_files": {"type": "array", "items": {"type": "string"}},
             "modified_files": {"type": "array", "items": {"type": "string"}},
             "deleted_files": {"type": "array", "items": {"type": "string"}},
@@ -960,6 +968,14 @@ class RunTestsTool(Tool):
             "exit_code": {"type": "integer"},
             "stdout": {"type": "string"},
             "stderr": {"type": "string"},
+            "stdout_chars": {"type": "integer"},
+            "stderr_chars": {"type": "integer"},
+            "stdout_truncated": {"type": "boolean"},
+            "stderr_truncated": {"type": "boolean"},
+            "stdout_artifact_id": {"type": "string"},
+            "stderr_artifact_id": {"type": "string"},
+            "stdout_sha256": {"type": "string"},
+            "stderr_sha256": {"type": "string"},
             "passed": {"type": "boolean"},
             "background": {"type": "boolean"},
             "process_id": {"type": "string"},
@@ -1221,17 +1237,30 @@ class KillProcessTool(Tool):
 
 class WaitSecondsTool(Tool):
     name = "wait_seconds"
-    description = "Wait synchronously for a bounded number of seconds, then return the measured elapsed duration."
+    description = "Wait synchronously for a bounded duration. Accept either numeric seconds or a human duration such as '250 ms', '2 minutes', or '1 hour'."
     kind = "pure"
-    input_schema = _closed_input({"seconds": {"type": "number"}})
+    input_schema = _closed_input({"seconds": {"anyOf": [{"type": "number"}, {"type": "null"}]}, "duration": {"anyOf": [{"type": "string"}, {"type": "null"}]}})
 
     def validate(self, raw_input: dict[str, Any]) -> dict[str, Any]:
         seconds = raw_input.get("seconds")
-        if not isinstance(seconds, (int, float)) or isinstance(seconds, bool):
-            raise ToolValidationError("wait_seconds.seconds must be a number")
-        if seconds < 0:
-            raise ToolValidationError("wait_seconds.seconds must be non-negative")
-        return {"seconds": float(seconds)}
+        duration = raw_input.get("duration")
+        has_seconds = seconds is not None
+        has_duration = isinstance(duration, str) and bool(duration.strip())
+        if has_seconds == has_duration:
+            raise ToolValidationError("wait_seconds requires exactly one of seconds or duration")
+        if has_seconds:
+            if not isinstance(seconds, (int, float)) or isinstance(seconds, bool):
+                raise ToolValidationError("wait_seconds.seconds must be a number or null")
+            if seconds < 0:
+                raise ToolValidationError("wait_seconds.seconds must be non-negative")
+            return {"seconds": float(seconds), "duration": None}
+        if duration is not None and not isinstance(duration, str):
+            raise ToolValidationError("wait_seconds.duration must be a string or null")
+        try:
+            parsed = parse_duration(str(duration).strip())
+        except ValueError as exc:
+            raise ToolValidationError(str(exc)) from exc
+        return {"seconds": parsed.total_seconds(), "duration": str(duration).strip()}
 
     def required_generated_event_types(self, validated_input: dict[str, Any]) -> set[str]:
         return {"wait_entered", "wait_resumed"}
@@ -1254,7 +1283,7 @@ class WaitSecondsTool(Tool):
             "wait_resumed",
             {"reason": f"wait_seconds:{seconds:g}", "process_ids": []},
         )
-        output = {"requested_seconds": seconds, "elapsed_seconds": elapsed}
+        output = {"requested_seconds": seconds, "requested_duration": validated_input.get("duration"), "elapsed_seconds": elapsed}
         return ToolExecutionResult(
             tool_name=self.name,
             output=output,
@@ -1266,7 +1295,7 @@ class WaitSecondsTool(Tool):
 class ScheduleWakeupTool(Tool):
     name = "schedule_wakeup"
     description = "Persist a wakeup for this session using either a human duration or an absolute ISO-8601 time. The wakeup survives process restarts."
-    usage_guidance = "Provide exactly one of duration or wake_at. Durations support seconds, minutes, hours, days, weeks, months, and years."
+    usage_guidance = "Provide exactly one of duration or wake_at. Durations support milliseconds, seconds, minutes, hours, days, weeks, months, and years."
     kind = "stateful"
     input_schema = _closed_input({
         "duration": _string_or_null(),

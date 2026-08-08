@@ -1,0 +1,69 @@
+from __future__ import annotations
+
+from typing import Any
+
+from swaag.environment.artifacts import TextArtifactStore
+from swaag.tools.base import Tool, ToolContext, ToolValidationError
+from swaag.types import ToolExecutionResult, ToolGeneratedEvent
+from swaag.utils import stable_json_dumps
+
+
+class ReadArtifactTool(Tool):
+    name = "read_artifact"
+    description = "Read an exact bounded slice of a durable text artifact produced by tools, such as full shell/test output that was too large for the immediate context."
+    usage_guidance = "Use artifact_id from another tool result. Advance start_offset with next_offset until finished; search or inspect only as much raw output as the task needs."
+    kind = "pure"
+    input_schema = {
+        "type": "object",
+        "properties": {
+            "artifact_id": {"type": "string"},
+            "start_offset": {"anyOf": [{"type": "integer"}, {"type": "null"}]},
+            "max_chars": {"anyOf": [{"type": "integer"}, {"type": "null"}]},
+        },
+        "required": ["artifact_id", "start_offset", "max_chars"],
+        "additionalProperties": False,
+    }
+
+    def validate(self, raw_input: dict[str, Any]) -> dict[str, Any]:
+        artifact_id = raw_input.get("artifact_id")
+        start_offset = raw_input.get("start_offset")
+        start_offset = 0 if start_offset is None else start_offset
+        max_chars = raw_input.get("max_chars")
+        if not isinstance(artifact_id, str) or not artifact_id.strip():
+            raise ToolValidationError("read_artifact.artifact_id must be a non-empty string")
+        if not isinstance(start_offset, int) or isinstance(start_offset, bool) or start_offset < 0:
+            raise ToolValidationError("read_artifact.start_offset must be a non-negative integer")
+        if max_chars is not None and (not isinstance(max_chars, int) or isinstance(max_chars, bool) or max_chars <= 0):
+            raise ToolValidationError("read_artifact.max_chars must be a positive integer")
+        return {"artifact_id": artifact_id.strip(), "start_offset": start_offset, "max_chars": max_chars}
+
+    def required_generated_event_types(self, validated_input: dict[str, Any]) -> set[str]:
+        return {"artifact_read"}
+
+    def execute(self, validated_input: dict[str, Any], context: ToolContext) -> ToolExecutionResult:
+        max_chars = validated_input["max_chars"] or context.config.reader.default_chunk_chars
+        max_chars = min(int(max_chars), int(context.config.reader.max_chunk_chars))
+        store = TextArtifactStore(context.config.sessions.root, context.session_state.session_id)
+        output = store.read(
+            validated_input["artifact_id"],
+            start_offset=validated_input["start_offset"],
+            max_chars=max_chars,
+        )
+        event = ToolGeneratedEvent(
+            "artifact_read",
+            {
+                "artifact_id": output["artifact_id"],
+                "start_offset": output["start_offset"],
+                "end_offset": output["end_offset"],
+                "finished": output["finished"],
+            },
+        )
+        return ToolExecutionResult(
+            tool_name=self.name,
+            output=output,
+            display_text=f"read_artifact result: {stable_json_dumps(output, indent=2)}",
+            generated_events=[event],
+        )
+
+
+ARTIFACT_TOOLS = [ReadArtifactTool()]

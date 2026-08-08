@@ -255,18 +255,23 @@ def test_identical_model_tool_response_is_rejected_for_recovery(make_config) -> 
     )
 
 
-def test_failure_analyzer_supports_action_loop_metrics_without_legacy_fields() -> None:
+def test_failure_analyzer_supports_current_action_loop_metrics_without_legacy_fields() -> None:
     from swaag.benchmark.failure_analyzer import FailureAnalyzer
     from swaag.types import HistoryEvent, SessionState
 
     state = SessionState(session_id="s", created_at="t", updated_at="t", config_fingerprint="cfg", model_base_url="http://127.0.0.1:14829")
     state.metrics.action_count = 1
-    events = [HistoryEvent(id="e1", sequence=1, session_id="s", timestamp="t", type="turn_failed", version=1, payload={"reason": "budget_exhausted"})]
+    events = [
+        HistoryEvent(
+            id="e1", sequence=1, session_id="s", timestamp="t", type="agent_action_selected", version=1,
+            payload={"action_index": 1, "action": {"assistant_message": "done", "tool_calls": [], "continue_loop": False}, "occurrence": 1},
+        )
+    ]
 
     failure = FailureAnalyzer().analyze(state=state, events=events, deterministic_verification_passed=False, runtime_error=None)
 
     assert failure.category == "premature_termination"
-    assert failure.evidence["last_reason"] == "budget_exhausted"
+    assert failure.evidence["actions"] == 1
 
 
 def test_non_live_benchmark_uses_resolvable_local_model_default(monkeypatch) -> None:
@@ -312,6 +317,7 @@ def test_context_discovery_retries_transient_failures(monkeypatch) -> None:
 def test_duration_parser_supports_recording_units() -> None:
     from swaag.scheduler import parse_duration
 
+    assert parse_duration("250 ms").total_seconds() == 0.25
     assert parse_duration("30 seconds").total_seconds() == 30
     assert parse_duration("2 hours").total_seconds() == 7200
     assert parse_duration("3 days").total_seconds() == 259200
@@ -331,7 +337,9 @@ def test_wakeup_store_persists_lists_cancels_and_claims_once(tmp_path) -> None:
     assert WakeupStore(tmp_path).claim_due(session_id="s", now=now + timedelta(hours=1)) == []
     claimed = WakeupStore(tmp_path).claim_due(session_id="s", now=now + timedelta(hours=3))
     assert [item.wakeup_id for item in claimed] == [wakeup.wakeup_id]
-    assert claimed[0].status == "delivered"
+    assert claimed[0].status == "claimed"
+    delivered = WakeupStore(tmp_path).mark_delivered(wakeup_id=wakeup.wakeup_id, now=now + timedelta(hours=3))
+    assert delivered.status == "delivered"
     assert WakeupStore(tmp_path).claim_due(session_id="s", now=now + timedelta(hours=4)) == []
 
     second = store.schedule(session_id="s", reason="later", duration="1 day", now=now)

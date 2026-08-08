@@ -1,0 +1,15 @@
+[Unit]
+Description=SWAAG durable wakeup dispatcher
+After=network.target
+
+[Service]
+Type=simple
+User=hans
+WorkingDirectory=/data/src/github/swaag
+Environment=SWAAG__SESSIONS__ROOT=/data/var/swaag/sessions
+ExecStart=/data/src/github/swaag/.venv/bin/python -m swaag.wakeup_dispatcher --poll-seconds 1
+Restart=always
+RestartSec=2
+
+[Install]
+WantedBy=multi-user.target

@@ -45,6 +45,7 @@ publish = [
 [project.scripts]
 swaag = "swaag.cli:main"
 swaag-benchmark = "swaag.benchmark.benchmark_runner:main"
+swaag-wakeup-dispatcher = "swaag.wakeup_dispatcher:main"
 
 [build-system]
 requires = ["setuptools>=68", "wheel"]

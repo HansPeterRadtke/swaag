@@ -8,7 +8,7 @@ from pathlib import Path
 from typing import Any, Iterable, Iterator
 
 from swaag.environment.state import EnvironmentState, ProcessRecord, ShellSessionState, WorkspaceState
-from swaag.events import ALLOWED_EVENT_TYPES, EventSchemaError, create_event, verify_event_integrity
+from swaag.events import ALLOWED_EVENT_TYPES, READABLE_EVENT_TYPES, EventSchemaError, create_event, verify_event_integrity
 from swaag.types import (
     CodeCheckpoint,
     DeferredTask,
@@ -76,7 +76,7 @@ _STATEFUL_REBUILD_EVENT_TYPES = frozenset(
     }
 )
 
-_IGNORED_REBUILD_EVENT_TYPES = ALLOWED_EVENT_TYPES - _STATEFUL_REBUILD_EVENT_TYPES
+_IGNORED_REBUILD_EVENT_TYPES = READABLE_EVENT_TYPES - _STATEFUL_REBUILD_EVENT_TYPES
 
 
 def _default_session_name(session_id: str) -> str:
@@ -371,8 +371,15 @@ class HistoryStore:
             return None
         return payload if isinstance(payload, dict) else None
 
-    def enqueue_control_message(self, session_id: str, text: str, *, source: str = "cli") -> dict[str, Any]:
-        control_id = new_id("control")
+    def enqueue_control_message(self, session_id: str, text: str, *, source: str = "cli", control_id: str | None = None) -> dict[str, Any]:
+        control_id = control_id or new_id("control")
+        inbox_path = self.control_inbox_dir(session_id) / f"{control_id}.json"
+        processed_path = self.control_processed_dir(session_id) / f"{control_id}.json"
+        for existing_path in (inbox_path, processed_path):
+            if existing_path.exists():
+                payload = json.loads(existing_path.read_text(encoding="utf-8"))
+                if isinstance(payload, dict):
+                    return payload
         payload = {
             "control_id": control_id,
             "session_id": session_id,
@@ -380,8 +387,7 @@ class HistoryStore:
             "source": source,
             "created_at": utc_now_iso(),
         }
-        path = self.control_inbox_dir(session_id) / f"{control_id}.json"
-        self._write_projection(path, payload)
+        self._write_projection(inbox_path, payload)
         return payload
 
     def list_pending_control_messages(self, session_id: str) -> list[dict[str, Any]]:

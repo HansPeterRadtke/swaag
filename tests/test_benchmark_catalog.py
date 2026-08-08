@@ -113,3 +113,33 @@ def test_extremely_hard_catalog_tasks_have_high_complexity_structure(tmp_path) -
             assert scenario.verification_contract.expected_json_schema is not None
         elif task.task_type == "quality":
             assert scenario.verification_contract.expected_answer_contains
+
+
+def test_capability_benchmark_tasks_cover_new_agent_primitives(tmp_path) -> None:
+    tasks = {task.task_id: task for task in get_benchmark_tasks()}
+    expected = {
+        "capability_history_exact_retrieval",
+        "capability_large_output_artifact_recovery",
+        "capability_persistent_interactive_terminal",
+        "capability_human_duration_wait",
+    }
+    assert expected <= set(tasks)
+    assert len(tasks) >= 63
+
+    history = tasks["capability_history_exact_retrieval"].create(tmp_path / "history")
+    assert history.history_messages
+    assert {"history_search", "history_window"} <= set(history.verification_contract.required_tools_used)
+    assert {"agent_action_selected", "history_retrieved", "history_window_read"} <= set(history.verification_contract.required_history_events)
+
+    large = tasks["capability_large_output_artifact_recovery"].create(tmp_path / "large")
+    assert {"shell_command", "read_artifact"} <= set(large.verification_contract.required_tools_used)
+    assert {"agent_action_selected", "artifact_created", "artifact_read"} <= set(large.verification_contract.required_history_events)
+    assert tasks["capability_large_output_artifact_recovery"].config_overrides["environment_max_capture_chars"] == 512
+
+    terminal = tasks["capability_persistent_interactive_terminal"].create(tmp_path / "terminal")
+    assert terminal.verification_contract.required_tools_used == ["terminal"]
+    assert {"agent_action_selected", "terminal_create", "terminal_send", "terminal_read", "terminal_close"} <= set(terminal.verification_contract.required_history_events)
+
+    wait = tasks["capability_human_duration_wait"].create(tmp_path / "wait")
+    assert wait.verification_contract.required_tools_used == ["wait_seconds"]
+    assert wait.verification_contract.required_history_events == ["agent_action_selected", "wait_completed"]

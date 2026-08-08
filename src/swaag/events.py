@@ -23,6 +23,15 @@ ALLOWED_EVENT_TYPES = frozenset(
         "summary_created",
         "history_compacted",
         "history_compressed",
+        "history_retrieved",
+        "history_window_read",
+        "artifact_created",
+        "artifact_read",
+        "terminal_create",
+        "terminal_send",
+        "terminal_read",
+        "terminal_list",
+        "terminal_close",
         "plan_created",
         "plan_updated",
         "plan_completed",
@@ -152,6 +161,70 @@ ALLOWED_EVENT_TYPES = frozenset(
     }
 )
 
+LEGACY_EVENT_TYPES = frozenset(
+    {
+        'action_selected',
+        'action_selection_resolved',
+        'answer_derived',
+        'consistency_checked',
+        'consistency_failed',
+        'context_built',
+        'decision_adjusted',
+        'decision_made',
+        'drift_detected',
+        'evaluation_failed',
+        'evaluation_performed',
+        'failure_classification_resolved',
+        'memory_extracted',
+        'memory_flagged',
+        'memory_rejected',
+        'memory_retrieved',
+        'memory_stored',
+        'output_unit_generated',
+        'plan_completed',
+        'plan_created',
+        'plan_updated',
+        'project_state_updated',
+        'prompt_analyzed',
+        'reasoning_completed',
+        'reasoning_started',
+        'recovery_triggered',
+        'replan_triggered',
+        'retry_suppressed',
+        'review_completed',
+        'review_skipped',
+        'review_started',
+        'role_switched',
+        'semantic_retrieval_degraded',
+        'step_completed',
+        'step_executed',
+        'step_started',
+        'strategy_selected',
+        'strategy_selection_resolved',
+        'subsystem_completed',
+        'subsystem_progress',
+        'subsystem_started',
+        'task_expanded',
+        'tool_chain_completed',
+        'tool_chain_started',
+        'tool_chain_step',
+        'tool_input_parsed',
+        'tool_mismatch_rejected',
+        'tool_result_missing',
+        'unresolved_objective_verification_deferred',
+        'verification_completed',
+        'verification_failed',
+        'verification_passed',
+        'verification_started',
+        'verification_type_used',
+        'working_memory_updated',
+    }
+)
+READABLE_EVENT_TYPES = ALLOWED_EVENT_TYPES
+CURRENT_EVENT_TYPES = ALLOWED_EVENT_TYPES - LEGACY_EVENT_TYPES
+ALLOWED_EVENT_TYPES = CURRENT_EVENT_TYPES
+
+
 REQUIRED_PAYLOAD_KEYS: dict[str, frozenset[str]] = {
     "session_created": frozenset({"session_id", "config_fingerprint", "model_base_url", "created_at"}),
     "session_renamed": frozenset({"session_id", "old_name", "new_name", "reason"}),
@@ -166,6 +239,15 @@ REQUIRED_PAYLOAD_KEYS: dict[str, frozenset[str]] = {
     "summary_created": frozenset({"source_message_count", "summary_message", "summary_budget_report"}),
     "history_compacted": frozenset({"source_message_count", "summary_message", "summary_budget_report"}),
     "history_compressed": frozenset({"source_message_count", "summary_message", "summary_budget_report"}),
+    "history_retrieved": frozenset({"session_id", "query", "match_count", "sequences"}),
+    "history_window_read": frozenset({"session_id", "start_sequence", "event_count", "sequences"}),
+    "artifact_created": frozenset({"artifact_id", "kind", "size_chars", "sha256"}),
+    "artifact_read": frozenset({"artifact_id", "start_offset", "end_offset", "finished"}),
+    "terminal_create": frozenset({"operation", "terminal_id", "terminal_ref", "name", "active"}),
+    "terminal_send": frozenset({"operation", "terminal_id", "terminal_ref", "name", "active"}),
+    "terminal_read": frozenset({"operation", "terminal_id", "terminal_ref", "name", "active"}),
+    "terminal_list": frozenset({"operation", "terminal_id", "terminal_ref", "name", "active"}),
+    "terminal_close": frozenset({"operation", "terminal_id", "terminal_ref", "name", "active"}),
     "plan_created": frozenset({"goal", "plan"}),
     "plan_updated": frozenset({"plan", "reason"}),
     "plan_completed": frozenset({"plan_id", "status"}),
@@ -329,8 +411,9 @@ class EventSchemaError(ValueError):
     pass
 
 
-def validate_event_payload(event_type: str, payload: dict[str, Any], metadata: dict[str, Any]) -> None:
-    if event_type not in ALLOWED_EVENT_TYPES:
+def validate_event_payload(event_type: str, payload: dict[str, Any], metadata: dict[str, Any], *, allow_legacy: bool = False) -> None:
+    allowed = READABLE_EVENT_TYPES if allow_legacy else ALLOWED_EVENT_TYPES
+    if event_type not in allowed:
         raise EventSchemaError(f"Unknown event type: {event_type}")
     if not isinstance(payload, dict):
         raise EventSchemaError(f"Event payload for {event_type} must be a dict")
@@ -388,7 +471,7 @@ def create_event(
 def verify_event_integrity(event: HistoryEvent, expected_prev_hash: str | None) -> None:
     if event.version != EVENT_SCHEMA_VERSION:
         raise EventSchemaError(f"Unsupported event version: {event.version}")
-    validate_event_payload(event.event_type, event.payload, event.metadata)
+    validate_event_payload(event.event_type, event.payload, event.metadata, allow_legacy=True)
     if event.prev_hash != expected_prev_hash:
         raise EventSchemaError(
             f"Hash chain mismatch at sequence {event.sequence}: expected prev_hash={expected_prev_hash!r}, got {event.prev_hash!r}"

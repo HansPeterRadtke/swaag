@@ -75,7 +75,7 @@ background_poll_seconds = 0.1
 # allow_side_effect_tools: set true only if destructive writes are intended.
 # -----------------------------------------------------------
 [tools]
-enabled = ["echo", "time_now", "calculator", "list_files", "read_file", "read_text", "notes", "edit_text", "write_file", "run_tests", "shell_command", "poll_process", "kill_process", "wait_seconds", "schedule_wakeup", "list_wakeups", "cancel_wakeup"]
+enabled = ["echo", "time_now", "calculator", "list_files", "read_file", "read_text", "history_search", "history_window", "read_artifact", "terminal", "notes", "edit_text", "write_file", "run_tests", "shell_command", "poll_process", "kill_process", "wait_seconds", "schedule_wakeup", "list_wakeups", "cancel_wakeup"]
 read_roots = ["."]
 allow_stateful_tools = true
 allow_side_effect_tools = false
@@ -100,7 +100,7 @@ compact_on_overflow = true
 # Rarely changed. root: where session histories are stored.
 # -----------------------------------------------------------
 [sessions]
-root = ".swaag/sessions"
+root = "/data/var/swaag/sessions"
 write_projections = true
 
 # -----------------------------------------------------------

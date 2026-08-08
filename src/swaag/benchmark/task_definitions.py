@@ -2704,8 +2704,9 @@ def validate_benchmark_catalog(tasks: list[BenchmarkTaskDefinition]) -> None:
 
 
 def get_benchmark_tasks() -> list[BenchmarkTaskDefinition]:
+    from swaag.benchmark.capability_catalog import capability_benchmark_tasks
     from swaag.benchmark.scaled_catalog import generated_benchmark_tasks
 
-    tasks = [*base_benchmark_tasks(), *generated_benchmark_tasks(), *history_benchmark_tasks()]
+    tasks = [*base_benchmark_tasks(), *generated_benchmark_tasks(), *history_benchmark_tasks(), *capability_benchmark_tasks()]
     validate_benchmark_catalog(tasks)
     return tasks

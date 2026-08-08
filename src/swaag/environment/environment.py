@@ -9,6 +9,7 @@ from typing import TYPE_CHECKING
 
 from swaag.config import AgentConfig
 from swaag.editing import EditError, TextEditor
+from swaag.environment.artifacts import TextArtifactStore
 from swaag.environment.browser import aubro_available, run_aubro_command
 from swaag.environment.filesystem import FilesystemError, FilesystemManager
 from swaag.environment.process import ProcessManager
@@ -42,6 +43,7 @@ class AgentEnvironment:
         self.workspace = WorkspaceManager(self.filesystem)
         self.process = ProcessManager()
         self.shell = ShellSession(config, process_manager=self.process)
+        self.artifacts = TextArtifactStore(config.sessions.root, session_state.session_id)
 
     def initialize_events(self) -> list[ToolGeneratedEvent]:
         env = self.session_state.environment
@@ -473,6 +475,35 @@ class AgentEnvironment:
                 repeated_failures.append("repeated_failed_tests_without_change")
         return repeated_failures
 
+    def _bounded_output(self, stdout: str, stderr: str, *, kind: str) -> tuple[dict[str, Any], list[ToolGeneratedEvent]]:
+        limit = int(self.config.environment.max_capture_chars)
+        stdout_preview = stdout if len(stdout) <= limit else stdout[:limit]
+        stderr_preview = stderr if len(stderr) <= limit else stderr[:limit]
+        metadata: dict[str, Any] = {
+            "stdout_chars": len(stdout),
+            "stderr_chars": len(stderr),
+            "stdout_truncated": len(stdout_preview) < len(stdout),
+            "stderr_truncated": len(stderr_preview) < len(stderr),
+        }
+        events: list[ToolGeneratedEvent] = []
+        if len(stdout_preview) < len(stdout):
+            artifact = self.artifacts.create(stdout, kind=f"{kind}_stdout")
+            metadata["stdout_artifact_id"] = artifact.artifact_id
+            metadata["stdout_sha256"] = artifact.sha256
+            events.append(ToolGeneratedEvent("artifact_created", {"artifact_id": artifact.artifact_id, "kind": artifact.kind, "size_chars": artifact.size_chars, "sha256": artifact.sha256}))
+        else:
+            metadata["stdout_artifact_id"] = ""
+            metadata["stdout_sha256"] = sha256_text(stdout)
+        if len(stderr_preview) < len(stderr):
+            artifact = self.artifacts.create(stderr, kind=f"{kind}_stderr")
+            metadata["stderr_artifact_id"] = artifact.artifact_id
+            metadata["stderr_sha256"] = artifact.sha256
+            events.append(ToolGeneratedEvent("artifact_created", {"artifact_id": artifact.artifact_id, "kind": artifact.kind, "size_chars": artifact.size_chars, "sha256": artifact.sha256}))
+        else:
+            metadata["stderr_artifact_id"] = ""
+            metadata["stderr_sha256"] = sha256_text(stderr)
+        return {"stdout": stdout_preview, "stderr": stderr_preview, **metadata}, events
+
     def run_shell_command(self, command: str, *, background: bool = False) -> ToolExecutionResult:
         if background:
             return self._start_background_shell_command(command)
@@ -481,7 +512,12 @@ class AgentEnvironment:
         after = self.filesystem.snapshot()
         snapshot = self.workspace.snapshot(before=before, after=after, cwd=result.cwd_after)
         process_record = asdict(result.process_result.record)
-        generated = [
+        bounded, artifact_events = self._bounded_output(result.process_result.stdout, result.process_result.stderr, kind="shell_command")
+        result.stdout = str(bounded["stdout"])
+        result.stderr = str(bounded["stderr"])
+        process_record["stdout"] = result.stdout
+        process_record["stderr"] = result.stderr
+        generated = [*artifact_events,
             ToolGeneratedEvent("process_started", process_record),
             ToolGeneratedEvent("shell_command_started", {"command": command, "cwd": result.cwd_before}),
             ToolGeneratedEvent("process_completed", process_record | {"stdout": result.stdout, "stderr": result.stderr, "return_code": result.exit_code}),
@@ -519,6 +555,7 @@ class AgentEnvironment:
             "exit_code": result.exit_code,
             "stdout": result.stdout,
             "stderr": result.stderr,
+            **{key: value for key, value in bounded.items() if key not in {"stdout", "stderr"}},
             "created_files": snapshot.created_files,
             "modified_files": snapshot.modified_files,
             "deleted_files": snapshot.deleted_files,
@@ -539,16 +576,21 @@ class AgentEnvironment:
             metadata={"kind": "run_tests"},
         )
         record = asdict(process_result.record)
+        bounded, artifact_events = self._bounded_output(process_result.stdout, process_result.stderr, kind="run_tests")
+        record["stdout"] = bounded["stdout"]
+        record["stderr"] = bounded["stderr"]
         generated = [
+            *artifact_events,
             ToolGeneratedEvent("process_started", record),
-            ToolGeneratedEvent("process_completed", record | {"stdout": process_result.stdout, "stderr": process_result.stderr, "return_code": process_result.record.return_code}),
+            ToolGeneratedEvent("process_completed", record | {"stdout": bounded["stdout"], "stderr": bounded["stderr"], "return_code": process_result.record.return_code, "output_artifacts": {key: value for key, value in bounded.items() if key not in {"stdout", "stderr"}}}),
         ]
         output = {
             "command": command,
             "cwd": self.current_cwd,
             "exit_code": process_result.record.return_code,
-            "stdout": process_result.stdout,
-            "stderr": process_result.stderr,
+            "stdout": bounded["stdout"],
+            "stderr": bounded["stderr"],
+            **{key: value for key, value in bounded.items() if key not in {"stdout", "stderr"}},
             "passed": process_result.record.return_code == 0,
             "background": False,
         }
@@ -705,11 +747,16 @@ class AgentEnvironment:
         ]
         tool_result: ToolExecutionResult | None = None
         if poll.completed and poll.status_changed:
+            bounded, artifact_events = self._bounded_output(poll.stdout, poll.stderr, kind=poll.record.metadata.get("kind", "process"))
+            generated.extend(artifact_events)
+            poll.record.stdout = str(bounded["stdout"])
+            poll.record.stderr = str(bounded["stderr"])
+            record_payload = asdict(poll.record)
             if poll.record.status == "timed_out":
                 generated.append(
                     ToolGeneratedEvent(
                         "process_timed_out",
-                        record_payload | {"stdout": poll.stdout, "stderr": poll.stderr, "return_code": poll.record.return_code},
+                        record_payload | {"stdout": bounded["stdout"], "stderr": bounded["stderr"], "return_code": poll.record.return_code, "output_artifacts": {key: value for key, value in bounded.items() if key not in {"stdout", "stderr"}}},
                     )
                 )
             elif poll.record.status == "killed":
@@ -718,7 +765,7 @@ class AgentEnvironment:
                 generated.append(
                     ToolGeneratedEvent(
                         "process_completed",
-                        record_payload | {"stdout": poll.stdout, "stderr": poll.stderr, "return_code": poll.record.return_code},
+                        record_payload | {"stdout": bounded["stdout"], "stderr": bounded["stderr"], "return_code": poll.record.return_code, "output_artifacts": {key: value for key, value in bounded.items() if key not in {"stdout", "stderr"}}},
                     )
                 )
             kind = poll.record.metadata.get("kind", "")
@@ -729,8 +776,9 @@ class AgentEnvironment:
                         "command": list(poll.record.command),
                         "cwd": poll.record.cwd,
                         "exit_code": poll.record.return_code,
-                        "stdout": poll.stdout,
-                        "stderr": poll.stderr,
+                        "stdout": bounded["stdout"],
+                        "stderr": bounded["stderr"],
+                        **{key: value for key, value in bounded.items() if key not in {"stdout", "stderr"}},
                         "passed": poll.record.return_code == 0,
                         "background": True,
                         "process_id": poll.record.process_id,
