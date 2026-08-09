@@ -622,3 +622,99 @@ def test_edit_text_noop_does_not_require_edit_applied_event() -> None:
         "dry_run": False,
     })
     assert tool.required_generated_event_types(validated) == {"file_read_for_edit"}
+
+
+def test_edit_text_rejects_python_syntax_regression(make_config, tmp_path: Path) -> None:
+    from swaag.environment.environment import AgentEnvironment
+    from swaag.history import HistoryStore
+
+    config = make_config()
+    config.sessions.root = tmp_path / "sessions"
+    config.tools.allow_side_effect_tools = True
+    config.editor.allow_writes = True
+    workspace = tmp_path / "workspace"
+    workspace.mkdir()
+    config.tools.read_roots = [workspace]
+    target = workspace / "mod.py"
+    target.write_text("def f():\n    return 1\n", encoding="utf-8")
+    state = HistoryStore(config.sessions.root).create(config_fingerprint="cfg", model_base_url="http://model")
+    env = AgentEnvironment(config, state)
+    context = ToolContext(config=config, session_state=state, environment=env)
+
+    validated = EditTextTool().validate({
+        "path": "mod.py",
+        "operation": "replace_exact",
+        "dry_run": False,
+        "old_text": "    return 1",
+        "new_text": "return 2",
+        "start": None,
+        "end": None,
+        "position": None,
+        "expected_text": None,
+        "replacement": None,
+        "insertion": None,
+        "pattern": None,
+    })
+    with pytest.raises(ToolValidationError, match="regress a syntactically valid Python file") as exc:
+        EditTextTool().execute(validated, context)
+    assert '"line":2' in str(exc.value)
+    assert target.read_text(encoding="utf-8") == "def f():\n    return 1\n"
+
+
+def test_edit_text_allows_repair_of_already_invalid_python(make_config, tmp_path: Path) -> None:
+    from swaag.environment.environment import AgentEnvironment
+    from swaag.history import HistoryStore
+
+    config = make_config()
+    config.sessions.root = tmp_path / "sessions"
+    config.tools.allow_side_effect_tools = True
+    config.editor.allow_writes = True
+    workspace = tmp_path / "workspace"
+    workspace.mkdir()
+    config.tools.read_roots = [workspace]
+    target = workspace / "mod.py"
+    target.write_text("def f():\nreturn 1\n", encoding="utf-8")
+    state = HistoryStore(config.sessions.root).create(config_fingerprint="cfg", model_base_url="http://model")
+    env = AgentEnvironment(config, state)
+    context = ToolContext(config=config, session_state=state, environment=env)
+
+    validated = EditTextTool().validate({
+        "path": "mod.py",
+        "operation": "replace_exact",
+        "dry_run": False,
+        "old_text": "return 1",
+        "new_text": "    return 1",
+        "start": None,
+        "end": None,
+        "position": None,
+        "expected_text": None,
+        "replacement": None,
+        "insertion": None,
+        "pattern": None,
+    })
+    result = EditTextTool().execute(validated, context)
+    assert result.output["changed"] is True
+    # Apply derived write the same way runtime history does not occur in direct execute;
+    # syntax guard itself must permit the proposed repair.
+    assert any(event.event_type == "edit_applied" for event in result.generated_events)
+
+
+def test_write_file_rejects_python_syntax_regression(make_config, tmp_path: Path) -> None:
+    from swaag.environment.environment import AgentEnvironment
+    from swaag.history import HistoryStore
+
+    config = make_config()
+    config.sessions.root = tmp_path / "sessions"
+    config.tools.allow_side_effect_tools = True
+    config.editor.allow_writes = True
+    workspace = tmp_path / "workspace"
+    workspace.mkdir()
+    config.tools.read_roots = [workspace]
+    target = workspace / "mod.py"
+    target.write_text("x = 1\n", encoding="utf-8")
+    state = HistoryStore(config.sessions.root).create(config_fingerprint="cfg", model_base_url="http://model")
+    env = AgentEnvironment(config, state)
+
+    with pytest.raises(ToolValidationError, match="regress a syntactically valid Python file"):
+        env.write_file("mod.py", "def broken(:\n", create=False)
+    assert target.read_text(encoding="utf-8") == "x = 1\n"

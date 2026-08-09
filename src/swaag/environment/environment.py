@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import ast
 import json
 from dataclasses import asdict, dataclass
 from difflib import unified_diff
@@ -233,6 +234,30 @@ class AgentEnvironment:
         }
         return ToolExecutionResult(tool_name="read_text", output=output, display_text=f"read_text result: {stable_json_dumps(output, indent=2)}", generated_events=generated)
 
+    @staticmethod
+    def _reject_new_python_syntax_error(path: Path, original_text: str, proposed_text: str) -> None:
+        if path.suffix not in {".py", ".pyi"} or original_text == proposed_text:
+            return
+        try:
+            ast.parse(original_text, filename=str(path))
+        except SyntaxError:
+            # Do not prevent repair of a file that was already syntactically invalid.
+            return
+        try:
+            ast.parse(proposed_text, filename=str(path))
+        except SyntaxError as exc:
+            evidence = {
+                "path": str(path),
+                "line": exc.lineno,
+                "offset": exc.offset,
+                "message": exc.msg,
+                "text": exc.text.rstrip("\n") if exc.text else "",
+            }
+            raise ToolValidationError(
+                "edit would regress a syntactically valid Python file to invalid syntax: "
+                + stable_json_dumps(evidence)
+            ) from exc
+
     def preview_or_apply_edit(self, validated_input: dict[str, Any], context: "ToolContext") -> ToolExecutionResult:
         path = self.filesystem.resolve_path(validated_input["path"], cwd=self.current_cwd)
         _, original_text = self.filesystem.read_text(str(path), cwd=self.current_cwd)
@@ -275,6 +300,7 @@ class AgentEnvironment:
                 if isinstance(value, str):
                     error_payload[key] = value
             raise ToolValidationError(f"edit_text could not produce an edit: {stable_json_dumps(error_payload)}") from exc
+        self._reject_new_python_syntax_error(path, original_text, preview.new_text)
         payload = {
             "path": str(path),
             "operation": validated_input["operation"],
@@ -326,6 +352,8 @@ class AgentEnvironment:
             _, original_text = self.filesystem.read_text(str(path), cwd=self.current_cwd)
         elif not create:
             raise ToolValidationError(f"write_file target does not exist: {path}")
+        if existed_before:
+            self._reject_new_python_syntax_error(path, original_text, content)
         generated = [
             ToolGeneratedEvent("file_read_requested", {"path": str(path), "reason": "write_file"}),
             ToolGeneratedEvent("file_read_for_edit", {"path": str(path), "size_chars": len(original_text), "text": original_text}),
