@@ -485,6 +485,8 @@ class AgentRuntime:
         environment = {
             "workspace_root": state.environment.workspace.root,
             "cwd": state.environment.workspace.cwd,
+            "workspace_files": list(state.environment.workspace.listed_files),
+            "workspace_listing_truncated": state.environment.workspace.listing_truncated,
             "waiting": state.environment.waiting,
             "waiting_reason": state.environment.waiting_reason,
             "processes": {

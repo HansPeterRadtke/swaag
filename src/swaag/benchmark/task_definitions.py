@@ -2376,7 +2376,7 @@ def make_benchmark_task(
     is_complex = task_type in {"coding", "multi_step"} and difficulty in {"hard", "extremely_hard"}
     # Keep these limits consistent with the action-loop prompt and with the
     # generated live tasks. A normal inspect/edit/verify/respond flow needs
-    # four plan steps, and even small file/coding tasks need more than one
+    # several sequential actions, and even small file/coding tasks may need more than one
     # action once the prompt explicitly says to inspect inputs first.
     repo_repair = task_type in {"coding", "file_edit", "multi_step"}
     default_overrides = {

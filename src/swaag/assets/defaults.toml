@@ -91,6 +91,7 @@ reserved_summary_tokens = 196
 safety_margin_tokens = 64
 max_recent_messages = 8
 max_compaction_rounds = 4
+workspace_manifest_max_files = 128
 note_prompt_token_cap = 256
 allow_estimate_fallback = true
 compact_on_overflow = true

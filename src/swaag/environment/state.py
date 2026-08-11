@@ -12,6 +12,7 @@ class WorkspaceState:
     cwd: str = ""
     known_files: dict[str, str] = field(default_factory=dict)
     listed_files: list[str] = field(default_factory=list)
+    listing_truncated: bool = False
     modified_files: list[str] = field(default_factory=list)
     created_files: list[str] = field(default_factory=list)
     deleted_files: list[str] = field(default_factory=list)

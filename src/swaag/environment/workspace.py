@@ -23,9 +23,16 @@ class WorkspaceManager:
     def __init__(self, filesystem: FilesystemManager):
         self.filesystem = filesystem
 
-    def initialize_state(self) -> WorkspaceState:
+    def initialize_state(self, *, max_manifest_files: int) -> WorkspaceState:
         root = str(self.filesystem.workspace_root)
-        return WorkspaceState(root=root, cwd=root, last_snapshot_at=utc_now_iso())
+        listed_files, listing_truncated = self.filesystem.bounded_file_manifest(max_entries=max_manifest_files)
+        return WorkspaceState(
+            root=root,
+            cwd=root,
+            listed_files=listed_files,
+            listing_truncated=listing_truncated,
+            last_snapshot_at=utc_now_iso(),
+        )
 
     def apply_delta(self, state: WorkspaceState, *, created: dict[str, str], modified: dict[str, str], deleted: list[str], cwd: str) -> WorkspaceState:
         known_files = dict(state.known_files)
@@ -42,6 +49,7 @@ class WorkspaceManager:
             cwd=cwd,
             known_files=known_files,
             listed_files=listed_files,
+            listing_truncated=state.listing_truncated,
             modified_files=sorted(set(state.modified_files) | set(modified)),
             created_files=sorted(set(state.created_files) | set(created)),
             deleted_files=sorted(set(state.deleted_files) | set(deleted)),

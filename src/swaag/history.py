@@ -818,6 +818,8 @@ class HistoryStore:
             cwd = str(payload["cwd"])
             state.environment.workspace.root = str(payload["workspace_root"])
             state.environment.workspace.cwd = cwd
+            state.environment.workspace.listed_files = [str(item) for item in payload.get("listed_files", [])]
+            state.environment.workspace.listing_truncated = bool(payload.get("listing_truncated", False))
             state.environment.shell.cwd = cwd
             state.environment.shell.env_overrides = {str(k): str(v) for k, v in payload.get("shell_env_overrides", {}).items()}
             state.environment.shell.unset_vars = [str(item) for item in payload.get("shell_unset_vars", [])]
@@ -827,6 +829,8 @@ class HistoryStore:
             listed = [str(item) for item in payload.get("entries", [])]
             state.environment.workspace.cwd = str(payload.get("cwd", state.environment.workspace.cwd))
             state.environment.workspace.listed_files = sorted(set(state.environment.workspace.listed_files) | set(listed))
+            if str(payload.get("path", "")) in {".", ""} and str(payload.get("cwd", "")) == state.environment.workspace.root:
+                state.environment.workspace.listing_truncated = False
             state.environment.workspace.last_snapshot_at = event.timestamp
             state.environment.last_updated = event.timestamp
             return
@@ -1082,6 +1086,7 @@ def _environment_from_payload(payload: dict[str, Any]) -> EnvironmentState:
             cwd=str(workspace_payload.get("cwd", "")),
             known_files={str(key): str(value) for key, value in workspace_payload.get("known_files", {}).items()},
             listed_files=[str(item) for item in workspace_payload.get("listed_files", [])],
+            listing_truncated=bool(workspace_payload.get("listing_truncated", False)),
             modified_files=[str(item) for item in workspace_payload.get("modified_files", [])],
             created_files=[str(item) for item in workspace_payload.get("created_files", [])],
             deleted_files=[str(item) for item in workspace_payload.get("deleted_files", [])],

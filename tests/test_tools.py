@@ -31,10 +31,9 @@ def test_schema_validator_accepts_union_types_and_null() -> None:
 
 
 
-def test_read_file_guidance_requires_one_file_per_plan_step() -> None:
-    assert ReadFileTool.max_plan_output_refs == 1
-    assert "One file per call and one output_ref per plan step" in ReadFileTool.usage_guidance
-    assert "separate ordered steps" in ReadFileTool.usage_guidance
+def test_read_file_guidance_requires_exact_file_discovery() -> None:
+    assert "Read one exact file per call" in ReadFileTool.usage_guidance
+    assert "list_files or search_repo" in ReadFileTool.usage_guidance
 
 
 def test_run_tests_guidance_distinguishes_required_success_from_diagnostics() -> None:

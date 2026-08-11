@@ -45,6 +45,7 @@ class ContextConfig:
     safety_margin_tokens: int
     max_recent_messages: int
     max_compaction_rounds: int
+    workspace_manifest_max_files: int
     note_prompt_token_cap: int
     allow_estimate_fallback: bool
     compact_on_overflow: bool
@@ -440,6 +441,7 @@ def _coerce_config(data: dict[str, Any]) -> AgentConfig:
     _validate_positive("context.reserved_response_tokens", context.reserved_response_tokens)
     _validate_positive("context.reserved_summary_tokens", context.reserved_summary_tokens)
     _validate_non_negative("context.safety_margin_tokens", context.safety_margin_tokens)
+    _validate_positive("context.workspace_manifest_max_files", context.workspace_manifest_max_files)
     _validate_non_negative("runtime.max_tool_steps", runtime.max_tool_steps)
     _validate_positive("runtime.max_reasoning_steps", runtime.max_reasoning_steps)
     _validate_positive("environment.command_timeout_seconds", environment.command_timeout_seconds)

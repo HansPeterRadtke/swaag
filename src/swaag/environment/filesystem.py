@@ -73,6 +73,27 @@ class FilesystemManager:
                 items.append(self.relative_path(item))
         return items
 
+
+    def bounded_file_manifest(self, *, max_entries: int, path_text: str = ".", cwd: str | None = None) -> tuple[list[str], bool]:
+        if max_entries <= 0:
+            raise ValueError("max_entries must be positive")
+        root = self.resolve_path(path_text, cwd=cwd)
+        if root.is_file():
+            return [self.relative_path(root)], False
+        if not root.exists():
+            raise FilesystemError(f"Path does not exist: {root}")
+        entries: list[str] = []
+        for dirpath, dirnames, filenames in os.walk(root):
+            dirnames[:] = sorted(name for name in dirnames if name != "__pycache__")
+            for filename in sorted(filenames):
+                item = Path(dirpath) / filename
+                if self._is_runtime_owned_snapshot_path(item):
+                    continue
+                entries.append(self.relative_path(item))
+                if len(entries) > max_entries:
+                    return entries[:max_entries], True
+        return entries, False
+
     def resolve_existing_file_path(self, path_text: str, *, cwd: str | None = None) -> Path:
         path = self.resolve_path(path_text, cwd=cwd)
         if path.exists() and path.is_file():

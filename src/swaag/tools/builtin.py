@@ -503,7 +503,8 @@ class EditTextTool(Tool):
 
 class ListFilesTool(Tool):
     name = "list_files"
-    description = "List files visible in the persistent workspace."
+    description = "List actual files under a workspace path. Use '.' to discover repository contents instead of guessing file locations."
+    usage_guidance = "If a referenced file path is unknown or a prior path lookup failed, list the relevant workspace directory before inferring what files exist."
     kind = "stateful"
     output_schema = {
         "type": "object",
@@ -532,9 +533,8 @@ class ListFilesTool(Tool):
 
 class ReadFileTool(Tool):
     name = "read_file"
-    max_plan_output_refs = 1
     description = "Read a full UTF-8 file from the persistent workspace."
-    usage_guidance = "One file per call and one output_ref per plan step. Use separate ordered steps when multiple files are needed."
+    usage_guidance = "Read one exact file per call. Do not guess contents from filenames; if the path is unknown, locate it with list_files or search_repo first."
     kind = "stateful"
     output_schema = {
         "type": "object",
