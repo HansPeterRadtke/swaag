@@ -189,7 +189,7 @@ def _select_candidate_files(
         _build_file_selection_prompt(prompt, manifest, policy=policy),
         max_tokens=policy.completion_max_tokens,
         contract=contract,
-        kind="planning",
+        kind="file_selection",
         live_mode=True,
     )
     payload = _parse_json(completion.text)

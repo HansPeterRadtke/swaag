@@ -126,5 +126,4 @@ def test_live_multifile_coding_tasks_have_enough_iteration_budget() -> None:
     for task_id in ("live_coding_fix_03", "live_coding_fix_04", "live_coding_fix_05"):
         task = tasks[task_id]
         assert task.config_overrides is not None
-        assert task.config_overrides["runtime_max_reasoning_steps"] >= 14
         assert task.config_overrides["runtime_max_total_actions"] >= 14

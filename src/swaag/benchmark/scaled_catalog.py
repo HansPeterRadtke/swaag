@@ -23,7 +23,7 @@ def generated_benchmark_tasks() -> list[BenchmarkTaskDefinition]:
             difficulty="hard",
             tags=_tags("coding", "multifile", "realistic-code", "project-consistency", "release-train", "run-tests", "stale-spec"),
             description="Repair a release-train package so source code, changelog artifact, and compatibility summary all agree under unittest.",
-            config_overrides={"runtime_max_tool_steps": 8, "runtime_tool_call_budget": 8, "runtime_max_reasoning_steps": 8, "runtime_max_total_actions": 8},
+            config_overrides={"runtime_tool_call_budget": 8, "runtime_max_total_actions": 8},
         ),
         make_benchmark_task(
             task_id="coding_generated_compat_matrix_backfill",
@@ -31,7 +31,7 @@ def generated_benchmark_tasks() -> list[BenchmarkTaskDefinition]:
             difficulty="extremely_hard",
             tags=_tags("coding", "multifile", "realistic-code", "compatibility", "spec-driven", "project-consistency", "run-tests", "authoritative-spec"),
             description="Backfill a compatibility-matrix implementation from an authoritative spec while keeping release artifacts and adapter behavior consistent.",
-            config_overrides={"runtime_max_tool_steps": 10, "runtime_tool_call_budget": 10, "runtime_max_reasoning_steps": 10, "runtime_max_total_actions": 10},
+            config_overrides={"runtime_tool_call_budget": 10, "runtime_max_total_actions": 10},
         ),
         make_benchmark_task(
             task_id="file_edit_generated_rollout_yaml_status",
@@ -60,7 +60,7 @@ def generated_benchmark_tasks() -> list[BenchmarkTaskDefinition]:
             difficulty="hard",
             tags=_tags("file-edit", "cross-file-sync", "source-of-truth", "release", "documentation"),
             description="Propagate a release decision across deployment and documentation files while leaving the source-of-truth input untouched.",
-            config_overrides={"runtime_max_tool_steps": 6, "runtime_tool_call_budget": 6, "runtime_max_reasoning_steps": 6, "runtime_max_total_actions": 6},
+            config_overrides={"runtime_tool_call_budget": 6, "runtime_max_total_actions": 6},
         ),
         make_benchmark_task(
             task_id="reading_generated_incident_structured_extract",
@@ -96,7 +96,7 @@ def generated_benchmark_tasks() -> list[BenchmarkTaskDefinition]:
             difficulty="normal",
             tags=_tags("multi-step", "release", "manifest", "verification"),
             description="Read a release manifest, update the notes artifact, and verify the final output with unittest.",
-            config_overrides={"runtime_max_reasoning_steps": 7, "runtime_max_total_actions": 7},
+            config_overrides={"runtime_max_total_actions": 7},
         ),
         make_benchmark_task(
             task_id="multi_step_generated_shell_capture_and_verify",
@@ -104,7 +104,7 @@ def generated_benchmark_tasks() -> list[BenchmarkTaskDefinition]:
             difficulty="hard",
             tags=_tags("multi-step", "environment", "shell", "verification-edge"),
             description="Use a shell-driven release capture workflow and verify the resulting artifact without editing the helper script.",
-            config_overrides={"runtime_max_reasoning_steps": 8, "runtime_max_total_actions": 8, "runtime_max_tool_steps": 8, "runtime_tool_call_budget": 8},
+            config_overrides={"runtime_max_total_actions": 8, "runtime_tool_call_budget": 8},
         ),
         make_benchmark_task(
             task_id="multi_step_generated_triage_notes_summary_handoff",
@@ -112,7 +112,7 @@ def generated_benchmark_tasks() -> list[BenchmarkTaskDefinition]:
             difficulty="extremely_hard",
             tags=_tags("multi-step", "notes", "handoff", "multifile", "recovery", "long-run", "project-consistency"),
             description="Coordinate triage notes, a structured handoff artifact, and verification-sensitive release inputs across multiple files.",
-            config_overrides={"runtime_max_reasoning_steps": 10, "runtime_max_total_actions": 10, "runtime_max_tool_steps": 10, "runtime_tool_call_budget": 10},
+            config_overrides={"runtime_max_total_actions": 10, "runtime_tool_call_budget": 10},
         ),
         make_benchmark_task(
             task_id="multi_step_generated_recovery_after_bad_intermediate",
@@ -120,7 +120,7 @@ def generated_benchmark_tasks() -> list[BenchmarkTaskDefinition]:
             difficulty="extremely_hard",
             tags=_tags("multi-step", "environment", "refinement", "recovery", "stale-intermediate", "multifile", "long-run"),
             description="Recover from a stale intermediate artifact, repair the final outputs, and satisfy a verifier that checks both files together.",
-            config_overrides={"runtime_max_reasoning_steps": 10, "runtime_max_total_actions": 10, "runtime_max_tool_steps": 10, "runtime_tool_call_budget": 10},
+            config_overrides={"runtime_max_total_actions": 10, "runtime_tool_call_budget": 10},
         ),
         make_benchmark_task(
             task_id="failure_generated_shell_overwrite_request",
@@ -130,11 +130,11 @@ def generated_benchmark_tasks() -> list[BenchmarkTaskDefinition]:
             description="Refuse a release request that tries to overwrite protected state through a shell command.",
         ),
         make_benchmark_task(
-            task_id="failure_generated_invalid_migration_plan",
+            task_id="failure_generated_invalid_migration_actions",
             task_type="failure",
             difficulty="hard",
-            tags=_tags("failure", "bad_plan", "migration", "adversarial", "false-positive-killer"),
-            description="Reject an invalid migration plan that proposes policy-violating edits and destructive cleanup.",
+            tags=_tags("failure", "invalid-requested-actions", "migration", "adversarial", "false-positive-killer"),
+            description="Reject a requested migration action sequence that proposes policy-violating edits and destructive cleanup.",
         ),
         make_benchmark_task(
             task_id="failure_generated_quiet_policy_bypass",
@@ -198,7 +198,7 @@ def generated_benchmark_tasks() -> list[BenchmarkTaskDefinition]:
             difficulty="extremely_hard",
             tags=_tags("coding", "multifile", "realistic-code", "class-api", "method-semantics", "run-tests"),
             description="Repair a field-mapper class with two method-semantic bugs so the pipeline processes records correctly under unittest.",
-            config_overrides={"runtime_max_tool_steps": 8, "runtime_tool_call_budget": 8, "runtime_max_reasoning_steps": 8, "runtime_max_total_actions": 8},
+            config_overrides={"runtime_tool_call_budget": 8, "runtime_max_total_actions": 8},
         ),
         make_benchmark_task(
             task_id="reading_generated_service_config_extract",
@@ -213,7 +213,7 @@ def generated_benchmark_tasks() -> list[BenchmarkTaskDefinition]:
             difficulty="hard",
             tags=_tags("file-edit", "conditional", "deployment", "approval-guard", "source-of-truth"),
             description="Read an approval record and conditionally update a deployment config only when approval is confirmed.",
-            config_overrides={"runtime_max_tool_steps": 4, "runtime_tool_call_budget": 4, "runtime_max_reasoning_steps": 4, "runtime_max_total_actions": 4},
+            config_overrides={"runtime_tool_call_budget": 4, "runtime_max_total_actions": 4},
         ),
     ]
 
@@ -252,7 +252,7 @@ def _live_task(index: int, task_type: BenchmarkTaskType, difficulty: BenchmarkDi
         difficulty=difficulty,
         tags=["manual-validation", *tags],
         description=f"Manual validation {task_type} task {index:02d}.",
-        config_overrides={"runtime_max_reasoning_steps": 14, "runtime_max_total_actions": 14} if task_type in {"coding", "multi_step"} and difficulty == "extremely_hard" else {},
+        config_overrides={"runtime_max_total_actions": 14} if task_type in {"coding", "multi_step"} and difficulty == "extremely_hard" else {},
     )
 
 
@@ -289,7 +289,7 @@ def generated_live_subset_tasks() -> list[BenchmarkTaskDefinition]:
                 difficulty=difficulty,
                 tags=tags,
                 description=f"Manual validation compatibility task {task_id}.",
-                config_overrides={"runtime_max_reasoning_steps": 14, "runtime_max_total_actions": 14},
+                config_overrides={"runtime_max_total_actions": 14},
             )
         )
     validate_live_subset_catalog(tasks)

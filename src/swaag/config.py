@@ -53,13 +53,10 @@ class ContextConfig:
 
 @dataclass(slots=True)
 class RuntimeConfig:
-    max_tool_steps: int
-    max_reasoning_steps: int
     tool_timeout_seconds: int
     background_poll_seconds: float
     tool_call_budget: int
     max_total_actions: int
-    no_progress_failure_limit: int
     verification_confidence_threshold: float
     capture_model_io: bool
     lean_on_overflow: bool
@@ -188,9 +185,7 @@ class ExternalBenchmarkAgentGenerationConfig:
     model_structured_timeout_seconds: int
     allow_stateful_tools: bool
     allow_side_effect_tools: bool
-    runtime_max_reasoning_steps: int
     runtime_max_total_actions: int
-    runtime_max_tool_steps: int
     runtime_tool_call_budget: int
     candidate_file_limit: int
     file_excerpt_char_limit: int
@@ -384,9 +379,7 @@ def _coerce_config(data: dict[str, Any]) -> AgentConfig:
             ),
             allow_stateful_tools=bool(data["external_benchmarks"]["agent_generation"]["allow_stateful_tools"]),
             allow_side_effect_tools=bool(data["external_benchmarks"]["agent_generation"]["allow_side_effect_tools"]),
-            runtime_max_reasoning_steps=int(data["external_benchmarks"]["agent_generation"]["runtime_max_reasoning_steps"]),
             runtime_max_total_actions=int(data["external_benchmarks"]["agent_generation"]["runtime_max_total_actions"]),
-            runtime_max_tool_steps=int(data["external_benchmarks"]["agent_generation"]["runtime_max_tool_steps"]),
             runtime_tool_call_budget=int(data["external_benchmarks"]["agent_generation"]["runtime_tool_call_budget"]),
             candidate_file_limit=int(data["external_benchmarks"]["agent_generation"]["candidate_file_limit"]),
             file_excerpt_char_limit=int(data["external_benchmarks"]["agent_generation"]["file_excerpt_char_limit"]),
@@ -442,8 +435,6 @@ def _coerce_config(data: dict[str, Any]) -> AgentConfig:
     _validate_positive("context.reserved_summary_tokens", context.reserved_summary_tokens)
     _validate_non_negative("context.safety_margin_tokens", context.safety_margin_tokens)
     _validate_positive("context.workspace_manifest_max_files", context.workspace_manifest_max_files)
-    _validate_non_negative("runtime.max_tool_steps", runtime.max_tool_steps)
-    _validate_positive("runtime.max_reasoning_steps", runtime.max_reasoning_steps)
     _validate_positive("environment.command_timeout_seconds", environment.command_timeout_seconds)
     _validate_positive("environment.max_capture_chars", environment.max_capture_chars)
     _validate_positive("environment.aubro_timeout_seconds", environment.aubro_timeout_seconds)
@@ -455,7 +446,6 @@ def _coerce_config(data: dict[str, Any]) -> AgentConfig:
         raise ValueError("runtime.background_poll_seconds must be non-negative")
     _validate_positive("runtime.tool_call_budget", runtime.tool_call_budget)
     _validate_positive("runtime.max_total_actions", runtime.max_total_actions)
-    _validate_positive("runtime.no_progress_failure_limit", runtime.no_progress_failure_limit)
     if not 0.0 <= runtime.verification_confidence_threshold <= 1.0:
         raise ValueError("runtime.verification_confidence_threshold must be between 0.0 and 1.0")
     _validate_positive("runtime.max_repeated_action_occurrences", runtime.max_repeated_action_occurrences)
@@ -521,16 +511,8 @@ def _coerce_config(data: dict[str, Any]) -> AgentConfig:
         external_benchmarks.agent_generation.model_structured_timeout_seconds,
     )
     _validate_positive(
-        "external_benchmarks.agent_generation.runtime_max_reasoning_steps",
-        external_benchmarks.agent_generation.runtime_max_reasoning_steps,
-    )
-    _validate_positive(
         "external_benchmarks.agent_generation.runtime_max_total_actions",
         external_benchmarks.agent_generation.runtime_max_total_actions,
-    )
-    _validate_positive(
-        "external_benchmarks.agent_generation.runtime_max_tool_steps",
-        external_benchmarks.agent_generation.runtime_max_tool_steps,
     )
     _validate_positive(
         "external_benchmarks.agent_generation.runtime_tool_call_budget",

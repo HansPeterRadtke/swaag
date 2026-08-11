@@ -88,9 +88,9 @@ def test_benchmark_catalog_preserves_family_specific_task_shapes(tmp_path) -> No
     assert {"release.env", "capture_release.sh", "shell_release_summary.txt"} <= shell_files
     assert "shell_command" in shell_flow.verification_contract.required_tools_used
 
-    failure = tasks["failure_generated_invalid_migration_plan"].create(tmp_path / "failure")
+    failure = tasks["failure_generated_invalid_migration_actions"].create(tmp_path / "failure")
     failure_files = {path.name for path in failure.workspace.rglob("*") if path.is_file()}
-    assert "requested_plan.md" in failure_files
+    assert "requested_actions.md" in failure_files
     assert {"shell_command", "edit_text", "write_file"} <= set(failure.verification_contract.forbidden_tools_used)
 
     quality = tasks["quality_generated_conflicting_hints_scope_choice"].create(tmp_path / "quality")

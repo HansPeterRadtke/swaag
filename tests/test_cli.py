@@ -17,7 +17,9 @@ def test_cli_tools_command(capsys) -> None:
 
 
 
-def test_cli_budget_demo(capsys) -> None:
+def test_cli_budget_demo(capsys, monkeypatch) -> None:
+    monkeypatch.setattr("swaag.model.LlamaCppClient.tokenize", lambda self, text: max(1, len(text) // 4))
+    monkeypatch.setattr("swaag.model.LlamaCppClient.tokenize_selection", lambda self, text: max(1, len(text) // 4))
     rc = main(["budget-demo", "hello"])
     out = capsys.readouterr().out
     assert rc == 0

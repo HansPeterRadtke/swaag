@@ -6,7 +6,7 @@ from typing import Any
 TASK_SCORE_COMPONENT_WEIGHTS: dict[str, float] = {
     "final_outcome": 50.0,
     "verification_contract": 30.0,
-    "quality_and_planning": 20.0,
+    "quality": 20.0,
 }
 
 
@@ -43,10 +43,10 @@ def build_task_rubric(
             "earned": TASK_SCORE_COMPONENT_WEIGHTS["verification_contract"] * verification_fraction,
             "reason": verification_summary.get("reason", ""),
         },
-        "quality_and_planning": {
-            "weight": TASK_SCORE_COMPONENT_WEIGHTS["quality_and_planning"],
+        "quality": {
+            "weight": TASK_SCORE_COMPONENT_WEIGHTS["quality"],
             "fraction": quality_fraction,
-            "earned": TASK_SCORE_COMPONENT_WEIGHTS["quality_and_planning"] * quality_fraction,
+            "earned": TASK_SCORE_COMPONENT_WEIGHTS["quality"] * quality_fraction,
             "reason": "quality oracle satisfied" if quality_summary.get("passed", True) else "quality oracle mismatch",
         },
     }

@@ -163,9 +163,7 @@ def _build_config(
         config.model.seed = int(seed)
     config.tools.allow_side_effect_tools = bool(overrides.get("tools_allow_side_effect_tools", config.tools.allow_side_effect_tools))
     config.tools.allow_stateful_tools = bool(overrides.get("tools_allow_stateful_tools", config.tools.allow_stateful_tools))
-    config.runtime.max_reasoning_steps = int(overrides.get("runtime_max_reasoning_steps", config.runtime.max_reasoning_steps))
     config.runtime.max_total_actions = int(overrides.get("runtime_max_total_actions", config.runtime.max_total_actions))
-    config.runtime.max_tool_steps = int(overrides.get("runtime_max_tool_steps", config.runtime.max_tool_steps))
     config.runtime.tool_call_budget = int(overrides.get("runtime_tool_call_budget", config.runtime.tool_call_budget))
     config.environment.max_capture_chars = int(overrides.get("environment_max_capture_chars", config.environment.max_capture_chars))
     return config

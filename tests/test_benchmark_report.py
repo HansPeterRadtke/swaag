@@ -71,7 +71,6 @@ def test_render_benchmark_report_includes_quality_sections() -> None:
                     "guidance_sources": ["repo:AGENTS.md"],
                     "selected_skill_ids": ["coding_patch"],
                     "exposed_tool_names": ["read_file", "run_tests"],
-                    "subagent_usage": ["reviewer"],
                     "verification_trace": {"verification_type_used": "execution", "conditions_met": ["command"], "conditions_failed": [], "reason": "ok"},
                 },
                 failure_category=None,
@@ -85,11 +84,11 @@ def test_render_benchmark_report_includes_quality_sections() -> None:
                 rubric_breakdown={
                     "final_outcome": {"weight": 50.0, "earned": 50.0, "percent": 100.0},
                     "verification_contract": {"weight": 30.0, "earned": 30.0, "percent": 100.0},
-                    "quality_and_planning": {"weight": 20.0, "earned": 20.0, "percent": 100.0},
+                    "quality": {"weight": 20.0, "earned": 20.0, "percent": 100.0},
                 },
             )
         ],
-        score_weights={"final_outcome": 50.0, "verification_contract": 30.0, "quality_and_planning": 20.0},
+        score_weights={"final_outcome": 50.0, "verification_contract": 30.0, "quality": 20.0},
     )
 
     text = render_benchmark_report(report)

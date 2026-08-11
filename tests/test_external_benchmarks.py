@@ -58,9 +58,7 @@ def test_external_benchmark_defaults_cover_all_required_integrations() -> None:
     assert config.external_benchmarks.agent_generation.allow_side_effect_tools is True
     assert config.external_benchmarks.agent_generation.model_timeout_seconds == 180
     assert config.external_benchmarks.agent_generation.model_structured_timeout_seconds == 240
-    assert config.external_benchmarks.agent_generation.runtime_max_reasoning_steps == 16
     assert config.external_benchmarks.agent_generation.runtime_max_total_actions == 40
-    assert config.external_benchmarks.agent_generation.runtime_max_tool_steps == 24
     assert config.external_benchmarks.agent_generation.runtime_tool_call_budget == 24
     assert config.external_benchmarks.agent_generation.candidate_file_limit == 2
     assert config.external_benchmarks.agent_generation.file_excerpt_char_limit == 900
@@ -425,6 +423,7 @@ def test_external_benchmark_timeout_becomes_explicit_external_blocker(tmp_path: 
 
 def test_external_benchmark_agent_run_generates_predictions_and_evaluates(tmp_path: Path, monkeypatch) -> None:
     config = load_config()
+    config.external_benchmarks.model_server.preflight_enabled = False
     target = config.external_benchmarks.targets["swebench_lite"]
     target.workdir = str(tmp_path)
     target.preflight_commands = []
@@ -544,6 +543,7 @@ def test_external_benchmark_agent_run_generates_predictions_and_evaluates(tmp_pa
 
 def test_external_benchmark_agent_run_requires_non_empty_patch(tmp_path: Path, monkeypatch) -> None:
     config = load_config()
+    config.external_benchmarks.model_server.preflight_enabled = False
     target = config.external_benchmarks.targets["swebench_lite"]
     target.workdir = str(tmp_path)
     target.preflight_commands = []
