@@ -548,29 +548,6 @@ def test_invalid_tool_input_is_rejected_before_execution(make_config) -> None:
     assert len(client.requests) >= 2
 
 
-def test_failed_verification_requires_diagnostic_action_before_edit_or_retest(make_config) -> None:
-    from swaag.action import action_from_payload, ActionValidationError
-
-    diagnostic_names = AgentRuntime._DIAGNOSTIC_TOOL_NAMES
-    assert "read_file" in diagnostic_names
-    assert "run_tests" not in diagnostic_names
-    assert "edit_text" not in diagnostic_names
-
-    edit = action_from_payload(
-        {
-            "assistant_message": "edit",
-            "tool_calls": [{"tool_name": "edit_text", "arguments": {"path": "x.py", "operation": "replace_exact", "old_text": "a", "new_text": "b", "pattern": None, "replacement": None, "start": None, "end": None, "position": None, "insertion": None, "expected_text": None, "dry_run": False}}],
-            "continue_loop": True,
-        },
-        enabled_tool_names=["edit_text"],
-    )
-    assert edit.tool_calls[0].tool_name not in diagnostic_names
-
-
-def test_failed_verification_blocks_terminal_answer_until_tests_pass() -> None:
-    assert "run_tests" not in AgentRuntime._DIAGNOSTIC_TOOL_NAMES
-
-
 def test_verification_repair_prompt_contains_only_failed_checks() -> None:
     from types import SimpleNamespace
     from swaag.benchmark.benchmark_runner import _verification_repair_prompt
@@ -593,3 +570,20 @@ def test_benchmark_repair_round_limit_is_bounded(monkeypatch) -> None:
     assert _verification_repair_round_limit() == 10
     monkeypatch.setenv("SWAAG_BENCHMARK_VERIFICATION_REPAIR_ROUNDS", "-2")
     assert _verification_repair_round_limit() == 0
+
+
+def test_failed_run_tests_is_evidence_not_permanent_completion_gate(make_config) -> None:
+    failing = _action(
+        tool_calls=[("run_tests", {"command": ["python3", "-c", "raise SystemExit(1)"], "background": False})],
+        continue_loop=True,
+    )
+    finish = _action(message="The test command was irrelevant to the requested reading task; here is the answer.", continue_loop=False)
+    runtime, client = _runtime(make_config, [failing, finish])
+    result = runtime.run_turn("Read the supplied text and answer directly; no test suite is required.")
+    assert "irrelevant" in result.assistant_text
+    events = runtime.history.read_history(result.session_id)
+    assert not any(
+        event.event_type == "agent_action_rejected" and "verification" in str(event.payload.get("reason", "")).lower()
+        for event in events
+    )
+    assert len(client.requests) == 2
