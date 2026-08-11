@@ -240,13 +240,20 @@ class AgentEnvironment:
     def _reject_new_python_syntax_error(path: Path, original_text: str, proposed_text: str) -> None:
         if path.suffix not in {".py", ".pyi"} or original_text == proposed_text:
             return
+
+        def _compile(text: str) -> None:
+            # compile(..., mode="exec") performs the contextual syntax checks that
+            # ast.parse() alone does not, including `return`/`break`/`continue`
+            # outside their legal scopes.
+            compile(text, str(path), "exec")
+
         try:
-            ast.parse(original_text, filename=str(path))
+            _compile(original_text)
         except SyntaxError:
             # Do not prevent repair of a file that was already syntactically invalid.
             return
         try:
-            ast.parse(proposed_text, filename=str(path))
+            _compile(proposed_text)
         except SyntaxError as exc:
             evidence = {
                 "path": str(path),

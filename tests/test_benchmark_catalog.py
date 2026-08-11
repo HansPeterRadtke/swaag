@@ -143,3 +143,13 @@ def test_capability_benchmark_tasks_cover_new_agent_primitives(tmp_path) -> None
     wait = tasks["capability_human_duration_wait"].create(tmp_path / "wait")
     assert wait.verification_contract.required_tools_used == ["wait_seconds"]
     assert wait.verification_contract.required_history_events == ["agent_action_selected", "wait_completed"]
+
+
+def test_repo_task_budgets_leave_room_for_one_failed_edit_verify_cycle() -> None:
+    tasks = {task.task_id: task for task in get_benchmark_tasks()}
+    easy = tasks["coding_implement_function"].config_overrides
+    normal = tasks["coding_multifile_fix"].config_overrides
+    assert easy["runtime_tool_call_budget"] >= 10
+    assert easy["runtime_max_total_actions"] >= 12
+    assert normal["runtime_tool_call_budget"] >= easy["runtime_tool_call_budget"]
+    assert normal["runtime_max_total_actions"] >= easy["runtime_max_total_actions"]

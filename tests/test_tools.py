@@ -717,3 +717,45 @@ def test_write_file_rejects_python_syntax_regression(make_config, tmp_path: Path
     with pytest.raises(ToolValidationError, match="regress a syntactically valid Python file"):
         env.write_file("mod.py", "def broken(:\n", create=False)
     assert target.read_text(encoding="utf-8") == "x = 1\n"
+
+
+def test_edit_text_rejects_return_outside_function_regression(make_config, tmp_path: Path) -> None:
+    from swaag.environment.environment import AgentEnvironment
+    from swaag.history import HistoryStore
+
+    config = make_config()
+    config.sessions.root = tmp_path / "sessions"
+    config.tools.allow_side_effect_tools = True
+    config.editor.allow_writes = True
+    workspace = tmp_path / "workspace"
+    workspace.mkdir()
+    config.tools.read_roots = [workspace]
+    target = workspace / "stats.py"
+    original = (
+        "def moving_total(values: list[int]) -> int:\n"
+        "    total = 0\n"
+        "    for value in values[:-1]:\n"
+        "        total += value\n"
+        "    return total\n"
+    )
+    target.write_text(original, encoding="utf-8")
+    state = HistoryStore(config.sessions.root).create(config_fingerprint="cfg", model_base_url="http://model")
+    env = AgentEnvironment(config, state)
+    context = ToolContext(config=config, session_state=state, environment=env)
+    validated = EditTextTool().validate({
+        "path": "stats.py",
+        "operation": "replace_exact",
+        "dry_run": False,
+        "old_text": "total += value\\n    return total\\n",
+        "new_text": "total += value\\nreturn total\\n",
+        "start": None,
+        "end": None,
+        "position": None,
+        "expected_text": None,
+        "replacement": None,
+        "insertion": None,
+        "pattern": None,
+    })
+    with pytest.raises(ToolValidationError, match="return.*outside function"):
+        EditTextTool().execute(validated, context)
+    assert target.read_text(encoding="utf-8") == original
