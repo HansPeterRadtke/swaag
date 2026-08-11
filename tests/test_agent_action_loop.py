@@ -548,30 +548,6 @@ def test_invalid_tool_input_is_rejected_before_execution(make_config) -> None:
     assert len(client.requests) >= 2
 
 
-def test_verification_repair_prompt_contains_only_failed_checks() -> None:
-    from types import SimpleNamespace
-    from swaag.benchmark.benchmark_runner import _verification_repair_prompt
-
-    report = SimpleNamespace(
-        checks={"command": True, "expected_files": False},
-        evidence={"command": {"return_code": 0}, "expected_files": {"x": {"actual": "bad", "expected": "good"}}},
-        reason="expected_files",
-    )
-    text = _verification_repair_prompt(report)
-    assert "expected_files" in text
-    assert '"command"' not in text
-    assert "Do not claim completion until the verifier passes" in text
-
-
-def test_benchmark_repair_round_limit_is_bounded(monkeypatch) -> None:
-    from swaag.benchmark.benchmark_runner import _verification_repair_round_limit
-
-    monkeypatch.setenv("SWAAG_BENCHMARK_VERIFICATION_REPAIR_ROUNDS", "99")
-    assert _verification_repair_round_limit() == 10
-    monkeypatch.setenv("SWAAG_BENCHMARK_VERIFICATION_REPAIR_ROUNDS", "-2")
-    assert _verification_repair_round_limit() == 0
-
-
 def test_failed_run_tests_is_evidence_not_permanent_completion_gate(make_config) -> None:
     failing = _action(
         tool_calls=[("run_tests", {"command": ["python3", "-c", "raise SystemExit(1)"], "background": False})],

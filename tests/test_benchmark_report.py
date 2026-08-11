@@ -108,3 +108,11 @@ def test_render_benchmark_report_includes_quality_sections() -> None:
     assert "Cache / Replay Summary" in text
     assert "Top Failure Diagnostics" in text
     assert "/tmp/benchmark_results.json" in text
+
+
+def test_benchmark_runner_does_not_feed_verifier_failures_back_as_new_user_turns() -> None:
+    from pathlib import Path
+    source = Path("src/swaag/benchmark/benchmark_runner.py").read_text(encoding="utf-8")
+    assert "_verification_repair_prompt" not in source
+    assert "repair_turn = runtime.run_turn_in_session" not in source
+    assert '"verification_repair_rounds": repair_rounds_used' in source

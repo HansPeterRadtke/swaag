@@ -418,35 +418,6 @@ def _evaluate_quality(
     }
 
 
-def _verification_repair_round_limit() -> int:
-    raw = os.environ.get("SWAAG_BENCHMARK_VERIFICATION_REPAIR_ROUNDS", "3").strip()
-    try:
-        value = int(raw)
-    except ValueError:
-        value = 3
-    return max(0, min(value, 10))
-
-
-def _verification_repair_prompt(verification) -> str:
-    failing = [name for name, passed in verification.checks.items() if not passed]
-    evidence = {name: verification.evidence.get(name) for name in failing}
-    payload = stable_json_dumps(
-        {
-            "failed_checks": failing,
-            "reason": verification.reason,
-            "evidence": evidence,
-        },
-        indent=2,
-    )
-    if len(payload) > 12000:
-        payload = payload[:12000] + "\n... verifier evidence truncated mechanically ..."
-    return (
-        "External deterministic verification has not passed yet. Continue the same task and repair the result. "
-        "Do not claim completion until the verifier passes. Use the evidence below exactly; inspect current state before editing when needed.\n"
-        + payload
-    )
-
-
 def _classify_benchmark_task_outcome(
     *,
     scenario: TaskScenario,
@@ -725,47 +696,26 @@ def run_benchmarks(
             except Exception as exc:
                 runtime_error = exc
 
-            verification = None
-            quality = None
+            after_snapshot = _snapshot_workspace(scenario.workspace)
+            rebuilt = runtime.history.rebuild_from_history(state.session_id)
+            events = runtime.history.read_history(state.session_id)
+            final_text = assistant_text or (rebuilt.messages[-1].content if rebuilt.messages and rebuilt.messages[-1].role == "assistant" else "")
+            verification = verify_benchmark_contract(
+                scenario.verification_contract,
+                assistant_text=final_text,
+                state=rebuilt,
+                events=events,
+                workspace_before=before_snapshot,
+                workspace_after=after_snapshot,
+                workspace_root=str(scenario.workspace),
+                semantic_backend_mode="llm_scoring",
+                semantic_base_url=config.model.base_url,
+                semantic_seed=config.model.seed,
+                semantic_connect_timeout_seconds=config.model.connect_timeout_seconds,
+                semantic_read_timeout_seconds=config.model.verification_timeout_seconds,
+            )
+            quality = _evaluate_quality(scenario.oracle, events, runtime=runtime, prompt=scenario.prompt, assistant_text=final_text)
             repair_rounds_used = 0
-            repair_limit = _verification_repair_round_limit()
-            while True:
-                after_snapshot = _snapshot_workspace(scenario.workspace)
-                rebuilt = runtime.history.rebuild_from_history(state.session_id)
-                events = runtime.history.read_history(state.session_id)
-                final_text = assistant_text or (rebuilt.messages[-1].content if rebuilt.messages and rebuilt.messages[-1].role == "assistant" else "")
-                verification = verify_benchmark_contract(
-                    scenario.verification_contract,
-                    assistant_text=final_text,
-                    state=rebuilt,
-                    events=events,
-                    workspace_before=before_snapshot,
-                    workspace_after=after_snapshot,
-                    workspace_root=str(scenario.workspace),
-                    semantic_backend_mode="llm_scoring",
-                    semantic_base_url=config.model.base_url,
-                    semantic_seed=config.model.seed,
-                    semantic_connect_timeout_seconds=config.model.connect_timeout_seconds,
-                    semantic_read_timeout_seconds=config.model.verification_timeout_seconds,
-                )
-                quality = _evaluate_quality(scenario.oracle, events, runtime=runtime, prompt=scenario.prompt, assistant_text=final_text)
-                if runtime_error is not None or scenario.expected_outcome != "success" or (verification.passed and quality["passed"]):
-                    break
-                if repair_rounds_used >= repair_limit:
-                    break
-                repair_rounds_used += 1
-                repair_prompt = _verification_repair_prompt(verification)
-                try:
-                    with _benchmark_seed_timeout(effective_task_timeout):
-                        repair_turn = runtime.run_turn_in_session(state, repair_prompt)
-                    assistant_text = repair_turn.assistant_text
-                except BenchmarkSeedTimeout as exc:
-                    runtime_error = TimeoutError(str(exc))
-                    state = _record_benchmark_timeout_event(runtime, state, runtime_error)
-                    break
-                except Exception as exc:
-                    runtime_error = exc
-                    break
 
             task_elapsed = round(time.monotonic() - task_started, 3)
             aggregate_wall_clock += task_elapsed
