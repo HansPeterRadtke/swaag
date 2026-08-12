@@ -712,3 +712,21 @@ def test_environment_context_exposes_latest_mechanical_handles(make_config, tmp_
     environment = next(item.text for item in components if item.name == "environment_state")
     assert '"latest_artifact_cursor"' in environment
     assert '"next_offset": 4096' in environment
+
+
+def test_action_prompt_requires_requested_side_effects_before_final_message(make_config) -> None:
+    config = make_config(model__context_limit=32_000)
+    runtime = AgentRuntime(config)
+    state = runtime.create_or_load_session()
+    specs = runtime.tools.prompt_tuples(config)
+    prepared = runtime._prepare_action_call(
+        state,
+        original_request="Recover a value, write it to a file, and verify it.",
+        pending_messages=[],
+        tool_specs=specs,
+        contract=agent_action_contract(specs),
+        validation_feedback="",
+    )
+    prompt = prepared.assembly.prompt_text
+    assert "never a substitute for an explicitly requested mechanical side effect" in prompt
+    assert "apply the required state change and verify again before finishing" in prompt
