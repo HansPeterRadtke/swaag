@@ -67,6 +67,7 @@ _STATEFUL_REBUILD_EVENT_TYPES = frozenset(
         "process_killed",
         "wait_entered",
         "wait_resumed",
+        "wait_completed",
         "file_chunk_read",
         "file_read_for_edit",
         "edit_previewed",
@@ -890,6 +891,12 @@ class HistoryStore:
             state.environment.last_updated = event.timestamp
             return
         if event.event_type == "wait_resumed":
+            state.environment.waiting = False
+            state.environment.waiting_reason = ""
+            state.environment.waiting_process_ids = []
+            state.environment.last_updated = event.timestamp
+            return
+        if event.event_type == "wait_completed":
             state.environment.waiting = False
             state.environment.waiting_reason = ""
             state.environment.waiting_process_ids = []
