@@ -621,3 +621,29 @@ def test_benchmark_answer_fragments_are_case_insensitive_and_support_alternative
     assert report.passed is True
     assert report.checks["expected_answer_contains"] is True
     assert report.checks["expected_answer_any_of"] is True
+
+def test_action_parser_allows_empty_terminal_message_after_tool_work() -> None:
+    from swaag.action import action_from_payload
+    action = action_from_payload(
+        {"assistant_message": "", "tool_calls": [], "continue_loop": False},
+        enabled_tool_names=[],
+    )
+    assert action.assistant_message == ""
+    assert action.tool_calls == []
+    assert action.continue_loop is False
+
+
+def test_runtime_can_finish_empty_after_successful_tool_result(make_config, tmp_path) -> None:
+    config = make_config(runtime__tool_call_budget=2, runtime__max_total_actions=2, model__context_limit=32_000)
+    config.sessions.root = tmp_path / "sessions"
+    config.tools.read_roots = [tmp_path]
+    (tmp_path / "a.txt").write_text("alpha\n", encoding="utf-8")
+    read = _action(tool_calls=[("read_file", {"path": "a.txt"})], continue_loop=True)
+    finish = _action(message="", continue_loop=False)
+    client = FakeModelClient([read, finish])
+    runtime = AgentRuntime(config, model_client=client)
+    result = runtime.run_turn("Read a.txt. No prose response is required after the read succeeds.")
+    assert result.assistant_text == ""
+    assert len(result.tool_results) == 1
+    events = runtime.history.read_history(result.session_id)
+    assert not any(e.event_type == "agent_action_rejected" for e in events)

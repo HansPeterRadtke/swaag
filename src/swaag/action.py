@@ -61,11 +61,6 @@ def action_from_payload(payload: dict[str, Any], *, enabled_tool_names: Iterable
         raise ActionValidationError(
             "continue_loop=true requires at least one tool call; use a wait tool when waiting is required"
         )
-    if not continue_loop and not tool_calls and not assistant_message.strip():
-        raise ActionValidationError(
-            "A completed turn without tool calls requires a non-empty assistant_message"
-        )
-
     return AgentAction(
         assistant_message=assistant_message,
         tool_calls=tool_calls,
