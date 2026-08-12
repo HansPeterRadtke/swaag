@@ -5,6 +5,7 @@ from typing import Any, Callable
 
 from swaag.model import CompletionRequestPolicy
 from swaag.runtime import AgentRuntime
+from swaag.grammar import agent_action_contract
 from swaag.types import CompletionResult, ContractSpec
 
 
@@ -647,3 +648,21 @@ def test_runtime_can_finish_empty_after_successful_tool_result(make_config, tmp_
     assert len(result.tool_results) == 1
     events = runtime.history.read_history(result.session_id)
     assert not any(e.event_type == "agent_action_rejected" for e in events)
+
+
+def test_action_prompt_explains_cross_action_tool_result_dependencies(make_config) -> None:
+    config = make_config(model__context_limit=32_000)
+    runtime = AgentRuntime(config)
+    state = runtime.create_or_load_session()
+    prepared = runtime._prepare_action_call(
+        state,
+        original_request="Inspect output then use its returned handle.",
+        pending_messages=[],
+        tool_specs=runtime.tools.prompt_tuples(config),
+        contract=agent_action_contract(runtime.tools.prompt_tuples(config)),
+        validation_feedback="",
+    )
+    prompt = prepared.assembly.prompt_text
+    assert "All tool_calls in one action are selected before any of them execute" in prompt
+    assert "issue the dependent call in the next action" in prompt
+    assert "do not simply stop on the failed verification" in prompt
