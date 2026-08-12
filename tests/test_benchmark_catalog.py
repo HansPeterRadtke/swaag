@@ -176,3 +176,11 @@ def test_failure_tasks_verify_policy_evidence_and_preserved_state_not_magic_refu
     assert "expected_answer_any_of" not in report.checks
     assert report.checks["expected_answer_contains"] is True
     assert report.checks["expected_files"] is True
+
+
+def test_terminal_capability_prompt_matches_trailing_newline_verifier(tmp_path) -> None:
+    task = next(task for task in get_benchmark_tasks() if task.task_id == "capability_persistent_interactive_terminal")
+    scenario = task.create(tmp_path)
+    assert "with a trailing newline after the second line" in scenario.prompt
+    expected = next(iter(scenario.verification_contract.expected_files.values()))
+    assert expected.endswith("\n")

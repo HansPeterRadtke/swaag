@@ -1263,7 +1263,7 @@ class WaitSecondsTool(Tool):
         return {"seconds": parsed.total_seconds(), "duration": str(duration).strip()}
 
     def required_generated_event_types(self, validated_input: dict[str, Any]) -> set[str]:
-        return {"wait_entered", "wait_resumed"}
+        return {"wait_entered", "wait_resumed", "wait_completed"}
 
     def execute(self, validated_input: dict[str, Any], context: ToolContext) -> ToolExecutionResult:
         seconds = float(validated_input["seconds"])
@@ -1283,12 +1283,21 @@ class WaitSecondsTool(Tool):
             "wait_resumed",
             {"reason": f"wait_seconds:{seconds:g}", "process_ids": []},
         )
+        completed = ToolGeneratedEvent(
+            "wait_completed",
+            {
+                "reason": f"wait_seconds:{seconds:g}",
+                "requested_seconds": seconds,
+                "requested_duration": validated_input.get("duration"),
+                "elapsed_seconds": elapsed,
+            },
+        )
         output = {"requested_seconds": seconds, "requested_duration": validated_input.get("duration"), "elapsed_seconds": elapsed}
         return ToolExecutionResult(
             tool_name=self.name,
             output=output,
             display_text=tool_result_display(self.name, output),
-            generated_events=[entered, resumed],
+            generated_events=[entered, resumed, completed],
         )
 
 

@@ -666,3 +666,35 @@ def test_action_prompt_explains_cross_action_tool_result_dependencies(make_confi
     assert "All tool_calls in one action are selected before any of them execute" in prompt
     assert "issue the dependent call in the next action" in prompt
     assert "do not simply stop on the failed verification" in prompt
+
+
+def test_environment_context_exposes_latest_mechanical_handles(make_config, tmp_path) -> None:
+    config = make_config(model__context_limit=32_000)
+    config.sessions.root = tmp_path / "sessions"
+    runtime = AgentRuntime(config)
+    state = runtime.create_or_load_session()
+    runtime.history.record_event(
+        state,
+        "tool_result",
+        {
+            "tool_name": "shell_command",
+            "raw_input": {},
+            "validated_input": {},
+            "output": {"stdout_artifact_id": "artifact_abc123"},
+        },
+    )
+    runtime.history.record_event(
+        state,
+        "tool_result",
+        {
+            "tool_name": "terminal",
+            "raw_input": {},
+            "validated_input": {},
+            "output": {"terminal_id": "terminal_xyz789"},
+        },
+    )
+    components = runtime._runtime_context_components(state, runtime._counter(state))
+    environment = next(item.text for item in components if item.name == "environment_state")
+    assert '"latest_handles"' in environment
+    assert '"stdout_artifact_id": "artifact_abc123"' in environment
+    assert '"terminal_id": "terminal_xyz789"' in environment

@@ -103,7 +103,7 @@ def _persistent_terminal(workspace: Path) -> TaskScenario:
         prompt=(
             "Use the persistent terminal tool, not shell_command, for this task. Create one terminal, set shell variable COLOR=violet in it, "
             "then in a later terminal send prove the variable persisted. In the same terminal run an interactive Python input() program and send "
-            "hello-pty as later stdin. Use the observed terminal output to write terminal_result.txt exactly as two lines: state=violet and stdin=hello-pty. "
+            "hello-pty as later stdin. Use the observed terminal output to write terminal_result.txt exactly as two lines: state=violet and stdin=hello-pty, with a trailing newline after the second line. "
             f"Close the terminal and run python3 {script} before answering."
         ),
         workspace=workspace,

@@ -488,6 +488,24 @@ class AgentRuntime:
         counter: ExactTokenCounter | ConservativeEstimator | _HistoryAwareTokenCounter,
     ) -> list[PromptComponent]:
         wakeup_store = WakeupStore(self.config.sessions.root)
+        latest_handles: dict[str, str] = {}
+        for event in self.history.iter_history(state.session_id):
+            if event.event_type != "tool_result":
+                continue
+            output = event.payload.get("output", {})
+            if not isinstance(output, dict):
+                continue
+            for key in (
+                "stdout_artifact_id",
+                "stderr_artifact_id",
+                "artifact_id",
+                "terminal_id",
+                "process_id",
+                "wakeup_id",
+            ):
+                value = output.get(key)
+                if isinstance(value, str) and value.strip():
+                    latest_handles[key] = value.strip()
         environment = {
             "workspace_root": state.environment.workspace.root,
             "cwd": state.environment.workspace.cwd,
@@ -502,6 +520,7 @@ class AgentRuntime:
             "scheduled_wakeups": [
                 to_jsonable(item) for item in wakeup_store.list(session_id=state.session_id)
             ],
+            "latest_handles": latest_handles,
         }
         components = [
             PromptComponent(

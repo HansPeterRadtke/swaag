@@ -773,3 +773,17 @@ def test_artifact_guidance_requires_exact_returned_artifact_id() -> None:
     assert "exact stdout_artifact_id or stderr_artifact_id" in ReadArtifactTool.usage_guidance
     assert "never use a filename" in ReadArtifactTool.usage_guidance
     assert "later action" in ReadArtifactTool.usage_guidance
+
+
+def test_wait_seconds_emits_completed_event(make_config, tmp_path) -> None:
+    from swaag.environment.environment import AgentEnvironment
+    from swaag.history import HistoryStore
+    from swaag.tools.builtin import WaitSecondsTool
+
+    config = make_config()
+    config.sessions.root = tmp_path / "sessions"
+    state = HistoryStore(config.sessions.root).create(config_fingerprint="cfg", model_base_url="http://model")
+    env = AgentEnvironment(config, state)
+    result = WaitSecondsTool().execute({"seconds": 0.0, "duration": "0 ms"}, ToolContext(config=config, session_state=state, environment=env))
+    assert [event.event_type for event in result.generated_events] == ["wait_entered", "wait_resumed", "wait_completed"]
+    assert result.generated_events[-1].payload["elapsed_seconds"] >= 0.0
