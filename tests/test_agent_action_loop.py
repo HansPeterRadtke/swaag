@@ -698,3 +698,17 @@ def test_environment_context_exposes_latest_mechanical_handles(make_config, tmp_
     assert '"latest_handles"' in environment
     assert '"stdout_artifact_id": "artifact_abc123"' in environment
     assert '"terminal_id": "terminal_xyz789"' in environment
+    runtime.history.record_event(
+        state,
+        "tool_result",
+        {
+            "tool_name": "read_artifact",
+            "raw_input": {},
+            "validated_input": {},
+            "output": {"artifact_id": "artifact_abc123", "next_offset": 4096, "finished": False},
+        },
+    )
+    components = runtime._runtime_context_components(state, runtime._counter(state))
+    environment = next(item.text for item in components if item.name == "environment_state")
+    assert '"latest_artifact_cursor"' in environment
+    assert '"next_offset": 4096' in environment

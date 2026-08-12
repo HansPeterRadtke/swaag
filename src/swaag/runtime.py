@@ -489,6 +489,7 @@ class AgentRuntime:
     ) -> list[PromptComponent]:
         wakeup_store = WakeupStore(self.config.sessions.root)
         latest_handles: dict[str, str] = {}
+        latest_artifact_cursor: dict[str, object] = {}
         for event in self.history.iter_history(state.session_id):
             if event.event_type != "tool_result":
                 continue
@@ -506,6 +507,16 @@ class AgentRuntime:
                 value = output.get(key)
                 if isinstance(value, str) and value.strip():
                     latest_handles[key] = value.strip()
+            if event.payload.get("tool_name") == "read_artifact":
+                artifact_id = output.get("artifact_id")
+                next_offset = output.get("next_offset")
+                finished = output.get("finished")
+                if isinstance(artifact_id, str) and artifact_id.strip() and isinstance(next_offset, int):
+                    latest_artifact_cursor = {
+                        "artifact_id": artifact_id.strip(),
+                        "next_offset": next_offset,
+                        "finished": bool(finished),
+                    }
         environment = {
             "workspace_root": state.environment.workspace.root,
             "cwd": state.environment.workspace.cwd,
@@ -521,6 +532,7 @@ class AgentRuntime:
                 to_jsonable(item) for item in wakeup_store.list(session_id=state.session_id)
             ],
             "latest_handles": latest_handles,
+            "latest_artifact_cursor": latest_artifact_cursor,
         }
         components = [
             PromptComponent(

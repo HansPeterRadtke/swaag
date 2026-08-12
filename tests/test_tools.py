@@ -787,3 +787,25 @@ def test_wait_seconds_emits_completed_event(make_config, tmp_path) -> None:
     result = WaitSecondsTool().execute({"seconds": 0.0, "duration": "0 ms"}, ToolContext(config=config, session_state=state, environment=env))
     assert [event.event_type for event in result.generated_events] == ["wait_entered", "wait_resumed", "wait_completed"]
     assert result.generated_events[-1].payload["elapsed_seconds"] >= 0.0
+
+
+def test_read_artifact_resolves_latest_symbolic_stdout_handle(make_config, tmp_path) -> None:
+    from swaag.environment.artifacts import TextArtifactStore
+    from swaag.environment.environment import AgentEnvironment
+    from swaag.history import HistoryStore
+    from swaag.tools.artifacts import ReadArtifactTool
+    from swaag.types import Message
+
+    config = make_config()
+    config.sessions.root = tmp_path / "sessions"
+    state = HistoryStore(config.sessions.root).create(config_fingerprint="cfg", model_base_url="http://model")
+    env = AgentEnvironment(config, state)
+    artifact = TextArtifactStore(config.sessions.root, state.session_id).create("abcdef", kind="shell_command_stdout")
+    state.messages.append(Message(role="tool", name="shell_command", content="ok", created_at="2026-01-01T00:00:00+00:00", metadata={"output": {"stdout_artifact_id": artifact.artifact_id}}))
+    result = ReadArtifactTool().execute(
+        {"artifact_id": "stdout_artifact_id", "start_offset": 0, "max_chars": 3},
+        ToolContext(config=config, session_state=state, environment=env),
+    )
+    assert result.output["artifact_id"] == artifact.artifact_id
+    assert result.output["text"] == "abc"
+    assert result.output["next_offset"] == 3
