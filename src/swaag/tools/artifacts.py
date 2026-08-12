@@ -11,7 +11,7 @@ from swaag.utils import stable_json_dumps
 class ReadArtifactTool(Tool):
     name = "read_artifact"
     description = "Read an exact bounded slice of a durable text artifact produced by tools, such as full shell/test output that was too large for the immediate context."
-    usage_guidance = "Use artifact_id from another tool result. Advance start_offset with next_offset until finished; search or inspect only as much raw output as the task needs."
+    usage_guidance = "Use the exact stdout_artifact_id or stderr_artifact_id returned by the producing tool as artifact_id; never use a filename, command, or guessed label. Advance start_offset with next_offset until finished, and use offsets strategically rather than rereading the same slice."
     kind = "pure"
     input_schema = {
         "type": "object",

@@ -212,12 +212,11 @@ class AgentRuntime:
             },
         )
 
-        tool_specs = self.tools.prompt_tuples(self.config)
-        tool_names = [str(item[0]) for item in tool_specs]
-        contract = agent_action_contract(tool_specs)
+        all_tool_specs = self.tools.prompt_tuples(self.config)
         tool_results: list[ToolExecutionResult] = []
         budget_reports: list[BudgetReport] = []
-        action_occurrences: dict[str, int] = {}
+        previous_action_signature = ""
+        consecutive_action_occurrences = 0
         tool_calls_used = 0
         recovery_feedback = ""
 
@@ -233,6 +232,10 @@ class AgentRuntime:
             selected_action: AgentAction | None = None
 
             for validation_attempt in range(1, 4):
+                remaining_tool_calls = self.config.runtime.tool_call_budget - tool_calls_used
+                tool_specs = all_tool_specs if remaining_tool_calls > 0 else []
+                tool_names = [str(item[0]) for item in tool_specs]
+                contract = agent_action_contract(tool_specs)
                 prepared = self._prepare_action_call(
                     state,
                     original_request=original_request,
@@ -245,10 +248,9 @@ class AgentRuntime:
 
                 def validate(payload: dict[str, Any]) -> AgentAction:
                     action = action_from_payload(payload, enabled_tool_names=tool_names)
-                    remaining = self.config.runtime.tool_call_budget - tool_calls_used
-                    if len(action.tool_calls) > remaining:
+                    if len(action.tool_calls) > remaining_tool_calls:
                         raise ActionValidationError(
-                            f"tool_calls contains {len(action.tool_calls)} calls but only {remaining} remain in the mechanical budget"
+                            f"tool_calls contains {len(action.tool_calls)} calls but only {remaining_tool_calls} remain in the mechanical budget"
                         )
                     for tool_call in action.tool_calls:
                         try:
@@ -294,8 +296,12 @@ class AgentRuntime:
 
             action_payload = asdict(selected_action)
             signature = stable_json_dumps(action_payload, indent=None)
-            occurrence = action_occurrences.get(signature, 0) + 1
-            action_occurrences[signature] = occurrence
+            if signature == previous_action_signature:
+                consecutive_action_occurrences += 1
+            else:
+                previous_action_signature = signature
+                consecutive_action_occurrences = 1
+            occurrence = consecutive_action_occurrences
             self.history.record_event(
                 state,
                 "agent_action_selected",
@@ -305,10 +311,10 @@ class AgentRuntime:
                     "occurrence": occurrence,
                 },
             )
-            if occurrence > self.config.runtime.max_repeated_action_occurrences:
+            if occurrence > 1:
                 recovery_feedback = (
-                    "The previous action was rejected because it exactly repeated an action that already produced no new progress. "
-                    "Choose a materially different next action. Inspect the latest tool/test evidence or current file contents before editing again. "
+                    "The previous action was rejected because it exactly repeated the immediately preceding action and would produce no new mechanical evidence. "
+                    "Choose a materially different next action. Inspect a different source, use the evidence already returned, or change state before rereading the same input. "
                     "Do not repeat the same tool arguments, and do not modify tests or files the user explicitly forbade changing."
                 )
                 self.history.record_event(

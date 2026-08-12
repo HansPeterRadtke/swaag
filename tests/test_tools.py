@@ -759,3 +759,15 @@ def test_edit_text_rejects_return_outside_function_regression(make_config, tmp_p
     with pytest.raises(ToolValidationError, match="return.*outside function"):
         EditTextTool().execute(validated, context)
     assert target.read_text(encoding="utf-8") == original
+
+
+def test_terminal_guidance_requires_exact_returned_terminal_id() -> None:
+    from swaag.tools.terminal import TerminalTool
+    assert "returned terminal_id exactly" in TerminalTool.usage_guidance
+    assert "do not invent aliases" in TerminalTool.usage_guidance
+
+
+def test_artifact_guidance_requires_exact_returned_artifact_id() -> None:
+    from swaag.tools.artifacts import ReadArtifactTool
+    assert "exact stdout_artifact_id or stderr_artifact_id" in ReadArtifactTool.usage_guidance
+    assert "never use a filename" in ReadArtifactTool.usage_guidance

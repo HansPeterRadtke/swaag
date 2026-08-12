@@ -116,9 +116,20 @@ def verify_benchmark_contract(
         checks["expected_answer"] = assistant_text.strip() == str(expected_answer).strip()
         evidence["expected_answer"] = {"actual": assistant_text.strip(), "expected": str(expected_answer).strip()}
     contains = list(getattr(contract, "expected_answer_contains", []) or [])
+    assistant_folded = assistant_text.casefold()
     if contains:
-        checks["expected_answer_contains"] = all(fragment in assistant_text for fragment in contains)
+        checks["expected_answer_contains"] = all(str(fragment).casefold() in assistant_folded for fragment in contains)
         evidence["expected_answer_contains"] = {"actual": assistant_text, "required_fragments": contains}
+    any_of_groups = list(getattr(contract, "expected_answer_any_of", []) or [])
+    if any_of_groups:
+        checks["expected_answer_any_of"] = all(
+            any(str(fragment).casefold() in assistant_folded for fragment in group)
+            for group in any_of_groups
+        )
+        evidence["expected_answer_any_of"] = {
+            "actual": assistant_text,
+            "required_alternative_groups": any_of_groups,
+        }
     regex = getattr(contract, "expected_answer_regex", None)
     if regex is not None:
         checks["expected_answer_regex"] = re.search(str(regex), assistant_text) is not None

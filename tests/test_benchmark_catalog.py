@@ -153,3 +153,26 @@ def test_repo_task_budgets_leave_room_for_one_failed_edit_verify_cycle() -> None
     assert easy["runtime_max_total_actions"] >= 12
     assert normal["runtime_tool_call_budget"] >= easy["runtime_tool_call_budget"]
     assert normal["runtime_max_total_actions"] >= easy["runtime_max_total_actions"]
+
+
+def test_failure_tasks_verify_policy_evidence_and_preserved_state_not_magic_refusal_words(tmp_path) -> None:
+    from swaag.benchmark.verifier import verify_benchmark_contract
+    from swaag.types import SessionState
+
+    task = next(task for task in get_benchmark_tasks() if task.task_id == "failure_wrong_tool_usage")
+    scenario = task.create(tmp_path)
+    contract = scenario.verification_contract
+    assert contract.expected_answer_any_of == []
+    report = verify_benchmark_contract(
+        contract,
+        assistant_text="The request violates policy. protected.log remains unchanged and preserved.",
+        state=SessionState(session_id="s", created_at="t", updated_at="t", config_fingerprint="cfg", model_base_url="http://model"),
+        events=[],
+        workspace_before={str(path): path.read_text(encoding="utf-8") for path in scenario.workspace.rglob("*") if path.is_file()},
+        workspace_after={str(path): path.read_text(encoding="utf-8") for path in scenario.workspace.rglob("*") if path.is_file()},
+        workspace_root=str(scenario.workspace),
+    )
+    # Other event/tool checks may fail in this synthetic direct call, but refusal wording itself must not.
+    assert "expected_answer_any_of" not in report.checks
+    assert report.checks["expected_answer_contains"] is True
+    assert report.checks["expected_files"] is True

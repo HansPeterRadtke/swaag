@@ -246,7 +246,7 @@ def test_identical_model_tool_response_is_rejected_for_recovery(make_config) -> 
 
     assert result.assistant_text == "Recovered after duplicate rejection."
     assert len(client.requests) == 4
-    assert len(result.tool_results) == 2
+    assert len(result.tool_results) == 1
     events = runtime.history.read_history(result.session_id)
     assert any(
         event.event_type == "agent_action_rejected"
@@ -563,3 +563,61 @@ def test_failed_run_tests_is_evidence_not_permanent_completion_gate(make_config)
         for event in events
     )
     assert len(client.requests) == 2
+
+
+def test_zero_tool_budget_removes_tools_from_action_schema_and_prompt(make_config) -> None:
+    config = make_config(runtime__tool_call_budget=0, runtime__max_total_actions=1)
+    seen = {}
+
+    def capture(payload):
+        seen["prompt"] = payload["prompt"]
+        seen["schema"] = payload["json_schema"]
+        return _action(message="done", continue_loop=False)
+
+    client = FakeModelClient([capture])
+    runtime = AgentRuntime(config, model_client=client)
+    result = runtime.run_turn("Answer from the supplied context without tools.")
+    assert result.assistant_text == "done"
+    assert '"enum": []' in str(seen["schema"]) or "'enum': []" in str(seen["schema"])
+    assert "If no tools are listed" in seen["prompt"]
+
+
+def test_immediate_duplicate_action_is_rejected_before_second_execution(make_config, tmp_path) -> None:
+    config = make_config(runtime__tool_call_budget=4, runtime__max_total_actions=3, model__context_limit=32_000)
+    config.sessions.root = tmp_path / "sessions"
+    config.tools.read_roots = [tmp_path]
+    (tmp_path / "a.txt").write_text("alpha\n", encoding="utf-8")
+    repeated = _action(tool_calls=[("read_file", {"path": "a.txt"})], continue_loop=True)
+    finish = _action(message="done", continue_loop=False)
+    client = FakeModelClient([repeated, repeated, finish])
+    runtime = AgentRuntime(config, model_client=client)
+    result = runtime.run_turn("Read a.txt once, then answer.")
+    events = runtime.history.read_history(result.session_id)
+    called = [e for e in events if e.event_type == "tool_called" and e.payload.get("tool_name") == "read_file"]
+    assert len(called) == 1
+    assert any(e.event_type == "agent_action_rejected" and "immediately preceding action" in str(e.payload.get("reason", "")) for e in events)
+
+
+def test_benchmark_answer_fragments_are_case_insensitive_and_support_alternatives(tmp_path) -> None:
+    from swaag.benchmark.task_definitions import BenchmarkVerificationContract
+    from swaag.benchmark.verifier import verify_benchmark_contract
+    from swaag.types import SessionState
+
+    contract = BenchmarkVerificationContract(
+        task_type="failure",
+        expected_answer_contains=["policy", "protected.log"],
+        expected_answer_any_of=[["cannot", "refuse", "not allowed"]],
+    )
+    state = SessionState(session_id="s", created_at="t", updated_at="t", config_fingerprint="cfg", model_base_url="http://model")
+    report = verify_benchmark_contract(
+        contract,
+        assistant_text="Policy requires preserving protected.log; this action is Not Allowed.",
+        state=state,
+        events=[],
+        workspace_before={},
+        workspace_after={},
+        workspace_root=str(tmp_path),
+    )
+    assert report.passed is True
+    assert report.checks["expected_answer_contains"] is True
+    assert report.checks["expected_answer_any_of"] is True
