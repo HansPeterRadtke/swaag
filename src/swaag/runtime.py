@@ -91,10 +91,27 @@ class AgentRuntime:
             request_metadata={"cache_scope": "default_agent_runtime"},
         )
         self.tools = tool_registry or ToolRegistry()
+        self._embedding_indexer: AsyncEmbeddingIndexer | None = None
+        event_observer = None
+        if config.embedding_index.enabled:
+            provider = OpenAICompatibleEmbeddingProvider(
+                config.embedding_index.base_url,
+                config.embedding_index.endpoint,
+                config.embedding_index.model,
+                config.embedding_index.timeout_seconds,
+            )
+            self._embedding_indexer = AsyncEmbeddingIndexer(
+                DerivedEmbeddingIndex(config.sessions.root, provider),
+                config.embedding_index.fields,
+            )
+            event_observer = self._embedding_indexer.submit
         self.history = history_store or HistoryStore(
             config.sessions.root,
             write_projections=config.sessions.write_projections,
+            event_observer=event_observer,
         )
+        if history_store is not None and event_observer is not None:
+            history_store.event_observer = event_observer
         self.prompts = PromptBuilder(config)
         self._token_counter = token_counter
         self._token_count_cache: dict[str, int] = {}

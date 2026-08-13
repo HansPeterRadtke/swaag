@@ -8,6 +8,8 @@ from pathlib import Path
 from typing import Sequence
 
 from swaag.config import load_config
+from swaag.communication import CommunicationService
+from swaag.mcp import McpAdapter
 from swaag.runtime import AgentRuntime, BudgetExceededError
 from swaag.utils import stable_json_dumps
 
@@ -89,6 +91,22 @@ def _build_parser() -> argparse.ArgumentParser:
     edit_parser.add_argument("--replacement")
     edit_parser.add_argument("--insertion")
     edit_parser.add_argument("--pattern")
+
+    subparsers.add_parser("mcp-stdio", help="Serve enabled SWAAG tools over MCP JSON-RPC on stdio.")
+
+    communication_parser = subparsers.add_parser("communication", help="Use the durable communication/control service.")
+    communication_sub = communication_parser.add_subparsers(dest="communication_command", required=True)
+    communication_submit = communication_sub.add_parser("submit", help="Queue a correlated request for the main agent.")
+    communication_submit.add_argument("message")
+    communication_submit.add_argument("--session", help="Session name or id. Defaults to latest.")
+    communication_submit.add_argument("--source", default="cli-communication")
+    communication_status = communication_sub.add_parser("status", help="Read a correlated communication request status.")
+    communication_status.add_argument("correlation_id")
+    communication_process = communication_sub.add_parser("process", help="Process the next queued communication request.")
+    communication_process.add_argument("--session", help="Optional exact target session id.")
+    communication_question = communication_sub.add_parser("ask-status", help="Answer a status/history question without mutating the target workspace.")
+    communication_question.add_argument("question")
+    communication_question.add_argument("--session", help="Session name or id. Defaults to latest.")
     return parser
 
 
@@ -387,6 +405,25 @@ def _run_edit_dry_run(runtime: AgentRuntime, args) -> int:
     return 0
 
 
+def _run_communication(runtime: AgentRuntime, args) -> int:
+    service = CommunicationService(runtime)
+    if args.communication_command == "submit":
+        request = service.submit(args.session, args.message, source=args.source)
+        print(stable_json_dumps(asdict(request), indent=2))
+        return 0
+    if args.communication_command == "status":
+        print(stable_json_dumps(asdict(service.status(args.correlation_id)), indent=2))
+        return 0
+    if args.communication_command == "process":
+        request = service.process_once(session_id=args.session)
+        print(stable_json_dumps(asdict(request), indent=2) if request is not None else "null")
+        return 0
+    if args.communication_command == "ask-status":
+        print(service.answer_status_question(args.session, args.question))
+        return 0
+    raise ValueError(f"Unknown communication command: {args.communication_command}")
+
+
 def main(argv: Sequence[str] | None = None) -> int:
     parser = _build_parser()
     args = parser.parse_args(argv)
@@ -426,6 +463,13 @@ def main(argv: Sequence[str] | None = None) -> int:
             return _run_readers(runtime, getattr(args, "session", None))
         if args.command == "checkpoint":
             return _run_checkpoint(runtime, args)
+        if args.command == "mcp-stdio":
+            if not runtime.config.mcp.enabled:
+                raise ValueError("MCP is disabled in configuration")
+            McpAdapter(runtime).serve_stdio()
+            return 0
+        if args.command == "communication":
+            return _run_communication(runtime, args)
     except BudgetExceededError as exc:
         print(str(exc), file=sys.stderr)
         if exc.report is not None:

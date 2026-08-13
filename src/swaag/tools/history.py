@@ -5,6 +5,7 @@ import json
 from typing import Any
 
 from swaag.history import HistoryStore
+from swaag.embedding_index import DerivedEmbeddingIndex, OpenAICompatibleEmbeddingProvider
 from swaag.grammar import history_analysis_contract
 from swaag.model import LlamaCppClient
 from swaag.tools.base import Tool, ToolContext, ToolValidationError
@@ -29,7 +30,7 @@ class HistorySearchTool(Tool):
     repeated_observation_is_redundant = True
     name = "history_search"
     description = "Search durable exact agent history for earlier user messages, tool calls/results, decisions, and events. Returns ranked previews and sequence numbers; use history_window for exact surrounding events."
-    usage_guidance = "Use when current context or summaries may omit an older exact detail. For the active session, pass session_ref=null (or use the exact active session_id/name from environment state); never invent a session label. Search first, then use the exact session_id and sequence returned by history_search with history_window."
+    usage_guidance = "Use when current context or summaries may omit an older exact detail. For the active session, pass session_ref=null (or use the exact active session_id/name from environment state); never invent a session label. Search first, then use the exact session_id and sequence returned by history_search with history_window. Optional semantic_matches are only candidate references from a derived embedding index; retrieve the exact event before relying on them."
     kind = "pure"
     input_schema = {
         "type": "object",
@@ -91,6 +92,40 @@ class HistorySearchTool(Tool):
             }
             for item in result["matches"]
         ]
+        semantic_matches: list[dict[str, Any]] = []
+        semantic_index_error = ""
+        embedding_cfg = context.config.embedding_index
+        if embedding_cfg.enabled and result["search_backend"] != "archive_fts5":
+            try:
+                provider = OpenAICompatibleEmbeddingProvider(
+                    embedding_cfg.base_url,
+                    embedding_cfg.endpoint,
+                    embedding_cfg.model,
+                    embedding_cfg.timeout_seconds,
+                )
+                index = DerivedEmbeddingIndex(context.config.sessions.root, provider)
+                indexed_through = index.complete_through(result["session_id"])
+                highest = indexed_through
+                for event in store.iter_history(result["session_id"], start_sequence=max(1, indexed_through + 1)):
+                    highest = max(highest, event.sequence)
+                    if event.event_type != "agent_status":
+                        continue
+                    for field in embedding_cfg.fields:
+                        value = event.payload.get(field)
+                        if isinstance(value, str) and value.strip():
+                            index.upsert(result["session_id"], event.sequence, field, value)
+                if highest > indexed_through:
+                    index.mark_complete_through(result["session_id"], highest)
+                semantic_matches = [
+                    {"sequence": item.sequence, "field": item.field, "score": item.score}
+                    for item in index.search(
+                        " ".join(part for part in [validated_input["query"], validated_input["topic_hint"]] if part),
+                        session_id=result["session_id"],
+                        limit=embedding_cfg.max_results,
+                    )
+                ]
+            except Exception as exc:
+                semantic_index_error = f"{type(exc).__name__}: {exc}"
         output = {
             "session_id": result["session_id"],
             "session_name": result["session_name"],
@@ -99,6 +134,8 @@ class HistorySearchTool(Tool):
             "topic_hint": result["topic_hint"],
             "match_count": len(matches),
             "matches": matches,
+            "semantic_matches": semantic_matches,
+            "semantic_index_error": semantic_index_error,
         }
         event = ToolGeneratedEvent(
             "history_retrieved",

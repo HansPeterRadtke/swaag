@@ -235,6 +235,50 @@ exact_score = 8
 type_bonus = 2
 preview_chars = 600
 
+
+# -----------------------------------------------------------
+# [embedding_index] — OPTIONAL DERIVED SEMANTIC INDEX
+# Canonical history remains exact SQLite events. This index is rebuildable.
+# -----------------------------------------------------------
+[embedding_index]
+enabled = false
+base_url = ""
+endpoint = "/v1/embeddings"
+model = ""
+timeout_seconds = 30.0
+fields = ["situation", "action", "reason"]
+max_results = 8
+
+# -----------------------------------------------------------
+# [archive] — IMMUTABLE HISTORY ARCHIVE SHARDS
+# Archiving copies exact events into read-only SQLite shards. Removal is opt-in.
+# -----------------------------------------------------------
+[archive]
+enabled = true
+remove_active_after_archive = false
+min_age_days = 30
+min_event_count = 100
+
+# -----------------------------------------------------------
+# [mcp] — EXTERNAL INTEROPERABILITY BOUNDARY
+# -----------------------------------------------------------
+[mcp]
+enabled = false
+transport = "stdio"
+
+# -----------------------------------------------------------
+# [communication] — PARALLEL COMMUNICATION/CONTROL SERVICE
+# Empty model_base_url reuses the main configured model endpoint.
+# -----------------------------------------------------------
+[communication]
+enabled = false
+model_base_url = ""
+max_concurrent_requests = 4
+enabled_tools = ["time_now", "calculator", "history_search", "history_window", "agent_status_lookup", "agent_control"]
+host = "127.0.0.1"
+port = 8765
+poll_seconds = 0.2
+
 [external_benchmarks]
 root = ".swaag/external_benchmarks"
 smoke_timeout_seconds = 90

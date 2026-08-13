@@ -160,6 +160,43 @@ class HistorySearchConfig:
     preview_chars: int
 
 
+
+
+@dataclass(slots=True)
+class EmbeddingIndexConfig:
+    enabled: bool
+    base_url: str
+    endpoint: str
+    model: str
+    timeout_seconds: float
+    fields: list[str]
+    max_results: int
+
+
+@dataclass(slots=True)
+class ArchiveConfig:
+    enabled: bool
+    remove_active_after_archive: bool
+    min_age_days: int
+    min_event_count: int
+
+
+@dataclass(slots=True)
+class McpConfig:
+    enabled: bool
+    transport: str
+
+
+@dataclass(slots=True)
+class CommunicationConfig:
+    enabled: bool
+    model_base_url: str
+    max_concurrent_requests: int
+    enabled_tools: list[str]
+    host: str
+    port: int
+    poll_seconds: float
+
 @dataclass(slots=True)
 class ExternalBenchmarkTargetConfig:
     enabled: bool
@@ -242,6 +279,10 @@ class AgentConfig:
     editor: EditorConfig
     compression: CompressionConfig
     history_search: HistorySearchConfig
+    embedding_index: EmbeddingIndexConfig
+    archive: ArchiveConfig
+    mcp: McpConfig
+    communication: CommunicationConfig
     budget_policy: BudgetPolicyConfig
     external_benchmarks: ExternalBenchmarksConfig
     raw: dict[str, Any] = field(repr=False)
@@ -352,6 +393,34 @@ def _coerce_config(data: dict[str, Any]) -> AgentConfig:
         exact_score=int(data["history_search"]["exact_score"]),
         type_bonus=int(data["history_search"]["type_bonus"]),
         preview_chars=int(data["history_search"]["preview_chars"]),
+    )
+    embedding_index = EmbeddingIndexConfig(
+        enabled=bool(data["embedding_index"]["enabled"]),
+        base_url=str(data["embedding_index"]["base_url"]),
+        endpoint=str(data["embedding_index"]["endpoint"]),
+        model=str(data["embedding_index"]["model"]),
+        timeout_seconds=float(data["embedding_index"]["timeout_seconds"]),
+        fields=[str(item) for item in data["embedding_index"]["fields"]],
+        max_results=int(data["embedding_index"]["max_results"]),
+    )
+    archive = ArchiveConfig(
+        enabled=bool(data["archive"]["enabled"]),
+        remove_active_after_archive=bool(data["archive"]["remove_active_after_archive"]),
+        min_age_days=int(data["archive"]["min_age_days"]),
+        min_event_count=int(data["archive"]["min_event_count"]),
+    )
+    mcp = McpConfig(
+        enabled=bool(data["mcp"]["enabled"]),
+        transport=str(data["mcp"]["transport"]),
+    )
+    communication = CommunicationConfig(
+        enabled=bool(data["communication"]["enabled"]),
+        model_base_url=str(data["communication"]["model_base_url"]),
+        max_concurrent_requests=int(data["communication"]["max_concurrent_requests"]),
+        enabled_tools=[str(item) for item in data["communication"]["enabled_tools"]],
+        host=str(data["communication"]["host"]),
+        port=int(data["communication"]["port"]),
+        poll_seconds=float(data["communication"]["poll_seconds"]),
     )
     external_benchmarks = ExternalBenchmarksConfig(
         root=Path(data["external_benchmarks"]["root"]).expanduser(),
@@ -566,6 +635,19 @@ def _coerce_config(data: dict[str, Any]) -> AgentConfig:
         raise ValueError("tools.enabled must not be empty")
     if not model.stop:
         raise ValueError("model.stop must not be empty")
+    _validate_positive("embedding_index.max_results", embedding_index.max_results)
+    if embedding_index.enabled and (not embedding_index.base_url or not embedding_index.model):
+        raise ValueError("embedding_index.base_url and embedding_index.model are required when embeddings are enabled")
+    _validate_non_negative("archive.min_age_days", archive.min_age_days)
+    _validate_non_negative("archive.min_event_count", archive.min_event_count)
+    _validate_positive("communication.max_concurrent_requests", communication.max_concurrent_requests)
+    _validate_positive("communication.port", communication.port)
+    if not 1 <= communication.port <= 65535:
+        raise ValueError("communication.port must be between 1 and 65535")
+    if communication.poll_seconds <= 0:
+        raise ValueError("communication.poll_seconds must be positive")
+    if mcp.transport not in {"stdio"}:
+        raise ValueError("mcp.transport must be stdio")
 
     return AgentConfig(
         model=model,
@@ -581,6 +663,10 @@ def _coerce_config(data: dict[str, Any]) -> AgentConfig:
         editor=editor,
         compression=compression,
         history_search=history_search,
+        embedding_index=embedding_index,
+        archive=archive,
+        mcp=mcp,
+        communication=communication,
         budget_policy=budget_policy,
         external_benchmarks=external_benchmarks,
         raw=data,

@@ -6,9 +6,10 @@ import re
 import sqlite3
 from dataclasses import asdict
 from pathlib import Path
-from typing import Any, Iterable, Iterator
+from typing import Any, Callable, Iterable, Iterator
 
 from swaag.environment.state import EnvironmentState, ProcessRecord, ShellSessionState, WorkspaceState
+from swaag.history_archive import HistoryArchiveStore
 from swaag.events import ALLOWED_EVENT_TYPES, READABLE_EVENT_TYPES, EventSchemaError, create_event, verify_event_integrity
 from swaag.types import (
     CodeCheckpoint,
@@ -99,9 +100,16 @@ def _ensure_directory(path: Path) -> Path:
 
 
 class HistoryStore:
-    def __init__(self, root: Path, *, write_projections: bool = True):
+    def __init__(
+        self,
+        root: Path,
+        *,
+        write_projections: bool = True,
+        event_observer: Callable[[HistoryEvent], None] | None = None,
+    ):
         self.root = Path(root).expanduser()
         self.write_projections = write_projections
+        self.event_observer = event_observer
         _ensure_directory(self.root)
         self._init_sqlite_history()
 
@@ -398,7 +406,10 @@ class HistoryStore:
         matches = [entry for entry in self.list_session_entries() if str(entry.get("session_name", "")).casefold() == lowered]
         if len(matches) > 1:
             raise HistoryInvariantError(f"Session name is ambiguous: {session_ref}")
-        return str(matches[0]["session_id"]) if matches else None
+        if matches:
+            return str(matches[0]["session_id"])
+        archived = HistoryArchiveStore(self.root).resolve(ref)
+        return archived.session_id if archived is not None else None
 
     def rename_session(self, session_ref: str, new_name: str, *, reason: str = "cli_rename") -> SessionState:
         session_id = self.resolve_session_ref(session_ref, latest_if_none=False)
@@ -666,6 +677,15 @@ class HistoryStore:
         start_sequence: int = 1,
         end_sequence: int | None = None,
     ) -> Iterator[HistoryEvent]:
+        if not self.history_path(session_id).exists():
+            archived = HistoryArchiveStore(self.root).resolve(session_id)
+            if archived is not None:
+                yield from HistoryArchiveStore(self.root).read_events(
+                    session_id,
+                    start_sequence=start_sequence,
+                    end_sequence=end_sequence,
+                )
+                return
         self._ensure_session_indexed(session_id)
         if self._sqlite_complete_through(session_id) > 0:
             yield from self._iter_history_sqlite(
@@ -827,6 +847,12 @@ class HistoryStore:
         self._apply_event(state, event)
         if self.write_projections:
             self._write_projections(state)
+        if self.event_observer is not None:
+            try:
+                self.event_observer(event)
+            except Exception:
+                # Derived observers must never make canonical history persistence fail.
+                pass
 
     def _apply_derived_write(self, state: SessionState, write_plan: DerivedFileWrite, *, cause_event: str) -> None:
         target = Path(write_plan.path).expanduser()
@@ -907,6 +933,33 @@ class HistoryStore:
         append_text(path, encoded, encoding="utf-8")
         return path
 
+    def archive_session(self, session_ref: str, *, remove_active: bool = False) -> dict[str, Any]:
+        session_id = self.resolve_session_ref(session_ref, latest_if_none=False)
+        if session_id is None:
+            raise FileNotFoundError(f"Unknown session: {session_ref}")
+        if self.read_active_run(session_id) is not None:
+            raise RuntimeError(f"Cannot archive active session: {session_id}")
+        entry_info = self._session_entry(session_id)
+        events = list(self.iter_history(session_id))
+        entry = HistoryArchiveStore(self.root).archive_events(
+            session_id,
+            str(entry_info.get("session_name") or session_id),
+            events,
+        )
+        if remove_active:
+            with self._sqlite_connect() as connection:
+                connection.execute("DELETE FROM events_fts WHERE session_id=?", (session_id,))
+                connection.execute("DELETE FROM events WHERE session_id=?", (session_id,))
+                connection.execute("DELETE FROM indexed_sessions WHERE session_id=?", (session_id,))
+            session_dir = self._session_dir(session_id)
+            if session_dir.exists():
+                import shutil
+                shutil.rmtree(session_dir)
+        return asdict(entry)
+
+    def list_archived_sessions(self) -> list[dict[str, Any]]:
+        return [asdict(item) for item in HistoryArchiveStore(self.root).list_entries()]
+
     def query_history_details(
         self,
         session_ref: str | None,
@@ -922,6 +975,35 @@ class HistoryStore:
         session_id = self.resolve_session_ref(session_ref, latest_if_none=True)
         if session_id is None:
             raise FileNotFoundError("No session available")
+        archive_store = HistoryArchiveStore(self.root)
+        archived_entry = archive_store.resolve(session_id) if not self.history_path(session_id).exists() else None
+        if archived_entry is not None:
+            query = " ".join(part for part in [query_text.strip(), topic_hint.strip()] if part.strip())
+            hits = archive_store.search(session_id, query, limit=max_results)
+            sequences = {int(item["sequence"]) for item in hits}
+            events = {event.sequence: event for event in archive_store.read_events(session_id) if event.sequence in sequences}
+            matches = []
+            for hit in hits:
+                event = events.get(int(hit["sequence"]))
+                if event is None:
+                    continue
+                preview = stable_json_dumps(event.payload)[:preview_chars]
+                matches.append({
+                    "sequence": event.sequence,
+                    "event_type": event.event_type,
+                    "timestamp": event.timestamp,
+                    "payload": to_jsonable(event.payload),
+                    "preview": preview,
+                })
+            return {
+                "session_id": session_id,
+                "session_name": archived_entry.session_name,
+                "query": query_text,
+                "topic_hint": topic_hint,
+                "match_count": len(matches),
+                "matches": matches,
+                "search_backend": "archive_fts5",
+            }
         self._ensure_session_indexed(session_id)
         query = " ".join(part for part in [query_text.strip(), topic_hint.strip()] if part.strip())
         lowered = query.casefold()
