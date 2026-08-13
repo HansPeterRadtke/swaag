@@ -796,3 +796,32 @@ def test_action_seed_schedule_is_deterministic_for_same_base_seed(make_config) -
         runtime.run_turn("Calculate 2 + 2.")
         return [request["seed"] for request in client.requests]
     assert run_once() == run_once() == [23, 26]
+
+
+def test_duplicate_tool_action_ignores_cosmetic_status_changes(make_config, tmp_path) -> None:
+    config = make_config(runtime__tool_call_budget=4, runtime__max_total_actions=3, model__context_limit=32_000)
+    config.sessions.root = tmp_path / "sessions"
+    config.tools.read_roots = [tmp_path]
+    (tmp_path / "a.txt").write_text("alpha\n", encoding="utf-8")
+    first = _action(
+        tool_calls=[("read_file", {"path": "a.txt"})],
+        continue_loop=True,
+        situation="Need the file.",
+        status_action="Read it.",
+        reason="Gather evidence.",
+    )
+    repeated_with_new_status = _action(
+        tool_calls=[("read_file", {"path": "a.txt"})],
+        continue_loop=True,
+        situation="I have read the file.",
+        status_action="Read it again.",
+        reason="Double-checking.",
+    )
+    finish = _action(message="alpha", continue_loop=False)
+    client = FakeModelClient([first, repeated_with_new_status, finish])
+    runtime = AgentRuntime(config, model_client=client)
+    result = runtime.run_turn("Read a.txt once and answer with its content.")
+    events = runtime.history.read_history(result.session_id)
+    called = [e for e in events if e.event_type == "tool_called" and e.payload.get("tool_name") == "read_file"]
+    assert len(called) == 1
+    assert any(e.event_type == "agent_action_rejected" and "immediately preceding action" in str(e.payload.get("reason", "")) for e in events)

@@ -296,7 +296,18 @@ class AgentRuntime:
             )
 
             action_payload = asdict(selected_action)
-            signature = stable_json_dumps(action_payload, indent=None)
+            # Duplicate detection is about repeated mechanical work, not cosmetic
+            # changes to status wording or assistant prose. For tool-bearing actions,
+            # compare exactly the calls and continuation decision.
+            signature_payload = (
+                {
+                    "tool_calls": action_payload.get("tool_calls", []),
+                    "continue_loop": action_payload.get("continue_loop", False),
+                }
+                if action_payload.get("tool_calls")
+                else action_payload
+            )
+            signature = stable_json_dumps(signature_payload, indent=None)
             if signature == previous_action_signature:
                 consecutive_action_occurrences += 1
             else:
