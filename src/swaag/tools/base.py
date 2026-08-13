@@ -35,6 +35,7 @@ class Tool(abc.ABC):
     output_schema: dict[str, Any] | None = None
     usage_guidance: str = ""
     kind: ToolKind = "pure"
+    repeated_observation_is_redundant: bool = False
 
     def prompt_tuple(self) -> tuple[str, str, dict[str, Any], str]:
         return self.name, self.description, self.input_schema, self.usage_guidance

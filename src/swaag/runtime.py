@@ -218,6 +218,7 @@ class AgentRuntime:
         previous_action_signature = ""
         consecutive_action_occurrences = 0
         tool_calls_used = 0
+        observation_signatures_since_state_change: set[str] = set()
         recovery_feedback = ""
 
         for action_index in range(1, self.config.runtime.max_total_actions + 1):
@@ -352,6 +353,33 @@ class AgentRuntime:
                 )
                 continue
 
+            repeated_observation_calls: list[str] = []
+            for tool_call in selected_action.tool_calls:
+                tool = self.tools.get(tool_call.tool_name)
+                if not tool.repeated_observation_is_redundant:
+                    continue
+                pure_signature = stable_json_dumps(
+                    {"tool_name": tool_call.tool_name, "arguments": tool_call.arguments},
+                    indent=None,
+                )
+                if pure_signature in observation_signatures_since_state_change:
+                    repeated_observation_calls.append(tool_call.tool_name)
+            if repeated_observation_calls:
+                recovery_feedback = (
+                    "This action was rejected because it repeats observation tool calls with identical arguments while no state-changing tool has run since the earlier result. "
+                    f"Repeated observation tools: {', '.join(repeated_observation_calls)}. Reuse the evidence already returned, inspect different evidence, or change state before rereading/recomputing the same input."
+                )
+                self.history.record_event(
+                    state,
+                    "agent_action_rejected",
+                    {
+                        "action_index": action_index,
+                        "validation_attempt": 0,
+                        "reason": recovery_feedback,
+                    },
+                )
+                continue
+
             if selected_action.tool_calls:
                 self._record_message(
                     state,
@@ -373,6 +401,9 @@ class AgentRuntime:
                     )
 
                 for tool_call_index, tool_call in enumerate(selected_action.tool_calls, start=1):
+                    tool = self.tools.get(tool_call.tool_name)
+                    effective_kind = tool.effective_kind(tool_call.arguments)
+                    repeated_observation_is_redundant = tool.repeated_observation_is_redundant
                     result = self._execute_tool(
                         state,
                         ToolDecision(
@@ -383,6 +414,15 @@ class AgentRuntime:
                         ),
                     )
                     tool_calls_used += 1
+                    if repeated_observation_is_redundant:
+                        observation_signatures_since_state_change.add(
+                            stable_json_dumps(
+                                {"tool_name": tool_call.tool_name, "arguments": tool_call.arguments},
+                                indent=None,
+                            )
+                        )
+                    elif result is not None and effective_kind in {"stateful", "side_effect"}:
+                        observation_signatures_since_state_change.clear()
                     if result is not None:
                         tool_results.append(result)
                         if tool_call.tool_name == "run_tests" and not bool(result.output.get("passed", False)):

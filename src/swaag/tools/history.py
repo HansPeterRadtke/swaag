@@ -13,6 +13,7 @@ from swaag.utils import stable_json_dumps, to_jsonable
 
 
 class HistorySearchTool(Tool):
+    repeated_observation_is_redundant = True
     name = "history_search"
     description = "Search durable exact agent history for earlier user messages, tool calls/results, decisions, and events. Returns ranked previews and sequence numbers; use history_window for exact surrounding events."
     usage_guidance = "Use when current context or summaries may omit an older exact detail. Search first, then retrieve the relevant exact sequence window."
@@ -103,6 +104,7 @@ class HistorySearchTool(Tool):
 
 
 class HistoryWindowTool(Tool):
+    repeated_observation_is_redundant = True
     name = "history_window"
     description = "Read an exact bounded window of durable history events by sequence number. This is the authoritative retrieval path after history_search identifies relevant events."
     usage_guidance = "Use small windows around relevant sequence numbers. Returned payloads are exact durable event data, not summaries."
@@ -169,6 +171,7 @@ class HistoryWindowTool(Tool):
 
 
 class HistoryAnalyzeTool(Tool):
+    repeated_observation_is_redundant = True
     name = "history_analyze"
     description = "Analyze durable exact history with a model-backed read-only root-cause pass. Returns goal/constraint reconstruction, failure evidence, candidate root causes, exact source event sequences, the wrong strategy, a materially different recommended strategy, and unresolved uncertainties."
     usage_guidance = "Use when repeated failures, user corrections, or ambiguous prior behavior require deeper root-cause analysis. The analyzer is read-only; use its source_sequences with history_window when you need the exact surrounding evidence."

@@ -56,7 +56,7 @@ def test_benchmark_catalog_uses_programmatic_verification_and_anti_tamper_contra
             assert contract.forbid_unexpected_workspace_changes is True
         elif task.task_type == "multi_step":
             assert contract.command
-            assert contract.expected_files
+            assert contract.expected_files or contract.expected_file_patterns
             assert contract.allowed_modified_files
             assert contract.forbid_unexpected_workspace_changes is True
         elif task.task_type == "failure":
@@ -209,3 +209,14 @@ def test_final_architecture_capability_tasks_are_present_and_constrained(tmp_pat
     analysis_contract = tasks["capability_grounded_history_analysis"].create(tmp_path / "analysis").verification_contract
     assert {"history_analyze", "history_window"}.issubset(set(analysis_contract.required_tools_used))
     assert {"history_analyzed", "history_window_read"}.issubset(set(analysis_contract.required_history_events))
+
+
+def test_generated_environment_contracts_do_not_require_unnecessary_tool_or_exact_unspecified_format(tmp_path) -> None:
+    tasks = {task.task_id: task for task in get_benchmark_tasks()}
+    shell = tasks["multi_step_environment_shell_persistence"].create(tmp_path / "shell")
+    assert shell.verification_contract.min_tool_calls == 2
+    filesystem = tasks["multi_step_environment_list_read_write"].create(tmp_path / "filesystem")
+    assert filesystem.verification_contract.expected_files == {}
+    assert filesystem.verification_contract.expected_file_patterns
+    assert filesystem.verification_contract.command
+    assert filesystem.verification_contract.allowed_modified_files

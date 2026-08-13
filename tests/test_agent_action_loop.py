@@ -825,3 +825,29 @@ def test_duplicate_tool_action_ignores_cosmetic_status_changes(make_config, tmp_
     called = [e for e in events if e.event_type == "tool_called" and e.payload.get("tool_name") == "read_file"]
     assert len(called) == 1
     assert any(e.event_type == "agent_action_rejected" and "immediately preceding action" in str(e.payload.get("reason", "")) for e in events)
+
+
+def test_repeated_pure_call_is_rejected_until_state_changes(make_config, tmp_path) -> None:
+    config = make_config(runtime__tool_call_budget=5, runtime__max_total_actions=6, model__context_limit=32_000, tools__allow_side_effect_tools=True)
+    config.sessions.root = tmp_path / "sessions"
+    config.tools.read_roots = [tmp_path]
+    (tmp_path / "a.txt").write_text("alpha\n", encoding="utf-8")
+    (tmp_path / "b.txt").write_text("bravo\n", encoding="utf-8")
+    first_read = _action(tool_calls=[("read_file", {"path": "a.txt"})], continue_loop=True)
+    different_read = _action(tool_calls=[("read_file", {"path": "b.txt"})], continue_loop=True)
+    redundant_read = _action(
+        tool_calls=[("read_file", {"path": "a.txt"})],
+        continue_loop=True,
+        situation="Checking again.", status_action="Reread.", reason="Double-check.",
+    )
+    write = _action(tool_calls=[("write_file", {"path": "a.txt", "content": "beta\n", "create": False})], continue_loop=True)
+    reread_after_change = _action(tool_calls=[("read_file", {"path": "a.txt"})], continue_loop=True)
+    finish = _action(message="beta", continue_loop=False)
+    client = FakeModelClient([first_read, different_read, redundant_read, write, reread_after_change, finish])
+    runtime = AgentRuntime(config, model_client=client)
+    result = runtime.run_turn("Read a.txt and b.txt, change a.txt to beta, then reread a.txt.")
+    events = runtime.history.read_history(result.session_id)
+    reads = [e for e in events if e.event_type == "tool_called" and e.payload.get("tool_name") == "read_file"]
+    assert len(reads) == 3
+    assert any(e.event_type == "agent_action_rejected" and "repeats observation tool calls" in str(e.payload.get("reason", "")) for e in events)
+    assert result.assistant_text == "beta"

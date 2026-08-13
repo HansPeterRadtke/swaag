@@ -1947,7 +1947,7 @@ def _build_multi_step_scenario(
                 command_framework="unittest",
                 required_history_events=["agent_action_selected"],
                 required_tools_used=["shell_command"],
-                min_tool_calls=3,
+                min_tool_calls=2,
                 allowed_modified_files=[str(summary)],
                 forbid_unexpected_workspace_changes=True,
             ),
@@ -2080,7 +2080,7 @@ def _build_multi_step_scenario(
             model_client=None,
             verification_contract=BenchmarkVerificationContract(
                 task_type="multi_step",
-                expected_files={str(target): expected_target},
+                expected_file_patterns={str(target): [f"service={service}", f"version={version}", f"build={seed % 100:02d}"]},
                 command=["python3", "-m", "unittest", "-q", test_name],
                 command_cwd=str(workspace),
                 command_framework="unittest",
@@ -2689,7 +2689,7 @@ def validate_benchmark_catalog(tasks: list[BenchmarkTaskDefinition]) -> None:
             if not contract.forbid_unexpected_workspace_changes:
                 raise ValueError(f"Reading task {task.task_id} must forbid unexpected workspace changes")
         if task.task_type == "multi_step":
-            if not contract.command or not contract.expected_files:
+            if not contract.command or not (contract.expected_files or contract.expected_file_patterns):
                 raise ValueError(f"Multi-step task {task.task_id} must verify written artifacts and execute a verifier command")
             if not contract.allowed_modified_files or not contract.forbid_unexpected_workspace_changes:
                 raise ValueError(f"Multi-step task {task.task_id} must constrain workspace mutations")
