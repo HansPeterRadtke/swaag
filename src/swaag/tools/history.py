@@ -74,10 +74,24 @@ class HistorySearchTool(Tool):
         store = HistoryStore(context.config.sessions.root, write_projections=False)
         session_ref = _active_session_ref(validated_input["session_ref"], context)
         current_call_sequence: int | None = None
-        for event in reversed(store.read_history(context.session_state.session_id)):
+        current_action_sequence: int | None = None
+        active_events = store.read_history(context.session_state.session_id)
+        for event in reversed(active_events):
             if event.event_type == "tool_called" and event.payload.get("tool_name") == self.name:
                 current_call_sequence = event.sequence
                 break
+        if current_call_sequence is not None:
+            for event in reversed(active_events):
+                if event.sequence >= current_call_sequence:
+                    continue
+                if event.event_type == "agent_action_selected":
+                    current_action_sequence = event.sequence
+                    break
+        search_end_sequence = None
+        if current_action_sequence is not None:
+            search_end_sequence = current_action_sequence - 1
+        elif current_call_sequence is not None:
+            search_end_sequence = current_call_sequence - 1
         result = store.query_history_details(
             session_ref,
             validated_input["query"],
@@ -87,7 +101,7 @@ class HistorySearchTool(Tool):
             exact_score=cfg.exact_score,
             type_bonus=cfg.type_bonus,
             preview_chars=cfg.preview_chars,
-            end_sequence=(current_call_sequence - 1) if current_call_sequence is not None else None,
+            end_sequence=search_end_sequence,
         )
         matches = [
             {
