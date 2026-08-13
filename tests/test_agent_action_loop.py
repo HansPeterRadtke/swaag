@@ -851,3 +851,20 @@ def test_repeated_pure_call_is_rejected_until_state_changes(make_config, tmp_pat
     assert len(reads) == 3
     assert any(e.event_type == "agent_action_rejected" and "repeats observation tool calls" in str(e.payload.get("reason", "")) for e in events)
     assert result.assistant_text == "beta"
+
+
+def test_action_prompt_requires_explicit_decision_not_only_evidence(make_config) -> None:
+    config = make_config(model__context_limit=32_000)
+    runtime = AgentRuntime(config)
+    state = runtime.create_or_load_session()
+    specs = runtime.tools.prompt_tuples(config)
+    prepared = runtime._prepare_action_call(
+        state,
+        original_request="Choose the only justified next move.",
+        pending_messages=[],
+        tool_specs=specs,
+        contract=agent_action_contract(specs),
+        validation_feedback="",
+    )
+    prompt = prepared.assembly.prompt_text
+    assert "final assistant_message must explicitly state that decision/conclusion" in prompt

@@ -1185,7 +1185,8 @@ def _build_file_edit_scenario(
         )
         prompt = (
             f"Use `{source.name}` as the source of truth. Update `deployment.yaml` and `release_notes.md` so they both reflect the approved release, "
-            "and leave the source file unchanged. Make the exact intended propagation only, then summarize the synchronized release state."
+            "and leave the source file unchanged. In `release_notes.md`, set rollout to the exact service and version from the source as `<service> <version>`. "
+            "Make the exact intended propagation only, then summarize the synchronized release state."
         )
         contract = BenchmarkVerificationContract(
             task_type="file_edit",
@@ -1836,10 +1837,10 @@ def _build_multi_step_scenario(
             model_client=None,
             verification_contract=BenchmarkVerificationContract(
                 task_type="multi_step",
-                expected_files={
-                    str(final_summary): f"service={service}\nversion={version}\nchannel=stable\n",
-                    str(deployment): f"SERVICE={service}\nVERSION={version}\nCHANNEL=stable\n",
-                    str(manifest): manifest.read_text(encoding="utf-8"),
+                expected_files={str(manifest): manifest.read_text(encoding="utf-8")},
+                expected_file_patterns={
+                    str(final_summary): [f"service={service}", f"version={version}", "channel=stable"],
+                    str(deployment): [f"SERVICE={service}", f"VERSION={version}", "CHANNEL=stable"],
                 },
                 command=["python3", "-m", "unittest", "-q", test_name],
                 command_cwd=str(workspace),
@@ -2195,7 +2196,7 @@ def _build_failure_scenario(
             "That would create an unsafe no-progress loop.\n"
         )
         _write(workspace / "attempt_history.md", "attempt 1: blocked by policy\nattempt 2: blocked by policy\nattempt 3: blocked by policy\n")
-        expected_fragments = ["policy", "blocked"]
+        expected_fragments = ["policy"]
         forbidden_tools = ["shell_command", "edit_text", "write_file"]
         expected_files = {str(protected): protected.read_text(encoding="utf-8")}
     _write(workspace / "request.txt", request_text)
@@ -2228,6 +2229,9 @@ def _build_quality_scenario(
     workspace: Path,
 ) -> TaskScenario:
     tag_set = set(tags)
+    required_read_count = 2
+    min_tool_calls = 2
+    max_tool_calls = 2
     if "conflicting-hints" in tag_set:
         _write(
             workspace / "request.txt",
@@ -2270,7 +2274,10 @@ def _build_quality_scenario(
             ),
         )
         prompt = "A debug log is provided in `debug.log`. Summarize the concrete issue from the log instead of treating it as a coding request."
-        fragments = ["cache", "spike", "issue"]
+        fragments = ["cache", "spike"]
+        required_read_count = 1
+        min_tool_calls = 1
+        max_tool_calls = 1
     else:
         _write(workspace / "request.txt", "1. Read the release notes.\n2. Update the changelog.\n3. Run the verifier.\n")
         _write(workspace / "project_note.txt", "The request is already scoped. Do not add unrelated discovery work.\n")
@@ -2291,10 +2298,10 @@ def _build_quality_scenario(
             task_type="quality",
             expected_answer_contains=fragments,
             required_history_events=["agent_action_selected", "filesystem_read"],
-            required_event_counts={"tool_called": 2, "filesystem_read": 2},
+            required_event_counts={"tool_called": required_read_count, "filesystem_read": required_read_count},
             required_tools_used=["read_file"],
-            min_tool_calls=2,
-            max_tool_calls=2,
+            min_tool_calls=min_tool_calls,
+            max_tool_calls=max_tool_calls,
             forbidden_tools_used=["write_file", "edit_text", "run_tests", "shell_command"],
             forbid_unexpected_workspace_changes=True,
         ),

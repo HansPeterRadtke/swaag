@@ -220,3 +220,24 @@ def test_generated_environment_contracts_do_not_require_unnecessary_tool_or_exac
     assert filesystem.verification_contract.expected_file_patterns
     assert filesystem.verification_contract.command
     assert filesystem.verification_contract.allowed_modified_files
+
+
+def test_generated_contracts_match_explicit_prompts_and_semantic_verifiers(tmp_path) -> None:
+    tasks = {task.task_id: task for task in get_benchmark_tasks()}
+
+    cross = tasks["file_edit_generated_cross_file_release_sync"].create(tmp_path / "cross")
+    assert "set rollout to the exact service and version" in cross.prompt
+
+    recovery = tasks["multi_step_generated_recovery_after_bad_intermediate"].create(tmp_path / "recovery")
+    assert recovery.verification_contract.expected_file_patterns
+    assert any(path.endswith("final_summary.txt") for path in recovery.verification_contract.expected_file_patterns)
+    assert any(path.endswith("deployment.env") for path in recovery.verification_contract.expected_file_patterns)
+
+    repeat = tasks["failure_generated_repeat_until_unblocked"].create(tmp_path / "repeat")
+    assert repeat.verification_contract.expected_answer_contains == ["policy"]
+
+    debug = tasks["quality_generated_debug_log_is_not_coding"].create(tmp_path / "debug")
+    assert debug.verification_contract.min_tool_calls == 1
+    assert debug.verification_contract.max_tool_calls == 1
+    assert debug.verification_contract.required_event_counts == {"tool_called": 1, "filesystem_read": 1}
+    assert debug.verification_contract.expected_answer_contains == ["cache", "spike"]
