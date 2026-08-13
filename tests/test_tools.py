@@ -809,3 +809,38 @@ def test_read_artifact_resolves_latest_symbolic_stdout_handle(make_config, tmp_p
     assert result.output["artifact_id"] == artifact.artifact_id
     assert result.output["text"] == "abc"
     assert result.output["next_offset"] == 3
+
+
+def test_read_artifact_accepts_stdout_alias(make_config, tmp_path) -> None:
+    from swaag.environment.artifacts import TextArtifactStore
+    from swaag.environment.environment import AgentEnvironment
+    from swaag.history import HistoryStore
+    from swaag.tools.artifacts import ReadArtifactTool
+    from swaag.types import Message
+
+    config = make_config()
+    config.sessions.root = tmp_path / "sessions"
+    state = HistoryStore(config.sessions.root).create(config_fingerprint="cfg", model_base_url="http://model")
+    env = AgentEnvironment(config, state)
+    artifact = TextArtifactStore(config.sessions.root, state.session_id).create("marker\n", kind="shell_command_stdout")
+    state.messages.append(Message(role="tool", name="shell_command", content="ok", created_at="2026-01-01T00:00:00+00:00", metadata={"output": {"stdout_artifact_id": artifact.artifact_id}}))
+    result = ReadArtifactTool().execute(
+        {"artifact_id": "stdout", "start_offset": 0, "max_chars": 100},
+        ToolContext(config=config, session_state=state, environment=env),
+    )
+    assert result.output["artifact_id"] == artifact.artifact_id
+    assert result.output["text"] == "marker\n"
+
+
+def test_terminal_store_resolves_terminal1_when_one_active_terminal_exists(tmp_path, monkeypatch) -> None:
+    from swaag.environment.terminal import TerminalRecord, TerminalStore
+
+    store = TerminalStore(tmp_path, "session_x")
+    record = TerminalRecord(
+        terminal_id="terminal_real", name="persistent_terminal", root="/tmp/x", cwd="/tmp", shell="/bin/bash",
+        worker_pid=1, shell_pid=2, active=True, return_code=None, created_at="2026-01-01T00:00:00+00:00",
+        updated_at="2026-01-01T00:00:00+00:00", output_chars=0,
+    )
+    monkeypatch.setattr(store, "list", lambda: [record])
+    monkeypatch.setattr(store, "_dir", lambda ref: tmp_path / "missing")
+    assert store.resolve("terminal1") == "terminal_real"

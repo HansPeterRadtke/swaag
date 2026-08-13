@@ -95,11 +95,18 @@ class TerminalStore:
         direct = self._dir(terminal_ref)
         if direct.is_dir() and self._meta_path(terminal_ref).exists():
             return terminal_ref
-        matches = [r.terminal_id for r in self.list() if r.name == terminal_ref]
+        records = self.list()
+        matches = [r.terminal_id for r in records if r.name == terminal_ref]
         if len(matches) == 1:
             return matches[0]
         if len(matches) > 1:
             raise ValueError(f"terminal name is ambiguous: {terminal_ref}")
+        if terminal_ref.casefold() in {"terminal", "terminal1", "current", "active"}:
+            active = [r.terminal_id for r in records if r.active]
+            if len(active) == 1:
+                return active[0]
+            if len(active) > 1:
+                raise ValueError(f"terminal alias is ambiguous: {terminal_ref}")
         raise FileNotFoundError(f"Unknown terminal: {terminal_ref}")
 
     def list(self) -> list[TerminalRecord]:

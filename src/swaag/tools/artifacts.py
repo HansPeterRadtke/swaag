@@ -46,7 +46,13 @@ class ReadArtifactTool(Tool):
         max_chars = min(int(max_chars), int(context.config.reader.max_chunk_chars))
         store = TextArtifactStore(context.config.sessions.root, context.session_state.session_id)
         artifact_id = validated_input["artifact_id"]
-        if artifact_id in {"stdout_artifact_id", "stderr_artifact_id", "artifact_id"}:
+        alias_key = {
+            "stdout": "stdout_artifact_id",
+            "latest_stdout": "stdout_artifact_id",
+            "stderr": "stderr_artifact_id",
+            "latest_stderr": "stderr_artifact_id",
+        }.get(artifact_id.casefold(), artifact_id)
+        if alias_key in {"stdout_artifact_id", "stderr_artifact_id", "artifact_id"}:
             resolved = ""
             for message in reversed(context.session_state.messages):
                 if message.role != "tool" or not isinstance(message.metadata, dict):
@@ -54,7 +60,7 @@ class ReadArtifactTool(Tool):
                 output_meta = message.metadata.get("output", {})
                 if not isinstance(output_meta, dict):
                     continue
-                candidate = output_meta.get(artifact_id)
+                candidate = output_meta.get(alias_key)
                 if isinstance(candidate, str) and candidate.strip():
                     resolved = candidate.strip()
                     break

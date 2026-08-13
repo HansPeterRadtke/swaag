@@ -218,3 +218,30 @@ def test_history_analyze_is_grounded_in_exact_candidate_sequences(make_config, t
     assert result.output["source_sequences"] == [source_sequence]
     assert result.output["recommended_strategy"].startswith("Retrieve the exact history event")
     assert [event.event_type for event in result.generated_events] == ["history_analyzed"]
+
+
+def test_history_tools_accept_active_session_aliases(make_config, tmp_path: Path) -> None:
+    from swaag.environment.environment import AgentEnvironment
+    from swaag.tools.base import ToolContext
+
+    config = make_config()
+    config.sessions.root = tmp_path / "sessions"
+    store = HistoryStore(config.sessions.root)
+    state = store.create(config_fingerprint=config.config_fingerprint(), model_base_url=config.model.base_url, session_name="seed_23", session_name_source="explicit")
+    store.record_event(
+        state,
+        "message_added",
+        {"message": {"role": "user", "content": "alias-marker-91", "created_at": "2026-01-01T00:00:00+00:00", "name": None, "metadata": {}}},
+    )
+    env = AgentEnvironment(config, state)
+    context = ToolContext(config=config, session_state=state, environment=env)
+    registry = ToolRegistry()
+    for session_ref in ("current", "seed_23", state.session_id):
+        _invocation, result = registry.dispatch(
+            "history_search",
+            {"query": "alias-marker-91", "topic_hint": None, "session_ref": session_ref, "max_results": 4},
+            config,
+            state,
+        )
+        assert result.output["session_id"] == state.session_id
+        assert result.output["matches"]

@@ -12,6 +12,19 @@ from swaag.types import ToolExecutionResult, ToolGeneratedEvent
 from swaag.utils import stable_json_dumps, to_jsonable
 
 
+def _active_session_ref(requested: str, context: ToolContext) -> str:
+    ref = requested.strip()
+    if not ref:
+        return context.session_state.session_id
+    lowered = ref.casefold()
+    current_aliases = {"current", "current_session", "this", "this_session", "active", "session"}
+    if lowered in current_aliases:
+        return context.session_state.session_id
+    if context.session_state.session_name and lowered == context.session_state.session_name.casefold():
+        return context.session_state.session_id
+    return ref
+
+
 class HistorySearchTool(Tool):
     repeated_observation_is_redundant = True
     name = "history_search"
@@ -58,7 +71,7 @@ class HistorySearchTool(Tool):
         requested = validated_input["max_results"] or cfg.max_results
         max_results = max(1, min(int(requested), int(cfg.max_results)))
         store = HistoryStore(context.config.sessions.root, write_projections=False)
-        session_ref = validated_input["session_ref"] or context.session_state.session_id
+        session_ref = _active_session_ref(validated_input["session_ref"], context)
         result = store.query_history_details(
             session_ref,
             validated_input["query"],
@@ -138,7 +151,7 @@ class HistoryWindowTool(Tool):
 
     def execute(self, validated_input: dict[str, Any], context: ToolContext) -> ToolExecutionResult:
         store = HistoryStore(context.config.sessions.root, write_projections=False)
-        session_ref = validated_input["session_ref"] or context.session_state.session_id
+        session_ref = _active_session_ref(validated_input["session_ref"], context)
         session_id = store.resolve_session_ref(session_ref, latest_if_none=False)
         if session_id is None:
             raise ToolValidationError(f"Unknown session: {session_ref}")
@@ -228,7 +241,7 @@ class HistoryAnalyzeTool(Tool):
 
     def execute(self, validated_input: dict[str, Any], context: ToolContext) -> ToolExecutionResult:
         store = HistoryStore(context.config.sessions.root, write_projections=False)
-        session_ref = validated_input["session_ref"] or context.session_state.session_id
+        session_ref = _active_session_ref(validated_input["session_ref"], context)
         details = store.query_history_details(
             session_ref,
             validated_input["query"],
