@@ -66,12 +66,15 @@ class ToolRegistry:
         should_wait = True
         try:
             future = executor.submit(tool.execute, invocation.validated_input, context)
+            timeout_seconds = float(tool.execution_timeout_seconds(context))
+            if timeout_seconds <= 0:
+                raise ValueError(f"Tool execution timeout must be positive: {tool.name}={timeout_seconds}")
             try:
-                result = future.result(timeout=context.config.runtime.tool_timeout_seconds)
+                result = future.result(timeout=timeout_seconds)
             except FuturesTimeoutError as exc:
                 future.cancel()
                 should_wait = False
-                raise TimeoutError(f"Tool timed out after {context.config.runtime.tool_timeout_seconds}s: {tool.name}") from exc
+                raise TimeoutError(f"Tool timed out after {timeout_seconds:g}s: {tool.name}") from exc
         finally:
             executor.shutdown(wait=should_wait, cancel_futures=not should_wait)
         if not isinstance(result, ToolExecutionResult):

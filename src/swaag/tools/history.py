@@ -240,6 +240,17 @@ class HistoryAnalyzeTool(Tool):
     def required_generated_event_types(self, validated_input: dict[str, Any]) -> set[str]:
         return {"history_analyzed"}
 
+    def execution_timeout_seconds(self, context: ToolContext) -> float:
+        # This tool intentionally performs a nested structured model call. Give it
+        # the model transport's own structured timeout plus connection/cleanup
+        # margin instead of the short default timeout used by ordinary local tools.
+        return float(max(
+            context.config.runtime.tool_timeout_seconds,
+            context.config.model.structured_timeout_seconds
+            + context.config.model.connect_timeout_seconds
+            + 5,
+        ))
+
     def execute(self, validated_input: dict[str, Any], context: ToolContext) -> ToolExecutionResult:
         store = HistoryStore(context.config.sessions.root, write_projections=False)
         session_ref = _active_session_ref(validated_input["session_ref"], context)

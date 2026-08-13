@@ -850,3 +850,47 @@ def test_read_artifact_guidance_requires_pagination_when_unfinished() -> None:
     from swaag.tools.artifacts import ReadArtifactTool
     assert "If finished=false, unread exact data remains" in ReadArtifactTool.usage_guidance
     assert "next_offset" in ReadArtifactTool.usage_guidance
+
+
+def test_tool_specific_execution_timeout_override_is_honored(make_config) -> None:
+    import time
+    from swaag.history import HistoryStore
+    from swaag.tools.base import Tool, ToolContext
+    from swaag.tools.registry import ToolRegistry
+    from swaag.types import ToolExecutionResult
+
+    class SlowButAllowedTool(Tool):
+        name = "slow_allowed"
+        description = "slow test"
+        input_schema = {"type": "object", "properties": {}, "required": [], "additionalProperties": False}
+
+        def validate(self, raw_input):
+            return {}
+
+        def execution_timeout_seconds(self, context: ToolContext) -> float:
+            return 0.25
+
+        def execute(self, validated_input, context: ToolContext) -> ToolExecutionResult:
+            time.sleep(0.08)
+            return ToolExecutionResult(tool_name=self.name, output={"ok": True}, display_text="ok")
+
+    config = make_config(tools__enabled=["slow_allowed"], runtime__tool_timeout_seconds=0.02)
+    store = HistoryStore(config.sessions.root)
+    state = store.create(config_fingerprint="cfg", model_base_url="http://model")
+    registry = ToolRegistry([SlowButAllowedTool()])
+    _invocation, result = registry.dispatch("slow_allowed", {}, config, state)
+    assert result.output == {"ok": True}
+
+
+def test_history_analyze_timeout_covers_nested_structured_model_call(make_config) -> None:
+    from swaag.environment.environment import AgentEnvironment
+    from swaag.history import HistoryStore
+    from swaag.tools.base import ToolContext
+    from swaag.tools.history import HistoryAnalyzeTool
+
+    config = make_config(runtime__tool_timeout_seconds=10)
+    config.model.structured_timeout_seconds = 120
+    config.model.connect_timeout_seconds = 10
+    state = HistoryStore(config.sessions.root).create(config_fingerprint="cfg", model_base_url="http://model")
+    context = ToolContext(config=config, session_state=state, environment=AgentEnvironment(config, state))
+    assert HistoryAnalyzeTool().execution_timeout_seconds(context) == 135.0

@@ -43,6 +43,9 @@ class Tool(abc.ABC):
     def effective_kind(self, validated_input: dict[str, Any]) -> ToolKind:
         return self.kind
 
+    def execution_timeout_seconds(self, context: ToolContext) -> float:
+        return float(context.config.runtime.tool_timeout_seconds)
+
     def pre_execute_events(self, validated_input: dict[str, Any], context: ToolContext) -> list[ToolGeneratedEvent]:
         return []
 
