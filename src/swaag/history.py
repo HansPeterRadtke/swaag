@@ -971,6 +971,7 @@ class HistoryStore:
         exact_score: int = 4,
         type_bonus: int = 1,
         preview_chars: int = 320,
+        end_sequence: int | None = None,
     ) -> dict[str, Any]:
         session_id = self.resolve_session_ref(session_ref, latest_if_none=True)
         if session_id is None:
@@ -979,7 +980,10 @@ class HistoryStore:
         archived_entry = archive_store.resolve(session_id) if not self.history_path(session_id).exists() else None
         if archived_entry is not None:
             query = " ".join(part for part in [query_text.strip(), topic_hint.strip()] if part.strip())
-            hits = archive_store.search(session_id, query, limit=max_results)
+            hits = archive_store.search(session_id, query, limit=max(max_results * 4, 16))
+            if end_sequence is not None:
+                hits = [item for item in hits if int(item["sequence"]) <= end_sequence]
+            hits = hits[:max_results]
             sequences = {int(item["sequence"]) for item in hits}
             events = {event.sequence: event for event in archive_store.read_events(session_id) if event.sequence in sequences}
             matches = []
@@ -1032,18 +1036,20 @@ class HistoryStore:
             fts_query = " OR ".join(f'"{token.replace(chr(34), chr(34) * 2)}"' for token in dict.fromkeys(tokens))
             try:
                 with self._sqlite_connect() as connection:
-                    rows = connection.execute(
-                        """
+                    sql = """
                         SELECT e.session_id, e.sequence, e.event_id, e.timestamp, e.event_type,
                                e.payload_json, e.metadata_json, e.prev_hash, e.event_hash
                         FROM events_fts f
                         JOIN events e ON e.session_id=f.session_id AND e.sequence=CAST(f.sequence AS INTEGER)
                         WHERE events_fts MATCH ? AND e.session_id=?
-                        ORDER BY bm25(events_fts), e.sequence DESC
-                        LIMIT ?
-                        """,
-                        (fts_query, session_id, max(max_results * 8, 32)),
-                    ).fetchall()
+                    """
+                    params: list[Any] = [fts_query, session_id]
+                    if end_sequence is not None:
+                        sql += " AND e.sequence<=?"
+                        params.append(end_sequence)
+                    sql += " ORDER BY bm25(events_fts), e.sequence DESC LIMIT ?"
+                    params.append(max(max_results * 8, 32))
+                    rows = connection.execute(sql, params).fetchall()
                 candidates = [
                     HistoryEvent(
                         id=str(row["event_id"]),
@@ -1062,7 +1068,7 @@ class HistoryStore:
             except sqlite3.Error:
                 candidates = []
         if not candidates:
-            candidates = list(self.iter_history(session_id))
+            candidates = list(self.iter_history(session_id, end_sequence=end_sequence))
         ranked: list[tuple[int, HistoryEvent, str]] = []
         for event in candidates:
             haystack = self._event_search_content(event).casefold()

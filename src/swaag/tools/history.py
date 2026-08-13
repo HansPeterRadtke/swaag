@@ -73,6 +73,11 @@ class HistorySearchTool(Tool):
         max_results = max(1, min(int(requested), int(cfg.max_results)))
         store = HistoryStore(context.config.sessions.root, write_projections=False)
         session_ref = _active_session_ref(validated_input["session_ref"], context)
+        current_call_sequence: int | None = None
+        for event in reversed(store.read_history(context.session_state.session_id)):
+            if event.event_type == "tool_called" and event.payload.get("tool_name") == self.name:
+                current_call_sequence = event.sequence
+                break
         result = store.query_history_details(
             session_ref,
             validated_input["query"],
@@ -82,6 +87,7 @@ class HistorySearchTool(Tool):
             exact_score=cfg.exact_score,
             type_bonus=cfg.type_bonus,
             preview_chars=cfg.preview_chars,
+            end_sequence=(current_call_sequence - 1) if current_call_sequence is not None else None,
         )
         matches = [
             {

@@ -5,6 +5,7 @@ from pathlib import Path
 import pytest
 
 from swaag.history import HistoryStore
+from swaag.runtime import AgentRuntime
 from swaag.tools.base import ToolValidationError
 from swaag.tools.registry import ToolRegistry
 from swaag.types import Message
@@ -304,3 +305,28 @@ def test_history_analyze_bounds_large_candidate_payloads(make_config, tmp_path: 
     assert len(captured["prompt"]) < 25_000
     assert "X" * 5000 not in captured["prompt"]
     assert "Bounded exact candidate excerpts" in captured["prompt"]
+
+
+def test_history_search_excludes_its_own_current_invocation(make_config, tmp_path: Path) -> None:
+    config = make_config()
+    config.sessions.root = tmp_path / "sessions"
+    runtime = AgentRuntime(config)
+    state = runtime.create_or_load_session()
+    runtime.history.record_event(
+        state,
+        "message_added",
+        {"message": {"role": "assistant", "content": "Durable indexed-history marker: cobalt-history-fts-531.", "created_at": "2026-01-01T00:00:00+00:00", "name": None, "metadata": {}}},
+    )
+    run = runtime.execute_tool_once(
+        "history_search",
+        {"query": "durable indexed-history marker", "topic_hint": "history marker", "session_ref": None, "max_results": 1},
+        session_id=state.session_id,
+    )
+    assert run.tool_result is not None
+    match = run.tool_result.output["matches"][0]
+    assert match["event_type"] == "message_added"
+    assert "cobalt-history-fts-531" in match["preview"]
+    assert match["sequence"] < max(
+        event.sequence for event in runtime.history.read_history(state.session_id)
+        if event.event_type == "tool_called" and event.payload.get("tool_name") == "history_search"
+    )
