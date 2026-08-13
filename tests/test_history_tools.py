@@ -262,3 +262,45 @@ def test_history_search_exposes_search_backend_and_current_session_schema(make_c
     from swaag.tools.history import HistorySearchTool
     assert "session_ref=null" in HistorySearchTool.usage_guidance
     assert "never invent a session label" in HistorySearchTool.usage_guidance
+
+
+def test_history_analyze_bounds_large_candidate_payloads(make_config, tmp_path: Path, monkeypatch) -> None:
+    import json
+    from swaag.types import CompletionResult
+
+    config = make_config()
+    config.sessions.root = tmp_path / "sessions"
+    store = HistoryStore(config.sessions.root)
+    state = store.create(config_fingerprint=config.config_fingerprint(), model_base_url=config.model.base_url)
+    huge = "X" * 200_000 + " root-cause-marker-77"
+    store.record_event(state, "assistant_progress", {"action_index": 1, "assistant_text": huge})
+    captured: dict[str, str] = {}
+
+    def fake_complete(self, prompt, *, max_tokens, contract, temperature=None, kind=None, live_mode=False):
+        captured["prompt"] = prompt
+        sequence = next(event.sequence for event in store.read_history(state.session_id) if event.event_type == "assistant_progress")
+        return CompletionResult(
+            text=json.dumps({
+                "goal_constraints": ["diagnose"],
+                "failure_evidence": ["bounded evidence"],
+                "candidate_root_causes": ["cause"],
+                "source_sequences": [sequence],
+                "wrong_strategy": "old",
+                "recommended_strategy": "new",
+                "uncertainties": [],
+            }),
+            raw_request={}, raw_response={}, prompt_tokens=None, completion_tokens=None, finish_reason="stop",
+        )
+
+    monkeypatch.setattr("swaag.tools.history.LlamaCppClient.complete", fake_complete)
+    registry = ToolRegistry()
+    _invocation, result = registry.dispatch(
+        "history_analyze",
+        {"query": "root-cause-marker-77", "session_ref": None, "max_events": 12},
+        config,
+        state,
+    )
+    assert result.output["candidate_root_causes"] == ["cause"]
+    assert len(captured["prompt"]) < 25_000
+    assert "X" * 5000 not in captured["prompt"]
+    assert "Bounded exact candidate excerpts" in captured["prompt"]

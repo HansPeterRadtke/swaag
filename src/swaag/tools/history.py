@@ -269,13 +269,28 @@ class HistoryAnalyzeTool(Tool):
                 for event in events[-validated_input["max_events"]:]
             ]
         allowed_sequences = {int(item["sequence"]) for item in candidates}
+        # Analyzer context must stay bounded even when candidate events contain huge
+        # model requests, artifacts, or tool payloads. query_history_details already
+        # provides an exact bounded prefix preview for each candidate; use that plus
+        # durable sequence/type/timestamp references. The caller can retrieve the
+        # complete exact event afterward with history_window.
+        analyzer_candidates = [
+            {
+                "sequence": int(item["sequence"]),
+                "event_type": str(item["event_type"]),
+                "timestamp": str(item["timestamp"]),
+                "exact_excerpt": str(item.get("preview", ""))[:1200],
+            }
+            for item in candidates
+        ]
         prompt = (
             "You are a read-only root-cause analyzer for an agent session. Reconstruct the actual user goal and constraints, "
             "identify concrete failure/dissatisfaction evidence, identify candidate root causes, explain what prior strategy was wrong or incomplete, "
-            "recommend a materially different next strategy, and state unresolved uncertainties. Ground every conclusion only in the exact candidate "
-            "events below. source_sequences must contain only sequence numbers from these candidates that support your analysis. Do not invent events.\n\n"
+            "recommend a materially different next strategy, and state unresolved uncertainties. Ground every conclusion only in the bounded exact "
+            "event excerpts below. source_sequences must contain only sequence numbers from these candidates that support your analysis. "
+            "The excerpts are bounded; the calling agent can retrieve the complete exact source event later with history_window. Do not invent events.\n\n"
             f"Analysis question: {validated_input['query']}\n\n"
-            f"Exact candidate events:\n{stable_json_dumps(candidates, indent=2)}"
+            f"Bounded exact candidate excerpts:\n{stable_json_dumps(analyzer_candidates, indent=2)}"
         )
         completion = LlamaCppClient(context.config).complete(
             prompt,
