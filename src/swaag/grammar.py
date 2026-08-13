@@ -82,6 +82,31 @@ def agent_action_contract(tool_specs: Iterable[tuple]) -> ContractSpec:
                 "assistant_message": _string(),
                 "tool_calls": _array(tool_call_schema),
                 "continue_loop": _boolean(),
+                "status": _closed_object(
+                    {
+                        "situation": _string(),
+                        "action": _string(),
+                        "reason": _string(),
+                        "importance": {"type": "string", "enum": ["minor", "normal", "major"]},
+                    }
+                ),
+            }
+        ),
+    )
+
+
+def history_analysis_contract() -> ContractSpec:
+    return _contract(
+        "history_analysis",
+        _closed_object(
+            {
+                "goal_constraints": _array(_string()),
+                "failure_evidence": _array(_string()),
+                "candidate_root_causes": _array(_string()),
+                "source_sequences": _array({"type": "integer"}),
+                "wrong_strategy": _string(),
+                "recommended_strategy": _string(),
+                "uncertainties": _array(_string()),
             }
         ),
     )

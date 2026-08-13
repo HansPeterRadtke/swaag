@@ -311,6 +311,18 @@ class AgentRuntime:
                     "occurrence": occurrence,
                 },
             )
+            self.history.record_event(
+                state,
+                "agent_status",
+                {
+                    "action_index": action_index,
+                    "situation": selected_action.status.situation,
+                    "action": selected_action.status.action,
+                    "reason": selected_action.status.reason,
+                    "importance": selected_action.status.importance,
+                    "importance_rank": selected_action.status.importance_rank,
+                },
+            )
             if occurrence > 1:
                 recovery_feedback = (
                     "The previous action was rejected because it exactly repeated the immediately preceding action and would produce no new mechanical evidence. "

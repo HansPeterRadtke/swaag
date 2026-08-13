@@ -15,10 +15,23 @@ class AgentToolCall:
 
 
 @dataclass(slots=True, frozen=True)
+class AgentStatus:
+    situation: str
+    action: str
+    reason: str
+    importance: str
+
+    @property
+    def importance_rank(self) -> int:
+        return {"minor": 1, "normal": 2, "major": 3}[self.importance]
+
+
+@dataclass(slots=True, frozen=True)
 class AgentAction:
     assistant_message: str
     tool_calls: list[AgentToolCall]
     continue_loop: bool
+    status: AgentStatus
 
     @property
     def calls_tools(self) -> bool:
@@ -32,6 +45,10 @@ def action_from_payload(payload: dict[str, Any], *, enabled_tool_names: Iterable
     assistant_message = payload.get("assistant_message")
     tool_calls_payload = payload.get("tool_calls")
     continue_loop = payload.get("continue_loop")
+    status_payload = payload.get("status")
+    if status_payload is None:
+        # Backward compatibility for pre-status stored actions and test fixtures.
+        status_payload = {"situation": "", "action": "", "reason": "", "importance": "normal"}
 
     if not isinstance(assistant_message, str):
         raise ActionValidationError("assistant_message must be a string")
@@ -39,6 +56,23 @@ def action_from_payload(payload: dict[str, Any], *, enabled_tool_names: Iterable
         raise ActionValidationError("tool_calls must be an array")
     if not isinstance(continue_loop, bool):
         raise ActionValidationError("continue_loop must be a boolean")
+    if not isinstance(status_payload, dict):
+        raise ActionValidationError("status must be an object")
+    required_status = {"situation", "action", "reason", "importance"}
+    if set(status_payload) != required_status:
+        raise ActionValidationError("status must contain exactly situation, action, reason, importance")
+    for key in ("situation", "action", "reason"):
+        if not isinstance(status_payload.get(key), str):
+            raise ActionValidationError(f"status.{key} must be a string")
+    importance = status_payload.get("importance")
+    if importance not in {"minor", "normal", "major"}:
+        raise ActionValidationError("status.importance must be one of minor, normal, major")
+    status = AgentStatus(
+        situation=status_payload["situation"],
+        action=status_payload["action"],
+        reason=status_payload["reason"],
+        importance=importance,
+    )
 
     enabled = set(enabled_tool_names)
     tool_calls: list[AgentToolCall] = []
@@ -65,4 +99,5 @@ def action_from_payload(payload: dict[str, Any], *, enabled_tool_names: Iterable
         assistant_message=assistant_message,
         tool_calls=tool_calls,
         continue_loop=continue_loop,
+        status=status,
     )

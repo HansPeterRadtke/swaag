@@ -147,6 +147,96 @@ def _human_duration_wait(workspace: Path) -> TaskScenario:
     )
 
 
+
+def _sqlite_fts_history(workspace: Path) -> TaskScenario:
+    target = _write(workspace / "sqlite_history_result.txt", "pending\n")
+    marker = "cobalt-history-fts-531"
+    expected = f"backend=sqlite_fts5\nmarker={marker}\n"
+    script = _verification_script(workspace, target.name, expected)
+    history = [
+        Message(role="user", content="Older unrelated note about project delta.", created_at="2026-01-01T00:00:00+00:00"),
+        Message(role="assistant", content=f"Durable indexed-history marker: {marker}.", created_at="2026-01-01T00:01:00+00:00"),
+        Message(role="user", content="Much later unrelated note about deployment checks.", created_at="2026-01-01T00:02:00+00:00"),
+    ]
+    return TaskScenario(
+        prompt=(
+            "Use history_search to recover the exact durable indexed-history marker from prior conversation history. "
+            "Also inspect the history_search tool result and use its reported search_backend value. Write sqlite_history_result.txt exactly as two lines: "
+            "backend=<reported backend> and marker=<exact recovered marker>, each with a trailing newline. "
+            f"Run python3 {script} before answering."
+        ),
+        workspace=workspace,
+        model_client=None,
+        history_messages=history,
+        verification_contract=BenchmarkVerificationContract(
+            task_type="multi_step",
+            expected_files={str(target): expected},
+            command=["python3", script],
+            command_cwd=str(workspace),
+            required_history_events=["agent_action_selected", "history_retrieved"],
+            required_tools_used=["history_search"],
+            min_tool_calls=2,
+            allowed_modified_files=[str(target)],
+            forbid_unexpected_workspace_changes=True,
+        ),
+    )
+
+
+def _structured_status(workspace: Path) -> TaskScenario:
+    target = _write(workspace / "status_result.txt", "pending\n")
+    expected = "status-persisted\n"
+    script = _verification_script(workspace, target.name, expected)
+    return TaskScenario(
+        prompt=(
+            "Write exactly status-persisted plus a trailing newline to status_result.txt, then run "
+            f"python3 {script}. Complete the task normally; the runtime must durably persist the structured status that accompanies your action."
+        ),
+        workspace=workspace,
+        model_client=None,
+        verification_contract=BenchmarkVerificationContract(
+            task_type="multi_step",
+            expected_files={str(target): expected},
+            command=["python3", script],
+            command_cwd=str(workspace),
+            required_history_events=["agent_action_selected", "agent_status"],
+            min_tool_calls=2,
+            allowed_modified_files=[str(target)],
+            forbid_unexpected_workspace_changes=True,
+        ),
+    )
+
+
+def _grounded_history_analysis(workspace: Path) -> TaskScenario:
+    target = _write(workspace / "analysis_result.txt", "pending\n")
+    marker = "root-cause-cache-endpoint-417"
+    script = _verification_script(workspace, target.name, marker + "\n")
+    history = [
+        Message(role="user", content="The repeated failure started after changing the model endpoint.", created_at="2026-01-01T00:00:00+00:00"),
+        Message(role="assistant", content=f"Root-cause evidence marker recorded for diagnosis: {marker}.", created_at="2026-01-01T00:01:00+00:00"),
+        Message(role="user", content="The old strategy kept retrying without inspecting durable history.", created_at="2026-01-01T00:02:00+00:00"),
+    ]
+    return TaskScenario(
+        prompt=(
+            "Use history_analyze to diagnose why the repeated failure was mishandled. Then use exact durable history retrieval, including history_window, "
+            "to inspect the analyzer's supporting source evidence and recover the exact root-cause evidence marker. Write only that exact marker plus a trailing newline "
+            f"to analysis_result.txt and run python3 {script} before answering."
+        ),
+        workspace=workspace,
+        model_client=None,
+        history_messages=history,
+        verification_contract=BenchmarkVerificationContract(
+            task_type="multi_step",
+            expected_files={str(target): marker + "\n"},
+            command=["python3", script],
+            command_cwd=str(workspace),
+            required_history_events=["agent_action_selected", "history_analyzed", "history_window_read"],
+            required_tools_used=["history_analyze", "history_window"],
+            min_tool_calls=3,
+            allowed_modified_files=[str(target)],
+            forbid_unexpected_workspace_changes=True,
+        ),
+    )
+
 def capability_benchmark_tasks() -> list[BenchmarkTaskDefinition]:
     common = {
         "task_type": "multi_step",
@@ -194,6 +284,30 @@ def capability_benchmark_tasks() -> list[BenchmarkTaskDefinition]:
             build=_human_duration_wait,
             build_live=_human_duration_wait,
             tags=["multi-step", "wait", "duration", "scheduler"],
+            **common,
+        ),
+        BenchmarkTaskDefinition(
+            task_id="capability_sqlite_fts_history",
+            description="Recover exact durable history through SQLite FTS5 and use the reported indexed-search backend.",
+            build=_sqlite_fts_history,
+            build_live=_sqlite_fts_history,
+            tags=["multi-step", "history", "sqlite", "fts5", "durability"],
+            **common,
+        ),
+        BenchmarkTaskDefinition(
+            task_id="capability_structured_status",
+            description="Persist the structured situation/action/reason/importance status accompanying an agent action.",
+            build=_structured_status,
+            build_live=_structured_status,
+            tags=["multi-step", "status", "observability", "history"],
+            **common,
+        ),
+        BenchmarkTaskDefinition(
+            task_id="capability_grounded_history_analysis",
+            description="Use model-backed root-cause analysis grounded in exact durable history sequence evidence.",
+            build=_grounded_history_analysis,
+            build_live=_grounded_history_analysis,
+            tags=["multi-step", "history", "root-cause", "analysis", "grounding"],
             **common,
         ),
     ]

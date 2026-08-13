@@ -99,6 +99,10 @@ def _action(
     message: str = "",
     tool_calls: list[tuple[str, dict[str, Any]]] | None = None,
     continue_loop: bool = False,
+    situation: str = "Working on the current request.",
+    status_action: str = "Choose and execute the next useful action.",
+    reason: str = "This advances the user's request using current evidence.",
+    importance: str = "normal",
 ) -> str:
     return json.dumps(
         {
@@ -108,6 +112,12 @@ def _action(
                 for name, arguments in (tool_calls or [])
             ],
             "continue_loop": continue_loop,
+            "status": {
+                "situation": situation,
+                "action": status_action,
+                "reason": reason,
+                "importance": importance,
+            },
         }
     )
 
@@ -134,7 +144,7 @@ def test_direct_answer_is_one_constrained_model_call_with_all_tools(make_config)
     for tool_name in runtime.tools.tool_names(runtime.config):
         assert f"- name: {tool_name}\n" in prompt
     schema = client.requests[0]["json_schema"]
-    assert set(schema["properties"]) == {"assistant_message", "tool_calls", "continue_loop"}
+    assert set(schema["properties"]) == {"assistant_message", "tool_calls", "continue_loop", "status"}
     events = runtime.history.read_history(result.session_id)
     assert not any(event.event_type in {"plan_created", "plan_updated"} for event in events)
     assert not any(event.event_type.startswith("plan_") for event in events)
@@ -730,3 +740,27 @@ def test_action_prompt_requires_requested_side_effects_before_final_message(make
     prompt = prepared.assembly.prompt_text
     assert "never a substitute for an explicitly requested mechanical side effect" in prompt
     assert "apply the required state change and verify again before finishing" in prompt
+
+
+def test_selected_action_persists_structured_status(make_config) -> None:
+    runtime, _client = _runtime(
+        make_config,
+        [_action(
+            message="done",
+            situation="The requested fact is available in current evidence.",
+            status_action="Return the grounded answer.",
+            reason="No further tool work is required.",
+            importance="minor",
+        )],
+    )
+    result = runtime.run_turn("Answer the request.")
+    events = runtime.history.read_history(result.session_id)
+    status = next(event for event in events if event.event_type == "agent_status")
+    assert status.payload == {
+        "action_index": 1,
+        "situation": "The requested fact is available in current evidence.",
+        "action": "Return the grounded answer.",
+        "reason": "No further tool work is required.",
+        "importance": "minor",
+        "importance_rank": 1,
+    }

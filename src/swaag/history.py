@@ -3,6 +3,7 @@ from __future__ import annotations
 import json
 import os
 import re
+import sqlite3
 from dataclasses import asdict
 from pathlib import Path
 from typing import Any, Iterable, Iterator
@@ -101,6 +102,166 @@ class HistoryStore:
     def __init__(self, root: Path, *, write_projections: bool = True):
         self.root = Path(root).expanduser()
         self.write_projections = write_projections
+        _ensure_directory(self.root)
+        self._init_sqlite_history()
+
+
+    def sqlite_history_path(self) -> Path:
+        return self.root / "history.sqlite3"
+
+    def _sqlite_connect(self) -> sqlite3.Connection:
+        connection = sqlite3.connect(self.sqlite_history_path(), timeout=30.0)
+        connection.row_factory = sqlite3.Row
+        connection.execute("PRAGMA journal_mode=WAL")
+        connection.execute("PRAGMA synchronous=FULL")
+        connection.execute("PRAGMA foreign_keys=ON")
+        connection.execute("PRAGMA busy_timeout=30000")
+        return connection
+
+    def _init_sqlite_history(self) -> None:
+        version = tuple(int(part) for part in sqlite3.sqlite_version.split(".")[:3])
+        if version < (3, 51, 3):
+            raise RuntimeError(
+                f"SWAAG durable history requires SQLite >= 3.51.3 (found {sqlite3.sqlite_version})"
+            )
+        with self._sqlite_connect() as connection:
+            connection.executescript(
+                """
+                CREATE TABLE IF NOT EXISTS events (
+                    session_id TEXT NOT NULL,
+                    sequence INTEGER NOT NULL,
+                    event_id TEXT NOT NULL UNIQUE,
+                    timestamp TEXT NOT NULL,
+                    event_type TEXT NOT NULL,
+                    payload_json TEXT NOT NULL,
+                    metadata_json TEXT NOT NULL,
+                    prev_hash TEXT,
+                    event_hash TEXT NOT NULL,
+                    PRIMARY KEY (session_id, sequence)
+                );
+                CREATE TABLE IF NOT EXISTS indexed_sessions (
+                    session_id TEXT PRIMARY KEY,
+                    complete_through INTEGER NOT NULL
+                );
+                CREATE TABLE IF NOT EXISTS control_messages (
+                    control_id TEXT PRIMARY KEY,
+                    session_id TEXT NOT NULL,
+                    message TEXT NOT NULL,
+                    source TEXT NOT NULL,
+                    created_at TEXT NOT NULL,
+                    priority INTEGER NOT NULL DEFAULT 0,
+                    status TEXT NOT NULL DEFAULT 'pending',
+                    processed_at TEXT
+                );
+                CREATE INDEX IF NOT EXISTS events_session_type_sequence
+                    ON events(session_id, event_type, sequence);
+                CREATE INDEX IF NOT EXISTS control_pending_session
+                    ON control_messages(session_id, status, priority DESC, created_at, control_id);
+                CREATE VIRTUAL TABLE IF NOT EXISTS events_fts USING fts5(
+                    session_id UNINDEXED,
+                    sequence UNINDEXED,
+                    event_type,
+                    content,
+                    tokenize='unicode61'
+                );
+                """
+            )
+
+    @staticmethod
+    def _event_search_content(event: HistoryEvent) -> str:
+        return stable_json_dumps({"type": event.event_type, "payload": event.payload}, indent=None)
+
+    def _sqlite_insert_event(self, connection: sqlite3.Connection, event: HistoryEvent) -> None:
+        payload_json = stable_json_dumps(event.payload, indent=None)
+        metadata_json = stable_json_dumps(event.metadata, indent=None)
+        connection.execute(
+            """
+            INSERT OR IGNORE INTO events(
+                session_id, sequence, event_id, timestamp, event_type,
+                payload_json, metadata_json, prev_hash, event_hash
+            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+            """,
+            (
+                event.session_id,
+                event.sequence,
+                event.id,
+                event.timestamp,
+                event.event_type,
+                payload_json,
+                metadata_json,
+                event.prev_hash,
+                event.hash,
+            ),
+        )
+        exists = connection.execute(
+            "SELECT 1 FROM events_fts WHERE session_id=? AND sequence=? LIMIT 1",
+            (event.session_id, event.sequence),
+        ).fetchone()
+        if exists is None:
+            connection.execute(
+                "INSERT INTO events_fts(session_id, sequence, event_type, content) VALUES (?, ?, ?, ?)",
+                (event.session_id, event.sequence, event.event_type, self._event_search_content(event)),
+            )
+
+    def _sqlite_complete_through(self, session_id: str) -> int:
+        with self._sqlite_connect() as connection:
+            row = connection.execute(
+                "SELECT complete_through FROM indexed_sessions WHERE session_id=?",
+                (session_id,),
+            ).fetchone()
+            return int(row[0]) if row is not None else 0
+
+    def _ensure_session_indexed(self, session_id: str) -> None:
+        path = self.history_path(session_id)
+        if not path.exists():
+            return
+        indexed_through = self._sqlite_complete_through(session_id)
+        events = list(self._iter_history_jsonl(session_id, start_sequence=max(1, indexed_through + 1)))
+        if not events:
+            return
+        with self._sqlite_connect() as connection:
+            connection.execute("BEGIN IMMEDIATE")
+            for event in events:
+                self._sqlite_insert_event(connection, event)
+            connection.execute(
+                """
+                INSERT INTO indexed_sessions(session_id, complete_through) VALUES (?, ?)
+                ON CONFLICT(session_id) DO UPDATE SET complete_through=excluded.complete_through
+                """,
+                (session_id, events[-1].sequence),
+            )
+            connection.commit()
+
+    def _iter_history_sqlite(
+        self,
+        session_id: str,
+        *,
+        start_sequence: int = 1,
+        end_sequence: int | None = None,
+    ) -> Iterator[HistoryEvent]:
+        sql = (
+            "SELECT session_id, sequence, event_id, timestamp, event_type, payload_json, "
+            "metadata_json, prev_hash, event_hash FROM events WHERE session_id=? AND sequence>=?"
+        )
+        params: list[Any] = [session_id, start_sequence]
+        if end_sequence is not None:
+            sql += " AND sequence<=?"
+            params.append(end_sequence)
+        sql += " ORDER BY sequence"
+        with self._sqlite_connect() as connection:
+            for row in connection.execute(sql, params):
+                yield HistoryEvent(
+                    id=str(row["event_id"]),
+                    session_id=str(row["session_id"]),
+                    sequence=int(row["sequence"]),
+                    timestamp=str(row["timestamp"]),
+                    type=str(row["event_type"]),
+                    version=1,
+                    payload=json.loads(str(row["payload_json"])),
+                    metadata=json.loads(str(row["metadata_json"])),
+                    prev_hash=row["prev_hash"],
+                    hash=str(row["event_hash"]),
+                )
 
     def guard(self, state: SessionState, operation_name: str) -> HistoryGuard:
         return HistoryGuard(self, state, operation_name)
@@ -374,47 +535,93 @@ class HistoryStore:
 
     def enqueue_control_message(self, session_id: str, text: str, *, source: str = "cli", control_id: str | None = None) -> dict[str, Any]:
         control_id = control_id or new_id("control")
-        inbox_path = self.control_inbox_dir(session_id) / f"{control_id}.json"
-        processed_path = self.control_processed_dir(session_id) / f"{control_id}.json"
-        for existing_path in (inbox_path, processed_path):
-            if existing_path.exists():
-                payload = json.loads(existing_path.read_text(encoding="utf-8"))
-                if isinstance(payload, dict):
-                    return payload
+        message = text.strip()
+        lowered = message.casefold()
+        priority = 100 if lowered == "stop" or lowered.startswith("stop ") else 80 if lowered == "pause" or lowered.startswith("pause ") else 0
         payload = {
             "control_id": control_id,
             "session_id": session_id,
-            "message": text.strip(),
+            "message": message,
             "source": source,
             "created_at": utc_now_iso(),
+            "priority": priority,
         }
-        self._write_projection(inbox_path, payload)
+        with self._sqlite_connect() as connection:
+            connection.execute(
+                """
+                INSERT OR IGNORE INTO control_messages(
+                    control_id, session_id, message, source, created_at, priority, status
+                ) VALUES (?, ?, ?, ?, ?, ?, 'pending')
+                """,
+                (control_id, session_id, message, source, payload["created_at"], priority),
+            )
+            row = connection.execute(
+                "SELECT control_id, session_id, message, source, created_at, priority, status FROM control_messages WHERE control_id=?",
+                (control_id,),
+            ).fetchone()
+        if row is not None:
+            payload = {key: row[key] for key in ("control_id", "session_id", "message", "source", "created_at", "priority")}
+            if str(row["status"]) == "pending":
+                self._write_projection(self.control_inbox_dir(session_id) / f"{control_id}.json", payload)
         return payload
 
     def list_pending_control_messages(self, session_id: str) -> list[dict[str, Any]]:
+        with self._sqlite_connect() as connection:
+            rows = connection.execute(
+                """
+                SELECT control_id, session_id, message, source, created_at, priority
+                FROM control_messages
+                WHERE session_id=? AND status='pending'
+                ORDER BY priority DESC, created_at, control_id
+                """,
+                (session_id,),
+            ).fetchall()
+        if rows:
+            return [dict(row) for row in rows]
+        # Compatibility import for control files created before SQLite-backed control state.
         inbox = self.control_inbox_dir(session_id)
         if not inbox.exists():
             return []
-        messages: list[dict[str, Any]] = []
+        imported: list[dict[str, Any]] = []
         for path in sorted(inbox.glob("*.json")):
             try:
                 payload = json.loads(path.read_text(encoding="utf-8"))
             except Exception:
                 continue
-            if isinstance(payload, dict):
-                payload["_path"] = str(path)
-                messages.append(payload)
-        return messages
+            if not isinstance(payload, dict):
+                continue
+            control_id = str(payload.get("control_id") or path.stem)
+            with self._sqlite_connect() as connection:
+                existing = connection.execute(
+                    "SELECT status FROM control_messages WHERE control_id=?",
+                    (control_id,),
+                ).fetchone()
+            if existing is not None:
+                if str(existing["status"]) != "pending":
+                    path.unlink(missing_ok=True)
+                continue
+            restored = self.enqueue_control_message(
+                session_id,
+                str(payload.get("message", "")),
+                source=str(payload.get("source", "legacy")),
+                control_id=control_id,
+            )
+            imported.append(restored)
+        return imported
 
     def mark_control_message_processed(self, session_id: str, control_id: str) -> None:
+        with self._sqlite_connect() as connection:
+            connection.execute(
+                "UPDATE control_messages SET status='processed', processed_at=? WHERE session_id=? AND control_id=?",
+                (utc_now_iso(), session_id, control_id),
+            )
         inbox_path = self.control_inbox_dir(session_id) / f"{control_id}.json"
         processed_path = self.control_processed_dir(session_id) / f"{control_id}.json"
-        if not inbox_path.exists():
-            return
-        _ensure_directory(processed_path.parent)
-        os.replace(inbox_path, processed_path)
+        if inbox_path.exists():
+            _ensure_directory(processed_path.parent)
+            os.replace(inbox_path, processed_path)
 
-    def iter_history(
+    def _iter_history_jsonl(
         self,
         session_id: str,
         *,
@@ -451,6 +658,27 @@ class HistoryStore:
                 if end_sequence is not None and event.sequence > end_sequence:
                     break
                 yield event
+
+    def iter_history(
+        self,
+        session_id: str,
+        *,
+        start_sequence: int = 1,
+        end_sequence: int | None = None,
+    ) -> Iterator[HistoryEvent]:
+        self._ensure_session_indexed(session_id)
+        if self._sqlite_complete_through(session_id) > 0:
+            yield from self._iter_history_sqlite(
+                session_id,
+                start_sequence=start_sequence,
+                end_sequence=end_sequence,
+            )
+            return
+        yield from self._iter_history_jsonl(
+            session_id,
+            start_sequence=start_sequence,
+            end_sequence=end_sequence,
+        )
 
     def read_history(self, session_id: str) -> list[HistoryEvent]:
         return list(self.iter_history(session_id))
@@ -573,8 +801,29 @@ class HistoryStore:
 
     def _append_marshaled_event(self, state: SessionState, event: HistoryEvent) -> None:
         _ensure_directory(self._session_dir(state.session_id))
-        encoded = stable_json_dumps(asdict(event)) + "\n"
-        append_text(self.history_path(state.session_id), encoded, encoding="utf-8")
+        self._ensure_session_indexed(state.session_id)
+        with self._sqlite_connect() as connection:
+            connection.execute("BEGIN IMMEDIATE")
+            row = connection.execute(
+                "SELECT COALESCE(MAX(sequence), 0) FROM events WHERE session_id=?",
+                (state.session_id,),
+            ).fetchone()
+            expected = int(row[0]) + 1
+            if expected != event.sequence:
+                raise HistoryInvariantError(
+                    f"Concurrent/stale history writer for {state.session_id}: expected sequence {expected}, got {event.sequence}"
+                )
+            self._sqlite_insert_event(connection, event)
+            encoded = stable_json_dumps(asdict(event)) + "\n"
+            append_text(self.history_path(state.session_id), encoded, encoding="utf-8")
+            connection.execute(
+                """
+                INSERT INTO indexed_sessions(session_id, complete_through) VALUES (?, ?)
+                ON CONFLICT(session_id) DO UPDATE SET complete_through=excluded.complete_through
+                """,
+                (state.session_id, event.sequence),
+            )
+            connection.commit()
         self._apply_event(state, event)
         if self.write_projections:
             self._write_projections(state)
@@ -673,12 +922,12 @@ class HistoryStore:
         session_id = self.resolve_session_ref(session_ref, latest_if_none=True)
         if session_id is None:
             raise FileNotFoundError("No session available")
+        self._ensure_session_indexed(session_id)
         query = " ".join(part for part in [query_text.strip(), topic_hint.strip()] if part.strip())
         lowered = query.casefold()
         tokens = [token for token in re.findall(r"[A-Za-z0-9_./:-]+", lowered) if len(token) >= 2]
         quoted_groups = re.findall(r'"([^\"]+)"|\'([^\']+)\'', query)
         exact_terms = [part.strip() for group in quoted_groups for part in group if part.strip()]
-        ranked: list[tuple[int, HistoryEvent, str]] = []
         preferred_types = {
             "tool_called",
             "tool_result",
@@ -692,19 +941,56 @@ class HistoryStore:
             "edit_applied",
             "filesystem_read",
             "workspace_snapshot",
+            "message_added",
+            "assistant_progress",
+            "agent_status",
         }
-        for event in self.iter_history(session_id):
-            haystack = stable_json_dumps({"type": event.event_type, "payload": event.payload}).casefold()
+        candidates: list[HistoryEvent] = []
+        if tokens:
+            fts_query = " OR ".join(f'"{token.replace(chr(34), chr(34) * 2)}"' for token in dict.fromkeys(tokens))
+            try:
+                with self._sqlite_connect() as connection:
+                    rows = connection.execute(
+                        """
+                        SELECT e.session_id, e.sequence, e.event_id, e.timestamp, e.event_type,
+                               e.payload_json, e.metadata_json, e.prev_hash, e.event_hash
+                        FROM events_fts f
+                        JOIN events e ON e.session_id=f.session_id AND e.sequence=CAST(f.sequence AS INTEGER)
+                        WHERE events_fts MATCH ? AND e.session_id=?
+                        ORDER BY bm25(events_fts), e.sequence DESC
+                        LIMIT ?
+                        """,
+                        (fts_query, session_id, max(max_results * 8, 32)),
+                    ).fetchall()
+                candidates = [
+                    HistoryEvent(
+                        id=str(row["event_id"]),
+                        session_id=str(row["session_id"]),
+                        sequence=int(row["sequence"]),
+                        timestamp=str(row["timestamp"]),
+                        type=str(row["event_type"]),
+                        version=1,
+                        payload=json.loads(str(row["payload_json"])),
+                        metadata=json.loads(str(row["metadata_json"])),
+                        prev_hash=row["prev_hash"],
+                        hash=str(row["event_hash"]),
+                    )
+                    for row in rows
+                ]
+            except sqlite3.Error:
+                candidates = []
+        if not candidates:
+            candidates = list(self.iter_history(session_id))
+        ranked: list[tuple[int, HistoryEvent, str]] = []
+        for event in candidates:
+            haystack = self._event_search_content(event).casefold()
             score = 0
-            matched_terms: list[str] = []
             for term in tokens:
                 if term in haystack:
                     score += token_score
-                    matched_terms.append(term)
             for term in exact_terms:
                 if term.casefold() in haystack:
                     score += exact_score
-                    matched_terms.append(term)
             if event.event_type in preferred_types:
                 score += type_bonus
             if score <= 0:
@@ -729,6 +1015,7 @@ class HistoryStore:
             "topic_hint": topic_hint,
             "match_count": len(matches),
             "matches": matches,
+            "search_backend": "sqlite_fts5" if tokens else "exact_replay",
         }
 
     def _state_payload(self, state: SessionState) -> dict[str, Any]:

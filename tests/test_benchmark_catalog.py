@@ -184,3 +184,24 @@ def test_terminal_capability_prompt_matches_trailing_newline_verifier(tmp_path) 
     assert "with a trailing newline after the second line" in scenario.prompt
     expected = next(iter(scenario.verification_contract.expected_files.values()))
     assert expected.endswith("\n")
+
+
+def test_final_architecture_capability_tasks_are_present_and_constrained(tmp_path) -> None:
+    tasks = {task.task_id: task for task in get_benchmark_tasks()}
+    for task_id in (
+        "capability_sqlite_fts_history",
+        "capability_structured_status",
+        "capability_grounded_history_analysis",
+    ):
+        assert task_id in tasks
+        scenario = tasks[task_id].create(tmp_path / task_id)
+        assert scenario.verification_contract.command
+        assert scenario.verification_contract.forbid_unexpected_workspace_changes is True
+    sqlite_contract = tasks["capability_sqlite_fts_history"].create(tmp_path / "sqlite").verification_contract
+    assert "history_search" in sqlite_contract.required_tools_used
+    assert "history_retrieved" in sqlite_contract.required_history_events
+    status_contract = tasks["capability_structured_status"].create(tmp_path / "status").verification_contract
+    assert "agent_status" in status_contract.required_history_events
+    analysis_contract = tasks["capability_grounded_history_analysis"].create(tmp_path / "analysis").verification_contract
+    assert {"history_analyze", "history_window"}.issubset(set(analysis_contract.required_tools_used))
+    assert {"history_analyzed", "history_window_read"}.issubset(set(analysis_contract.required_history_events))

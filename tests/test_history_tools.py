@@ -138,3 +138,83 @@ def test_history_tools_are_enabled_by_default(make_config) -> None:
     config = make_config()
     names = set(ToolRegistry().tool_names(config))
     assert {"history_search", "history_window"} <= names
+
+
+def test_sqlite_wal_fts_is_durable_index_for_exact_history(make_config, tmp_path: Path) -> None:
+    import sqlite3
+
+    config = make_config()
+    config.sessions.root = tmp_path / "sessions"
+    store, state = _state_with_history(config, session_id="session_sqlite_index")
+    assert store.sqlite_history_path().exists()
+    with sqlite3.connect(store.sqlite_history_path()) as connection:
+        assert connection.execute("PRAGMA journal_mode").fetchone()[0].casefold() == "wal"
+        assert connection.execute("PRAGMA synchronous").fetchone()[0] == 2
+        count = connection.execute("SELECT COUNT(*) FROM events WHERE session_id=?", (state.session_id,)).fetchone()[0]
+        assert count == len(store.read_history(state.session_id))
+        fts_count = connection.execute("SELECT COUNT(*) FROM events_fts WHERE session_id=?", (state.session_id,)).fetchone()[0]
+        assert fts_count == count
+    details = store.query_history_details(state.session_id, "Blue Heron", max_results=4)
+    assert details["search_backend"] == "sqlite_fts5"
+    assert details["matches"]
+    assert any("Blue Heron" in item["preview"] for item in details["matches"])
+
+
+def test_sqlite_control_priority_and_processed_idempotency(make_config, tmp_path: Path) -> None:
+    config = make_config()
+    config.sessions.root = tmp_path / "sessions"
+    store = HistoryStore(config.sessions.root)
+    state = store.create(config_fingerprint=config.config_fingerprint(), model_base_url=config.model.base_url)
+    ordinary = store.enqueue_control_message(state.session_id, "please inspect logs", control_id="control_normal")
+    pause = store.enqueue_control_message(state.session_id, "pause", control_id="control_pause")
+    stop = store.enqueue_control_message(state.session_id, "stop now", control_id="control_stop")
+    pending = store.list_pending_control_messages(state.session_id)
+    assert [item["control_id"] for item in pending] == [stop["control_id"], pause["control_id"], ordinary["control_id"]]
+    store.mark_control_message_processed(state.session_id, stop["control_id"])
+    store.enqueue_control_message(state.session_id, "stop now", control_id=stop["control_id"])
+    assert stop["control_id"] not in {item["control_id"] for item in store.list_pending_control_messages(state.session_id)}
+
+
+def test_history_analyze_is_grounded_in_exact_candidate_sequences(make_config, tmp_path: Path, monkeypatch) -> None:
+    import json
+
+    from swaag.environment.environment import AgentEnvironment
+    from swaag.tools.base import ToolContext
+    from swaag.types import CompletionResult
+
+    config = make_config()
+    config.sessions.root = tmp_path / "sessions"
+    store, state = _state_with_history(config, session_id="session_history_analyze")
+    source_sequence = next(event.sequence for event in store.read_history(state.session_id) if "artifact-marker-73" in str(event.payload))
+
+    def fake_complete(self, prompt, *, max_tokens, contract, temperature=None, kind=None, live_mode=False):
+        assert contract.name == "history_analysis"
+        assert str(source_sequence) in prompt
+        return CompletionResult(
+            text=json.dumps(
+                {
+                    "goal_constraints": ["Recover the exact prior artifact marker."],
+                    "failure_evidence": ["The marker exists in a prior tool result."],
+                    "candidate_root_causes": ["The previous strategy did not retrieve the exact historical tool result."],
+                    "source_sequences": [source_sequence],
+                    "wrong_strategy": "Relying on incomplete current context.",
+                    "recommended_strategy": "Retrieve the exact history event and use its value.",
+                    "uncertainties": [],
+                }
+            ),
+            raw_request={}, raw_response={}, prompt_tokens=None, completion_tokens=None, finish_reason="stop",
+        )
+
+    monkeypatch.setattr("swaag.tools.history.LlamaCppClient.complete", fake_complete)
+    env = AgentEnvironment(config, state)
+    registry = ToolRegistry()
+    invocation, result = registry.dispatch(
+        "history_analyze",
+        {"query": "Why did we miss artifact-marker-73?", "session_ref": state.session_id, "max_events": 8},
+        config,
+        state,
+    )
+    assert invocation.tool_name == "history_analyze"
+    assert result.output["source_sequences"] == [source_sequence]
+    assert result.output["recommended_strategy"].startswith("Retrieve the exact history event")
+    assert [event.event_type for event in result.generated_events] == ["history_analyzed"]
