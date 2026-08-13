@@ -29,7 +29,7 @@ class HistorySearchTool(Tool):
     repeated_observation_is_redundant = True
     name = "history_search"
     description = "Search durable exact agent history for earlier user messages, tool calls/results, decisions, and events. Returns ranked previews and sequence numbers; use history_window for exact surrounding events."
-    usage_guidance = "Use when current context or summaries may omit an older exact detail. Search first, then retrieve the relevant exact sequence window."
+    usage_guidance = "Use when current context or summaries may omit an older exact detail. For the active session, pass session_ref=null (or use the exact active session_id/name from environment state); never invent a session label. Search first, then use the exact session_id and sequence returned by history_search with history_window."
     kind = "pure"
     input_schema = {
         "type": "object",
@@ -94,6 +94,7 @@ class HistorySearchTool(Tool):
         output = {
             "session_id": result["session_id"],
             "session_name": result["session_name"],
+            "search_backend": result["search_backend"],
             "query": result["query"],
             "topic_hint": result["topic_hint"],
             "match_count": len(matches),
@@ -120,7 +121,7 @@ class HistoryWindowTool(Tool):
     repeated_observation_is_redundant = True
     name = "history_window"
     description = "Read an exact bounded window of durable history events by sequence number. This is the authoritative retrieval path after history_search identifies relevant events."
-    usage_guidance = "Use small windows around relevant sequence numbers. Returned payloads are exact durable event data, not summaries."
+    usage_guidance = "Use small windows around relevant sequence numbers. For the active session, pass session_ref=null; after history_search, prefer the exact session_id it returned. Returned payloads are exact durable event data, not summaries."
     kind = "pure"
     input_schema = {
         "type": "object",
@@ -187,7 +188,7 @@ class HistoryAnalyzeTool(Tool):
     repeated_observation_is_redundant = True
     name = "history_analyze"
     description = "Analyze durable exact history with a model-backed read-only root-cause pass. Returns goal/constraint reconstruction, failure evidence, candidate root causes, exact source event sequences, the wrong strategy, a materially different recommended strategy, and unresolved uncertainties."
-    usage_guidance = "Use when repeated failures, user corrections, or ambiguous prior behavior require deeper root-cause analysis. The analyzer is read-only; use its source_sequences with history_window when you need the exact surrounding evidence."
+    usage_guidance = "Use when repeated failures, user corrections, or ambiguous prior behavior require deeper root-cause analysis. For the active session, pass session_ref=null (or the exact active session_id/name from environment state), never a guessed label. The analyzer is read-only; use its returned source_sequences and exact session_id with history_window for surrounding evidence."
     kind = "pure"
     input_schema = {
         "type": "object",

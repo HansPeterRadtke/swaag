@@ -844,3 +844,9 @@ def test_terminal_store_resolves_terminal1_when_one_active_terminal_exists(tmp_p
     monkeypatch.setattr(store, "list", lambda: [record])
     monkeypatch.setattr(store, "_dir", lambda ref: tmp_path / "missing")
     assert store.resolve("terminal1") == "terminal_real"
+
+
+def test_read_artifact_guidance_requires_pagination_when_unfinished() -> None:
+    from swaag.tools.artifacts import ReadArtifactTool
+    assert "If finished=false, unread exact data remains" in ReadArtifactTool.usage_guidance
+    assert "next_offset" in ReadArtifactTool.usage_guidance

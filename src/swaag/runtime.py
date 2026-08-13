@@ -582,6 +582,10 @@ class AgentRuntime:
                         "finished": bool(finished),
                     }
         environment = {
+            "active_session": {
+                "session_id": state.session_id,
+                "session_name": state.session_name,
+            },
             "workspace_root": state.environment.workspace.root,
             "cwd": state.environment.workspace.cwd,
             "workspace_files": list(state.environment.workspace.listed_files),

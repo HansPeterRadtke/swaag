@@ -868,3 +868,13 @@ def test_action_prompt_requires_explicit_decision_not_only_evidence(make_config)
     )
     prompt = prepared.assembly.prompt_text
     assert "final assistant_message must explicitly state that decision/conclusion" in prompt
+
+
+def test_environment_state_exposes_authoritative_active_session(make_config) -> None:
+    config = make_config(model__context_limit=32_000)
+    runtime = AgentRuntime(config)
+    state = runtime.create_or_load_session()
+    components = runtime._runtime_context_components(state, runtime._counter(state))
+    environment = next(item.text for item in components if item.name == "environment_state")
+    assert '"active_session"' in environment
+    assert f'"session_id": "{state.session_id}"' in environment

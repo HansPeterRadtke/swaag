@@ -245,3 +245,20 @@ def test_history_tools_accept_active_session_aliases(make_config, tmp_path: Path
         )
         assert result.output["session_id"] == state.session_id
         assert result.output["matches"]
+
+
+def test_history_search_exposes_search_backend_and_current_session_schema(make_config, tmp_path: Path) -> None:
+    config = make_config()
+    config.sessions.root = tmp_path / "sessions"
+    store, state = _state_with_history(config, session_id="session_backend_output")
+    registry = ToolRegistry()
+    _invocation, result = registry.dispatch(
+        "history_search",
+        {"query": "Blue Heron", "topic_hint": None, "session_ref": None, "max_results": 4},
+        config,
+        state,
+    )
+    assert result.output["search_backend"] == "sqlite_fts5"
+    from swaag.tools.history import HistorySearchTool
+    assert "session_ref=null" in HistorySearchTool.usage_guidance
+    assert "never invent a session label" in HistorySearchTool.usage_guidance

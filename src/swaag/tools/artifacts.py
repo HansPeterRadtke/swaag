@@ -12,7 +12,7 @@ class ReadArtifactTool(Tool):
     repeated_observation_is_redundant = True
     name = "read_artifact"
     description = "Read an exact bounded slice of a durable text artifact produced by tools, such as full shell/test output that was too large for the immediate context."
-    usage_guidance = "Use the exact stdout_artifact_id or stderr_artifact_id returned by the producing tool as artifact_id; never use a filename, command, or guessed label. Because tool calls in one action cannot consume results from earlier calls in that same action, run the producing tool first and read its returned artifact_id in a later action. Advance start_offset with next_offset until finished, and use offsets strategically rather than rereading the same slice."
+    usage_guidance = "Use the exact stdout_artifact_id or stderr_artifact_id returned by the producing tool as artifact_id (the unambiguous aliases stdout/latest_stdout and stderr/latest_stderr are also accepted); never use a filename, command, or guessed label. Because tool calls in one action cannot consume results from earlier calls in that same action, run the producing tool first and read its returned artifact in a later action. If finished=false, unread exact data remains: do not treat a provisional match or generic filler from that slice as the final requested value. Advance start_offset using next_offset until the required evidence is unambiguous, and continue until finished=true when completeness matters."
     kind = "pure"
     input_schema = {
         "type": "object",

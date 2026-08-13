@@ -241,3 +241,13 @@ def test_generated_contracts_match_explicit_prompts_and_semantic_verifiers(tmp_p
     assert debug.verification_contract.max_tool_calls == 1
     assert debug.verification_contract.required_event_counts == {"tool_called": 1, "filesystem_read": 1}
     assert debug.verification_contract.expected_answer_contains == ["cache", "spike"]
+
+
+def test_history_capability_prompts_use_explicit_active_session_reference(tmp_path) -> None:
+    tasks = {task.task_id: task for task in get_benchmark_tasks()}
+    exact = tasks["capability_history_exact_retrieval"].create(tmp_path / "exact")
+    sqlite = tasks["capability_sqlite_fts_history"].create(tmp_path / "sqlite")
+    analysis = tasks["capability_grounded_history_analysis"].create(tmp_path / "analysis")
+    assert "session_ref=null for the active session" in exact.prompt
+    assert "session_ref=null for the active session" in sqlite.prompt
+    assert "session_ref=null for the active session" in analysis.prompt

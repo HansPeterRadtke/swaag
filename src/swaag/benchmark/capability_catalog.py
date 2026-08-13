@@ -41,7 +41,7 @@ def _history_retrieval(workspace: Path) -> TaskScenario:
     ]
     return TaskScenario(
         prompt=(
-            "Recover the exact recovery marker from durable conversation history using history_search and history_window, "
+            "Recover the exact recovery marker from durable conversation history using history_search with session_ref=null for the active session, then history_window with the exact returned session_id/sequence, "
             "then write only that marker plus a trailing newline to recovered_history.txt. Do not infer it from workspace files. "
             f"Run python3 {script} before answering."
         ),
@@ -76,7 +76,7 @@ def _large_output_artifact(workspace: Path) -> TaskScenario:
     return TaskScenario(
         prompt=(
             "Run python3 emit_large_output.py with shell_command. Its important marker is beyond the bounded immediate shell output, "
-            "so use the returned output artifact and read_artifact to recover the exact marker. Write only that marker plus a trailing newline "
+            "so use the returned output artifact and read_artifact to recover the exact marker. A read_artifact result with finished=false is incomplete; follow next_offset through additional slices until the marker is unambiguous. Write only that marker plus a trailing newline "
             f"to large_output_marker.txt, then run python3 {script}."
         ),
         workspace=workspace,
@@ -160,7 +160,7 @@ def _sqlite_fts_history(workspace: Path) -> TaskScenario:
     ]
     return TaskScenario(
         prompt=(
-            "Use history_search to recover the exact durable indexed-history marker from prior conversation history. "
+            "Use history_search with session_ref=null for the active session to recover the exact durable indexed-history marker from prior conversation history. "
             "Also inspect the history_search tool result and use its reported search_backend value. Write sqlite_history_result.txt exactly as two lines: "
             "backend=<reported backend> and marker=<exact recovered marker>, each with a trailing newline. "
             f"Run python3 {script} before answering."
@@ -217,7 +217,7 @@ def _grounded_history_analysis(workspace: Path) -> TaskScenario:
     ]
     return TaskScenario(
         prompt=(
-            "Use history_analyze to diagnose why the repeated failure was mishandled. Then use exact durable history retrieval, including history_window, "
+            "Use history_analyze with session_ref=null for the active session to diagnose why the repeated failure was mishandled. Then use the analyzer's exact returned session_id/source_sequences with history_window, "
             "to inspect the analyzer's supporting source evidence and recover the exact root-cause evidence marker. Write only that exact marker plus a trailing newline "
             f"to analysis_result.txt and run python3 {script} before answering."
         ),
