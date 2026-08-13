@@ -764,3 +764,35 @@ def test_selected_action_persists_structured_status(make_config) -> None:
         "importance": "minor",
         "importance_rank": 1,
     }
+
+
+def test_action_and_validation_retries_use_reproducibly_distinct_seeds(make_config) -> None:
+    # First response is malformed JSON, second is a valid action for the same action
+    # index, then the next action should advance the deterministic seed again.
+    runtime, client = _runtime(
+        make_config,
+        [
+            '{"assistant_message":',
+            _action(tool_calls=[("calculator", {"expression": "1 + 1"})], continue_loop=True),
+            _action(message="2", continue_loop=False),
+        ],
+    )
+    runtime.config.model.seed = 100
+    result = runtime.run_turn("Calculate 1 + 1 and answer.")
+    assert result.assistant_text == "2"
+    assert [request["seed"] for request in client.requests] == [100, 101, 103]
+
+
+def test_action_seed_schedule_is_deterministic_for_same_base_seed(make_config) -> None:
+    def run_once() -> list[int]:
+        runtime, client = _runtime(
+            make_config,
+            [
+                _action(tool_calls=[("calculator", {"expression": "2 + 2"})], continue_loop=True),
+                _action(message="4", continue_loop=False),
+            ],
+        )
+        runtime.config.model.seed = 23
+        runtime.run_turn("Calculate 2 + 2.")
+        return [request["seed"] for request in client.requests]
+    assert run_once() == run_once() == [23, 26]

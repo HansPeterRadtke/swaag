@@ -2383,11 +2383,11 @@ def make_benchmark_task(
         "extremely_hard": (10, 10),
     }
     repo_limits = {
-        "extremely_easy": (8, 6),
-        "easy": (12, 10),
-        "normal": (14, 12),
-        "hard": (18, 16),
-        "extremely_hard": (24, 20),
+        "extremely_easy": (10, 10),
+        "easy": (14, 14),
+        "normal": (18, 20),
+        "hard": (24, 28),
+        "extremely_hard": (32, 40),
     }
     max_total_actions, tool_call_budget = (repo_limits if repo_repair else base_limits)[difficulty]
     default_overrides = {

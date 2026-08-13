@@ -153,6 +153,10 @@ def test_repo_task_budgets_leave_room_for_one_failed_edit_verify_cycle() -> None
     assert easy["runtime_max_total_actions"] >= 12
     assert normal["runtime_tool_call_budget"] >= easy["runtime_tool_call_budget"]
     assert normal["runtime_max_total_actions"] >= easy["runtime_max_total_actions"]
+    assert normal["runtime_tool_call_budget"] >= 20
+    hard = tasks["coding_run_tests_environment"].config_overrides
+    assert hard["runtime_tool_call_budget"] >= 28
+    assert hard["runtime_max_total_actions"] >= 24
 
 
 def test_failure_tasks_verify_policy_evidence_and_preserved_state_not_magic_refusal_words(tmp_path) -> None:

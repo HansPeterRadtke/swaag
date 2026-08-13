@@ -266,6 +266,7 @@ class AgentRuntime:
                         state,
                         prepared,
                         validator=validate,
+                        seed_offset=(action_index - 1) * 3 + (validation_attempt - 1),
                     )
                     break
                 except (ActionValidationError, ValueError) as exc:
@@ -731,8 +732,9 @@ class AgentRuntime:
         prepared: PreparedCall,
         *,
         validator: Callable[[dict[str, Any]], Any] | None = None,
+        seed_offset: int = 0,
     ) -> Any:
-        completion = self._execute_model_call(state, prepared)
+        completion = self._execute_model_call(state, prepared, seed_offset=seed_offset)
         try:
             payload = json.loads(completion.text)
         except json.JSONDecodeError as exc:
@@ -743,7 +745,13 @@ class AgentRuntime:
             raise ValueError(f"Contract {prepared.contract.name} must return one JSON object")
         return validator(payload) if validator is not None else payload
 
-    def _execute_model_call(self, state: SessionState, prepared: PreparedCall) -> CompletionResult:
+    def _execute_model_call(
+        self,
+        state: SessionState,
+        prepared: PreparedCall,
+        *,
+        seed_offset: int = 0,
+    ) -> CompletionResult:
         resolved_contract, policy = self.client.resolve_contract(
             prepared.contract,
             kind=prepared.assembly.kind,
@@ -755,6 +763,10 @@ class AgentRuntime:
             max_tokens=prepared.report.reserved_response_tokens,
             contract=resolved_contract,
         )
+        # Reproducible but non-identical decoding across semantic action/retry attempts.
+        # Reusing one fixed seed caused malformed JSON and exact bad actions to recur
+        # deterministically even after validation feedback changed.
+        request["seed"] = int(self.config.model.seed) + int(seed_offset)
         transient_attempts = 0
         semantic_attempt = 0
         total_attempt = 0
