@@ -234,13 +234,14 @@ class AgentRuntime:
         budget_reports: list[BudgetReport] = []
         previous_action_signature = ""
         consecutive_action_occurrences = 0
+        rejected_signature_counts: dict[str, int] = {}
         tool_calls_used = 0
         observation_signatures_since_state_change: set[str] = set()
         recovery_feedback = ""
         accepted_actions = 0
         max_mechanical_attempts = max(
-            self.config.runtime.max_total_actions * 4,
-            self.config.runtime.max_total_actions + 6,
+            self.config.runtime.max_total_actions * 3,
+            self.config.runtime.max_total_actions + 8,
         )
 
         for mechanical_attempt in range(1, max_mechanical_attempts + 1):
@@ -354,11 +355,29 @@ class AgentRuntime:
                 },
             )
             if occurrence > 1:
+                rejected_signature_counts[signature] = rejected_signature_counts.get(signature, 0) + 1
+                rejected_count = rejected_signature_counts[signature]
+                exact_calls = stable_json_dumps(action_payload.get("tool_calls", []), indent=None)
+                edit_paths = [
+                    str(call.get("arguments", {}).get("path", ""))
+                    for call in action_payload.get("tool_calls", [])
+                    if call.get("tool_name") == "edit_text" and call.get("arguments", {}).get("path")
+                ]
                 recovery_feedback = (
-                    "The previous action was rejected because it exactly repeated the immediately preceding action and would produce no new mechanical evidence. "
-                    "Choose a materially different next action. Inspect a different source, use the evidence already returned, or change state before rereading the same input. "
-                    "Do not repeat the same tool arguments, and do not modify tests or files the user explicitly forbade changing."
+                    "This exact mechanical action was rejected because it repeats the immediately preceding action and would produce no new evidence. "
+                    f"It has now been rejected {rejected_count} time(s). Exact rejected tool calls: {exact_calls}. "
+                    "Do not emit these exact tool calls again. Choose a materially different next action using the evidence already returned: use materially different arguments or a different tool. "
                 )
+                if edit_paths:
+                    recovery_feedback += (
+                        "Because the rejected action contains edit_text, reread the current target file before proposing another edit if the prior edit failed or the expected old_text may be stale. "
+                        f"Relevant edit target(s): {', '.join(edit_paths)}. "
+                    )
+                if rejected_count >= 3:
+                    recovery_feedback += (
+                        "Repeatedly retrying this signature is a hard no-progress loop. You MUST choose a different mechanical action now; do not merely rephrase status or assistant text. "
+                    )
+                recovery_feedback += "Do not modify tests or files the user explicitly forbade changing."
                 self.history.record_event(
                     state,
                     "agent_action_rejected",

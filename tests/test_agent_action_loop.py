@@ -915,3 +915,31 @@ def test_validation_retry_exhaustion_retries_same_semantic_action(make_config) -
     terminal = [e for e in events if e.event_type == "agent_action_terminal"]
     assert terminal[-1].payload["action_index"] == 1
     assert len(client.requests) == 4
+
+
+def test_duplicate_recovery_feedback_contains_exact_calls_and_edit_reread_guidance(make_config, tmp_path) -> None:
+    config = make_config(runtime__tool_call_budget=2, runtime__max_total_actions=3, model__context_limit=32_000, tools__allow_side_effect_tools=True)
+    config.sessions.root = tmp_path / "sessions"
+    config.tools.read_roots = [tmp_path]
+    (tmp_path / "a.py").write_text("value = 1\n", encoding="utf-8")
+    first = _action(
+        tool_calls=[("edit_text", {"path": "a.py", "operation": "replace_exact", "old_text": "missing", "new_text": "value = 2", "replace_all": False})],
+        continue_loop=True,
+    )
+    duplicate = _action(
+        tool_calls=[("edit_text", {"path": "a.py", "operation": "replace_exact", "old_text": "missing", "new_text": "value = 2", "replace_all": False})],
+        continue_loop=True,
+        situation="Retrying.", status_action="Retry edit.", reason="Try again.",
+    )
+    read = _action(tool_calls=[("read_file", {"path": "a.py"})], continue_loop=True)
+    finish = _action(message="done", continue_loop=False)
+    client = FakeModelClient([first, duplicate, read, finish])
+    runtime = AgentRuntime(config, model_client=client)
+    result = runtime.run_turn("Inspect a.py and fix it if needed.")
+    assert result.assistant_text == "done"
+    events = runtime.history.read_history(result.session_id)
+    rejected = [e for e in events if e.event_type == "agent_action_rejected"]
+    reason = "\n".join(str(e.payload.get("reason", "")) for e in rejected)
+    assert '"tool_name":"edit_text"' in reason
+    assert "reread the current target file" in reason
+    assert "a.py" in reason
