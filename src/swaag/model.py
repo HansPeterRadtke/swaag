@@ -318,6 +318,12 @@ class LlamaCppClient:
                 if not raw_line:
                     continue
                 line = raw_line.strip()
+                # Server-Sent Events permit comment/keepalive lines beginning with
+                # a colon. llama.cpp/proxies may emit bare ':' heartbeats while
+                # long constrained generations are in flight; these are transport
+                # metadata, not completion payloads.
+                if line.startswith(":"):
+                    continue
                 if line.startswith("data:"):
                     line = line[5:].strip()
                 if not line or line == "[DONE]":
