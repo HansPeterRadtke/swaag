@@ -2383,11 +2383,11 @@ def make_benchmark_task(
     )
     repo_repair = task_type in {"coding", "file_edit", "multi_step"}
     base_limits = {
-        "extremely_easy": (4, 4),
-        "easy": (5, 4),
-        "normal": (6, 6),
-        "hard": (8, 8),
-        "extremely_hard": (10, 10),
+        "extremely_easy": (6, 8),
+        "easy": (8, 10),
+        "normal": (10, 12),
+        "hard": (12, 16),
+        "extremely_hard": (16, 20),
     }
     repo_limits = {
         "extremely_easy": (10, 10),

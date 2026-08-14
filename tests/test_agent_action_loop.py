@@ -878,3 +878,40 @@ def test_environment_state_exposes_authoritative_active_session(make_config) -> 
     environment = next(item.text for item in components if item.name == "environment_state")
     assert '"active_session"' in environment
     assert f'"session_id": "{state.session_id}"' in environment
+
+
+def test_rejected_duplicate_does_not_consume_accepted_action_budget(make_config, tmp_path) -> None:
+    config = make_config(runtime__tool_call_budget=2, runtime__max_total_actions=2, model__context_limit=32_000)
+    config.sessions.root = tmp_path / "sessions"
+    config.tools.read_roots = [tmp_path]
+    (tmp_path / "a.txt").write_text("alpha\n", encoding="utf-8")
+    read = _action(tool_calls=[("read_file", {"path": "a.txt"})], continue_loop=True)
+    duplicate = _action(
+        tool_calls=[("read_file", {"path": "a.txt"})],
+        continue_loop=True,
+        situation="Checking again.", status_action="Reread.", reason="Double-checking.",
+    )
+    finish = _action(message="alpha", continue_loop=False)
+    client = FakeModelClient([read, duplicate, finish])
+    runtime = AgentRuntime(config, model_client=client)
+    result = runtime.run_turn("Read a.txt once and answer with its content.")
+    assert result.assistant_text == "alpha"
+    events = runtime.history.read_history(result.session_id)
+    called = [e for e in events if e.event_type == "tool_called" and e.payload.get("tool_name") == "read_file"]
+    assert len(called) == 1
+    terminal = [e for e in events if e.event_type == "agent_action_terminal"]
+    assert terminal[-1].payload["action_index"] == 2
+
+
+def test_validation_retry_exhaustion_retries_same_semantic_action(make_config) -> None:
+    config = make_config(runtime__tool_call_budget=0, runtime__max_total_actions=1, model__context_limit=32_000)
+    bad = '{"assistant_message":'
+    finish = _action(message="recovered", continue_loop=False)
+    client = FakeModelClient([bad, bad, bad, finish])
+    runtime = AgentRuntime(config, model_client=client)
+    result = runtime.run_turn("Answer directly.")
+    assert result.assistant_text == "recovered"
+    events = runtime.history.read_history(result.session_id)
+    terminal = [e for e in events if e.event_type == "agent_action_terminal"]
+    assert terminal[-1].payload["action_index"] == 1
+    assert len(client.requests) == 4

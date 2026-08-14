@@ -237,8 +237,16 @@ class AgentRuntime:
         tool_calls_used = 0
         observation_signatures_since_state_change: set[str] = set()
         recovery_feedback = ""
+        accepted_actions = 0
+        max_mechanical_attempts = max(
+            self.config.runtime.max_total_actions * 4,
+            self.config.runtime.max_total_actions + 6,
+        )
 
-        for action_index in range(1, self.config.runtime.max_total_actions + 1):
+        for mechanical_attempt in range(1, max_mechanical_attempts + 1):
+            if accepted_actions >= self.config.runtime.max_total_actions:
+                break
+            action_index = accepted_actions + 1
             pending_payloads = self.history.list_pending_control_messages(state.session_id)
             pending_messages = [
                 str(item.get("message", "")).strip()
@@ -284,7 +292,7 @@ class AgentRuntime:
                         state,
                         prepared,
                         validator=validate,
-                        seed_offset=(action_index - 1) * 3 + (validation_attempt - 1),
+                        seed_offset=(mechanical_attempt - 1) * 3 + (validation_attempt - 1),
                     )
                     break
                 except (ActionValidationError, ValueError) as exc:
@@ -300,18 +308,10 @@ class AgentRuntime:
                     )
 
             if selected_action is None:
-                return self._finish_turn(
-                    state,
-                    "I could not produce a mechanically valid response or tool call within the retry limit.",
-                    tool_results,
-                    budget_reports,
+                recovery_feedback = validation_feedback or (
+                    "The previous mechanical action could not be validated. Produce a different valid action that follows the exact tool schemas and remaining budget."
                 )
-
-            self._consume_pending_control_messages(
-                state,
-                pending_payloads=pending_payloads,
-                selected_action=selected_action,
-            )
+                continue
 
             action_payload = asdict(selected_action)
             # Duplicate detection is about repeated mechanical work, not cosmetic
@@ -397,6 +397,13 @@ class AgentRuntime:
                 )
                 continue
 
+            self._consume_pending_control_messages(
+                state,
+                pending_payloads=pending_payloads,
+                selected_action=selected_action,
+            )
+            accepted_actions += 1
+
             if selected_action.tool_calls:
                 self._record_message(
                     state,
@@ -476,7 +483,7 @@ class AgentRuntime:
 
         return self._finish_turn(
             state,
-            "I stopped because the configured model-call limit was reached before completion.",
+            "I stopped because the configured accepted-action or mechanical-retry limit was reached before completion.",
             tool_results,
             budget_reports,
         )

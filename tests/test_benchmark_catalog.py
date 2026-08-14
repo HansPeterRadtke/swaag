@@ -251,3 +251,13 @@ def test_history_capability_prompts_use_explicit_active_session_reference(tmp_pa
     assert "session_ref=null for the active session" in exact.prompt
     assert "session_ref=null for the active session" in sqlite.prompt
     assert "session_ref=null for the active session" in analysis.prompt
+
+
+def test_non_repository_generated_tasks_have_recovery_headroom() -> None:
+    tasks = {task.task_id: task for task in get_benchmark_tasks()}
+    easy_read = tasks["reading_generated_incident_structured_extract"].config_overrides
+    assert easy_read["runtime_tool_call_budget"] >= 8
+    assert easy_read["runtime_max_total_actions"] >= 6
+    hard_read = tasks["reading_generated_authoritative_source_selection"].config_overrides
+    assert hard_read["runtime_tool_call_budget"] >= 16
+    assert hard_read["runtime_max_total_actions"] >= 12
