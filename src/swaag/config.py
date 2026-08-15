@@ -125,6 +125,7 @@ class EditorConfig:
     create_backups: bool
     backup_suffix: str
     allow_writes: bool
+    allowed_write_paths: list[str]
 
 
 @dataclass(slots=True)

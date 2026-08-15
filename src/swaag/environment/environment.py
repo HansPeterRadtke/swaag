@@ -267,6 +267,24 @@ class AgentEnvironment:
                 + stable_json_dumps(evidence)
             ) from exc
 
+    def _assert_write_allowed(self, path: Path) -> None:
+        allowed = [str(item).strip() for item in self.config.editor.allowed_write_paths if str(item).strip()]
+        if not allowed:
+            return
+        resolved = path.resolve()
+        resolved_allowed: set[Path] = set()
+        for item in allowed:
+            candidate = Path(item).expanduser()
+            if not candidate.is_absolute():
+                candidate = self.filesystem.workspace_root / candidate
+            resolved_allowed.add(candidate.resolve())
+        if resolved not in resolved_allowed:
+            allowed_text = sorted(str(item) for item in resolved_allowed)
+            raise PermissionError(
+                "write target is forbidden by the active editor allowlist: "
+                f"target={resolved} allowed_write_paths={stable_json_dumps(allowed_text)}"
+            )
+
     def preview_or_apply_edit(self, validated_input: dict[str, Any], context: "ToolContext") -> ToolExecutionResult:
         path = self.filesystem.resolve_path(validated_input["path"], cwd=self.current_cwd)
         _, original_text = self.filesystem.read_text(str(path), cwd=self.current_cwd)
@@ -310,6 +328,13 @@ class AgentEnvironment:
                     error_payload[key] = value
             raise ToolValidationError(f"edit_text could not produce an edit: {stable_json_dumps(error_payload)}") from exc
         self._reject_new_python_syntax_error(path, original_text, preview.new_text)
+        if not validated_input.get("dry_run", False):
+            self._assert_write_allowed(path)
+            if not preview.changed:
+                raise ToolValidationError(
+                    "edit_text would make no change to the current file; inspect the current content or choose a materially different edit: "
+                    + stable_json_dumps({"path": str(path), "operation": validated_input["operation"], "current_text": original_text})
+                )
         payload = {
             "path": str(path),
             "operation": validated_input["operation"],
@@ -361,6 +386,12 @@ class AgentEnvironment:
             _, original_text = self.filesystem.read_text(str(path), cwd=self.current_cwd)
         elif not create:
             raise ToolValidationError(f"write_file target does not exist: {path}")
+        self._assert_write_allowed(path)
+        if existed_before and original_text == content:
+            raise ToolValidationError(
+                "write_file would make no change to the current file; use the existing evidence or write materially different content: "
+                + stable_json_dumps({"path": str(path), "current_text": original_text})
+            )
         if existed_before:
             self._reject_new_python_syntax_error(path, original_text, content)
         generated = [

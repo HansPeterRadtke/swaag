@@ -302,12 +302,8 @@ def test_write_file_effect_rejects_noop_write(make_config, tmp_path: Path) -> No
     state = _empty_state()
     config = make_config(tools__allow_side_effect_tools=True)
     environment = AgentEnvironment(config, state)
-    result = environment.write_file(str(target), "same\n", create=False)
-
-    passed, evidence = WriteFileTool().verify_effect(result, environment)
-    assert passed is False
-    assert evidence["persisted"] is True
-    assert evidence["real_change"] is False
+    with pytest.raises(ToolValidationError, match="would make no change"):
+        environment.write_file(str(target), "same\n", create=False)
 
 
 def test_edit_tool_write_blocked_by_editor_policy(make_config, tmp_path: Path) -> None:
@@ -894,3 +890,50 @@ def test_history_analyze_timeout_covers_nested_structured_model_call(make_config
     state = HistoryStore(config.sessions.root).create(config_fingerprint="cfg", model_base_url="http://model")
     context = ToolContext(config=config, session_state=state, environment=AgentEnvironment(config, state))
     assert HistoryAnalyzeTool().execution_timeout_seconds(context) == 135.0
+
+
+def test_editor_write_allowlist_blocks_protected_files_and_allows_declared_target(make_config, tmp_path: Path) -> None:
+    allowed = tmp_path / "allowed.py"
+    protected = tmp_path / "test_protected.py"
+    allowed.write_text("value = 1\n", encoding="utf-8")
+    protected.write_text("assert True\n", encoding="utf-8")
+    state = _empty_state()
+    config = make_config(tools__allow_side_effect_tools=True)
+    config.editor.allow_writes = True
+    config.editor.allowed_write_paths = [str(allowed)]
+    environment = AgentEnvironment(config, state)
+
+    changed = environment.preview_or_apply_edit(
+        {"path": str(allowed), "operation": "replace_exact", "old_text": "value = 1", "new_text": "value = 2", "dry_run": False},
+        ToolContext(config=config, session_state=state, environment=environment),
+    )
+    assert changed.output["changed"] is True
+    with pytest.raises(PermissionError, match="forbidden by the active editor allowlist"):
+        environment.preview_or_apply_edit(
+            {"path": str(protected), "operation": "replace_exact", "old_text": "assert True", "new_text": "assert False", "dry_run": False},
+            ToolContext(config=config, session_state=state, environment=environment),
+        )
+    assert protected.read_text(encoding="utf-8") == "assert True\n"
+
+
+def test_real_noop_edit_and_write_are_rejected_as_no_progress(make_config, tmp_path: Path) -> None:
+    target = tmp_path / "sample.txt"
+    target.write_text("same\n", encoding="utf-8")
+    state = _empty_state()
+    config = make_config(tools__allow_side_effect_tools=True)
+    config.editor.allow_writes = True
+    environment = AgentEnvironment(config, state)
+    context = ToolContext(config=config, session_state=state, environment=environment)
+
+    with pytest.raises(ToolValidationError, match="would make no change"):
+        environment.preview_or_apply_edit(
+            {"path": str(target), "operation": "replace_exact", "old_text": "same", "new_text": "same", "dry_run": False},
+            context,
+        )
+    with pytest.raises(ToolValidationError, match="would make no change"):
+        environment.write_file(str(target), "same\n", create=False)
+    preview = environment.preview_or_apply_edit(
+        {"path": str(target), "operation": "replace_exact", "old_text": "same", "new_text": "same", "dry_run": True},
+        context,
+    )
+    assert preview.output["changed"] is False

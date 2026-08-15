@@ -147,6 +147,8 @@ max_chunk_chars = 12000
 create_backups = false
 backup_suffix = ".bak"
 allow_writes = true
+# Empty means unrestricted. Benchmarks with immutable-workspace contracts populate this at runtime.
+allowed_write_paths = []
 
 # -----------------------------------------------------------
 # -----------------------------------------------------------

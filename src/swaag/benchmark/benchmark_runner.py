@@ -668,6 +668,15 @@ def run_benchmarks(
                 progress_poll_seconds=effective_progress_poll,
                 seed=seed,
             )
+            contract = scenario.verification_contract
+            if contract.forbid_unexpected_workspace_changes and contract.allowed_modified_files:
+                allowed_write_paths: list[str] = []
+                for item in contract.allowed_modified_files:
+                    candidate = Path(item).expanduser()
+                    if not candidate.is_absolute():
+                        candidate = scenario.workspace / candidate
+                    allowed_write_paths.append(str(candidate.resolve()))
+                config.editor.allowed_write_paths = allowed_write_paths
             runtime_model_client, replay_cache_info = _build_agent_behavior_model_client(
                 config=config,
                 scenario=scenario,
