@@ -261,3 +261,19 @@ def test_non_repository_generated_tasks_have_recovery_headroom() -> None:
     hard_read = tasks["reading_generated_authoritative_source_selection"].config_overrides
     assert hard_read["runtime_tool_call_budget"] >= 16
     assert hard_read["runtime_max_total_actions"] >= 12
+
+
+def test_multistep_semantic_contracts_do_not_require_byte_exact_formatting(tmp_path) -> None:
+    tasks = {task.task_id: task for task in get_benchmark_tasks()}
+    mixed = tasks["multi_step_mixed_read_note_compute_write"].create(tmp_path / "mixed")
+    assert mixed.verification_contract.expected_files == {}
+    assert mixed.verification_contract.expected_file_patterns
+    iterative = tasks["multi_step_iterative_write_refinement"].create(tmp_path / "iterative")
+    assert iterative.verification_contract.expected_files == {}
+    assert iterative.verification_contract.expected_file_patterns
+    calculator = tasks["multi_step_read_compute_write_verify"].create(tmp_path / "calculator")
+    assert calculator.verification_contract.expected_files == {}
+    assert calculator.verification_contract.expected_file_patterns
+    filesystem = tasks["multi_step_environment_list_read_write"].create(tmp_path / "filesystem")
+    assert "key=value format" in filesystem.prompt
+    assert "service=..." in filesystem.prompt and "version=..." in filesystem.prompt and "build=..." in filesystem.prompt

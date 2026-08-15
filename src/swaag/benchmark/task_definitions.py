@@ -1610,9 +1610,9 @@ def _build_multi_step_scenario(
             model_client=None,
             verification_contract=BenchmarkVerificationContract(
                 task_type="multi_step",
-                expected_files={
-                    str(capacity_plan): json.dumps({"service": service, "required_capacity": required_capacity}, indent=2) + "\n",
-                    str(ops_summary): f"service={service}\nrequired_capacity={required_capacity}\nstatus=approved\n",
+                expected_file_patterns={
+                    str(capacity_plan): [f'"service"', service, '"required_capacity"', str(required_capacity)],
+                    str(ops_summary): [f"service={service}", f"required_capacity={required_capacity}", "status=approved"],
                 },
                 command=["python3", "-m", "unittest", "-q", test_name],
                 command_cwd=str(workspace),
@@ -1701,9 +1701,9 @@ def _build_multi_step_scenario(
             model_client=None,
             verification_contract=BenchmarkVerificationContract(
                 task_type="multi_step",
-                expected_files={
-                    str(infra_plan): expected_infra,
-                    str(rollout_plan): expected_rollout,
+                expected_file_patterns={
+                    str(infra_plan): [f"service={service}", f"capacity={capacity}", f"env={env_name}", f"replicas={replicas}"],
+                    str(rollout_plan): [service, str(capacity), env_name, str(replicas), "approved"],
                 },
                 command=["python3", "-m", "unittest", "-q", test_name],
                 command_cwd=str(workspace),
@@ -1998,7 +1998,7 @@ def _build_multi_step_scenario(
             model_client=None,
             verification_contract=BenchmarkVerificationContract(
                 task_type="multi_step",
-                expected_files={str(target): expected_target},
+                expected_file_patterns={str(target): [f"service={service}", f"headroom={headroom}", f"workers={6 + seed % 3}"]},
                 command=["python3", "-m", "unittest", "-q", test_name],
                 command_cwd=str(workspace),
                 command_framework="unittest",
@@ -2072,8 +2072,9 @@ def _build_multi_step_scenario(
             ),
         )
         prompt = (
-            "Inspect the `incoming/` directory, use `selection.txt` to choose the correct manifest, write `filesystem_release.txt`, "
-            f"then run `python3 -m unittest -q {test_name}`. Keep the incoming manifests unchanged and summarize the verified result."
+            "Inspect the `incoming/` directory and use `selection.txt` to choose the correct manifest. "
+            "Write `filesystem_release.txt` in key=value format with exactly the selected manifest's `service`, `version`, and `build` fields as `service=...`, `version=...`, and `build=...` lines. "
+            f"Then run `python3 -m unittest -q {test_name}`. Keep the incoming manifests unchanged and summarize the verified result."
         )
         return TaskScenario(
             prompt=prompt,

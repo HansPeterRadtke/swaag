@@ -849,7 +849,7 @@ def test_repeated_pure_call_is_rejected_until_state_changes(make_config, tmp_pat
     events = runtime.history.read_history(result.session_id)
     reads = [e for e in events if e.event_type == "tool_called" and e.payload.get("tool_name") == "read_file"]
     assert len(reads) == 3
-    assert any(e.event_type == "agent_action_rejected" and "repeats observation tool calls" in str(e.payload.get("reason", "")) for e in events)
+    assert any(e.event_type == "agent_action_rejected" and "repeats observation calls" in str(e.payload.get("reason", "")) for e in events)
     assert result.assistant_text == "beta"
 
 
@@ -943,3 +943,29 @@ def test_duplicate_recovery_feedback_contains_exact_calls_and_edit_reread_guidan
     assert '"tool_name":"edit_text"' in reason
     assert "reread the current target file" in reason
     assert "a.py" in reason
+
+
+def test_repeated_observation_feedback_requires_synthesis_from_existing_evidence(make_config, tmp_path) -> None:
+    config = make_config(runtime__tool_call_budget=3, runtime__max_total_actions=3, model__context_limit=32_000)
+    config.sessions.root = tmp_path / "sessions"
+    config.tools.read_roots = [tmp_path]
+    (tmp_path / "facts.txt").write_text("owner=team-blue\n", encoding="utf-8")
+    (tmp_path / "other.txt").write_text("status=green\n", encoding="utf-8")
+    first = _action(tool_calls=[("read_file", {"path": "facts.txt"})], continue_loop=True)
+    different = _action(tool_calls=[("read_file", {"path": "other.txt"})], continue_loop=True)
+    repeated = _action(
+        tool_calls=[("read_file", {"path": "facts.txt"})],
+        continue_loop=True,
+        situation="Need certainty.", status_action="Read again.", reason="Double-check.",
+    )
+    finish = _action(message='{"owner":"team-blue"}', continue_loop=False)
+    client = FakeModelClient([first, different, repeated, finish])
+    runtime = AgentRuntime(config, model_client=client)
+    result = runtime.run_turn("Read facts.txt and other.txt and return the owner as JSON.")
+    assert result.assistant_text == '{"owner":"team-blue"}'
+    events = runtime.history.read_history(result.session_id)
+    rejected = [e for e in events if e.event_type == "agent_action_rejected"]
+    reason = "\n".join(str(e.payload.get("reason", "")) for e in rejected)
+    assert "Already-observed calls" in reason
+    assert "synthesize and return the final answer now" in reason
+    assert 'facts.txt' in reason

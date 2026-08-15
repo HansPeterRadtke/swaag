@@ -235,6 +235,7 @@ class AgentRuntime:
         previous_action_signature = ""
         consecutive_action_occurrences = 0
         rejected_signature_counts: dict[str, int] = {}
+        rejected_observation_counts: dict[str, int] = {}
         tool_calls_used = 0
         observation_signatures_since_state_change: set[str] = set()
         recovery_feedback = ""
@@ -389,22 +390,36 @@ class AgentRuntime:
                 )
                 continue
 
-            repeated_observation_calls: list[str] = []
+            repeated_observation_calls: list[dict[str, Any]] = []
             for tool_call in selected_action.tool_calls:
                 tool = self.tools.get(tool_call.tool_name)
                 if not tool.repeated_observation_is_redundant:
                     continue
-                pure_signature = stable_json_dumps(
+                observation_signature = stable_json_dumps(
                     {"tool_name": tool_call.tool_name, "arguments": tool_call.arguments},
                     indent=None,
                 )
-                if pure_signature in observation_signatures_since_state_change:
-                    repeated_observation_calls.append(tool_call.tool_name)
+                if observation_signature in observation_signatures_since_state_change:
+                    rejected_observation_counts[observation_signature] = rejected_observation_counts.get(observation_signature, 0) + 1
+                    repeated_observation_calls.append(
+                        {
+                            "tool_name": tool_call.tool_name,
+                            "arguments": tool_call.arguments,
+                            "rejected_count": rejected_observation_counts[observation_signature],
+                        }
+                    )
             if repeated_observation_calls:
+                exact_observations = stable_json_dumps(repeated_observation_calls, indent=None)
                 recovery_feedback = (
-                    "This action was rejected because it repeats observation tool calls with identical arguments while no state-changing tool has run since the earlier result. "
-                    f"Repeated observation tools: {', '.join(repeated_observation_calls)}. Reuse the evidence already returned, inspect different evidence, or change state before rereading/recomputing the same input."
+                    "This action was rejected because it repeats observation calls whose exact results are already available and no state-changing tool has run since those observations. "
+                    f"Already-observed calls: {exact_observations}. Do NOT issue these same observations again. "
+                    "Use the evidence already returned. If the requested answer can be derived from that evidence, synthesize and return the final answer now instead of rereading. "
+                    "If evidence is genuinely missing, inspect a different source or use materially different tool arguments. "
                 )
+                if any(int(item["rejected_count"]) >= 2 for item in repeated_observation_calls):
+                    recovery_feedback += (
+                        "This observation has already been rejected repeatedly, so another identical read/search/inspection is a hard no-progress loop. You MUST either answer from existing evidence or choose different evidence. "
+                    )
                 self.history.record_event(
                     state,
                     "agent_action_rejected",
