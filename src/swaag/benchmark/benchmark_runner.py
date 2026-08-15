@@ -30,7 +30,7 @@ from swaag.model import LlamaCppClient
 from swaag.runtime import AgentRuntime
 from swaag.types import SessionState
 from swaag.model_cache import RecordReplayModelClient
-from swaag.utils import stable_json_dumps
+from swaag.utils import sha256_text, stable_json_dumps
 from swaag.benchmark.verifier import verify_benchmark_contract
 
 
@@ -272,6 +272,34 @@ def _benchmark_replay_cache_root() -> Path:
     return root
 
 
+def _benchmark_model_cache_namespace(base_url: str, *, connect_timeout_seconds: int | None = None) -> str:
+    normalized_base = str(base_url).rstrip("/")
+    identity: dict[str, Any] = {"base_url": normalized_base}
+    timeout = max(1, min(int(connect_timeout_seconds or 5), 10))
+    try:
+        request = urllib.request.Request(f"{normalized_base}/props", method="GET")
+        with urllib.request.urlopen(request, timeout=timeout) as response:
+            props = json.loads(response.read().decode("utf-8"))
+        if not isinstance(props, dict):
+            raise ValueError("model /props response must be a JSON object")
+        identity["props"] = props
+        identity["status"] = "resolved"
+    except Exception as exc:
+        # The base URL still prevents cross-endpoint reuse. The request-level
+        # RecordReplayModelClient identity adds a nonce when the exact model
+        # cannot be resolved, so unresolved model responses remain non-reusable.
+        identity["status"] = "unresolved"
+        identity["probe_error_type"] = exc.__class__.__name__
+    digest = sha256_text(stable_json_dumps(identity, indent=None))[:20]
+    alias = "model"
+    props = identity.get("props")
+    if isinstance(props, dict):
+        raw_alias = str(props.get("model_alias") or props.get("model_path") or "model")
+        safe = "".join(ch if ch.isalnum() or ch in {"-", "_"} else "-" for ch in Path(raw_alias).name)
+        alias = safe.strip("-")[:48] or "model"
+    return f"{alias}-{digest}"
+
+
 def _cached_replay_policy() -> str:
     raw = os.environ.get("SWAAG_BENCHMARK_CACHED_REPLAY_POLICY", "record_if_missing").strip().lower()
     aliases = {
@@ -301,6 +329,7 @@ def _build_agent_behavior_model_client(
     seed: int,
     agent_behavior_mode: str | None,
     live_subset: bool,
+    model_cache_namespace: str,
 ):
     delegate = scenario.model_client if scenario is not None else None
     if agent_behavior_mode != "cached":
@@ -310,7 +339,7 @@ def _build_agent_behavior_model_client(
     if delegate is not None and getattr(delegate, "is_record_replay_client", False):
         return delegate, None
     delegate = LlamaCppClient(config) if delegate is None else delegate
-    replay_cache_root = _benchmark_replay_cache_root() / task.task_id
+    replay_cache_root = _benchmark_replay_cache_root() / model_cache_namespace / task.task_id
     os.makedirs(replay_cache_root, exist_ok=True)
     cassette_path = replay_cache_root / f"seed_{seed}.json"
     replay_policy = _cached_replay_policy()
@@ -443,13 +472,13 @@ def _print_benchmark_progress(*, current: int, total: int, task: BenchmarkTaskDe
     )
 
 
-def _planned_cache_mode(output_dir: Path, task: BenchmarkTaskDefinition, seeds: Sequence[int], *, cached: bool) -> str:
+def _planned_cache_mode(output_dir: Path, task: BenchmarkTaskDefinition, seeds: Sequence[int], *, cached: bool, model_cache_namespace: str) -> str:
     if not cached:
         return "uncached"
     policy = _cached_replay_policy()
     modes = []
     for seed in seeds:
-        cassette_path = _benchmark_replay_cache_root() / task.task_id / f"seed_{seed}.json"
+        cassette_path = _benchmark_replay_cache_root() / model_cache_namespace / task.task_id / f"seed_{seed}.json"
         if cassette_path.exists():
             modes.append("replay")
         else:
@@ -625,6 +654,10 @@ def run_benchmarks(
     effective_seeds = [int(seed) for seed in live_settings.get("seeds", [42]) or [42]]
     effective_profile_use_case = live_settings.get("recommendation_use_case")
     effective_profile_rationale = live_settings.get("recommendation_rationale")
+    benchmark_model_cache_namespace = _benchmark_model_cache_namespace(
+        effective_base_url,
+        connect_timeout_seconds=effective_connect_timeout,
+    )
     total_tasks = len(selected_tasks)
     for task_index, task in enumerate(selected_tasks, start=1):
         planned_cache_mode = _planned_cache_mode(
@@ -632,6 +665,7 @@ def run_benchmarks(
             task,
             effective_seeds,
             cached=resolved_agent_behavior_mode == "cached",
+            model_cache_namespace=benchmark_model_cache_namespace,
         )
         _print_benchmark_progress(
             current=task_index - 1,
@@ -685,6 +719,7 @@ def run_benchmarks(
                 seed=seed,
                 agent_behavior_mode=resolved_agent_behavior_mode,
                 live_subset=live_subset,
+                model_cache_namespace=benchmark_model_cache_namespace,
             )
             runtime = AgentRuntime(config, model_client=runtime_model_client)
             state = runtime.create_or_load_session()
@@ -866,7 +901,8 @@ def run_benchmarks(
             "use_live_model": use_live_model,
             "agent_behavior_mode": resolved_agent_behavior_mode or "",
             "replay_cache_enabled": resolved_agent_behavior_mode == "cached",
-            "replay_cache_root": str(_benchmark_replay_cache_root()) if resolved_agent_behavior_mode == "cached" else "",
+            "replay_cache_root": str(_benchmark_replay_cache_root() / benchmark_model_cache_namespace) if resolved_agent_behavior_mode == "cached" else "",
+            "replay_cache_model_namespace": benchmark_model_cache_namespace if resolved_agent_behavior_mode == "cached" else "",
             "replay_cache_policy": _cached_replay_policy() if resolved_agent_behavior_mode == "cached" else "",
             "request_observability_mode": (
                 "replay_cache_or_progress_polling"
