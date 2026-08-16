@@ -5,6 +5,8 @@ from typing import Any, Callable
 
 from swaag.model import CompletionRequestPolicy
 from swaag.runtime import AgentRuntime
+from swaag.types import Message
+from swaag.utils import stable_json_dumps
 from swaag.grammar import agent_action_contract
 from swaag.types import CompletionResult, ContractSpec
 
@@ -982,3 +984,31 @@ def test_repeated_observation_feedback_requires_synthesis_from_existing_evidence
     assert "Already-observed calls" in reason
     assert "synthesize and return the final answer now" in reason
     assert 'facts.txt' in reason
+
+
+def test_repeated_observation_is_allowed_after_compaction_removes_visible_result(make_config, tmp_path) -> None:
+    config = make_config(runtime__tool_call_budget=4, runtime__max_total_actions=4, model__context_limit=32_000)
+    config.sessions.root = tmp_path / "sessions"
+    config.tools.read_roots = [tmp_path]
+    (tmp_path / "a.txt").write_text("alpha\n", encoding="utf-8")
+    runtime, _client = _runtime(make_config, [_action(message="unused", continue_loop=False)])
+    runtime.config = config
+    state = runtime.create_or_load_session()
+    signature = stable_json_dumps({"tool_name": "read_file", "arguments": {"path": "a.txt"}}, indent=None)
+    runtime._record_message(state, Message(role="tool", name="read_file", content="alpha", created_at="t", metadata={"validated_input": {"path": "a.txt"}}))
+    assert signature in runtime._visible_observation_signatures(state)
+    state.messages = [Message(role="system", content="summary only", created_at="t")]
+    assert signature not in runtime._visible_observation_signatures(state)
+
+
+def test_duplicate_no_progress_limit_stops_boundedly(make_config, tmp_path) -> None:
+    config = make_config(runtime__tool_call_budget=4, runtime__max_total_actions=10, runtime__max_repeated_action_occurrences=2, model__context_limit=32_000)
+    config.sessions.root = tmp_path / "sessions"
+    config.tools.read_roots = [tmp_path]
+    (tmp_path / "a.txt").write_text("alpha\n", encoding="utf-8")
+    repeated = _action(tool_calls=[("read_file", {"path": "a.txt"})], continue_loop=True)
+    runtime, client = _runtime(make_config, [repeated, repeated, repeated, repeated])
+    runtime.config = config
+    result = runtime.run_turn("Read a.txt and answer.")
+    assert "no-progress limit" in result.assistant_text
+    assert len(client.requests) == 4

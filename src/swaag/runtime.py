@@ -388,8 +388,16 @@ class AgentRuntime:
                         "reason": recovery_feedback,
                     },
                 )
+                if rejected_count > max(1, int(self.config.runtime.max_repeated_action_occurrences)):
+                    return self._finish_turn(
+                        state,
+                        "I stopped because the model repeated the same rejected mechanical action beyond the configured no-progress limit.",
+                        tool_results,
+                        budget_reports,
+                    )
                 continue
 
+            visible_observation_signatures = self._visible_observation_signatures(state)
             repeated_observation_calls: list[dict[str, Any]] = []
             for tool_call in selected_action.tool_calls:
                 tool = self.tools.get(tool_call.tool_name)
@@ -399,7 +407,10 @@ class AgentRuntime:
                     {"tool_name": tool_call.tool_name, "arguments": tool_call.arguments},
                     indent=None,
                 )
-                if observation_signature in observation_signatures_since_state_change:
+                if (
+                    observation_signature in observation_signatures_since_state_change
+                    and observation_signature in visible_observation_signatures
+                ):
                     rejected_observation_counts[observation_signature] = rejected_observation_counts.get(observation_signature, 0) + 1
                     repeated_observation_calls.append(
                         {
@@ -429,6 +440,16 @@ class AgentRuntime:
                         "reason": recovery_feedback,
                     },
                 )
+                if any(
+                    int(item["rejected_count"]) > max(1, int(self.config.runtime.max_repeated_action_occurrences))
+                    for item in repeated_observation_calls
+                ):
+                    return self._finish_turn(
+                        state,
+                        "I stopped because the model repeated an already-visible observation beyond the configured no-progress limit.",
+                        tool_results,
+                        budget_reports,
+                    )
                 continue
 
             self._consume_pending_control_messages(
@@ -522,6 +543,24 @@ class AgentRuntime:
             tool_results,
             budget_reports,
         )
+
+    @staticmethod
+    def _visible_observation_signatures(state: SessionState) -> set[str]:
+        visible: set[str] = set()
+        for message in state.messages:
+            if message.role != "tool" or not message.name:
+                continue
+            metadata = message.metadata if isinstance(message.metadata, dict) else {}
+            arguments = metadata.get("validated_input", metadata.get("raw_input", {}))
+            if not isinstance(arguments, dict):
+                continue
+            visible.add(
+                stable_json_dumps(
+                    {"tool_name": message.name, "arguments": arguments},
+                    indent=None,
+                )
+            )
+        return visible
 
     def _consume_pending_control_messages(
         self,
