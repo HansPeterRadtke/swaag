@@ -45,7 +45,7 @@ def _string_array_or_null() -> dict[str, Any]:
 
 class EchoTool(Tool):
     name = "echo"
-    description = "Echo back the provided text exactly."
+    description = "Echo back provided text exactly for diagnostic/tool-work purposes. Do not use this tool to deliver the final user-facing answer; final answers belong in assistant_message."
     kind = "pure"
     output_schema = {
         "type": "object",

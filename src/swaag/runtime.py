@@ -182,15 +182,36 @@ class AgentRuntime:
                 metadata=event.metadata,
             )
 
-    def run_turn(self, user_text: str, *, session_id: str | None = None) -> TurnResult:
+    def run_turn(
+        self,
+        user_text: str,
+        *,
+        session_id: str | None = None,
+        allow_silent_completion: bool = False,
+    ) -> TurnResult:
         state = self.create_or_load_session(session_id)
-        return self.run_turn_in_session(state, user_text)
+        return self.run_turn_in_session(
+            state,
+            user_text,
+            allow_silent_completion=allow_silent_completion,
+        )
 
-    def run_turn_in_session(self, state: SessionState, user_text: str) -> TurnResult:
+    def run_turn_in_session(
+        self,
+        state: SessionState,
+        user_text: str,
+        *,
+        allow_silent_completion: bool = False,
+    ) -> TurnResult:
         run_id = f"{state.session_id}:{new_id('run')}"
         self.history.set_active_run(state.session_id, run_id=run_id, user_text=user_text)
         try:
-            return self._run_model_tool_loop(state, user_text, record_user_message=True)
+            return self._run_model_tool_loop(
+                state,
+                user_text,
+                record_user_message=True,
+                allow_silent_completion=allow_silent_completion,
+            )
         finally:
             self.history.clear_active_run(state.session_id, run_id=run_id)
 
@@ -208,7 +229,14 @@ class AgentRuntime:
         finally:
             self.history.clear_active_run(state.session_id, run_id=run_id)
 
-    def _run_model_tool_loop(self, state: SessionState, user_text: str, *, record_user_message: bool = True) -> TurnResult:
+    def _run_model_tool_loop(
+        self,
+        state: SessionState,
+        user_text: str,
+        *,
+        record_user_message: bool = True,
+        allow_silent_completion: bool = False,
+    ) -> TurnResult:
         original_request = user_text.strip()
         if not original_request:
             raise ValueError("user_text must not be empty")
@@ -263,7 +291,10 @@ class AgentRuntime:
                 remaining_tool_calls = self.config.runtime.tool_call_budget - tool_calls_used
                 tool_specs = all_tool_specs if remaining_tool_calls > 0 else []
                 tool_names = [str(item[0]) for item in tool_specs]
-                contract = agent_action_contract(tool_specs)
+                contract = agent_action_contract(
+                    tool_specs,
+                    allow_silent_completion=allow_silent_completion,
+                )
                 prepared = self._prepare_action_call(
                     state,
                     original_request=original_request,
@@ -276,6 +307,10 @@ class AgentRuntime:
 
                 def validate(payload: dict[str, Any]) -> AgentAction:
                     action = action_from_payload(payload, enabled_tool_names=tool_names)
+                    if action.silent_completion and not allow_silent_completion:
+                        raise ActionValidationError(
+                            "silent_completion is not permitted for this turn; return the complete user-facing result in assistant_message"
+                        )
                     if len(action.tool_calls) > remaining_tool_calls:
                         raise ActionValidationError(
                             f"tool_calls contains {len(action.tool_calls)} calls but only {remaining_tool_calls} remain in the mechanical budget"

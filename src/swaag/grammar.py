@@ -47,7 +47,7 @@ def summary_contract() -> ContractSpec:
     )
 
 
-def agent_action_contract(tool_specs: Iterable[tuple]) -> ContractSpec:
+def agent_action_contract(tool_specs: Iterable[tuple], *, allow_silent_completion: bool = False) -> ContractSpec:
     tool_call_variants: list[dict[str, Any]] = []
     seen: set[str] = set()
     for item in sorted(tool_specs, key=lambda value: str(value[0])):
@@ -82,7 +82,7 @@ def agent_action_contract(tool_specs: Iterable[tuple]) -> ContractSpec:
                 "assistant_message": _string(),
                 "tool_calls": _array(tool_call_schema),
                 "continue_loop": _boolean(),
-                "silent_completion": _boolean(),
+                "silent_completion": _boolean() if allow_silent_completion else {"type": "boolean", "enum": [False]},
                 "status": _closed_object(
                     {
                         "situation": _string(),

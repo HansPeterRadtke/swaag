@@ -637,6 +637,14 @@ def test_benchmark_answer_fragments_are_case_insensitive_and_support_alternative
     assert report.checks["expected_answer_contains"] is True
     assert report.checks["expected_answer_any_of"] is True
 
+def test_action_schema_disallows_silent_completion_by_default() -> None:
+    from swaag.grammar import agent_action_contract
+    schema = agent_action_contract([]).json_schema
+    assert schema["properties"]["silent_completion"]["enum"] == [False]
+    allowed = agent_action_contract([], allow_silent_completion=True).json_schema
+    assert "enum" not in allowed["properties"]["silent_completion"]
+
+
 def test_action_parser_rejects_empty_terminal_message_without_explicit_silence() -> None:
     import pytest
     from swaag.action import ActionValidationError, action_from_payload
@@ -668,7 +676,10 @@ def test_runtime_can_finish_empty_after_successful_tool_result(make_config, tmp_
     finish = _action(message="", continue_loop=False, silent_completion=True)
     client = FakeModelClient([read, finish])
     runtime = AgentRuntime(config, model_client=client)
-    result = runtime.run_turn("Read a.txt. No prose response is required after the read succeeds.")
+    result = runtime.run_turn(
+        "Read a.txt. No prose response is required after the read succeeds.",
+        allow_silent_completion=True,
+    )
     assert result.assistant_text == ""
     assert len(result.tool_results) == 1
     events = runtime.history.read_history(result.session_id)
