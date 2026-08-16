@@ -264,6 +264,7 @@ class AgentRuntime:
         consecutive_action_occurrences = 0
         rejected_signature_counts: dict[str, int] = {}
         rejected_observation_counts: dict[str, int] = {}
+        validation_failure_counts: dict[str, int] = {}
         tool_calls_used = 0
         observation_signatures_since_state_change: set[str] = set()
         recovery_feedback = ""
@@ -347,6 +348,20 @@ class AgentRuntime:
             if selected_action is None:
                 recovery_feedback = validation_feedback or (
                     "The previous mechanical action could not be validated. Produce a different valid action that follows the exact tool schemas and remaining budget."
+                )
+                validation_key = recovery_feedback.strip()
+                validation_failure_counts[validation_key] = validation_failure_counts.get(validation_key, 0) + 1
+                failure_count = validation_failure_counts[validation_key]
+                if failure_count > max(1, int(self.config.runtime.max_repeated_action_occurrences)):
+                    return self._finish_turn(
+                        state,
+                        "I stopped because the model repeated the same invalid action beyond the configured validation-recovery limit.",
+                        tool_results,
+                        budget_reports,
+                    )
+                recovery_feedback += (
+                    f" This same validation failure has now occurred in {failure_count} mechanical cycle(s). "
+                    "Do not retry the same invalid tool usage; choose the explicitly recommended valid tool or a materially different action."
                 )
                 continue
 

@@ -1023,3 +1023,28 @@ def test_duplicate_no_progress_limit_stops_boundedly(make_config, tmp_path) -> N
     result = runtime.run_turn("Read a.txt and answer.")
     assert "no-progress limit" in result.assistant_text
     assert len(client.requests) == 4
+
+
+def test_repeated_validation_failure_stops_boundedly(make_config, tmp_path) -> None:
+    config = make_config(
+        runtime__max_total_actions=36,
+        runtime__max_repeated_action_occurrences=2,
+        model__context_limit=32_000,
+    )
+    config.sessions.root = tmp_path / "sessions"
+    invalid = _action(tool_calls=[("shell_command", {"command": "pytest -q", "background": False})], continue_loop=True)
+    runtime, client = _runtime(make_config, [invalid] * 20)
+    runtime.config = config
+    result = runtime.run_turn("Inspect the project and run its tests.")
+    assert "validation-recovery limit" in result.assistant_text
+    # Three validation attempts per mechanical cycle; with a repeated-cycle limit of 2,
+    # the third failed cycle terminates instead of consuming the global attempt ceiling.
+    assert len(client.requests) == 9
+
+
+def test_shell_command_prompt_guidance_forbids_test_runners() -> None:
+    from swaag.tools.builtin import ShellCommandTool
+    text = f"{ShellCommandTool.description} {ShellCommandTool.usage_guidance}".lower()
+    assert "run_tests" in text
+    assert "pytest" in text
+    assert "never run" in text or "forbidden" in text

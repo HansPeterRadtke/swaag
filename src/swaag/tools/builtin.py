@@ -887,9 +887,10 @@ class WorkspaceSnapshotTool(Tool):
 
 class ShellCommandTool(Tool):
     name = "shell_command"
-    description = "Run a shell command in the persistent session workspace."
+    description = "Run a non-test shell command in the persistent session workspace. Test runners are forbidden here; use run_tests for pytest, unittest, tox, nox, and equivalent verification commands."
     usage_guidance = (
         "Return one non-interactive shell command directly executable in the current workspace. "
+        "Never run pytest, py.test, python -m pytest, python -m unittest, tox, nox, or another test runner through shell_command; use run_tests instead so verification evidence is structured. "
         "Do not return only an interpreter name. Set background to true only for work that should continue after the call returns."
     )
     kind = "side_effect"
