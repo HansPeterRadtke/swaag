@@ -1,68 +1,31 @@
 # Memory, Reading, And Editing Policies
 
+## Authority
+
+History is authoritative. Working memory, event memory, notes, summaries, embeddings, indexes, logical file views, and plans are derived working projections. None may silently replace or rewrite the source history.
+
 ## Working memory
 
-Working memory is short-term, structured, and derived.
-It currently tracks:
-- active goal
-- current step id and title
-- recent tool results
-- active entities such as files, notes, and plan id
+Working memory is short-term structured state derived from history. It can track the active goal, current step, recent evidence, active entities, and other bounded task state. Changes are history events so state can be rebuilt.
 
-It is updated through `working_memory_updated` events and rebuilt from history.
-It is never authoritative.
+## Semantic retrieval
 
-## Event Memory
+The desired relevance policy is semantic, not recency-first. A model or model-assisted retrieval phase chooses which older/recent history ranges are relevant to the current effective user objective. Embeddings, lexical search, timestamps, event types, and recency may generate candidates, but deterministic mechanics do not make the final semantic relevance judgment.
 
-The current memory layer stores raw, bounded event snapshots from history.
-It does not extract facts, entities, semantic relationships, procedural
-summaries, or strategy recipes in Python.
+If a semantic scorer is temporarily unavailable, deterministic retrieval may use recency/search as a conservative fallback. That fallback must be recorded and must not be described as equivalent quality.
 
-Current promotion rules:
-- event snapshots retain trust metadata
-- untrusted tool outputs such as file reads are not promoted when
-  `security.block_untrusted_semantic = true`
-- retrieval is recency/mechanics-first unless an explicit model scorer is
-  available
+Untrusted source/tool content keeps trust/provenance metadata. Blocking untrusted text from being promoted into authoritative semantic facts does not mean hiding it from the model when the user's task requires inspecting it; it means preserving provenance and preventing derived memory from treating it as trusted instruction.
 
-Relevant retrieval is explicit and recorded with `memory_retrieved`.
+## Context safety
 
-## Sequential reading
+Every prompt path must account for the entire request and reserve output headroom before calling the model. Context overflow is forbidden. Large tool/source results are stored completely and exposed through bounded previews/retrieval handles rather than dumped blindly into the active prompt.
 
-The sequential reader reads bounded segments only.
-Each reader state tracks:
-- source kind
-- source reference
-- current offset
-- chunk size
-- overlap size
-- finished flag
+## Reading
 
-Reading events include:
-- `reader_opened`
-- `reader_chunk_read`
-- `file_chunk_read` or `buffer_chunk_read`
-
-The runtime and tools use this instead of dumping whole sources into context.
+The sequential reader supports bounded traversal of large sources and persistent offsets. Targeted search/jump retrieval is also allowed. The agent decides semantically whether sequential reading, search, or another inspection method is appropriate.
 
 ## Editing
 
-The edit engine is pure and deterministic.
-Supported operations:
-- `replace_range`
-- `insert_at`
-- `delete_range`
-- `replace_pattern_once`
-- `replace_pattern_all`
+The deterministic edit engine can provide exact range/pattern operations, previews, and auditable writes. It is an implementation capability, not a requirement that the agent always use a custom edit tool. The general command/process tool remains a valid way to use mature system editing utilities when appropriate.
 
-Editing behavior:
-- dry-run preview records `edit_previewed`
-- real writes record `edit_applied` and then `file_write_applied`
-- file writes happen only through `history.py`
-- backups are optional and policy-controlled
-
-## Tool isolation
-
-Tools run with an isolated copied session context.
-They can inspect structured session data, but they do not receive the live mutable in-memory session object.
-Only structured tool outputs and generated events are allowed back into the runtime.
+All file mutations are recorded with enough information to audit what changed. Tool execution receives isolated structured session context rather than unrestricted mutable runtime internals.
