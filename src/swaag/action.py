@@ -23,7 +23,7 @@ class AgentStatus:
 
     @property
     def importance_rank(self) -> int:
-        return {"minor": 1, "normal": 2, "major": 3}[self.importance]
+        return {"minor": 1, "normal": 2, "major": 3, "critical": 4}[self.importance]
 
 
 @dataclass(slots=True, frozen=True)
@@ -31,6 +31,7 @@ class AgentAction:
     assistant_message: str
     tool_calls: list[AgentToolCall]
     continue_loop: bool
+    silent_completion: bool
     status: AgentStatus
 
     @property
@@ -45,6 +46,7 @@ def action_from_payload(payload: dict[str, Any], *, enabled_tool_names: Iterable
     assistant_message = payload.get("assistant_message")
     tool_calls_payload = payload.get("tool_calls")
     continue_loop = payload.get("continue_loop")
+    silent_completion = payload.get("silent_completion", False)
     status_payload = payload.get("status")
     if status_payload is None:
         # Backward compatibility for pre-status stored actions and test fixtures.
@@ -56,6 +58,8 @@ def action_from_payload(payload: dict[str, Any], *, enabled_tool_names: Iterable
         raise ActionValidationError("tool_calls must be an array")
     if not isinstance(continue_loop, bool):
         raise ActionValidationError("continue_loop must be a boolean")
+    if not isinstance(silent_completion, bool):
+        raise ActionValidationError("silent_completion must be a boolean")
     if not isinstance(status_payload, dict):
         raise ActionValidationError("status must be an object")
     required_status = {"situation", "action", "reason", "importance"}
@@ -65,8 +69,8 @@ def action_from_payload(payload: dict[str, Any], *, enabled_tool_names: Iterable
         if not isinstance(status_payload.get(key), str):
             raise ActionValidationError(f"status.{key} must be a string")
     importance = status_payload.get("importance")
-    if importance not in {"minor", "normal", "major"}:
-        raise ActionValidationError("status.importance must be one of minor, normal, major")
+    if importance not in {"minor", "normal", "major", "critical"}:
+        raise ActionValidationError("status.importance must be one of minor, normal, major, critical")
     status = AgentStatus(
         situation=status_payload["situation"],
         action=status_payload["action"],
@@ -95,9 +99,16 @@ def action_from_payload(payload: dict[str, Any], *, enabled_tool_names: Iterable
         raise ActionValidationError(
             "continue_loop=true requires at least one tool call; use a wait tool when waiting is required"
         )
+    if silent_completion and (continue_loop or tool_calls):
+        raise ActionValidationError("silent_completion=true is valid only for a terminal action with no tool calls")
+    if not continue_loop and not assistant_message.strip() and not silent_completion:
+        raise ActionValidationError(
+            "Terminal actions require a non-empty assistant_message unless silent_completion=true because the user/protocol explicitly requested no user-facing response"
+        )
     return AgentAction(
         assistant_message=assistant_message,
         tool_calls=tool_calls,
         continue_loop=continue_loop,
+        silent_completion=silent_completion,
         status=status,
     )

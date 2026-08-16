@@ -271,7 +271,7 @@ REQUIRED_PAYLOAD_KEYS: dict[str, frozenset[str]] = {
     "agent_action_rejected": frozenset({"action_index", "validation_attempt", "reason"}),
     "agent_action_selected": frozenset({"action_index", "action", "occurrence"}),
     "agent_status": frozenset({"action_index", "situation", "action", "reason", "importance", "importance_rank"}),
-    "agent_action_terminal": frozenset({"action_index", "continue_loop"}),
+    "agent_action_terminal": frozenset({"action_index", "continue_loop", "silent_completion"}),
     "agent_tool_call_completed": frozenset({"action_index", "tool_call_index", "tool_name", "success"}),
     "assistant_progress": frozenset({"action_index", "assistant_text"}),
     "tool_result_missing": frozenset({"tool_name", "action_index"}),

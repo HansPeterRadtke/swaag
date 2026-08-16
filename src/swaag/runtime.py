@@ -506,6 +506,7 @@ class AgentRuntime:
                 {
                     "action_index": action_index,
                     "continue_loop": selected_action.continue_loop,
+                    "silent_completion": selected_action.silent_completion,
                 },
             )
             return self._finish_turn(

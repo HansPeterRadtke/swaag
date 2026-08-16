@@ -103,6 +103,7 @@ def _action(
     status_action: str = "Choose and execute the next useful action.",
     reason: str = "This advances the user's request using current evidence.",
     importance: str = "normal",
+    silent_completion: bool = False,
 ) -> str:
     return json.dumps(
         {
@@ -112,6 +113,7 @@ def _action(
                 for name, arguments in (tool_calls or [])
             ],
             "continue_loop": continue_loop,
+            "silent_completion": silent_completion,
             "status": {
                 "situation": situation,
                 "action": status_action,
@@ -144,7 +146,7 @@ def test_direct_answer_is_one_constrained_model_call_with_all_tools(make_config)
     for tool_name in runtime.tools.tool_names(runtime.config):
         assert f"- name: {tool_name}\n" in prompt
     schema = client.requests[0]["json_schema"]
-    assert set(schema["properties"]) == {"assistant_message", "tool_calls", "continue_loop", "status"}
+    assert set(schema["properties"]) == {"assistant_message", "tool_calls", "continue_loop", "silent_completion", "status"}
     events = runtime.history.read_history(result.session_id)
     assert not any(event.event_type in {"plan_created", "plan_updated"} for event in events)
     assert not any(event.event_type.startswith("plan_") for event in events)
@@ -633,15 +635,26 @@ def test_benchmark_answer_fragments_are_case_insensitive_and_support_alternative
     assert report.checks["expected_answer_contains"] is True
     assert report.checks["expected_answer_any_of"] is True
 
-def test_action_parser_allows_empty_terminal_message_after_tool_work() -> None:
+def test_action_parser_rejects_empty_terminal_message_without_explicit_silence() -> None:
+    import pytest
+    from swaag.action import ActionValidationError, action_from_payload
+    with pytest.raises(ActionValidationError, match="Terminal actions require a non-empty assistant_message"):
+        action_from_payload(
+            {"assistant_message": "", "tool_calls": [], "continue_loop": False, "silent_completion": False},
+            enabled_tool_names=[],
+        )
+
+
+def test_action_parser_allows_explicit_silent_terminal_completion() -> None:
     from swaag.action import action_from_payload
     action = action_from_payload(
-        {"assistant_message": "", "tool_calls": [], "continue_loop": False},
+        {"assistant_message": "", "tool_calls": [], "continue_loop": False, "silent_completion": True},
         enabled_tool_names=[],
     )
     assert action.assistant_message == ""
     assert action.tool_calls == []
     assert action.continue_loop is False
+    assert action.silent_completion is True
 
 
 def test_runtime_can_finish_empty_after_successful_tool_result(make_config, tmp_path) -> None:
@@ -650,7 +663,7 @@ def test_runtime_can_finish_empty_after_successful_tool_result(make_config, tmp_
     config.tools.read_roots = [tmp_path]
     (tmp_path / "a.txt").write_text("alpha\n", encoding="utf-8")
     read = _action(tool_calls=[("read_file", {"path": "a.txt"})], continue_loop=True)
-    finish = _action(message="", continue_loop=False)
+    finish = _action(message="", continue_loop=False, silent_completion=True)
     client = FakeModelClient([read, finish])
     runtime = AgentRuntime(config, model_client=client)
     result = runtime.run_turn("Read a.txt. No prose response is required after the read succeeds.")

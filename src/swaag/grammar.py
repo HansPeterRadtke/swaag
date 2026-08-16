@@ -82,12 +82,13 @@ def agent_action_contract(tool_specs: Iterable[tuple]) -> ContractSpec:
                 "assistant_message": _string(),
                 "tool_calls": _array(tool_call_schema),
                 "continue_loop": _boolean(),
+                "silent_completion": _boolean(),
                 "status": _closed_object(
                     {
                         "situation": _string(),
                         "action": _string(),
                         "reason": _string(),
-                        "importance": {"type": "string", "enum": ["minor", "normal", "major"]},
+                        "importance": {"type": "string", "enum": ["minor", "normal", "major", "critical"]},
                     }
                 ),
             }
