@@ -53,6 +53,28 @@ def test_calculator_tool_executes(make_config) -> None:
     assert result.output["result"] == 14
 
 
+def test_calculator_tool_supports_safe_round(make_config) -> None:
+    registry = ToolRegistry()
+    config = make_config()
+    _, result = registry.dispatch(
+        "calculator",
+        {"expression": "round(42 * 142 / 100 * (100 + 22) / 100)"},
+        config,
+        _empty_state(),
+    )
+    assert result.output["result"] == 73
+    _, result = registry.dispatch("calculator", {"expression": "round(72.7608, 2)"}, config, _empty_state())
+    assert result.output["result"] == 72.76
+
+
+def test_calculator_rejects_arbitrary_function_calls(make_config) -> None:
+    registry = ToolRegistry()
+    config = make_config()
+    for expression in ("abs(-2)", "__import__('os')", "round(1, ndigits=2)"):
+        with pytest.raises(ToolValidationError):
+            registry.dispatch("calculator", {"expression": expression}, config, _empty_state())
+
+
 
 def test_unknown_tool_raises(make_config) -> None:
     with pytest.raises(KeyError):

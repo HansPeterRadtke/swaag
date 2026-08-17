@@ -110,7 +110,7 @@ class TimeNowTool(Tool):
 
 class CalculatorTool(Tool):
     name = "calculator"
-    description = "Evaluate a basic arithmetic expression using +, -, *, /, //, %, **, unary +/-, and parentheses."
+    description = "Evaluate safe arithmetic using +, -, *, /, //, %, **, unary +/-, parentheses, and round(value[, ndigits])."
     kind = "pure"
     output_schema = {
         "type": "object",
@@ -142,6 +142,9 @@ class CalculatorTool(Tool):
         ast.UAdd,
         ast.USub,
         ast.Constant,
+        ast.Call,
+        ast.Name,
+        ast.Load,
     )
 
     def validate(self, raw_input: dict[str, Any]) -> dict[str, Any]:
@@ -155,7 +158,14 @@ class CalculatorTool(Tool):
         for node in ast.walk(tree):
             if not isinstance(node, self._allowed_nodes):
                 raise ToolValidationError(f"Unsupported calculator syntax: {node.__class__.__name__}")
-        return eval(compile(tree, "<calculator>", "eval"), {"__builtins__": {}}, {})
+            if isinstance(node, ast.Call):
+                if not isinstance(node.func, ast.Name) or node.func.id != "round":
+                    raise ToolValidationError("calculator supports only the round(...) function")
+                if node.keywords or len(node.args) not in {1, 2}:
+                    raise ToolValidationError("round(...) requires one or two positional arguments")
+            if isinstance(node, ast.Name) and node.id != "round":
+                raise ToolValidationError(f"Unsupported calculator name: {node.id}")
+        return eval(compile(tree, "<calculator>", "eval"), {"__builtins__": {}, "round": round}, {})
 
     def execute(self, validated_input: dict[str, Any], context: ToolContext) -> ToolExecutionResult:
         result = self._safe_eval(validated_input["expression"])
