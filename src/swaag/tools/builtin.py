@@ -887,10 +887,10 @@ class WorkspaceSnapshotTool(Tool):
 
 class ShellCommandTool(Tool):
     name = "shell_command"
-    description = "Run a non-test shell command in the persistent session workspace. Test runners are forbidden here; use run_tests for pytest, unittest, tox, nox, and equivalent verification commands."
+    description = "Run a shell command in the persistent session workspace. Use run_tests when structured pass/fail verification evidence is useful, but ordinary test commands remain valid shell commands."
     usage_guidance = (
         "Return one non-interactive shell command directly executable in the current workspace. "
-        "Never run pytest, py.test, python -m pytest, python -m unittest, tox, nox, or another test runner through shell_command; use run_tests instead so verification evidence is structured. "
+        "Prefer run_tests for test-suite verification when its structured passed/exit_code/stdout/stderr result is useful; shell_command remains a general execution primitive and may run the same commands when appropriate. "
         "Do not return only an interpreter name. Set background to true only for work that should continue after the call returns."
     )
     kind = "side_effect"
@@ -932,16 +932,6 @@ class ShellCommandTool(Tool):
         if not isinstance(command, str) or not command.strip():
             raise ToolValidationError("shell_command.command must be a non-empty string")
         stripped = command.strip()
-        lowered = stripped.lower()
-        test_runner_patterns = (
-            r"(?:^|[;&|()\s])(?:pytest|py\.test)(?:$|\s)",
-            r"(?:^|[;&|()\s])(?:python|python3|[^\s/]+/python(?:3(?:\.\d+)?)?)\s+-m\s+(?:pytest|unittest)(?:$|\s)",
-            r"(?:^|[;&|()\s])(?:tox|nox)(?:$|\s)",
-        )
-        if any(re.search(pattern, lowered) for pattern in test_runner_patterns):
-            raise ToolValidationError(
-                "shell_command must not run test runners; use run_tests so pass/fail, exit code, stdout, and stderr are returned as structured verification evidence"
-            )
         background = bool(raw_input.get("background", False))
         return {"command": stripped, "background": background}
 
