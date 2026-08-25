@@ -1,0 +1,43 @@
+# Context management implementation contract
+
+Context management is Swaag's primary harness responsibility. Every LLM operation should eventually pass through one context-compilation path.
+
+## Compilation pipeline
+
+1. Identify the semantic operation and model.
+2. Read model context capacity and tokenizer/chat-format behavior.
+3. Choose an explicit output-token reserve.
+4. Account for mandatory input: system and operation instructions, current request, required tool/protocol framing, and other nonoptional material.
+5. Calculate the remaining dynamic-input budget.
+6. Present candidate history, tools, tool results, retrieved sources, files, summaries, and state to semantic selection/reduction operations as needed.
+7. Assemble the candidate request.
+8. Tokenize the actual serialized request.
+9. If it exceeds budget, calculate the required reduction and perform another semantic reduction pass. Never silently truncate semantic data.
+10. Send only after the hard invariant passes.
+11. Record request, response, token accounting, selected projections, and source references in durable history.
+
+## Accounting and allocation
+
+For every call, the target implementation should record model identifier, context capacity, output reserve, safety margin if any, mandatory-input tokens, each dynamic component's tokens, final input tokens, actual output tokens, and provenance identifying which source records produced projections or summaries.
+
+Avoid a universal percentage allocation. A document-extraction call may devote almost all input to a document; a communication call may need status and recent history; a tool-selection call may need capability descriptions and little history. Deterministic code calculates capacities. An LLM decides semantic allocation within them.
+
+Output reserve is chosen before dynamic input is packed. A request that fits only by consuming intended answer space does not fit.
+
+## History and results
+
+Raw history and raw tool results remain durable. Context compilation selects projections. Candidate strategies include recent exact events plus older summaries, hierarchical summaries, semantic retrieval, and targeted re-reading of raw events. These are strategies to benchmark, not universal rules.
+
+If a summary must fit a target token count, give the summarization operation that concrete target and enough task context to preserve relevant information. Re-tokenize the result and retry semantic reduction if necessary.
+
+Tool schemas also consume context. Support capability discovery or staged schema loading. The LLM selects semantically relevant capabilities; deterministic code calculates serialized cost and enforces permissions. Never destroy the only copy of source information because a prompt needs to become smaller.
+
+## Failure modes to test
+
+Test mandatory input exceeding capacity, output reserve exceeding available capacity, oversized tool schemas, enormous tool results, long histories, summaries exceeding targets, summaries losing critical facts, multilingual tokenization differences, model switches with different capacities, tool-call serialization overhead, context expansion after user interruption, and repeated compaction over long-running tasks.
+
+## API direction
+
+Converge on an explicit context compiler rather than distributing token arithmetic across the agent loop. It should accept an operation description, model capabilities, mandatory material, candidate semantic sources, and output requirements, and return a verified model request plus accounting/provenance.
+
+The compiler is not the semantic authority. It invokes semantic LLM operations when selection or compression requires understanding and mechanically verifies their products.

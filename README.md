@@ -4,6 +4,14 @@ SWAAG is a local-first autonomous agent runtime for llama.cpp and OpenAI-compati
 
 The model owns semantic choices. Python owns schemas, constrained decoding, path and permission policy, exact context accounting, tool execution, persistence, replay, retries, and deterministic verification. The runtime never silently repairs semantic output with hard-coded planner logic.
 
+## Design documentation
+
+The implementation is intentionally small while the intended harness architecture is broader. Read these before architectural changes:
+
+- `docs/design-principles.md` — semantic/deterministic boundary, agent behavior, tools, communication, interfaces, and current-versus-target scope.
+- `docs/context-management.md` — primary implementation contract for per-call context calculation, output reservation, history projection, summaries, and tool-result sizing.
+- `docs/research-and-standards.md` — external systems, protocols, benchmarks, and research discipline.
+
 ## Core behavior
 
 Every session has append-only event history and replayable state. Prompt context is assembled from the current request, recent detailed history, model-authored compressed history, durable notes, environment state, scheduled wakeups, and the complete enabled-tool registry. Exact tokenizer-backed budgeting reserves output tokens and a safety margin before any request is admitted. When compaction is required, the model can request bounded verbatim retention of recent messages while Python enforces the hard context limit.
