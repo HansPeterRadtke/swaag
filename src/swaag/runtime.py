@@ -4,7 +4,7 @@ import inspect
 import json
 import sys
 import time
-from dataclasses import asdict, dataclass
+from dataclasses import asdict, dataclass, fields
 from pathlib import Path
 from typing import Any, Callable
 
@@ -19,6 +19,7 @@ from swaag.fsops import ensure_dir, restore_tree, snapshot_tree, write_text
 from swaag.grammar import agent_action_contract, summary_contract, yes_no_contract
 from swaag.history import HistoryInvariantError, HistoryStore
 from swaag.model import LlamaCppClient, ModelClientError
+from swaag.preemption import ModelCallPreempted, ModelCallStateChanged, ModelPreemptionCoordinator
 from swaag.model_cache import build_model_client
 from swaag.notes import select_notes_for_prompt
 from swaag.prompts import PromptBuilder
@@ -90,6 +91,7 @@ class AgentRuntime:
             config,
             request_metadata={"cache_scope": "default_agent_runtime"},
         )
+        self.preemption = ModelPreemptionCoordinator(config.sessions.root)
         self.tools = tool_registry or ToolRegistry()
         self._embedding_indexer: AsyncEmbeddingIndexer | None = None
         event_observer = None
@@ -229,6 +231,11 @@ class AgentRuntime:
         finally:
             self.history.clear_active_run(state.session_id, run_id=run_id)
 
+    def _refresh_state_from_history(self, state: SessionState) -> None:
+        refreshed = self.history.rebuild_from_history(state.session_id, write_projections=False)
+        for item in fields(SessionState):
+            setattr(state, item.name, getattr(refreshed, item.name))
+
     def _run_model_tool_loop(
         self,
         state: SessionState,
@@ -287,6 +294,7 @@ class AgentRuntime:
             validation_feedback = recovery_feedback
             recovery_feedback = ""
             selected_action: AgentAction | None = None
+            state_changed_during_call = False
 
             for validation_attempt in range(1, 4):
                 remaining_tool_calls = self.config.runtime.tool_call_budget - tool_calls_used
@@ -333,6 +341,14 @@ class AgentRuntime:
                         seed_offset=(mechanical_attempt - 1) * 3 + (validation_attempt - 1),
                     )
                     break
+                except ModelCallStateChanged:
+                    self._refresh_state_from_history(state)
+                    recovery_feedback = (
+                        "The target session changed while the previous model request was preempted for communication. "
+                        "The stale request was discarded. Re-evaluate the current authoritative history and continue from the updated state."
+                    )
+                    state_changed_during_call = True
+                    break
                 except (ActionValidationError, ValueError) as exc:
                     validation_feedback = str(exc)
                     self.history.record_event(
@@ -344,6 +360,9 @@ class AgentRuntime:
                             "reason": validation_feedback,
                         },
                     )
+
+            if state_changed_during_call:
+                continue
 
             if selected_action is None:
                 recovery_feedback = validation_feedback or (
@@ -970,6 +989,14 @@ class AgentRuntime:
         # Reusing one fixed seed caused malformed JSON and exact bad actions to recur
         # deterministically even after validation feedback changed.
         request["seed"] = int(self.config.model.seed) + int(seed_offset)
+        call_id = new_id("model_call")
+        active_call = self.preemption.register_active(
+            state.session_id,
+            call_id,
+            prepared.assembly.kind,
+            request,
+        )
+        frozen_request = active_call.request
         transient_attempts = 0
         semantic_attempt = 0
         total_attempt = 0
@@ -983,7 +1010,7 @@ class AgentRuntime:
                     "prompt_mode": prepared.prompt_mode,
                     "attempt": total_attempt,
                     "semantic_attempt": semantic_attempt + 1,
-                    "request": request,
+                    "request": frozen_request,
                     "budget_report": asdict(prepared.report),
                     "policy": asdict(policy),
                     "token_timeout_seconds": policy.effective_timeout_seconds,
@@ -1027,19 +1054,72 @@ class AgentRuntime:
                 send = self.client.send_completion
                 try:
                     signature = inspect.signature(send)
-                    supports_progress = (
-                        "progress_callback" in signature.parameters
-                        or any(
-                            item.kind == inspect.Parameter.VAR_KEYWORD
-                            for item in signature.parameters.values()
-                        )
+                    has_var_kwargs = any(
+                        item.kind == inspect.Parameter.VAR_KEYWORD
+                        for item in signature.parameters.values()
                     )
+                    supports_progress = "progress_callback" in signature.parameters or has_var_kwargs
+                    supports_cancel = "cancel_check" in signature.parameters or has_var_kwargs
                 except (TypeError, ValueError):
                     supports_progress = False
+                    supports_cancel = False
                 kwargs: dict[str, Any] = {"timeout_seconds": policy.effective_timeout_seconds}
                 if supports_progress:
                     kwargs["progress_callback"] = progress_callback
-                completion = send(request, **kwargs)
+                if supports_cancel:
+                    kwargs["cancel_check"] = lambda: self.preemption.pending_for_call(state.session_id, call_id) is not None
+                completion = send(frozen_request, **kwargs)
+            except ModelCallPreempted:
+                pending = self.preemption.pending_for_call(state.session_id, call_id)
+                if pending is None:
+                    self.preemption.clear_active(state.session_id, call_id)
+                    raise
+                self.preemption.mark_interrupted(pending.preemption_id)
+                guard.record(
+                    "model_call_preempted",
+                    {
+                        "kind": prepared.assembly.kind,
+                        "prompt_mode": prepared.prompt_mode,
+                        "attempt": total_attempt,
+                        "call_id": call_id,
+                        "preemption_id": pending.preemption_id,
+                        "request_sha256": active_call.request_sha256,
+                    },
+                )
+                resolved = self.preemption.wait_for_status(
+                    pending.preemption_id,
+                    {"completed", "failed"},
+                    timeout_seconds=max(1.0, float(policy.effective_timeout_seconds)),
+                    poll_seconds=0.02,
+                )
+                if resolved.status == "failed":
+                    self.preemption.clear_active(state.session_id, call_id)
+                    raise ModelClientError(f"communication preemption failed: {resolved.reply or 'unknown error'}")
+                if resolved.target_changed:
+                    self.preemption.clear_active(state.session_id, call_id)
+                    self._refresh_state_from_history(state)
+                    guard = self.history.guard(state, f"model_call:{prepared.assembly.kind}:preemption")
+                    guard.record(
+                        "model_call_replay_invalidated",
+                        {
+                            "kind": prepared.assembly.kind,
+                            "call_id": call_id,
+                            "preemption_id": pending.preemption_id,
+                            "request_sha256": active_call.request_sha256,
+                        },
+                    )
+                    raise ModelCallStateChanged("target session changed during communication; stale model request was not replayed")
+                guard.record(
+                    "model_call_replayed",
+                    {
+                        "kind": prepared.assembly.kind,
+                        "call_id": call_id,
+                        "preemption_id": pending.preemption_id,
+                        "request_sha256": active_call.request_sha256,
+                        "request": frozen_request,
+                    },
+                )
+                continue
             except Exception as exc:
                 if self._is_model_server_unavailable(exc):
                     transient_attempts += 1
@@ -1078,8 +1158,10 @@ class AgentRuntime:
                         },
                     )
                     continue
+                self.preemption.clear_active(state.session_id, call_id)
                 raise
 
+            self.preemption.clear_active(state.session_id, call_id)
             guard.record(
                 "model_response_received",
                 {

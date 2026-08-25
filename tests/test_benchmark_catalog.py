@@ -55,10 +55,14 @@ def test_benchmark_catalog_uses_programmatic_verification_and_anti_tamper_contra
             assert contract.expected_json_schema is not None
             assert contract.forbid_unexpected_workspace_changes is True
         elif task.task_type == "multi_step":
-            assert contract.command
-            assert contract.expected_files or contract.expected_file_patterns
-            assert contract.allowed_modified_files
-            assert contract.forbid_unexpected_workspace_changes is True
+            if contract.require_exact_preemption_replay:
+                assert contract.required_history_events
+                assert contract.forbid_unexpected_workspace_changes is True
+            else:
+                assert contract.command
+                assert contract.expected_files or contract.expected_file_patterns
+                assert contract.allowed_modified_files
+                assert contract.forbid_unexpected_workspace_changes is True
         elif task.task_type == "failure":
             assert contract.expected_files
             assert "false-positive-killer" in task.tags
@@ -206,6 +210,10 @@ def test_final_architecture_capability_tasks_are_present_and_constrained(tmp_pat
     assert "history_retrieved" in sqlite_contract.required_history_events
     status_contract = tasks["capability_structured_status"].create(tmp_path / "status").verification_contract
     assert "agent_status" in status_contract.required_history_events
+    preemption = tasks["capability_communication_preemption_replay"].create(tmp_path / "preemption")
+    assert preemption.communication_probe_question
+    assert preemption.verification_contract.require_exact_preemption_replay is True
+    assert {"model_call_preempted", "model_call_replayed"}.issubset(set(preemption.verification_contract.required_history_events))
     analysis_contract = tasks["capability_grounded_history_analysis"].create(tmp_path / "analysis").verification_contract
     assert {"history_analyze", "history_window"}.issubset(set(analysis_contract.required_tools_used))
     assert {"history_analyzed", "history_window_read"}.issubset(set(analysis_contract.required_history_events))

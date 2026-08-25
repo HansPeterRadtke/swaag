@@ -11,6 +11,7 @@ from typing import Any
 
 from swaag.tools.base import ToolValidationError, _validate_schema_value
 from swaag.types import HistoryEvent, SessionState
+from swaag.utils import sha256_text, stable_json_dumps
 
 
 _BENIGN_DIRS = frozenset({"__pycache__", ".pytest_cache", ".mypy_cache", ".ruff_cache"})
@@ -96,6 +97,33 @@ def verify_benchmark_contract(
         "seen": sorted(seen_events),
         "missing": sorted(required_events - seen_events),
     }
+    if bool(getattr(contract, "require_exact_preemption_replay", False)):
+        preempted = [event for event in events if event.event_type == "model_call_preempted"]
+        replayed = [event for event in events if event.event_type == "model_call_replayed"]
+        exact = False
+        replay_evidence: dict[str, Any] = {"preempted": [], "replayed": []}
+        if preempted and replayed:
+            replay_evidence["preempted"] = [event.payload for event in preempted]
+            replay_evidence["replayed"] = [event.payload for event in replayed]
+            for interrupted in preempted:
+                interrupted_hash = str(interrupted.payload.get("request_sha256", ""))
+                interrupted_id = str(interrupted.payload.get("preemption_id", ""))
+                for replay in replayed:
+                    if str(replay.payload.get("preemption_id", "")) != interrupted_id:
+                        continue
+                    request = replay.payload.get("request")
+                    if not isinstance(request, dict):
+                        continue
+                    serialized = stable_json_dumps(request, indent=None)
+                    replay_hash = sha256_text(serialized)
+                    if interrupted_hash and interrupted_hash == str(replay.payload.get("request_sha256", "")) == replay_hash:
+                        exact = True
+                        break
+                if exact:
+                    break
+        checks["exact_preemption_replay"] = exact
+        evidence["exact_preemption_replay"] = replay_evidence
+
     forbidden_events = set(getattr(contract, "forbidden_history_events", []) or [])
     if forbidden_events:
         checks["forbidden_history_events"] = forbidden_events.isdisjoint(seen_events)

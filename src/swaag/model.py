@@ -5,6 +5,7 @@ import json
 import os
 from urllib.parse import urlparse
 import time
+import threading
 from pathlib import Path
 from typing import Any, Callable
 
@@ -12,6 +13,7 @@ import requests
 
 from swaag.config import AgentConfig
 from swaag.schema_portability import PortableSchemaError, assert_portable_json_schema
+from swaag.preemption import ModelCallPreempted
 from swaag.types import CompletionResult, ContractSpec
 from swaag.utils import sha256_text, stable_json_dumps
 
@@ -288,6 +290,8 @@ class LlamaCppClient:
         *,
         timeout_seconds: int | None = None,
         progress_callback: Callable[[dict[str, Any]], None] | None = None,
+        cancel_check: Callable[[], bool] | None = None,
+        cancel_poll_seconds: float = 0.05,
     ) -> CompletionResult:
         token_timeout_seconds = self._token_timeout_seconds(timeout_seconds)
         stream_payload = dict(payload)
@@ -299,9 +303,33 @@ class LlamaCppClient:
             timeout=(self.config.model.connect_timeout_seconds, token_timeout_seconds),
             stream=True,
         )
+        cancel_observed = threading.Event()
+        stop_watcher = threading.Event()
+        watcher: threading.Thread | None = None
+        if cancel_check is not None:
+            def watch_for_cancel() -> None:
+                while not stop_watcher.wait(max(0.005, float(cancel_poll_seconds))):
+                    try:
+                        should_cancel = bool(cancel_check())
+                    except Exception:
+                        should_cancel = False
+                    if should_cancel:
+                        cancel_observed.set()
+                        close = getattr(response, "close", None)
+                        if callable(close):
+                            close()
+                        return
+            watcher = threading.Thread(target=watch_for_cancel, name="swaag-model-cancel", daemon=True)
+            watcher.start()
         try:
             response.raise_for_status()
         except requests.HTTPError as exc:
+            stop_watcher.set()
+            if watcher is not None:
+                watcher.join(timeout=1.0)
+            close = getattr(response, "close", None)
+            if callable(close):
+                close()
             detail = _http_error_detail(response)
             raise requests.HTTPError(
                 f"{exc} :: {detail}",
@@ -315,6 +343,8 @@ class LlamaCppClient:
         first_token_seconds: float | None = None
         try:
             for raw_line in response.iter_lines(decode_unicode=True):
+                if cancel_observed.is_set():
+                    raise ModelCallPreempted("model call preempted for communication")
                 if not raw_line:
                     continue
                 line = raw_line.strip()
@@ -363,7 +393,22 @@ class LlamaCppClient:
                 if item.get("stop") or _chat_finished(item):
                     break
         except requests.Timeout as exc:
+            if cancel_observed.is_set():
+                raise ModelCallPreempted("model call preempted for communication") from exc
             raise requests.ReadTimeout(f"No streamed model token/event for {token_timeout_seconds:.1f} seconds") from exc
+        except (requests.RequestException, OSError, ValueError) as exc:
+            if cancel_observed.is_set():
+                raise ModelCallPreempted("model call preempted for communication") from exc
+            raise
+        finally:
+            stop_watcher.set()
+            if watcher is not None:
+                watcher.join(timeout=1.0)
+            close = getattr(response, "close", None)
+            if callable(close):
+                close()
+        if cancel_observed.is_set():
+            raise ModelCallPreempted("model call preempted for communication")
         if not content_parts and "content" not in last_body and not _chat_content(last_body):
             raise ModelClientError(f"Streamed completion response missing content: {last_body!r}")
         elapsed_seconds = round(time.monotonic() - started, 3)

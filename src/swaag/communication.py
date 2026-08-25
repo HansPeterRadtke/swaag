@@ -10,6 +10,7 @@ from typing import Any
 
 from swaag.config import AgentConfig
 from swaag.runtime import AgentRuntime
+from swaag.preemption import ModelPreemptionCoordinator
 from swaag.utils import new_id, utc_now_iso
 
 
@@ -109,12 +110,12 @@ class CommunicationService:
         main = AgentRuntime(config)
         assistant = None
         if getattr(config, "communication", None) and config.communication.enabled:
-            assistant_config = copy.deepcopy(config)
             if config.communication.model_base_url:
+                assistant_config = copy.deepcopy(config)
                 assistant_config.model.base_url = config.communication.model_base_url
-            assistant_config.tools.enabled = list(config.communication.enabled_tools)
-            assistant_config.tools.allow_side_effect_tools = False
-            assistant = AgentRuntime(assistant_config)
+                assistant_config.tools.enabled = list(config.communication.enabled_tools)
+                assistant_config.tools.allow_side_effect_tools = False
+                assistant = AgentRuntime(assistant_config)
             return cls(main, assistant_runtime=assistant, max_concurrency=config.communication.max_concurrent_requests)
         return cls(main)
 
@@ -130,23 +131,68 @@ class CommunicationService:
             raise FileNotFoundError(f"Unknown correlation id: {correlation_id}")
         return request
 
+    def _preempt_active_main_call(self, session_id: str, message: str):
+        request = self.runtime.preemption.request_preemption(session_id, message, source="communication")
+        if request is None:
+            return None
+        timeout = max(
+            1.0,
+            float(self.runtime.config.model.structured_timeout_seconds),
+            float(self.runtime.config.model.timeout_seconds),
+        )
+        interrupted = self.runtime.preemption.wait_for_status(
+            request.preemption_id,
+            {"interrupted", "failed"},
+            timeout_seconds=timeout,
+            poll_seconds=0.02,
+        )
+        if interrupted.status == "failed":
+            raise RuntimeError(interrupted.reply or "main model preemption failed")
+        self.runtime.preemption.mark_assistant_running(request.preemption_id)
+        return request
+
+    def _complete_preemption(self, request, *, target_changed: bool, reply: str | None = None) -> None:
+        if request is not None:
+            self.runtime.preemption.complete(
+                request.preemption_id,
+                target_changed=target_changed,
+                reply=reply,
+            )
+
+    def _fail_preemption(self, request, exc: Exception) -> None:
+        if request is not None:
+            self.runtime.preemption.fail(request.preemption_id, f"{type(exc).__name__}: {exc}")
+
+    def _same_model_assistant_answer(self, session_id: str, question: str, status: dict[str, Any]) -> str:
+        prompt = (
+            "You are the communication assistant for another SWAAG agent. Answer the user's status/history question only from the target session evidence below. "
+            "Do not alter the target workspace or target session. If evidence is insufficient, say so.\n\n"
+            f"Target session id: {session_id}\nStatus: {json.dumps(status, sort_keys=True)}\nQuestion: {question}"
+        )
+        communication_session = self.runtime.create_or_load_user_session(f"communication-{session_id}")
+        return self.runtime.run_turn_in_session(communication_session, prompt).assistant_text
+
     def process_once(self, *, session_id: str | None = None) -> CommunicationRequest | None:
         request = self.store.next_pending(session_id)
         if request is None:
             return None
         self.store.set_status(request.correlation_id, "processing")
+        preemption = None
         try:
+            preemption = self._preempt_active_main_call(request.session_id, request.message)
             self.runtime.history.enqueue_control_message(
                 request.session_id,
                 request.message,
                 source=f"communication:{request.correlation_id}",
                 control_id=request.correlation_id,
             )
-            state = self.runtime.create_or_load_session(request.session_id)
+            state = self.runtime.history.rebuild_from_history(request.session_id, write_projections=False)
             result = self.runtime.run_pending_controls_in_session(state)
             reply = result.assistant_text if result is not None else ""
             self.store.set_status(request.correlation_id, "completed", reply=reply)
+            self._complete_preemption(preemption, target_changed=True, reply=reply)
         except Exception as exc:
+            self._fail_preemption(preemption, exc)
             self.store.set_status(request.correlation_id, "failed", reply=f"{type(exc).__name__}: {exc}")
         return self.status(request.correlation_id)
 
@@ -160,15 +206,26 @@ class CommunicationService:
             raise FileNotFoundError("No target session available")
         state = self.runtime.history.rebuild_from_history(session_id, write_projections=False)
         status = self.runtime.session_status_payload(state)
-        if self.assistant_runtime is None:
-            return json.dumps(status, sort_keys=True)
-        prompt = (
-            "You are the communication assistant for another SWAAG agent. Answer the user's status/history question only from the target session evidence below. "
-            "Do not alter the target workspace. If evidence is insufficient, say so.\n\n"
-            f"Target session id: {session_id}\nStatus: {json.dumps(status, sort_keys=True)}\nQuestion: {question}"
-        )
-        communication_session = self.assistant_runtime.create_or_load_user_session(f"communication-{session_id}")
-        return self.assistant_runtime.run_turn_in_session(communication_session, prompt).assistant_text
+        if self.assistant_runtime is not None:
+            prompt = (
+                "You are the communication assistant for another SWAAG agent. Answer the user's status/history question only from the target session evidence below. "
+                "Do not alter the target workspace. If evidence is insufficient, say so.\n\n"
+                f"Target session id: {session_id}\nStatus: {json.dumps(status, sort_keys=True)}\nQuestion: {question}"
+            )
+            communication_session = self.assistant_runtime.create_or_load_user_session(f"communication-{session_id}")
+            return self.assistant_runtime.run_turn_in_session(communication_session, prompt).assistant_text
+
+        preemption = None
+        try:
+            preemption = self._preempt_active_main_call(session_id, question)
+            if preemption is None:
+                return json.dumps(status, sort_keys=True)
+            answer = self._same_model_assistant_answer(session_id, question, status)
+            self._complete_preemption(preemption, target_changed=False, reply=answer)
+            return answer
+        except Exception as exc:
+            self._fail_preemption(preemption, exc)
+            raise
 
 
     async def handle_client(self, reader: asyncio.StreamReader, writer: asyncio.StreamWriter) -> None:

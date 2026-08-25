@@ -237,6 +237,26 @@ def _grounded_history_analysis(workspace: Path) -> TaskScenario:
         ),
     )
 
+def _communication_preemption_replay(workspace: Path) -> TaskScenario:
+    return TaskScenario(
+        prompt=(
+            "Perform this main-agent reasoning turn normally and return a concise completion when done. "
+            "The benchmark harness will inject a concurrent user status question while your first model request is active."
+        ),
+        workspace=workspace,
+        model_client=None,
+        communication_probe_question="What is the main agent doing right now?",
+        communication_probe_wait_seconds=20.0,
+        verification_contract=BenchmarkVerificationContract(
+            task_type="multi_step",
+            required_history_events=["agent_action_selected", "model_call_preempted", "model_call_replayed", "model_response_received", "turn_finished"],
+            required_event_counts={"model_call_preempted": 1, "model_call_replayed": 1},
+            require_exact_preemption_replay=True,
+            forbid_unexpected_workspace_changes=True,
+        ),
+    )
+
+
 def capability_benchmark_tasks() -> list[BenchmarkTaskDefinition]:
     common = {
         "task_type": "multi_step",
@@ -300,6 +320,14 @@ def capability_benchmark_tasks() -> list[BenchmarkTaskDefinition]:
             build=_structured_status,
             build_live=_structured_status,
             tags=["multi-step", "status", "observability", "history"],
+            **common,
+        ),
+        BenchmarkTaskDefinition(
+            task_id="capability_communication_preemption_replay",
+            description="Remain responsive to a concurrent communication request by preempting and byte-identically replaying the active main-model request when no separate assistant model is configured.",
+            build=_communication_preemption_replay,
+            build_live=_communication_preemption_replay,
+            tags=["multi-step", "communication", "preemption", "responsiveness", "replay"],
             **common,
         ),
         BenchmarkTaskDefinition(

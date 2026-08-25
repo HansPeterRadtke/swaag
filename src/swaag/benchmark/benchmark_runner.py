@@ -7,6 +7,7 @@ import os
 import signal
 import shutil
 import time
+import threading
 import urllib.error
 import urllib.request
 from dataclasses import asdict
@@ -28,6 +29,7 @@ from swaag.config import AgentConfig, load_config
 from swaag.live_runtime_profiles import get_documented_final_live_benchmark_recommendation
 from swaag.model import LlamaCppClient
 from swaag.runtime import AgentRuntime
+from swaag.communication import CommunicationService
 from swaag.types import SessionState
 from swaag.model_cache import RecordReplayModelClient
 from swaag.utils import sha256_text, stable_json_dumps
@@ -365,6 +367,47 @@ def _build_agent_behavior_model_client(
 def _seed_scenario_history(runtime: AgentRuntime, state, history_messages: Sequence[Any]) -> None:
     for message in history_messages:
         runtime._record_message(state, message)
+
+def _run_turn_with_communication_probe(runtime: AgentRuntime, state: SessionState, scenario) -> Any:
+    question = str(getattr(scenario, "communication_probe_question", "") or "").strip()
+    if not question:
+        return runtime.run_turn_in_session(state, scenario.prompt)
+
+    holder: dict[str, Any] = {}
+    failure: dict[str, BaseException] = {}
+
+    def run_main_turn() -> None:
+        try:
+            holder["turn"] = runtime.run_turn_in_session(state, scenario.prompt)
+        except BaseException as exc:  # benchmark orchestration must preserve the exact worker failure
+            failure["error"] = exc
+
+    worker = threading.Thread(target=run_main_turn, name="swaag-benchmark-main-turn", daemon=True)
+    worker.start()
+    wait_seconds = max(0.1, float(getattr(scenario, "communication_probe_wait_seconds", 10.0)))
+    deadline = time.monotonic() + wait_seconds
+    active = None
+    while time.monotonic() < deadline:
+        active = runtime.preemption.active_call(state.session_id)
+        if active is not None:
+            break
+        if not worker.is_alive():
+            break
+        time.sleep(0.005)
+    if active is None:
+        worker.join(timeout=0.1)
+        if failure:
+            raise failure["error"]
+        raise RuntimeError("communication probe could not observe an active main-model request before the main turn completed")
+
+    CommunicationService(runtime).answer_status_question(state.session_id, question)
+    worker.join(timeout=wait_seconds)
+    if worker.is_alive():
+        raise TimeoutError("main turn did not resume after communication preemption")
+    if failure:
+        raise failure["error"]
+    return holder["turn"]
+
 
 def _snapshot_workspace(root: Path) -> dict[str, str]:
     snapshot: dict[str, str] = {}
@@ -730,7 +773,7 @@ def run_benchmarks(
             task_started = time.monotonic()
             try:
                 with _benchmark_seed_timeout(effective_task_timeout):
-                    turn = runtime.run_turn_in_session(state, scenario.prompt)
+                    turn = _run_turn_with_communication_probe(runtime, state, scenario)
                 assistant_text = turn.assistant_text
             except BenchmarkSeedTimeout as exc:
                 runtime_error = TimeoutError(str(exc))

@@ -66,6 +66,7 @@ class BenchmarkVerificationContract:
     expected_stop_reason: str | None = None
     allowed_modified_files: list[str] = field(default_factory=list)
     forbid_unexpected_workspace_changes: bool = False
+    require_exact_preemption_replay: bool = False
 
 
 @dataclass(slots=True)
@@ -85,6 +86,8 @@ class TaskScenario:
     expected_failure_category: str | None = None
     oracle: ObservableBehaviorOracle | None = None
     history_messages: list[Message] = field(default_factory=list)
+    communication_probe_question: str | None = None
+    communication_probe_wait_seconds: float = 10.0
 
     def __post_init__(self) -> None:
         if self.oracle is not None and self.model_client is not None:
@@ -2697,9 +2700,13 @@ def validate_benchmark_catalog(tasks: list[BenchmarkTaskDefinition]) -> None:
             if not contract.forbid_unexpected_workspace_changes:
                 raise ValueError(f"Reading task {task.task_id} must forbid unexpected workspace changes")
         if task.task_type == "multi_step":
-            if not contract.command or not (contract.expected_files or contract.expected_file_patterns):
+            history_only_capability = bool(contract.require_exact_preemption_replay)
+            if not history_only_capability and (not contract.command or not (contract.expected_files or contract.expected_file_patterns)):
                 raise ValueError(f"Multi-step task {task.task_id} must verify written artifacts and execute a verifier command")
-            if not contract.allowed_modified_files or not contract.forbid_unexpected_workspace_changes:
+            if history_only_capability:
+                if not contract.forbid_unexpected_workspace_changes:
+                    raise ValueError(f"History-only multi-step task {task.task_id} must forbid unexpected workspace changes")
+            elif not contract.allowed_modified_files or not contract.forbid_unexpected_workspace_changes:
                 raise ValueError(f"Multi-step task {task.task_id} must constrain workspace mutations")
         if task.task_type == "failure":
             if not contract.expected_files or "false-positive-killer" not in task.tags:

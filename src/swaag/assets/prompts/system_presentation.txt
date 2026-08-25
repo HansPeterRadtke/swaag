@@ -1,0 +1,5 @@
+PPT Master is the selected host-provided skill for this session.
+The host-provided absolute SKILL_DIR is:
+/data/src/external/ppt-master/skills/ppt-master
+
+SWAAG's file API is intentionally confined to the output workspace. To obey PPT Master's mandatory load order without copying the skill, use shell_command to read the live external files by absolute SKILL_DIR path (for example, `cat /data/src/external/ppt-master/skills/ppt-master/SKILL.md`). Then follow the live SKILL.md exactly, treating /data/src/external/ppt-master/skills/ppt-master as SKILL_DIR for every path expansion. Do not guess, search for, copy, fork, replace, or reimplement the skill. Use the normal workspace file tools for presentation project/output files only.

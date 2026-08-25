@@ -100,6 +100,9 @@ ALLOWED_EVENT_TYPES = frozenset(
         "model_token_progress",
         "model_response_received",
         "model_call_failed",
+        "model_call_preempted",
+        "model_call_replayed",
+        "model_call_replay_invalidated",
         "model_retry_scheduled",
         "model_tokenize_requested",
         "model_tokenize_result",
@@ -350,6 +353,9 @@ REQUIRED_PAYLOAD_KEYS: dict[str, frozenset[str]] = {
     "model_token_progress": frozenset({"kind", "prompt_mode", "attempt", "elapsed_seconds", "completion_tokens", "tokens_per_second", "first_token_seconds", "token_timeout_seconds"}),
     "model_response_received": frozenset({"kind", "prompt_mode", "attempt", "completion"}),
     "model_call_failed": frozenset({"kind", "prompt_mode", "attempt", "error", "error_type"}),
+    "model_call_preempted": frozenset({"kind", "prompt_mode", "attempt", "call_id", "preemption_id", "request_sha256"}),
+    "model_call_replayed": frozenset({"kind", "call_id", "preemption_id", "request_sha256", "request"}),
+    "model_call_replay_invalidated": frozenset({"kind", "call_id", "preemption_id", "request_sha256"}),
     "model_retry_scheduled": frozenset({"kind", "prompt_mode", "next_attempt"}),
     # text_hash alone keeps old histories valid while new events add text_chars
     # and intentionally omit raw model-visible text.
