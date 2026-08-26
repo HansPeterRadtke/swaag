@@ -42,6 +42,8 @@ If a summary must fit a target token count, give the summarization operation tha
 
 Tool schemas also consume context. Support capability discovery or staged schema loading. The LLM selects semantically relevant capabilities; deterministic code calculates serialized cost and enforces permissions. Never destroy the only copy of source information because a prompt needs to become smaller.
 
+Attachments enter context as a separate reference component containing only mechanical metadata: stable attachment ID, original name, likely media type, byte size, content hash, source, and event lineage. Raw content remains in content-addressed storage outside disposable session projections. Uploading never triggers extraction. If inspection is semantically useful, the LLM loads and calls a direct text reader, all2text, or a future specialist capability. Bounded previews must retain an exact raw or derived artifact reference and flow through the same measured tool-result projection path as other observations.
+
 ## Failure modes to test
 
 Test mandatory input exceeding capacity, minimum output exceeding available capacity, desired headroom under input pressure, output-limit finish reasons and reconstruction, oversized tool schemas, enormous tool results, long histories, summaries exceeding targets, summaries losing critical facts, multilingual tokenization differences, model switches with different capacities, tool-call serialization overhead, context expansion after user interruption, and repeated compaction over long-running tasks.

@@ -190,6 +190,14 @@ class ArchiveConfig:
 
 
 @dataclass(slots=True)
+class AttachmentConfig:
+    max_upload_bytes: int
+    preview_chars: int
+    extraction_timeout_seconds: int
+    all2text_command: str
+
+
+@dataclass(slots=True)
 class McpConfig:
     enabled: bool
     transport: str
@@ -289,6 +297,7 @@ class AgentConfig:
     history_search: HistorySearchConfig
     embedding_index: EmbeddingIndexConfig
     archive: ArchiveConfig
+    attachments: AttachmentConfig
     mcp: McpConfig
     communication: CommunicationConfig
     budget_policy: BudgetPolicyConfig
@@ -417,6 +426,12 @@ def _coerce_config(data: dict[str, Any]) -> AgentConfig:
         remove_active_after_archive=bool(data["archive"]["remove_active_after_archive"]),
         min_age_days=int(data["archive"]["min_age_days"]),
         min_event_count=int(data["archive"]["min_event_count"]),
+    )
+    attachments = AttachmentConfig(
+        max_upload_bytes=int(data["attachments"]["max_upload_bytes"]),
+        preview_chars=int(data["attachments"]["preview_chars"]),
+        extraction_timeout_seconds=int(data["attachments"]["extraction_timeout_seconds"]),
+        all2text_command=str(data["attachments"]["all2text_command"]),
     )
     mcp = McpConfig(
         enabled=bool(data["mcp"]["enabled"]),
@@ -647,6 +662,11 @@ def _coerce_config(data: dict[str, Any]) -> AgentConfig:
         raise ValueError("embedding_index.base_url and embedding_index.model are required when embeddings are enabled")
     _validate_non_negative("archive.min_age_days", archive.min_age_days)
     _validate_non_negative("archive.min_event_count", archive.min_event_count)
+    _validate_positive("attachments.max_upload_bytes", attachments.max_upload_bytes)
+    _validate_positive("attachments.preview_chars", attachments.preview_chars)
+    _validate_positive("attachments.extraction_timeout_seconds", attachments.extraction_timeout_seconds)
+    if not attachments.all2text_command.strip():
+        raise ValueError("attachments.all2text_command must not be empty")
     _validate_positive("communication.max_concurrent_requests", communication.max_concurrent_requests)
     _validate_positive("communication.port", communication.port)
     if not 1 <= communication.port <= 65535:
@@ -672,6 +692,7 @@ def _coerce_config(data: dict[str, Any]) -> AgentConfig:
         history_search=history_search,
         embedding_index=embedding_index,
         archive=archive,
+        attachments=attachments,
         mcp=mcp,
         communication=communication,
         budget_policy=budget_policy,

@@ -12,6 +12,7 @@ from swaag.environment.state import EnvironmentState, ProcessRecord, ShellSessio
 from swaag.history_archive import HistoryArchiveStore
 from swaag.events import ALLOWED_EVENT_TYPES, READABLE_EVENT_TYPES, EventSchemaError, create_event, verify_event_integrity
 from swaag.types import (
+    AttachmentReference,
     CodeCheckpoint,
     DeferredTask,
     DerivedFileWrite,
@@ -52,6 +53,7 @@ _STATEFUL_REBUILD_EVENT_TYPES = frozenset(
         "deferred_task_consumed",
         "code_checkpoint_created",
         "code_checkpoint_restored",
+        "attachment_added",
         "note_added",
         "note_replaced",
         "notes_compacted",
@@ -1297,6 +1299,21 @@ class HistoryStore:
             return
         if event.event_type == "code_checkpoint_restored":
             return
+        if event.event_type == "attachment_added":
+            reference_payload = dict(payload["attachment"])
+            reference_metadata = dict(reference_payload.get("metadata", {}))
+            reference_metadata.setdefault("source_event_sequence", event.sequence)
+            reference_metadata.setdefault("source_event_hash", event.hash)
+            reference_metadata.setdefault("source_event_type", event.event_type)
+            reference_metadata.setdefault("source_event_session_id", event.session_id)
+            reference_payload["metadata"] = reference_metadata
+            reference = AttachmentReference(**reference_payload)
+            state.attachments = [
+                item for item in state.attachments
+                if item.attachment_id != reference.attachment_id
+            ]
+            state.attachments.append(reference)
+            return
         if event.event_type == "note_added":
             note = Note(**payload["note"])
             state.notes = [item for item in state.notes if item.note_id != note.note_id]
@@ -1573,6 +1590,7 @@ def _state_from_payload(payload: dict[str, Any]) -> SessionState:
         environment=_environment_from_payload(payload.get("environment", {})),
         deferred_tasks=[DeferredTask(**item) for item in payload.get("deferred_tasks", [])],
         code_checkpoints=[CodeCheckpoint(**item) for item in payload.get("code_checkpoints", [])],
+        attachments=[AttachmentReference(**item) for item in payload.get("attachments", [])],
         metrics=SessionMetrics(**{
             key: value
             for key, value in payload.get("metrics", {}).items()

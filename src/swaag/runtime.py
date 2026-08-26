@@ -11,6 +11,7 @@ from typing import Any, Callable
 import requests
 
 from swaag.action import ActionValidationError, AgentAction, action_from_payload
+from swaag.attachments import AttachmentStore
 from swaag.compression import message_source_event_references, summary_message_payload
 from swaag.context_compiler import ContextCompilation, ContextCompiler
 from swaag.config import AgentConfig, load_config
@@ -38,6 +39,7 @@ from swaag.scheduler import WakeupStore
 from swaag.tokens import ConservativeEstimator, CountResult, ExactTokenCounter, build_budget
 from swaag.tools.registry import ToolRegistry
 from swaag.types import (
+    AttachmentReference,
     BudgetReport,
     CompletionResult,
     ContractSpec,
@@ -168,6 +170,34 @@ class AgentRuntime:
         self._ensure_environment_initialized(state)
         self._deliver_due_wakeups(state)
         return state
+
+    def add_attachment(
+        self,
+        data: bytes,
+        *,
+        original_name: str,
+        media_type: str = "",
+        source: str = "api",
+        session_id: str | None = None,
+    ) -> AttachmentReference:
+        if session_id:
+            resolved = self.history.resolve_session_ref(session_id, latest_if_none=False)
+            if resolved is not None and not self.history.history_path(resolved).exists():
+                raise RuntimeError(f"attachments cannot be added to archived session: {resolved}")
+        state = self.create_or_load_session(session_id)
+        if self.history.read_active_run(state.session_id) is not None:
+            raise RuntimeError("attachments cannot be added through the idle-session API during an active run")
+        reference = AttachmentStore(
+            self.config.sessions.root,
+            max_upload_bytes=self.config.attachments.max_upload_bytes,
+        ).add_bytes(
+            data,
+            original_name=original_name,
+            media_type=media_type,
+            source=source,
+        )
+        self.history.record_event(state, "attachment_added", {"attachment": asdict(reference)})
+        return reference
 
 
     def _deliver_due_wakeups(self, state: SessionState) -> None:
@@ -1189,6 +1219,24 @@ class AgentRuntime:
                 text="Environment state:\n" + stable_json_dumps(environment, indent=2) + "\n\n",
             )
         ]
+        if state.attachments:
+            references = []
+            for attachment in state.attachments:
+                payload = asdict(attachment)
+                payload.pop("storage_ref", None)
+                references.append(payload)
+            components.append(
+                PromptComponent(
+                    name="attachment_references",
+                    category="attachments",
+                    text=(
+                        "Raw attachments available to this task. These are references and cheap mechanical facts only; "
+                        "decide whether and how to inspect them with an attachment capability:\n"
+                        + stable_json_dumps(references, indent=2)
+                        + "\n\n"
+                    ),
+                )
+            )
         selected = select_notes_for_prompt(self.config, state.notes, counter)
         self.history.record_event(
             state,

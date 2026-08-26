@@ -224,6 +224,19 @@ class CodeCheckpoint:
     metadata: dict[str, Any] = field(default_factory=dict)
 
 
+@dataclass(slots=True, frozen=True)
+class AttachmentReference:
+    attachment_id: str
+    original_name: str
+    media_type: str
+    size_bytes: int
+    sha256: str
+    storage_ref: str
+    created_at: str
+    source: str
+    metadata: dict[str, Any] = field(default_factory=dict)
+
+
 @dataclass(slots=True)
 class SessionState:
     session_id: str
@@ -241,6 +254,7 @@ class SessionState:
     environment: EnvironmentState = field(default_factory=EnvironmentState)
     deferred_tasks: list[DeferredTask] = field(default_factory=list)
     code_checkpoints: list[CodeCheckpoint] = field(default_factory=list)
+    attachments: list[AttachmentReference] = field(default_factory=list)
     metrics: SessionMetrics = field(default_factory=SessionMetrics)
     turn_count: int = 0
     compaction_count: int = 0

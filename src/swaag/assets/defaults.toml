@@ -73,7 +73,7 @@ background_poll_seconds = 0.1
 # allow_side_effect_tools: set true only if destructive writes are intended.
 # -----------------------------------------------------------
 [tools]
-enabled = ["echo", "time_now", "calculator", "list_files", "read_file", "read_text", "history_search", "history_window", "history_analyze", "read_artifact", "terminal", "notes", "edit_text", "write_file", "run_tests", "shell_command", "poll_process", "kill_process", "wait_seconds", "schedule_wakeup", "list_wakeups", "cancel_wakeup"]
+enabled = ["echo", "time_now", "calculator", "list_files", "read_file", "read_text", "history_search", "history_window", "history_analyze", "read_artifact", "list_attachments", "read_attachment", "extract_attachment", "terminal", "notes", "edit_text", "write_file", "run_tests", "shell_command", "poll_process", "kill_process", "wait_seconds", "schedule_wakeup", "list_wakeups", "cancel_wakeup"]
 read_roots = ["."]
 allow_stateful_tools = true
 allow_side_effect_tools = false
@@ -275,6 +275,14 @@ enabled = true
 remove_active_after_archive = false
 min_age_days = 30
 min_event_count = 100
+
+# Raw bytes are content-addressed outside disposable session projections.
+# Extraction is opt-in through a model-selected tool and never runs on upload.
+[attachments]
+max_upload_bytes = 104857600
+preview_chars = 12000
+extraction_timeout_seconds = 300
+all2text_command = "all2text"
 
 # -----------------------------------------------------------
 # [mcp] — EXTERNAL INTEROPERABILITY BOUNDARY

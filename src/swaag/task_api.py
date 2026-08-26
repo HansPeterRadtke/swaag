@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+import base64
+import binascii
 from dataclasses import asdict
 from typing import Any
 
@@ -18,7 +20,22 @@ class TaskApi:
         args = dict(payload or {})
         if operation == "create":
             objective = _required_text(args, "objective")
+            attachment_payloads = args.get("attachments", [])
+            if not isinstance(attachment_payloads, list):
+                raise ValueError("attachments must be an array")
+            decoded_attachments = [_attachment_payload(item) for item in attachment_payloads]
+            max_bytes = self.workers.runtime.config.attachments.max_upload_bytes
+            if any(len(data) > max_bytes for _name, _media_type, data in decoded_attachments):
+                raise ValueError(f"attachment exceeds max_upload_bytes: {max_bytes}")
             record = self.workers.create(objective, name=_optional_text(args, "name"))
+            for name, media_type, data in decoded_attachments:
+                self.workers.add_attachment(
+                    record.worker_id,
+                    data,
+                    original_name=name,
+                    media_type=media_type,
+                    source="task_api_create",
+                )
             if bool(args.get("start", False)):
                 record = self.workers.start(record.worker_id)
             return self._record(record)
@@ -58,6 +75,27 @@ class TaskApi:
             return self._record(record)
         if operation == "archive":
             return self._record(self.workers.archive(_required_text(args, "worker_id")))
+        if operation == "attachment.add":
+            worker_id = _required_text(args, "worker_id")
+            name, media_type, data = _attachment_payload(args)
+            reference = self.workers.add_attachment(
+                worker_id,
+                data,
+                original_name=name,
+                media_type=media_type,
+                source=_optional_text(args, "source") or "task_api",
+            )
+            payload = asdict(reference)
+            payload.pop("storage_ref", None)
+            return {"version": self.version, "worker_id": worker_id, "attachment": payload}
+        if operation == "attachment.list":
+            worker_id = _required_text(args, "worker_id")
+            attachments = []
+            for reference in self.workers.attachments(worker_id):
+                payload = asdict(reference)
+                payload.pop("storage_ref", None)
+                attachments.append(payload)
+            return {"version": self.version, "worker_id": worker_id, "attachments": attachments}
         if operation == "events":
             worker_id = _required_text(args, "worker_id")
             after = args.get("after_sequence", 0)
@@ -90,3 +128,18 @@ def _optional_text(payload: dict[str, Any], key: str) -> str | None:
     if not isinstance(value, str):
         raise ValueError(f"{key} must be a string or null")
     return value.strip() or None
+
+
+def _attachment_payload(payload: Any) -> tuple[str, str, bytes]:
+    if not isinstance(payload, dict):
+        raise ValueError("attachment must be an object")
+    name = _required_text(payload, "original_name")
+    media_type = _optional_text(payload, "media_type") or ""
+    encoded = payload.get("content_base64")
+    if not isinstance(encoded, str) or not encoded:
+        raise ValueError("content_base64 must be a non-empty base64 string")
+    try:
+        data = base64.b64decode(encoded, validate=True)
+    except (ValueError, binascii.Error) as exc:
+        raise ValueError("content_base64 is invalid") from exc
+    return name, media_type, data

@@ -65,6 +65,15 @@ def test_visible_editor_backups_are_disabled_by_default() -> None:
     assert config.editor.create_backups is False
 
 
+def test_attachment_defaults_preserve_raw_bytes_without_automatic_extraction() -> None:
+    config = load_config()
+
+    assert config.attachments.max_upload_bytes == 100 * 1024 * 1024
+    assert config.attachments.preview_chars == 12000
+    assert config.attachments.all2text_command == "all2text"
+    assert {"list_attachments", "read_attachment", "extract_attachment"}.issubset(config.tools.enabled)
+
+
 
 
 def test_budget_policy_safe_input_floor_is_loaded_from_defaults() -> None:

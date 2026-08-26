@@ -98,11 +98,11 @@ This is the gap list between the current repository and the intended architectur
 
 ## P1 - attachment and file handling
 
-- [ ] **Add first-class raw attachment references to session/task state.** Preserve original bytes and stable metadata before semantic inspection.
-- [ ] **Do only cheap deterministic file facts automatically.** Size, name, storage reference, and safely detected type are mechanical; what the file means or whether it should be inspected is semantic.
-- [ ] **Let an LLM decide whether a task requires content analysis and which capability to use.** Do not automatically convert every file to text.
-- [ ] **Integrate all2text/Docling/image/OCR/speech/specialized readers as selectable capabilities rather than mandatory ingestion stages.**
-- [ ] **Budget extracted content like any other large tool result.** Preserve raw source and extracted representation outside context and project only what a call needs.
+- [x] **Add first-class raw attachment references to session/task state.** Content-addressed raw bytes survive disposable session projections and archival; exact attachment events carry stable ID/name/type/size/hash/source lineage through replay, worker inspection, and the task API.
+- [x] **Do only cheap deterministic file facts automatically.** Upload records bytes, size, name, hash, and a MIME guess but never reads or converts content into the model context.
+- [x] **Let an LLM decide whether a task requires content analysis and which capability to use.** Context contains references only; `read_attachment` and `extract_attachment` are staged capabilities selected through the normal semantic tool loop.
+- [ ] **Integrate all2text/Docling/image/OCR/speech/specialized readers as selectable capabilities rather than mandatory ingestion stages.** **Partial.** The configurable `extract_attachment` adapter invokes all2text only when selected, retains its auditable manifest and complete output artifact, and was exercised against the real local all2text command. all2text can route optional providers, but dedicated multimodal/Docling/speech capabilities and availability reporting still need implementation and evaluation.
+- [ ] **Budget extracted content like any other large tool result.** **Partial.** Bounded previews retain exact full artifacts and raw-attachment lineage, and normal measured tool-result overflow projection applies. Preserve derived extraction artifacts across session archival and add attachment-specific projection/re-expansion tests.
 - [ ] **Add attachment tasks that require no inspection, partial inspection, and deep multimodal inspection to benchmarks.**
 
 ## P1 - observability and logging

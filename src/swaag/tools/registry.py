@@ -8,6 +8,7 @@ from swaag.config import AgentConfig
 from swaag.environment.environment import AgentEnvironment
 from swaag.tools.base import Tool, ToolContext, ToolValidationError
 from swaag.tools.artifacts import ARTIFACT_TOOLS
+from swaag.tools.attachments import ATTACHMENT_TOOLS
 from swaag.tools.builtin import BUILTIN_TOOLS
 from swaag.tools.history import HISTORY_TOOLS
 from swaag.tools.terminal import TERMINAL_TOOLS
@@ -77,7 +78,14 @@ class LoadToolsTool(Tool):
 class ToolRegistry:
     def __init__(self, tools: Iterable[Tool] | None = None):
         self._tools: dict[str, Tool] = {}
-        for tool in tools or [*BUILTIN_TOOLS, *HISTORY_TOOLS, *ARTIFACT_TOOLS, *TERMINAL_TOOLS, *CONTROL_TOOLS]:
+        for tool in tools or [
+            *BUILTIN_TOOLS,
+            *HISTORY_TOOLS,
+            *ARTIFACT_TOOLS,
+            *ATTACHMENT_TOOLS,
+            *TERMINAL_TOOLS,
+            *CONTROL_TOOLS,
+        ]:
             self.register(tool)
         if "load_tools" not in self._tools:
             self.register(LoadToolsTool(self))

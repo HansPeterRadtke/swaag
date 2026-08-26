@@ -11,6 +11,7 @@ from typing import Any, Iterable
 
 from swaag.preemption import RunCancellationRequested
 from swaag.runtime import AgentRuntime
+from swaag.types import AttachmentReference
 from swaag.utils import new_id, stable_json_dumps, utc_now_iso
 
 
@@ -437,6 +438,50 @@ class WorkerManager:
         archived = self.runtime.history.archive_session(current.session_id, remove_active=True)
         return self.store.mark_archived(worker_id, archive=archived)
 
+    def add_attachment(
+        self,
+        worker_id: str,
+        data: bytes,
+        *,
+        original_name: str,
+        media_type: str = "",
+        source: str = "task_api",
+    ) -> AttachmentReference:
+        current = self.store.get(worker_id)
+        if current.archived_at is not None:
+            raise ValueError(f"Worker {worker_id} is archived")
+        if current.status in WORKER_ACTIVE_STATES:
+            raise ValueError(
+                f"Worker {worker_id} is {current.status}; attach raw inputs before starting or after it becomes idle"
+            )
+        reference = self.runtime.add_attachment(
+            data,
+            original_name=original_name,
+            media_type=media_type,
+            source=source,
+            session_id=current.session_id,
+        )
+        self.store.append_event(
+            worker_id,
+            "worker_attachment_added",
+            {
+                "attachment_id": reference.attachment_id,
+                "original_name": reference.original_name,
+                "media_type": reference.media_type,
+                "size_bytes": reference.size_bytes,
+                "sha256": reference.sha256,
+                "source": reference.source,
+            },
+        )
+        return reference
+
+    def attachments(self, worker_id: str) -> list[AttachmentReference]:
+        record = self.store.get(worker_id)
+        state = self.runtime.history.rebuild_from_history(
+            record.session_id, write_projections=False
+        )
+        return list(state.attachments)
+
     def inspect(self, worker_id: str) -> dict[str, Any]:
         record = self.store.get(worker_id)
         active_run = self.runtime.history.read_active_run(record.session_id)
@@ -447,6 +492,14 @@ class WorkerManager:
             **asdict(record),
             "active_run": active_run,
             "semantic_status": self.runtime.session_status_payload(state),
+            "attachments": [
+                {
+                    key: value
+                    for key, value in asdict(item).items()
+                    if key != "storage_ref"
+                }
+                for item in state.attachments
+            ],
             "latest_event_sequence": self.store.events(worker_id)[-1].sequence,
         }
 
