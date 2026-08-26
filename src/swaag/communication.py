@@ -10,6 +10,11 @@ from typing import Any
 
 from swaag.config import AgentConfig
 from swaag.heartbeat import systemd_notify, watchdog_interval_seconds
+from swaag.protocol_adapters import (
+    A2AProjectionAdapter,
+    AgUiProjectionAdapter,
+    OpenWebUiProjectionAdapter,
+)
 from swaag.runtime import AgentRuntime
 from swaag.task_api import TaskApi
 from swaag.utils import new_id, utc_now_iso
@@ -231,6 +236,41 @@ class CommunicationService:
             self._fail_preemption(preemption, exc)
             raise
 
+    def protocol_projection(
+        self,
+        protocol: str,
+        operation: str,
+        params: dict[str, Any],
+    ) -> dict[str, Any]:
+        worker_id = str(params.get("worker_id", "")).strip()
+        if not worker_id:
+            raise ValueError("worker_id must be a non-empty string")
+        record = self.workers.store.get(worker_id)
+        if protocol == "a2a" and operation == "get":
+            return {
+                "protocol": A2AProjectionAdapter.protocol_version,
+                "task": A2AProjectionAdapter().task(record),
+            }
+        if protocol == "open_webui" and operation == "get":
+            return OpenWebUiProjectionAdapter().response(record)
+        if protocol == "ag_ui" and operation == "events":
+            page = self.task_api.execute("events", params)
+            projected = AgUiProjectionAdapter().events(
+                record,
+                [
+                    self.workers.event_from_payload(item)
+                    for item in page["events"]
+                ],
+            )
+            return {
+                "protocol": "ag-ui",
+                "worker_id": worker_id,
+                "events": projected,
+                "next_sequence": page["next_sequence"],
+                "has_more": page["has_more"],
+            }
+        raise ValueError(f"unsupported protocol operation: {protocol}.{operation}")
+
 
     async def handle_client(self, reader: asyncio.StreamReader, writer: asyncio.StreamWriter) -> None:
         try:
@@ -269,6 +309,16 @@ class CommunicationService:
                                 op.removeprefix("task."),
                                 params,
                             )
+                    elif op.startswith(("ag_ui.", "a2a.", "open_webui.")):
+                        params = request.get("params") or {}
+                        if not isinstance(params, dict):
+                            raise ValueError("protocol operation params must be an object")
+                        protocol, operation = op.split(".", 1)
+                        response = self.protocol_projection(
+                            protocol,
+                            operation,
+                            params,
+                        )
                     else:
                         raise ValueError(f"unknown communication op: {op}")
                     payload = {"ok": True, "result": response}

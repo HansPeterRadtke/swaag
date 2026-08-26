@@ -549,6 +549,10 @@ class WorkerManager:
     def events(self, worker_id: str, *, after_sequence: int = 0) -> list[WorkerEvent]:
         return self.store.events(worker_id, after_sequence=after_sequence)
 
+    @staticmethod
+    def event_from_payload(payload: dict[str, Any]) -> WorkerEvent:
+        return WorkerEvent(**payload)
+
     def structured_output(self, worker_id: str) -> dict[str, Any] | None:
         return self._structured_output_from_events(self.store.events(worker_id))
 

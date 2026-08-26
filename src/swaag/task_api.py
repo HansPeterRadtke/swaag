@@ -118,12 +118,21 @@ class TaskApi:
             after = args.get("after_sequence", 0)
             if not isinstance(after, int) or isinstance(after, bool) or after < 0:
                 raise ValueError("after_sequence must be a non-negative integer")
-            events = self.workers.events(worker_id, after_sequence=after)
+            limit = args.get("limit", 200)
+            if (
+                not isinstance(limit, int)
+                or isinstance(limit, bool)
+                or not 1 <= limit <= 1000
+            ):
+                raise ValueError("limit must be an integer between 1 and 1000")
+            available = self.workers.events(worker_id, after_sequence=after)
+            events = available[:limit]
             return {
                 "version": self.version,
                 "worker_id": worker_id,
                 "events": [asdict(item) for item in events],
                 "next_sequence": events[-1].sequence if events else after,
+                "has_more": len(available) > len(events),
             }
         raise ValueError(f"Unknown task operation: {operation}")
 

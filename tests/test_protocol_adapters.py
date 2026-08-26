@@ -49,12 +49,26 @@ def test_task_api_is_transport_neutral_and_cursor_based(make_config) -> None:
     listed = api.execute("list")
     events = api.execute("events", {"worker_id": worker_id, "after_sequence": 0})
     canceled = api.execute("cancel", {"worker_id": worker_id, "reason": "not needed"})
+    first_page = api.execute(
+        "events", {"worker_id": worker_id, "after_sequence": 0, "limit": 1}
+    )
+    second_page = api.execute(
+        "events",
+        {
+            "worker_id": worker_id,
+            "after_sequence": first_page["next_sequence"],
+            "limit": 100,
+        },
+    )
     manager.shutdown()
 
     assert created["version"] == "swaag.task.v1"
     assert listed["workers"][0]["worker_id"] == worker_id
     assert events["events"][0]["event_type"] == "worker_created"
     assert events["next_sequence"] == 1
+    assert first_page["has_more"] is True
+    assert second_page["events"]
+    assert second_page["has_more"] is False
     assert canceled["worker"]["status"] == "canceled"
 
 

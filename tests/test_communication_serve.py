@@ -49,6 +49,29 @@ def test_communication_transport_exposes_task_api(make_config):
         writer.write((json.dumps({"op": "task.list", "params": {}}) + "\n").encode())
         await writer.drain()
         listed = json.loads((await reader.readline()).decode())
+        worker_id = created["result"]["worker"]["worker_id"]
+
+        async def request(payload):
+            writer.write((json.dumps(payload) + "\n").encode())
+            await writer.drain()
+            return json.loads((await reader.readline()).decode())
+
+        ag_ui = await request(
+            {
+                "op": "ag_ui.events",
+                "params": {
+                    "worker_id": worker_id,
+                    "after_sequence": 0,
+                    "limit": 1,
+                },
+            }
+        )
+        a2a = await request(
+            {"op": "a2a.get", "params": {"worker_id": worker_id}}
+        )
+        open_webui = await request(
+            {"op": "open_webui.get", "params": {"worker_id": worker_id}}
+        )
         writer.close()
         await writer.wait_closed()
         server.close()
@@ -56,7 +79,10 @@ def test_communication_transport_exposes_task_api(make_config):
         service.workers.shutdown()
 
         assert created["ok"] is True
-        worker_id = created["result"]["worker"]["worker_id"]
         assert listed["result"]["workers"][0]["worker_id"] == worker_id
+        assert ag_ui["result"]["events"][0]["type"] == "ACTIVITY_SNAPSHOT"
+        assert ag_ui["result"]["next_sequence"] == 1
+        assert a2a["result"]["task"]["id"] == worker_id
+        assert open_webui["result"]["metadata"]["worker_id"] == worker_id
 
     asyncio.run(exercise())
