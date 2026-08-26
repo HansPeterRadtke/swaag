@@ -3,6 +3,7 @@ from __future__ import annotations
 from datetime import datetime
 from typing import Any, Iterable
 
+from swaag.utils import stable_json_dumps
 from swaag.workers import WorkerEvent, WorkerRecord
 
 
@@ -21,7 +22,7 @@ _A2A_STATES = {
 class A2AProjectionAdapter:
     """Projects internal tasks into A2A 1.0 task objects without owning lifecycle state."""
 
-    protocol_version = "1.0.0"
+    protocol_version = "1.0"
 
     def task(self, record: WorkerRecord) -> dict[str, Any]:
         state = _A2A_STATES[record.status]
@@ -75,7 +76,9 @@ class AgUiProjectionAdapter:
                 },
                 "metadata": {"swaagWorkerId": record.worker_id},
             }
-            if event.event_type == "worker_started":
+            if event.event_type == "worker_history_event":
+                output.extend(self._history_event(record, event, base))
+            elif event.event_type == "worker_started":
                 output.append(
                     {
                         **base,
@@ -178,6 +181,122 @@ class AgUiProjectionAdapter:
                     }
                 )
         return output
+
+    @staticmethod
+    def _history_event(
+        record: WorkerRecord,
+        event: WorkerEvent,
+        base: dict[str, Any],
+    ) -> list[dict[str, Any]]:
+        source = event.payload.get("canonical_event")
+        if not isinstance(source, dict):
+            return [
+                {
+                    **base,
+                    "type": "ACTIVITY_SNAPSHOT",
+                    "messageId": f"{record.worker_id}-activity",
+                    "activityType": "SWAAG_HISTORY_REFERENCE",
+                    "content": event.payload,
+                    "replace": True,
+                }
+            ]
+        source_type = str(source.get("type", ""))
+        source_payload = source.get("payload")
+        if not isinstance(source_payload, dict):
+            source_payload = {}
+        history_metadata = {
+            **dict(base.get("metadata", {})),
+            "swaagHistorySequence": source.get("sequence"),
+            "swaagHistoryHash": source.get("hash"),
+        }
+        history_base = {**base, "metadata": history_metadata}
+        call_id = str(source_payload.get("call_id") or source.get("id") or event.event_id)
+        if source_type == "tool_called":
+            tool_name = str(source_payload.get("tool_name", ""))
+            arguments = source_payload.get("tool_input", {})
+            return [
+                {
+                    **history_base,
+                    "type": "TOOL_CALL_START",
+                    "toolCallId": call_id,
+                    "toolCallName": tool_name,
+                },
+                {
+                    **history_base,
+                    "type": "TOOL_CALL_ARGS",
+                    "toolCallId": call_id,
+                    "delta": stable_json_dumps(arguments, indent=None),
+                },
+                {
+                    **history_base,
+                    "type": "TOOL_CALL_END",
+                    "toolCallId": call_id,
+                },
+            ]
+        if source_type in {"tool_result", "tool_error"}:
+            if source_type == "tool_result":
+                content = source_payload.get("output")
+            else:
+                content = {
+                    "error": source_payload.get("error"),
+                    "error_type": source_payload.get("error_type"),
+                }
+            return [
+                {
+                    **history_base,
+                    "type": "TOOL_CALL_RESULT",
+                    "messageId": str(source.get("id") or event.event_id),
+                    "toolCallId": call_id,
+                    "content": (
+                        content
+                        if isinstance(content, str)
+                        else stable_json_dumps(content, indent=None)
+                    ),
+                    "role": "tool",
+                }
+            ]
+        if source_type == "assistant_progress":
+            text = source_payload.get("assistant_text")
+            if isinstance(text, str) and text:
+                message_id = str(source.get("id") or event.event_id)
+                return [
+                    {
+                        **history_base,
+                        "type": "TEXT_MESSAGE_START",
+                        "messageId": message_id,
+                        "role": "assistant",
+                    },
+                    {
+                        **history_base,
+                        "type": "TEXT_MESSAGE_CONTENT",
+                        "messageId": message_id,
+                        "delta": text,
+                    },
+                    {
+                        **history_base,
+                        "type": "TEXT_MESSAGE_END",
+                        "messageId": message_id,
+                    },
+                ]
+        if source_type == "agent_question":
+            return [
+                {
+                    **history_base,
+                    "type": "CUSTOM",
+                    "name": "swaag.agent.question",
+                    "value": source_payload,
+                }
+            ]
+        return [
+            {
+                **history_base,
+                "type": "ACTIVITY_SNAPSHOT",
+                "messageId": f"{record.worker_id}-activity",
+                "activityType": f"SWAAG_{source_type.upper() or 'HISTORY_EVENT'}",
+                "content": source_payload,
+                "replace": True,
+            }
+        ]
 
     @staticmethod
     def _run_id(record: WorkerRecord, event: WorkerEvent) -> str:

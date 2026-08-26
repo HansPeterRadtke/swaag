@@ -250,8 +250,11 @@ class CommunicationService:
             }
         if protocol == "open_webui" and operation == "get":
             return OpenWebUiProjectionAdapter().response(record)
-        if protocol == "ag_ui" and operation == "events":
-            page = self.task_api.execute("events", params)
+        if protocol == "ag_ui" and operation in {"events", "subscribe"}:
+            page = self.task_api.execute(
+                "events.wait" if operation == "subscribe" else "events",
+                params,
+            )
             projected = AgUiProjectionAdapter().events(
                 record,
                 [
@@ -265,9 +268,71 @@ class CommunicationService:
                 "events": projected,
                 "next_sequence": page["next_sequence"],
                 "has_more": page["has_more"],
+                **(
+                    {
+                        "terminal": page["terminal"],
+                        "timed_out": page["timed_out"],
+                    }
+                    if operation == "subscribe"
+                    else {}
+                ),
             }
         raise ValueError(f"unsupported protocol operation: {protocol}.{operation}")
 
+    async def _wait_task_events(self, params: dict[str, Any]) -> dict[str, Any]:
+        timeout = params.get("timeout_seconds", 30.0)
+        if (
+            not isinstance(timeout, (int, float))
+            or isinstance(timeout, bool)
+            or not 0 <= float(timeout) <= 60
+        ):
+            raise ValueError("timeout_seconds must be between 0 and 60")
+        deadline = asyncio.get_running_loop().time() + float(timeout)
+        probe = {**params, "timeout_seconds": 0}
+        while True:
+            page = await asyncio.to_thread(
+                self.task_api.execute,
+                "events.wait",
+                probe,
+            )
+            if page["events"] or page["terminal"]:
+                return page
+            remaining = deadline - asyncio.get_running_loop().time()
+            if remaining <= 0:
+                return page
+            await asyncio.sleep(min(0.05, remaining))
+
+    async def _protocol_projection_async(
+        self,
+        protocol: str,
+        operation: str,
+        params: dict[str, Any],
+    ) -> dict[str, Any]:
+        if protocol == "ag_ui" and operation == "subscribe":
+            page = await self._wait_task_events(params)
+            record = self.workers.store.get(str(params.get("worker_id", "")).strip())
+            return {
+                "protocol": "ag-ui",
+                "worker_id": record.worker_id,
+                "events": AgUiProjectionAdapter().events(
+                    record,
+                    [
+                        self.workers.event_from_payload(item)
+                        for item in page["events"]
+                    ],
+                ),
+                "next_sequence": page["next_sequence"],
+                "has_more": page["has_more"],
+                "terminal": page["terminal"],
+                "timed_out": page["timed_out"],
+            }
+        async with self._semaphore:
+            return await asyncio.to_thread(
+                self.protocol_projection,
+                protocol,
+                operation,
+                params,
+            )
 
     async def handle_client(self, reader: asyncio.StreamReader, writer: asyncio.StreamWriter) -> None:
         try:
@@ -300,18 +365,22 @@ class CommunicationService:
                         params = request.get("params") or {}
                         if not isinstance(params, dict):
                             raise ValueError("task operation params must be an object")
-                        async with self._semaphore:
-                            response = await asyncio.to_thread(
-                                self.task_api.execute,
-                                op.removeprefix("task."),
-                                params,
-                            )
+                        task_operation = op.removeprefix("task.")
+                        if task_operation == "events.wait":
+                            response = await self._wait_task_events(params)
+                        else:
+                            async with self._semaphore:
+                                response = await asyncio.to_thread(
+                                    self.task_api.execute,
+                                    task_operation,
+                                    params,
+                                )
                     elif op.startswith(("ag_ui.", "a2a.", "open_webui.")):
                         params = request.get("params") or {}
                         if not isinstance(params, dict):
                             raise ValueError("protocol operation params must be an object")
                         protocol, operation = op.split(".", 1)
-                        response = self.protocol_projection(
+                        response = await self._protocol_projection_async(
                             protocol,
                             operation,
                             params,

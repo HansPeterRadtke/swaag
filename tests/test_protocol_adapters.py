@@ -72,6 +72,36 @@ def test_task_api_is_transport_neutral_and_cursor_based(make_config) -> None:
     assert canceled["worker"]["status"] == "canceled"
 
 
+def test_task_api_event_wait_is_resumable_and_reports_timeout_or_terminal(make_config) -> None:
+    manager = WorkerManager(AgentRuntime(make_config(), model_client=object()))
+    api = TaskApi(manager)
+    created = api.execute("create", {"objective": "wait for durable events"})
+    worker_id = created["worker"]["worker_id"]
+    cursor = api.execute("events", {"worker_id": worker_id})["next_sequence"]
+
+    timed_out = api.execute(
+        "events.wait",
+        {
+            "worker_id": worker_id,
+            "after_sequence": cursor,
+            "timeout_seconds": 0.01,
+        },
+    )
+    api.execute("cancel", {"worker_id": worker_id})
+    terminal = api.execute(
+        "events.wait",
+        {"worker_id": worker_id, "after_sequence": cursor, "timeout_seconds": 0},
+    )
+    manager.shutdown()
+
+    assert timed_out["events"] == []
+    assert timed_out["timed_out"] is True
+    assert timed_out["terminal"] is False
+    assert terminal["events"]
+    assert terminal["timed_out"] is False
+    assert terminal["terminal"] is True
+
+
 def test_a2a_projection_preserves_internal_task_state_and_archive_metadata() -> None:
     adapter = A2AProjectionAdapter()
     task = adapter.task(_record(archived_at="2026-08-26T11:00:00+00:00"))
@@ -139,6 +169,61 @@ def test_ag_ui_projects_input_required_as_a_resumable_interrupt() -> None:
     ]
 
 
+def test_ag_ui_projects_canonical_tool_and_status_history_events() -> None:
+    def linked(
+        source_type: str,
+        sequence: int,
+        payload: dict[str, object],
+    ) -> WorkerEvent:
+        return _event(
+            "worker_history_event",
+            sequence,
+            {
+                "canonical_event": {
+                    "id": f"history_{sequence}",
+                    "sequence": sequence + 10,
+                    "hash": f"hash_{sequence}",
+                    "type": source_type,
+                    "payload": payload,
+                }
+            },
+        )
+
+    events = AgUiProjectionAdapter().events(
+        _record(status="working"),
+        [
+            linked(
+                "tool_called",
+                3,
+                {"call_id": "call_1", "tool_name": "reader", "tool_input": {"path": "a.txt"}},
+            ),
+            linked(
+                "tool_result",
+                4,
+                {"call_id": "call_1", "tool_name": "reader", "output": {"text": "exact"}},
+            ),
+            linked(
+                "agent_status",
+                5,
+                {"situation": "Reading evidence", "importance": "normal"},
+            ),
+        ],
+    )
+
+    assert [item["type"] for item in events] == [
+        "TOOL_CALL_START",
+        "TOOL_CALL_ARGS",
+        "TOOL_CALL_END",
+        "TOOL_CALL_RESULT",
+        "ACTIVITY_SNAPSHOT",
+    ]
+    assert events[0]["toolCallId"] == "call_1"
+    assert events[1]["delta"] == '{"path":"a.txt"}'
+    assert events[3]["content"] == '{"text":"exact"}'
+    assert events[4]["content"]["situation"] == "Reading evidence"
+    assert events[4]["metadata"]["swaagHistoryHash"] == "hash_5"
+
+
 def test_open_webui_projection_uses_persisted_status_and_final_return_channel() -> None:
     response = OpenWebUiProjectionAdapter().response(_record(status="input_required"))
 
@@ -154,3 +239,37 @@ def test_open_webui_projection_uses_persisted_status_and_final_return_channel() 
         }
     ]
     assert all(event["type"] not in {"input", "confirmation"} for event in response["events"])
+
+
+def test_critical_failure_remains_retrievable_by_every_projection_after_restart(
+    make_config,
+) -> None:
+    config = make_config()
+    manager = WorkerManager(AgentRuntime(config, model_client=object()))
+    worker = manager.create("preserve a critical failure")
+    manager.store.transition(
+        worker.worker_id,
+        "failed",
+        expected={"created"},
+        error="CriticalBackendError: exact durable failure",
+        event_type="worker_failed",
+    )
+    manager.shutdown()
+
+    restarted = WorkerManager(AgentRuntime(config, model_client=object()))
+    record = restarted.store.get(worker.worker_id)
+    inspection = TaskApi(restarted).execute("get", {"worker_id": worker.worker_id})
+    events = restarted.events(worker.worker_id)
+    a2a = A2AProjectionAdapter().task(record)
+    ag_ui = AgUiProjectionAdapter().events(record, events)
+    open_webui = OpenWebUiProjectionAdapter().response(record)
+    restarted.shutdown()
+
+    assert inspection["error"] == "CriticalBackendError: exact durable failure"
+    assert a2a["status"]["message"]["parts"] == [
+        {"text": "CriticalBackendError: exact durable failure"}
+    ]
+    assert next(item for item in ag_ui if item["type"] == "RUN_ERROR")[
+        "message"
+    ] == "CriticalBackendError: exact durable failure"
+    assert open_webui["return"] == "CriticalBackendError: exact durable failure"

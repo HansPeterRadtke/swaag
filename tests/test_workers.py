@@ -353,3 +353,60 @@ def test_worker_archive_preserves_exact_history_and_prevents_restart(make_config
     with pytest.raises(ValueError, match="archived"):
         manager.resume(worker.worker_id)
     manager.shutdown()
+
+
+def test_worker_events_link_and_rehydrate_canonical_session_history(make_config) -> None:
+    from swaag.runtime import AgentRuntime
+
+    config = make_config(model__context_limit=32_000)
+    runtime = AgentRuntime(config, model_client=object())
+    manager = WorkerManager(runtime)
+    worker = manager.create("stream canonical activity")
+    state = runtime.history.rebuild_from_history(
+        worker.session_id, write_projections=False
+    )
+    source = runtime.history.record_event(
+        state,
+        "tool_called",
+        {
+            "call_id": "call_exact",
+            "tool_name": "reader",
+            "tool_input": {"path": "evidence.txt"},
+        },
+    )
+    runtime.history.record_event(
+        state,
+        "tool_result",
+        {
+            "call_id": "call_exact",
+            "tool_name": "reader",
+            "raw_input": {"path": "evidence.txt"},
+            "validated_input": {"path": "evidence.txt"},
+            "output": {"text": "durable exact result"},
+            "source_event_references": [],
+        },
+    )
+
+    projected_once = manager.events(worker.worker_id)
+    projected_twice = manager.events(worker.worker_id)
+    durable = manager.store.events(worker.worker_id)
+    manager.shutdown()
+
+    linked = [
+        event for event in projected_once if event.event_type == "worker_history_event"
+    ]
+    assert len(linked) == 2
+    assert len(projected_twice) == len(projected_once)
+    assert linked[0].payload["history_event_hash"] == source.hash
+    assert linked[0].payload["canonical_event"]["payload"]["tool_input"] == {
+        "path": "evidence.txt"
+    }
+    assert all("canonical_event" not in event.payload for event in durable)
+
+    restarted = WorkerManager(AgentRuntime(config, model_client=object()))
+    replayed = restarted.events(worker.worker_id)
+    restarted.shutdown()
+    replayed_link = next(
+        event for event in replayed if event.event_type == "worker_history_event"
+    )
+    assert replayed_link.payload["canonical_event"]["hash"] == source.hash

@@ -17,13 +17,23 @@ from swaag.structured_output import (
     merge_caller_output,
     prepare_caller_output_spec,
 )
-from swaag.types import AttachmentReference
+from swaag.types import AttachmentReference, HistoryEvent
 from swaag.utils import new_id, stable_json_dumps, utc_now_iso
 
 
 WORKER_TERMINAL_STATES = frozenset({"completed", "failed", "canceled"})
 WORKER_RESUMABLE_STATES = frozenset({"failed", "canceled", "input_required", "completed"})
 WORKER_ACTIVE_STATES = frozenset({"queued", "working", "cancellation_requested"})
+WORKER_STREAM_EVENT_TYPES = frozenset(
+    {
+        "agent_question",
+        "agent_status",
+        "assistant_progress",
+        "tool_called",
+        "tool_error",
+        "tool_result",
+    }
+)
 
 
 @dataclass(slots=True, frozen=True)
@@ -85,6 +95,22 @@ class WorkerStore:
                     event_type TEXT NOT NULL,
                     payload_json TEXT NOT NULL,
                     PRIMARY KEY (worker_id, sequence),
+                    FOREIGN KEY (worker_id) REFERENCES workers(worker_id)
+                );
+                CREATE TABLE IF NOT EXISTS worker_history_cursors (
+                    worker_id TEXT PRIMARY KEY,
+                    session_id TEXT NOT NULL,
+                    through_sequence INTEGER NOT NULL,
+                    FOREIGN KEY (worker_id) REFERENCES workers(worker_id)
+                );
+                CREATE TABLE IF NOT EXISTS worker_history_links (
+                    worker_id TEXT NOT NULL,
+                    session_id TEXT NOT NULL,
+                    history_sequence INTEGER NOT NULL,
+                    history_event_id TEXT NOT NULL,
+                    history_event_hash TEXT NOT NULL,
+                    worker_event_id TEXT NOT NULL UNIQUE,
+                    PRIMARY KEY (worker_id, session_id, history_sequence),
                     FOREIGN KEY (worker_id) REFERENCES workers(worker_id)
                 );
                 """
@@ -204,6 +230,100 @@ class WorkerStore:
             event = self._append_event(connection, worker_id, event_type, payload)
             connection.commit()
         return event
+
+    def history_cursor(self, worker_id: str) -> int:
+        self.get(worker_id)
+        with self._connect() as connection:
+            row = connection.execute(
+                "SELECT through_sequence FROM worker_history_cursors WHERE worker_id=?",
+                (worker_id,),
+            ).fetchone()
+        return 0 if row is None else int(row[0])
+
+    def sync_history_references(
+        self,
+        worker_id: str,
+        session_id: str,
+        events: Iterable[HistoryEvent],
+    ) -> list[WorkerEvent]:
+        """Atomically advance a history cursor and link stream-worthy source events."""
+        source_events = list(events)
+        if not source_events:
+            return []
+        appended: list[WorkerEvent] = []
+        with self._connect() as connection:
+            connection.execute("BEGIN IMMEDIATE")
+            row = connection.execute(
+                "SELECT session_id FROM workers WHERE worker_id=?", (worker_id,)
+            ).fetchone()
+            if row is None:
+                raise FileNotFoundError(f"Unknown worker: {worker_id}")
+            if str(row[0]) != session_id:
+                raise ValueError(f"Worker {worker_id} does not own session {session_id}")
+            cursor_row = connection.execute(
+                "SELECT through_sequence FROM worker_history_cursors WHERE worker_id=?",
+                (worker_id,),
+            ).fetchone()
+            through_sequence = 0 if cursor_row is None else int(cursor_row[0])
+            for source in source_events:
+                source_sequence = int(source.sequence)
+                if source_sequence <= through_sequence:
+                    continue
+                if source.event_type in WORKER_STREAM_EVENT_TYPES:
+                    existing = connection.execute(
+                        """
+                        SELECT 1 FROM worker_history_links
+                        WHERE worker_id=? AND session_id=? AND history_sequence=?
+                        """,
+                        (worker_id, session_id, source_sequence),
+                    ).fetchone()
+                    if existing is None:
+                        linked = self._append_event(
+                            connection,
+                            worker_id,
+                            "worker_history_event",
+                            {
+                                "session_id": session_id,
+                                "history_sequence": source_sequence,
+                                "history_event_id": str(source.id),
+                                "history_event_hash": str(source.hash),
+                                "history_event_type": str(source.event_type),
+                            },
+                            timestamp=str(source.timestamp),
+                        )
+                        connection.execute(
+                            """
+                            INSERT INTO worker_history_links(
+                                worker_id, session_id, history_sequence,
+                                history_event_id, history_event_hash, worker_event_id
+                            ) VALUES (?, ?, ?, ?, ?, ?)
+                            """,
+                            (
+                                worker_id,
+                                session_id,
+                                source_sequence,
+                                str(source.id),
+                                str(source.hash),
+                                linked.event_id,
+                            ),
+                        )
+                        appended.append(linked)
+                through_sequence = max(through_sequence, source_sequence)
+            connection.execute(
+                """
+                INSERT INTO worker_history_cursors(worker_id, session_id, through_sequence)
+                VALUES (?, ?, ?)
+                ON CONFLICT(worker_id) DO UPDATE SET
+                    session_id=excluded.session_id,
+                    through_sequence=MAX(
+                        worker_history_cursors.through_sequence,
+                        excluded.through_sequence
+                    )
+                """,
+                (worker_id, session_id, through_sequence),
+            )
+            connection.commit()
+        return appended
 
     def transition(
         self,
@@ -519,6 +639,7 @@ class WorkerManager:
 
     def inspect(self, worker_id: str) -> dict[str, Any]:
         record = self.store.get(worker_id)
+        self._sync_history_events(record)
         events = self.store.events(worker_id)
         output_spec = self._output_spec(record, events=events)
         active_run = self.runtime.history.read_active_run(record.session_id)
@@ -627,7 +748,80 @@ class WorkerManager:
         return self.store.list(include_archived=include_archived)
 
     def events(self, worker_id: str, *, after_sequence: int = 0) -> list[WorkerEvent]:
-        return self.store.events(worker_id, after_sequence=after_sequence)
+        record = self.store.get(worker_id)
+        self._sync_history_events(record)
+        events = self.store.events(worker_id, after_sequence=after_sequence)
+        return self._hydrate_history_events(record, events)
+
+    def _sync_history_events(self, record: WorkerRecord) -> None:
+        cursor = self.store.history_cursor(record.worker_id)
+        source_events = self.runtime.history.iter_history(
+            record.session_id,
+            start_sequence=cursor + 1,
+        )
+        self.store.sync_history_references(
+            record.worker_id,
+            record.session_id,
+            source_events,
+        )
+
+    def _hydrate_history_events(
+        self,
+        record: WorkerRecord,
+        events: list[WorkerEvent],
+    ) -> list[WorkerEvent]:
+        references = {
+            int(event.payload["history_sequence"]): event
+            for event in events
+            if event.event_type == "worker_history_event"
+            and isinstance(event.payload.get("history_sequence"), int)
+        }
+        if not references:
+            return events
+        source_by_sequence = {
+            event.sequence: event
+            for event in self.runtime.history.iter_history(
+                record.session_id,
+                start_sequence=min(references),
+                end_sequence=max(references),
+            )
+        }
+        output: list[WorkerEvent] = []
+        for event in events:
+            source_sequence = event.payload.get("history_sequence")
+            if event.event_type != "worker_history_event" or not isinstance(
+                source_sequence, int
+            ):
+                output.append(event)
+                continue
+            source = source_by_sequence.get(source_sequence)
+            payload = dict(event.payload)
+            if source is None:
+                payload["canonical_event_unavailable"] = True
+            else:
+                expected = (
+                    payload.get("history_event_id"),
+                    payload.get("history_event_hash"),
+                    payload.get("history_event_type"),
+                )
+                actual = (source.id, source.hash, source.event_type)
+                if actual != expected:
+                    raise RuntimeError(
+                        f"Worker {record.worker_id} history reference mismatch at "
+                        f"sequence {source_sequence}"
+                    )
+                payload["canonical_event"] = asdict(source)
+            output.append(
+                WorkerEvent(
+                    event_id=event.event_id,
+                    worker_id=event.worker_id,
+                    sequence=event.sequence,
+                    timestamp=event.timestamp,
+                    event_type=event.event_type,
+                    payload=payload,
+                )
+            )
+        return output
 
     @staticmethod
     def event_from_payload(payload: dict[str, Any]) -> WorkerEvent:
@@ -719,6 +913,7 @@ class WorkerManager:
                 result = self.runtime.resume_turn_in_session(state, working.objective)
             latest = self.store.get(worker_id)
             if latest.status == "cancellation_requested":
+                self._sync_history_events(working)
                 self.store.transition(
                     worker_id,
                     "canceled",
@@ -759,6 +954,7 @@ class WorkerManager:
                 )
                 latest = self.store.get(worker_id)
                 if latest.status == "cancellation_requested":
+                    self._sync_history_events(working)
                     self.store.transition(
                         worker_id,
                         "canceled",
@@ -768,6 +964,7 @@ class WorkerManager:
                         event_payload={"structured_output_raced_cancellation": True},
                     )
                     return
+            self._sync_history_events(working)
             self.store.transition(
                 worker_id,
                 "input_required" if blocking else "completed",
@@ -781,19 +978,29 @@ class WorkerManager:
                 ),
             )
         except RunCancellationRequested as exc:
+            error = str(exc)
+            try:
+                self._sync_history_events(working)
+            except Exception as sync_exc:
+                error += f"; history event sync failed: {type(sync_exc).__name__}: {sync_exc}"
             self.store.transition(
                 worker_id,
                 "canceled",
                 expected={"working", "cancellation_requested"},
-                error=str(exc),
+                error=error,
                 event_type="worker_canceled",
             )
         except Exception as exc:
+            error = f"{type(exc).__name__}: {exc}"
+            try:
+                self._sync_history_events(working)
+            except Exception as sync_exc:
+                error += f"; history event sync failed: {type(sync_exc).__name__}: {sync_exc}"
             self.store.transition(
                 worker_id,
                 "failed",
                 expected={"working", "cancellation_requested"},
-                error=f"{type(exc).__name__}: {exc}",
+                error=error,
                 event_type="worker_failed",
             )
 

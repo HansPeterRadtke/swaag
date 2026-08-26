@@ -66,6 +66,16 @@ def test_communication_transport_exposes_task_api(make_config):
                 },
             }
         )
+        subscribed = await request(
+            {
+                "op": "ag_ui.subscribe",
+                "params": {
+                    "worker_id": worker_id,
+                    "after_sequence": ag_ui["result"]["next_sequence"],
+                    "timeout_seconds": 0.01,
+                },
+            }
+        )
         a2a = await request(
             {"op": "a2a.get", "params": {"worker_id": worker_id}}
         )
@@ -82,6 +92,9 @@ def test_communication_transport_exposes_task_api(make_config):
         assert listed["result"]["workers"][0]["worker_id"] == worker_id
         assert ag_ui["result"]["events"][0]["type"] == "ACTIVITY_SNAPSHOT"
         assert ag_ui["result"]["next_sequence"] == 1
+        assert subscribed["result"]["events"] == []
+        assert subscribed["result"]["timed_out"] is True
+        assert subscribed["result"]["terminal"] is False
         assert a2a["result"]["task"]["id"] == worker_id
         assert open_webui["result"]["metadata"]["worker_id"] == worker_id
 

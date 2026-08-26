@@ -2,10 +2,11 @@ from __future__ import annotations
 
 import base64
 import binascii
+import time
 from dataclasses import asdict
 from typing import Any
 
-from swaag.workers import WorkerManager
+from swaag.workers import WORKER_TERMINAL_STATES, WorkerManager
 
 
 class TaskApi:
@@ -113,28 +114,43 @@ class TaskApi:
                 payload.pop("storage_ref", None)
                 attachments.append(payload)
             return {"version": self.version, "worker_id": worker_id, "attachments": attachments}
-        if operation == "events":
+        if operation in {"events", "events.wait"}:
             worker_id = _required_text(args, "worker_id")
-            after = args.get("after_sequence", 0)
-            if not isinstance(after, int) or isinstance(after, bool) or after < 0:
-                raise ValueError("after_sequence must be a non-negative integer")
-            limit = args.get("limit", 200)
+            after, limit = _event_cursor_args(args)
+            if operation == "events":
+                return self._event_page(worker_id, after=after, limit=limit)
+            timeout = args.get("timeout_seconds", 30.0)
             if (
-                not isinstance(limit, int)
-                or isinstance(limit, bool)
-                or not 1 <= limit <= 1000
+                not isinstance(timeout, (int, float))
+                or isinstance(timeout, bool)
+                or not 0 <= float(timeout) <= 60
             ):
-                raise ValueError("limit must be an integer between 1 and 1000")
-            available = self.workers.events(worker_id, after_sequence=after)
-            events = available[:limit]
-            return {
-                "version": self.version,
-                "worker_id": worker_id,
-                "events": [asdict(item) for item in events],
-                "next_sequence": events[-1].sequence if events else after,
-                "has_more": len(available) > len(events),
-            }
+                raise ValueError("timeout_seconds must be between 0 and 60")
+            deadline = time.monotonic() + float(timeout)
+            while True:
+                page = self._event_page(worker_id, after=after, limit=limit)
+                record = self.workers.store.get(worker_id)
+                terminal = (
+                    record.status in WORKER_TERMINAL_STATES
+                    or record.status == "input_required"
+                )
+                if page["events"] or terminal:
+                    return {**page, "terminal": terminal, "timed_out": False}
+                if time.monotonic() >= deadline:
+                    return {**page, "terminal": False, "timed_out": True}
+                time.sleep(min(0.05, max(0.0, deadline - time.monotonic())))
         raise ValueError(f"Unknown task operation: {operation}")
+
+    def _event_page(self, worker_id: str, *, after: int, limit: int) -> dict[str, Any]:
+        available = self.workers.events(worker_id, after_sequence=after)
+        events = available[:limit]
+        return {
+            "version": self.version,
+            "worker_id": worker_id,
+            "events": [asdict(item) for item in events],
+            "next_sequence": events[-1].sequence if events else after,
+            "has_more": len(available) > len(events),
+        }
 
     def _record(self, record) -> dict[str, Any]:
         payload = asdict(record)
@@ -156,6 +172,20 @@ def _optional_text(payload: dict[str, Any], key: str) -> str | None:
     if not isinstance(value, str):
         raise ValueError(f"{key} must be a string or null")
     return value.strip() or None
+
+
+def _event_cursor_args(payload: dict[str, Any]) -> tuple[int, int]:
+    after = payload.get("after_sequence", 0)
+    if not isinstance(after, int) or isinstance(after, bool) or after < 0:
+        raise ValueError("after_sequence must be a non-negative integer")
+    limit = payload.get("limit", 200)
+    if (
+        not isinstance(limit, int)
+        or isinstance(limit, bool)
+        or not 1 <= limit <= 1000
+    ):
+        raise ValueError("limit must be an integer between 1 and 1000")
+    return after, limit
 
 
 def _attachment_payload(payload: Any) -> tuple[str, str, bytes]:
