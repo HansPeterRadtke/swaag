@@ -152,6 +152,50 @@ class _InputClient(_WorkerClient):
         return self.result(payload, _action("green complete"))
 
 
+class _OptionalInputClient(_WorkerClient):
+    def __init__(self) -> None:
+        self.calls = 0
+
+    def send_completion(self, payload: dict[str, Any], **_kwargs):
+        self.calls += 1
+        prompt = str(payload["prompt"])
+        if self.calls == 1:
+            return self.result(
+                payload,
+                json.dumps(
+                    {
+                        "assistant_message": "I can proceed with blue unless you prefer another target.",
+                        "tool_calls": [
+                            {
+                                "tool_name": "calculator",
+                                "arguments": {"expression": "1 + 1"},
+                            }
+                        ],
+                        "continue_loop": True,
+                        "silent_completion": False,
+                        "questions": [
+                            {
+                                "question": "Do you prefer a target other than blue?",
+                                "criticality": "optional",
+                                "reason": "Blue is a safe provisional choice.",
+                                "assumption_if_unanswered": "Use blue.",
+                            }
+                        ],
+                        "status": {
+                            "situation": "A safe provisional target is available.",
+                            "action": "Continue useful work with blue.",
+                            "reason": "The optional preference does not block progress.",
+                            "importance": "normal",
+                        },
+                    }
+                ),
+            )
+        if "Use target green" in prompt:
+            return self.result(payload, _action("green revision complete"))
+        assert '"result": 2' in prompt
+        return self.result(payload, _action("blue provisional complete"))
+
+
 def test_multiple_workers_have_independent_durable_sessions(make_config) -> None:
     from swaag.runtime import AgentRuntime
 
@@ -246,6 +290,40 @@ def test_input_required_worker_resumes_without_duplicate_original_request(make_c
     assert [message.content for message in state.messages if message.role == "user"] == [
         "choose a target"
     ]
+
+
+def test_optional_question_continues_work_and_later_answer_redirects(make_config) -> None:
+    from swaag.runtime import AgentRuntime
+
+    client = _OptionalInputClient()
+    runtime = AgentRuntime(make_config(model__context_limit=32_000), model_client=client)
+    manager = WorkerManager(runtime)
+    worker = manager.create("choose a target and complete the calculation")
+    manager.start(worker.worker_id)
+    provisional = manager.wait(worker.worker_id, timeout_seconds=10)
+
+    assert provisional.status == "completed"
+    assert provisional.result == "blue provisional complete"
+    question = next(
+        event
+        for event in runtime.history.read_history(worker.session_id)
+        if event.event_type == "agent_question"
+    )
+    assert question.payload["criticality"] == "optional"
+    assert question.payload["assumption_if_unanswered"] == "Use blue."
+    assert any(
+        event.event_type == "tool_result"
+        and event.payload.get("tool_name") == "calculator"
+        for event in runtime.history.read_history(worker.session_id)
+    )
+
+    manager.message(worker.worker_id, "Use target green")
+    revised = manager.wait(worker.worker_id, timeout_seconds=10)
+    manager.shutdown()
+
+    assert revised.status == "completed"
+    assert revised.result == "green revision complete"
+    assert revised.run_count == 2
 
 
 def test_worker_archive_preserves_exact_history_and_prevents_restart(make_config) -> None:

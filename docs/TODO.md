@@ -42,8 +42,8 @@ This is the gap list between the current repository and the intended architectur
 - [ ] **Make research/tool-based uncertainty resolution a first-class worker behavior.** **Partial.** Browsing capability exists. The system prompt/runtime should explicitly encourage the LLM to resolve missing or stale information via local search, documentation, web research, experiments, or other tools when useful instead of immediately asking the user.
 - [ ] **Keep the decision to research semantic.** Do not trigger web search from keywords, fixed retry counts, or deterministic topic classes.
 - [ ] **Record research provenance and preserve raw evidence.** Later calls should receive budgeted semantic projections while retaining links/references to original evidence.
-- [ ] **Implement semantic question criticality.** Distinguish blocking questions from optional questions where the worker can proceed with a provisional assumption.
-- [ ] **Allow optional questions to remain pending while useful work continues.** A later user answer must be able to redirect/revise the worker without losing history.
+- [x] **Implement semantic question criticality.** Every model-authored question carries `blocking` or `optional`, a semantic reason, and an explicit provisional assumption; deterministic code only enforces the declared lifecycle effect.
+- [x] **Allow optional questions to remain pending while useful work continues.** Optional questions are durable events, do not force input-required state, and may accompany useful tool work. A later answer can resume/redirect even a provisionally completed worker without losing history.
 - [ ] **Benchmark ambiguity handling and unnecessary clarification.** Include AskBench-like cases, recoverable uncertainty, wrong-premise cases, and cases where tools can answer the question without user interruption.
 - [ ] **Make persistence an explicit evaluated behavior.** The worker should inspect, test, verify, research, and improve rather than stopping at the first plausible output.
 - [ ] **Support intentionally open-ended/improvement-until-interrupted tasks.** These need explicit lifecycle state rather than pretending every task has a natural final answer.
@@ -83,7 +83,7 @@ This is the gap list between the current repository and the intended architectur
 - [ ] **Implement heartbeat independent of semantic status generation.** A wedged LLM/status call must not suppress mechanical liveness evidence.
 - [ ] **Integrate external process supervision/watchdog for production on Jetson.** Use systemd watchdog semantics rather than only an in-process timer.
 - [ ] **Guarantee durable critical failure delivery.** Rich side-channel events are optional; a critical failure must also have a representation every client can retrieve later.
-- [ ] **Guarantee durable critical-question delivery.** Interactive UI prompts may be transient, so blocking questions need persisted task state/main-channel fallback.
+- [x] **Guarantee durable critical-question delivery.** Blocking questions are append-only `agent_question` events, place workers in durable `input_required`, and remain in the normal conversational result even without a rich live UI.
 - [ ] **Make silent inactivity diagnosable.** Record the last mechanical transition, active request/tool identifiers, start time, and supervisor health without needing an LLM to be alive.
 
 ## P1 - interfaces and structured output
