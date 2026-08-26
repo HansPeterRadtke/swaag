@@ -25,6 +25,7 @@ def _record(*, status: str = "completed", archived_at: str | None = None) -> Wor
         result="exact result" if status in {"completed", "input_required"} else None,
         error="failed exactly" if status == "failed" else None,
         run_count=1,
+        completion_mode="natural",
     )
 
 
@@ -112,6 +113,7 @@ def test_a2a_projection_preserves_internal_task_state_and_archive_metadata() -> 
     assert task["contextId"] == "session_1"
     assert task["artifacts"][0]["parts"] == [{"text": "exact result"}]
     assert task["metadata"]["archivedAt"]
+    assert task["metadata"]["swaagCompletionMode"] == "natural"
     assert waiting["status"]["state"] == "TASK_STATE_INPUT_REQUIRED"
 
 

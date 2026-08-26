@@ -25,6 +25,14 @@ from swaag.utils import new_id, stable_json_dumps, utc_now_iso
 WORKER_TERMINAL_STATES = frozenset({"completed", "failed", "canceled"})
 WORKER_RESUMABLE_STATES = frozenset({"failed", "canceled", "input_required", "completed"})
 WORKER_ACTIVE_STATES = frozenset({"queued", "working", "cancellation_requested"})
+WORKER_COMPLETION_MODES = frozenset({"natural", "continuous"})
+_CONTINUOUS_WORKER_CONTROL = (
+    "This worker has explicit continuous completion mode. Treat the previous cycle's "
+    "result as provisional, reassess the original objective and authoritative evidence, "
+    "and choose the next materially useful improvement, verification, research step, or "
+    "experiment. Do not merely restate the provisional result. The worker remains active "
+    "until an explicit cancellation or a genuinely blocking question."
+)
 WORKER_STREAM_EVENT_TYPES = frozenset(
     {
         "agent_question",
@@ -92,6 +100,12 @@ _WORKER_STORE_MIGRATIONS = (
         )
         """,
     ),
+    (
+        """
+        ALTER TABLE workers
+        ADD COLUMN completion_mode TEXT NOT NULL DEFAULT 'natural'
+        """,
+    ),
 )
 
 
@@ -109,6 +123,7 @@ class WorkerRecord:
     result: str | None
     error: str | None
     run_count: int
+    completion_mode: str
 
 
 @dataclass(slots=True, frozen=True)
@@ -159,10 +174,17 @@ class WorkerStore:
         objective: str,
         *,
         output_spec: CallerOutputSpec | None = None,
+        completion_mode: str = "natural",
     ) -> WorkerRecord:
         text = objective.strip()
         if not text:
             raise ValueError("worker objective must not be empty")
+        mode = str(completion_mode).strip()
+        if mode not in WORKER_COMPLETION_MODES:
+            raise ValueError(
+                "worker completion_mode must be one of "
+                f"{sorted(WORKER_COMPLETION_MODES)}"
+            )
         worker_id = new_id("worker")
         now = utc_now_iso()
         with self._connect() as connection:
@@ -170,10 +192,11 @@ class WorkerStore:
             connection.execute(
                 """
                 INSERT INTO workers(
-                    worker_id, session_id, objective, status, created_at, updated_at
-                ) VALUES (?, ?, ?, 'created', ?, ?)
+                    worker_id, session_id, objective, status, created_at, updated_at,
+                    completion_mode
+                ) VALUES (?, ?, ?, 'created', ?, ?, ?)
                 """,
-                (worker_id, session_id, text, now, now),
+                (worker_id, session_id, text, now, now, mode),
             )
             self._append_event(
                 connection,
@@ -183,6 +206,7 @@ class WorkerStore:
                     "session_id": session_id,
                     "objective": text,
                     "status": "created",
+                    "completion_mode": mode,
                     "caller_output_spec": (
                         output_spec.payload() if output_spec is not None else None
                     ),
@@ -493,8 +517,19 @@ class WorkerManager:
         name: str | None = None,
         output_schema: dict[str, Any] | None = None,
         mechanical_fields: dict[str, str] | None = None,
+        completion_mode: str = "natural",
     ) -> WorkerRecord:
         output_spec = prepare_caller_output_spec(output_schema, mechanical_fields)
+        mode = str(completion_mode).strip()
+        if mode not in WORKER_COMPLETION_MODES:
+            raise ValueError(
+                "completion_mode must be one of "
+                f"{sorted(WORKER_COMPLETION_MODES)}"
+            )
+        if mode == "continuous" and output_spec is not None:
+            raise ValueError(
+                "continuous workers cannot have a terminal output_schema"
+            )
         state = self.runtime.create_or_load_session()
         if name and name.strip():
             state = self.runtime.history.rename_session(state.session_id, name.strip())
@@ -502,6 +537,7 @@ class WorkerManager:
             state.session_id,
             objective,
             output_spec=output_spec,
+            completion_mode=mode,
         )
 
     def start(self, worker_id: str) -> WorkerRecord:
@@ -584,6 +620,7 @@ class WorkerManager:
             worker_id,
             "cancellation_requested",
             expected={"created", "queued", "working", "input_required"},
+            result=current.result,
             event_type="worker_cancellation_requested",
             event_payload={"reason": reason},
         )
@@ -932,53 +969,29 @@ class WorkerManager:
             working.session_id, write_projections=False
         )
         output_spec = self._output_spec(working)
-        first_sequence = state.event_count + 1
         try:
-            if working.run_count == 1 and not state.messages:
-                result = self.runtime.run_turn_in_session(state, working.objective)
-            else:
-                result = self.runtime.resume_turn_in_session(state, working.objective)
-            latest = self.store.get(worker_id)
-            if latest.status == "cancellation_requested":
-                self._sync_history_events(working)
-                self.store.transition(
-                    worker_id,
-                    "canceled",
-                    expected={"cancellation_requested"},
-                    result=result.assistant_text,
-                    event_type="worker_canceled",
-                    event_payload={"completion_raced_cancellation": True},
-                )
-                return
-            blocking = any(
-                event.event_type == "agent_question"
-                and event.payload.get("criticality") == "blocking"
-                for event in self.runtime.history.iter_history(
-                    working.session_id, start_sequence=first_sequence
-                )
-            )
-            structured_output = None
-            if not blocking and output_spec is not None:
-                semantic_output = self.runtime.generate_caller_structured_output(
-                    state,
-                    original_request=working.objective,
-                    assistant_message=result.assistant_text,
-                    tool_results=result.tool_results,
-                    semantic_schema=output_spec.semantic_schema,
-                )
-                structured_output = merge_caller_output(
-                    output_spec,
-                    semantic_output,
-                    {
-                        "worker_id": working.worker_id,
-                        "session_id": working.session_id,
-                        "objective": working.objective,
-                        "status": "completed",
-                        "created_at": working.created_at,
-                        "started_at": working.started_at or "",
-                        "run_count": working.run_count,
-                    },
-                )
+            while True:
+                latest = self.store.get(worker_id)
+                if latest.status == "cancellation_requested":
+                    self.store.transition(
+                        worker_id,
+                        "canceled",
+                        expected={"cancellation_requested"},
+                        result=latest.result,
+                        event_type="worker_canceled",
+                        event_payload={"between_continuous_cycles": True},
+                    )
+                    return
+                if latest.status != "working":
+                    return
+                working = latest
+                first_sequence = state.event_count + 1
+                if working.run_count == 1 and not state.messages:
+                    result = self.runtime.run_turn_in_session(state, working.objective)
+                else:
+                    result = self.runtime.resume_turn_in_session(
+                        state, working.objective
+                    )
                 latest = self.store.get(worker_id)
                 if latest.status == "cancellation_requested":
                     self._sync_history_events(working)
@@ -988,32 +1001,125 @@ class WorkerManager:
                         expected={"cancellation_requested"},
                         result=result.assistant_text,
                         event_type="worker_canceled",
-                        event_payload={"structured_output_raced_cancellation": True},
+                        event_payload={"completion_raced_cancellation": True},
                     )
                     return
-            self._sync_history_events(working)
-            self.store.transition(
-                worker_id,
-                "input_required" if blocking else "completed",
-                expected={"working"},
-                result=result.assistant_text,
-                event_type="worker_input_required" if blocking else "worker_completed",
-                event_payload=(
-                    {"structured_output": structured_output}
-                    if structured_output is not None
-                    else None
-                ),
-            )
+                if latest.status != "working":
+                    return
+                blocking = any(
+                    event.event_type == "agent_question"
+                    and event.payload.get("criticality") == "blocking"
+                    for event in self.runtime.history.iter_history(
+                        working.session_id, start_sequence=first_sequence
+                    )
+                )
+                if blocking:
+                    self._sync_history_events(working)
+                    self.store.transition(
+                        worker_id,
+                        "input_required",
+                        expected={"working"},
+                        result=result.assistant_text,
+                        event_type="worker_input_required",
+                    )
+                    return
+
+                if working.completion_mode == "continuous":
+                    self._sync_history_events(working)
+                    continued = self.store.transition(
+                        worker_id,
+                        "working",
+                        expected={"working"},
+                        result=result.assistant_text,
+                        event_type="worker_iteration_completed",
+                        event_payload={
+                            "completion_mode": "continuous",
+                            "provisional": True,
+                        },
+                    )
+                    self._queue_message(
+                        continued,
+                        _CONTINUOUS_WORKER_CONTROL,
+                        source="worker_continuous",
+                    )
+                    latest = self.store.get(worker_id)
+                    if latest.status != "working":
+                        continue
+                    working = self.store.transition(
+                        worker_id,
+                        "working",
+                        expected={"working"},
+                        result=continued.result,
+                        increment_run_count=True,
+                        event_type="worker_continuation_started",
+                        event_payload={"completion_mode": "continuous"},
+                    )
+                    continue
+
+                structured_output = None
+                if output_spec is not None:
+                    semantic_output = self.runtime.generate_caller_structured_output(
+                        state,
+                        original_request=working.objective,
+                        assistant_message=result.assistant_text,
+                        tool_results=result.tool_results,
+                        semantic_schema=output_spec.semantic_schema,
+                    )
+                    structured_output = merge_caller_output(
+                        output_spec,
+                        semantic_output,
+                        {
+                            "worker_id": working.worker_id,
+                            "session_id": working.session_id,
+                            "objective": working.objective,
+                            "status": "completed",
+                            "created_at": working.created_at,
+                            "started_at": working.started_at or "",
+                            "run_count": working.run_count,
+                        },
+                    )
+                    latest = self.store.get(worker_id)
+                    if latest.status == "cancellation_requested":
+                        self._sync_history_events(working)
+                        self.store.transition(
+                            worker_id,
+                            "canceled",
+                            expected={"cancellation_requested"},
+                            result=result.assistant_text,
+                            event_type="worker_canceled",
+                            event_payload={
+                                "structured_output_raced_cancellation": True
+                            },
+                        )
+                        return
+                self._sync_history_events(working)
+                self.store.transition(
+                    worker_id,
+                    "completed",
+                    expected={"working"},
+                    result=result.assistant_text,
+                    event_type="worker_completed",
+                    event_payload=(
+                        {"structured_output": structured_output}
+                        if structured_output is not None
+                        else None
+                    ),
+                )
+                return
         except RunCancellationRequested as exc:
             error = str(exc)
             try:
                 self._sync_history_events(working)
             except Exception as sync_exc:
                 error += f"; history event sync failed: {type(sync_exc).__name__}: {sync_exc}"
+            latest = self.store.get(worker_id)
+            if latest.status == "canceled":
+                return
             self.store.transition(
                 worker_id,
                 "canceled",
                 expected={"working", "cancellation_requested"},
+                result=latest.result,
                 error=error,
                 event_type="worker_canceled",
             )
@@ -1023,10 +1129,25 @@ class WorkerManager:
                 self._sync_history_events(working)
             except Exception as sync_exc:
                 error += f"; history event sync failed: {type(sync_exc).__name__}: {sync_exc}"
+            latest = self.store.get(worker_id)
+            if latest.status == "canceled":
+                return
+            if latest.status == "cancellation_requested":
+                self.store.transition(
+                    worker_id,
+                    "canceled",
+                    expected={"cancellation_requested"},
+                    result=latest.result,
+                    error=error,
+                    event_type="worker_canceled",
+                    event_payload={"failure_raced_cancellation": True},
+                )
+                return
             self.store.transition(
                 worker_id,
                 "failed",
-                expected={"working", "cancellation_requested"},
+                expected={"working"},
+                result=latest.result,
                 error=error,
                 event_type="worker_failed",
             )

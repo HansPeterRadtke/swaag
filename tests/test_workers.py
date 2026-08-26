@@ -196,6 +196,26 @@ class _OptionalInputClient(_WorkerClient):
         return self.result(payload, _action("blue provisional complete"))
 
 
+class _ContinuousClient(_WorkerClient):
+    def __init__(self) -> None:
+        self.calls = 0
+        self.second_started = threading.Event()
+        self.second_prompt = ""
+
+    def send_completion(self, payload: dict[str, Any], *, cancel_check=None, **_kwargs):
+        self.calls += 1
+        if self.calls == 1:
+            return self.result(payload, _action("first provisional result"))
+        self.second_prompt = str(payload["prompt"])
+        self.second_started.set()
+        deadline = time.monotonic() + 5
+        while time.monotonic() < deadline:
+            if cancel_check is not None and cancel_check():
+                raise ModelCallPreempted("continuous cancellation observed")
+            time.sleep(0.005)
+        raise AssertionError("continuous worker cancellation was not observed")
+
+
 def test_multiple_workers_have_independent_durable_sessions(make_config) -> None:
     from swaag.runtime import AgentRuntime
 
@@ -334,6 +354,62 @@ def test_optional_question_continues_work_and_later_answer_redirects(make_config
     assert revised.status == "completed"
     assert revised.result == "green revision complete"
     assert revised.run_count == 2
+
+
+def test_continuous_worker_keeps_provisional_results_and_runs_until_canceled(
+    make_config,
+) -> None:
+    from swaag.runtime import AgentRuntime
+
+    client = _ContinuousClient()
+    runtime = AgentRuntime(
+        make_config(model__context_limit=32_000), model_client=client
+    )
+    manager = WorkerManager(runtime)
+    worker = manager.create(
+        "keep improving the evidence",
+        completion_mode="continuous",
+    )
+    manager.start(worker.worker_id)
+    assert client.second_started.wait(timeout=10)
+
+    active = manager.store.get(worker.worker_id)
+    events = manager.events(worker.worker_id)
+    manager.cancel(worker.worker_id, reason="enough improvement")
+    finished = manager.wait(worker.worker_id, timeout_seconds=10)
+    manager.shutdown()
+
+    assert active.status == "working"
+    assert active.completion_mode == "continuous"
+    assert active.result == "first provisional result"
+    assert active.run_count == 2
+    assert "explicit continuous completion mode" in client.second_prompt
+    assert any(event.event_type == "worker_iteration_completed" for event in events)
+    assert any(event.event_type == "worker_continuation_started" for event in events)
+    assert finished.status == "canceled"
+    assert finished.result == "first provisional result"
+
+
+def test_continuous_worker_mode_is_explicit_and_rejects_terminal_schema(
+    make_config,
+) -> None:
+    from swaag.runtime import AgentRuntime
+
+    manager = WorkerManager(AgentRuntime(make_config(), model_client=object()))
+    with pytest.raises(ValueError, match="completion_mode"):
+        manager.create("objective", completion_mode="eventually")
+    with pytest.raises(ValueError, match="terminal output_schema"):
+        manager.create(
+            "objective",
+            completion_mode="continuous",
+            output_schema={
+                "type": "object",
+                "properties": {"answer": {"type": "string"}},
+                "required": ["answer"],
+                "additionalProperties": False,
+            },
+        )
+    manager.shutdown()
 
 
 def test_worker_archive_preserves_exact_history_and_prevents_restart(make_config) -> None:

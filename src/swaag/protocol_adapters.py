@@ -118,6 +118,7 @@ class A2AProjectionAdapter:
             "status": status,
             "metadata": {
                 "swaagStatus": record.status,
+                "swaagCompletionMode": record.completion_mode,
                 "runCount": record.run_count,
                 "archivedAt": record.archived_at,
             },

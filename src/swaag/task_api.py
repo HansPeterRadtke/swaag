@@ -21,6 +21,9 @@ class TaskApi:
         args = dict(payload or {})
         if operation == "create":
             objective = _required_text(args, "objective")
+            completion_mode = args.get("completion_mode", "natural")
+            if not isinstance(completion_mode, str):
+                raise ValueError("completion_mode must be a string")
             output_schema = args.get("output_schema")
             if output_schema is not None and not isinstance(output_schema, dict):
                 raise ValueError("output_schema must be an object or null")
@@ -45,6 +48,7 @@ class TaskApi:
                 name=_optional_text(args, "name"),
                 output_schema=output_schema,
                 mechanical_fields=mechanical_fields,
+                completion_mode=completion_mode,
             )
             for name, media_type, data in decoded_attachments:
                 self.workers.add_attachment(

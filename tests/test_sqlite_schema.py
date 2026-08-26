@@ -96,9 +96,49 @@ def test_all_runtime_sqlite_stores_record_explicit_schema_versions(tmp_path) -> 
     embeddings = DerivedEmbeddingIndex(sessions, _Embeddings())
 
     assert _version(communication.path) == 1
-    assert _version(workers.path) == 2
+    assert _version(workers.path) == 3
     assert _version(history.sqlite_history_path()) == 1
     assert _version(archives.catalog_path) == 1
     assert _version(inference.path) == 1
     assert _version(preemption.path) == 1
     assert _version(embeddings.path) == 1
+
+
+def test_worker_completion_mode_migration_preserves_existing_rows(tmp_path) -> None:
+    sessions = tmp_path / "sessions"
+    sessions.mkdir()
+    path = sessions / "workers.sqlite3"
+    with sqlite3.connect(path) as connection:
+        connection.execute(
+            """
+            CREATE TABLE workers (
+                worker_id TEXT PRIMARY KEY,
+                session_id TEXT NOT NULL UNIQUE,
+                objective TEXT NOT NULL,
+                status TEXT NOT NULL,
+                created_at TEXT NOT NULL,
+                updated_at TEXT NOT NULL,
+                started_at TEXT,
+                completed_at TEXT,
+                archived_at TEXT,
+                result TEXT,
+                error TEXT,
+                run_count INTEGER NOT NULL DEFAULT 0
+            )
+            """
+        )
+        connection.execute(
+            """
+            INSERT INTO workers(
+                worker_id, session_id, objective, status, created_at, updated_at
+            ) VALUES ('worker_old', 'session_old', 'preserved', 'created', 'now', 'now')
+            """
+        )
+        connection.execute("PRAGMA user_version=2")
+
+    store = WorkerStore(sessions)
+    record = store.get("worker_old")
+
+    assert _version(store.path) == 3
+    assert record.objective == "preserved"
+    assert record.completion_mode == "natural"

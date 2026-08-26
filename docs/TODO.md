@@ -46,7 +46,7 @@ This is the gap list between the current repository and the intended architectur
 - [x] **Allow optional questions to remain pending while useful work continues.** Optional questions are durable events, do not force input-required state, and may accompany useful tool work. A later answer can resume/redirect even a provisionally completed worker without losing history.
 - [ ] **Benchmark ambiguity handling and unnecessary clarification.** Include AskBench-like cases, recoverable uncertainty, wrong-premise cases, and cases where tools can answer the question without user interruption.
 - [ ] **Make persistence an explicit evaluated behavior.** The worker should inspect, test, verify, research, and improve rather than stopping at the first plausible output.
-- [ ] **Support intentionally open-ended/improvement-until-interrupted tasks.** These need explicit lifecycle state rather than pretending every task has a natural final answer.
+- [x] **Support intentionally open-ended/improvement-until-interrupted tasks.** Callers explicitly choose `completion_mode=continuous`; each semantically verified cycle remains a durable provisional result, enters a new context-compiled improvement cycle, and keeps the worker mechanically working until explicit cancellation or a genuinely blocking LLM-authored question. The mode and cycle transitions survive restart, inspection, and protocol projection instead of pretending a natural terminal answer exists.
 
 ## P0 - completion semantics
 
