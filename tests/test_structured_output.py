@@ -109,6 +109,53 @@ class _CancellableStructuredOutputClient(_StructuredOutputClient):
         raise AssertionError("structured output cancellation was not observed")
 
 
+class _OutputLimitedStructuredOutputClient(_StructuredOutputClient):
+    def __init__(self) -> None:
+        super().__init__()
+        self.limited = False
+
+    def send_completion(self, payload: dict[str, Any], **kwargs) -> CompletionResult:
+        if payload["contract"] == "caller_structured_output" and not self.limited:
+            self.limited = True
+            self.requests.append(payload)
+            return CompletionResult(
+                text="{",
+                raw_request=payload,
+                raw_response={"content": "{", "stop_type": "limit"},
+                prompt_tokens=None,
+                completion_tokens=payload["n_predict"],
+                finish_reason="length",
+            )
+        return super().send_completion(payload, **kwargs)
+
+
+def test_caller_structured_output_recompiles_after_output_starvation(
+    make_config,
+) -> None:
+    client = _OutputLimitedStructuredOutputClient()
+    runtime = AgentRuntime(
+        make_config(model__context_limit=12_000, model__max_retries=1),
+        model_client=client,
+    )
+    state = runtime.create_or_load_session()
+    output = runtime.generate_caller_structured_output(
+        state,
+        original_request="Return the audit finding.",
+        assistant_message="The audit found no remaining defects.",
+        tool_results=[],
+        semantic_schema=_closed(
+            {
+                "finding": {"type": "string"},
+                "confidence": {"type": "string", "enum": ["low", "high"]},
+            }
+        ),
+    )
+
+    assert output == {"finding": "no remaining defects", "confidence": "high"}
+    assert len(client.requests) == 2
+    assert client.requests[1]["n_predict"] > client.requests[0]["n_predict"]
+
+
 def test_output_spec_separates_semantic_and_mechanical_fields() -> None:
     schema = _closed(
         {

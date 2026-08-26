@@ -88,6 +88,20 @@ class OutputBudgetExhaustedError(ValueError):
         self.reserved_tokens = int(reserved_tokens)
 
 
+class _OutputRecoveryContextOverflow(BudgetExceededError):
+    def __init__(
+        self,
+        compilation: ContextCompilation,
+        minimum_output_tokens: int,
+    ):
+        super().__init__(
+            "The reconstructed call needs more output space than the current exact input permits",
+            compilation.report,
+        )
+        self.compilation = compilation
+        self.minimum_output_tokens = int(minimum_output_tokens)
+
+
 def _validated_caller_output(
     payload: dict[str, Any], schema: dict[str, Any]
 ) -> dict[str, Any]:
@@ -1000,6 +1014,7 @@ class AgentRuntime:
         evidence_rows = self._completion_evidence_rows(state, tool_results)
         projections: dict[int, str] = {}
         last_compilation: ContextCompilation | None = None
+        minimum_output_tokens = 128
         max_rounds = max(0, int(self.config.context.max_compaction_rounds))
         for reduction_round in range(max_rounds + 1):
             assembly = self.prompts.build_completion_evaluation_prompt(
@@ -1010,7 +1025,10 @@ class AgentRuntime:
                 tool_result_projections=projections,
             )
             compilation = self._compile_context(
-                state, assembly, contract, minimum_output_tokens=128
+                state,
+                assembly,
+                contract,
+                minimum_output_tokens=minimum_output_tokens,
             )
             last_compilation = compilation
             self.history.record_event(
@@ -1036,27 +1054,39 @@ class AgentRuntime:
             )
             if compilation.report.fits:
                 self._record_prompt_built(state, assembly, contract, compilation.report)
-                payload = self._execute_structured_call(
-                    state,
-                    PreparedCall(assembly, compilation.report, "lean", contract),
-                )
-                result = {
-                    "complete": bool(payload.get("complete", False)),
-                    "reason": str(payload.get("reason", "")).strip(),
-                    "remaining_work": [
-                        str(item)
-                        for item in payload.get("remaining_work", [])
-                        if isinstance(item, str)
-                    ],
-                    "evidence_source_references": [
-                        reference
-                        for row in evidence_rows
-                        for reference in row.get("source_event_references", [])
-                    ],
-                    "projected_source_event_sequences": sorted(projections),
-                }
-                self.history.record_event(state, "completion_evaluated", result)
-                return result
+                try:
+                    payload, _final_prepared = self._execute_with_output_recovery(
+                        state,
+                        PreparedCall(
+                            assembly,
+                            compilation.report,
+                            "lean",
+                            contract,
+                        ),
+                        minimum_output_tokens=minimum_output_tokens,
+                    )
+                except _OutputRecoveryContextOverflow as exc:
+                    compilation = exc.compilation
+                    last_compilation = compilation
+                    minimum_output_tokens = exc.minimum_output_tokens
+                else:
+                    result = {
+                        "complete": bool(payload.get("complete", False)),
+                        "reason": str(payload.get("reason", "")).strip(),
+                        "remaining_work": [
+                            str(item)
+                            for item in payload.get("remaining_work", [])
+                            if isinstance(item, str)
+                        ],
+                        "evidence_source_references": [
+                            reference
+                            for row in evidence_rows
+                            for reference in row.get("source_event_references", [])
+                        ],
+                        "projected_source_event_sequences": sorted(projections),
+                    }
+                    self.history.record_event(state, "completion_evaluated", result)
+                    return result
             if (
                 not self.config.context.compact_on_overflow
                 or reduction_round >= max_rounds
@@ -1172,6 +1202,7 @@ class AgentRuntime:
         evidence_rows = self._completion_evidence_rows(state, tool_results)
         projections: dict[int, str] = {}
         last_compilation: ContextCompilation | None = None
+        minimum_output_tokens = 128
         max_rounds = max(0, int(self.config.context.max_compaction_rounds))
         for reduction_round in range(max_rounds + 1):
             assembly = self.prompts.build_caller_structured_output_prompt(
@@ -1184,7 +1215,7 @@ class AgentRuntime:
                 state,
                 assembly,
                 contract,
-                minimum_output_tokens=128,
+                minimum_output_tokens=minimum_output_tokens,
             )
             last_compilation = compilation
             cap_error = "" if compilation.report.fits else "context_limit_exceeded"
@@ -1211,29 +1242,41 @@ class AgentRuntime:
             )
             if compilation.report.fits:
                 self._record_prompt_built(state, assembly, contract, compilation.report)
-                payload = self._execute_structured_call(
-                    state,
-                    PreparedCall(assembly, compilation.report, "lean", contract),
-                    validator=lambda value: _validated_caller_output(
-                        value, semantic_schema
-                    ),
-                )
-                source_references = [
-                    reference
-                    for row in evidence_rows
-                    for reference in row.get("source_event_references", [])
-                ]
-                self.history.record_event(
-                    state,
-                    "caller_structured_output_created",
-                    {
-                        "schema": semantic_schema,
-                        "semantic_output": payload,
-                        "evidence_source_references": source_references,
-                        "projected_source_event_sequences": sorted(projections),
-                    },
-                )
-                return payload
+                try:
+                    payload, _final_prepared = self._execute_with_output_recovery(
+                        state,
+                        PreparedCall(
+                            assembly,
+                            compilation.report,
+                            "lean",
+                            contract,
+                        ),
+                        minimum_output_tokens=minimum_output_tokens,
+                        validator=lambda value: _validated_caller_output(
+                            value, semantic_schema
+                        ),
+                    )
+                except _OutputRecoveryContextOverflow as exc:
+                    compilation = exc.compilation
+                    last_compilation = compilation
+                    minimum_output_tokens = exc.minimum_output_tokens
+                else:
+                    source_references = [
+                        reference
+                        for row in evidence_rows
+                        for reference in row.get("source_event_references", [])
+                    ]
+                    self.history.record_event(
+                        state,
+                        "caller_structured_output_created",
+                        {
+                            "schema": semantic_schema,
+                            "semantic_output": payload,
+                            "evidence_source_references": source_references,
+                            "projected_source_event_sequences": sorted(projections),
+                        },
+                    )
+                    return payload
             if (
                 not self.config.context.compact_on_overflow
                 or reduction_round >= max_rounds
@@ -1452,11 +1495,15 @@ class AgentRuntime:
             source_event_hash=source_hash,
             target_tokens=target_tokens,
         )
+        minimum_output_tokens = min(
+            target_tokens + 64,
+            self.config.context.reserved_response_tokens,
+        )
         compilation = self._compile_context(
             state,
             assembly,
             contract,
-            minimum_output_tokens=min(target_tokens + 64, self.config.context.reserved_response_tokens),
+            minimum_output_tokens=minimum_output_tokens,
             desired_output_tokens=target_tokens + 64,
         )
         if not compilation.report.fits:
@@ -1484,10 +1531,29 @@ class AgentRuntime:
             },
         )
         self._record_prompt_built(state, assembly, contract, compilation.report)
-        payload = self._execute_structured_call(
-            state,
-            PreparedCall(assembly, compilation.report, "lean", contract),
-        )
+        try:
+            payload, _final_prepared = self._execute_with_output_recovery(
+                state,
+                PreparedCall(assembly, compilation.report, "lean", contract),
+                minimum_output_tokens=minimum_output_tokens,
+                desired_output_tokens=target_tokens + 64,
+            )
+        except _OutputRecoveryContextOverflow as exc:
+            self.history.record_event(
+                state,
+                "tool_result_projection_skipped",
+                {
+                    "source_event_sequence": sequence,
+                    "source_event_hash": source_hash,
+                    "reason": "output_recovery_context_does_not_fit",
+                    "target_tokens": target_tokens,
+                    "original_tokens": original_tokens,
+                    "overflow_tokens": overflow_tokens,
+                    "minimum_output_tokens": exc.minimum_output_tokens,
+                    "budget_report": asdict(exc.compilation.report),
+                },
+            )
+            return ""
         projection = str(payload.get("projection", "")).strip()
         if not projection:
             return ""
@@ -1777,6 +1843,7 @@ class AgentRuntime:
 
         contract = summary_contract()
         context_limit_resolution = self._resolve_context_limit()
+        minimum_summary_tokens = int(self.config.context.reserved_summary_tokens)
         for source_count in range(maximum_source, 0, -1):
             source_messages = state.messages[:source_count]
             adaptive_cap = min(max(0, source_count - 1), max(0, int(self.config.context.max_recent_messages) * 4))
@@ -1796,7 +1863,8 @@ class AgentRuntime:
                 state,
                 assembly,
                 contract,
-                minimum_output_tokens=self.config.context.reserved_summary_tokens,
+                minimum_output_tokens=minimum_summary_tokens,
+                desired_output_tokens=target_summary_tokens + 64,
                 context_limit_resolution=context_limit_resolution,
             )
             report = compilation.report
@@ -1813,7 +1881,18 @@ class AgentRuntime:
                 },
             )
             self._record_prompt_built(state, assembly, contract, report)
-            payload = self._execute_structured_call(state, PreparedCall(assembly, report, "lean", contract))
+            try:
+                payload, final_prepared = self._execute_with_output_recovery(
+                    state,
+                    PreparedCall(assembly, report, "lean", contract),
+                    minimum_output_tokens=minimum_summary_tokens,
+                    desired_output_tokens=target_summary_tokens + 64,
+                    context_limit_resolution=context_limit_resolution,
+                )
+            except _OutputRecoveryContextOverflow as exc:
+                minimum_summary_tokens = exc.minimum_output_tokens
+                continue
+            report = final_prepared.report
             summary_text = str(payload.get("summary", "")).strip()
             if not summary_text:
                 raise ValueError("summary must not be empty")
@@ -1903,6 +1982,102 @@ class AgentRuntime:
         if not isinstance(payload, dict):
             raise ValueError(f"Contract {prepared.contract.name} must return one JSON object")
         return validator(payload) if validator is not None else payload
+
+    def _execute_with_output_recovery(
+        self,
+        state: SessionState,
+        prepared: PreparedCall,
+        *,
+        minimum_output_tokens: int,
+        desired_output_tokens: int | None = None,
+        validator: Callable[[dict[str, Any]], Any] | None = None,
+        context_limit_resolution: tuple[int, str] | None = None,
+    ) -> tuple[Any, PreparedCall]:
+        current = prepared
+        current_minimum = max(1, int(minimum_output_tokens))
+        for output_retry in range(int(self.config.model.max_retries) + 1):
+            try:
+                return (
+                    self._execute_structured_call(
+                        state,
+                        current,
+                        validator=validator,
+                        seed_offset=output_retry,
+                    ),
+                    current,
+                )
+            except OutputBudgetExhaustedError:
+                if output_retry >= int(self.config.model.max_retries):
+                    raise
+                expanded = self._expanded_output_minimum(current)
+                if expanded <= current_minimum:
+                    raise
+                self.history.record_event(
+                    state,
+                    "budget_repaired",
+                    {
+                        "kind": current.assembly.kind,
+                        "reason": "model_output_budget_exhausted",
+                        "requested_response_tokens": current.report.reserved_response_tokens,
+                        "capped_response_tokens": expanded,
+                        "previous_reserved_response_tokens": current.report.reserved_response_tokens,
+                        "next_minimum_output_tokens": expanded,
+                        "output_retry": output_retry + 1,
+                    },
+                )
+                current_minimum = expanded
+                compilation = self._compile_context(
+                    state,
+                    current.assembly,
+                    current.contract,
+                    minimum_output_tokens=current_minimum,
+                    desired_output_tokens=desired_output_tokens,
+                    context_limit_resolution=context_limit_resolution,
+                )
+                cap_error = (
+                    "" if compilation.report.fits else "context_limit_exceeded"
+                )
+                self.history.record_event(
+                    state,
+                    "context_compiled",
+                    {
+                        "kind": current.assembly.kind,
+                        "prompt_mode": current.prompt_mode,
+                        "accounting": compilation.accounting(),
+                        "cap_error": cap_error,
+                        "output_retry": output_retry + 1,
+                    },
+                )
+                self.history.record_event(
+                    state,
+                    "budget_checked",
+                    {
+                        "kind": current.assembly.kind,
+                        "prompt_mode": current.prompt_mode,
+                        "budget_report": asdict(compilation.report),
+                        "cap_error": cap_error,
+                        "output_retry": output_retry + 1,
+                    },
+                )
+                if not compilation.report.fits:
+                    raise _OutputRecoveryContextOverflow(
+                        compilation,
+                        current_minimum,
+                    )
+                self._record_prompt_built(
+                    state,
+                    current.assembly,
+                    current.contract,
+                    compilation.report,
+                )
+                current = PreparedCall(
+                    current.assembly,
+                    compilation.report,
+                    current.prompt_mode,
+                    current.contract,
+                )
+
+        raise AssertionError("unreachable output-recovery loop")
 
     @staticmethod
     def _expanded_output_minimum(prepared: PreparedCall) -> int:
@@ -2647,9 +2822,10 @@ class AgentRuntime:
         )
         report = self._budget_report(state, assembly, contract)
         self._record_prompt_built(state, assembly, contract, report)
-        payload = self._execute_structured_call(
+        payload, _final_prepared = self._execute_with_output_recovery(
             state,
             PreparedCall(assembly, report, "lean", contract),
+            minimum_output_tokens=self.config.context.reserved_response_tokens,
         )
         if payload.get("answer") != "yes":
             raise ValueError("Doctor constrained-output probe did not return yes")

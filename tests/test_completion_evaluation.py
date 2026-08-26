@@ -131,6 +131,57 @@ class _CompletionClient:
         )
 
 
+class _OutputLimitedCompletionClient(_CompletionClient):
+    def send_completion(self, payload: dict, **kwargs) -> CompletionResult:
+        if not self.requests:
+            self.requests.append(payload)
+            return CompletionResult(
+                text="{",
+                raw_request=payload,
+                raw_response={"content": "{", "stop_type": "limit"},
+                prompt_tokens=None,
+                completion_tokens=payload["n_predict"],
+                finish_reason="length",
+            )
+        return super().send_completion(payload, **kwargs)
+
+
+def test_completion_evaluation_recompiles_after_output_starvation(make_config) -> None:
+    client = _OutputLimitedCompletionClient(
+        [json.dumps({"complete": True, "reason": "Verified.", "remaining_work": []})]
+    )
+    runtime = AgentRuntime(
+        make_config(model__context_limit=12_000, model__max_retries=1),
+        model_client=client,
+    )
+    state = runtime.create_or_load_session()
+    action = AgentAction(
+        assistant_message="The work is verified.",
+        tool_calls=[],
+        continue_loop=False,
+        silent_completion=False,
+        status=AgentStatus("Verification passed.", "Finish.", "Evidence is sufficient.", "normal"),
+        questions=[],
+    )
+
+    result = runtime._evaluate_completion(
+        state,
+        original_request="Complete and verify the work.",
+        selected_action=action,
+        tool_results=[],
+    )
+
+    assert result["complete"] is True
+    assert len(client.requests) == 2
+    assert client.requests[1]["n_predict"] > client.requests[0]["n_predict"]
+    repaired = [
+        event
+        for event in runtime.history.read_history(state.session_id)
+        if event.event_type == "budget_repaired"
+    ]
+    assert repaired[-1].payload["kind"] == "completion_evaluation"
+
+
 def test_completion_evaluation_semantically_projects_only_after_measured_overflow(
     make_config, tmp_path
 ) -> None:

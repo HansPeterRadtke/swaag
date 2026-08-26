@@ -220,6 +220,34 @@ def test_history_compaction_creates_replayable_summary_with_exact_sources(
     assert rebuilt.messages == state.messages
 
 
+def test_history_summary_recompiles_after_output_starvation(make_config) -> None:
+    config = make_config(
+        model__context_limit=32_000,
+        model__max_retries=1,
+        context__max_recent_messages=2,
+    )
+    client = OutputLimitedFakeModelClient(
+        [json.dumps({"summary": "Earlier facts retained.", "preserve_recent_messages": 0})]
+    )
+    runtime = AgentRuntime(config, model_client=client)
+    state = runtime.create_or_load_session()
+    for role, content in (
+        ("user", "first fact"),
+        ("assistant", "second fact"),
+        ("user", "third fact"),
+        ("assistant", "fourth fact"),
+    ):
+        runtime._record_message(
+            state,
+            Message(role=role, content=content, created_at="t"),
+        )
+
+    assert runtime._compact_once(state) is True
+    assert len(client.requests) == 2
+    assert client.requests[1]["n_predict"] > client.requests[0]["n_predict"]
+    assert state.messages[0].content == "Earlier facts retained."
+
+
 def test_multiple_tool_calls_execute_in_order_and_exact_results_reach_next_call(make_config) -> None:
     request = "Calculate 21 * 2 and 5 + 7, then tell me both results."
 
