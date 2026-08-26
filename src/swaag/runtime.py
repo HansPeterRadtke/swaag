@@ -44,7 +44,11 @@ from swaag.prompts import PromptBuilder
 from swaag.scheduler import WakeupStore
 from swaag.schema_portability import assert_portable_json_schema
 from swaag.tokens import ConservativeEstimator, CountResult, ExactTokenCounter, build_budget
-from swaag.tools.base import _validate_schema_value
+from swaag.tools.base import (
+    SemanticCallContextOverflow,
+    SemanticCallRequest,
+    _validate_schema_value,
+)
 from swaag.tools.registry import ToolRegistry
 from swaag.types import (
     AttachmentReference,
@@ -1636,6 +1640,82 @@ class AgentRuntime:
             context_limit_source=context_limit_source,
         )
 
+    def _execute_tool_semantic_call(
+        self, state: SessionState, request: SemanticCallRequest
+    ) -> dict[str, Any]:
+        assembly = self.prompts.build_semantic_operation_prompt(
+            kind=request.kind,
+            system_instruction=request.system_instruction,
+            components=request.components,
+            prompt_mode=request.prompt_mode,
+        )
+        minimum_output_tokens = max(1, int(request.minimum_output_tokens))
+        output_retry = 0
+        while True:
+            compilation = self._compile_context(
+                state,
+                assembly,
+                request.contract,
+                minimum_output_tokens=minimum_output_tokens,
+            )
+            cap_error = "" if compilation.report.fits else "context_limit_exceeded"
+            self.history.record_event(
+                state,
+                "context_compiled",
+                {
+                    "kind": request.kind,
+                    "prompt_mode": request.prompt_mode,
+                    "accounting": compilation.accounting(),
+                    "cap_error": cap_error,
+                    "output_retry": output_retry,
+                },
+            )
+            self.history.record_event(
+                state,
+                "budget_checked",
+                {
+                    "kind": request.kind,
+                    "prompt_mode": request.prompt_mode,
+                    "budget_report": asdict(compilation.report),
+                    "cap_error": cap_error,
+                },
+            )
+            if not compilation.report.fits:
+                raise SemanticCallContextOverflow(compilation.report)
+            self._record_prompt_built(
+                state, assembly, request.contract, compilation.report
+            )
+            prepared = PreparedCall(
+                assembly,
+                compilation.report,
+                request.prompt_mode,
+                request.contract,
+            )
+            try:
+                return self._execute_structured_call(
+                    state,
+                    prepared,
+                    seed_offset=output_retry,
+                )
+            except OutputBudgetExhaustedError:
+                if output_retry >= int(self.config.model.max_retries):
+                    raise
+                expanded = self._expanded_output_minimum(prepared)
+                if expanded <= minimum_output_tokens:
+                    raise
+                self.history.record_event(
+                    state,
+                    "budget_repaired",
+                    {
+                        "kind": request.kind,
+                        "reason": "model_output_budget_exhausted",
+                        "requested_response_tokens": minimum_output_tokens,
+                        "capped_response_tokens": expanded,
+                    },
+                )
+                minimum_output_tokens = expanded
+                output_retry += 1
+
     def _resolve_context_limit(self) -> tuple[int, str]:
         resolver = getattr(self.client, "context_limit_resolution", None)
         if callable(resolver):
@@ -2103,6 +2183,9 @@ class AgentRuntime:
                 decision.tool_input,
                 self.config,
                 state,
+                semantic_call=lambda request: self._execute_tool_semantic_call(
+                    state, request
+                ),
             )
             guard.record(
                 "tool_execution_context",

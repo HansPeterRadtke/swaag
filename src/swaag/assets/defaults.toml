@@ -197,6 +197,7 @@ summary = "medium"
 tool_result_projection = "medium"
 completion_evaluation = "small"
 caller_structured_output = "small"
+history_analysis = "small"
 doctor = "tiny"
 benchmark_quality_judge = "small"
 

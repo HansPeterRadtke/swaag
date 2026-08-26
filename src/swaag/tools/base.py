@@ -3,11 +3,21 @@ from __future__ import annotations
 import abc
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Any
+from typing import Any, Callable
 from typing import TYPE_CHECKING
 
 from swaag.config import AgentConfig
-from swaag.types import SessionState, ToolExecutionResult, ToolGeneratedEvent, ToolKind, ToolInvocation
+from swaag.types import (
+    BudgetReport,
+    ContractSpec,
+    ModelCallKind,
+    PromptComponent,
+    SessionState,
+    ToolExecutionResult,
+    ToolGeneratedEvent,
+    ToolInvocation,
+    ToolKind,
+)
 
 if TYPE_CHECKING:
     from swaag.environment.environment import AgentEnvironment
@@ -17,15 +27,41 @@ class ToolValidationError(ValueError):
     pass
 
 
+class SemanticCallContextOverflow(RuntimeError):
+    def __init__(self, report: BudgetReport):
+        super().__init__(
+            "The complete semantic-call input does not fit the resolved model context"
+        )
+        self.report = report
+
+
+@dataclass(slots=True, frozen=True)
+class SemanticCallRequest:
+    kind: ModelCallKind
+    system_instruction: str
+    components: list[PromptComponent]
+    contract: ContractSpec
+    minimum_output_tokens: int
+    prompt_mode: str = "lean"
+
+
 @dataclass(slots=True)
 class ToolContext:
     config: AgentConfig
     session_state: SessionState
     environment: "AgentEnvironment"
+    semantic_call: Callable[[SemanticCallRequest], dict[str, Any]] | None = None
 
     @property
     def read_roots(self) -> list[Path]:
         return self.config.tools.read_roots
+
+    def call_semantic(self, request: SemanticCallRequest) -> dict[str, Any]:
+        if self.semantic_call is None:
+            raise RuntimeError(
+                "This model-backed capability requires the AgentRuntime semantic-call service"
+            )
+        return self.semantic_call(request)
 
 
 class Tool(abc.ABC):
@@ -43,7 +79,7 @@ class Tool(abc.ABC):
     def effective_kind(self, validated_input: dict[str, Any]) -> ToolKind:
         return self.kind
 
-    def execution_timeout_seconds(self, context: ToolContext) -> float:
+    def execution_timeout_seconds(self, context: ToolContext) -> float | None:
         return float(context.config.runtime.tool_timeout_seconds)
 
     def pre_execute_events(self, validated_input: dict[str, Any], context: ToolContext) -> list[ToolGeneratedEvent]:

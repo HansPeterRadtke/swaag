@@ -900,18 +900,59 @@ def test_tool_specific_execution_timeout_override_is_honored(make_config) -> Non
     assert result.output == {"ok": True}
 
 
-def test_history_analyze_timeout_covers_nested_structured_model_call(make_config) -> None:
+def test_caller_managed_tool_timeout_runs_on_dispatch_thread(make_config) -> None:
+    import threading
+
+    from swaag.history import HistoryStore
+    from swaag.tools.base import Tool, ToolContext
+    from swaag.tools.registry import ToolRegistry
+    from swaag.types import ToolExecutionResult
+
+    dispatch_thread = threading.get_ident()
+
+    class CallerManagedTool(Tool):
+        name = "caller_managed"
+        description = "caller-managed test"
+        input_schema = {
+            "type": "object",
+            "properties": {},
+            "required": [],
+            "additionalProperties": False,
+        }
+
+        def validate(self, raw_input):
+            return {}
+
+        def execution_timeout_seconds(self, context: ToolContext) -> None:
+            return None
+
+        def execute(self, validated_input, context: ToolContext) -> ToolExecutionResult:
+            return ToolExecutionResult(
+                tool_name=self.name,
+                output={"thread": threading.get_ident()},
+                display_text="ok",
+            )
+
+    config = make_config(tools__enabled=["caller_managed"])
+    state = HistoryStore(config.sessions.root).create(
+        config_fingerprint="cfg", model_base_url="http://model"
+    )
+    _invocation, result = ToolRegistry([CallerManagedTool()]).dispatch(
+        "caller_managed", {}, config, state
+    )
+    assert result.output["thread"] == dispatch_thread
+
+
+def test_history_analyze_uses_runtime_managed_model_timeouts(make_config) -> None:
     from swaag.environment.environment import AgentEnvironment
     from swaag.history import HistoryStore
     from swaag.tools.base import ToolContext
     from swaag.tools.history import HistoryAnalyzeTool
 
     config = make_config(runtime__tool_timeout_seconds=10)
-    config.model.structured_timeout_seconds = 120
-    config.model.connect_timeout_seconds = 10
     state = HistoryStore(config.sessions.root).create(config_fingerprint="cfg", model_base_url="http://model")
     context = ToolContext(config=config, session_state=state, environment=AgentEnvironment(config, state))
-    assert HistoryAnalyzeTool().execution_timeout_seconds(context) == 135.0
+    assert HistoryAnalyzeTool().execution_timeout_seconds(context) is None
 
 
 def test_editor_write_allowlist_blocks_protected_files_and_allows_declared_target(make_config, tmp_path: Path) -> None:

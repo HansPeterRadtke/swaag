@@ -4,14 +4,20 @@ from pathlib import Path
 
 import pytest
 
-from swaag.history import HistoryStore
-from swaag.runtime import AgentRuntime
-from swaag.tools.history import HistorySearchTool
-from swaag.tools.base import ToolContext
 from swaag.environment.environment import AgentEnvironment
-from swaag.tools.base import ToolValidationError
+from swaag.grammar import history_analysis_contract
+from swaag.history import HistoryStore
+from swaag.runtime import AgentRuntime, OutputBudgetExhaustedError
+from swaag.tokens import ConservativeEstimator
+from swaag.tools.base import (
+    SemanticCallContextOverflow,
+    SemanticCallRequest,
+    ToolContext,
+    ToolValidationError,
+)
+from swaag.tools.history import HistorySearchTool
 from swaag.tools.registry import ToolRegistry
-from swaag.types import Message
+from swaag.types import BudgetComponentReport, BudgetReport, Message, PromptComponent
 from swaag.utils import utc_now_iso
 
 
@@ -182,55 +188,98 @@ def test_sqlite_control_priority_and_processed_idempotency(make_config, tmp_path
     assert stop["control_id"] not in {item["control_id"] for item in store.list_pending_control_messages(state.session_id)}
 
 
-def test_history_analyze_is_grounded_in_exact_candidate_sequences(make_config, tmp_path: Path, monkeypatch) -> None:
-    import json
-
-    from swaag.environment.environment import AgentEnvironment
-    from swaag.tools.base import ToolContext
-    from swaag.types import CompletionResult
-
+def test_history_analyze_is_grounded_in_exact_candidate_sequences(
+    make_config, tmp_path: Path
+) -> None:
     config = make_config()
     config.sessions.root = tmp_path / "sessions"
     store, state = _state_with_history(config, session_id="session_history_analyze")
     source_sequence = next(event.sequence for event in store.read_history(state.session_id) if "artifact-marker-73" in str(event.payload))
 
-    def fake_complete(self, prompt, *, max_tokens, contract, temperature=None, kind=None, live_mode=False):
-        assert contract.name == "history_analysis"
+    def fake_semantic_call(request):
+        prompt = "".join(component.text for component in request.components)
+        assert request.kind == "history_analysis"
+        assert request.contract.name == "history_analysis"
         assert str(source_sequence) in prompt
-        return CompletionResult(
-            text=json.dumps(
-                {
-                    "goal_constraints": ["Recover the exact prior artifact marker."],
-                    "failure_evidence": ["The marker exists in a prior tool result."],
-                    "candidate_root_causes": ["The previous strategy did not retrieve the exact historical tool result."],
-                    "source_sequences": [source_sequence],
-                    "wrong_strategy": "Relying on incomplete current context.",
-                    "recommended_strategy": "Retrieve the exact history event and use its value.",
-                    "uncertainties": [],
-                }
-            ),
-            raw_request={}, raw_response={}, prompt_tokens=None, completion_tokens=None, finish_reason="stop",
-        )
+        assert "artifact-marker-73" in prompt
+        return {
+            "goal_constraints": ["Recover the exact prior artifact marker."],
+            "failure_evidence": ["The marker exists in a prior tool result."],
+            "candidate_root_causes": [
+                "The previous strategy did not retrieve the exact historical tool result."
+            ],
+            "source_sequences": [source_sequence],
+            "wrong_strategy": "Relying on incomplete current context.",
+            "recommended_strategy": "Retrieve the exact history event and use its value.",
+            "uncertainties": [],
+        }
 
-    monkeypatch.setattr("swaag.tools.history.LlamaCppClient.complete", fake_complete)
-    env = AgentEnvironment(config, state)
     registry = ToolRegistry()
     invocation, result = registry.dispatch(
         "history_analyze",
         {"query": "Why did we miss artifact-marker-73?", "session_ref": state.session_id, "max_events": 8},
         config,
         state,
+        semantic_call=fake_semantic_call,
     )
     assert invocation.tool_name == "history_analyze"
     assert result.output["source_sequences"] == [source_sequence]
     assert result.output["recommended_strategy"].startswith("Retrieve the exact history event")
+    assert result.output["source_event_references"][0]["sequence"] == source_sequence
+    assert result.output["source_event_references"][0]["hash"]
     assert [event.event_type for event in result.generated_events] == ["history_analyzed"]
 
 
-def test_history_tools_accept_active_session_aliases(make_config, tmp_path: Path) -> None:
-    from swaag.environment.environment import AgentEnvironment
-    from swaag.tools.base import ToolContext
+def test_runtime_injects_semantic_service_into_model_backed_tools(
+    make_config, monkeypatch
+) -> None:
+    config = make_config()
+    runtime = AgentRuntime(config, model_client=object())
+    state = runtime.create_or_load_session()
+    source = runtime.history.record_event(
+        state,
+        "assistant_progress",
+        {"action_index": 1, "assistant_text": "runtime semantic marker"},
+    )
 
+    def fake_semantic(call_state, request):
+        assert call_state.session_id == state.session_id
+        assert request.kind == "history_analysis"
+        assert "runtime semantic marker" in "".join(
+            component.text for component in request.components
+        )
+        return {
+            "goal_constraints": ["Use the runtime semantic service."],
+            "failure_evidence": ["The exact marker is present."],
+            "candidate_root_causes": ["The marker had not been analyzed."],
+            "source_sequences": [source.sequence],
+            "wrong_strategy": "Bypass the runtime.",
+            "recommended_strategy": "Use the central compiled call.",
+            "uncertainties": [],
+        }
+
+    monkeypatch.setattr(runtime, "_execute_tool_semantic_call", fake_semantic)
+    run = runtime.execute_tool_once(
+        "history_analyze",
+        {
+            "query": "runtime semantic marker",
+            "session_ref": None,
+            "max_events": 4,
+        },
+        session_id=state.session_id,
+    )
+
+    assert run.error is None
+    assert run.tool_result is not None
+    assert run.tool_result.output["source_sequences"] == [source.sequence]
+    event_types = [
+        event.event_type for event in runtime.history.read_history(state.session_id)
+    ]
+    assert "history_analyzed" in event_types
+    assert event_types[-2:] == ["tool_result", "message_added"]
+
+
+def test_history_tools_accept_active_session_aliases(make_config, tmp_path: Path) -> None:
     config = make_config()
     config.sessions.root = tmp_path / "sessions"
     store = HistoryStore(config.sessions.root)
@@ -271,10 +320,9 @@ def test_history_search_exposes_search_backend_and_current_session_schema(make_c
     assert "never invent a session label" in HistorySearchTool.usage_guidance
 
 
-def test_history_analyze_bounds_large_candidate_payloads(make_config, tmp_path: Path, monkeypatch) -> None:
-    import json
-    from swaag.types import CompletionResult
-
+def test_history_analyze_preserves_large_candidates_before_context_compilation(
+    make_config, tmp_path: Path
+) -> None:
     config = make_config()
     config.sessions.root = tmp_path / "sessions"
     store = HistoryStore(config.sessions.root)
@@ -283,34 +331,281 @@ def test_history_analyze_bounds_large_candidate_payloads(make_config, tmp_path: 
     store.record_event(state, "assistant_progress", {"action_index": 1, "assistant_text": huge})
     captured: dict[str, str] = {}
 
-    def fake_complete(self, prompt, *, max_tokens, contract, temperature=None, kind=None, live_mode=False):
+    def fake_semantic_call(request):
+        prompt = "".join(component.text for component in request.components)
         captured["prompt"] = prompt
         sequence = next(event.sequence for event in store.read_history(state.session_id) if event.event_type == "assistant_progress")
-        return CompletionResult(
-            text=json.dumps({
-                "goal_constraints": ["diagnose"],
-                "failure_evidence": ["bounded evidence"],
-                "candidate_root_causes": ["cause"],
-                "source_sequences": [sequence],
-                "wrong_strategy": "old",
-                "recommended_strategy": "new",
-                "uncertainties": [],
-            }),
-            raw_request={}, raw_response={}, prompt_tokens=None, completion_tokens=None, finish_reason="stop",
-        )
+        return {
+            "goal_constraints": ["diagnose"],
+            "failure_evidence": ["exact evidence"],
+            "candidate_root_causes": ["cause"],
+            "source_sequences": [sequence],
+            "wrong_strategy": "old",
+            "recommended_strategy": "new",
+            "uncertainties": [],
+        }
 
-    monkeypatch.setattr("swaag.tools.history.LlamaCppClient.complete", fake_complete)
     registry = ToolRegistry()
     _invocation, result = registry.dispatch(
         "history_analyze",
         {"query": "root-cause-marker-77", "session_ref": None, "max_events": 12},
         config,
         state,
+        semantic_call=fake_semantic_call,
     )
     assert result.output["candidate_root_causes"] == ["cause"]
-    assert len(captured["prompt"]) < 25_000
-    assert "X" * 5000 not in captured["prompt"]
-    assert "Bounded exact candidate excerpts" in captured["prompt"]
+    assert huge in captured["prompt"]
+    assert "Exact durable candidate event" in captured["prompt"]
+
+
+def test_history_analyze_projects_only_after_measured_overflow(make_config) -> None:
+    config = make_config()
+    store, state = _state_with_history(config, session_id="session_history_projection")
+    source_event = next(
+        event
+        for event in store.read_history(state.session_id)
+        if "artifact-marker-73" in str(event.payload)
+    )
+    analysis_calls = 0
+
+    def fake_semantic_call(request):
+        nonlocal analysis_calls
+        prompt = "".join(component.text for component in request.components)
+        if request.kind == "tool_result_projection":
+            assert "artifact-marker-73" in prompt
+            return {"projection": "The exact source contains artifact-marker-73."}
+        analysis_calls += 1
+        if analysis_calls == 1:
+            assert "artifact-marker-73" in prompt
+            event_component = next(
+                component
+                for component in request.components
+                if component.name == f"history_candidate_event_{source_event.sequence}"
+            )
+            raise SemanticCallContextOverflow(
+                BudgetReport(
+                    context_limit=500,
+                    input_tokens=800,
+                    reserved_response_tokens=100,
+                    safety_margin_tokens=10,
+                    required_tokens=910,
+                    non_context_tokens=0,
+                    fits=False,
+                    exact=True,
+                    breakdown=[
+                        BudgetComponentReport(
+                            name=event_component.name,
+                            category="history",
+                            tokens=700,
+                            exact=True,
+                            include_in_context=True,
+                            optional=False,
+                        )
+                    ],
+                )
+            )
+        assert "SEMANTIC PROJECTION CREATED ONLY AFTER MEASURED OVERFLOW" in prompt
+        return {
+            "goal_constraints": ["Recover the exact marker."],
+            "failure_evidence": ["The projected source preserves the marker."],
+            "candidate_root_causes": ["Prior context omitted the source."],
+            "source_sequences": [source_event.sequence],
+            "wrong_strategy": "Ignore measured context pressure.",
+            "recommended_strategy": "Use the grounded semantic projection.",
+            "uncertainties": [],
+        }
+
+    _invocation, result = ToolRegistry().dispatch(
+        "history_analyze",
+        {
+            "query": "Why was artifact-marker-73 missed?",
+            "session_ref": None,
+            "max_events": 8,
+        },
+        config,
+        state,
+        semantic_call=fake_semantic_call,
+    )
+
+    assert analysis_calls == 2
+    generated = result.generated_events[0].payload
+    assert generated["semantic_projections"][0]["source_event_sequence"] == source_event.sequence
+    assert generated["semantic_projections"][0]["source_event_hash"] == source_event.hash
+
+
+def test_history_projection_attempts_have_a_total_bound(make_config) -> None:
+    config = make_config(context__max_compaction_rounds=1)
+    store = HistoryStore(config.sessions.root)
+    state = store.create(
+        config_fingerprint=config.config_fingerprint(),
+        model_base_url=config.model.base_url,
+    )
+    store.record_event(
+        state,
+        "assistant_progress",
+        {"action_index": 1, "assistant_text": "Y" * 200_000 + " projection-bound-marker"},
+    )
+    projection_calls = 0
+
+    def fake_semantic_call(request):
+        nonlocal projection_calls
+        if request.kind == "tool_result_projection":
+            projection_calls += 1
+            raise SemanticCallContextOverflow(
+                BudgetReport(
+                    context_limit=100,
+                    input_tokens=200,
+                    reserved_response_tokens=32,
+                    safety_margin_tokens=8,
+                    required_tokens=240,
+                    non_context_tokens=0,
+                    fits=False,
+                    exact=True,
+                    breakdown=[],
+                )
+            )
+        candidate = next(
+            component
+            for component in request.components
+            if component.name.startswith("history_candidate_event_")
+        )
+        raise SemanticCallContextOverflow(
+            BudgetReport(
+                context_limit=500,
+                input_tokens=2_000,
+                reserved_response_tokens=100,
+                safety_margin_tokens=10,
+                required_tokens=2_110,
+                non_context_tokens=0,
+                fits=False,
+                exact=True,
+                breakdown=[
+                    BudgetComponentReport(
+                        name=candidate.name,
+                        category="history",
+                        tokens=1_800,
+                        exact=True,
+                        include_in_context=True,
+                        optional=False,
+                    )
+                ],
+            )
+        )
+
+    with pytest.raises(ToolValidationError, match="bounded semantic projection attempts"):
+        ToolRegistry().dispatch(
+            "history_analyze",
+            {"query": "projection-bound-marker", "max_events": 1},
+            config,
+            state,
+            semantic_call=fake_semantic_call,
+        )
+    assert projection_calls == 16
+
+
+def test_runtime_semantic_service_compiles_named_context_and_refuses_overflow(
+    make_config, monkeypatch
+) -> None:
+    config = make_config(
+        model__context_limit=2_000,
+        context__safety_margin_tokens=10,
+    )
+    runtime = AgentRuntime(
+        config,
+        model_client=object(),
+        token_counter=ConservativeEstimator(chars_per_token=1.0),
+    )
+    state = runtime.create_or_load_session()
+    captured = {}
+
+    def fake_execute(call_state, prepared, **_kwargs):
+        assert call_state.session_id == state.session_id
+        captured["prepared"] = prepared
+        return {"source_sequences": []}
+
+    monkeypatch.setattr(runtime, "_execute_structured_call", fake_execute)
+    request = SemanticCallRequest(
+        kind="history_analysis",
+        system_instruction="Analyze exact history without inventing evidence.",
+        components=[
+            PromptComponent(
+                name="history_candidate_event_7",
+                category="history",
+                text="exact candidate marker",
+            )
+        ],
+        contract=history_analysis_contract(),
+        minimum_output_tokens=128,
+    )
+
+    assert runtime._execute_tool_semantic_call(state, request) == {
+        "source_sequences": []
+    }
+    prepared = captured["prepared"]
+    assert prepared.assembly.kind == "history_analysis"
+    assert any(
+        item.name == "history_candidate_event_7"
+        for item in prepared.assembly.components
+    )
+    assert prepared.report.fits
+
+    overflow = SemanticCallRequest(
+        kind="history_analysis",
+        system_instruction=request.system_instruction,
+        components=[
+            PromptComponent(name="history_candidate_event_8", text="X" * 4_000)
+        ],
+        contract=request.contract,
+        minimum_output_tokens=128,
+    )
+    with pytest.raises(SemanticCallContextOverflow) as exc_info:
+        runtime._execute_tool_semantic_call(state, overflow)
+    assert exc_info.value.report.required_tokens > exc_info.value.report.context_limit
+
+
+def test_runtime_semantic_service_rebuilds_after_output_starvation(
+    make_config, monkeypatch
+) -> None:
+    config = make_config(
+        model__context_limit=4_000,
+        model__max_retries=1,
+        context__safety_margin_tokens=10,
+    )
+    runtime = AgentRuntime(
+        config,
+        model_client=object(),
+        token_counter=ConservativeEstimator(chars_per_token=1.0),
+    )
+    state = runtime.create_or_load_session()
+    reserved: list[int] = []
+
+    def fake_execute(_state, prepared, **_kwargs):
+        reserved.append(prepared.report.reserved_response_tokens)
+        if len(reserved) == 1:
+            raise OutputBudgetExhaustedError("length", reserved[-1])
+        return {"source_sequences": []}
+
+    monkeypatch.setattr(runtime, "_execute_structured_call", fake_execute)
+    result = runtime._execute_tool_semantic_call(
+        state,
+        SemanticCallRequest(
+            kind="history_analysis",
+            system_instruction="Analyze exact history.",
+            components=[PromptComponent(name="candidate", text="exact evidence")],
+            contract=history_analysis_contract(),
+            minimum_output_tokens=128,
+        ),
+    )
+
+    assert result == {"source_sequences": []}
+    assert len(reserved) == 2
+    assert reserved[1] > reserved[0]
+    repaired = [
+        event
+        for event in runtime.history.read_history(state.session_id)
+        if event.event_type == "budget_repaired"
+    ]
+    assert repaired[-1].payload["reason"] == "model_output_budget_exhausted"
 
 
 def test_history_search_excludes_its_entire_current_action(make_config, tmp_path: Path) -> None:

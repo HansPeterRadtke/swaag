@@ -141,10 +141,28 @@ class PromptBuilder:
         prompt_mode: str,
         user_components: list[PromptComponent],
     ) -> PromptAssembly:
+        return self._assemble_with_system(
+            kind,
+            prompt_mode,
+            self.system_text(prompt_mode),
+            user_components,
+        )
+
+    def _assemble_with_system(
+        self,
+        kind: ModelCallKind,
+        prompt_mode: str,
+        system_instruction: str,
+        user_components: list[PromptComponent],
+    ) -> PromptAssembly:
         components = [
             PromptComponent(name="llama3_begin", category="wrapper", text=LLAMA3_BEGIN),
             PromptComponent(name="system_header", category="wrapper", text=LLAMA3_SYSTEM_HEADER),
-            PromptComponent(name="system_prompt", category="system_prompt", text=self.system_text(prompt_mode)),
+            PromptComponent(
+                name="system_prompt",
+                category="system_prompt",
+                text=system_instruction.strip(),
+            ),
             PromptComponent(name="system_eot", category="wrapper", text=LLAMA3_EOT),
             PromptComponent(name="user_header", category="wrapper", text=LLAMA3_USER_HEADER),
             *user_components,
@@ -156,6 +174,21 @@ class PromptBuilder:
             prompt_mode=prompt_mode,
             prompt_text="".join(component.text for component in components),
             components=components,
+        )
+
+    def build_semantic_operation_prompt(
+        self,
+        *,
+        kind: ModelCallKind,
+        system_instruction: str,
+        components: list[PromptComponent],
+        prompt_mode: str = "lean",
+    ) -> PromptAssembly:
+        return self._assemble_with_system(
+            kind,
+            prompt_mode,
+            system_instruction,
+            components,
         )
 
     def build_agent_action_prompt(

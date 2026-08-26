@@ -38,7 +38,9 @@ Raw history and raw tool results remain durable. Context compilation selects pro
 
 Every derived history summary records session-aware exact source-event references/ranges and its own projection event. Prompt rendering labels it as derived and points to `history_window` for re-expansion. History search/window responses carry exact hashes, including for immutable archive shards; if those responses are later summarized or projected, their original cross-session lineage is propagated transitively. A projection may be reused only when its source event/hash matches and its measured size satisfies the new call's target.
 
-If a summary must fit a target token count, give the summarization operation that concrete target and enough task context to preserve relevant information. Re-tokenize the result and retry semantic reduction if necessary.
+Model-backed capabilities use the runtime semantic-call service rather than constructing a model client of their own. This keeps live capacity discovery, prompt-component accounting, output-starvation recovery, preemption, and durable request evidence on the same path as worker calls. History analysis first submits complete exact candidate events as individually measured components. Only a measured overflow starts bounded semantic projection; an oversized reducer input is mechanically segmented without dropping fragments, each fragment is projected semantically, and the projections are recombined semantically. The output cites exact source event sequences and hashes, while raw append-only events remain authoritative.
+
+If a summary or projection must fit a target token count, give the semantic operation that concrete per-call target and enough task context to preserve relevant information. Re-tokenize the result and retry semantic reduction if necessary.
 
 Tool schemas also consume context. Support capability discovery or staged schema loading. The LLM selects semantically relevant capabilities; deterministic code calculates serialized cost and enforces permissions. Never destroy the only copy of source information because a prompt needs to become smaller.
 

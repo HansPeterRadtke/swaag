@@ -14,6 +14,7 @@ ModelCallKind = Literal[
     "tool_result_projection",
     "completion_evaluation",
     "caller_structured_output",
+    "history_analysis",
     "doctor",
     "benchmark_quality_judge",
 ]

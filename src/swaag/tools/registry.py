@@ -2,11 +2,11 @@ from __future__ import annotations
 
 import copy
 from concurrent.futures import ThreadPoolExecutor, TimeoutError as FuturesTimeoutError
-from typing import Iterable
+from typing import Callable, Iterable
 
 from swaag.config import AgentConfig
 from swaag.environment.environment import AgentEnvironment
-from swaag.tools.base import Tool, ToolContext, ToolValidationError
+from swaag.tools.base import SemanticCallRequest, Tool, ToolContext, ToolValidationError
 from swaag.tools.artifacts import ARTIFACT_TOOLS
 from swaag.tools.attachments import ATTACHMENT_TOOLS
 from swaag.tools.builtin import BUILTIN_TOOLS
@@ -132,10 +132,23 @@ class ToolRegistry:
     def tool_names(self, config: AgentConfig) -> list[str]:
         return [tool.name for tool in self.enabled_tools(config)]
 
-    def prepare(self, name: str, raw_input: dict, config: AgentConfig, session_state: SessionState) -> tuple[Tool, ToolContext, ToolInvocation]:
+    def prepare(
+        self,
+        name: str,
+        raw_input: dict,
+        config: AgentConfig,
+        session_state: SessionState,
+        *,
+        semantic_call: Callable[[SemanticCallRequest], dict] | None = None,
+    ) -> tuple[Tool, ToolContext, ToolInvocation]:
         tool = self.get(name)
         session_copy = copy.deepcopy(session_state)
-        context = ToolContext(config=config, session_state=session_copy, environment=AgentEnvironment(config, session_copy))
+        context = ToolContext(
+            config=config,
+            session_state=session_copy,
+            environment=AgentEnvironment(config, session_copy),
+            semantic_call=semantic_call,
+        )
         validated = tool.validate(raw_input)
         effective_kind = tool.effective_kind(validated)
         if effective_kind == "stateful" and not config.tools.allow_stateful_tools:
@@ -146,11 +159,21 @@ class ToolRegistry:
         return tool, context, invocation
 
     def execute_prepared(self, tool: Tool, context: ToolContext, invocation: ToolInvocation) -> ToolExecutionResult:
+        timeout = tool.execution_timeout_seconds(context)
+        if timeout is None:
+            # Runtime-backed semantic tools own individually bounded model calls and
+            # must remain on the runtime thread for cancellation and durable events.
+            result = tool.execute(invocation.validated_input, context)
+            if not isinstance(result, ToolExecutionResult):
+                raise TypeError(f"Tool {tool.name} returned invalid result type: {type(result).__name__}")
+            tool.validate_output(result.output)
+            return result
+
         executor = ThreadPoolExecutor(max_workers=1)
         should_wait = True
         try:
             future = executor.submit(tool.execute, invocation.validated_input, context)
-            timeout_seconds = float(tool.execution_timeout_seconds(context))
+            timeout_seconds = float(timeout)
             if timeout_seconds <= 0:
                 raise ValueError(f"Tool execution timeout must be positive: {tool.name}={timeout_seconds}")
             try:
@@ -166,7 +189,21 @@ class ToolRegistry:
         tool.validate_output(result.output)
         return result
 
-    def dispatch(self, name: str, raw_input: dict, config: AgentConfig, session_state: SessionState) -> tuple[ToolInvocation, ToolExecutionResult]:
-        tool, context, invocation = self.prepare(name, raw_input, config, session_state)
+    def dispatch(
+        self,
+        name: str,
+        raw_input: dict,
+        config: AgentConfig,
+        session_state: SessionState,
+        *,
+        semantic_call: Callable[[SemanticCallRequest], dict] | None = None,
+    ) -> tuple[ToolInvocation, ToolExecutionResult]:
+        tool, context, invocation = self.prepare(
+            name,
+            raw_input,
+            config,
+            session_state,
+            semantic_call=semantic_call,
+        )
         result = self.execute_prepared(tool, context, invocation)
         return invocation, result
