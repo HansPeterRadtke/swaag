@@ -12,6 +12,12 @@ Do not replace semantic judgment with arbitrary age cutoffs, fixed message count
 
 ## Context budgeting is the core algorithm
 
+### Preserve full fidelity whenever it fits
+
+Context reduction is not a default optimization. First construct and measure the richest semantically relevant request available for the operation. If the complete candidate information fits together with the required output reserve and safety margin, include it without summarization, selection, or lossy projection. Reduction begins only because the actual serialized next call does not fit.
+
+When reduction is necessary, it is specific to the semantic operation being constructed. There is no universal permanently compressed history or permanently preferred ordering that should replace richer source state merely because it is smaller.
+
 Every LLM call needs an explicit budget before it is sent:
 
 `fixed input + selected history + tool definitions + tool results + retrieved data + other dynamic input + output reserve + safety margin <= model context capacity`

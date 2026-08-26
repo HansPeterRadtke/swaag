@@ -2,6 +2,12 @@
 
 Context management is Swaag's primary harness responsibility. Every LLM operation should eventually pass through one context-compilation path.
 
+## Full-fidelity-first invariant
+
+Before invoking any semantic reducer, compile the richest available candidate context. If that real serialized request fits with its output reserve and safety margin, send it unchanged. Do not summarize history, project tool results, omit candidate information, or load a smaller representation merely to save tokens. Compression is an overflow-recovery mechanism, not a standing preference.
+
+When overflow occurs, measure which components consume the failed request and use semantic reduction targeted to that operation. Rebuild and re-tokenize after every reduction.
+
 ## Compilation pipeline
 
 1. Identify the semantic operation and model.
