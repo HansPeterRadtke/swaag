@@ -105,6 +105,16 @@ def agent_action_contract(tool_specs: Iterable[tuple], *, allow_silent_completio
                         "importance": {"type": "string", "enum": ["minor", "normal", "major", "critical"]},
                     }
                 ),
+                "questions": _array(
+                    _closed_object(
+                        {
+                            "question": _string(),
+                            "criticality": {"type": "string", "enum": ["optional", "blocking"]},
+                            "reason": _string(),
+                            "assumption_if_unanswered": _string(),
+                        }
+                    )
+                ),
             }
         ),
     )

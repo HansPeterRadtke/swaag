@@ -435,6 +435,19 @@ class AgentRuntime:
                     "importance_rank": selected_action.status.importance_rank,
                 },
             )
+            for question in selected_action.questions:
+                self.history.record_event(
+                    state,
+                    "agent_question",
+                    {
+                        "action_index": action_index,
+                        "question": question.question,
+                        "criticality": question.criticality,
+                        "reason": question.reason,
+                        "assumption_if_unanswered": question.assumption_if_unanswered,
+                    },
+                )
+
             if occurrence > 1:
                 rejected_signature_counts[signature] = rejected_signature_counts.get(signature, 0) + 1
                 rejected_count = rejected_signature_counts[signature]
@@ -617,8 +630,11 @@ class AgentRuntime:
                     )
                 continue
 
+            has_blocking_question = any(question.criticality == "blocking" for question in selected_action.questions)
             completion = (
-                self._evaluate_completion(state, original_request=original_request, selected_action=selected_action, tool_results=tool_results)
+                {"complete": True, "reason": "blocking user input requested", "remaining_work": []}
+                if has_blocking_question
+                else self._evaluate_completion(state, original_request=original_request, selected_action=selected_action, tool_results=tool_results)
                 if self.config.runtime.completion_evaluation_enabled
                 else {"complete": True, "reason": "completion evaluation disabled", "remaining_work": []}
             )

@@ -15,6 +15,14 @@ class AgentToolCall:
 
 
 @dataclass(slots=True, frozen=True)
+class AgentQuestion:
+    question: str
+    criticality: str
+    reason: str
+    assumption_if_unanswered: str
+
+
+@dataclass(slots=True, frozen=True)
 class AgentStatus:
     situation: str
     action: str
@@ -33,6 +41,7 @@ class AgentAction:
     continue_loop: bool
     silent_completion: bool
     status: AgentStatus
+    questions: list[AgentQuestion]
 
     @property
     def calls_tools(self) -> bool:
@@ -48,6 +57,7 @@ def action_from_payload(payload: dict[str, Any], *, enabled_tool_names: Iterable
     continue_loop = payload.get("continue_loop")
     silent_completion = payload.get("silent_completion", False)
     status_payload = payload.get("status")
+    questions_payload = payload.get("questions", [])
     if status_payload is None:
         # Backward compatibility for pre-status stored actions and test fixtures.
         status_payload = {"situation": "", "action": "", "reason": "", "importance": "normal"}
@@ -77,6 +87,24 @@ def action_from_payload(payload: dict[str, Any], *, enabled_tool_names: Iterable
         reason=status_payload["reason"],
         importance=importance,
     )
+
+    if not isinstance(questions_payload, list):
+        raise ActionValidationError("questions must be an array")
+    questions: list[AgentQuestion] = []
+    for index, item in enumerate(questions_payload):
+        if not isinstance(item, dict):
+            raise ActionValidationError(f"questions[{index}] must be an object")
+        required_question = {"question", "criticality", "reason", "assumption_if_unanswered"}
+        if set(item) != required_question:
+            raise ActionValidationError(f"questions[{index}] must contain exactly question, criticality, reason, assumption_if_unanswered")
+        if item.get("criticality") not in {"optional", "blocking"}:
+            raise ActionValidationError(f"questions[{index}].criticality must be optional or blocking")
+        for key in ("question", "reason", "assumption_if_unanswered"):
+            if not isinstance(item.get(key), str):
+                raise ActionValidationError(f"questions[{index}].{key} must be a string")
+        questions.append(AgentQuestion(
+            question=item["question"], criticality=item["criticality"], reason=item["reason"], assumption_if_unanswered=item["assumption_if_unanswered"]
+        ))
 
     enabled = set(enabled_tool_names)
     tool_calls: list[AgentToolCall] = []
@@ -111,4 +139,5 @@ def action_from_payload(payload: dict[str, Any], *, enabled_tool_names: Iterable
         continue_loop=continue_loop,
         silent_completion=silent_completion,
         status=status,
+        questions=questions,
     )

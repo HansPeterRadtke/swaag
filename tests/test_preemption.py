@@ -169,7 +169,8 @@ def test_same_model_communication_preempts_and_exactly_replays_main_request(make
 
     thread = threading.Thread(target=lambda: holder.setdefault("result", runtime.run_turn_in_session(state, "Do the long main task.")), daemon=True)
     thread.start()
-    assert client.main_started.wait(timeout=2)
+    # Synchronization only: context compilation/schema preparation can exceed two seconds under full-suite load.
+    assert client.main_started.wait(timeout=10)
 
     answer = service.answer_status_question(state.session_id, "What is happening right now?")
     thread.join(timeout=5)

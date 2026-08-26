@@ -148,7 +148,7 @@ def test_direct_answer_is_one_constrained_model_call_with_all_tools(make_config)
     for tool_name in runtime.tools.tool_names(runtime.config):
         assert f"- name: {tool_name}\n" in prompt
     schema = client.requests[0]["json_schema"]
-    assert set(schema["properties"]) == {"assistant_message", "tool_calls", "continue_loop", "silent_completion", "status"}
+    assert set(schema["properties"]) == {"assistant_message", "tool_calls", "continue_loop", "silent_completion", "status", "questions"}
     events = runtime.history.read_history(result.session_id)
     assert not any(event.event_type in {"plan_created", "plan_updated"} for event in events)
     assert not any(event.event_type.startswith("plan_") for event in events)
@@ -581,7 +581,7 @@ def test_failed_run_tests_is_evidence_not_permanent_completion_gate(make_config)
 
 
 def test_zero_tool_budget_removes_tools_from_action_schema_and_prompt(make_config) -> None:
-    config = make_config(runtime__tool_call_budget=0, runtime__max_total_actions=1)
+    config = make_config(runtime__tool_call_budget=0, runtime__max_total_actions=1, model__context_limit=8192)
     seen = {}
 
     def capture(payload):
