@@ -121,6 +121,37 @@ class OutputLimitedFakeModelClient(FakeModelClient):
         )
 
 
+class CharacterCountSummaryClient(FakeModelClient):
+    def __init__(self, marker: str):
+        super().__init__([])
+        self.marker = marker
+
+    def tokenize(self, text: str) -> int:
+        return len(text)
+
+    def send_completion(
+        self,
+        payload: dict[str, Any],
+        *,
+        timeout_seconds: int | None = None,
+        progress_callback=None,
+    ) -> CompletionResult:
+        del timeout_seconds, progress_callback
+        self.requests.append(payload)
+        summary = self.marker if self.marker in str(payload["prompt"]) else "fragment retained"
+        response = json.dumps(
+            {"summary": summary, "preserve_recent_messages": 0}
+        )
+        return CompletionResult(
+            text=response,
+            raw_request=payload,
+            raw_response={"content": response},
+            prompt_tokens=None,
+            completion_tokens=None,
+            finish_reason="stop",
+        )
+
+
 def _action(
     *,
     message: str = "",
@@ -246,6 +277,50 @@ def test_history_summary_recompiles_after_output_starvation(make_config) -> None
     assert len(client.requests) == 2
     assert client.requests[1]["n_predict"] > client.requests[0]["n_predict"]
     assert state.messages[0].content == "Earlier facts retained."
+
+
+def test_oversized_single_history_message_is_hierarchically_summarized(
+    make_config,
+) -> None:
+    marker = "critical-history-marker-731"
+    config = make_config(
+        model__context_limit=2_000,
+        context__max_recent_messages=2,
+        context__max_compaction_rounds=4,
+        context__safety_margin_tokens=32,
+    )
+    client = CharacterCountSummaryClient(marker)
+    runtime = AgentRuntime(config, model_client=client)
+    state = runtime.create_or_load_session()
+    for role, content in (
+        ("user", "A" * 8_000 + marker),
+        ("assistant", "second"),
+        ("user", "third"),
+        ("assistant", "fourth"),
+    ):
+        runtime._record_message(
+            state,
+            Message(role=role, content=content, created_at="t"),
+        )
+    raw_source = next(
+        event
+        for event in runtime.history.read_history(state.session_id)
+        if event.event_type == "message_added" and marker in str(event.payload)
+    )
+
+    assert runtime._compact_once(state) is True
+
+    assert state.messages[0].role == "summary"
+    assert marker in state.messages[0].content
+    assert state.messages[0].metadata["source_event_references"][0]["hash"] == raw_source.hash
+    assert len(client.requests) > 1
+    compressed = [
+        event
+        for event in runtime.history.read_history(state.session_id)
+        if event.event_type == "history_compressed"
+    ]
+    assert compressed[-1].payload["hierarchical"] is True
+    assert any(marker in str(event.payload) for event in runtime.history.read_history(state.session_id))
 
 
 def test_multiple_tool_calls_execute_in_order_and_exact_results_reach_next_call(make_config) -> None:

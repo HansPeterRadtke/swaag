@@ -1833,6 +1833,134 @@ class AgentRuntime:
             },
         )
 
+    def _summarize_oversized_message(
+        self,
+        state: SessionState,
+        message: Message,
+        *,
+        target_summary_tokens: int,
+        context_limit_resolution: tuple[int, str],
+        remaining_calls: list[int],
+        depth: int = 0,
+    ) -> tuple[str, BudgetReport]:
+        contract = summary_contract()
+        minimum_output_tokens = min(
+            int(self.config.context.reserved_summary_tokens),
+            max(64, int(target_summary_tokens) + 64),
+        )
+        assembly = self.prompts.build_summary_prompt(
+            [message],
+            prompt_mode="lean",
+            maximum_preserve_recent_messages=0,
+            target_summary_tokens=target_summary_tokens,
+        )
+        compilation = self._compile_context(
+            state,
+            assembly,
+            contract,
+            minimum_output_tokens=minimum_output_tokens,
+            desired_output_tokens=target_summary_tokens + 64,
+            context_limit_resolution=context_limit_resolution,
+        )
+        if compilation.report.fits:
+            if remaining_calls[0] <= 0:
+                raise BudgetExceededError(
+                    "Hierarchical summary exhausted its bounded semantic call budget",
+                    compilation.report,
+                )
+            remaining_calls[0] -= 1
+            self.history.record_event(
+                state,
+                "context_compiled",
+                {
+                    "kind": "summary",
+                    "prompt_mode": "lean",
+                    "accounting": compilation.accounting(),
+                    "hierarchical_depth": depth,
+                },
+            )
+            self._record_prompt_built(
+                state,
+                assembly,
+                contract,
+                compilation.report,
+            )
+            try:
+                payload, final_prepared = self._execute_with_output_recovery(
+                    state,
+                    PreparedCall(
+                        assembly,
+                        compilation.report,
+                        "lean",
+                        contract,
+                    ),
+                    minimum_output_tokens=minimum_output_tokens,
+                    desired_output_tokens=target_summary_tokens + 64,
+                    context_limit_resolution=context_limit_resolution,
+                )
+            except _OutputRecoveryContextOverflow:
+                pass
+            else:
+                summary_text = str(payload.get("summary", "")).strip()
+                if not summary_text:
+                    raise ValueError("hierarchical summary must not be empty")
+                return summary_text, final_prepared.report
+
+        if depth >= 16 or len(message.content) < 2:
+            raise BudgetExceededError(
+                "An exact history source cannot be segmented enough to fit the summary operation",
+                compilation.report,
+            )
+        midpoint = len(message.content) // 2
+        child_target = max(64, (int(target_summary_tokens) + 1) // 2)
+        fragments = []
+        for index, content in enumerate(
+            (message.content[:midpoint], message.content[midpoint:]),
+            start=1,
+        ):
+            fragment = Message(
+                role=message.role,
+                content=content,
+                created_at=message.created_at,
+                name=message.name,
+                metadata={
+                    **message.metadata,
+                    "hierarchical_fragment": f"{index}/2",
+                    "hierarchical_fragment_depth": depth + 1,
+                },
+            )
+            summary, _report = self._summarize_oversized_message(
+                state,
+                fragment,
+                target_summary_tokens=child_target,
+                context_limit_resolution=context_limit_resolution,
+                remaining_calls=remaining_calls,
+                depth=depth + 1,
+            )
+            fragments.append(summary)
+        combined = Message(
+            role="summary",
+            content=(
+                "[SEMANTIC SUMMARY OF EXACT FRAGMENT 1]\n"
+                + fragments[0]
+                + "\n\n[SEMANTIC SUMMARY OF EXACT FRAGMENT 2]\n"
+                + fragments[1]
+            ),
+            created_at=utc_now_iso(),
+            metadata={
+                "projection_kind": "hierarchical_history_summary",
+                "source_event_references": message_source_event_references([message]),
+            },
+        )
+        return self._summarize_oversized_message(
+            state,
+            combined,
+            target_summary_tokens=target_summary_tokens,
+            context_limit_resolution=context_limit_resolution,
+            remaining_calls=remaining_calls,
+            depth=depth + 1,
+        )
+
     def _compact_once(self, state: SessionState) -> bool:
         if len(state.messages) <= 2:
             return False
@@ -1919,6 +2047,45 @@ class AgentRuntime:
                 "summary_budget_report": asdict(report),
                 "adaptive_preserve_recent_messages": preserve_recent,
                 "candidate_source_message_count": source_count,
+            }
+            self.history.record_event(state, "summary_created", event_payload)
+            self.history.record_event(state, "history_compressed", event_payload)
+            return True
+        source_messages = state.messages[:1]
+        if source_messages:
+            summary_plan = self.context_compiler.plan(
+                call_kind="summary",
+                context_limit=context_limit_resolution[0],
+            )
+            target_summary_tokens = max(
+                int(self.config.context.reserved_summary_tokens),
+                int(summary_plan.output_tokens) - 32,
+            )
+            summary_text, report = self._summarize_oversized_message(
+                state,
+                source_messages[0],
+                target_summary_tokens=target_summary_tokens,
+                context_limit_resolution=context_limit_resolution,
+                remaining_calls=[
+                    max(16, int(self.config.context.max_compaction_rounds) * 16)
+                ],
+            )
+            source_event_references = message_source_event_references(source_messages)
+            summary_payload = summary_message_payload(
+                summary_text,
+                source_message_count=1,
+                created_at=utc_now_iso(),
+                source_event_references=source_event_references,
+            )
+            event_payload = {
+                "source_message_count": 1,
+                "source_event_references": source_event_references,
+                "source_event_ranges": summary_payload["metadata"]["source_event_ranges"],
+                "summary_message": summary_payload,
+                "summary_budget_report": asdict(report),
+                "adaptive_preserve_recent_messages": 0,
+                "candidate_source_message_count": 1,
+                "hierarchical": True,
             }
             self.history.record_event(state, "summary_created", event_payload)
             self.history.record_event(state, "history_compressed", event_payload)
