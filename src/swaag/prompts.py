@@ -255,23 +255,97 @@ class PromptBuilder:
         return self._assemble("action", prompt_mode, components)
 
     def build_completion_evaluation_prompt(
-        self, *, original_request: str, assistant_message: str, status_json: str, tool_evidence: str
+        self,
+        *,
+        original_request: str,
+        assistant_message: str,
+        status_json: str,
+        tool_evidence: str = "",
+        tool_evidence_rows: list[dict] | None = None,
+        tool_result_projections: dict[int, str] | None = None,
     ) -> PromptAssembly:
         system_prompt = self._load_template(self._config.prompts.completion_evaluation_system_template)
-        user_text = self._load_template(self._config.prompts.completion_evaluation_template).format(
-            original_request=original_request, assistant_message=assistant_message, status_json=status_json, tool_evidence=tool_evidence
-        )
         components = [
             PromptComponent(name="llama3_begin", category="wrapper", text=LLAMA3_BEGIN),
             PromptComponent(name="system_header", category="wrapper", text=LLAMA3_SYSTEM_HEADER),
             PromptComponent(name="system_prompt", category="system_prompt", text=system_prompt),
             PromptComponent(name="system_eot", category="wrapper", text=LLAMA3_EOT),
             PromptComponent(name="user_header", category="wrapper", text=LLAMA3_USER_HEADER),
-            PromptComponent(name="completion_evidence", category="turn_context", text=user_text),
+            PromptComponent(
+                name="completion_objective",
+                category="current_user",
+                text=f"Original user objective:\n{original_request}\n\n",
+            ),
+            PromptComponent(
+                name="completion_candidate",
+                category="turn_context",
+                text=f"Candidate final answer:\n{assistant_message}\n\n",
+            ),
+            PromptComponent(
+                name="completion_status",
+                category="turn_context",
+                text=f"Current action status:\n{status_json}\n\n",
+            ),
+            PromptComponent(
+                name="completion_tool_evidence_header",
+                category="tool_result",
+                text="Deterministic/tool evidence from this turn:\n",
+            ),
+            *self._completion_evidence_components(
+                tool_evidence=tool_evidence,
+                rows=tool_evidence_rows or [],
+                projections=tool_result_projections or {},
+            ),
+            PromptComponent(
+                name="completion_instruction",
+                category="instruction",
+                text="\n" + self._load_template(
+                    self._config.prompts.completion_evaluation_template
+                ),
+            ),
             PromptComponent(name="user_eot", category="wrapper", text=LLAMA3_EOT),
             PromptComponent(name="assistant_header", category="wrapper", text=LLAMA3_ASSISTANT_HEADER),
         ]
         return PromptAssembly(kind="completion_evaluation", prompt_mode="lean", prompt_text="".join(c.text for c in components), components=components)
+
+    @staticmethod
+    def _completion_evidence_components(
+        *,
+        tool_evidence: str,
+        rows: list[dict],
+        projections: dict[int, str],
+    ) -> list[PromptComponent]:
+        if not rows:
+            return [
+                PromptComponent(
+                    name="completion_tool_evidence_empty" if not tool_evidence else "completion_tool_evidence_legacy",
+                    category="tool_result",
+                    text=(tool_evidence or "(none)") + "\n",
+                )
+            ]
+        components: list[PromptComponent] = []
+        for index, row in enumerate(rows, start=1):
+            sequence = row.get("source_event_sequence")
+            source_hash = str(row.get("source_event_hash", ""))
+            name = f"completion_tool_evidence_{index}"
+            body = stable_json_dumps(row, indent=None)
+            provenance = ""
+            if isinstance(sequence, int):
+                name = f"completion_tool_event_{sequence}"
+                provenance = f"[SOURCE EVENT sequence={sequence} hash={source_hash or 'unknown'}]\n"
+                if sequence in projections:
+                    body = (
+                        "[SEMANTIC PROJECTION; raw source remains authoritative and retrievable]\n"
+                        + projections[sequence].strip()
+                    )
+            components.append(
+                PromptComponent(
+                    name=name,
+                    category="tool_result",
+                    text=f"{provenance}{body}\n",
+                )
+            )
+        return components
 
     def build_tool_result_projection_prompt(
         self,

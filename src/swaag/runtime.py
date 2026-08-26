@@ -22,7 +22,13 @@ from swaag.embedding_index import (
 )
 from swaag.environment.environment import AgentEnvironment
 from swaag.fsops import ensure_dir, restore_tree, snapshot_tree, write_text
-from swaag.grammar import agent_action_contract, completion_evaluation_contract, summary_contract, yes_no_contract
+from swaag.grammar import (
+    agent_action_contract,
+    completion_evaluation_contract,
+    summary_contract,
+    tool_result_projection_contract,
+    yes_no_contract,
+)
 from swaag.history import HistoryInvariantError, HistoryStore
 from swaag.heartbeat import heartbeat_payload, systemd_notify
 from swaag.model import LlamaCppClient, ModelClientError
@@ -962,24 +968,182 @@ class AgentRuntime:
             last_report,
         )
 
-    def _evaluate_completion(self, state: SessionState, *, original_request: str, selected_action: AgentAction, tool_results: list[ToolExecutionResult]) -> dict[str, Any]:
-        self._heartbeat(state, phase="completion_evaluation", detail="evaluating task completion", active_kind="completion_evaluation")
-        contract = completion_evaluation_contract()
-        evidence_rows = [{"tool_name": r.tool_name, "output": to_jsonable(r.output), "display_text": r.display_text} for r in tool_results]
-        assembly = self.prompts.build_completion_evaluation_prompt(
-            original_request=original_request, assistant_message=selected_action.assistant_message,
-            status_json=stable_json_dumps(asdict(selected_action.status), indent=None), tool_evidence=stable_json_dumps(evidence_rows, indent=None),
+    def _evaluate_completion(
+        self,
+        state: SessionState,
+        *,
+        original_request: str,
+        selected_action: AgentAction,
+        tool_results: list[ToolExecutionResult],
+    ) -> dict[str, Any]:
+        self._heartbeat(
+            state,
+            phase="completion_evaluation",
+            detail="evaluating task completion",
+            active_kind="completion_evaluation",
         )
-        compilation = self._compile_context(state, assembly, contract, minimum_output_tokens=128)
-        if not compilation.report.fits:
-            self.history.record_event(state, "completion_evaluation_unavailable", {"reason": "evaluation_context_does_not_fit", "budget_report": asdict(compilation.report)})
-            return {"complete": False, "reason": "The completion evaluator could not fit its evidence context.", "remaining_work": ["Reduce or retrieve the evidence needed for a completion decision."]}
-        self.history.record_event(state, "context_compiled", {"kind": "completion_evaluation", "prompt_mode": "lean", "accounting": compilation.accounting()})
-        self._record_prompt_built(state, assembly, contract, compilation.report)
-        payload = self._execute_structured_call(state, PreparedCall(assembly, compilation.report, "lean", contract))
-        result = {"complete": bool(payload.get("complete", False)), "reason": str(payload.get("reason", "")).strip(), "remaining_work": [str(x) for x in payload.get("remaining_work", []) if isinstance(x, str)]}
-        self.history.record_event(state, "completion_evaluated", result)
-        return result
+        contract = completion_evaluation_contract()
+        evidence_rows = self._completion_evidence_rows(state, tool_results)
+        projections: dict[int, str] = {}
+        last_compilation: ContextCompilation | None = None
+        max_rounds = max(0, int(self.config.context.max_compaction_rounds))
+        for reduction_round in range(max_rounds + 1):
+            assembly = self.prompts.build_completion_evaluation_prompt(
+                original_request=original_request,
+                assistant_message=selected_action.assistant_message,
+                status_json=stable_json_dumps(asdict(selected_action.status), indent=None),
+                tool_evidence_rows=evidence_rows,
+                tool_result_projections=projections,
+            )
+            compilation = self._compile_context(
+                state, assembly, contract, minimum_output_tokens=128
+            )
+            last_compilation = compilation
+            self.history.record_event(
+                state,
+                "context_compiled",
+                {
+                    "kind": "completion_evaluation",
+                    "prompt_mode": "lean",
+                    "accounting": compilation.accounting(),
+                    "cap_error": "" if compilation.report.fits else "context_limit_exceeded",
+                    "reduction_round": reduction_round,
+                },
+            )
+            self.history.record_event(
+                state,
+                "budget_checked",
+                {
+                    "kind": "completion_evaluation",
+                    "prompt_mode": "lean",
+                    "budget_report": asdict(compilation.report),
+                    "cap_error": "" if compilation.report.fits else "context_limit_exceeded",
+                },
+            )
+            if compilation.report.fits:
+                self._record_prompt_built(state, assembly, contract, compilation.report)
+                payload = self._execute_structured_call(
+                    state,
+                    PreparedCall(assembly, compilation.report, "lean", contract),
+                )
+                result = {
+                    "complete": bool(payload.get("complete", False)),
+                    "reason": str(payload.get("reason", "")).strip(),
+                    "remaining_work": [
+                        str(item)
+                        for item in payload.get("remaining_work", [])
+                        if isinstance(item, str)
+                    ],
+                    "evidence_source_references": [
+                        reference
+                        for row in evidence_rows
+                        for reference in row.get("source_event_references", [])
+                    ],
+                    "projected_source_event_sequences": sorted(projections),
+                }
+                self.history.record_event(state, "completion_evaluated", result)
+                return result
+            if (
+                not self.config.context.compact_on_overflow
+                or reduction_round >= max_rounds
+            ):
+                break
+            projected = self._project_largest_tool_result_for_overflow(
+                state,
+                original_request=original_request,
+                assembly=assembly,
+                compilation=compilation,
+                existing_projections=projections,
+            )
+            if projected is None:
+                break
+            sequence, projection = projected
+            projections[sequence] = projection
+
+        report = asdict(last_compilation.report) if last_compilation is not None else None
+        self.history.record_event(
+            state,
+            "completion_evaluation_unavailable",
+            {
+                "reason": "evaluation_context_does_not_fit_after_semantic_reduction",
+                "budget_report": report,
+                "projected_source_event_sequences": sorted(projections),
+            },
+        )
+        return {
+            "complete": False,
+            "reason": "The completion evaluator could not fit its evidence context after bounded semantic reduction.",
+            "remaining_work": [
+                "Retrieve or semantically reduce additional evidence before deciding completion."
+            ],
+        }
+
+    @staticmethod
+    def _completion_evidence_rows(
+        state: SessionState,
+        tool_results: list[ToolExecutionResult],
+    ) -> list[dict[str, Any]]:
+        rows: list[dict[str, Any]] = []
+        current_turn_start = 0
+        for index in range(len(state.messages) - 1, -1, -1):
+            if state.messages[index].role == "user":
+                current_turn_start = index + 1
+                break
+        tool_messages = [
+            message
+            for message in state.messages[current_turn_start:]
+            if message.role == "tool" and message.name
+        ]
+        matched_result_indices: set[int] = set()
+        for message in tool_messages:
+            metadata = message.metadata if isinstance(message.metadata, dict) else {}
+            output = metadata.get("output")
+            for result_index, result in enumerate(tool_results):
+                if result_index in matched_result_indices:
+                    continue
+                if message.name == result.tool_name and to_jsonable(output) == to_jsonable(result.output):
+                    matched_result_indices.add(result_index)
+                    break
+            sequence = metadata.get("source_event_sequence")
+            source_hash = metadata.get("source_event_hash")
+            nested_references = metadata.get("source_event_references", [])
+            source_references = list(nested_references) if isinstance(nested_references, list) else []
+            if isinstance(sequence, int) and isinstance(source_hash, str) and source_hash:
+                source_references = [
+                    {
+                        "session_id": str(metadata.get("source_event_session_id", state.session_id)),
+                        "sequence": sequence,
+                        "hash": source_hash,
+                        "event_type": str(metadata.get("source_event_type", "tool_result")),
+                    },
+                    *source_references,
+                ]
+            rows.append(
+                {
+                    "tool_name": message.name,
+                    "output": to_jsonable(output),
+                    "display_text": message.content,
+                    "success": str(metadata.get("source_event_type", "")) == "tool_result",
+                    "source_event_sequence": sequence,
+                    "source_event_hash": source_hash,
+                    "source_event_references": source_references,
+                }
+            )
+        for result_index, result in enumerate(tool_results):
+            if result_index in matched_result_indices:
+                continue
+            rows.append(
+                {
+                    "tool_name": result.tool_name,
+                    "output": to_jsonable(result.output),
+                    "display_text": result.display_text,
+                    "success": True,
+                    "source_event_sequence": None,
+                    "source_event_hash": None,
+                    "source_event_references": [],
+                }
+            )
+        return rows
 
     def _project_largest_tool_result_for_overflow(
         self,
@@ -999,8 +1163,13 @@ class AgentRuntime:
             if message.role != "tool":
                 continue
             sequence = message.metadata.get("source_event_sequence")
-            if not isinstance(sequence, int) or sequence in existing_projections:
+            if not isinstance(sequence, int):
                 continue
+            existing_projection = existing_projections.get(sequence)
+            if existing_projection is not None:
+                projected_text_tokens = self._counter(state).count_text(existing_projection).tokens
+                if projected_text_tokens <= 64:
+                    continue
             matching_tokens = 0
             suffix = f"_tool_event_{sequence}"
             for component in assembly.components:
@@ -1017,6 +1186,14 @@ class AgentRuntime:
         # Reduce enough to clear the measured overflow plus a small deterministic
         # cushion for JSON/provenance framing, while preserving useful room when possible.
         target_tokens = max(64, current_tokens - overflow - max(32, int(current_tokens * 0.05)))
+        if sequence in existing_projections:
+            projected_text_tokens = self._counter(state).count_text(
+                existing_projections[sequence]
+            ).tokens
+            target_tokens = min(
+                target_tokens,
+                max(64, projected_text_tokens - max(16, overflow)),
+            )
         if target_tokens >= current_tokens:
             return None
         stored_projection = self._stored_tool_result_projection(
