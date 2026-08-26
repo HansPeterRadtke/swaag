@@ -16,6 +16,7 @@ class ContextCompilation:
     plan: CallBudgetPlan
     structured_output_floor_tokens: int
     minimum_output_tokens: int
+    desired_output_tokens: int
     context_limit_source: str
 
     @property
@@ -47,7 +48,7 @@ class ContextCompilation:
             "fits": self.report.fits,
             "structured_output_floor_tokens": self.structured_output_floor_tokens,
             "minimum_output_tokens": self.minimum_output_tokens,
-            "desired_output_tokens": self.plan.output_tokens,
+            "desired_output_tokens": self.desired_output_tokens,
             "context_limit_source": self.context_limit_source,
             "policy": asdict(self.plan),
             "components": [asdict(item) for item in self.report.breakdown],
@@ -75,6 +76,7 @@ class ContextCompiler:
         counter: TokenCounter,
         *,
         minimum_output_tokens: int = 0,
+        desired_output_tokens: int | None = None,
         context_limit: int | None = None,
         context_limit_source: str = "configured",
     ) -> ContextCompilation:
@@ -94,6 +96,10 @@ class ContextCompiler:
         minimum_required_output = max(
             int(minimum_output_tokens),
             int(structured_floor),
+        )
+        desired_output = max(
+            minimum_required_output,
+            int(plan.output_tokens if desired_output_tokens is None else desired_output_tokens),
         )
         components = [
             *assembly.components,
@@ -131,7 +137,7 @@ class ContextCompiler:
             # receives all remaining safe headroom as long as its minimum valid
             # output requirement still fits.
             reserved = min(
-                max(minimum_required_output, int(plan.output_tokens)),
+                desired_output,
                 available_output,
             )
         else:
@@ -150,5 +156,6 @@ class ContextCompiler:
             plan=plan,
             structured_output_floor_tokens=structured_floor,
             minimum_output_tokens=int(minimum_output_tokens),
+            desired_output_tokens=desired_output,
             context_limit_source=str(context_limit_source),
         )

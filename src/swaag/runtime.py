@@ -1457,6 +1457,7 @@ class AgentRuntime:
             assembly,
             contract,
             minimum_output_tokens=min(target_tokens + 64, self.config.context.reserved_response_tokens),
+            desired_output_tokens=target_tokens + 64,
         )
         if not compilation.report.fits:
             self.history.record_event(
@@ -1624,6 +1625,7 @@ class AgentRuntime:
         contract: ContractSpec,
         *,
         minimum_output_tokens: int,
+        desired_output_tokens: int | None = None,
         context_limit_resolution: tuple[int, str] | None = None,
     ) -> ContextCompilation:
         context_limit, context_limit_source = (
@@ -1636,6 +1638,7 @@ class AgentRuntime:
             contract,
             self._counter(state),
             minimum_output_tokens=minimum_output_tokens,
+            desired_output_tokens=desired_output_tokens,
             context_limit=context_limit,
             context_limit_source=context_limit_source,
         )
@@ -1657,6 +1660,7 @@ class AgentRuntime:
                 assembly,
                 request.contract,
                 minimum_output_tokens=minimum_output_tokens,
+                desired_output_tokens=request.desired_output_tokens,
             )
             cap_error = "" if compilation.report.fits else "context_limit_exceeded"
             self.history.record_event(

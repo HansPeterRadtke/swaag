@@ -120,6 +120,7 @@ def _project_history_text(
                 int(context.config.context.reserved_response_tokens),
             ),
         ),
+        desired_output_tokens=target + 64,
     )
     call_budget.consume()
     try:

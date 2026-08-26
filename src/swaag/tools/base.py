@@ -42,6 +42,7 @@ class SemanticCallRequest:
     components: list[PromptComponent]
     contract: ContractSpec
     minimum_output_tokens: int
+    desired_output_tokens: int | None = None
     prompt_mode: str = "lean"
 
 

@@ -536,6 +536,7 @@ def test_runtime_semantic_service_compiles_named_context_and_refuses_overflow(
         ],
         contract=history_analysis_contract(),
         minimum_output_tokens=128,
+        desired_output_tokens=700,
     )
 
     assert runtime._execute_tool_semantic_call(state, request) == {
@@ -548,6 +549,7 @@ def test_runtime_semantic_service_compiles_named_context_and_refuses_overflow(
         for item in prepared.assembly.components
     )
     assert prepared.report.fits
+    assert prepared.report.reserved_response_tokens == 700
 
     overflow = SemanticCallRequest(
         kind="history_analysis",

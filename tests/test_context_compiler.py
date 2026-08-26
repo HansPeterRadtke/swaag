@@ -3,7 +3,7 @@ from __future__ import annotations
 from swaag.context_compiler import ContextCompiler
 from swaag.grammar import agent_action_contract
 from swaag.tokens import ConservativeEstimator
-from swaag.types import PromptAssembly, PromptComponent
+from swaag.types import ContractSpec, PromptAssembly, PromptComponent
 
 
 def test_context_compiler_accounts_named_components_and_output_reserve(make_config):
@@ -97,6 +97,63 @@ def test_full_fidelity_input_not_rejected_only_for_desired_output_ratio(make_con
     assert result.report.safety_margin_tokens == 10
     assert result.report.reserved_response_tokens <= 390
     assert result.context_limit_source == "configured"
+
+
+def test_per_call_desired_output_is_soft_and_accounted(make_config):
+    config = make_config(
+        model__context_limit=1000,
+        context__safety_margin_tokens=10,
+        budget_policy__structured_output_json_floor_tokens=20,
+    )
+    compiler = ContextCompiler(config)
+    contract = ContractSpec(
+        name="test_output",
+        mode="json_schema",
+        json_schema={
+            "type": "object",
+            "properties": {},
+            "required": [],
+            "additionalProperties": False,
+        },
+    )
+
+    class Exact:
+        def count_text(self, text):
+            from swaag.tokens import CountResult
+
+            return CountResult(tokens=len(text), exact=True, strategy="test_exact")
+
+    roomy = compiler.compile(
+        PromptAssembly(
+            kind="tool_result_projection",
+            prompt_mode="lean",
+            prompt_text="x" * 100,
+            components=[PromptComponent(name="input", text="x" * 100)],
+        ),
+        contract,
+        Exact(),
+        minimum_output_tokens=50,
+        desired_output_tokens=400,
+    )
+    assert roomy.report.reserved_response_tokens == 400
+    assert roomy.accounting()["desired_output_tokens"] == 400
+
+    pressured = compiler.compile(
+        PromptAssembly(
+            kind="tool_result_projection",
+            prompt_mode="lean",
+            prompt_text="x" * 800,
+            components=[PromptComponent(name="input", text="x" * 800)],
+        ),
+        contract,
+        Exact(),
+        minimum_output_tokens=100,
+        desired_output_tokens=400,
+    )
+    assert pressured.report.fits
+    assert pressured.report.input_tokens == 800
+    assert pressured.report.reserved_response_tokens == 190
+    assert pressured.desired_output_tokens == 400
 
 
 def test_live_context_limit_override_is_authoritative(make_config):
