@@ -112,6 +112,10 @@ ALLOWED_EVENT_TYPES = frozenset(
         "consistency_failed",
         "tool_execution_context",
         "model_request_sent",
+        "inference_request_queued",
+        "inference_request_started",
+        "inference_request_requeued",
+        "inference_request_finished",
         "model_request_progress",
         "model_token_progress",
         "model_response_received",
@@ -429,6 +433,28 @@ REQUIRED_PAYLOAD_KEYS: dict[str, frozenset[str]] = {
     "wakeup_cancelled": frozenset({"wakeup_id", "cancelled_at"}),
     "wakeup_due": frozenset({"wakeup_id", "wake_at", "reason"}),
     "model_request_sent": frozenset({"kind", "prompt_mode", "attempt", "request", "budget_report"}),
+    "inference_request_queued": frozenset(
+        {"request_id", "call_id", "kind", "source", "priority", "backend_key"}
+    ),
+    "inference_request_started": frozenset(
+        {
+            "request_id",
+            "call_id",
+            "kind",
+            "source",
+            "priority",
+            "attempt",
+            "queue_wait_seconds",
+            "backend_capacity",
+            "capacity_source",
+        }
+    ),
+    "inference_request_requeued": frozenset(
+        {"request_id", "call_id", "kind", "reason", "attempt"}
+    ),
+    "inference_request_finished": frozenset(
+        {"request_id", "call_id", "kind", "status", "attempt", "error"}
+    ),
     "model_request_progress": frozenset({"kind", "prompt_mode", "attempt", "elapsed_seconds", "timeout_seconds", "policy"}),
     "model_token_progress": frozenset({"kind", "prompt_mode", "attempt", "elapsed_seconds", "completion_tokens", "tokens_per_second", "first_token_seconds", "token_timeout_seconds"}),
     "model_response_received": frozenset({"kind", "prompt_mode", "attempt", "completion"}),

@@ -190,6 +190,31 @@ class OperationalTelemetry:
             unit="{compaction}",
             description="Number of durable history compaction operations.",
         )
+        self._inference_queue_depth = self.meter.create_histogram(
+            "swaag.inference.queue.depth",
+            unit="{request}",
+            description="Backend-local inference requests waiting for admission.",
+        )
+        self._inference_queue_wait = self.meter.create_histogram(
+            "swaag.inference.queue.wait",
+            unit="s",
+            description="Time a model request waits for backend admission.",
+        )
+        self._inference_active = self.meter.create_up_down_counter(
+            "swaag.inference.active",
+            unit="{request}",
+            description="Model requests currently admitted to a backend.",
+        )
+        self._inference_slot_utilization = self.meter.create_histogram(
+            "swaag.inference.backend.slot.utilization",
+            unit="1",
+            description="Admitted request count divided by discovered backend capacity.",
+        )
+        self._inference_cancellation_latency = self.meter.create_histogram(
+            "swaag.inference.cancellation.latency",
+            unit="s",
+            description="Time from a cancellation request to terminal acknowledgement.",
+        )
 
     def agent_invocation(
         self,
@@ -409,3 +434,90 @@ class OperationalTelemetry:
                     ),
                 },
             )
+
+    def record_inference_queued(
+        self,
+        *,
+        call_kind: str,
+        source: str,
+        priority: int,
+        queue_depth: int,
+    ) -> None:
+        attributes = {
+            "swaag.model.call_kind": str(call_kind),
+            "swaag.inference.source": str(source),
+            "swaag.inference.priority": int(priority),
+        }
+        self._inference_queue_depth.record(max(0, int(queue_depth)), attributes)
+        current_span = trace.get_current_span()
+        if current_span.is_recording():
+            current_span.add_event(
+                "swaag.inference.queued",
+                {**attributes, "swaag.inference.queue_depth": max(0, int(queue_depth))},
+            )
+
+    def record_inference_started(
+        self,
+        *,
+        call_kind: str,
+        source: str,
+        priority: int,
+        queue_wait_seconds: float,
+        active_count: int,
+        backend_capacity: int,
+    ) -> None:
+        attributes = {
+            "swaag.model.call_kind": str(call_kind),
+            "swaag.inference.source": str(source),
+            "swaag.inference.priority": int(priority),
+        }
+        self._inference_queue_wait.record(
+            max(0.0, float(queue_wait_seconds)), attributes
+        )
+        self._inference_active.add(1, attributes)
+        self._inference_slot_utilization.record(
+            max(0.0, float(active_count) / max(1, int(backend_capacity))),
+            attributes,
+        )
+        current_span = trace.get_current_span()
+        if current_span.is_recording():
+            current_span.add_event(
+                "swaag.inference.started",
+                {
+                    **attributes,
+                    "swaag.inference.queue_wait_seconds": max(
+                        0.0, float(queue_wait_seconds)
+                    ),
+                    "swaag.inference.active_count": max(0, int(active_count)),
+                    "swaag.inference.backend_capacity": max(
+                        1, int(backend_capacity)
+                    ),
+                },
+            )
+
+    def record_inference_released(
+        self,
+        *,
+        call_kind: str,
+        source: str,
+        priority: int,
+        status: str,
+        cancellation_latency_seconds: float | None = None,
+    ) -> None:
+        active_attributes = {
+            "swaag.model.call_kind": str(call_kind),
+            "swaag.inference.source": str(source),
+            "swaag.inference.priority": int(priority),
+        }
+        attributes = {
+            **active_attributes,
+            "swaag.inference.status": str(status),
+        }
+        self._inference_active.add(-1, active_attributes)
+        if cancellation_latency_seconds is not None:
+            self._inference_cancellation_latency.record(
+                max(0.0, float(cancellation_latency_seconds)), attributes
+            )
+        current_span = trace.get_current_span()
+        if current_span.is_recording():
+            current_span.add_event("swaag.inference.released", attributes)

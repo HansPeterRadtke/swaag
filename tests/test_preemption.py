@@ -206,6 +206,9 @@ def test_same_model_communication_preempts_and_exactly_replays_main_request(make
     assert len(replayed) == 1
     assert preempted[0].payload["request_sha256"] == replayed[0].payload["request_sha256"]
     assert replayed[0].payload["request"] == client.requests[0]
+    inference = runtime.inference.list(session_id=state.session_id)
+    assert any(item.status == "completed" and item.attempt_count == 2 for item in inference)
+    assert any(event.event_type == "inference_request_requeued" for event in events)
 
 
 def test_target_changing_communication_invalidates_replay_and_refreshes_history(make_config) -> None:
@@ -258,6 +261,9 @@ def test_target_changing_communication_invalidates_replay_and_refreshes_history(
     events = runtime.history.read_history(state.session_id)
     assert any(event.event_type == "model_call_replay_invalidated" for event in events)
     assert not any(event.event_type == "model_call_replayed" for event in events)
+    inference = runtime.inference.list(session_id=state.session_id)
+    assert any(item.status == "superseded" for item in inference)
+    assert any(item.status == "completed" for item in inference)
 
 
 def test_separate_assistant_model_answers_without_preempting_main(make_config) -> None:

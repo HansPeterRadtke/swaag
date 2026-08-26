@@ -68,12 +68,12 @@ This is the gap list between the current repository and the intended architectur
 
 ## P1 - inference scheduling, cancellation, and preemption
 
-- [ ] **Turn cooperative model preemption into a backend-independent request lifecycle.** **Partial.** Worker/task states and cancellation requests are durable; active inference observes cancellation and records terminal preemption evidence, while redirects invalidate stale requests. Add a backend-neutral inference request table for queued/completed/failed/superseded calls and queue priority.
-- [ ] **Do not claim true suspend/resume unless a backend proves it.** For llama.cpp/OpenAI-compatible backends, distinguish cancellation plus replay/reconstruction from actual continuation of the same generation state.
+- [x] **Turn cooperative model preemption into a backend-independent request lifecycle.** Every model call now has a durable request row and canonical history evidence for queue admission, attempts, requeue, completion, failure, cancellation, and supersession. Cross-process admission is keyed by backend rather than worker/runtime implementation.
+- [x] **Do not claim true suspend/resume unless a backend proves it.** llama.cpp/OpenAI-compatible interruption is explicitly cancellation plus release, reconstruction, re-admission, and exact request replay; changed target state supersedes the old request.
 - [ ] **Benchmark live llama.cpp cancellation behavior on the deployed Jetson version.** The previous direct experiment could not run because the endpoint was unavailable.
 - [ ] **Benchmark llama.cpp parallel slots/continuous batching versus vLLM scheduling for the actual Jetson workload.** Include latency to interactive communication requests while long worker generations are active.
-- [ ] **Add priority scheduling for communication/control traffic without starving worker progress.**
-- [ ] **Account for cancelled/replayed inference in history, token/cost metrics, and completion reasoning.**
+- [x] **Add priority scheduling for communication/control traffic without starving worker progress.** Communication status/control runs at elevated mechanical priority, backend capacity comes from live llama.cpp `total_slots` when available, and queue aging eventually outranks new high-priority traffic.
+- [ ] **Account for cancelled/replayed inference in history, token/cost metrics, and completion reasoning.** **Partial.** Request/requeue/terminal states, attempts, queue wait, active-slot accounting, and cancellation latency are durable and observable. Backends do not always return consumed prompt/output tokens for an interrupted stream, so exact canceled-token accounting still requires backend evidence rather than invented values.
 
 ## P1 - status, questions, heartbeat, and failure reporting
 
@@ -107,10 +107,10 @@ This is the gap list between the current repository and the intended architectur
 
 ## P1 - observability and logging
 
-- [ ] **Map operational traces/metrics to OpenTelemetry GenAI semantic conventions.** **Partial.** In-process agent invocation, logical model calls across retries, agent-side tools, backend/exact token usage, duration, errors, and cancellation/preemption now use current GenAI spans/metrics without capturing semantic content. Add backend queue/slot measurements and exporter deployment before closing this item.
+- [ ] **Map operational traces/metrics to OpenTelemetry GenAI semantic conventions.** **Partial.** In-process agent invocation, logical model calls across retries, agent-side tools, backend/exact token usage, duration, errors, and cancellation/preemption use current GenAI spans/metrics without capturing semantic content. Client-side scheduler measurements use an honest `swaag.inference.*` namespace because standard GenAI queue metrics are still proposed; exporter deployment remains.
 - [x] **Keep OpenTelemetry separate from authoritative execution history.** OpenTelemetry uses only the standard API and can be sampled or disabled independently. Append-only history remains the replay authority; correlation uses shared session/run/model-call/tool-call identifiers rather than treating spans as state.
 - [x] **Expose context-budget metrics.** Every compilation records context capacity/source, exactness, fit, input/output reserve, safety, required/overflow tokens, and bounded component categories as OTel metrics plus a correlated span event. Semantic-reduction attempts expose call kind, hierarchical use, and dynamic target size; successful durable history compactions expose frequency and hierarchical strategy without semantic content.
-- [ ] **Expose inference scheduler metrics.** Queue depth, queue wait, active generation count, priority, cancellation latency, and backend slot utilization.
+- [x] **Expose inference scheduler metrics.** OTel API instruments now expose queue depth, queue wait, active generation count, priority/source, cancellation latency, and utilization against discovered backend slot capacity, with correlated model-span events and no semantic content.
 - [ ] **Add correlation identifiers connecting UI/task events, worker history, model calls, tool calls, and traces.** **Partial.** Spans carry durable conversation/session and active run IDs; model/tool spans and their canonical history events share explicit call IDs; worker/task projections already expose the session relationship. Propagate standard trace context through external protocol adapters and inference backends.
 
 ## P1 - prompts and evaluation

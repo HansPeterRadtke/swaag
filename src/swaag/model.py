@@ -177,6 +177,29 @@ class LlamaCppClient:
             raise ModelClientError(f"Model props contain invalid n_ctx: {n_ctx!r}")
         return int(n_ctx)
 
+    def server_slot_count(self) -> int:
+        response = requests.get(
+            f"{self._base}/props",
+            timeout=(
+                self.config.model.connect_timeout_seconds,
+                min(self.config.model.timeout_seconds, 15),
+            ),
+        )
+        response.raise_for_status()
+        props = response.json()
+        if not isinstance(props, dict):
+            raise ModelClientError(f"Unexpected model props response: {props!r}")
+        total_slots = props.get("total_slots")
+        if (
+            not isinstance(total_slots, int)
+            or isinstance(total_slots, bool)
+            or total_slots <= 0
+        ):
+            raise ModelClientError(
+                f"Model props contain invalid total_slots: {total_slots!r}"
+            )
+        return int(total_slots)
+
     def context_limit_resolution(self) -> tuple[int, str]:
         return self.server_context_limit(), "server_props:n_ctx"
 

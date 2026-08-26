@@ -94,6 +94,27 @@ def test_genai_spans_metrics_and_context_accounting_follow_otel_conventions() ->
             source_message_count=7,
             hierarchical=True,
         )
+        telemetry.record_inference_queued(
+            call_kind="agent_action",
+            source="worker",
+            priority=0,
+            queue_depth=2,
+        )
+        telemetry.record_inference_started(
+            call_kind="agent_action",
+            source="worker",
+            priority=0,
+            queue_wait_seconds=0.25,
+            active_count=1,
+            backend_capacity=2,
+        )
+        telemetry.record_inference_released(
+            call_kind="agent_action",
+            source="worker",
+            priority=0,
+            status="cancelled",
+            cancellation_latency_seconds=0.1,
+        )
         with telemetry.model_call(
             session_id="session-1",
             run_id="run-1",
@@ -147,6 +168,11 @@ def test_genai_spans_metrics_and_context_accounting_follow_otel_conventions() ->
         "swaag.context.semantic_reduction",
         "swaag.context.semantic_reduction.target",
         "swaag.history.compaction",
+        "swaag.inference.queue.depth",
+        "swaag.inference.queue.wait",
+        "swaag.inference.active",
+        "swaag.inference.backend.slot.utilization",
+        "swaag.inference.cancellation.latency",
     }.issubset(metrics)
     token_points = metrics["gen_ai.client.token.usage"].data.data_points
     assert {
@@ -171,7 +197,19 @@ def test_genai_spans_metrics_and_context_accounting_follow_otel_conventions() ->
     assert compaction_points[0].attributes["swaag.history.hierarchical"] is True
     assert {
         event.name for event in agent.events
-    } >= {"swaag.context.semantic_reduction", "swaag.history.compacted"}
+    } >= {
+        "swaag.context.semantic_reduction",
+        "swaag.history.compacted",
+        "swaag.inference.queued",
+        "swaag.inference.started",
+        "swaag.inference.released",
+    }
+    active_points = metrics["swaag.inference.active"].data.data_points
+    assert active_points[0].value == 0
+    utilization = metrics[
+        "swaag.inference.backend.slot.utilization"
+    ].data.data_points
+    assert utilization[0].sum == 0.5
 
     meter_provider.shutdown()
     tracer_provider.shutdown()

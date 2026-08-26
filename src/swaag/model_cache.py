@@ -2,6 +2,7 @@ from __future__ import annotations
 
 from contextlib import contextmanager
 from dataclasses import asdict, dataclass
+import inspect
 import json
 import os
 from pathlib import Path
@@ -381,6 +382,12 @@ class RecordReplayModelClient:
             raise ValueError("Model client has no context-capacity resolver or configured fallback")
         return int(value), "configured"
 
+    def server_slot_count(self) -> int:
+        if self.mode == "replay":
+            return 128
+        resolver = getattr(self.delegate, "server_slot_count", None)
+        return int(resolver()) if callable(resolver) else 1
+
     def build_completion_request(
         self,
         prompt: str,
@@ -455,6 +462,7 @@ class RecordReplayModelClient:
         *,
         timeout_seconds: int | None = None,
         progress_callback=None,
+        cancel_check=None,
     ) -> CompletionResult:
         self._refresh_request_metadata()
         request_hash, request_envelope = self._request_hash(payload, timeout_seconds=timeout_seconds)
@@ -475,11 +483,22 @@ class RecordReplayModelClient:
             if entry is not None:
                 return self._return_from_entry(entry, payload)
 
-            result = self.delegate.send_completion(
-                payload,
-                timeout_seconds=timeout_seconds,
-                progress_callback=progress_callback,
-            )
+            send = self.delegate.send_completion
+            kwargs = {
+                "timeout_seconds": timeout_seconds,
+                "progress_callback": progress_callback,
+            }
+            try:
+                signature = inspect.signature(send)
+                supports_cancel = "cancel_check" in signature.parameters or any(
+                    item.kind == inspect.Parameter.VAR_KEYWORD
+                    for item in signature.parameters.values()
+                )
+            except (TypeError, ValueError):
+                supports_cancel = False
+            if supports_cancel:
+                kwargs["cancel_check"] = cancel_check
+            result = send(payload, **kwargs)
             new_entry = RecordReplayEntry(
                 request_hash=request_hash,
                 request=request_envelope,

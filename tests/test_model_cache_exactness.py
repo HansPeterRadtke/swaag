@@ -24,6 +24,7 @@ class Delegate:
             )
         )
         self.context_probes = 0
+        self.cancel_checks = []
 
     def cache_identity(self):
         return {
@@ -36,8 +37,16 @@ class Delegate:
         self.context_probes += 1
         return 22016, "server_props:n_ctx"
 
-    def send_completion(self, payload, *, timeout_seconds=None, progress_callback=None):
+    def send_completion(
+        self,
+        payload,
+        *,
+        timeout_seconds=None,
+        progress_callback=None,
+        cancel_check=None,
+    ):
         self.calls += 1
+        self.cancel_checks.append(cancel_check)
         return CompletionResult(
             text=f"response-{self.calls}",
             raw_request=payload,
@@ -145,3 +154,13 @@ def test_record_mode_uses_live_capacity_but_replay_uses_configured_fallback(tmp_
     )
     assert replay_client.context_limit_resolution() == (2048, "configured:replay")
     assert delegate.context_probes == 1
+
+
+def test_record_mode_propagates_cooperative_cancellation(tmp_path: Path) -> None:
+    delegate = Delegate()
+    cached = client(tmp_path, delegate)
+    cancellation = lambda: False
+
+    cached.send_completion(base_payload(), cancel_check=cancellation)
+
+    assert delegate.cancel_checks == [cancellation]

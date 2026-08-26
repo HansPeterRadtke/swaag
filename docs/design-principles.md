@@ -62,6 +62,8 @@ The user must remain able to communicate while workers wait for long inference o
 
 Long inference must not become an untouchable global critical section. Swaag already contains cooperative preemption primitives. Backend cancellation capabilities vary and must be represented honestly. If a backend cannot truly suspend and resume transformer generation, cancellation followed by context reconstruction/replay is not bit-for-bit resume.
 
+Every logical model call enters a durable backend-neutral inference lifecycle before transport execution. Cross-process admission uses the discovered backend slot capacity, records queued/running/completed/failed/cancelled/superseded states, and gives communication/control calls deterministic priority. Queue age increases effective priority so sustained control traffic cannot starve ordinary workers. A preempted request releases its admission before the communication operation runs; an unchanged request is then admitted again and exactly replayed, while changed target state permanently supersedes it.
+
 ## Status, heartbeat, and failures
 
 Mechanical observability and semantic explanation are different. Runtime code can know that inference has run for a measured duration, a tool process is active, a worker is waiting, or a process stopped reporting. An LLM can explain what that means relative to the user's goal and its importance.

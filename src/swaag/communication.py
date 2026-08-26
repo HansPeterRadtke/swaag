@@ -187,7 +187,10 @@ class CommunicationService:
                 control_id=request.correlation_id,
             )
             state = self.runtime.history.rebuild_from_history(request.session_id, write_projections=False)
-            result = self.runtime.run_pending_controls_in_session(state)
+            with self.runtime.inference_priority(
+                100, source="communication_control"
+            ):
+                result = self.runtime.run_pending_controls_in_session(state)
             reply = result.assistant_text if result is not None else ""
             self.store.set_status(request.correlation_id, "completed", reply=reply)
             self._complete_preemption(preemption, target_changed=True, reply=reply)
@@ -214,12 +217,15 @@ class CommunicationService:
             mechanical_status = self.runtime.session_status_payload(state)
             source_events = self.runtime.history.read_history(session_id)
             semantic_runtime = self.assistant_runtime or self.runtime
-            semantic_status = semantic_runtime.generate_communication_status(
-                target_session_id=session_id,
-                question=question,
-                mechanical_status=mechanical_status,
-                source_events=source_events,
-            )
+            with semantic_runtime.inference_priority(
+                100, source="communication_status"
+            ):
+                semantic_status = semantic_runtime.generate_communication_status(
+                    target_session_id=session_id,
+                    question=question,
+                    mechanical_status=mechanical_status,
+                    source_events=source_events,
+                )
             answer = str(semantic_status["answer"])
             self._complete_preemption(preemption, target_changed=False, reply=answer)
             return answer

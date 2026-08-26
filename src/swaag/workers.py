@@ -527,6 +527,9 @@ class WorkerManager:
             events=events,
             active_run=active_run,
         )
+        inference_requests = self.runtime.inference.list(
+            session_id=record.session_id
+        )
         state = self.runtime.history.rebuild_from_history(
             record.session_id, write_projections=False
         )
@@ -534,6 +537,9 @@ class WorkerManager:
             **asdict(record),
             "active_run": active_run,
             "execution_diagnostics": execution_diagnostics,
+            "inference_requests": [
+                asdict(item) for item in inference_requests[-10:]
+            ],
             "mechanical_status": self.runtime.session_status_payload(state),
             "semantic_status": self.runtime.latest_semantic_status_payload(state),
             "attachments": [

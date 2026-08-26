@@ -7,6 +7,7 @@ import threading
 import time
 from contextlib import contextmanager
 from dataclasses import asdict, dataclass, fields
+from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any, Callable, Iterator
 
@@ -35,6 +36,7 @@ from swaag.grammar import (
 )
 from swaag.history import HistoryInvariantError, HistoryStore
 from swaag.heartbeat import heartbeat_payload, systemd_notify
+from swaag.inference import InferenceRequest, InferenceRequestCoordinator
 from swaag.model import LlamaCppClient, ModelClientError, uses_chat_completions_transport
 from swaag.preemption import (
     ModelCallPreempted,
@@ -183,6 +185,12 @@ class AgentRuntime:
             history_store.event_observer = event_observer
         self.prompts = PromptBuilder(config)
         self.telemetry = telemetry or OperationalTelemetry()
+        self._inference_context = threading.local()
+        self.inference = InferenceRequestCoordinator(
+            config.sessions.root,
+            backend_key=self._inference_backend_key(),
+            capacity_resolver=self._inference_capacity,
+        )
         self._token_counter = token_counter
         self._token_count_cache: dict[str, int] = {}
         self._sleep = time.sleep
@@ -191,6 +199,55 @@ class AgentRuntime:
     @classmethod
     def from_config_paths(cls, config_paths: list[str] | None = None) -> AgentRuntime:
         return cls(load_config(config_paths))
+
+    def _inference_backend_key(self) -> str:
+        if getattr(self.client, "is_deterministic_test_client", False):
+            return f"deterministic:{id(self.client)}"
+        if getattr(self.client, "mode", "") == "replay":
+            cassette = getattr(self.client, "cassette_path", "")
+            return f"replay:{Path(cassette).expanduser()}"
+        return self.config.model.base_url.rstrip("/")
+
+    def _inference_capacity(self) -> tuple[int, str]:
+        if getattr(self.client, "is_deterministic_test_client", False):
+            return 128, "deterministic_test_client"
+        if getattr(self.client, "mode", "") == "replay":
+            return 128, "recorded_replay"
+        resolver = getattr(self.client, "server_slot_count", None)
+        if callable(resolver):
+            try:
+                slots = int(resolver())
+                if slots > 0:
+                    return slots, "server_props:total_slots"
+            except Exception:
+                pass
+        return 1, "conservative_fallback"
+
+    @contextmanager
+    def inference_priority(
+        self,
+        priority: int,
+        *,
+        source: str,
+    ) -> Iterator[None]:
+        previous = getattr(self._inference_context, "value", None)
+        self._inference_context.value = (int(priority), str(source))
+        try:
+            yield
+        finally:
+            if previous is None:
+                try:
+                    del self._inference_context.value
+                except AttributeError:
+                    pass
+            else:
+                self._inference_context.value = previous
+
+    def _current_inference_priority(self) -> tuple[int, str]:
+        value = getattr(self._inference_context, "value", None)
+        if isinstance(value, tuple) and len(value) == 2:
+            return int(value[0]), str(value[1])
+        return 0, "worker"
 
     def create_or_load_session(self, session_id: str | None = None) -> SessionState:
         state = self.history.create_or_load(
@@ -2867,6 +2924,259 @@ class AgentRuntime:
         )
         return min(ceiling, max(current + 64, (current * 3 + 1) // 2))
 
+    def _record_inference_started(
+        self,
+        state: SessionState,
+        request: InferenceRequest,
+    ) -> None:
+        self.telemetry.record_inference_started(
+            call_kind=request.call_kind,
+            source=request.source,
+            priority=request.priority,
+            queue_wait_seconds=request.queue_wait_seconds or 0.0,
+            active_count=self.inference.active_count(),
+            backend_capacity=request.backend_capacity or 1,
+        )
+        self.history.record_event(
+            state,
+            "inference_request_started",
+            {
+                "request_id": request.request_id,
+                "call_id": request.call_id,
+                "kind": request.call_kind,
+                "source": request.source,
+                "priority": request.priority,
+                "attempt": request.attempt_count,
+                "queue_wait_seconds": request.queue_wait_seconds or 0.0,
+                "backend_capacity": request.backend_capacity or 1,
+                "capacity_source": request.capacity_source or "unknown",
+            },
+        )
+
+    def _requeue_inference(
+        self,
+        state: SessionState,
+        request_id: str,
+        *,
+        reason: str,
+    ) -> InferenceRequest:
+        before = self.inference.get(request_id)
+        request = self.inference.requeue(request_id, reason=reason)
+        if before is not None and before.status == "running":
+            self.telemetry.record_inference_released(
+                call_kind=request.call_kind,
+                source=request.source,
+                priority=request.priority,
+                status="requeued",
+            )
+        self.history.record_event(
+            state,
+            "inference_request_requeued",
+            {
+                "request_id": request.request_id,
+                "call_id": request.call_id,
+                "kind": request.call_kind,
+                "reason": reason,
+                "attempt": request.attempt_count,
+            },
+        )
+        return request
+
+    def _finish_inference(
+        self,
+        state: SessionState,
+        request_id: str,
+        *,
+        status: str,
+        error: str = "",
+        cancellation_requested_at: str | None = None,
+        record_history: bool = True,
+    ) -> InferenceRequest:
+        before = self.inference.get(request_id)
+        if status == "completed":
+            request = self.inference.complete(request_id)
+        elif status == "cancelled":
+            request = self.inference.cancel(
+                request_id,
+                reason=error,
+                requested_at=cancellation_requested_at,
+            )
+        elif status == "superseded":
+            request = self.inference.supersede(request_id, reason=error)
+        elif status == "failed":
+            request = self.inference.fail(request_id, error=error)
+        else:
+            raise ValueError(f"unknown inference terminal status: {status}")
+        if before is not None and before.status == "running":
+            cancellation_latency = None
+            if status == "cancelled" and request.cancellation_requested_at:
+                cancellation_latency = _iso_elapsed_seconds(
+                    request.cancellation_requested_at,
+                    request.completed_at,
+                )
+            self.telemetry.record_inference_released(
+                call_kind=request.call_kind,
+                source=request.source,
+                priority=request.priority,
+                status=request.status,
+                cancellation_latency_seconds=cancellation_latency,
+            )
+        if record_history:
+            self._record_inference_finished_event(state, request, error=error)
+        return request
+
+    def _record_inference_finished_event(
+        self,
+        state: SessionState,
+        request: InferenceRequest,
+        *,
+        error: str,
+    ) -> None:
+        self.history.record_event(
+            state,
+            "inference_request_finished",
+            {
+                "request_id": request.request_id,
+                "call_id": request.call_id,
+                "kind": request.call_kind,
+                "status": request.status,
+                "attempt": request.attempt_count,
+                "error": error,
+            },
+        )
+
+    def _handle_model_preemption(
+        self,
+        state: SessionState,
+        prepared: PreparedCall,
+        *,
+        call_id: str,
+        inference_request_id: str,
+        active_call: Any,
+        guard: Any,
+        attempt: int,
+        policy: Any,
+        frozen_request: dict[str, Any],
+    ) -> None:
+        if self._run_cancellation_requested(state):
+            run_id = self._active_run_id(state)
+            cancellation = self.preemption.run_cancellation(state.session_id, run_id)
+            guard.record(
+                "model_call_preempted",
+                {
+                    "kind": prepared.assembly.kind,
+                    "prompt_mode": prepared.prompt_mode,
+                    "attempt": attempt,
+                    "call_id": call_id,
+                    "preemption_id": f"run_cancellation:{run_id}",
+                    "request_sha256": active_call.request_sha256,
+                    "reason": "run_cancellation_requested",
+                },
+            )
+            self._finish_inference(
+                state,
+                inference_request_id,
+                status="cancelled",
+                error="worker run cancellation requested",
+                cancellation_requested_at=(
+                    None if cancellation is None else cancellation.requested_at
+                ),
+            )
+            self.preemption.clear_active(state.session_id, call_id)
+            raise RunCancellationRequested("worker run cancellation requested")
+        pending = self.preemption.pending_for_call(state.session_id, call_id)
+        if pending is None:
+            self._finish_inference(
+                state,
+                inference_request_id,
+                status="cancelled",
+                error="backend interrupted without a pending coordinator request",
+            )
+            self.preemption.clear_active(state.session_id, call_id)
+            raise ModelCallPreempted("model call interrupted without a pending request")
+        guard.record(
+            "model_call_preempted",
+            {
+                "kind": prepared.assembly.kind,
+                "prompt_mode": prepared.prompt_mode,
+                "attempt": attempt,
+                "call_id": call_id,
+                "preemption_id": pending.preemption_id,
+                "request_sha256": active_call.request_sha256,
+            },
+        )
+        current = self.inference.get(inference_request_id)
+        if current is not None and current.status == "running":
+            self._requeue_inference(
+                state,
+                inference_request_id,
+                reason=f"preempted:{pending.preemption_id}",
+            )
+        # Publish interruption only after canonical target-session evidence is durable.
+        self.preemption.mark_interrupted(pending.preemption_id)
+        resolved = self.preemption.wait_for_status(
+            pending.preemption_id,
+            {"completed", "failed"},
+            timeout_seconds=max(
+                1.0,
+                float(policy.effective_timeout_seconds),
+                float(self.config.model.timeout_seconds),
+                float(self.config.model.structured_timeout_seconds),
+            ),
+            poll_seconds=0.02,
+        )
+        if resolved.status == "failed":
+            self._finish_inference(
+                state,
+                inference_request_id,
+                status="failed",
+                error=f"communication preemption failed: {resolved.reply or 'unknown error'}",
+            )
+            self.preemption.clear_active(state.session_id, call_id)
+            raise ModelClientError(
+                f"communication preemption failed: {resolved.reply or 'unknown error'}"
+            )
+        if resolved.target_changed:
+            finished = self._finish_inference(
+                state,
+                inference_request_id,
+                status="superseded",
+                error="target session changed during communication",
+                record_history=False,
+            )
+            self.preemption.clear_active(state.session_id, call_id)
+            self._refresh_state_from_history(state)
+            guard = self.history.guard(
+                state, f"model_call:{prepared.assembly.kind}:preemption"
+            )
+            guard.record(
+                "model_call_replay_invalidated",
+                {
+                    "kind": prepared.assembly.kind,
+                    "call_id": call_id,
+                    "preemption_id": pending.preemption_id,
+                    "request_sha256": active_call.request_sha256,
+                },
+            )
+            self._record_inference_finished_event(
+                state,
+                finished,
+                error="target session changed during communication",
+            )
+            raise ModelCallStateChanged(
+                "target session changed during communication; stale model request was not replayed"
+            )
+        guard.record(
+            "model_call_replayed",
+            {
+                "kind": prepared.assembly.kind,
+                "call_id": call_id,
+                "preemption_id": pending.preemption_id,
+                "request_sha256": active_call.request_sha256,
+                "request": frozen_request,
+            },
+        )
+
     def _execute_model_call(
         self,
         state: SessionState,
@@ -2943,12 +3253,72 @@ class AgentRuntime:
             request,
         )
         frozen_request = active_call.request
+        inference_priority, inference_source = self._current_inference_priority()
+        inference_request = self.inference.enqueue(
+            session_id=state.session_id,
+            run_id=self._active_run_id(state),
+            call_id=call_id,
+            call_kind=prepared.assembly.kind,
+            priority=inference_priority,
+            source=inference_source,
+        )
+        self.telemetry.record_inference_queued(
+            call_kind=inference_request.call_kind,
+            source=inference_request.source,
+            priority=inference_request.priority,
+            queue_depth=self.inference.queue_depth(),
+        )
+        self.history.record_event(
+            state,
+            "inference_request_queued",
+            {
+                "request_id": inference_request.request_id,
+                "call_id": inference_request.call_id,
+                "kind": inference_request.call_kind,
+                "source": inference_request.source,
+                "priority": inference_request.priority,
+                "backend_key": inference_request.backend_key,
+            },
+        )
         transient_attempts = 0
         semantic_attempt = 0
         total_attempt = 0
         while True:
             total_attempt += 1
             guard = self.history.guard(state, f"model_call:{prepared.assembly.kind}")
+            self._heartbeat(
+                state,
+                phase="queued_inference",
+                detail=f"queued {prepared.assembly.kind}",
+                active_kind="model",
+                active_id=call_id,
+            )
+            try:
+                acquired = self.inference.acquire(
+                    inference_request.request_id,
+                    cancel_check=lambda: (
+                        self._run_cancellation_requested(state)
+                        or self.preemption.pending_for_call(
+                            state.session_id, call_id
+                        )
+                        is not None
+                    ),
+                )
+            except ModelCallPreempted:
+                telemetry_operation.record_preemption()
+                self._handle_model_preemption(
+                    state,
+                    prepared,
+                    call_id=call_id,
+                    inference_request_id=inference_request.request_id,
+                    active_call=active_call,
+                    guard=guard,
+                    attempt=total_attempt,
+                    policy=policy,
+                    frozen_request=frozen_request,
+                )
+                continue
+            self._record_inference_started(state, acquired)
             guard.record(
                 "model_request_sent",
                 {
@@ -3034,78 +3404,16 @@ class AgentRuntime:
                     completion = send(frozen_request, **kwargs)
             except ModelCallPreempted:
                 telemetry_operation.record_preemption()
-                if self._run_cancellation_requested(state):
-                    run_id = self._active_run_id(state)
-                    guard.record(
-                        "model_call_preempted",
-                        {
-                            "kind": prepared.assembly.kind,
-                            "prompt_mode": prepared.prompt_mode,
-                            "attempt": total_attempt,
-                            "call_id": call_id,
-                            "preemption_id": f"run_cancellation:{run_id}",
-                            "request_sha256": active_call.request_sha256,
-                            "reason": "run_cancellation_requested",
-                        },
-                    )
-                    self.preemption.clear_active(state.session_id, call_id)
-                    raise RunCancellationRequested("worker run cancellation requested")
-                pending = self.preemption.pending_for_call(state.session_id, call_id)
-                if pending is None:
-                    self.preemption.clear_active(state.session_id, call_id)
-                    raise
-                guard.record(
-                    "model_call_preempted",
-                    {
-                        "kind": prepared.assembly.kind,
-                        "prompt_mode": prepared.prompt_mode,
-                        "attempt": total_attempt,
-                        "call_id": call_id,
-                        "preemption_id": pending.preemption_id,
-                        "request_sha256": active_call.request_sha256,
-                    },
-                )
-                # Publish the coordinator transition only after its canonical event.
-                # Communication may append target changes as soon as it observes
-                # "interrupted", so reversing this order creates a stale writer race.
-                self.preemption.mark_interrupted(pending.preemption_id)
-                resolved = self.preemption.wait_for_status(
-                    pending.preemption_id,
-                    {"completed", "failed"},
-                    timeout_seconds=max(
-                        1.0,
-                        float(policy.effective_timeout_seconds),
-                        float(self.config.model.timeout_seconds),
-                        float(self.config.model.structured_timeout_seconds),
-                    ),
-                    poll_seconds=0.02,
-                )
-                if resolved.status == "failed":
-                    self.preemption.clear_active(state.session_id, call_id)
-                    raise ModelClientError(f"communication preemption failed: {resolved.reply or 'unknown error'}")
-                if resolved.target_changed:
-                    self.preemption.clear_active(state.session_id, call_id)
-                    self._refresh_state_from_history(state)
-                    guard = self.history.guard(state, f"model_call:{prepared.assembly.kind}:preemption")
-                    guard.record(
-                        "model_call_replay_invalidated",
-                        {
-                            "kind": prepared.assembly.kind,
-                            "call_id": call_id,
-                            "preemption_id": pending.preemption_id,
-                            "request_sha256": active_call.request_sha256,
-                        },
-                    )
-                    raise ModelCallStateChanged("target session changed during communication; stale model request was not replayed")
-                guard.record(
-                    "model_call_replayed",
-                    {
-                        "kind": prepared.assembly.kind,
-                        "call_id": call_id,
-                        "preemption_id": pending.preemption_id,
-                        "request_sha256": active_call.request_sha256,
-                        "request": frozen_request,
-                    },
+                self._handle_model_preemption(
+                    state,
+                    prepared,
+                    call_id=call_id,
+                    inference_request_id=inference_request.request_id,
+                    active_call=active_call,
+                    guard=guard,
+                    attempt=total_attempt,
+                    policy=policy,
+                    frozen_request=frozen_request,
                 )
                 continue
             except Exception as exc:
@@ -3123,7 +3431,18 @@ class AgentRuntime:
                         },
                     )
                     if transient_attempts > self._max_model_unavailable_attempts:
+                        self._finish_inference(
+                            state,
+                            inference_request.request_id,
+                            status="failed",
+                            error="model_unavailable",
+                        )
                         raise ModelClientError("model_unavailable") from exc
+                    self._requeue_inference(
+                        state,
+                        inference_request.request_id,
+                        reason="model_unavailable_retry",
+                    )
                     self._sleep(self._model_unavailable_backoff_seconds(transient_attempts - 1))
                     continue
                 guard.record(
@@ -3150,10 +3469,26 @@ class AgentRuntime:
                             "next_attempt": semantic_attempt + 1,
                         },
                     )
+                    self._requeue_inference(
+                        state,
+                        inference_request.request_id,
+                        reason="semantic_model_retry",
+                    )
                     continue
+                self._finish_inference(
+                    state,
+                    inference_request.request_id,
+                    status="failed",
+                    error=f"{type(exc).__name__}: {exc}",
+                )
                 self.preemption.clear_active(state.session_id, call_id)
                 raise
 
+            self._finish_inference(
+                state,
+                inference_request.request_id,
+                status="completed",
+            )
             self.preemption.clear_active(state.session_id, call_id)
             guard.record(
                 "model_response_received",
@@ -3781,3 +4116,21 @@ class _HistoryAwareTokenCounter:
                 },
             )
             return estimate
+
+
+def _iso_elapsed_seconds(start: str | None, end: str | None) -> float | None:
+    if not start or not end:
+        return None
+    try:
+        start_time = datetime.fromisoformat(str(start).replace("Z", "+00:00"))
+        end_time = datetime.fromisoformat(str(end).replace("Z", "+00:00"))
+    except ValueError:
+        return None
+    if start_time.tzinfo is None:
+        start_time = start_time.replace(tzinfo=timezone.utc)
+    if end_time.tzinfo is None:
+        end_time = end_time.replace(tzinfo=timezone.utc)
+    return max(
+        0.0,
+        (end_time.astimezone(timezone.utc) - start_time.astimezone(timezone.utc)).total_seconds(),
+    )
