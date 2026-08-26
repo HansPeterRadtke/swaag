@@ -3,10 +3,12 @@ from __future__ import annotations
 import inspect
 import json
 import sys
+import threading
 import time
+from contextlib import contextmanager
 from dataclasses import asdict, dataclass, fields
 from pathlib import Path
-from typing import Any, Callable
+from typing import Any, Callable, Iterator
 
 import requests
 
@@ -409,6 +411,40 @@ class AgentRuntime:
             "WATCHDOG=1",
             f"STATUS=swaag session={state.session_id} phase={payload['phase']} detail={payload['detail'][:180]}",
         )
+
+    @contextmanager
+    def _periodic_model_heartbeat(
+        self,
+        state: SessionState,
+        *,
+        call_id: str,
+        call_kind: str,
+        interval_seconds: float = 5.0,
+    ) -> Iterator[None]:
+        """Keep mechanical liveness current while a backend has not streamed output."""
+        stop = threading.Event()
+
+        def pulse() -> None:
+            while not stop.wait(max(0.01, float(interval_seconds))):
+                self._heartbeat(
+                    state,
+                    phase="inference",
+                    detail=f"waiting for {call_kind} model stream",
+                    active_kind="model",
+                    active_id=call_id,
+                )
+
+        thread = threading.Thread(
+            target=pulse,
+            name=f"swaag-heartbeat-{call_id}",
+            daemon=True,
+        )
+        thread.start()
+        try:
+            yield
+        finally:
+            stop.set()
+            thread.join(timeout=max(1.0, float(interval_seconds) + 0.5))
 
     def _refresh_state_from_history(self, state: SessionState) -> None:
         refreshed = self.history.rebuild_from_history(state.session_id, write_projections=False)
@@ -2985,7 +3021,17 @@ class AgentRuntime:
                         self._run_cancellation_requested(state)
                         or self.preemption.pending_for_call(state.session_id, call_id) is not None
                     )
-                completion = send(frozen_request, **kwargs)
+                heartbeat_interval = max(
+                    0.5,
+                    min(5.0, float(policy.progress_poll_seconds)),
+                )
+                with self._periodic_model_heartbeat(
+                    state,
+                    call_id=call_id,
+                    call_kind=prepared.assembly.kind,
+                    interval_seconds=heartbeat_interval,
+                ):
+                    completion = send(frozen_request, **kwargs)
             except ModelCallPreempted:
                 telemetry_operation.record_preemption()
                 if self._run_cancellation_requested(state):

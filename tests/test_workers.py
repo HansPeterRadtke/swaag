@@ -232,6 +232,16 @@ def test_worker_cancellation_is_durable_and_stops_active_inference(make_config) 
     manager.start(worker.worker_id)
     assert client.started.wait(timeout=10)
 
+    inspection = manager.inspect(worker.worker_id)
+    diagnostics = inspection["execution_diagnostics"]
+    assert diagnostics["last_transition"]["to_status"] == "working"
+    assert diagnostics["active_operation"]["active_kind"] == "model"
+    assert diagnostics["active_operation"]["active_id"].startswith("model_call_")
+    assert diagnostics["active_operation"]["pid_alive"] is True
+    assert diagnostics["active_operation"]["heartbeat_age_seconds"] >= 0
+    assert diagnostics["local_supervisor"]["manager_process_alive"] is True
+    assert diagnostics["local_supervisor"]["run_state"] == "running"
+
     requested = manager.cancel(worker.worker_id, reason="stop now")
     finished = manager.wait(worker.worker_id, timeout_seconds=10)
     manager.shutdown()

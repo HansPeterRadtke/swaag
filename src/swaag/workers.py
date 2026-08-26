@@ -6,6 +6,7 @@ import sqlite3
 import time
 from concurrent.futures import Future, ThreadPoolExecutor
 from dataclasses import asdict, dataclass
+from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any, Iterable
 
@@ -521,12 +522,18 @@ class WorkerManager:
         events = self.store.events(worker_id)
         output_spec = self._output_spec(record, events=events)
         active_run = self.runtime.history.read_active_run(record.session_id)
+        execution_diagnostics = self._execution_diagnostics(
+            record,
+            events=events,
+            active_run=active_run,
+        )
         state = self.runtime.history.rebuild_from_history(
             record.session_id, write_projections=False
         )
         return {
             **asdict(record),
             "active_run": active_run,
+            "execution_diagnostics": execution_diagnostics,
             "mechanical_status": self.runtime.session_status_payload(state),
             "semantic_status": self.runtime.latest_semantic_status_payload(state),
             "attachments": [
@@ -542,6 +549,72 @@ class WorkerManager:
             ),
             "structured_output": self._structured_output_from_events(events),
             "latest_event_sequence": events[-1].sequence,
+        }
+
+    def _execution_diagnostics(
+        self,
+        record: WorkerRecord,
+        *,
+        events: list[WorkerEvent],
+        active_run: dict[str, Any] | None,
+    ) -> dict[str, Any]:
+        transition = next(
+            (
+                event
+                for event in reversed(events)
+                if "to_status" in event.payload or event.event_type == "worker_created"
+            ),
+            None,
+        )
+        future = self._futures.get(record.worker_id)
+        if future is None:
+            local_run_state = "not_registered"
+        elif future.cancelled():
+            local_run_state = "cancelled"
+        elif future.running():
+            local_run_state = "running"
+        elif future.done():
+            local_run_state = "finished"
+        else:
+            local_run_state = "queued"
+        active_operation = None
+        if active_run is not None:
+            active_operation = {
+                "run_id": str(active_run.get("run_id", "")),
+                "phase": str(active_run.get("phase", "unknown")),
+                "detail": str(active_run.get("detail", "")),
+                "active_kind": str(active_run.get("active_kind", "")),
+                "active_id": str(active_run.get("active_id", "")),
+                "started_at": str(active_run.get("started_at", "")),
+                "updated_at": str(active_run.get("updated_at", "")),
+                "heartbeat_at": str(active_run.get("heartbeat_at", "")),
+                "heartbeat_age_seconds": _timestamp_age_seconds(
+                    active_run.get("heartbeat_at")
+                ),
+                "pid": active_run.get("pid"),
+                "pid_alive": _pid_is_alive(active_run.get("pid")),
+            }
+        return {
+            "observed_at": utc_now_iso(),
+            "last_transition": (
+                None
+                if transition is None
+                else {
+                    "sequence": transition.sequence,
+                    "timestamp": transition.timestamp,
+                    "event_type": transition.event_type,
+                    "from_status": transition.payload.get("from_status"),
+                    "to_status": transition.payload.get(
+                        "to_status", transition.payload.get("status")
+                    ),
+                }
+            ),
+            "active_operation": active_operation,
+            "local_supervisor": {
+                "manager_pid": os.getpid(),
+                "manager_process_alive": _pid_is_alive(os.getpid()),
+                "run_state": local_run_state,
+            },
         }
 
     def list(self, *, include_archived: bool = False) -> list[WorkerRecord]:
@@ -766,3 +839,16 @@ def _pid_is_alive(value: Any) -> bool:
     except OSError:
         return False
     return True
+
+
+def _timestamp_age_seconds(value: Any) -> float | None:
+    try:
+        timestamp = datetime.fromisoformat(str(value).replace("Z", "+00:00"))
+    except (TypeError, ValueError):
+        return None
+    if timestamp.tzinfo is None:
+        timestamp = timestamp.replace(tzinfo=timezone.utc)
+    return round(
+        max(0.0, (datetime.now(timezone.utc) - timestamp.astimezone(timezone.utc)).total_seconds()),
+        3,
+    )

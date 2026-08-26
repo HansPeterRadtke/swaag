@@ -84,7 +84,7 @@ This is the gap list between the current repository and the intended architectur
 - [x] **Integrate external process supervision/watchdog for production on Jetson.** The repo-backed communication service emits READY/WATCHDOG/STOPPING notifications and the deployed infra unit uses systemd watchdog supervision.
 - [ ] **Guarantee durable critical failure delivery.** Rich side-channel events are optional; a critical failure must also have a representation every client can retrieve later.
 - [x] **Guarantee durable critical-question delivery.** Blocking questions are append-only `agent_question` events, place workers in durable `input_required`, and remain in the normal conversational result even without a rich live UI.
-- [ ] **Make silent inactivity diagnosable.** Record the last mechanical transition, active request/tool identifiers, start time, and supervisor health without needing an LLM to be alive.
+- [x] **Make silent inactivity diagnosable.** Worker inspection exposes the last durable mechanical transition, active run/request/tool identity, start/update/heartbeat timestamps and heartbeat age, run-process liveness, and local executor supervision state without an LLM. A periodic mechanical pulse keeps liveness current even while a backend is still evaluating a prompt and has not streamed its first token.
 
 ## P1 - interfaces and structured output
 
