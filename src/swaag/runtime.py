@@ -2376,6 +2376,10 @@ class AgentRuntime:
                 "prompt_mode": assembly.prompt_mode,
                 "contract": contract.name,
                 "prompt": assembly.prompt_text,
+                "prompt_sha256": sha256_text(assembly.prompt_text),
+                "prompt_artifacts": [
+                    asdict(artifact) for artifact in assembly.prompt_artifacts
+                ],
                 "components": [asdict(component) for component in assembly.components],
                 "budget_report": asdict(report),
             },

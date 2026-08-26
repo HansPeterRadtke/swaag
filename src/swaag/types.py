@@ -114,12 +114,19 @@ class PromptComponent:
     category: str | None = None
 
 
+@dataclass(slots=True, frozen=True)
+class PromptArtifact:
+    source: str
+    sha256: str
+
+
 @dataclass(slots=True)
 class PromptAssembly:
     kind: ModelCallKind
     prompt_text: str
     components: list[PromptComponent]
     prompt_mode: str
+    prompt_artifacts: list[PromptArtifact] = field(default_factory=list)
 
 
 @dataclass(slots=True)

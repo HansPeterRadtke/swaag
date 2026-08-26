@@ -5,8 +5,14 @@ from typing import Iterable
 
 from swaag.compression import summary_provenance_text
 from swaag.config import AgentConfig
-from swaag.types import Message, ModelCallKind, PromptAssembly, PromptComponent
-from swaag.utils import stable_json_dumps
+from swaag.types import (
+    Message,
+    ModelCallKind,
+    PromptArtifact,
+    PromptAssembly,
+    PromptComponent,
+)
+from swaag.utils import sha256_text, stable_json_dumps
 
 LLAMA3_BEGIN = "<|begin_of_text|>"
 LLAMA3_SYSTEM_HEADER = "<|start_header_id|>system<|end_header_id|>\n\n"
@@ -32,6 +38,46 @@ class PromptBuilder:
             else self._config.prompts.standard_system_template
         )
         return self._load_template(template_name)
+
+    def _prompt_artifacts(
+        self,
+        *,
+        kind: ModelCallKind,
+        system_instruction: str,
+        template_names: tuple[str, ...],
+    ) -> list[PromptArtifact]:
+        artifacts = [
+            PromptArtifact(
+                source="prompt_protocol:llama3",
+                sha256=sha256_text(
+                    LLAMA3_BEGIN
+                    + LLAMA3_SYSTEM_HEADER
+                    + "{system}"
+                    + LLAMA3_EOT
+                    + LLAMA3_USER_HEADER
+                    + "{user}"
+                    + LLAMA3_EOT
+                    + LLAMA3_ASSISTANT_HEADER
+                ),
+            ),
+            PromptArtifact(
+                source=f"rendered_system:{kind}",
+                sha256=sha256_text(system_instruction.strip()),
+            ),
+        ]
+        seen = {artifact.source for artifact in artifacts}
+        for template_name in template_names:
+            source = f"assets/prompts/{template_name}"
+            if source in seen:
+                continue
+            seen.add(source)
+            artifacts.append(
+                PromptArtifact(
+                    source=source,
+                    sha256=sha256_text(self._load_template(template_name)),
+                )
+            )
+        return artifacts
 
     def render_tool_catalog(self, tools: Iterable[tuple]) -> str:
         lines: list[str] = []
@@ -140,12 +186,19 @@ class PromptBuilder:
         kind: ModelCallKind,
         prompt_mode: str,
         user_components: list[PromptComponent],
+        template_names: tuple[str, ...] = (),
     ) -> PromptAssembly:
+        system_template = (
+            self._config.prompts.lean_system_template
+            if prompt_mode == "lean"
+            else self._config.prompts.standard_system_template
+        )
         return self._assemble_with_system(
             kind,
             prompt_mode,
-            self.system_text(prompt_mode),
+            self._load_template(system_template),
             user_components,
+            template_names=(system_template, *template_names),
         )
 
     def _assemble_with_system(
@@ -154,6 +207,7 @@ class PromptBuilder:
         prompt_mode: str,
         system_instruction: str,
         user_components: list[PromptComponent],
+        template_names: tuple[str, ...] = (),
     ) -> PromptAssembly:
         components = [
             PromptComponent(name="llama3_begin", category="wrapper", text=LLAMA3_BEGIN),
@@ -174,6 +228,11 @@ class PromptBuilder:
             prompt_mode=prompt_mode,
             prompt_text="".join(component.text for component in components),
             components=components,
+            prompt_artifacts=self._prompt_artifacts(
+                kind=kind,
+                system_instruction=system_instruction,
+                template_names=template_names,
+            ),
         )
 
     def build_semantic_operation_prompt(
@@ -285,7 +344,12 @@ class PromptBuilder:
                 text=self._load_template(self._config.prompts.action_template),
             )
         )
-        return self._assemble("action", prompt_mode, components)
+        return self._assemble(
+            "action",
+            prompt_mode,
+            components,
+            template_names=(self._config.prompts.action_template,),
+        )
 
     def build_completion_evaluation_prompt(
         self,
@@ -340,7 +404,20 @@ class PromptBuilder:
             PromptComponent(name="user_eot", category="wrapper", text=LLAMA3_EOT),
             PromptComponent(name="assistant_header", category="wrapper", text=LLAMA3_ASSISTANT_HEADER),
         ]
-        return PromptAssembly(kind="completion_evaluation", prompt_mode="lean", prompt_text="".join(c.text for c in components), components=components)
+        return PromptAssembly(
+            kind="completion_evaluation",
+            prompt_mode="lean",
+            prompt_text="".join(c.text for c in components),
+            components=components,
+            prompt_artifacts=self._prompt_artifacts(
+                kind="completion_evaluation",
+                system_instruction=system_prompt,
+                template_names=(
+                    self._config.prompts.completion_evaluation_system_template,
+                    self._config.prompts.completion_evaluation_template,
+                ),
+            ),
+        )
 
     def build_caller_structured_output_prompt(
         self,
@@ -396,6 +473,14 @@ class PromptBuilder:
             prompt_mode="lean",
             prompt_text="".join(component.text for component in components),
             components=components,
+            prompt_artifacts=self._prompt_artifacts(
+                kind="caller_structured_output",
+                system_instruction=system_prompt,
+                template_names=(
+                    self._config.prompts.caller_structured_output_system_template,
+                    self._config.prompts.caller_structured_output_template,
+                ),
+            ),
         )
 
     @staticmethod
@@ -472,6 +557,14 @@ class PromptBuilder:
             prompt_mode="lean",
             prompt_text="".join(component.text for component in components),
             components=components,
+            prompt_artifacts=self._prompt_artifacts(
+                kind="tool_result_projection",
+                system_instruction=system_prompt,
+                template_names=(
+                    self._config.prompts.tool_result_projection_system_template,
+                    self._config.prompts.tool_result_projection_template,
+                ),
+            ),
         )
 
     def build_evidence_projection_prompt(
@@ -504,6 +597,10 @@ class PromptBuilder:
                     text=user_text,
                 )
             ],
+            template_names=(
+                self._config.prompts.evidence_projection_system_template,
+                self._config.prompts.evidence_projection_template,
+            ),
         )
 
     def build_communication_status_prompt(
@@ -613,6 +710,10 @@ class PromptBuilder:
                 self._config.prompts.communication_status_system_template
             ),
             components,
+            template_names=(
+                self._config.prompts.communication_status_system_template,
+                self._config.prompts.communication_status_template,
+            ),
         )
 
     def build_summary_prompt(
@@ -645,4 +746,12 @@ class PromptBuilder:
             prompt_mode=prompt_mode,
             prompt_text="".join(component.text for component in components),
             components=components,
+            prompt_artifacts=self._prompt_artifacts(
+                kind="summary",
+                system_instruction=system_prompt,
+                template_names=(
+                    self._config.prompts.summary_system_template,
+                    self._config.prompts.summary_template,
+                ),
+            ),
         )

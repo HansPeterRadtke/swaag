@@ -24,7 +24,7 @@ When overflow occurs, measure which components consume the failed request and us
 
 ## Accounting and allocation
 
-For every call, the target implementation should record model identifier, context capacity, output reserve, safety margin if any, mandatory-input tokens, each dynamic component's tokens, final input tokens, actual output tokens, and provenance identifying which source records produced projections or summaries.
+For every call, the implementation records model identifier, context capacity, output reserve, safety margin if any, mandatory-input tokens, each dynamic component's tokens, final input tokens, actual output tokens, and provenance identifying which source records produced projections or summaries. Each prompt assembly also carries content hashes for its protocol wrapper, rendered system instruction, and canonical template artifacts; `prompt_built` persists those versions with the complete rendered-prompt hash so behavior can be correlated and replayed without guessing from a package version.
 
 Avoid a universal percentage allocation. A document-extraction call may devote almost all input to a document; a communication call may need status and recent history; a tool-selection call may need capability descriptions and little history. Deterministic code calculates capacities. An LLM decides semantic allocation within them.
 

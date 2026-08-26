@@ -115,7 +115,7 @@ This is the gap list between the current repository and the intended architectur
 
 ## P1 - prompts and evaluation
 
-- [ ] **Version every behaviorally important prompt as an implementation artifact.** Include worker/system, context-selection, summary, tool-result reduction, research, question-criticality, status, communication, and completion-evaluator prompts.
+- [x] **Version every behaviorally important prompt as an implementation artifact.** Every prompt assembly carries SHA-256 identities for the prompt protocol, rendered system instruction, and each canonical template file it uses. Durable `prompt_built` events store those artifact identities plus the exact rendered-prompt hash, covering worker/action, inline semantic capabilities, summary, projection, completion, caller-schema, and communication/status operations without relying on package version alone.
 - [ ] **Add systematic prompt-variant evaluation with held-out tasks.** Do not merge prompt changes based only on qualitative inspection.
 - [ ] **Import/adapt instruction-following evals inspired by FollowBench and AgentIF.** Cover many simultaneous user constraints and long tool-heavy prompts.
 - [ ] **Add over-refusal evals inspired by OR-Bench.** Measure unnecessary refusal separately from unsafe compliance.
