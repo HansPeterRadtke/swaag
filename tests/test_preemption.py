@@ -252,7 +252,9 @@ def test_separate_assistant_model_answers_without_preempting_main(make_config) -
 
     thread = threading.Thread(target=lambda: holder.setdefault("result", main.run_turn_in_session(state, "Long task.")), daemon=True)
     thread.start()
-    assert main_client.started.wait(timeout=2)
+    # Context compilation and constrained-schema preparation can exceed two seconds
+    # on a loaded Jetson; this synchronization wait is not a latency assertion.
+    assert main_client.started.wait(timeout=10)
 
     answer = service.answer_status_question(state.session_id, "Status?")
     assert answer == "assistant status"

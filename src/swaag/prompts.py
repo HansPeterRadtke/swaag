@@ -50,6 +50,14 @@ class PromptBuilder:
                 lines.append(f"  usage_guidance: {guidance}")
         return "\n".join(lines)
 
+    def render_capability_index(self, capabilities: Iterable[tuple[str, str, str]]) -> str:
+        lines: list[str] = []
+        for name, description, guidance in capabilities:
+            lines.append(f"- {name}: {description}")
+            if str(guidance).strip():
+                lines.append(f"  guidance: {str(guidance).strip()}")
+        return "\n".join(lines)
+
     def render_messages(self, messages: list[Message]) -> str:
         if not messages:
             return "(none)"
@@ -99,6 +107,7 @@ class PromptBuilder:
         pending_user_messages: list[str],
         prompt_mode: str,
         context_components: list[PromptComponent] | None = None,
+        capability_index: Iterable[tuple[str, str, str]] | None = None,
         validation_feedback: str = "",
     ) -> PromptAssembly:
         history, current_user, turn_transcript = self.partition_turn(messages)
@@ -145,11 +154,22 @@ class PromptBuilder:
             )
         if context_components:
             components.extend(context_components)
+        if capability_index is not None:
+            components.append(
+                PromptComponent(
+                    name="compact_capability_index",
+                    category="tool_descriptions",
+                    text=(
+                        "Capabilities that may be loaded when semantically relevant. Their full schemas are intentionally omitted until selected:\n"
+                        f"{self.render_capability_index(capability_index) or '(none)'}\n\n"
+                    ),
+                )
+            )
         components.append(
             PromptComponent(
-                name="complete_enabled_tool_registry",
+                name="loaded_tool_schemas",
                 category="tool_descriptions",
-                text=f"Available tools for this call:\n{self.render_tool_catalog(tools) or '(none)'}\n\n",
+                text=f"Exact tool schemas available for this call:\n{self.render_tool_catalog(tools) or '(none)'}\n\n",
             )
         )
         if validation_feedback:

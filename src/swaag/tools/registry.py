@@ -6,7 +6,7 @@ from typing import Iterable
 
 from swaag.config import AgentConfig
 from swaag.environment.environment import AgentEnvironment
-from swaag.tools.base import Tool, ToolContext
+from swaag.tools.base import Tool, ToolContext, ToolValidationError
 from swaag.tools.artifacts import ARTIFACT_TOOLS
 from swaag.tools.builtin import BUILTIN_TOOLS
 from swaag.tools.history import HISTORY_TOOLS
@@ -15,11 +15,72 @@ from swaag.tools.control import CONTROL_TOOLS
 from swaag.types import SessionState, ToolExecutionResult, ToolInvocation
 
 
+class LoadToolsTool(Tool):
+    name = "load_tools"
+    description = "Load exact schemas for semantically selected capabilities from the compact capability index."
+    usage_guidance = (
+        "Use when the task needs a capability whose full schema is not currently loaded. "
+        "Request only tools relevant to the next work; loaded schemas become available on the next model action."
+    )
+    kind = "pure"
+    repeated_observation_is_redundant = False
+    input_schema = {
+        "type": "object",
+        "properties": {
+            "tool_names": {
+                "type": "array",
+                "items": {"type": "string"},
+            }
+        },
+        "required": ["tool_names"],
+        "additionalProperties": False,
+    }
+
+    def __init__(self, registry: "ToolRegistry"):
+        self._registry = registry
+
+    def validate(self, raw_input: dict) -> dict:
+        names = raw_input.get("tool_names")
+        if not isinstance(names, list) or not names:
+            raise ToolValidationError("load_tools.tool_names must be a non-empty array")
+        cleaned: list[str] = []
+        for value in names:
+            if not isinstance(value, str) or not value.strip():
+                raise ToolValidationError("load_tools.tool_names must contain non-empty strings")
+            name = value.strip()
+            if name == self.name:
+                continue
+            if name not in cleaned:
+                cleaned.append(name)
+        if not cleaned:
+            raise ToolValidationError("load_tools requires at least one non-discovery capability name")
+        return {"tool_names": cleaned}
+
+    def execute(self, validated_input: dict, context: ToolContext) -> ToolExecutionResult:
+        enabled = {tool.name: tool for tool in self._registry.enabled_domain_tools(context.config)}
+        requested = list(validated_input["tool_names"])
+        selected = [name for name in requested if name in enabled]
+        unavailable = [name for name in requested if name not in enabled]
+        output = {
+            "selected_tool_names": selected,
+            "unavailable_tool_names": unavailable,
+        }
+        if not selected:
+            detail = "No requested capabilities are currently enabled by configuration and policy."
+        else:
+            detail = "Loaded for subsequent actions: " + ", ".join(selected)
+        if unavailable:
+            detail += "; unavailable: " + ", ".join(unavailable)
+        return ToolExecutionResult(self.name, output, detail)
+
+
 class ToolRegistry:
     def __init__(self, tools: Iterable[Tool] | None = None):
         self._tools: dict[str, Tool] = {}
         for tool in tools or [*BUILTIN_TOOLS, *HISTORY_TOOLS, *ARTIFACT_TOOLS, *TERMINAL_TOOLS, *CONTROL_TOOLS]:
             self.register(tool)
+        if "load_tools" not in self._tools:
+            self.register(LoadToolsTool(self))
 
     def register(self, tool: Tool) -> None:
         if tool.name in self._tools:
@@ -32,8 +93,8 @@ class ToolRegistry:
         except KeyError as exc:
             raise KeyError(f"Unknown tool: {name}") from exc
 
-    def enabled_tools(self, config: AgentConfig) -> list[Tool]:
-        tools = [self.get(name) for name in config.tools.enabled]
+    def enabled_domain_tools(self, config: AgentConfig) -> list[Tool]:
+        tools = [self.get(name) for name in config.tools.enabled if name != "load_tools"]
         result: list[Tool] = []
         for tool in tools:
             if tool.kind == "stateful" and not config.tools.allow_stateful_tools:
@@ -43,8 +104,22 @@ class ToolRegistry:
             result.append(tool)
         return result
 
+    def enabled_tools(self, config: AgentConfig) -> list[Tool]:
+        return [self.get("load_tools"), *self.enabled_domain_tools(config)]
+
     def prompt_tuples(self, config: AgentConfig) -> list[tuple[str, str, dict, str]]:
+        """Compatibility/full-registry view. Production action loops use staged schemas."""
         return [tool.prompt_tuple() for tool in self.enabled_tools(config)]
+
+    def staged_prompt_tuples(self, config: AgentConfig, selected_names: Iterable[str]) -> list[tuple[str, str, dict, str]]:
+        selected = set(selected_names)
+        return [
+            self.get("load_tools").prompt_tuple(),
+            *[tool.prompt_tuple() for tool in self.enabled_domain_tools(config) if tool.name in selected],
+        ]
+
+    def capability_index(self, config: AgentConfig) -> list[tuple[str, str, str]]:
+        return [(tool.name, tool.description, tool.usage_guidance) for tool in self.enabled_domain_tools(config)]
 
     def tool_names(self, config: AgentConfig) -> list[str]:
         return [tool.name for tool in self.enabled_tools(config)]

@@ -265,7 +265,12 @@ class AgentRuntime:
             },
         )
 
-        all_tool_specs = self.tools.prompt_tuples(self.config)
+        capability_index = self.tools.capability_index(self.config)
+        loaded_tool_names: set[str] = (
+            set()
+            if self.config.tools.staged_discovery
+            else {name for name, _, _ in capability_index}
+        )
         tool_results: list[ToolExecutionResult] = []
         budget_reports: list[BudgetReport] = []
         previous_action_signature = ""
@@ -299,7 +304,11 @@ class AgentRuntime:
 
             for validation_attempt in range(1, 4):
                 remaining_tool_calls = self.config.runtime.tool_call_budget - tool_calls_used
-                tool_specs = all_tool_specs if remaining_tool_calls > 0 else []
+                tool_specs = (
+                    self.tools.staged_prompt_tuples(self.config, loaded_tool_names)
+                    if remaining_tool_calls > 0
+                    else []
+                )
                 tool_names = [str(item[0]) for item in tool_specs]
                 contract = agent_action_contract(
                     tool_specs,
@@ -310,6 +319,7 @@ class AgentRuntime:
                     original_request=original_request,
                     pending_messages=pending_messages,
                     tool_specs=tool_specs,
+                    capability_index=capability_index if remaining_tool_calls > 0 else [],
                     contract=contract,
                     validation_feedback=validation_feedback,
                 )
@@ -574,6 +584,22 @@ class AgentRuntime:
                         observation_signatures_since_state_change.clear()
                     if result is not None:
                         tool_results.append(result)
+                        if tool_call.tool_name == "load_tools":
+                            newly_loaded = [
+                                str(name)
+                                for name in result.output.get("selected_tool_names", [])
+                                if isinstance(name, str) and name
+                            ]
+                            loaded_tool_names.update(newly_loaded)
+                            self.history.record_event(
+                                state,
+                                "tool_capabilities_loaded",
+                                {
+                                    "action_index": action_index,
+                                    "requested_tool_names": list(tool_call.arguments.get("tool_names", [])),
+                                    "loaded_tool_names": sorted(loaded_tool_names),
+                                },
+                            )
                         if tool_call.tool_name == "run_tests" and not bool(result.output.get("passed", False)):
                             recovery_feedback = (
                                 "The run_tests result failed. Treat its exact stdout/stderr as evidence. Decide the next action from "
@@ -667,6 +693,7 @@ class AgentRuntime:
         original_request: str,
         pending_messages: list[str],
         tool_specs: list[tuple[str, str, dict, str]],
+        capability_index: list[tuple[str, str, str]] | None = None,
         contract: ContractSpec,
         validation_feedback: str,
     ) -> PreparedCall:
@@ -682,6 +709,7 @@ class AgentRuntime:
                 pending_user_messages=pending_messages,
                 prompt_mode="standard",
                 context_components=context_components,
+                capability_index=capability_index,
                 validation_feedback=validation_feedback,
             )
             compilation = self._compile_context(

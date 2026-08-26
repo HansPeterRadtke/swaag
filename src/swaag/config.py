@@ -89,6 +89,7 @@ class ToolConfig:
     read_roots: list[Path]
     allow_stateful_tools: bool
     allow_side_effect_tools: bool
+    staged_discovery: bool
 
 
 @dataclass(slots=True)
@@ -363,6 +364,7 @@ def _coerce_config(data: dict[str, Any]) -> AgentConfig:
         read_roots=[Path(item).expanduser() for item in data["tools"]["read_roots"]],
         allow_stateful_tools=bool(data["tools"]["allow_stateful_tools"]),
         allow_side_effect_tools=bool(data["tools"]["allow_side_effect_tools"]),
+        staged_discovery=bool(data["tools"].get("staged_discovery", True)),
     )
     prompts = PromptConfig(**data["prompts"])
     logging_cfg = LoggingConfig(**data["logging"])
