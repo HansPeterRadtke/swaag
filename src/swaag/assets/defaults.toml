@@ -30,6 +30,8 @@ health_endpoint = "/health"
 profile_name = "small_fast"
 # Optional explicit model/revision identifier. When empty, SWAAG fingerprints the live server properties.
 model_identity = ""
+# OpenTelemetry GenAI provider discriminator; custom providers are permitted by the convention.
+provider_name = "llama.cpp"
 structured_output_mode = "server_schema"
 # Cache-first record mode is the normal runtime default. Set cache_enabled=false for an explicitly uncached live run.
 cache_enabled = true

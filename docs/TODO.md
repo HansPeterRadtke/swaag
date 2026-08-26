@@ -107,11 +107,11 @@ This is the gap list between the current repository and the intended architectur
 
 ## P1 - observability and logging
 
-- [ ] **Map operational traces/metrics to OpenTelemetry GenAI semantic conventions.** Cover agent invocation, model calls, tools, token usage, latency, errors, cancellation/preemption, and relevant queue measurements.
-- [ ] **Keep OpenTelemetry separate from authoritative execution history.** Telemetry may be sampled/expired; semantic history must remain replayable according to Swaag retention rules.
-- [ ] **Expose context-budget metrics.** Record requested context capacity, input/output reserve, component sizes, reduction count, compaction frequency, and overflow failures.
+- [ ] **Map operational traces/metrics to OpenTelemetry GenAI semantic conventions.** **Partial.** In-process agent invocation, logical model calls across retries, agent-side tools, backend/exact token usage, duration, errors, and cancellation/preemption now use current GenAI spans/metrics without capturing semantic content. Add backend queue/slot measurements and exporter deployment before closing this item.
+- [x] **Keep OpenTelemetry separate from authoritative execution history.** OpenTelemetry uses only the standard API and can be sampled or disabled independently. Append-only history remains the replay authority; correlation uses shared session/run/model-call/tool-call identifiers rather than treating spans as state.
+- [ ] **Expose context-budget metrics.** **Partial.** Every compilation now records context capacity/source, exactness, fit, input/output reserve, safety, required/overflow tokens, and bounded component categories as OTel metrics plus a correlated span event. Add semantic-reduction count and compaction-frequency rollups.
 - [ ] **Expose inference scheduler metrics.** Queue depth, queue wait, active generation count, priority, cancellation latency, and backend slot utilization.
-- [ ] **Add correlation identifiers connecting UI/task events, worker history, model calls, tool calls, and traces.**
+- [ ] **Add correlation identifiers connecting UI/task events, worker history, model calls, tool calls, and traces.** **Partial.** Spans carry durable conversation/session and active run IDs; model/tool spans and their canonical history events share explicit call IDs; worker/task projections already expose the session relationship. Propagate standard trace context through external protocol adapters and inference backends.
 
 ## P1 - prompts and evaluation
 

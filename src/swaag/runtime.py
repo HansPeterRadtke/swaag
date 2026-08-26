@@ -31,7 +31,7 @@ from swaag.grammar import (
 )
 from swaag.history import HistoryInvariantError, HistoryStore
 from swaag.heartbeat import heartbeat_payload, systemd_notify
-from swaag.model import LlamaCppClient, ModelClientError
+from swaag.model import LlamaCppClient, ModelClientError, uses_chat_completions_transport
 from swaag.preemption import (
     ModelCallPreempted,
     ModelCallStateChanged,
@@ -43,6 +43,7 @@ from swaag.notes import select_notes_for_prompt
 from swaag.prompts import PromptBuilder
 from swaag.scheduler import WakeupStore
 from swaag.schema_portability import assert_portable_json_schema
+from swaag.telemetry import OperationalTelemetry, TelemetryOperation
 from swaag.tokens import ConservativeEstimator, CountResult, ExactTokenCounter, build_budget
 from swaag.tools.base import (
     SemanticCallContextOverflow,
@@ -144,6 +145,7 @@ class AgentRuntime:
         tool_registry: ToolRegistry | None = None,
         history_store: HistoryStore | None = None,
         token_counter: ExactTokenCounter | ConservativeEstimator | None = None,
+        telemetry: OperationalTelemetry | None = None,
     ):
         self.config = config
         self.context_compiler = ContextCompiler(config)
@@ -175,6 +177,7 @@ class AgentRuntime:
         if history_store is not None and event_observer is not None:
             history_store.event_observer = event_observer
         self.prompts = PromptBuilder(config)
+        self.telemetry = telemetry or OperationalTelemetry()
         self._token_counter = token_counter
         self._token_count_cache: dict[str, int] = {}
         self._sleep = time.sleep
@@ -296,24 +299,29 @@ class AgentRuntime:
         run_id = f"{state.session_id}:{new_id('run')}"
         self.history.set_active_run(state.session_id, run_id=run_id, user_text=user_text)
         self._heartbeat(state, run_id=run_id, phase="starting", detail="turn starting")
-        try:
-            result = self._run_model_tool_loop(
-                state,
-                user_text,
-                record_user_message=True,
-                allow_silent_completion=allow_silent_completion,
-            )
-            self._heartbeat(state, run_id=run_id, phase="completed", detail="turn completed")
-            return result
-        except RunCancellationRequested as exc:
-            self.preemption.complete_run_cancellation(state.session_id, run_id)
-            self._heartbeat(state, run_id=run_id, phase="cancelled", detail=str(exc))
-            raise
-        except Exception as exc:
-            self._heartbeat(state, run_id=run_id, phase="failed", detail=f"{type(exc).__name__}: {exc}")
-            raise
-        finally:
-            self.history.clear_active_run(state.session_id, run_id=run_id)
+        with self.telemetry.agent_invocation(
+            session_id=state.session_id,
+            run_id=run_id,
+            model_name=self.config.model.model_identity,
+        ):
+            try:
+                result = self._run_model_tool_loop(
+                    state,
+                    user_text,
+                    record_user_message=True,
+                    allow_silent_completion=allow_silent_completion,
+                )
+                self._heartbeat(state, run_id=run_id, phase="completed", detail="turn completed")
+                return result
+            except RunCancellationRequested as exc:
+                self.preemption.complete_run_cancellation(state.session_id, run_id)
+                self._heartbeat(state, run_id=run_id, phase="cancelled", detail=str(exc))
+                raise
+            except Exception as exc:
+                self._heartbeat(state, run_id=run_id, phase="failed", detail=f"{type(exc).__name__}: {exc}")
+                raise
+            finally:
+                self.history.clear_active_run(state.session_id, run_id=run_id)
 
     def resume_turn_in_session(self, state: SessionState, original_request: str) -> TurnResult:
         """Resume an interrupted durable task without duplicating its user request."""
@@ -323,23 +331,28 @@ class AgentRuntime:
         run_id = f"{state.session_id}:{new_id('run')}"
         self.history.set_active_run(state.session_id, run_id=run_id, user_text=objective)
         self._heartbeat(state, run_id=run_id, phase="starting", detail="resuming turn")
-        try:
-            result = self._run_model_tool_loop(
-                state,
-                objective,
-                record_user_message=False,
-            )
-            self._heartbeat(state, run_id=run_id, phase="completed", detail="resumed turn completed")
-            return result
-        except RunCancellationRequested as exc:
-            self.preemption.complete_run_cancellation(state.session_id, run_id)
-            self._heartbeat(state, run_id=run_id, phase="cancelled", detail=str(exc))
-            raise
-        except Exception as exc:
-            self._heartbeat(state, run_id=run_id, phase="failed", detail=f"{type(exc).__name__}: {exc}")
-            raise
-        finally:
-            self.history.clear_active_run(state.session_id, run_id=run_id)
+        with self.telemetry.agent_invocation(
+            session_id=state.session_id,
+            run_id=run_id,
+            model_name=self.config.model.model_identity,
+        ):
+            try:
+                result = self._run_model_tool_loop(
+                    state,
+                    objective,
+                    record_user_message=False,
+                )
+                self._heartbeat(state, run_id=run_id, phase="completed", detail="resumed turn completed")
+                return result
+            except RunCancellationRequested as exc:
+                self.preemption.complete_run_cancellation(state.session_id, run_id)
+                self._heartbeat(state, run_id=run_id, phase="cancelled", detail=str(exc))
+                raise
+            except Exception as exc:
+                self._heartbeat(state, run_id=run_id, phase="failed", detail=f"{type(exc).__name__}: {exc}")
+                raise
+            finally:
+                self.history.clear_active_run(state.session_id, run_id=run_id)
 
     def run_pending_controls_in_session(self, state: SessionState) -> TurnResult | None:
         self._deliver_due_wakeups(state)
@@ -351,19 +364,24 @@ class AgentRuntime:
         run_id = f"{state.session_id}:{new_id('run')}"
         self.history.set_active_run(state.session_id, run_id=run_id, user_text=original_request)
         self._heartbeat(state, run_id=run_id, phase="starting", detail="processing pending controls")
-        try:
-            result = self._run_model_tool_loop(state, original_request, record_user_message=False)
-            self._heartbeat(state, run_id=run_id, phase="completed", detail="pending controls completed")
-            return result
-        except RunCancellationRequested as exc:
-            self.preemption.complete_run_cancellation(state.session_id, run_id)
-            self._heartbeat(state, run_id=run_id, phase="cancelled", detail=str(exc))
-            raise
-        except Exception as exc:
-            self._heartbeat(state, run_id=run_id, phase="failed", detail=f"{type(exc).__name__}: {exc}")
-            raise
-        finally:
-            self.history.clear_active_run(state.session_id, run_id=run_id)
+        with self.telemetry.agent_invocation(
+            session_id=state.session_id,
+            run_id=run_id,
+            model_name=self.config.model.model_identity,
+        ):
+            try:
+                result = self._run_model_tool_loop(state, original_request, record_user_message=False)
+                self._heartbeat(state, run_id=run_id, phase="completed", detail="pending controls completed")
+                return result
+            except RunCancellationRequested as exc:
+                self.preemption.complete_run_cancellation(state.session_id, run_id)
+                self._heartbeat(state, run_id=run_id, phase="cancelled", detail=str(exc))
+                raise
+            except Exception as exc:
+                self._heartbeat(state, run_id=run_id, phase="failed", detail=f"{type(exc).__name__}: {exc}")
+                raise
+            finally:
+                self.history.clear_active_run(state.session_id, run_id=run_id)
 
     def _heartbeat(
         self,
@@ -1779,7 +1797,7 @@ class AgentRuntime:
             if context_limit_resolution is None
             else context_limit_resolution
         )
-        return self.context_compiler.compile(
+        compilation = self.context_compiler.compile(
             assembly,
             contract,
             self._counter(state),
@@ -1788,6 +1806,12 @@ class AgentRuntime:
             context_limit=context_limit,
             context_limit_source=context_limit_source,
         )
+        self.telemetry.record_context_compilation(
+            call_kind=assembly.kind,
+            context_limit_source=context_limit_source,
+            report=compilation.report,
+        )
+        return compilation
 
     def _execute_tool_semantic_call(
         self, state: SessionState, request: SemanticCallRequest
@@ -2343,6 +2367,52 @@ class AgentRuntime:
         *,
         seed_offset: int = 0,
     ) -> CompletionResult:
+        call_id = new_id("model_call")
+        with self.telemetry.model_call(
+            session_id=state.session_id,
+            run_id=self._active_run_id(state),
+            call_id=call_id,
+            call_kind=prepared.assembly.kind,
+            operation_name=(
+                "chat"
+                if uses_chat_completions_transport(
+                    self.config.model.base_url,
+                    self.config.model.completion_endpoint,
+                )
+                else "text_completion"
+            ),
+            provider_name=self.config.model.provider_name,
+            model_name=self.config.model.model_identity,
+            base_url=self.config.model.base_url,
+            max_tokens=prepared.report.reserved_response_tokens,
+            cache_mode=(
+                self.config.model.cache_mode
+                if self.config.model.cache_enabled
+                else "disabled"
+            ),
+        ) as operation:
+            completion = self._execute_model_call_inner(
+                state,
+                prepared,
+                call_id=call_id,
+                telemetry_operation=operation,
+                seed_offset=seed_offset,
+            )
+            operation.record_model_completion(
+                completion,
+                budget_report=prepared.report,
+            )
+            return completion
+
+    def _execute_model_call_inner(
+        self,
+        state: SessionState,
+        prepared: PreparedCall,
+        *,
+        call_id: str,
+        telemetry_operation: TelemetryOperation,
+        seed_offset: int = 0,
+    ) -> CompletionResult:
         resolved_contract, policy = self.client.resolve_contract(
             prepared.contract,
             kind=prepared.assembly.kind,
@@ -2358,7 +2428,6 @@ class AgentRuntime:
         # Reusing one fixed seed caused malformed JSON and exact bad actions to recur
         # deterministically even after validation feedback changed.
         request["seed"] = int(self.config.model.seed) + int(seed_offset)
-        call_id = new_id("model_call")
         self._heartbeat(state, phase="queued_inference", detail=f"queued {prepared.assembly.kind}", active_kind="model", active_id=call_id)
         active_call = self.preemption.register_active(
             state.session_id,
@@ -2376,6 +2445,7 @@ class AgentRuntime:
             guard.record(
                 "model_request_sent",
                 {
+                    "call_id": call_id,
                     "kind": prepared.assembly.kind,
                     "prompt_mode": prepared.prompt_mode,
                     "attempt": total_attempt,
@@ -2408,6 +2478,7 @@ class AgentRuntime:
                 guard.record(
                     "model_token_progress",
                     {
+                        "call_id": call_id,
                         "kind": prepared.assembly.kind,
                         "prompt_mode": prepared.prompt_mode,
                         "attempt": total_attempt,
@@ -2445,6 +2516,7 @@ class AgentRuntime:
                     )
                 completion = send(frozen_request, **kwargs)
             except ModelCallPreempted:
+                telemetry_operation.record_preemption()
                 if self._run_cancellation_requested(state):
                     run_id = self._active_run_id(state)
                     guard.record(
@@ -2517,9 +2589,11 @@ class AgentRuntime:
             except Exception as exc:
                 if self._is_model_server_unavailable(exc):
                     transient_attempts += 1
+                    telemetry_operation.record_retry()
                     guard.record(
                         "retry",
                         {
+                            "call_id": call_id,
                             "operation": "model_unavailable",
                             "reason": str(exc),
                             "attempt": transient_attempts,
@@ -2533,6 +2607,7 @@ class AgentRuntime:
                 guard.record(
                     "model_call_failed",
                     {
+                        "call_id": call_id,
                         "kind": prepared.assembly.kind,
                         "prompt_mode": prepared.prompt_mode,
                         "attempt": total_attempt,
@@ -2543,9 +2618,11 @@ class AgentRuntime:
                 guard.require_all("model_request_sent", "model_call_failed")
                 if semantic_attempt < self.config.model.max_retries:
                     semantic_attempt += 1
+                    telemetry_operation.record_retry()
                     guard.record(
                         "model_retry_scheduled",
                         {
+                            "call_id": call_id,
                             "kind": prepared.assembly.kind,
                             "prompt_mode": prepared.prompt_mode,
                             "next_attempt": semantic_attempt + 1,
@@ -2559,6 +2636,7 @@ class AgentRuntime:
             guard.record(
                 "model_response_received",
                 {
+                    "call_id": call_id,
                     "kind": prepared.assembly.kind,
                     "prompt_mode": prepared.prompt_mode,
                     "attempt": total_attempt,
@@ -2598,10 +2676,40 @@ class AgentRuntime:
     def _execute_tool_with_error(
         self, state: SessionState, decision: ToolDecision
     ) -> tuple[ToolExecutionResult | None, dict[str, Any] | None]:
+        call_id = new_id("tool_call")
+        with self.telemetry.tool_execution(
+            session_id=state.session_id,
+            run_id=self._active_run_id(state),
+            call_id=call_id,
+            tool_name=decision.tool_name,
+        ) as operation:
+            result, error = self._execute_tool_with_error_inner(
+                state,
+                decision,
+                call_id=call_id,
+            )
+            if error is not None:
+                operation.record_error(
+                    str(error.get("error_type", "_OTHER")),
+                    str(error.get("error", "")),
+                )
+            return result, error
+
+    def _execute_tool_with_error_inner(
+        self,
+        state: SessionState,
+        decision: ToolDecision,
+        *,
+        call_id: str,
+    ) -> tuple[ToolExecutionResult | None, dict[str, Any] | None]:
         guard = self.history.guard(state, f"tool:{decision.tool_name}")
         guard.record(
             "tool_called",
-            {"tool_name": decision.tool_name, "tool_input": decision.tool_input},
+            {
+                "call_id": call_id,
+                "tool_name": decision.tool_name,
+                "tool_input": decision.tool_input,
+            },
         )
         try:
             tool, context, invocation = self.tools.prepare(
@@ -2616,6 +2724,7 @@ class AgentRuntime:
             guard.record(
                 "tool_execution_context",
                 {
+                    "call_id": call_id,
                     "tool_name": tool.name,
                     "tool_kind": tool.effective_kind(invocation.validated_input),
                     "isolated": True,
@@ -2630,6 +2739,7 @@ class AgentRuntime:
             result = self.tools.execute_prepared(tool, context, invocation)
         except Exception as exc:
             error_payload = {
+                "call_id": call_id,
                 "tool_name": decision.tool_name,
                 "tool_input": decision.tool_input,
                 "error": str(exc),
@@ -2675,6 +2785,7 @@ class AgentRuntime:
         tool_result_event = guard.record(
             "tool_result",
             {
+                "call_id": call_id,
                 "tool_name": result.tool_name,
                 "raw_input": invocation.raw_input,
                 "validated_input": invocation.validated_input,

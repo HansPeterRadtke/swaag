@@ -19,6 +19,7 @@ class ModelConfig:
     health_endpoint: str
     profile_name: str
     model_identity: str
+    provider_name: str
     structured_output_mode: str
     cache_enabled: bool
     cache_mode: str
@@ -524,6 +525,8 @@ def _coerce_config(data: dict[str, Any]) -> AgentConfig:
         raise ValueError("model.progress_poll_seconds must be positive")
     if model.structured_output_mode != "server_schema":
         raise ValueError("model.structured_output_mode must be server_schema")
+    if not model.provider_name.strip():
+        raise ValueError("model.provider_name must not be empty")
     if model.cache_mode not in {"record", "replay"}:
         raise ValueError("model.cache_mode must be record or replay")
     _validate_positive("context.reserved_response_tokens", context.reserved_response_tokens)

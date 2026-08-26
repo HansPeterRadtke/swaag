@@ -17,6 +17,7 @@ MANDATORY_MODULES = {
     "swaag.history",
     "swaag.runtime",
     "swaag.scheduler",
+    "swaag.telemetry",
     "swaag.tools.registry",
     "swaag.benchmark.benchmark_runner",
     "swaag.benchmark.failure_analyzer",

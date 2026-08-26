@@ -53,3 +53,7 @@ Runtime state belongs under `/data/var`; source code belongs under `/data/src`.
 ## Documentation
 
 Current supporting documents cover installation, history projections, memory and deterministic editing, and live runtime profiles under `doc/`.
+
+## Observability
+
+Swaag instruments agent invocations, logical model operations, tool executions, token usage, and context budgets with the current OpenTelemetry GenAI conventions. The base package depends only on `opentelemetry-api`: without a hosting-process SDK/provider it is a standard no-op, while deployments can configure sampling and exporters independently through normal OpenTelemetry mechanisms. Semantic prompts, responses, tool arguments, and tool results are deliberately not captured; durable append-only Swaag history remains the replay authority rather than telemetry.
