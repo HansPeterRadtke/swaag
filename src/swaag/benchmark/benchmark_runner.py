@@ -1016,6 +1016,12 @@ def _build_parser() -> argparse.ArgumentParser:
     manual_parser.add_argument("--seeds", help="Comma-separated fixed seeds for model-backed manual validation.")
     manual_parser.add_argument("--json", action="store_true", help="Print the full manual-validation JSON.")
 
+    context_order_parser = subparsers.add_parser("context-order", help="Run the live context-position retrieval experiment from the agent design recordings.")
+    context_order_parser.add_argument("--utilization", action="append", type=float, default=[], help="Requested input-context utilization fraction. Repeat for multiple values.")
+    context_order_parser.add_argument("--seed", type=int, default=17, help="Deterministic retrieval-code seed.")
+    context_order_parser.add_argument("--output", default="context_order_output.json", help="JSON result path.")
+    context_order_parser.add_argument("--json", action="store_true", help="Print the full JSON report.")
+
     subparsers.add_parser("list", help="List available benchmark task ids.")
     external_parser = subparsers.add_parser("external", help="Run optional official external benchmark harness integrations.")
     external_parser.add_argument("external_args", nargs=argparse.REMAINDER, help="Arguments forwarded to the external benchmark runner.")
@@ -1118,6 +1124,21 @@ def main(argv: Sequence[str] | None = None) -> int:
             print(f"percent={report['percent']}")
             print(f"task_count={report['summary']['total_tasks']}")
         return 0 if report["summary"].get("failed_tasks", 0) == 0 and report["summary"].get("false_positives", 0) == 0 else 1
+    if args.command == "context-order":
+        from swaag.benchmark.context_order import DEFAULT_UTILIZATIONS, run_context_order_benchmark
+        report = run_context_order_benchmark(
+            utilizations=list(args.utilization) or DEFAULT_UTILIZATIONS,
+            seed=int(args.seed),
+            output_path=Path(args.output),
+        )
+        if args.json:
+            print(stable_json_dumps(report, indent=2))
+        else:
+            print(f"passed={report['passed']}/{report['total']}")
+            for position, values in report["by_position"].items():
+                print(f"{position}={values['passed']}/{values['total']}")
+            print(f"output={args.output}")
+        return 0 if report["passed"] == report["total"] else 1
     if args.command == "external":
         forwarded = list(args.external_args)
         if forwarded and forwarded[0] == "--":
