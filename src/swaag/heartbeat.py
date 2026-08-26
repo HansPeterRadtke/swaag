@@ -48,3 +48,15 @@ def systemd_notify(*fields: str) -> bool:
         return False
     finally:
         sock.close()
+
+
+def watchdog_interval_seconds(*, default_seconds: float = 10.0) -> float:
+    raw = os.environ.get("WATCHDOG_USEC", "").strip()
+    if not raw:
+        return max(0.5, float(default_seconds))
+    try:
+        watchdog_seconds = int(raw) / 1_000_000.0
+    except ValueError:
+        return max(0.5, float(default_seconds))
+    # Ping at half the watchdog interval, bounded away from a busy loop.
+    return max(0.5, watchdog_seconds / 2.0)

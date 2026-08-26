@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+import asyncio
+
 import argparse
 import json
 import sys
@@ -104,6 +106,9 @@ def _build_parser() -> argparse.ArgumentParser:
     communication_status.add_argument("correlation_id")
     communication_process = communication_sub.add_parser("process", help="Process the next queued communication request.")
     communication_process.add_argument("--session", help="Optional exact target session id.")
+    communication_serve = communication_sub.add_parser("serve", help="Serve the communication/control API over TCP until stopped.")
+    communication_serve.add_argument("--host", help="Bind host; defaults to communication.host from config.")
+    communication_serve.add_argument("--port", type=int, help="Bind port; defaults to communication.port from config.")
     communication_question = communication_sub.add_parser("ask-status", help="Answer a status/history question without mutating the target workspace.")
     communication_question.add_argument("question")
     communication_question.add_argument("--session", help="Session name or id. Defaults to latest.")
@@ -417,6 +422,11 @@ def _run_communication(runtime: AgentRuntime, args) -> int:
     if args.communication_command == "process":
         request = service.process_once(session_id=args.session)
         print(stable_json_dumps(asdict(request), indent=2) if request is not None else "null")
+        return 0
+    if args.communication_command == "serve":
+        host = str(args.host or runtime.config.communication.host)
+        port = int(args.port or runtime.config.communication.port)
+        asyncio.run(service.serve_tcp(host, port))
         return 0
     if args.communication_command == "ask-status":
         print(service.answer_status_question(args.session, args.question))

@@ -9,6 +9,7 @@ from pathlib import Path
 from typing import Any
 
 from swaag.config import AgentConfig
+from swaag.heartbeat import systemd_notify, watchdog_interval_seconds
 from swaag.runtime import AgentRuntime
 from swaag.preemption import ModelPreemptionCoordinator
 from swaag.utils import new_id, utc_now_iso
@@ -266,7 +267,23 @@ class CommunicationService:
             writer.close()
             await writer.wait_closed()
 
+    async def _watchdog_loop(self) -> None:
+        interval = watchdog_interval_seconds(default_seconds=10.0)
+        while True:
+            systemd_notify("WATCHDOG=1", "STATUS=swaag communication service healthy")
+            await asyncio.sleep(interval)
+
     async def serve_tcp(self, host: str, port: int) -> None:
         server = await asyncio.start_server(self.handle_client, host, port)
-        async with server:
-            await server.serve_forever()
+        systemd_notify("READY=1", f"STATUS=swaag communication listening on {host}:{port}")
+        watchdog_task = asyncio.create_task(self._watchdog_loop(), name="swaag-systemd-watchdog")
+        try:
+            async with server:
+                await server.serve_forever()
+        finally:
+            watchdog_task.cancel()
+            try:
+                await watchdog_task
+            except asyncio.CancelledError:
+                pass
+            systemd_notify("STOPPING=1", "STATUS=swaag communication stopping")
