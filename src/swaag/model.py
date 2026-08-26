@@ -157,6 +157,29 @@ class LlamaCppClient:
             identity["probe_error_type"] = exc.__class__.__name__
         return identity
 
+    def server_context_limit(self) -> int:
+        response = requests.get(
+            f"{self._base}/props",
+            timeout=(
+                self.config.model.connect_timeout_seconds,
+                min(self.config.model.timeout_seconds, 15),
+            ),
+        )
+        response.raise_for_status()
+        props = response.json()
+        if not isinstance(props, dict):
+            raise ModelClientError(f"Unexpected model props response: {props!r}")
+        generation = props.get("default_generation_settings")
+        if not isinstance(generation, dict):
+            raise ModelClientError("Model props are missing default_generation_settings")
+        n_ctx = generation.get("n_ctx")
+        if not isinstance(n_ctx, int) or isinstance(n_ctx, bool) or n_ctx <= 0:
+            raise ModelClientError(f"Model props contain invalid n_ctx: {n_ctx!r}")
+        return int(n_ctx)
+
+    def context_limit_resolution(self) -> tuple[int, str]:
+        return self.server_context_limit(), "server_props:n_ctx"
+
     def tokenize(self, text: str) -> int:
         response = requests.post(
             f"{self._base}{self.config.model.tokenize_endpoint}",
@@ -429,7 +452,7 @@ class LlamaCppClient:
             raw_response=body,
             prompt_tokens=body.get("tokens_evaluated"),
             completion_tokens=completion_tokens,
-            finish_reason="stop" if body.get("stop") else None,
+            finish_reason=_completion_finish_reason(body),
             elapsed_seconds=elapsed_seconds,
             tokens_per_second=tokens_per_second,
             first_token_seconds=first_token_seconds,
@@ -517,3 +540,19 @@ def _chat_finished(item: dict[str, Any]) -> bool:
         return False
     first = choices[0]
     return isinstance(first, dict) and bool(first.get("finish_reason"))
+
+
+def _completion_finish_reason(body: dict[str, Any]) -> str | None:
+    if body.get("truncated") is True:
+        return "context_overflow"
+    stop_type = str(body.get("stop_type", "")).strip().lower()
+    if stop_type == "limit":
+        return "length"
+    if stop_type in {"eos", "word"}:
+        return "stop"
+    choices = body.get("choices")
+    if isinstance(choices, list) and choices and isinstance(choices[0], dict):
+        reason = choices[0].get("finish_reason")
+        if isinstance(reason, str) and reason.strip():
+            return reason.strip()
+    return "stop" if body.get("stop") else None

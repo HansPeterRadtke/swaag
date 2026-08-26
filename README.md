@@ -18,7 +18,7 @@ The implementation is intentionally small while the intended harness architectur
 
 ## Core behavior
 
-Every session has append-only event history and replayable state. Prompt context is assembled from the current request, recent detailed history, model-authored compressed history, durable notes, environment state, scheduled wakeups, and the complete enabled-tool registry. Exact tokenizer-backed budgeting reserves output tokens and a safety margin before any request is admitted. When compaction is required, the model can request bounded verbatim retention of recent messages while Python enforces the hard context limit.
+Every session has append-only event history and replayable state. Prompt context is assembled from the current request, detailed history, model-authored projections, durable notes, environment state, scheduled wakeups, and semantically selected tool schemas. Live llama.cpp capacity comes from the server's per-slot properties. Exact tokenizer-backed budgeting preserves the richest input that fits an operation-specific output minimum and fixed safety allowance, then uses any remaining desired output headroom. Measured overflow or observed output starvation triggers model-authored reduction and re-tokenization rather than silent truncation.
 
 Tools are registered centrally and exposed with closed JSON schemas. Built-ins cover file reading and editing, shell and test execution, calculations, notes, browsing, short waits, and durable wakeups. Durable wakeups support human-readable relative durations and timezone-aware absolute times, survive process restarts, and are delivered exactly once as session control messages.
 

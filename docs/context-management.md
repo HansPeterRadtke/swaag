@@ -12,7 +12,7 @@ When overflow occurs, measure which components consume the failed request and us
 
 1. Identify the semantic operation and model.
 2. Read model context capacity and tokenizer/chat-format behavior.
-3. Choose an explicit output-token reserve.
+3. Identify the operation's minimum useful output and desired output headroom.
 4. Account for mandatory input: system and operation instructions, current request, required tool/protocol framing, and other nonoptional material.
 5. Calculate the remaining dynamic-input budget.
 6. Present candidate history, tools, tool results, retrieved sources, files, summaries, and state to semantic selection/reduction operations as needed.
@@ -28,7 +28,9 @@ For every call, the target implementation should record model identifier, contex
 
 Avoid a universal percentage allocation. A document-extraction call may devote almost all input to a document; a communication call may need status and recent history; a tool-selection call may need capability descriptions and little history. Deterministic code calculates capacities. An LLM decides semantic allocation within them.
 
-Output reserve is chosen before dynamic input is packed. A request that fits only by consuming intended answer space does not fit.
+Output budgeting has two distinct values. The operation minimum is a hard validity/usefulness requirement; desired headroom is a soft maximum. Compile and measure the richest candidate against the minimum first. If it fits, reserve as much desired headroom as remains without dropping that candidate. A desired percentage must never cause otherwise-valid semantic input to be reduced. If the backend later reports output-limit exhaustion, raise the minimum for that retry, reconstruct the context under the new hard constraint, and record the evidence.
+
+For live llama.cpp calls, `GET /props` `default_generation_settings.n_ctx` is the authoritative per-slot capacity. Packaged `model.context_limit` is an explicit fallback for offline replay, fakes, and clients without a capacity probe. Probe failures in live operation are errors rather than silent fallback. Exact `/tokenize` accounting uses a fixed safety allowance for transport/template details; estimator fallback records its strategy and uses a proportional conservative margin.
 
 ## History and results
 
@@ -40,7 +42,7 @@ Tool schemas also consume context. Support capability discovery or staged schema
 
 ## Failure modes to test
 
-Test mandatory input exceeding capacity, output reserve exceeding available capacity, oversized tool schemas, enormous tool results, long histories, summaries exceeding targets, summaries losing critical facts, multilingual tokenization differences, model switches with different capacities, tool-call serialization overhead, context expansion after user interruption, and repeated compaction over long-running tasks.
+Test mandatory input exceeding capacity, minimum output exceeding available capacity, desired headroom under input pressure, output-limit finish reasons and reconstruction, oversized tool schemas, enormous tool results, long histories, summaries exceeding targets, summaries losing critical facts, multilingual tokenization differences, model switches with different capacities, tool-call serialization overhead, context expansion after user interruption, and repeated compaction over long-running tasks.
 
 ## API direction
 

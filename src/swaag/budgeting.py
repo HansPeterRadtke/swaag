@@ -47,9 +47,10 @@ def compute_call_budget(
     config: AgentConfig,
     *,
     call_kind: str,
+    context_limit: int | None = None,
 ) -> CallBudgetPlan:
     budget_class = str(config.budget_policy.call_classes.get(call_kind, "small"))
-    context_limit = max(int(config.model.context_limit), 256)
+    context_limit = max(int(config.model.context_limit if context_limit is None else context_limit), 1)
     output_ratio = float(
         config.budget_policy.output_ratio_by_kind.get(
             call_kind,
@@ -87,20 +88,26 @@ def compute_call_budget(
     )
 
 
-def _schema_upper_bound_instance(schema: dict[str, Any], *, depth: int = 0) -> Any:
+def _schema_minimum_instance(schema: dict[str, Any]) -> Any:
+    """Build a smallest structurally valid value for a portable JSON schema.
+
+    Unbounded strings and arrays have no honest deterministic upper bound.  The
+    caller supplies the operation-specific useful-output minimum separately;
+    this value only measures the syntax needed to satisfy the contract.
+    """
     if not isinstance(schema, dict):
         return ""
     variants = schema.get("oneOf") or schema.get("anyOf")
     if isinstance(variants, list) and variants:
-        candidates = [_schema_upper_bound_instance(item, depth=depth) for item in variants if isinstance(item, dict)]
+        candidates = [_schema_minimum_instance(item) for item in variants if isinstance(item, dict)]
         if candidates:
-            return max(candidates, key=lambda item: len(stable_json_dumps(item)))
+            return min(candidates, key=lambda item: len(stable_json_dumps(item)))
     schema_type = schema.get("type")
     if isinstance(schema_type, list):
         ordered = [item for item in schema_type if item != "null"]
         schema_type = ordered[0] if ordered else schema_type[0]
     if "enum" in schema and isinstance(schema["enum"], list) and schema["enum"]:
-        return max(schema["enum"], key=lambda item: len(stable_json_dumps(item)))
+        return min(schema["enum"], key=lambda item: len(stable_json_dumps(item)))
     if schema_type == "object":
         properties = schema.get("properties")
         if not isinstance(properties, dict):
@@ -108,52 +115,23 @@ def _schema_upper_bound_instance(schema: dict[str, Any], *, depth: int = 0) -> A
         required = schema.get("required")
         required_keys = [str(key) for key in required] if isinstance(required, list) and required else list(properties)
         return {
-            str(key): _schema_upper_bound_instance(properties[key], depth=depth + 1)
+            str(key): _schema_minimum_instance(properties[key])
             for key in required_keys
             if key in properties and isinstance(properties[key], dict)
         }
     if schema_type == "array":
-        item_schema = schema.get("items")
-        if not isinstance(item_schema, dict):
-            return []
-        raw_items = schema.get("maxItems", schema.get("minItems"))
-        try:
-            count = int(raw_items)
-        except (TypeError, ValueError):
-            count = 4 if depth <= 1 else 3
-        count = max(1, min(count, 8 if depth == 0 else 4))
-        item_value = _schema_upper_bound_instance(item_schema, depth=depth + 1)
-        return [item_value for _ in range(count)]
+        return []
     if schema_type == "string":
-        max_length = schema.get("maxLength", schema.get("minLength", 64))
-        try:
-            length = int(max_length)
-        except (TypeError, ValueError):
-            length = 16
-        length = max(1, min(length, 256))
-        # Use a token-dense placeholder rather than a repeated character. A
-        # repeated "xxxx..." string badly underestimates worst-case token
-        # usage on the active tokenizer because it compresses into very few
-        # tokens. Short space-separated atoms give a safer bounded estimate.
-        dense = " ".join("a" for _ in range(length))
-        return dense[:length]
+        return ""
     if schema_type == "integer":
-        if isinstance(schema.get("maximum"), int):
-            return int(schema["maximum"])
-        if isinstance(schema.get("minimum"), int):
-            return int(schema["minimum"])
-        return 999999
+        return 0
     if schema_type == "number":
-        if isinstance(schema.get("maximum"), (int, float)):
-            return float(schema["maximum"])
-        if isinstance(schema.get("minimum"), (int, float)):
-            return float(schema["minimum"])
-        return 999999.0
+        return 0
     if schema_type == "boolean":
         return True
     if schema_type == "null":
         return None
-    return "x" * 16
+    return ""
 
 
 def structured_output_token_floor(
@@ -164,9 +142,8 @@ def structured_output_token_floor(
     call_kind: str,
 ) -> int:
     if contract.json_schema:
-        sample_instance = _schema_upper_bound_instance(contract.json_schema)
+        sample_instance = _schema_minimum_instance(contract.json_schema)
         instance_tokens = max(counter.count_text(stable_json_dumps(sample_instance)).tokens, 1)
-        schema_tokens = max(counter.count_text(stable_json_dumps(contract.json_schema)).tokens, 1)
         factor = config.budget_policy.structured_output_json_factor_by_contract.get(
             contract.name,
             config.budget_policy.structured_output_json_factor_by_contract.get(
@@ -175,10 +152,5 @@ def structured_output_token_floor(
             ),
         )
         bounded_tokens = int(round(instance_tokens * factor))
-        context_floor_cap = max(
-            int(config.context.reserved_response_tokens),
-            int(round(max(int(config.model.context_limit), 1) * 0.25)),
-        )
-        effective_floor = min(int(config.budget_policy.structured_output_json_floor_tokens), context_floor_cap)
-        return max(effective_floor, min(bounded_tokens, schema_tokens))
+        return max(int(config.budget_policy.structured_output_json_floor_tokens), bounded_tokens)
     return 0

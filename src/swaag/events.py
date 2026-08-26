@@ -107,6 +107,7 @@ ALLOWED_EVENT_TYPES = frozenset(
         "model_request_progress",
         "model_token_progress",
         "model_response_received",
+        "model_output_budget_exhausted",
         "model_call_failed",
         "model_call_preempted",
         "model_call_replayed",
@@ -294,6 +295,15 @@ REQUIRED_PAYLOAD_KEYS: dict[str, frozenset[str]] = {
     "tool_capabilities_loaded": frozenset({"action_index", "requested_tool_names", "loaded_tool_names"}),
     "assistant_progress": frozenset({"action_index", "assistant_text"}),
     "tool_result_missing": frozenset({"tool_name", "action_index"}),
+    "model_output_budget_exhausted": frozenset(
+        {
+            "kind",
+            "finish_reason",
+            "reserved_response_tokens",
+            "prompt_tokens",
+            "completion_tokens",
+        }
+    ),
     "failure_classification_resolved": frozenset({"classification", "source"}),
     "working_memory_updated": frozenset({"working_memory", "reason"}),
     "memory_extracted": frozenset({"memory", "source_event_id"}),

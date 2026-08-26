@@ -8,7 +8,7 @@
 #   4. SWAAG__SECTION__KEY=value env vars  — per-key overrides (highest)
 #
 # Distinction between config types:
-#   server/model facts  — must match the running server (e.g. context_limit)
+#   server/model facts  — discovered from the live backend where supported
 #   user-tunable policy — safe to experiment with (ratios, limits, previews)
 #   derived allocations — computed at runtime from facts × policy; never set here
 #
@@ -18,9 +18,9 @@
 # ============================================================
 
 # -----------------------------------------------------------
-# [model] — SERVER/MODEL FACTS
-# These must match the running llama.cpp server and loaded model.
-# context_limit in particular MUST match the server's configured value.
+# [model] — SERVER/MODEL FACTS AND OFFLINE FALLBACKS
+# Live llama.cpp calls read per-slot n_ctx from /props. context_limit is the
+# explicit fallback for fake/non-probing clients and offline replay only.
 # -----------------------------------------------------------
 [model]
 base_url = "http://127.0.0.1:14829"
@@ -81,8 +81,10 @@ staged_discovery = true
 
 # -----------------------------------------------------------
 # [context] — TOKEN RESERVE POLICY  (moderate risk)
-# These are subtracted from context_limit before input budgeting.
-# Too small => model truncates its own response. Too large => wastes input space.
+# reserved_* values are operation minimums. Per-kind output ratios below are
+# desired maxima; they do not exclude full-fidelity input that fits with the
+# operation minimum and safety. A larger reserve is retried after observed
+# output starvation.
 # -----------------------------------------------------------
 [context]
 reserved_response_tokens = 256
@@ -171,10 +173,10 @@ completion_evaluation_system_template = "completion_evaluation_system.txt"
 completion_evaluation_template = "completion_evaluation_user.txt"
 
 # -----------------------------------------------------------
-# [budget_policy] — SCALE-FREE OUTPUT/SAFETY/SECTION RATIOS
+# [budget_policy] — DESIRED OUTPUT AND ESTIMATOR-SAFETY RATIOS
 # ADVANCED TUNING — changes here affect all model calls globally.
-# All ratios are multiplied by context_limit at runtime to produce
-# absolute token allocations (derived allocations; never set directly).
+# Output ratios produce desired headroom, not mandatory input exclusions.
+# Percentage safety applies only when exact tokenizer counting is unavailable.
 #
 # safe_input_floor_tokens: minimum input budget preserved even when
 # the context is very tight (structural safety floor, not a soft guide).

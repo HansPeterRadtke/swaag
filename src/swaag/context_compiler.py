@@ -16,6 +16,7 @@ class ContextCompilation:
     plan: CallBudgetPlan
     structured_output_floor_tokens: int
     minimum_output_tokens: int
+    context_limit_source: str
 
     @property
     def overflow_tokens(self) -> int:
@@ -46,6 +47,8 @@ class ContextCompilation:
             "fits": self.report.fits,
             "structured_output_floor_tokens": self.structured_output_floor_tokens,
             "minimum_output_tokens": self.minimum_output_tokens,
+            "desired_output_tokens": self.plan.output_tokens,
+            "context_limit_source": self.context_limit_source,
             "policy": asdict(self.plan),
             "components": [asdict(item) for item in self.report.breakdown],
         }
@@ -62,8 +65,8 @@ class ContextCompiler:
     def __init__(self, config: AgentConfig):
         self.config = config
 
-    def plan(self, *, call_kind: str) -> CallBudgetPlan:
-        return compute_call_budget(self.config, call_kind=call_kind)
+    def plan(self, *, call_kind: str, context_limit: int | None = None) -> CallBudgetPlan:
+        return compute_call_budget(self.config, call_kind=call_kind, context_limit=context_limit)
 
     def compile(
         self,
@@ -72,17 +75,24 @@ class ContextCompiler:
         counter: TokenCounter,
         *,
         minimum_output_tokens: int = 0,
+        context_limit: int | None = None,
+        context_limit_source: str = "configured",
     ) -> ContextCompilation:
-        plan = compute_call_budget(self.config, call_kind=assembly.kind)
+        effective_context_limit = max(
+            int(self.config.model.context_limit if context_limit is None else context_limit),
+            1,
+        )
+        plan = compute_call_budget(
+            self.config, call_kind=assembly.kind, context_limit=effective_context_limit
+        )
         structured_floor = structured_output_token_floor(
             contract,
             config=self.config,
             counter=counter,
             call_kind=assembly.kind,
         )
-        reserved = max(
+        minimum_required_output = max(
             int(minimum_output_tokens),
-            int(plan.output_tokens),
             int(structured_floor),
         )
         components = [
@@ -94,17 +104,51 @@ class ContextCompiler:
                 include_in_context=False,
             ),
         ]
+
+        # First measure the richest candidate without using a percentage-based
+        # output reservation as an admission gate. If tokenizer accounting is
+        # exact, only the explicit fixed safety margin is needed; proportional
+        # safety is reserved for conservative/estimated counting.
+        measured = build_budget(
+            counter,
+            components,
+            self.config.context,
+            effective_context_limit,
+            reserved_response_tokens=minimum_required_output,
+            safety_margin_tokens=0,
+        )
+        safety_margin = (
+            int(self.config.context.safety_margin_tokens)
+            if measured.exact
+            else int(plan.safety_margin_tokens)
+        )
+        available_output = max(
+            0, effective_context_limit - measured.input_tokens - safety_margin
+        )
+        if available_output >= minimum_required_output:
+            # The configured per-kind output plan is a desired maximum. It does
+            # not force semantic input loss. When less room remains, the call
+            # receives all remaining safe headroom as long as its minimum valid
+            # output requirement still fits.
+            reserved = min(
+                max(minimum_required_output, int(plan.output_tokens)),
+                available_output,
+            )
+        else:
+            reserved = minimum_required_output
+
         report = build_budget(
             counter,
             components,
             self.config.context,
-            self.config.model.context_limit,
+            effective_context_limit,
             reserved_response_tokens=reserved,
-            safety_margin_tokens=plan.safety_margin_tokens,
+            safety_margin_tokens=safety_margin,
         )
         return ContextCompilation(
             report=report,
             plan=plan,
             structured_output_floor_tokens=structured_floor,
             minimum_output_tokens=int(minimum_output_tokens),
+            context_limit_source=str(context_limit_source),
         )

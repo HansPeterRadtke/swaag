@@ -360,6 +360,27 @@ class RecordReplayModelClient:
             return int(tokenize_selection(text))
         return self.tokenize(text)
 
+    def context_limit_resolution(self) -> tuple[int, str]:
+        """Resolve capacity without making replay-only execution depend on a server."""
+        if self.mode == "replay":
+            configured = getattr(getattr(self.delegate, "config", None), "model", None)
+            value = getattr(configured, "context_limit", None)
+            if not isinstance(value, int) or isinstance(value, bool) or value <= 0:
+                raise ValueError("Replay mode requires a positive configured model.context_limit")
+            return int(value), "configured:replay"
+
+        resolver = getattr(self.delegate, "context_limit_resolution", None)
+        if callable(resolver):
+            return resolver()
+        server_resolver = getattr(self.delegate, "server_context_limit", None)
+        if callable(server_resolver):
+            return int(server_resolver()), "server_props:n_ctx"
+        configured = getattr(getattr(self.delegate, "config", None), "model", None)
+        value = getattr(configured, "context_limit", None)
+        if not isinstance(value, int) or isinstance(value, bool) or value <= 0:
+            raise ValueError("Model client has no context-capacity resolver or configured fallback")
+        return int(value), "configured"
+
     def build_completion_request(
         self,
         prompt: str,

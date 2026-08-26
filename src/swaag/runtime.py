@@ -52,6 +52,18 @@ class FatalSemanticEngineError(RuntimeError):
     """Compatibility name for impossible constrained-output failures."""
 
 
+class OutputBudgetExhaustedError(ValueError):
+    """The backend stopped before a constrained response could complete."""
+
+    def __init__(self, finish_reason: str, reserved_tokens: int):
+        super().__init__(
+            f"Model output ended with {finish_reason!r} after a {reserved_tokens}-token reserve; "
+            "rebuild the call with more output headroom and less semantic input if required"
+        )
+        self.finish_reason = finish_reason
+        self.reserved_tokens = int(reserved_tokens)
+
+
 @dataclass(slots=True)
 class TurnResult:
     session_id: str
@@ -318,6 +330,7 @@ class AgentRuntime:
         tool_calls_used = 0
         observation_signatures_since_state_change: set[str] = set()
         recovery_feedback = ""
+        action_minimum_output_tokens = int(self.config.context.reserved_response_tokens)
         accepted_actions = 0
         max_mechanical_attempts = max(
             self.config.runtime.max_total_actions * 3,
@@ -360,6 +373,7 @@ class AgentRuntime:
                     capability_index=capability_index if remaining_tool_calls > 0 else [],
                     contract=contract,
                     validation_feedback=validation_feedback,
+                    minimum_output_tokens=action_minimum_output_tokens,
                 )
                 budget_reports.append(prepared.report)
 
@@ -398,6 +412,25 @@ class AgentRuntime:
                     )
                     state_changed_during_call = True
                     break
+                except OutputBudgetExhaustedError as exc:
+                    action_minimum_output_tokens = self._expanded_output_minimum(prepared)
+                    validation_feedback = (
+                        f"The previous constrained action exhausted its {exc.reserved_tokens}-token output budget "
+                        f"with finish reason {exc.finish_reason!r}. Be concise and emit one complete valid JSON action. "
+                        f"The reconstructed call now requires at least {action_minimum_output_tokens} output tokens."
+                    )
+                    self.history.record_event(
+                        state,
+                        "agent_action_rejected",
+                        {
+                            "action_index": action_index,
+                            "validation_attempt": validation_attempt,
+                            "reason": validation_feedback,
+                            "finish_reason": exc.finish_reason,
+                            "previous_output_tokens": exc.reserved_tokens,
+                            "next_minimum_output_tokens": action_minimum_output_tokens,
+                        },
+                    )
                 except (ActionValidationError, ValueError) as exc:
                     validation_feedback = str(exc)
                     self.history.record_event(
@@ -432,6 +465,11 @@ class AgentRuntime:
                     "Do not retry the same invalid tool usage; choose the explicitly recommended valid tool or a materially different action."
                 )
                 continue
+
+            # Output starvation applies to the call that exhibited it. A
+            # successful complete action restores full-fidelity-first admission
+            # for the next independently compiled action.
+            action_minimum_output_tokens = int(self.config.context.reserved_response_tokens)
 
             action_payload = asdict(selected_action)
             # Duplicate detection is about repeated mechanical work, not cosmetic
@@ -769,6 +807,7 @@ class AgentRuntime:
         capability_index: list[tuple[str, str, str]] | None = None,
         contract: ContractSpec,
         validation_feedback: str,
+        minimum_output_tokens: int | None = None,
     ) -> PreparedCall:
         last_report: BudgetReport | None = None
         tool_result_projections: dict[int, str] = {}
@@ -788,7 +827,14 @@ class AgentRuntime:
                 validation_feedback=validation_feedback,
             )
             compilation = self._compile_context(
-                state, assembly, contract, minimum_output_tokens=self.config.context.reserved_response_tokens
+                state,
+                assembly,
+                contract,
+                minimum_output_tokens=(
+                    self.config.context.reserved_response_tokens
+                    if minimum_output_tokens is None
+                    else minimum_output_tokens
+                ),
             )
             report = compilation.report
             last_report = report
@@ -1084,13 +1130,35 @@ class AgentRuntime:
         contract: ContractSpec,
         *,
         minimum_output_tokens: int,
+        context_limit_resolution: tuple[int, str] | None = None,
     ) -> ContextCompilation:
+        context_limit, context_limit_source = (
+            self._resolve_context_limit()
+            if context_limit_resolution is None
+            else context_limit_resolution
+        )
         return self.context_compiler.compile(
             assembly,
             contract,
             self._counter(state),
             minimum_output_tokens=minimum_output_tokens,
+            context_limit=context_limit,
+            context_limit_source=context_limit_source,
         )
+
+    def _resolve_context_limit(self) -> tuple[int, str]:
+        resolver = getattr(self.client, "context_limit_resolution", None)
+        if callable(resolver):
+            value, source = resolver()
+        else:
+            server_resolver = getattr(self.client, "server_context_limit", None)
+            if callable(server_resolver):
+                value, source = server_resolver(), "server_props:n_ctx"
+            else:
+                value, source = self.config.model.context_limit, "configured"
+        if not isinstance(value, int) or isinstance(value, bool) or value <= 0:
+            raise ModelClientError(f"Invalid resolved model context limit: {value!r}")
+        return int(value), str(source)
 
     def _budget_report(
         self,
@@ -1134,10 +1202,12 @@ class AgentRuntime:
             return False
 
         contract = summary_contract()
+        context_limit_resolution = self._resolve_context_limit()
         for source_count in range(maximum_source, 0, -1):
             source_messages = state.messages[:source_count]
             adaptive_cap = min(max(0, source_count - 1), max(0, int(self.config.context.max_recent_messages) * 4))
-            summary_plan = self.context_compiler.plan(call_kind="summary")
+            summary_context_limit, _summary_context_source = context_limit_resolution
+            summary_plan = self.context_compiler.plan(call_kind="summary", context_limit=summary_context_limit)
             target_summary_tokens = max(
                 int(self.config.context.reserved_summary_tokens),
                 int(summary_plan.output_tokens) - 32,
@@ -1149,7 +1219,11 @@ class AgentRuntime:
                 target_summary_tokens=target_summary_tokens,
             )
             compilation = self._compile_context(
-                state, assembly, contract, minimum_output_tokens=self.config.context.reserved_summary_tokens
+                state,
+                assembly,
+                contract,
+                minimum_output_tokens=self.config.context.reserved_summary_tokens,
+                context_limit_resolution=context_limit_resolution,
             )
             report = compilation.report
             if not report.fits:
@@ -1224,6 +1298,22 @@ class AgentRuntime:
         seed_offset: int = 0,
     ) -> Any:
         completion = self._execute_model_call(state, prepared, seed_offset=seed_offset)
+        if completion.finish_reason in {"length", "context_overflow"}:
+            self.history.record_event(
+                state,
+                "model_output_budget_exhausted",
+                {
+                    "kind": prepared.assembly.kind,
+                    "finish_reason": completion.finish_reason,
+                    "reserved_response_tokens": prepared.report.reserved_response_tokens,
+                    "prompt_tokens": completion.prompt_tokens,
+                    "completion_tokens": completion.completion_tokens,
+                },
+            )
+            raise OutputBudgetExhaustedError(
+                completion.finish_reason,
+                prepared.report.reserved_response_tokens,
+            )
         try:
             payload = json.loads(completion.text)
         except json.JSONDecodeError as exc:
@@ -1233,6 +1323,16 @@ class AgentRuntime:
         if not isinstance(payload, dict):
             raise ValueError(f"Contract {prepared.contract.name} must return one JSON object")
         return validator(payload) if validator is not None else payload
+
+    @staticmethod
+    def _expanded_output_minimum(prepared: PreparedCall) -> int:
+        current = int(prepared.report.reserved_response_tokens)
+        ceiling = max(
+            current,
+            int(prepared.report.context_limit)
+            - int(prepared.report.safety_margin_tokens),
+        )
+        return min(ceiling, max(current + 64, (current * 3 + 1) // 2))
 
     def _execute_model_call(
         self,

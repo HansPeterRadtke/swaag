@@ -20,8 +20,10 @@ class Delegate:
                 profile_name="model-a",
                 structured_output_mode="server_schema",
                 seed=42,
+                context_limit=2048,
             )
         )
+        self.context_probes = 0
 
     def cache_identity(self):
         return {
@@ -29,6 +31,10 @@ class Delegate:
             "configured_model_identity": "model-a",
             "server_properties_sha256": self.identity_version,
         }
+
+    def context_limit_resolution(self):
+        self.context_probes += 1
+        return 22016, "server_props:n_ctx"
 
     def send_completion(self, payload, *, timeout_seconds=None, progress_callback=None):
         self.calls += 1
@@ -124,3 +130,18 @@ def test_cassette_is_reloaded_from_disk_before_every_lookup(tmp_path: Path) -> N
     cassette.write_text(json.dumps(data))
     assert second.send_completion(payload).text == "response-1"
     assert second_delegate.calls == 1
+
+
+def test_record_mode_uses_live_capacity_but_replay_uses_configured_fallback(tmp_path: Path) -> None:
+    delegate = Delegate()
+    record_client = client(tmp_path, delegate)
+    assert record_client.context_limit_resolution() == (22016, "server_props:n_ctx")
+    assert delegate.context_probes == 1
+
+    replay_client = RecordReplayModelClient(
+        cassette_path=tmp_path / "cassette.json",
+        mode="replay",
+        delegate=delegate,
+    )
+    assert replay_client.context_limit_resolution() == (2048, "configured:replay")
+    assert delegate.context_probes == 1

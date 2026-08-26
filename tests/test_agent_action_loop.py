@@ -96,6 +96,31 @@ class FakeModelClient:
         )
 
 
+class OutputLimitedFakeModelClient(FakeModelClient):
+    def send_completion(
+        self,
+        payload: dict[str, Any],
+        *,
+        timeout_seconds: int | None = None,
+        progress_callback=None,
+    ) -> CompletionResult:
+        if not self.requests:
+            self.requests.append(payload)
+            return CompletionResult(
+                text="{",
+                raw_request=payload,
+                raw_response={"content": "{", "stop_type": "limit"},
+                prompt_tokens=None,
+                completion_tokens=payload["n_predict"],
+                finish_reason="length",
+            )
+        return super().send_completion(
+            payload,
+            timeout_seconds=timeout_seconds,
+            progress_callback=progress_callback,
+        )
+
+
 def _action(
     *,
     message: str = "",
@@ -152,6 +177,21 @@ def test_direct_answer_is_one_constrained_model_call_with_all_tools(make_config)
     events = runtime.history.read_history(result.session_id)
     assert not any(event.event_type in {"plan_created", "plan_updated"} for event in events)
     assert not any(event.event_type.startswith("plan_") for event in events)
+
+
+def test_output_limit_rebuilds_action_with_more_headroom(make_config) -> None:
+    config = make_config(model__context_limit=12_000)
+    client = OutputLimitedFakeModelClient([_action(message="done")])
+    runtime = AgentRuntime(config, model_client=client)
+
+    result = runtime.run_turn("Return a concise answer.")
+
+    assert result.assistant_text == "done"
+    assert len(client.requests) == 2
+    assert client.requests[1]["n_predict"] > client.requests[0]["n_predict"]
+    events = runtime.history.read_history(result.session_id)
+    exhausted = [event for event in events if event.event_type == "model_output_budget_exhausted"]
+    assert len(exhausted) == 1
 
 
 def test_multiple_tool_calls_execute_in_order_and_exact_results_reach_next_call(make_config) -> None:
@@ -688,7 +728,7 @@ def test_runtime_can_finish_empty_after_successful_tool_result(make_config, tmp_
 
 def test_action_prompt_explains_cross_action_tool_result_dependencies(make_config) -> None:
     config = make_config(model__context_limit=32_000)
-    runtime = AgentRuntime(config)
+    runtime = AgentRuntime(config, model_client=FakeModelClient([]))
     state = runtime.create_or_load_session()
     prepared = runtime._prepare_action_call(
         state,
@@ -752,7 +792,7 @@ def test_environment_context_exposes_latest_mechanical_handles(make_config, tmp_
 
 def test_action_prompt_requires_requested_side_effects_before_final_message(make_config) -> None:
     config = make_config(model__context_limit=32_000)
-    runtime = AgentRuntime(config)
+    runtime = AgentRuntime(config, model_client=FakeModelClient([]))
     state = runtime.create_or_load_session()
     specs = runtime.tools.prompt_tuples(config)
     prepared = runtime._prepare_action_call(
@@ -881,7 +921,7 @@ def test_repeated_pure_call_is_rejected_until_state_changes(make_config, tmp_pat
 
 def test_action_prompt_requires_explicit_decision_not_only_evidence(make_config) -> None:
     config = make_config(model__context_limit=32_000)
-    runtime = AgentRuntime(config)
+    runtime = AgentRuntime(config, model_client=FakeModelClient([]))
     state = runtime.create_or_load_session()
     specs = runtime.tools.prompt_tuples(config)
     prepared = runtime._prepare_action_call(

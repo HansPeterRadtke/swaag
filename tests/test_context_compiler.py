@@ -51,3 +51,146 @@ def test_context_compiler_reports_exact_overflow_tokens(make_config):
     )
     assert not result.report.fits
     assert result.overflow_tokens == result.report.required_tokens - result.report.context_limit
+
+
+def test_estimated_counting_uses_percentage_safety(make_config):
+    config = make_config(model__context_limit=10000, context__safety_margin_tokens=64)
+    compiler = ContextCompiler(config)
+    assembly = PromptAssembly(
+        kind="action",
+        prompt_mode="standard",
+        prompt_text="x" * 100,
+        components=[PromptComponent(name="input", text="x" * 100)],
+    )
+    result = compiler.compile(
+        assembly,
+        agent_action_contract([]),
+        ConservativeEstimator(chars_per_token=1.0),
+        minimum_output_tokens=200,
+    )
+    assert result.report.safety_margin_tokens > 64
+
+
+def test_full_fidelity_input_not_rejected_only_for_desired_output_ratio(make_config):
+    config = make_config(model__context_limit=1000, context__safety_margin_tokens=10)
+    compiler = ContextCompiler(config)
+    class Exact:
+        def count_text(self, text):
+            from swaag.tokens import CountResult
+
+            return CountResult(tokens=len(text), exact=True, strategy="test_exact")
+
+    assembly = PromptAssembly(
+        kind="action",
+        prompt_mode="standard",
+        prompt_text="x" * 600,
+        components=[PromptComponent(name="input", text="x" * 600)],
+    )
+    result = compiler.compile(
+        assembly,
+        agent_action_contract([]),
+        Exact(),
+        minimum_output_tokens=100,
+    )
+    assert result.report.fits
+    assert result.report.input_tokens == 600
+    assert result.report.safety_margin_tokens == 10
+    assert result.report.reserved_response_tokens <= 390
+    assert result.context_limit_source == "configured"
+
+
+def test_live_context_limit_override_is_authoritative(make_config):
+    config = make_config(model__context_limit=2048, context__safety_margin_tokens=10)
+    compiler = ContextCompiler(config)
+    class Exact:
+        def count_text(self, text):
+            from swaag.tokens import CountResult
+
+            return CountResult(tokens=len(text), exact=True, strategy="test_exact")
+
+    assembly = PromptAssembly(
+        kind="action",
+        prompt_mode="standard",
+        prompt_text="x" * 3000,
+        components=[PromptComponent(name="input", text="x" * 3000)],
+    )
+    result = compiler.compile(
+        assembly,
+        agent_action_contract([]),
+        Exact(),
+        minimum_output_tokens=100,
+        context_limit=4096,
+        context_limit_source="server_props:n_ctx",
+    )
+    assert result.report.context_limit == 4096
+    assert result.report.fits
+    assert result.context_limit_source == "server_props:n_ctx"
+
+
+def test_unbounded_schema_content_does_not_inflate_required_output(make_config):
+    config = make_config(
+        model__context_limit=1000,
+        budget_policy__structured_output_json_floor_tokens=20,
+    )
+    compiler = ContextCompiler(config)
+    assembly = PromptAssembly(
+        kind="action",
+        prompt_mode="standard",
+        prompt_text="x" * 100,
+        components=[PromptComponent(name="input", text="x" * 100)],
+    )
+
+    no_tools = compiler.compile(
+        assembly,
+        agent_action_contract([]),
+        ConservativeEstimator(chars_per_token=1.0),
+        minimum_output_tokens=30,
+    )
+    many_tools = compiler.compile(
+        assembly,
+        agent_action_contract(
+            [
+                (
+                    f"tool_{index}",
+                    "description",
+                    {
+                        "type": "object",
+                        "properties": {"value": {"type": "string"}},
+                        "required": ["value"],
+                        "additionalProperties": False,
+                    },
+                )
+                for index in range(20)
+            ]
+        ),
+        ConservativeEstimator(chars_per_token=1.0),
+        minimum_output_tokens=30,
+    )
+
+    # A valid action may contain an empty tool-call list, so schema breadth is
+    # grammar overhead, not a deterministic generated-output requirement.
+    assert many_tools.structured_output_floor_tokens == no_tools.structured_output_floor_tokens
+
+
+def test_context_limit_is_not_silently_inflated_to_policy_floor(make_config):
+    config = make_config(
+        model__context_limit=128,
+        budget_policy__structured_output_json_floor_tokens=20,
+        context__safety_margin_tokens=5,
+    )
+    compiler = ContextCompiler(config)
+    assembly = PromptAssembly(
+        kind="action",
+        prompt_mode="standard",
+        prompt_text="x" * 80,
+        components=[PromptComponent(name="input", text="x" * 80)],
+    )
+    result = compiler.compile(
+        assembly,
+        agent_action_contract([]),
+        ConservativeEstimator(chars_per_token=1.0),
+        minimum_output_tokens=40,
+    )
+
+    assert result.report.context_limit == 128
+    assert not result.report.fits

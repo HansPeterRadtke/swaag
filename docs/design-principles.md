@@ -22,7 +22,7 @@ Every LLM call needs an explicit budget before it is sent:
 
 `fixed input + selected history + tool definitions + tool results + retrieved data + other dynamic input + output reserve + safety margin <= model context capacity`
 
-Tokenize the actual serialized request with the tokenizer and chat/tool format appropriate to the model. Output space is first-class, not whatever remains after packing input. Different operations need different output reserves.
+Tokenize the actual serialized request with the tokenizer and chat/tool format appropriate to the model. Output space is first-class, with an operation-specific minimum and desired headroom. Preserve the richest input whenever it fits with the minimum and safety; a desired output ratio is never a reason to discard valid input. If generation actually exhausts its output limit, increase the minimum for a bounded retry and reconstruct/re-tokenize the call.
 
 After mandatory input and output reserve are accounted for, history, summaries, tool schemas, tool results, retrieved documents, attachments, and other material compete for the remaining budget. Recalculate this for every operation; there is no single permanent agent context.
 

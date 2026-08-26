@@ -22,6 +22,21 @@ class _FakeResponse:
         yield 'data: [DONE]'
 
 
+class _LimitedResponse(_FakeResponse):
+    def iter_lines(self, *, decode_unicode: bool):
+        assert decode_unicode is True
+        yield 'data: ' + json.dumps({"content": "{", "tokens_predicted": 1})
+        yield 'data: ' + json.dumps(
+            {
+                "content": "",
+                "tokens_predicted": 1,
+                "stop": True,
+                "stop_type": "limit",
+                "truncated": False,
+            }
+        )
+
+
 def test_streaming_client_ignores_sse_comments_and_keepalives(make_config, monkeypatch) -> None:
     config = make_config()
     client = LlamaCppClient(config)
@@ -40,3 +55,16 @@ def test_streaming_client_ignores_sse_comments_and_keepalives(make_config, monke
     assert result.completion_tokens == 2
     assert captured["stream"] is True
     assert captured["payload"]["stream"] is True
+
+
+def test_streaming_client_preserves_output_limit_finish_reason(make_config, monkeypatch) -> None:
+    client = LlamaCppClient(make_config())
+    monkeypatch.setattr(
+        "swaag.model.requests.post",
+        lambda *args, **kwargs: _LimitedResponse(),
+    )
+
+    result = client.send_completion({"prompt": "x", "n_predict": 1})
+
+    assert result.finish_reason == "length"
+    assert result.raw_response["stop_type"] == "limit"
