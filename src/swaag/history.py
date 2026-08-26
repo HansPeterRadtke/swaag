@@ -512,14 +512,56 @@ class HistoryStore:
             suffix += 1
 
     def set_active_run(self, session_id: str, *, run_id: str, user_text: str) -> None:
+        now = utc_now_iso()
         payload = {
             "run_id": run_id,
             "session_id": session_id,
             "user_text": user_text,
-            "started_at": utc_now_iso(),
+            "started_at": now,
+            "updated_at": now,
+            "heartbeat_at": now,
+            "phase": "starting",
+            "detail": "",
+            "active_kind": "",
+            "active_id": "",
             "pid": os.getpid(),
         }
         self._write_projection(self.active_run_path(session_id), payload)
+
+    def update_active_run(
+        self,
+        session_id: str,
+        *,
+        run_id: str | None = None,
+        phase: str | None = None,
+        detail: str | None = None,
+        active_kind: str | None = None,
+        active_id: str | None = None,
+    ) -> dict[str, Any] | None:
+        path = self.active_run_path(session_id)
+        if not path.exists():
+            return None
+        try:
+            payload = json.loads(path.read_text(encoding="utf-8"))
+        except Exception:
+            return None
+        if not isinstance(payload, dict):
+            return None
+        if run_id is not None and payload.get("run_id") not in {None, run_id}:
+            return None
+        now = utc_now_iso()
+        payload["updated_at"] = now
+        payload["heartbeat_at"] = now
+        if phase is not None:
+            payload["phase"] = str(phase)
+        if detail is not None:
+            payload["detail"] = str(detail)
+        if active_kind is not None:
+            payload["active_kind"] = str(active_kind)
+        if active_id is not None:
+            payload["active_id"] = str(active_id)
+        self._write_projection(path, payload)
+        return payload
 
     def clear_active_run(self, session_id: str, *, run_id: str | None = None) -> None:
         path = self.active_run_path(session_id)

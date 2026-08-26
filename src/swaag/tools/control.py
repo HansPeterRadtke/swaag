@@ -41,10 +41,14 @@ class AgentStatusLookupTool(Tool):
             for event in store.iter_history(session_id)
             if event.event_type == "agent_status"
         ][-5:]
+        active_run = store.read_active_run(session_id)
         output = {
             "session_id": session_id,
             "session_name": state.session_name,
             "active_goal": latest_user,
+            "mechanical_phase": "idle" if active_run is None else str(active_run.get("phase", "unknown")),
+            "heartbeat_at": "" if active_run is None else str(active_run.get("heartbeat_at", "")),
+            "active_run": active_run,
             "waiting": state.environment.waiting,
             "waiting_reason": state.environment.waiting_reason,
             "running_process_ids": [pid for pid, item in state.environment.processes.items() if item.status == "running"],

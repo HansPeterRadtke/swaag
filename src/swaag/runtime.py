@@ -18,6 +18,7 @@ from swaag.environment.environment import AgentEnvironment
 from swaag.fsops import ensure_dir, restore_tree, snapshot_tree, write_text
 from swaag.grammar import agent_action_contract, completion_evaluation_contract, summary_contract, yes_no_contract
 from swaag.history import HistoryInvariantError, HistoryStore
+from swaag.heartbeat import heartbeat_payload, systemd_notify
 from swaag.model import LlamaCppClient, ModelClientError
 from swaag.preemption import ModelCallPreempted, ModelCallStateChanged, ModelPreemptionCoordinator
 from swaag.model_cache import build_model_client
@@ -208,13 +209,19 @@ class AgentRuntime:
     ) -> TurnResult:
         run_id = f"{state.session_id}:{new_id('run')}"
         self.history.set_active_run(state.session_id, run_id=run_id, user_text=user_text)
+        self._heartbeat(state, run_id=run_id, phase="starting", detail="turn starting")
         try:
-            return self._run_model_tool_loop(
+            result = self._run_model_tool_loop(
                 state,
                 user_text,
                 record_user_message=True,
                 allow_silent_completion=allow_silent_completion,
             )
+            self._heartbeat(state, run_id=run_id, phase="completed", detail="turn completed")
+            return result
+        except Exception as exc:
+            self._heartbeat(state, run_id=run_id, phase="failed", detail=f"{type(exc).__name__}: {exc}")
+            raise
         finally:
             self.history.clear_active_run(state.session_id, run_id=run_id)
 
@@ -227,10 +234,40 @@ class AgentRuntime:
             return None
         run_id = f"{state.session_id}:{new_id('run')}"
         self.history.set_active_run(state.session_id, run_id=run_id, user_text=original_request)
+        self._heartbeat(state, run_id=run_id, phase="starting", detail="processing pending controls")
         try:
-            return self._run_model_tool_loop(state, original_request, record_user_message=False)
+            result = self._run_model_tool_loop(state, original_request, record_user_message=False)
+            self._heartbeat(state, run_id=run_id, phase="completed", detail="pending controls completed")
+            return result
+        except Exception as exc:
+            self._heartbeat(state, run_id=run_id, phase="failed", detail=f"{type(exc).__name__}: {exc}")
+            raise
         finally:
             self.history.clear_active_run(state.session_id, run_id=run_id)
+
+    def _heartbeat(
+        self,
+        state: SessionState,
+        *,
+        run_id: str | None = None,
+        phase: str,
+        detail: str = "",
+        active_kind: str = "",
+        active_id: str = "",
+    ) -> None:
+        payload = heartbeat_payload(phase=phase, detail=detail, active_kind=active_kind, active_id=active_id)
+        self.history.update_active_run(
+            state.session_id,
+            run_id=run_id,
+            phase=payload["phase"],
+            detail=payload["detail"],
+            active_kind=payload["active_kind"],
+            active_id=payload["active_id"],
+        )
+        systemd_notify(
+            "WATCHDOG=1",
+            f"STATUS=swaag session={state.session_id} phase={payload['phase']} detail={payload['detail'][:180]}",
+        )
 
     def _refresh_state_from_history(self, state: SessionState) -> None:
         refreshed = self.history.rebuild_from_history(state.session_id, write_projections=False)
@@ -314,6 +351,7 @@ class AgentRuntime:
                     tool_specs,
                     allow_silent_completion=allow_silent_completion,
                 )
+                self._heartbeat(state, phase="context_compilation", detail=f"preparing action {action_index}", active_kind="action", active_id=str(action_index))
                 prepared = self._prepare_action_call(
                     state,
                     original_request=original_request,
@@ -576,6 +614,7 @@ class AgentRuntime:
                     tool = self.tools.get(tool_call.tool_name)
                     effective_kind = tool.effective_kind(tool_call.arguments)
                     repeated_observation_is_redundant = tool.repeated_observation_is_redundant
+                    self._heartbeat(state, phase="tool_execution", detail=f"running {tool_call.tool_name}", active_kind="tool", active_id=tool_call.tool_name)
                     result = self._execute_tool(
                         state,
                         ToolDecision(
@@ -631,6 +670,8 @@ class AgentRuntime:
                 continue
 
             has_blocking_question = any(question.criticality == "blocking" for question in selected_action.questions)
+            if has_blocking_question:
+                self._heartbeat(state, phase="waiting_for_user", detail="blocking user question", active_kind="question", active_id=str(action_index))
             completion = (
                 {"complete": True, "reason": "blocking user input requested", "remaining_work": []}
                 if has_blocking_question
@@ -801,6 +842,7 @@ class AgentRuntime:
         )
 
     def _evaluate_completion(self, state: SessionState, *, original_request: str, selected_action: AgentAction, tool_results: list[ToolExecutionResult]) -> dict[str, Any]:
+        self._heartbeat(state, phase="completion_evaluation", detail="evaluating task completion", active_kind="completion_evaluation")
         contract = completion_evaluation_contract()
         evidence_rows = [{"tool_name": r.tool_name, "output": to_jsonable(r.output), "display_text": r.display_text} for r in tool_results]
         assembly = self.prompts.build_completion_evaluation_prompt(
@@ -1215,6 +1257,7 @@ class AgentRuntime:
         # deterministically even after validation feedback changed.
         request["seed"] = int(self.config.model.seed) + int(seed_offset)
         call_id = new_id("model_call")
+        self._heartbeat(state, phase="queued_inference", detail=f"queued {prepared.assembly.kind}", active_kind="model", active_id=call_id)
         active_call = self.preemption.register_active(
             state.session_id,
             call_id,
@@ -1243,6 +1286,7 @@ class AgentRuntime:
                     "effective_contract_mode": resolved_contract.mode,
                 },
             )
+            self._heartbeat(state, phase="inference", detail=f"running {prepared.assembly.kind}", active_kind="model", active_id=call_id)
             started = time.monotonic()
             last_progress_log = started
             last_progress_tokens = 0
@@ -1258,6 +1302,7 @@ class AgentRuntime:
                     return
                 last_progress_log = now
                 last_progress_tokens = tokens
+                self._heartbeat(state, phase="inference", detail=f"{prepared.assembly.kind}: {tokens} completion tokens", active_kind="model", active_id=call_id)
                 guard.record(
                     "model_token_progress",
                     {
@@ -1630,11 +1675,15 @@ class AgentRuntime:
             for process_id, record in sorted(state.environment.processes.items())
             if record.status == "running"
         ]
+        active_run = self.history.read_active_run(state.session_id)
         return {
             "session_id": state.session_id,
             "session_name": state.session_name,
             "active_goal": latest_user,
-            "active_step": "",
+            "active_step": "" if active_run is None else str(active_run.get("detail", "")),
+            "mechanical_phase": "idle" if active_run is None else str(active_run.get("phase", "unknown")),
+            "heartbeat_at": "" if active_run is None else str(active_run.get("heartbeat_at", "")),
+            "active_run": active_run,
             "waiting": state.environment.waiting,
             "waiting_reason": state.environment.waiting_reason,
             "running_processes": running_processes,
