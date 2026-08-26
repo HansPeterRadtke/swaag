@@ -10,6 +10,7 @@ from typing import Any, Callable, Iterable, Iterator
 
 from swaag.environment.state import EnvironmentState, ProcessRecord, ShellSessionState, WorkspaceState
 from swaag.history_archive import HistoryArchiveStore
+from swaag.sqlite_schema import apply_sqlite_migrations
 from swaag.events import ALLOWED_EVENT_TYPES, READABLE_EVENT_TYPES, EventSchemaError, create_event, verify_event_integrity
 from swaag.types import (
     AttachmentReference,
@@ -82,6 +83,59 @@ _STATEFUL_REBUILD_EVENT_TYPES = frozenset(
 )
 
 _IGNORED_REBUILD_EVENT_TYPES = READABLE_EVENT_TYPES - _STATEFUL_REBUILD_EVENT_TYPES
+_HISTORY_INDEX_MIGRATIONS = (
+    (
+        """
+        CREATE TABLE IF NOT EXISTS events (
+            session_id TEXT NOT NULL,
+            sequence INTEGER NOT NULL,
+            event_id TEXT NOT NULL UNIQUE,
+            timestamp TEXT NOT NULL,
+            event_type TEXT NOT NULL,
+            payload_json TEXT NOT NULL,
+            metadata_json TEXT NOT NULL,
+            prev_hash TEXT,
+            event_hash TEXT NOT NULL,
+            PRIMARY KEY (session_id, sequence)
+        )
+        """,
+        """
+        CREATE TABLE IF NOT EXISTS indexed_sessions (
+            session_id TEXT PRIMARY KEY,
+            complete_through INTEGER NOT NULL
+        )
+        """,
+        """
+        CREATE TABLE IF NOT EXISTS control_messages (
+            control_id TEXT PRIMARY KEY,
+            session_id TEXT NOT NULL,
+            message TEXT NOT NULL,
+            source TEXT NOT NULL,
+            created_at TEXT NOT NULL,
+            priority INTEGER NOT NULL DEFAULT 0,
+            status TEXT NOT NULL DEFAULT 'pending',
+            processed_at TEXT
+        )
+        """,
+        """
+        CREATE INDEX IF NOT EXISTS events_session_type_sequence
+        ON events(session_id, event_type, sequence)
+        """,
+        """
+        CREATE INDEX IF NOT EXISTS control_pending_session
+        ON control_messages(session_id, status, priority DESC, created_at, control_id)
+        """,
+        """
+        CREATE VIRTUAL TABLE IF NOT EXISTS events_fts USING fts5(
+            session_id UNINDEXED,
+            sequence UNINDEXED,
+            event_type,
+            content,
+            tokenize='unicode61'
+        )
+        """,
+    ),
+)
 
 
 def _default_session_name(session_id: str) -> str:
@@ -135,46 +189,10 @@ class HistoryStore:
                 f"SWAAG durable history requires SQLite >= 3.51.3 (found {sqlite3.sqlite_version})"
             )
         with self._sqlite_connect() as connection:
-            connection.executescript(
-                """
-                CREATE TABLE IF NOT EXISTS events (
-                    session_id TEXT NOT NULL,
-                    sequence INTEGER NOT NULL,
-                    event_id TEXT NOT NULL UNIQUE,
-                    timestamp TEXT NOT NULL,
-                    event_type TEXT NOT NULL,
-                    payload_json TEXT NOT NULL,
-                    metadata_json TEXT NOT NULL,
-                    prev_hash TEXT,
-                    event_hash TEXT NOT NULL,
-                    PRIMARY KEY (session_id, sequence)
-                );
-                CREATE TABLE IF NOT EXISTS indexed_sessions (
-                    session_id TEXT PRIMARY KEY,
-                    complete_through INTEGER NOT NULL
-                );
-                CREATE TABLE IF NOT EXISTS control_messages (
-                    control_id TEXT PRIMARY KEY,
-                    session_id TEXT NOT NULL,
-                    message TEXT NOT NULL,
-                    source TEXT NOT NULL,
-                    created_at TEXT NOT NULL,
-                    priority INTEGER NOT NULL DEFAULT 0,
-                    status TEXT NOT NULL DEFAULT 'pending',
-                    processed_at TEXT
-                );
-                CREATE INDEX IF NOT EXISTS events_session_type_sequence
-                    ON events(session_id, event_type, sequence);
-                CREATE INDEX IF NOT EXISTS control_pending_session
-                    ON control_messages(session_id, status, priority DESC, created_at, control_id);
-                CREATE VIRTUAL TABLE IF NOT EXISTS events_fts USING fts5(
-                    session_id UNINDEXED,
-                    sequence UNINDEXED,
-                    event_type,
-                    content,
-                    tokenize='unicode61'
-                );
-                """
+            apply_sqlite_migrations(
+                connection,
+                store_name="history index",
+                migrations=_HISTORY_INDEX_MIGRATIONS,
             )
 
     @staticmethod

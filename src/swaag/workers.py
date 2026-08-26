@@ -12,6 +12,7 @@ from typing import Any, Iterable
 
 from swaag.preemption import RunCancellationRequested
 from swaag.runtime import AgentRuntime
+from swaag.sqlite_schema import apply_sqlite_migrations
 from swaag.structured_output import (
     CallerOutputSpec,
     merge_caller_output,
@@ -33,6 +34,64 @@ WORKER_STREAM_EVENT_TYPES = frozenset(
         "tool_error",
         "tool_result",
     }
+)
+_WORKER_STORE_MIGRATIONS = (
+    (
+        """
+        CREATE TABLE IF NOT EXISTS workers (
+            worker_id TEXT PRIMARY KEY,
+            session_id TEXT NOT NULL UNIQUE,
+            objective TEXT NOT NULL,
+            status TEXT NOT NULL,
+            created_at TEXT NOT NULL,
+            updated_at TEXT NOT NULL,
+            started_at TEXT,
+            completed_at TEXT,
+            archived_at TEXT,
+            result TEXT,
+            error TEXT,
+            run_count INTEGER NOT NULL DEFAULT 0
+        )
+        """,
+        """
+        CREATE INDEX IF NOT EXISTS workers_status_updated
+        ON workers(status, updated_at, worker_id)
+        """,
+        """
+        CREATE TABLE IF NOT EXISTS worker_events (
+            worker_id TEXT NOT NULL,
+            sequence INTEGER NOT NULL,
+            event_id TEXT NOT NULL UNIQUE,
+            timestamp TEXT NOT NULL,
+            event_type TEXT NOT NULL,
+            payload_json TEXT NOT NULL,
+            PRIMARY KEY (worker_id, sequence),
+            FOREIGN KEY (worker_id) REFERENCES workers(worker_id)
+        )
+        """,
+    ),
+    (
+        """
+        CREATE TABLE IF NOT EXISTS worker_history_cursors (
+            worker_id TEXT PRIMARY KEY,
+            session_id TEXT NOT NULL,
+            through_sequence INTEGER NOT NULL,
+            FOREIGN KEY (worker_id) REFERENCES workers(worker_id)
+        )
+        """,
+        """
+        CREATE TABLE IF NOT EXISTS worker_history_links (
+            worker_id TEXT NOT NULL,
+            session_id TEXT NOT NULL,
+            history_sequence INTEGER NOT NULL,
+            history_event_id TEXT NOT NULL,
+            history_event_hash TEXT NOT NULL,
+            worker_event_id TEXT NOT NULL UNIQUE,
+            PRIMARY KEY (worker_id, session_id, history_sequence),
+            FOREIGN KEY (worker_id) REFERENCES workers(worker_id)
+        )
+        """,
+    ),
 )
 
 
@@ -69,51 +128,10 @@ class WorkerStore:
         self.path = Path(root).expanduser() / "workers.sqlite3"
         self.path.parent.mkdir(parents=True, exist_ok=True)
         with self._connect() as connection:
-            connection.executescript(
-                """
-                CREATE TABLE IF NOT EXISTS workers (
-                    worker_id TEXT PRIMARY KEY,
-                    session_id TEXT NOT NULL UNIQUE,
-                    objective TEXT NOT NULL,
-                    status TEXT NOT NULL,
-                    created_at TEXT NOT NULL,
-                    updated_at TEXT NOT NULL,
-                    started_at TEXT,
-                    completed_at TEXT,
-                    archived_at TEXT,
-                    result TEXT,
-                    error TEXT,
-                    run_count INTEGER NOT NULL DEFAULT 0
-                );
-                CREATE INDEX IF NOT EXISTS workers_status_updated
-                    ON workers(status, updated_at, worker_id);
-                CREATE TABLE IF NOT EXISTS worker_events (
-                    worker_id TEXT NOT NULL,
-                    sequence INTEGER NOT NULL,
-                    event_id TEXT NOT NULL UNIQUE,
-                    timestamp TEXT NOT NULL,
-                    event_type TEXT NOT NULL,
-                    payload_json TEXT NOT NULL,
-                    PRIMARY KEY (worker_id, sequence),
-                    FOREIGN KEY (worker_id) REFERENCES workers(worker_id)
-                );
-                CREATE TABLE IF NOT EXISTS worker_history_cursors (
-                    worker_id TEXT PRIMARY KEY,
-                    session_id TEXT NOT NULL,
-                    through_sequence INTEGER NOT NULL,
-                    FOREIGN KEY (worker_id) REFERENCES workers(worker_id)
-                );
-                CREATE TABLE IF NOT EXISTS worker_history_links (
-                    worker_id TEXT NOT NULL,
-                    session_id TEXT NOT NULL,
-                    history_sequence INTEGER NOT NULL,
-                    history_event_id TEXT NOT NULL,
-                    history_event_hash TEXT NOT NULL,
-                    worker_event_id TEXT NOT NULL UNIQUE,
-                    PRIMARY KEY (worker_id, session_id, history_sequence),
-                    FOREIGN KEY (worker_id) REFERENCES workers(worker_id)
-                );
-                """
+            apply_sqlite_migrations(
+                connection,
+                store_name="worker store",
+                migrations=_WORKER_STORE_MIGRATIONS,
             )
 
     def _connect(self) -> sqlite3.Connection:

@@ -16,9 +16,33 @@ from swaag.protocol_adapters import (
     OpenWebUiProjectionAdapter,
 )
 from swaag.runtime import AgentRuntime
+from swaag.sqlite_schema import apply_sqlite_migrations
 from swaag.task_api import TaskApi
 from swaag.utils import new_id, utc_now_iso
 from swaag.workers import WorkerManager
+
+
+_COMMUNICATION_STORE_MIGRATIONS = (
+    (
+        """
+        CREATE TABLE IF NOT EXISTS requests (
+            correlation_id TEXT PRIMARY KEY,
+            session_id TEXT NOT NULL,
+            message TEXT NOT NULL,
+            source TEXT NOT NULL,
+            priority INTEGER NOT NULL,
+            status TEXT NOT NULL,
+            created_at TEXT NOT NULL,
+            completed_at TEXT,
+            reply TEXT
+        )
+        """,
+        """
+        CREATE INDEX IF NOT EXISTS requests_pending
+        ON requests(status, priority DESC, created_at, correlation_id)
+        """,
+    ),
+)
 
 
 @dataclass(slots=True, frozen=True)
@@ -39,22 +63,10 @@ class CommunicationStore:
         self.path = Path(root).expanduser() / "communication.sqlite3"
         self.path.parent.mkdir(parents=True, exist_ok=True)
         with self._connect() as connection:
-            connection.executescript(
-                """
-                CREATE TABLE IF NOT EXISTS requests (
-                    correlation_id TEXT PRIMARY KEY,
-                    session_id TEXT NOT NULL,
-                    message TEXT NOT NULL,
-                    source TEXT NOT NULL,
-                    priority INTEGER NOT NULL,
-                    status TEXT NOT NULL,
-                    created_at TEXT NOT NULL,
-                    completed_at TEXT,
-                    reply TEXT
-                );
-                CREATE INDEX IF NOT EXISTS requests_pending
-                    ON requests(status, priority DESC, created_at, correlation_id);
-                """
+            apply_sqlite_migrations(
+                connection,
+                store_name="communication store",
+                migrations=_COMMUNICATION_STORE_MIGRATIONS,
             )
 
     def _connect(self) -> sqlite3.Connection:

@@ -130,7 +130,7 @@ This is the gap list between the current repository and the intended architectur
 - [ ] **Document each remaining deterministic policy and why it is non-semantic.** Anything that decides meaning belongs under suspicion and should be justified or moved to an LLM.
 - [ ] **Ensure benchmark adapters use the same production context compiler and semantic policies.** Avoid benchmark-only shortcuts that hide real overflow/compaction behavior.
 - [ ] **Make context/accounting replayable for recorded model tests.** A recorded trajectory should show exactly why each call saw its context and be usable for regression testing without live inference.
-- [ ] **Add migration/versioning for durable event/history schemas before multi-worker and richer event protocols expand them.**
+- [x] **Add migration/versioning for durable event/history schemas before multi-worker and richer event protocols expand them.** Every runtime SQLite store now applies ordered transactional `user_version` migrations, adopts preserved unversioned tables idempotently, rejects state written by newer code, and rolls back schema plus version together on failure. Immutable history shards carry their schema version too; append-only JSON events retain their existing per-event version and integrity chain.
 - [ ] **Review security/permission boundaries after dynamic tool discovery and attachments.** Semantic tool choice must never bypass deterministic authorization and workspace/path controls.
 
 ## Already present foundations that should not be reimplemented

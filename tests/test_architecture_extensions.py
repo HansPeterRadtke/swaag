@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import json
+import sqlite3
 from pathlib import Path
 
 from swaag.communication import CommunicationService, CommunicationStore
@@ -41,6 +42,8 @@ def test_history_archive_is_exact_read_only_fallback(make_config, tmp_path: Path
     shard = Path(archived["shard_path"])
     assert shard.exists()
     assert shard.stat().st_mode & 0o222 == 0
+    with sqlite3.connect(f"file:{shard}?mode=ro&immutable=1", uri=True) as connection:
+        assert connection.execute("PRAGMA user_version").fetchone()[0] == 1
 
 
 def test_derived_embedding_index_is_non_authoritative_and_ranked(tmp_path: Path) -> None:

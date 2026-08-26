@@ -10,6 +10,34 @@ from concurrent.futures import ThreadPoolExecutor, Future
 
 import requests
 
+from swaag.sqlite_schema import apply_sqlite_migrations
+
+
+_EMBEDDING_INDEX_MIGRATIONS = (
+    (
+        """
+        CREATE TABLE IF NOT EXISTS embeddings (
+            session_id TEXT NOT NULL,
+            sequence INTEGER NOT NULL,
+            field TEXT NOT NULL,
+            text_hash TEXT NOT NULL,
+            vector_json TEXT NOT NULL,
+            PRIMARY KEY(session_id, sequence, field)
+        )
+        """,
+        """
+        CREATE INDEX IF NOT EXISTS embeddings_session_sequence
+        ON embeddings(session_id, sequence)
+        """,
+        """
+        CREATE TABLE IF NOT EXISTS indexed_sessions (
+            session_id TEXT PRIMARY KEY,
+            complete_through INTEGER NOT NULL
+        )
+        """,
+    ),
+)
+
 
 class EmbeddingProvider(Protocol):
     def embed(self, texts: Sequence[str]) -> list[list[float]]: ...
@@ -66,23 +94,10 @@ class DerivedEmbeddingIndex:
 
     def _init(self) -> None:
         with self._connect() as connection:
-            connection.executescript(
-                """
-                CREATE TABLE IF NOT EXISTS embeddings (
-                    session_id TEXT NOT NULL,
-                    sequence INTEGER NOT NULL,
-                    field TEXT NOT NULL,
-                    text_hash TEXT NOT NULL,
-                    vector_json TEXT NOT NULL,
-                    PRIMARY KEY(session_id, sequence, field)
-                );
-                CREATE INDEX IF NOT EXISTS embeddings_session_sequence
-                    ON embeddings(session_id, sequence);
-                CREATE TABLE IF NOT EXISTS indexed_sessions (
-                    session_id TEXT PRIMARY KEY,
-                    complete_through INTEGER NOT NULL
-                );
-                """
+            apply_sqlite_migrations(
+                connection,
+                store_name="derived embedding index",
+                migrations=_EMBEDDING_INDEX_MIGRATIONS,
             )
 
     @staticmethod

@@ -7,7 +7,57 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
 
+from swaag.sqlite_schema import apply_sqlite_migrations
 from swaag.utils import new_id, sha256_text, stable_json_dumps, utc_now_iso
+
+
+_PREEMPTION_STORE_MIGRATIONS = (
+    (
+        """
+        CREATE TABLE IF NOT EXISTS active_calls (
+            session_id TEXT PRIMARY KEY,
+            call_id TEXT NOT NULL,
+            kind TEXT NOT NULL,
+            request_json TEXT NOT NULL,
+            request_sha256 TEXT NOT NULL,
+            started_at TEXT NOT NULL
+        )
+        """,
+        """
+        CREATE TABLE IF NOT EXISTS preemptions (
+            preemption_id TEXT PRIMARY KEY,
+            session_id TEXT NOT NULL,
+            call_id TEXT NOT NULL,
+            message TEXT NOT NULL,
+            source TEXT NOT NULL,
+            status TEXT NOT NULL,
+            target_changed INTEGER NOT NULL DEFAULT 0,
+            reply TEXT,
+            created_at TEXT NOT NULL,
+            updated_at TEXT NOT NULL
+        )
+        """,
+        """
+        CREATE INDEX IF NOT EXISTS preemptions_call_status
+        ON preemptions(call_id, status, created_at)
+        """,
+        """
+        CREATE TABLE IF NOT EXISTS run_cancellations (
+            session_id TEXT NOT NULL,
+            run_id TEXT NOT NULL,
+            reason TEXT NOT NULL,
+            status TEXT NOT NULL,
+            requested_at TEXT NOT NULL,
+            updated_at TEXT NOT NULL,
+            PRIMARY KEY (session_id, run_id)
+        )
+        """,
+        """
+        CREATE INDEX IF NOT EXISTS run_cancellations_status
+        ON run_cancellations(status, requested_at)
+        """,
+    ),
+)
 
 
 class ModelCallPreempted(RuntimeError):
@@ -70,42 +120,10 @@ class ModelPreemptionCoordinator:
         self.path = Path(root).expanduser() / "model_preemption.sqlite3"
         self.path.parent.mkdir(parents=True, exist_ok=True)
         with self._connect() as connection:
-            connection.executescript(
-                """
-                CREATE TABLE IF NOT EXISTS active_calls (
-                    session_id TEXT PRIMARY KEY,
-                    call_id TEXT NOT NULL,
-                    kind TEXT NOT NULL,
-                    request_json TEXT NOT NULL,
-                    request_sha256 TEXT NOT NULL,
-                    started_at TEXT NOT NULL
-                );
-                CREATE TABLE IF NOT EXISTS preemptions (
-                    preemption_id TEXT PRIMARY KEY,
-                    session_id TEXT NOT NULL,
-                    call_id TEXT NOT NULL,
-                    message TEXT NOT NULL,
-                    source TEXT NOT NULL,
-                    status TEXT NOT NULL,
-                    target_changed INTEGER NOT NULL DEFAULT 0,
-                    reply TEXT,
-                    created_at TEXT NOT NULL,
-                    updated_at TEXT NOT NULL
-                );
-                CREATE INDEX IF NOT EXISTS preemptions_call_status
-                    ON preemptions(call_id, status, created_at);
-                CREATE TABLE IF NOT EXISTS run_cancellations (
-                    session_id TEXT NOT NULL,
-                    run_id TEXT NOT NULL,
-                    reason TEXT NOT NULL,
-                    status TEXT NOT NULL,
-                    requested_at TEXT NOT NULL,
-                    updated_at TEXT NOT NULL,
-                    PRIMARY KEY (session_id, run_id)
-                );
-                CREATE INDEX IF NOT EXISTS run_cancellations_status
-                    ON run_cancellations(status, requested_at);
-                """
+            apply_sqlite_migrations(
+                connection,
+                store_name="model preemption store",
+                migrations=_PREEMPTION_STORE_MIGRATIONS,
             )
 
     def _connect(self) -> sqlite3.Connection:

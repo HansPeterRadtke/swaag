@@ -8,11 +8,49 @@ from pathlib import Path
 from typing import Any, Callable, Iterable
 
 from swaag.preemption import ModelCallPreempted
+from swaag.sqlite_schema import apply_sqlite_migrations
 from swaag.utils import new_id, utc_now_iso
 
 
 INFERENCE_TERMINAL_STATES = frozenset(
     {"completed", "failed", "cancelled", "superseded"}
+)
+_INFERENCE_STORE_MIGRATIONS = (
+    (
+        """
+        CREATE TABLE IF NOT EXISTS inference_requests (
+            request_id TEXT PRIMARY KEY,
+            backend_key TEXT NOT NULL,
+            session_id TEXT NOT NULL,
+            run_id TEXT NOT NULL,
+            call_id TEXT NOT NULL UNIQUE,
+            call_kind TEXT NOT NULL,
+            source TEXT NOT NULL,
+            priority INTEGER NOT NULL,
+            status TEXT NOT NULL,
+            owner_pid INTEGER NOT NULL,
+            queued_at TEXT NOT NULL,
+            queued_epoch REAL NOT NULL,
+            started_at TEXT,
+            completed_at TEXT,
+            updated_at TEXT NOT NULL,
+            attempt_count INTEGER NOT NULL DEFAULT 0,
+            backend_capacity INTEGER,
+            capacity_source TEXT,
+            queue_wait_seconds REAL,
+            cancellation_requested_at TEXT,
+            error TEXT
+        )
+        """,
+        """
+        CREATE INDEX IF NOT EXISTS inference_requests_backend_status
+        ON inference_requests(backend_key, status, priority, queued_epoch)
+        """,
+        """
+        CREATE INDEX IF NOT EXISTS inference_requests_session
+        ON inference_requests(session_id, queued_epoch, request_id)
+        """,
+    ),
 )
 
 
@@ -63,36 +101,10 @@ class InferenceRequestCoordinator:
         )
         self._capacity: tuple[int, str] | None = None
         with self._connect() as connection:
-            connection.executescript(
-                """
-                CREATE TABLE IF NOT EXISTS inference_requests (
-                    request_id TEXT PRIMARY KEY,
-                    backend_key TEXT NOT NULL,
-                    session_id TEXT NOT NULL,
-                    run_id TEXT NOT NULL,
-                    call_id TEXT NOT NULL UNIQUE,
-                    call_kind TEXT NOT NULL,
-                    source TEXT NOT NULL,
-                    priority INTEGER NOT NULL,
-                    status TEXT NOT NULL,
-                    owner_pid INTEGER NOT NULL,
-                    queued_at TEXT NOT NULL,
-                    queued_epoch REAL NOT NULL,
-                    started_at TEXT,
-                    completed_at TEXT,
-                    updated_at TEXT NOT NULL,
-                    attempt_count INTEGER NOT NULL DEFAULT 0,
-                    backend_capacity INTEGER,
-                    capacity_source TEXT,
-                    queue_wait_seconds REAL,
-                    cancellation_requested_at TEXT,
-                    error TEXT
-                );
-                CREATE INDEX IF NOT EXISTS inference_requests_backend_status
-                    ON inference_requests(backend_key, status, priority, queued_epoch);
-                CREATE INDEX IF NOT EXISTS inference_requests_session
-                    ON inference_requests(session_id, queued_epoch, request_id);
-                """
+            apply_sqlite_migrations(
+                connection,
+                store_name="inference request store",
+                migrations=_INFERENCE_STORE_MIGRATIONS,
             )
 
     def _connect(self) -> sqlite3.Connection:

@@ -9,7 +9,27 @@ from datetime import datetime, timezone
 from pathlib import Path
 from typing import Iterable
 
+from swaag.sqlite_schema import apply_sqlite_migrations
 from swaag.types import HistoryEvent
+
+
+_ARCHIVE_CATALOG_MIGRATIONS = (
+    (
+        """
+        CREATE TABLE IF NOT EXISTS archived_sessions (
+            session_id TEXT PRIMARY KEY,
+            session_name TEXT NOT NULL,
+            shard_path TEXT NOT NULL,
+            event_count INTEGER NOT NULL,
+            archived_at TEXT NOT NULL
+        )
+        """,
+        """
+        CREATE INDEX IF NOT EXISTS archived_sessions_name
+        ON archived_sessions(session_name)
+        """,
+    ),
+)
 
 
 @dataclass(slots=True, frozen=True)
@@ -39,17 +59,10 @@ class HistoryArchiveStore:
 
     def _init_catalog(self) -> None:
         with self._catalog() as connection:
-            connection.executescript(
-                """
-                CREATE TABLE IF NOT EXISTS archived_sessions (
-                    session_id TEXT PRIMARY KEY,
-                    session_name TEXT NOT NULL,
-                    shard_path TEXT NOT NULL,
-                    event_count INTEGER NOT NULL,
-                    archived_at TEXT NOT NULL
-                );
-                CREATE INDEX IF NOT EXISTS archived_sessions_name ON archived_sessions(session_name);
-                """
+            apply_sqlite_migrations(
+                connection,
+                store_name="history archive catalog",
+                migrations=_ARCHIVE_CATALOG_MIGRATIONS,
             )
 
     def archive_events(self, session_id: str, session_name: str, events: Iterable[HistoryEvent]) -> ArchiveEntry:
@@ -92,6 +105,7 @@ class HistoryArchiveStore:
                     "INSERT INTO events_fts(sequence, event_type, content) VALUES (?, ?, ?)",
                     (event.sequence, event.event_type, json.dumps({"type": event.event_type, "payload": event.payload}, sort_keys=True)),
                 )
+            connection.execute("PRAGMA user_version=1")
             connection.commit()
         finally:
             connection.close()
