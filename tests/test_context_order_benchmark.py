@@ -103,13 +103,20 @@ def test_context_order_benchmark_resumes_matching_partial_checkpoint(
     monkeypatch, make_config, tmp_path
 ):
     calls: list[str] = []
+    properties_hash = ["first-props"]
 
     class FakeClient:
         def __init__(self, _config):
             pass
 
         def cache_identity(self):
-            return {"model": "stable-fake"}
+            return {
+                "base_url": "http://model",
+                "model_alias": "stable-fake",
+                "model_file": {"path": "/model", "size": 10, "mtime_ns": 1},
+                "server_build_info": "build-1",
+                "server_properties_sha256": properties_hash[0],
+            }
 
         def context_limit_resolution(self):
             return 10_000, "test"
@@ -141,6 +148,7 @@ def test_context_order_benchmark_resumes_matching_partial_checkpoint(
     partial["complete"] = False
     output.write_text(json.dumps(partial), encoding="utf-8")
     calls.clear()
+    properties_hash[0] = "second-props"
 
     resumed = context_order.run_context_order_benchmark(
         config=make_config(model__context_limit=10_000),
@@ -151,3 +159,4 @@ def test_context_order_benchmark_resumes_matching_partial_checkpoint(
     assert len(calls) == 1
     assert resumed["completed"] == resumed["passed"] == 3
     assert resumed["complete"] is True
+    assert len(resumed["model_identity_history"]) == 2

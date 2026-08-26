@@ -191,6 +191,24 @@ def build_matrix(
     return cases
 
 
+def _stable_model_identity(identity: object) -> object:
+    if not isinstance(identity, dict):
+        return identity
+    stable_keys = (
+        "base_url",
+        "completion_endpoint",
+        "configured_model_identity",
+        "model_alias",
+        "model_file",
+        "profile_name",
+        "server_build_info",
+        "local_server_process_sha256",
+    )
+    if not any(key in identity for key in stable_keys):
+        return identity
+    return {key: identity.get(key) for key in stable_keys}
+
+
 def run_context_order_benchmark(
     *, config: AgentConfig | None = None, utilizations: Iterable[float] = DEFAULT_UTILIZATIONS, seed: int = 17,
     output_path: Path | None = None, resume: bool = True,
@@ -207,6 +225,7 @@ def run_context_order_benchmark(
         token_counter=client.tokenize,
     )
     results: list[ContextOrderResult] = []
+    model_identity_history: list[object] = [identity]
     contract = answer_contract()
 
     if resume and output_path is not None and output_path.exists():
@@ -218,13 +237,15 @@ def run_context_order_benchmark(
             ) from exc
         expected_header = {
             "benchmark": "context_order_retrieval",
-            "model_identity": identity,
             "context_limit": context_limit,
             "context_limit_source": context_limit_source,
             "seed": seed,
             "requested_utilizations": list(utilization_values),
             "planned": len(cases),
         }
+        previous_identity = previous.get("model_identity")
+        if _stable_model_identity(previous_identity) != _stable_model_identity(identity):
+            expected_header["model_identity"] = identity
         mismatches = {
             key: {"checkpoint": previous.get(key), "current": value}
             for key, value in expected_header.items()
@@ -235,6 +256,12 @@ def run_context_order_benchmark(
                 "Context-order checkpoint does not match the current benchmark: "
                 + stable_json_dumps(mismatches, indent=None)
             )
+        previous_history = previous.get("model_identity_history", [previous_identity])
+        if not isinstance(previous_history, list):
+            raise ValueError("Context-order checkpoint model_identity_history must be an array")
+        model_identity_history = list(previous_history)
+        if identity not in model_identity_history:
+            model_identity_history.append(identity)
         raw_results = previous.get("results")
         if not isinstance(raw_results, list):
             raise ValueError("Context-order checkpoint results must be an array")
@@ -265,6 +292,7 @@ def run_context_order_benchmark(
         return {
             "benchmark": "context_order_retrieval",
             "model_identity": identity,
+            "model_identity_history": model_identity_history,
             "context_limit": context_limit,
             "context_limit_source": context_limit_source,
             "seed": seed,
