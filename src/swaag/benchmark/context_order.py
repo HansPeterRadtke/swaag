@@ -193,7 +193,7 @@ def build_matrix(
 
 def run_context_order_benchmark(
     *, config: AgentConfig | None = None, utilizations: Iterable[float] = DEFAULT_UTILIZATIONS, seed: int = 17,
-    output_path: Path | None = None,
+    output_path: Path | None = None, resume: bool = True,
 ) -> dict:
     config = config or load_config()
     client = LlamaCppClient(config)
@@ -208,6 +208,49 @@ def run_context_order_benchmark(
     )
     results: list[ContextOrderResult] = []
     contract = answer_contract()
+
+    if resume and output_path is not None and output_path.exists():
+        try:
+            previous = json.loads(output_path.read_text(encoding="utf-8"))
+        except (OSError, json.JSONDecodeError) as exc:
+            raise ValueError(
+                f"Cannot resume invalid context-order checkpoint {output_path}: {exc}"
+            ) from exc
+        expected_header = {
+            "benchmark": "context_order_retrieval",
+            "model_identity": identity,
+            "context_limit": context_limit,
+            "context_limit_source": context_limit_source,
+            "seed": seed,
+            "requested_utilizations": list(utilization_values),
+            "planned": len(cases),
+        }
+        mismatches = {
+            key: {"checkpoint": previous.get(key), "current": value}
+            for key, value in expected_header.items()
+            if previous.get(key) != value
+        }
+        if mismatches:
+            raise ValueError(
+                "Context-order checkpoint does not match the current benchmark: "
+                + stable_json_dumps(mismatches, indent=None)
+            )
+        raw_results = previous.get("results")
+        if not isinstance(raw_results, list):
+            raise ValueError("Context-order checkpoint results must be an array")
+        try:
+            results = [ContextOrderResult(**row) for row in raw_results]
+        except (TypeError, ValueError) as exc:
+            raise ValueError(
+                f"Context-order checkpoint has invalid result rows: {exc}"
+            ) from exc
+
+    completed_keys = {
+        (result.position, result.requested_utilization, result.expected_code)
+        for result in results
+    }
+    if len(completed_keys) != len(results):
+        raise ValueError("Context-order checkpoint contains duplicate completed cases")
 
     def build_report(*, complete: bool) -> dict:
         rows = [asdict(result) for result in results]
@@ -248,6 +291,9 @@ def run_context_order_benchmark(
         temporary_path.replace(output_path)
 
     for case in cases:
+        case_key = (case.position, case.requested_utilization, case.expected_code)
+        if case_key in completed_keys:
+            continue
         preflight_prompt_tokens = client.tokenize(case.prompt)
         if preflight_prompt_tokens + 96 + int(config.context.safety_margin_tokens) > context_limit:
             raise ValueError(

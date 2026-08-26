@@ -97,3 +97,57 @@ def test_context_order_benchmark_checkpoints_each_completed_case(
     assert report["complete"] is True
     assert report["planned"] == 3
     assert all(0 <= row["marker_token_fraction"] <= 1 for row in report["results"])
+
+
+def test_context_order_benchmark_resumes_matching_partial_checkpoint(
+    monkeypatch, make_config, tmp_path
+):
+    calls: list[str] = []
+
+    class FakeClient:
+        def __init__(self, _config):
+            pass
+
+        def cache_identity(self):
+            return {"model": "stable-fake"}
+
+        def context_limit_resolution(self):
+            return 10_000, "test"
+
+        def tokenize(self, text):
+            return len(text)
+
+        def complete(self, prompt, **_kwargs):
+            calls.append(prompt)
+            return CompletionResult(
+                text=json.dumps({"answer": "SWAAG-0017-ORBIT"}),
+                raw_request={},
+                raw_response={},
+                prompt_tokens=len(prompt),
+                completion_tokens=4,
+                finish_reason="stop",
+            )
+
+    monkeypatch.setattr(context_order, "LlamaCppClient", FakeClient)
+    output = tmp_path / "context-order.json"
+    complete = context_order.run_context_order_benchmark(
+        config=make_config(model__context_limit=10_000),
+        utilizations=[0.10],
+        output_path=output,
+    )
+    partial = dict(complete)
+    partial["results"] = complete["results"][:2]
+    partial["completed"] = partial["passed"] = partial["total"] = 2
+    partial["complete"] = False
+    output.write_text(json.dumps(partial), encoding="utf-8")
+    calls.clear()
+
+    resumed = context_order.run_context_order_benchmark(
+        config=make_config(model__context_limit=10_000),
+        utilizations=[0.10],
+        output_path=output,
+    )
+
+    assert len(calls) == 1
+    assert resumed["completed"] == resumed["passed"] == 3
+    assert resumed["complete"] is True
