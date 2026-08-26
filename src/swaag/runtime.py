@@ -24,7 +24,9 @@ from swaag.environment.environment import AgentEnvironment
 from swaag.fsops import ensure_dir, restore_tree, snapshot_tree, write_text
 from swaag.grammar import (
     agent_action_contract,
+    communication_status_contract,
     completion_evaluation_contract,
+    evidence_projection_contract,
     summary_contract,
     tool_result_projection_contract,
     yes_no_contract,
@@ -57,6 +59,7 @@ from swaag.types import (
     CompletionResult,
     ContractSpec,
     DeferredTask,
+    HistoryEvent,
     Message,
     PromptAssembly,
     PromptComponent,
@@ -1140,6 +1143,407 @@ class AgentRuntime:
             ],
         }
 
+    @staticmethod
+    def _communication_evidence_row(event: HistoryEvent) -> dict[str, Any]:
+        return {
+            "session_id": event.session_id,
+            "sequence": event.sequence,
+            "hash": event.hash,
+            "event_type": event.event_type,
+            "timestamp": event.timestamp,
+            "payload": to_jsonable(event.payload),
+            "metadata": to_jsonable(event.metadata),
+        }
+
+    @staticmethod
+    def _communication_evidence_reference(event: HistoryEvent) -> dict[str, Any]:
+        return {
+            "session_id": event.session_id,
+            "sequence": event.sequence,
+            "hash": event.hash,
+            "event_type": event.event_type,
+        }
+
+    @staticmethod
+    def _communication_status_prompt_state(
+        mechanical_status: dict[str, Any],
+    ) -> tuple[dict[str, Any], dict[str, Any]]:
+        compact = to_jsonable(mechanical_status)
+        if not isinstance(compact, dict):
+            raise TypeError("mechanical_status must serialize to an object")
+        semantic: dict[str, Any] = {}
+
+        active_goal = compact.pop("active_goal", "")
+        if isinstance(active_goal, str) and active_goal:
+            semantic["active_goal"] = active_goal
+            compact["active_goal_reference"] = {
+                "chars": len(active_goal),
+                "sha256": sha256_text(active_goal),
+            }
+
+        active_run = compact.get("active_run")
+        if isinstance(active_run, dict):
+            run_text = active_run.pop("user_text", "")
+            if isinstance(run_text, str) and run_text:
+                semantic["active_run_user_text"] = run_text
+                active_run["user_text_reference"] = {
+                    "chars": len(run_text),
+                    "sha256": sha256_text(run_text),
+                }
+        return compact, semantic
+
+    def generate_communication_status(
+        self,
+        *,
+        target_session_id: str,
+        question: str,
+        mechanical_status: dict[str, Any],
+        source_events: list[HistoryEvent],
+    ) -> dict[str, Any]:
+        """Interpret a worker snapshot in an independent, separately budgeted call."""
+        status_question = question.strip()
+        if not status_question:
+            raise ValueError("status question must not be empty")
+        operation_state = self.create_or_load_session(
+            new_id("operation_communication_status")
+        )
+        run_id = f"{operation_state.session_id}:{new_id('run')}"
+        source_references = [
+            self._communication_evidence_reference(event) for event in source_events
+        ]
+        self.history.set_active_run(
+            operation_state.session_id,
+            run_id=run_id,
+            user_text=status_question,
+        )
+        self.history.record_event(
+            operation_state,
+            "communication_status_requested",
+            {
+                "target_session_id": target_session_id,
+                "question": status_question,
+                "mechanical_status": to_jsonable(mechanical_status),
+                "source_event_references": source_references,
+            },
+        )
+        self._heartbeat(
+            operation_state,
+            run_id=run_id,
+            phase="semantic_status",
+            detail=f"interpreting status for {target_session_id}",
+        )
+        with self.telemetry.agent_invocation(
+            session_id=operation_state.session_id,
+            run_id=run_id,
+            model_name=self.config.model.model_identity,
+        ):
+            try:
+                result = self._generate_communication_status(
+                    operation_state,
+                    target_session_id=target_session_id,
+                    question=status_question,
+                    mechanical_status=mechanical_status,
+                    source_events=source_events,
+                )
+                self.history.record_event(
+                    operation_state,
+                    "communication_status_generated",
+                    {
+                        "target_session_id": target_session_id,
+                        "question": status_question,
+                        "status": result,
+                        "mechanical_status": to_jsonable(mechanical_status),
+                        "source_event_references": source_references,
+                        "evidence_projected": bool(result["evidence_projected"]),
+                    },
+                )
+                self._heartbeat(
+                    operation_state,
+                    run_id=run_id,
+                    phase="completed",
+                    detail="semantic status completed",
+                )
+                return result
+            except RunCancellationRequested as exc:
+                self.preemption.complete_run_cancellation(
+                    operation_state.session_id, run_id
+                )
+                self._heartbeat(
+                    operation_state,
+                    run_id=run_id,
+                    phase="cancelled",
+                    detail=str(exc),
+                )
+                raise
+            except Exception as exc:
+                self.history.record_event(
+                    operation_state,
+                    "communication_status_unavailable",
+                    {
+                        "target_session_id": target_session_id,
+                        "question": status_question,
+                        "error": str(exc),
+                        "error_type": type(exc).__name__,
+                        "source_event_references": source_references,
+                    },
+                )
+                self._heartbeat(
+                    operation_state,
+                    run_id=run_id,
+                    phase="failed",
+                    detail=f"{type(exc).__name__}: {exc}",
+                )
+                raise
+            finally:
+                self.history.clear_active_run(
+                    operation_state.session_id, run_id=run_id
+                )
+
+    def _generate_communication_status(
+        self,
+        state: SessionState,
+        *,
+        target_session_id: str,
+        question: str,
+        mechanical_status: dict[str, Any],
+        source_events: list[HistoryEvent],
+    ) -> dict[str, Any]:
+        contract = communication_status_contract()
+        evidence_rows = [
+            self._communication_evidence_row(event) for event in source_events
+        ]
+        prompt_mechanical_status, runtime_semantic_evidence = (
+            self._communication_status_prompt_state(mechanical_status)
+        )
+        source_references = [
+            self._communication_evidence_reference(event) for event in source_events
+        ]
+        valid_sequences = {event.sequence for event in source_events}
+        exact_evidence = stable_json_dumps(
+            {
+                "runtime_semantic_evidence": runtime_semantic_evidence,
+                "durable_events": evidence_rows,
+            },
+            indent=None,
+        )
+        exact_evidence_tokens = self._counter(state).count_text(exact_evidence).tokens
+        context_limit_resolution = self._resolve_context_limit()
+        minimum_output_tokens = 128
+        desired_output_tokens = min(512, context_limit_resolution[0])
+        evidence_projection = ""
+        evidence_projected = False
+        projection_target_tokens: int | None = None
+        projection_budget_report: dict[str, Any] | None = None
+        validation_feedback = ""
+        validation_attempt = 0
+        reduction_round = 0
+        max_validation_attempts = max(1, int(self.config.model.max_retries) + 1)
+        max_reduction_rounds = max(0, int(self.config.context.max_compaction_rounds))
+        remaining_projection_calls = [max(16, max_reduction_rounds * 16)]
+
+        def validate(payload: dict[str, Any]) -> dict[str, Any]:
+            if contract.json_schema is not None:
+                _validate_schema_value(
+                    payload,
+                    contract.json_schema,
+                    path="communication_status",
+                )
+            for key in ("answer", "situation", "action", "reason"):
+                if not str(payload.get(key, "")).strip():
+                    raise ValueError(f"communication_status.{key} must not be empty")
+            cited = payload.get("evidence_sequences", [])
+            unknown = sorted({int(sequence) for sequence in cited} - valid_sequences)
+            if unknown:
+                raise ValueError(
+                    "communication_status.evidence_sequences cites unavailable "
+                    f"target event sequences: {unknown}"
+                )
+            return payload
+
+        while True:
+            assembly = self.prompts.build_communication_status_prompt(
+                question=question,
+                mechanical_status=prompt_mechanical_status,
+                evidence_rows=[] if evidence_projected else evidence_rows,
+                runtime_semantic_evidence=(
+                    None if evidence_projected else runtime_semantic_evidence
+                ),
+                evidence_projection=evidence_projection,
+                validation_feedback=validation_feedback,
+            )
+            compilation = self._compile_context(
+                state,
+                assembly,
+                contract,
+                minimum_output_tokens=minimum_output_tokens,
+                desired_output_tokens=desired_output_tokens,
+                context_limit_resolution=context_limit_resolution,
+            )
+            cap_error = "" if compilation.report.fits else "context_limit_exceeded"
+            self.history.record_event(
+                state,
+                "context_compiled",
+                {
+                    "kind": "communication_status",
+                    "prompt_mode": "lean",
+                    "accounting": compilation.accounting(),
+                    "cap_error": cap_error,
+                    "reduction_round": reduction_round,
+                    "validation_attempt": validation_attempt,
+                },
+            )
+            self.history.record_event(
+                state,
+                "budget_checked",
+                {
+                    "kind": "communication_status",
+                    "prompt_mode": "lean",
+                    "budget_report": asdict(compilation.report),
+                    "cap_error": cap_error,
+                    "reduction_round": reduction_round,
+                    "validation_attempt": validation_attempt,
+                },
+            )
+            if compilation.report.fits:
+                self._record_prompt_built(
+                    state, assembly, contract, compilation.report
+                )
+                try:
+                    payload, final_prepared = self._execute_with_output_recovery(
+                        state,
+                        PreparedCall(
+                            assembly,
+                            compilation.report,
+                            "lean",
+                            contract,
+                        ),
+                        minimum_output_tokens=minimum_output_tokens,
+                        desired_output_tokens=desired_output_tokens,
+                        validator=validate,
+                        context_limit_resolution=context_limit_resolution,
+                    )
+                except _OutputRecoveryContextOverflow as exc:
+                    compilation = exc.compilation
+                    minimum_output_tokens = exc.minimum_output_tokens
+                except ValueError as exc:
+                    validation_attempt += 1
+                    self.history.record_event(
+                        state,
+                        "communication_status_rejected",
+                        {
+                            "target_session_id": target_session_id,
+                            "attempt": validation_attempt,
+                            "reason": str(exc),
+                        },
+                    )
+                    if validation_attempt >= max_validation_attempts:
+                        raise
+                    validation_feedback = str(exc)
+                    continue
+                else:
+                    importance = str(payload["importance"])
+                    importance_rank = {
+                        "minor": 1,
+                        "normal": 2,
+                        "major": 3,
+                        "critical": 4,
+                    }[importance]
+                    cited_sequences = sorted(
+                        {int(sequence) for sequence in payload["evidence_sequences"]}
+                    )
+                    return {
+                        "answer": str(payload["answer"]).strip(),
+                        "situation": str(payload["situation"]).strip(),
+                        "action": str(payload["action"]).strip(),
+                        "reason": str(payload["reason"]).strip(),
+                        "importance": importance,
+                        "importance_rank": importance_rank,
+                        "evidence_sequences": cited_sequences,
+                        "uncertainty": str(payload["uncertainty"]).strip(),
+                        "target_session_id": target_session_id,
+                        "generated_at": utc_now_iso(),
+                        "source_event_references": source_references,
+                        "evidence_projected": evidence_projected,
+                        "projection_target_tokens": projection_target_tokens,
+                        "projection_budget_report": projection_budget_report,
+                        "status_budget_report": asdict(final_prepared.report),
+                    }
+
+            if (
+                not self.config.context.compact_on_overflow
+                or reduction_round >= max_reduction_rounds
+                or (not evidence_rows and not runtime_semantic_evidence)
+            ):
+                raise BudgetExceededError(
+                    "Communication status evidence does not fit after bounded semantic reduction",
+                    compilation.report,
+                )
+
+            placeholder = self.prompts.build_communication_status_prompt(
+                question=question,
+                mechanical_status=prompt_mechanical_status,
+                evidence_rows=[],
+                runtime_semantic_evidence=None,
+                evidence_projection="[purpose-specific evidence projection]",
+                validation_feedback=validation_feedback,
+            )
+            base_compilation = self._compile_context(
+                state,
+                placeholder,
+                contract,
+                minimum_output_tokens=minimum_output_tokens,
+                desired_output_tokens=desired_output_tokens,
+                context_limit_resolution=context_limit_resolution,
+            )
+            projection_capacity = (
+                base_compilation.available_input_tokens
+                - base_compilation.report.input_tokens
+            )
+            if projection_capacity < 32:
+                raise BudgetExceededError(
+                    "Communication status has no room for a semantic evidence projection",
+                    base_compilation.report,
+                )
+            reduction = max(32, compilation.overflow_tokens + 16)
+            previous_target = (
+                exact_evidence_tokens
+                if projection_target_tokens is None
+                else projection_target_tokens
+            )
+            projection_plan = self.context_compiler.plan(
+                call_kind="evidence_projection",
+                context_limit=context_limit_resolution[0],
+            )
+            projection_target_tokens = min(
+                projection_capacity,
+                max(32, int(projection_plan.output_tokens) - 64),
+                max(32, previous_target - reduction),
+            )
+            projection, projection_report = self._reduce_text_hierarchically(
+                state,
+                source_text=exact_evidence,
+                source_label=(
+                    f"exact authoritative evidence for target session {target_session_id}"
+                ),
+                target_tokens=projection_target_tokens,
+                contract=evidence_projection_contract(),
+                output_key="projection",
+                build_assembly=lambda text, label, target: (
+                    self.prompts.build_evidence_projection_prompt(
+                        purpose=question,
+                        source_label=label,
+                        raw_evidence=text,
+                        target_tokens=target,
+                    )
+                ),
+                remaining_calls=remaining_projection_calls,
+                context_limit_resolution=context_limit_resolution,
+            )
+            evidence_projection = projection
+            evidence_projected = True
+            projection_budget_report = asdict(projection_report)
+            reduction_round += 1
+
     def generate_caller_structured_output(
         self,
         state: SessionState,
@@ -1490,43 +1894,37 @@ class AgentRuntime:
                 return event.sequence, projection, projected_tokens
         return None
 
-    def _project_tool_result_text_hierarchically(
+    def _reduce_text_hierarchically(
         self,
         state: SessionState,
         *,
-        original_request: str,
-        tool_name: str,
         source_text: str,
-        source_event_sequence: int,
-        source_event_hash: str,
+        source_label: str,
         target_tokens: int,
+        contract: ContractSpec,
+        output_key: str,
+        build_assembly: Callable[[str, str, int], PromptAssembly],
         remaining_calls: list[int],
+        context_limit_resolution: tuple[int, str] | None = None,
         depth: int = 0,
     ) -> tuple[str, BudgetReport]:
-        contract = tool_result_projection_contract()
         minimum_output_tokens = min(
             target_tokens + 64,
             self.config.context.reserved_response_tokens,
         )
-        assembly = self.prompts.build_tool_result_projection_prompt(
-            original_request=original_request,
-            tool_name=tool_name,
-            raw_tool_result=source_text,
-            source_event_sequence=source_event_sequence,
-            source_event_hash=source_event_hash,
-            target_tokens=target_tokens,
-        )
+        assembly = build_assembly(source_text, source_label, target_tokens)
         compilation = self._compile_context(
             state,
             assembly,
             contract,
             minimum_output_tokens=minimum_output_tokens,
+            context_limit_resolution=context_limit_resolution,
             desired_output_tokens=target_tokens + 64,
         )
         if compilation.report.fits:
             if remaining_calls[0] <= 0:
                 raise BudgetExceededError(
-                    "Tool-result projection exhausted its bounded semantic call budget",
+                    f"{assembly.kind} exhausted its bounded semantic call budget",
                     compilation.report,
                 )
             remaining_calls[0] -= 1
@@ -1534,7 +1932,7 @@ class AgentRuntime:
                 state,
                 "context_compiled",
                 {
-                    "kind": "tool_result_projection",
+                    "kind": assembly.kind,
                     "prompt_mode": "lean",
                     "accounting": compilation.accounting(),
                     "hierarchical_depth": depth,
@@ -1546,6 +1944,16 @@ class AgentRuntime:
                 contract,
                 compilation.report,
             )
+
+            def validate_reduction(payload: dict[str, Any]) -> dict[str, Any]:
+                if contract.json_schema is not None:
+                    _validate_schema_value(
+                        payload,
+                        contract.json_schema,
+                        path=contract.name,
+                    )
+                return payload
+
             try:
                 payload, final_prepared = self._execute_with_output_recovery(
                     state,
@@ -1557,18 +1965,20 @@ class AgentRuntime:
                     ),
                     minimum_output_tokens=minimum_output_tokens,
                     desired_output_tokens=target_tokens + 64,
+                    validator=validate_reduction,
+                    context_limit_resolution=context_limit_resolution,
                 )
             except _OutputRecoveryContextOverflow:
                 pass
             else:
-                projection = str(payload.get("projection", "")).strip()
-                if not projection:
-                    raise ValueError("tool-result projection must not be empty")
-                return projection, final_prepared.report
+                reduced = str(payload.get(output_key, "")).strip()
+                if not reduced:
+                    raise ValueError(f"{assembly.kind} output must not be empty")
+                return reduced, final_prepared.report
 
         if depth >= 16 or len(source_text) < 2:
             raise BudgetExceededError(
-                "An exact tool result cannot be segmented enough to fit the projection operation",
+                f"An exact source cannot be segmented enough to fit {assembly.kind}",
                 compilation.report,
             )
         midpoint = len(source_text) // 2
@@ -1578,33 +1988,67 @@ class AgentRuntime:
             (source_text[:midpoint], source_text[midpoint:]),
             start=1,
         ):
-            projection, _report = self._project_tool_result_text_hierarchically(
+            projection, _report = self._reduce_text_hierarchically(
                 state,
-                original_request=original_request,
-                tool_name=f"{tool_name} exact fragment {index}/2",
                 source_text=fragment_text,
-                source_event_sequence=source_event_sequence,
-                source_event_hash=source_event_hash,
+                source_label=f"{source_label} exact fragment {index}/2",
                 target_tokens=child_target,
+                contract=contract,
+                output_key=output_key,
+                build_assembly=build_assembly,
                 remaining_calls=remaining_calls,
+                context_limit_resolution=context_limit_resolution,
                 depth=depth + 1,
             )
             fragments.append(projection)
-        return self._project_tool_result_text_hierarchically(
+        return self._reduce_text_hierarchically(
             state,
-            original_request=original_request,
-            tool_name=f"{tool_name} semantic fragment projections",
             source_text=(
                 "[SEMANTIC PROJECTION OF EXACT FRAGMENT 1]\n"
                 + fragments[0]
                 + "\n\n[SEMANTIC PROJECTION OF EXACT FRAGMENT 2]\n"
                 + fragments[1]
             ),
-            source_event_sequence=source_event_sequence,
-            source_event_hash=source_event_hash,
+            source_label=f"{source_label} semantic fragment projections",
             target_tokens=target_tokens,
+            contract=contract,
+            output_key=output_key,
+            build_assembly=build_assembly,
             remaining_calls=remaining_calls,
+            context_limit_resolution=context_limit_resolution,
             depth=depth + 1,
+        )
+
+    def _project_tool_result_text_hierarchically(
+        self,
+        state: SessionState,
+        *,
+        original_request: str,
+        tool_name: str,
+        source_text: str,
+        source_event_sequence: int,
+        source_event_hash: str,
+        target_tokens: int,
+        remaining_calls: list[int],
+    ) -> tuple[str, BudgetReport]:
+        return self._reduce_text_hierarchically(
+            state,
+            source_text=source_text,
+            source_label=tool_name,
+            target_tokens=target_tokens,
+            contract=tool_result_projection_contract(),
+            output_key="projection",
+            build_assembly=lambda text, label, target: (
+                self.prompts.build_tool_result_projection_prompt(
+                    original_request=original_request,
+                    tool_name=label,
+                    raw_tool_result=text,
+                    source_event_sequence=source_event_sequence,
+                    source_event_hash=source_event_hash,
+                    target_tokens=target,
+                )
+            ),
+            remaining_calls=remaining_calls,
         )
 
     def _create_tool_result_projection(
@@ -2555,7 +2999,12 @@ class AgentRuntime:
                 resolved = self.preemption.wait_for_status(
                     pending.preemption_id,
                     {"completed", "failed"},
-                    timeout_seconds=max(1.0, float(policy.effective_timeout_seconds)),
+                    timeout_seconds=max(
+                        1.0,
+                        float(policy.effective_timeout_seconds),
+                        float(self.config.model.timeout_seconds),
+                        float(self.config.model.structured_timeout_seconds),
+                    ),
                     poll_seconds=0.02,
                 )
                 if resolved.status == "failed":
@@ -2945,6 +3394,7 @@ class AgentRuntime:
         ]
         active_run = self.history.read_active_run(state.session_id)
         return {
+            "status_kind": "mechanical",
             "session_id": state.session_id,
             "session_name": state.session_name,
             "active_goal": latest_user,
@@ -2963,6 +3413,46 @@ class AgentRuntime:
             "turn_count": state.turn_count,
             "event_count": state.event_count,
         }
+
+    def latest_semantic_status_payload(
+        self, state: SessionState
+    ) -> dict[str, Any] | None:
+        candidates: list[tuple[str, dict[str, Any]]] = []
+        for event in reversed(self.history.read_history(state.session_id)):
+            if event.event_type != "agent_status":
+                continue
+            candidates.append(
+                (
+                    event.timestamp,
+                    {
+                        **to_jsonable(event.payload),
+                        "status_kind": "worker_action_status",
+                        "status_event_sequence": event.sequence,
+                        "status_event_hash": event.hash,
+                    },
+                )
+            )
+            break
+
+        # Independent status calls use their own append-only operation session,
+        # so they never race with or mutate the target worker history.
+        event = self.history.latest_communication_status(state.session_id)
+        if event is not None:
+            status = event.payload.get("status")
+            if isinstance(status, dict):
+                candidates.append(
+                    (
+                        event.timestamp,
+                        {
+                            **to_jsonable(status),
+                            "status_kind": "independent_communication_status",
+                            "status_operation_session_id": event.session_id,
+                            "status_event_sequence": event.sequence,
+                            "status_event_hash": event.hash,
+                        },
+                    )
+                )
+        return max(candidates, key=lambda item: item[0])[1] if candidates else None
 
     def queue_control_message(
         self,

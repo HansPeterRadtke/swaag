@@ -54,6 +54,33 @@ def tool_result_projection_contract() -> ContractSpec:
     )
 
 
+def evidence_projection_contract() -> ContractSpec:
+    return _contract(
+        "evidence_projection",
+        _closed_object({"projection": _string()}),
+    )
+
+
+def communication_status_contract() -> ContractSpec:
+    return _contract(
+        "communication_status",
+        _closed_object(
+            {
+                "answer": _string(),
+                "situation": _string(),
+                "action": _string(),
+                "reason": _string(),
+                "importance": {
+                    "type": "string",
+                    "enum": ["minor", "normal", "major", "critical"],
+                },
+                "evidence_sequences": _array({"type": "integer"}),
+                "uncertainty": _string(),
+            }
+        ),
+    )
+
+
 def completion_evaluation_contract() -> ContractSpec:
     return _contract(
         "completion_evaluation",

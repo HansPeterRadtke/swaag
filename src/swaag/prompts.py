@@ -474,6 +474,147 @@ class PromptBuilder:
             components=components,
         )
 
+    def build_evidence_projection_prompt(
+        self,
+        *,
+        purpose: str,
+        source_label: str,
+        raw_evidence: str,
+        target_tokens: int,
+    ) -> PromptAssembly:
+        system_prompt = self._load_template(
+            self._config.prompts.evidence_projection_system_template
+        )
+        user_text = self._load_template(
+            self._config.prompts.evidence_projection_template
+        ).format(
+            purpose=purpose,
+            source_label=source_label,
+            raw_evidence=raw_evidence,
+            target_tokens=max(1, int(target_tokens)),
+        )
+        return self._assemble_with_system(
+            "evidence_projection",
+            "lean",
+            system_prompt,
+            [
+                PromptComponent(
+                    name="evidence_projection_task",
+                    category="history",
+                    text=user_text,
+                )
+            ],
+        )
+
+    def build_communication_status_prompt(
+        self,
+        *,
+        question: str,
+        mechanical_status: dict,
+        evidence_rows: list[dict],
+        runtime_semantic_evidence: dict | None = None,
+        evidence_projection: str = "",
+        validation_feedback: str = "",
+    ) -> PromptAssembly:
+        components = [
+            PromptComponent(
+                name="communication_question",
+                category="current_user",
+                text=f"User status/history question, verbatim:\n{question}\n\n",
+            ),
+            PromptComponent(
+                name="mechanical_runtime_status",
+                category="runtime_state",
+                text=(
+                    "Deterministic runtime state (facts, not semantic interpretation):\n"
+                    + stable_json_dumps(mechanical_status, indent=None)
+                    + "\n\n"
+                ),
+            ),
+            PromptComponent(
+                name="status_evidence_header",
+                category="history",
+                text="Authoritative target-worker evidence, oldest to newest:\n",
+            ),
+        ]
+        if evidence_projection:
+            components.append(
+                PromptComponent(
+                    name="status_evidence_projection",
+                    category="history",
+                    text=(
+                        "[SEMANTIC PROJECTION; exact durable events remain authoritative and retrievable]\n"
+                        + evidence_projection.strip()
+                        + "\n\n"
+                    ),
+                )
+            )
+        else:
+            if runtime_semantic_evidence:
+                components.append(
+                    PromptComponent(
+                        name="runtime_semantic_evidence",
+                        category="history",
+                        text=(
+                            "[EXACT RUNTIME SEMANTIC SOURCE; not a durable event sequence]\n"
+                            + stable_json_dumps(runtime_semantic_evidence, indent=None)
+                            + "\n\n"
+                        ),
+                    )
+                )
+        if not evidence_projection and evidence_rows:
+            for row in evidence_rows:
+                sequence = int(row["sequence"])
+                components.append(
+                    PromptComponent(
+                        name=f"status_event_{sequence}",
+                        category="history",
+                        text=(
+                            f"[SOURCE EVENT sequence={sequence} hash={row['hash']}]\n"
+                            + stable_json_dumps(row, indent=None)
+                            + "\n\n"
+                        ),
+                    )
+                )
+        elif not evidence_projection and not runtime_semantic_evidence:
+            components.append(
+                PromptComponent(
+                    name="status_evidence_empty",
+                    category="history",
+                    text="(none)\n\n",
+                )
+            )
+        if validation_feedback.strip():
+            components.append(
+                PromptComponent(
+                    name="communication_status_validation_feedback",
+                    category="validation_feedback",
+                    text=(
+                        "The previous response was rejected by mechanical validation. "
+                        "Correct the stated error using the same authoritative evidence:\n"
+                        + validation_feedback.strip()
+                        + "\n\n"
+                    ),
+                )
+            )
+        components.append(
+            PromptComponent(
+                name="communication_status_instruction",
+                category="instruction",
+                text=self._load_template(
+                    self._config.prompts.communication_status_template
+                ),
+            )
+        )
+        return self._assemble_with_system(
+            "communication_status",
+            "lean",
+            self._load_template(
+                self._config.prompts.communication_status_system_template
+            ),
+            components,
+        )
+
     def build_summary_prompt(
         self,
         messages: list[Message],

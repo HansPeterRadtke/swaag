@@ -1,0 +1,9 @@
+Projection purpose:
+{purpose}
+
+Canonical source label: {source_label}
+
+Exact durable evidence:
+{raw_evidence}
+
+Produce a semantic projection for the stated purpose. The `projection` value should fit within approximately {target_tokens} tokens. Preserve exact details when they may affect correctness. Omit irrelevant bulk rather than truncating blindly.

@@ -70,6 +70,8 @@ Liveness must not depend on the worker explaining its own health. Expose determi
 
 Semantic status should receive enough context to be meaningful, potentially the overarching goal, current step, recent events, and deterministic state without the entire worker context. Prompt and context variants should be benchmarked. Critical questions and failures need a durable fallback every client can represent. Silent inactivity is not error reporting.
 
+The current status path implements that separation as its own constrained, context-compiled operation. It starts with the complete exact status evidence snapshot, reduces only after measured overflow, validates source-event citations, and records results or failures in an operation history without writing into the concurrently active worker history. Mechanical heartbeat state remains independently readable even if semantic interpretation fails.
+
 ## Interfaces and files
 
 Swaag should not be architected around voice, one browser UI, CLI text, or one proprietary client. Attachments are raw files or durable references plus user intent. The LLM decides whether content inspection is necessary. Copying images does not require image understanding; analyzing them does.

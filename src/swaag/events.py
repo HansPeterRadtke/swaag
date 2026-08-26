@@ -25,6 +25,10 @@ ALLOWED_EVENT_TYPES = frozenset(
         "completion_rejected",
         "completion_evaluation_unavailable",
         "caller_structured_output_created",
+        "communication_status_requested",
+        "communication_status_generated",
+        "communication_status_rejected",
+        "communication_status_unavailable",
         "budget_checked",
         "budget_rejected",
         "budget_repaired",
@@ -269,6 +273,36 @@ REQUIRED_PAYLOAD_KEYS: dict[str, frozenset[str]] = {
     "completion_evaluation_unavailable": frozenset({"reason", "budget_report"}),
     "caller_structured_output_created": frozenset(
         {"schema", "semantic_output", "evidence_source_references"}
+    ),
+    "communication_status_requested": frozenset(
+        {
+            "target_session_id",
+            "question",
+            "mechanical_status",
+            "source_event_references",
+        }
+    ),
+    "communication_status_generated": frozenset(
+        {
+            "target_session_id",
+            "question",
+            "status",
+            "mechanical_status",
+            "source_event_references",
+            "evidence_projected",
+        }
+    ),
+    "communication_status_rejected": frozenset(
+        {"target_session_id", "attempt", "reason"}
+    ),
+    "communication_status_unavailable": frozenset(
+        {
+            "target_session_id",
+            "question",
+            "error",
+            "error_type",
+            "source_event_references",
+        }
     ),
     "budget_checked": frozenset({"kind", "prompt_mode", "budget_report", "cap_error"}),
     "budget_rejected": frozenset({"kind", "prompt_mode", "reason", "budget_report"}),

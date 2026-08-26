@@ -109,8 +109,13 @@ def test_communication_store_prioritizes_stop_and_preserves_correlation(make_con
     stop = service.submit(state.session_id, "stop now")
     assert ordinary.correlation_id != pause.correlation_id != stop.correlation_id
     assert service.store.next_pending(state.session_id).correlation_id == stop.correlation_id
-    payload = json.loads(service.answer_status_question(state.session_id, "What is happening?"))
-    assert payload["session_id"] == state.session_id
+    runtime.generate_communication_status = lambda **kwargs: {  # type: ignore[method-assign]
+        "answer": "The session is idle.",
+        "source_event_references": [],
+        "evidence_projected": False,
+    }
+    answer = service.answer_status_question(state.session_id, "What is happening?")
+    assert answer == "The session is idle."
     service.store.set_status(stop.correlation_id, "completed", reply="stopped")
     completed = service.status(stop.correlation_id)
     assert completed.status == "completed"

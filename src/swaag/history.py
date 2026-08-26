@@ -372,12 +372,18 @@ class HistoryStore:
     def list_sessions(self) -> list[str]:
         return [entry["session_id"] for entry in self.list_session_entries()]
 
-    def list_session_entries(self) -> list[dict[str, Any]]:
+    def list_session_entries(
+        self, *, include_internal: bool = False
+    ) -> list[dict[str, Any]]:
         if not self.root.exists():
             return []
         entries: list[dict[str, Any]] = []
         for path in sorted(self.root.iterdir()):
-            if not path.is_dir() or not self.history_path(path.name).exists():
+            if (
+                not path.is_dir()
+                or not self.history_path(path.name).exists()
+                or (not include_internal and path.name.startswith("operation_"))
+            ):
                 continue
             entries.append(self._session_entry(path.name))
         entries.sort(
@@ -746,6 +752,40 @@ class HistoryStore:
 
     def read_history(self, session_id: str) -> list[HistoryEvent]:
         return list(self.iter_history(session_id))
+
+    def latest_communication_status(
+        self, target_session_id: str
+    ) -> HistoryEvent | None:
+        """Read the newest independent status without touching target history."""
+        for entry in self.list_session_entries(include_internal=True):
+            self._ensure_session_indexed(str(entry["session_id"]))
+        with self._sqlite_connect() as connection:
+            rows = connection.execute(
+                """
+                SELECT session_id, sequence, event_id, timestamp, event_type,
+                       payload_json, metadata_json, prev_hash, event_hash
+                FROM events
+                WHERE event_type='communication_status_generated'
+                ORDER BY timestamp DESC, sequence DESC
+                """
+            )
+            for row in rows:
+                payload = json.loads(str(row["payload_json"]))
+                if payload.get("target_session_id") != target_session_id:
+                    continue
+                return HistoryEvent(
+                    id=str(row["event_id"]),
+                    session_id=str(row["session_id"]),
+                    sequence=int(row["sequence"]),
+                    timestamp=str(row["timestamp"]),
+                    type=str(row["event_type"]),
+                    version=1,
+                    payload=payload,
+                    metadata=json.loads(str(row["metadata_json"])),
+                    prev_hash=row["prev_hash"],
+                    hash=str(row["event_hash"]),
+                )
+        return None
 
     def read_history_window(self, session_id: str, *, start_sequence: int, limit: int) -> list[HistoryEvent]:
         if start_sequence <= 0:

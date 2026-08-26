@@ -31,6 +31,20 @@ def _action(message: str) -> str:
     )
 
 
+def _status(message: str) -> str:
+    return json.dumps(
+        {
+            "answer": message,
+            "situation": "The worker status was interpreted from durable evidence.",
+            "action": "Report the evidence-backed snapshot.",
+            "reason": "The communication operation is independent of worker action selection.",
+            "importance": "normal",
+            "evidence_sequences": [],
+            "uncertainty": "No event citation was needed for this test response.",
+        }
+    )
+
+
 class _BaseClient:
     is_deterministic_test_client = True
 
@@ -95,9 +109,8 @@ class _PreemptReplayClient(_BaseClient):
     def send_completion(self, payload: dict[str, Any], *, timeout_seconds: int | None = None, progress_callback=None, cancel_check=None) -> CompletionResult:
         copied = json.loads(stable_json_dumps(payload, indent=None))
         self.requests.append(copied)
-        prompt = str(payload.get("prompt", ""))
-        if "communication assistant for another SWAAG agent" in prompt:
-            return self._result(payload, _action("The main agent is still working."))
+        if payload.get("contract") == "communication_status":
+            return self._result(payload, _status("The main agent is still working."))
         if self.first_main_request is None:
             self.first_main_request = copied
             self.main_started.set()
@@ -156,7 +169,12 @@ class _ImmediateClient(_BaseClient):
 
     def send_completion(self, payload: dict[str, Any], *, timeout_seconds: int | None = None, progress_callback=None, cancel_check=None) -> CompletionResult:
         self.requests.append(json.loads(stable_json_dumps(payload, indent=None)))
-        return self._result(payload, _action(self.answer))
+        response = (
+            _status(self.answer)
+            if payload.get("contract") == "communication_status"
+            else _action(self.answer)
+        )
+        return self._result(payload, response)
 
 
 def test_same_model_communication_preempts_and_exactly_replays_main_request(make_config) -> None:

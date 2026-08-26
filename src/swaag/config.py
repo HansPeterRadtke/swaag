@@ -103,10 +103,14 @@ class PromptConfig:
     summary_template: str
     tool_result_projection_system_template: str
     tool_result_projection_template: str
+    evidence_projection_system_template: str
+    evidence_projection_template: str
     completion_evaluation_system_template: str
     completion_evaluation_template: str
     caller_structured_output_system_template: str
     caller_structured_output_template: str
+    communication_status_system_template: str
+    communication_status_template: str
 
 
 @dataclass(slots=True)

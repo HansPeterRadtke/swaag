@@ -9,6 +9,7 @@ from swaag.utils import utc_now_iso
 WORKER_PHASES = frozenset({
     "starting", "context_compilation", "queued_inference", "inference", "tool_execution",
     "completion_evaluation", "structured_output", "waiting_for_user", "verification", "completed", "cancelled", "failed",
+    "semantic_status",
 })
 
 

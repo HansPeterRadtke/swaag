@@ -1,0 +1,1 @@
+Answer the supplied question concisely. Describe the relevant situation, current or next action, why that follows from evidence, semantic importance, supporting event sequences, and any uncertainty. Mechanical timestamps, process state, and liveness are facts supplied by the runtime; their meaning is your decision.

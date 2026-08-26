@@ -172,15 +172,6 @@ class CommunicationService:
         if request is not None:
             self.runtime.preemption.fail(request.preemption_id, f"{type(exc).__name__}: {exc}")
 
-    def _same_model_assistant_answer(self, session_id: str, question: str, status: dict[str, Any]) -> str:
-        prompt = (
-            "You are the communication assistant for another SWAAG agent. Answer the user's status/history question only from the target session evidence below. "
-            "Do not alter the target workspace or target session. If evidence is insufficient, say so.\n\n"
-            f"Target session id: {session_id}\nStatus: {json.dumps(status, sort_keys=True)}\nQuestion: {question}"
-        )
-        communication_session = self.runtime.create_or_load_user_session(f"communication-{session_id}")
-        return self.runtime.run_turn_in_session(communication_session, prompt).assistant_text
-
     def process_once(self, *, session_id: str | None = None) -> CommunicationRequest | None:
         request = self.store.next_pending(session_id)
         if request is None:
@@ -213,23 +204,23 @@ class CommunicationService:
         session_id = self.runtime.resolve_session_ref(session_ref, latest_if_none=True)
         if session_id is None:
             raise FileNotFoundError("No target session available")
-        state = self.runtime.history.rebuild_from_history(session_id, write_projections=False)
-        status = self.runtime.session_status_payload(state)
-        if self.assistant_runtime is not None:
-            prompt = (
-                "You are the communication assistant for another SWAAG agent. Answer the user's status/history question only from the target session evidence below. "
-                "Do not alter the target workspace. If evidence is insufficient, say so.\n\n"
-                f"Target session id: {session_id}\nStatus: {json.dumps(status, sort_keys=True)}\nQuestion: {question}"
-            )
-            communication_session = self.assistant_runtime.create_or_load_user_session(f"communication-{session_id}")
-            return self.assistant_runtime.run_turn_in_session(communication_session, prompt).assistant_text
-
         preemption = None
         try:
-            preemption = self._preempt_active_main_call(session_id, question)
-            if preemption is None:
-                return json.dumps(status, sort_keys=True)
-            answer = self._same_model_assistant_answer(session_id, question, status)
+            if self.assistant_runtime is None:
+                preemption = self._preempt_active_main_call(session_id, question)
+            state = self.runtime.history.rebuild_from_history(
+                session_id, write_projections=False
+            )
+            mechanical_status = self.runtime.session_status_payload(state)
+            source_events = self.runtime.history.read_history(session_id)
+            semantic_runtime = self.assistant_runtime or self.runtime
+            semantic_status = semantic_runtime.generate_communication_status(
+                target_session_id=session_id,
+                question=question,
+                mechanical_status=mechanical_status,
+                source_events=source_events,
+            )
+            answer = str(semantic_status["answer"])
             self._complete_preemption(preemption, target_changed=False, reply=answer)
             return answer
         except Exception as exc:

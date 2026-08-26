@@ -527,7 +527,8 @@ class WorkerManager:
         return {
             **asdict(record),
             "active_run": active_run,
-            "semantic_status": self.runtime.session_status_payload(state),
+            "mechanical_status": self.runtime.session_status_payload(state),
+            "semantic_status": self.runtime.latest_semantic_status_payload(state),
             "attachments": [
                 {
                     key: value
