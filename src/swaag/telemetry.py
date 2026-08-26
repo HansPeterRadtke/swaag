@@ -175,6 +175,21 @@ class OperationalTelemetry:
             unit="{token}",
             description="Measured context budget values and component sizes.",
         )
+        self._semantic_reductions = self.meter.create_counter(
+            "swaag.context.semantic_reduction",
+            unit="{reduction}",
+            description="Number of model-authored semantic reduction calls.",
+        )
+        self._semantic_reduction_targets = self.meter.create_histogram(
+            "swaag.context.semantic_reduction.target",
+            unit="{token}",
+            description="Requested output size for semantic reduction calls.",
+        )
+        self._history_compactions = self.meter.create_counter(
+            "swaag.history.compaction",
+            unit="{compaction}",
+            description="Number of durable history compaction operations.",
+        )
 
     def agent_invocation(
         self,
@@ -342,5 +357,55 @@ class OperationalTelemetry:
                     "swaag.context.component.category": component.category,
                     "swaag.context.component.in_context": component.include_in_context,
                     "swaag.context.component.optional": component.optional,
+                },
+            )
+
+    def record_semantic_reduction(
+        self,
+        *,
+        call_kind: str,
+        target_tokens: int,
+        hierarchical_depth: int,
+    ) -> None:
+        attributes = {
+            "swaag.context.call_kind": str(call_kind),
+            "swaag.context.hierarchical": int(hierarchical_depth) > 0,
+        }
+        self._semantic_reductions.add(1, attributes)
+        self._semantic_reduction_targets.record(
+            max(0, int(target_tokens)), attributes
+        )
+        current_span = trace.get_current_span()
+        if current_span.is_recording():
+            current_span.add_event(
+                "swaag.context.semantic_reduction",
+                {
+                    **attributes,
+                    "swaag.context.target_tokens": max(0, int(target_tokens)),
+                    "swaag.context.hierarchical_depth": max(
+                        0, int(hierarchical_depth)
+                    ),
+                },
+            )
+
+    def record_history_compaction(
+        self,
+        *,
+        source_message_count: int,
+        hierarchical: bool,
+    ) -> None:
+        attributes = {
+            "swaag.history.hierarchical": bool(hierarchical),
+        }
+        self._history_compactions.add(1, attributes)
+        current_span = trace.get_current_span()
+        if current_span.is_recording():
+            current_span.add_event(
+                "swaag.history.compacted",
+                {
+                    **attributes,
+                    "swaag.history.source_message_count": max(
+                        0, int(source_message_count)
+                    ),
                 },
             )

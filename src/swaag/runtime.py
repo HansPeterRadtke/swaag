@@ -1928,6 +1928,11 @@ class AgentRuntime:
                     compilation.report,
                 )
             remaining_calls[0] -= 1
+            self.telemetry.record_semantic_reduction(
+                call_kind=assembly.kind,
+                target_tokens=target_tokens,
+                hierarchical_depth=depth,
+            )
             self.history.record_event(
                 state,
                 "context_compiled",
@@ -2421,6 +2426,11 @@ class AgentRuntime:
                     compilation.report,
                 )
             remaining_calls[0] -= 1
+            self.telemetry.record_semantic_reduction(
+                call_kind="summary",
+                target_tokens=target_summary_tokens,
+                hierarchical_depth=depth,
+            )
             self.history.record_event(
                 state,
                 "context_compiled",
@@ -2561,6 +2571,11 @@ class AgentRuntime:
                 },
             )
             self._record_prompt_built(state, assembly, contract, report)
+            self.telemetry.record_semantic_reduction(
+                call_kind="summary",
+                target_tokens=target_summary_tokens,
+                hierarchical_depth=0,
+            )
             try:
                 payload, final_prepared = self._execute_with_output_recovery(
                     state,
@@ -2602,6 +2617,10 @@ class AgentRuntime:
             }
             self.history.record_event(state, "summary_created", event_payload)
             self.history.record_event(state, "history_compressed", event_payload)
+            self.telemetry.record_history_compaction(
+                source_message_count=effective_source_count,
+                hierarchical=False,
+            )
             return True
         source_messages = state.messages[:1]
         if source_messages:
@@ -2641,6 +2660,10 @@ class AgentRuntime:
             }
             self.history.record_event(state, "summary_created", event_payload)
             self.history.record_event(state, "history_compressed", event_payload)
+            self.telemetry.record_history_compaction(
+                source_message_count=1,
+                hierarchical=True,
+            )
             return True
         return False
 

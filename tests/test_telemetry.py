@@ -85,6 +85,15 @@ def test_genai_spans_metrics_and_context_accounting_follow_otel_conventions() ->
             context_limit_source="llama_cpp_props",
             report=report,
         )
+        telemetry.record_semantic_reduction(
+            call_kind="summary",
+            target_tokens=320,
+            hierarchical_depth=2,
+        )
+        telemetry.record_history_compaction(
+            source_message_count=7,
+            hierarchical=True,
+        )
         with telemetry.model_call(
             session_id="session-1",
             run_id="run-1",
@@ -135,6 +144,9 @@ def test_genai_spans_metrics_and_context_accounting_follow_otel_conventions() ->
         "gen_ai.execute_tool.duration",
         "swaag.context.compilation",
         "swaag.context.token.usage",
+        "swaag.context.semantic_reduction",
+        "swaag.context.semantic_reduction.target",
+        "swaag.history.compaction",
     }.issubset(metrics)
     token_points = metrics["gen_ai.client.token.usage"].data.data_points
     assert {
@@ -146,6 +158,20 @@ def test_genai_spans_metrics_and_context_accounting_follow_otel_conventions() ->
         and point.sum == 2_000
         for point in context_points
     )
+    reduction_points = metrics["swaag.context.semantic_reduction"].data.data_points
+    assert reduction_points[0].value == 1
+    assert reduction_points[0].attributes["swaag.context.call_kind"] == "summary"
+    assert reduction_points[0].attributes["swaag.context.hierarchical"] is True
+    target_points = metrics[
+        "swaag.context.semantic_reduction.target"
+    ].data.data_points
+    assert target_points[0].sum == 320
+    compaction_points = metrics["swaag.history.compaction"].data.data_points
+    assert compaction_points[0].value == 1
+    assert compaction_points[0].attributes["swaag.history.hierarchical"] is True
+    assert {
+        event.name for event in agent.events
+    } >= {"swaag.context.semantic_reduction", "swaag.history.compacted"}
 
     meter_provider.shutdown()
     tracer_provider.shutdown()
