@@ -36,6 +36,8 @@ For live llama.cpp calls, `GET /props` `default_generation_settings.n_ctx` is th
 
 Raw history and raw tool results remain durable. Context compilation selects projections. Candidate strategies include recent exact events plus older summaries, hierarchical summaries, semantic retrieval, and targeted re-reading of raw events. These are strategies to benchmark, not universal rules.
 
+Every derived history summary records session-aware exact source-event references/ranges and its own projection event. Prompt rendering labels it as derived and points to `history_window` for re-expansion. History search/window responses carry exact hashes, including for immutable archive shards; if those responses are later summarized or projected, their original cross-session lineage is propagated transitively. A projection may be reused only when its source event/hash matches and its measured size satisfies the new call's target.
+
 If a summary must fit a target token count, give the summarization operation that concrete target and enough task context to preserve relevant information. Re-tokenize the result and retry semantic reduction if necessary.
 
 Tool schemas also consume context. Support capability discovery or staged schema loading. The LLM selects semantically relevant capabilities; deterministic code calculates serialized cost and enforces permissions. Never destroy the only copy of source information because a prompt needs to become smaller.

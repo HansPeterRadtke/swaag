@@ -106,6 +106,7 @@ class HistorySearchTool(Tool):
         matches = [
             {
                 "sequence": item["sequence"],
+                "hash": item["hash"],
                 "event_type": item["event_type"],
                 "timestamp": item["timestamp"],
                 "preview": item["preview"],
@@ -156,6 +157,16 @@ class HistorySearchTool(Tool):
             "matches": matches,
             "semantic_matches": semantic_matches,
             "semantic_index_error": semantic_index_error,
+            "source_event_references": [
+                {
+                    "session_id": result["session_id"],
+                    "sequence": item["sequence"],
+                    "hash": item["hash"],
+                    "event_type": item["event_type"],
+                    "relationship": "retrieved_history_event",
+                }
+                for item in matches
+            ],
         }
         event = ToolGeneratedEvent(
             "history_retrieved",
@@ -223,6 +234,16 @@ class HistoryWindowTool(Tool):
             "start_sequence": validated_input["start_sequence"],
             "event_count": len(events),
             "events": [to_jsonable(asdict(event)) for event in events],
+            "source_event_references": [
+                {
+                    "session_id": event.session_id,
+                    "sequence": event.sequence,
+                    "hash": event.hash,
+                    "event_type": event.event_type,
+                    "relationship": "retrieved_history_event",
+                }
+                for event in events
+            ],
         }
         event = ToolGeneratedEvent(
             "history_window_read",

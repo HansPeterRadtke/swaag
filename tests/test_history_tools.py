@@ -58,6 +58,8 @@ def test_history_search_tool_finds_ranked_exact_history(make_config, tmp_path: P
     assert result.output["match_count"] >= 1
     assert any("Blue Heron" in item["preview"] for item in result.output["matches"])
     assert all("payload" not in item for item in result.output["matches"])
+    assert all(item["hash"] for item in result.output["matches"])
+    assert all(item["hash"] for item in result.output["source_event_references"])
     assert [event.event_type for event in result.generated_events] == ["history_retrieved"]
 
 
@@ -109,6 +111,7 @@ def test_history_window_returns_exact_events(make_config, tmp_path: Path) -> Non
     assert [event["sequence"] for event in events] == [2, 3]
     assert events[0]["payload"]["message"]["content"] == "Deployment codename is Blue Heron."
     assert events[1]["payload"]["output"]["text"] == "artifact-marker-73"
+    assert all(item["hash"] for item in result.output["source_event_references"])
     assert [event.event_type for event in result.generated_events] == ["history_window_read"]
 
 

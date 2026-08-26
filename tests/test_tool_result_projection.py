@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from swaag.grammar import tool_result_projection_contract
+from swaag.runtime import AgentRuntime
 from swaag.prompts import PromptBuilder
 from swaag.types import Message
 
@@ -52,3 +53,45 @@ def test_projection_prompt_contains_goal_source_and_target(make_config):
     assert "locate the failing test" in assembly.prompt_text
     assert "sequence=12 hash=abc" in assembly.prompt_text
     assert "222 tokens" in assembly.prompt_text
+
+
+def test_runtime_reuses_only_matching_projection_that_meets_new_target(
+    make_config, tmp_path
+):
+    config = make_config()
+    config.sessions.root = tmp_path / "sessions"
+    runtime = AgentRuntime(config, model_client=object())
+    state = runtime.create_or_load_session()
+    event = runtime.history.record_event(
+        state,
+        "tool_result_projected",
+        {
+            "source_event_sequence": 12,
+            "source_event_hash": "abc",
+            "tool_name": "shell_command",
+            "target_tokens": 100,
+            "original_tokens": 800,
+            "projected_tokens": 80,
+            "overflow_tokens": 400,
+            "projection": "durable semantic projection",
+        },
+    )
+
+    assert runtime._stored_tool_result_projection(
+        state,
+        source_event_sequence=12,
+        source_event_hash="abc",
+        target_tokens=90,
+    ) == (event.sequence, "durable semantic projection", 80)
+    assert runtime._stored_tool_result_projection(
+        state,
+        source_event_sequence=12,
+        source_event_hash="abc",
+        target_tokens=70,
+    ) is None
+    assert runtime._stored_tool_result_projection(
+        state,
+        source_event_sequence=12,
+        source_event_hash="different",
+        target_tokens=90,
+    ) is None

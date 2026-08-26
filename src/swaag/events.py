@@ -19,6 +19,7 @@ ALLOWED_EVENT_TYPES = frozenset(
         "prompt_built",
         "context_compiled",
         "tool_result_projected",
+        "tool_result_projection_reused",
         "tool_result_projection_skipped",
         "completion_evaluated",
         "completion_rejected",
@@ -250,6 +251,15 @@ REQUIRED_PAYLOAD_KEYS: dict[str, frozenset[str]] = {
     "prompt_built": frozenset({"kind", "prompt_mode", "contract", "prompt", "components", "budget_report"}),
     "context_compiled": frozenset({"kind", "prompt_mode", "accounting"}),
     "tool_result_projected": frozenset({"source_event_sequence", "source_event_hash", "tool_name", "target_tokens", "original_tokens", "projected_tokens", "overflow_tokens", "projection"}),
+    "tool_result_projection_reused": frozenset(
+        {
+            "source_event_sequence",
+            "source_event_hash",
+            "projection_event_sequence",
+            "target_tokens",
+            "projected_tokens",
+        }
+    ),
     "tool_result_projection_skipped": frozenset({"source_event_sequence", "source_event_hash", "reason", "target_tokens", "original_tokens", "overflow_tokens", "budget_report"}),
     "completion_evaluated": frozenset({"complete", "reason", "remaining_work"}),
     "completion_rejected": frozenset({"action_index", "reason", "remaining_work"}),

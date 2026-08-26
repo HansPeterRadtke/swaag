@@ -11,9 +11,14 @@ from typing import Any, Callable
 import requests
 
 from swaag.action import ActionValidationError, AgentAction, action_from_payload
-from swaag.compression import summary_message_payload
+from swaag.compression import message_source_event_references, summary_message_payload
 from swaag.context_compiler import ContextCompilation, ContextCompiler
 from swaag.config import AgentConfig, load_config
+from swaag.embedding_index import (
+    AsyncEmbeddingIndexer,
+    DerivedEmbeddingIndex,
+    OpenAICompatibleEmbeddingProvider,
+)
 from swaag.environment.environment import AgentEnvironment
 from swaag.fsops import ensure_dir, restore_tree, snapshot_tree, write_text
 from swaag.grammar import agent_action_contract, completion_evaluation_contract, summary_contract, yes_no_contract
@@ -944,6 +949,29 @@ class AgentRuntime:
         target_tokens = max(64, current_tokens - overflow - max(32, int(current_tokens * 0.05)))
         if target_tokens >= current_tokens:
             return None
+        stored_projection = self._stored_tool_result_projection(
+            state,
+            source_event_sequence=sequence,
+            source_event_hash=str(message.metadata.get("source_event_hash", "")),
+            target_tokens=target_tokens,
+        )
+        if stored_projection is not None:
+            projection_event_sequence, projection, projected_tokens = stored_projection
+            self.history.record_event(
+                state,
+                "tool_result_projection_reused",
+                {
+                    "source_event_sequence": sequence,
+                    "source_event_hash": str(message.metadata.get("source_event_hash", "")),
+                    "source_event_references": message.metadata.get(
+                        "source_event_references", []
+                    ),
+                    "projection_event_sequence": projection_event_sequence,
+                    "target_tokens": target_tokens,
+                    "projected_tokens": projected_tokens,
+                },
+            )
+            return sequence, projection
         projection = self._create_tool_result_projection(
             state,
             original_request=original_request,
@@ -955,6 +983,27 @@ class AgentRuntime:
         if not projection:
             return None
         return sequence, projection
+
+    def _stored_tool_result_projection(
+        self,
+        state: SessionState,
+        *,
+        source_event_sequence: int,
+        source_event_hash: str,
+        target_tokens: int,
+    ) -> tuple[int, str, int] | None:
+        event = self.history.latest_tool_result_projection(
+            state.session_id,
+            source_event_sequence=source_event_sequence,
+            source_event_hash=source_event_hash,
+            max_projected_tokens=target_tokens,
+        )
+        if event is not None:
+            projection = str(event.payload.get("projection", "")).strip()
+            projected_tokens = event.payload.get("projected_tokens")
+            if projection and isinstance(projected_tokens, int):
+                return event.sequence, projection, projected_tokens
+        return None
 
     def _create_tool_result_projection(
         self,
@@ -1024,6 +1073,9 @@ class AgentRuntime:
             {
                 "source_event_sequence": sequence,
                 "source_event_hash": source_hash,
+                "source_event_references": message.metadata.get(
+                    "source_event_references", []
+                ),
                 "tool_name": message.name or "tool",
                 "target_tokens": target_tokens,
                 "original_tokens": original_tokens,
@@ -1249,13 +1301,19 @@ class AgentRuntime:
                 maximum=adaptive_cap,
             )
             effective_source_count = source_count - preserve_recent
+            source_event_references = message_source_event_references(
+                source_messages[:effective_source_count]
+            )
             summary_payload = summary_message_payload(
                 summary_text,
                 source_message_count=effective_source_count,
                 created_at=utc_now_iso(),
+                source_event_references=source_event_references,
             )
             event_payload = {
                 "source_message_count": effective_source_count,
+                "source_event_references": source_event_references,
+                "source_event_ranges": summary_payload["metadata"]["source_event_ranges"],
                 "summary_message": summary_payload,
                 "summary_budget_report": asdict(report),
                 "adaptive_preserve_recent_messages": preserve_recent,
@@ -1444,7 +1502,6 @@ class AgentRuntime:
                 if pending is None:
                     self.preemption.clear_active(state.session_id, call_id)
                     raise
-                self.preemption.mark_interrupted(pending.preemption_id)
                 guard.record(
                     "model_call_preempted",
                     {
@@ -1456,6 +1513,10 @@ class AgentRuntime:
                         "request_sha256": active_call.request_sha256,
                     },
                 )
+                # Publish the coordinator transition only after its canonical event.
+                # Communication may append target changes as soon as it observes
+                # "interrupted", so reversing this order creates a stale writer race.
+                self.preemption.mark_interrupted(pending.preemption_id)
                 resolved = self.preemption.wait_for_status(
                     pending.preemption_id,
                     {"completed", "failed"},
@@ -1594,7 +1655,7 @@ class AgentRuntime:
                 "error": str(exc),
                 "error_type": exc.__class__.__name__,
             }
-            guard.record("tool_error", error_payload)
+            tool_error_event = guard.record("tool_error", error_payload)
             guard.require_any("tool_called", "tool_error")
             self._record_message(
                 state,
@@ -1603,7 +1664,13 @@ class AgentRuntime:
                     name=decision.tool_name,
                     content=f"tool_error: {stable_json_dumps(error_payload, indent=2)}",
                     created_at=utc_now_iso(),
-                    metadata=error_payload,
+                    metadata={
+                        **error_payload,
+                        "source_event_sequence": tool_error_event.sequence,
+                        "source_event_hash": tool_error_event.hash,
+                        "source_event_type": tool_error_event.event_type,
+                        "source_event_session_id": tool_error_event.session_id,
+                    },
                 ),
             )
             return None
@@ -1622,6 +1689,9 @@ class AgentRuntime:
             raise HistoryInvariantError(
                 f"Tool {decision.tool_name} completed without required generated events: {', '.join(sorted(missing))}"
             )
+        nested_source_references = result.output.get("source_event_references", [])
+        if not isinstance(nested_source_references, list):
+            nested_source_references = []
         tool_result_event = guard.record(
             "tool_result",
             {
@@ -1629,6 +1699,7 @@ class AgentRuntime:
                 "raw_input": invocation.raw_input,
                 "validated_input": invocation.validated_input,
                 "output": to_jsonable(result.output),
+                "source_event_references": nested_source_references,
             },
         )
         guard.require_all("tool_called", "tool_result")
@@ -1647,6 +1718,8 @@ class AgentRuntime:
                     "source_event_sequence": tool_result_event.sequence,
                     "source_event_hash": tool_result_event.hash,
                     "source_event_type": tool_result_event.event_type,
+                    "source_event_session_id": tool_result_event.session_id,
+                    "source_event_references": nested_source_references,
                 },
             ),
         )

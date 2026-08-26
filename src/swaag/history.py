@@ -753,6 +753,73 @@ class HistoryStore:
         end_sequence = start_sequence + limit - 1
         return list(self.iter_history(session_id, start_sequence=start_sequence, end_sequence=end_sequence))
 
+    def latest_tool_result_projection(
+        self,
+        session_id: str,
+        *,
+        source_event_sequence: int,
+        source_event_hash: str,
+        max_projected_tokens: int,
+    ) -> HistoryEvent | None:
+        """Find a reusable durable projection without loading an entire active history."""
+        if self.history_path(session_id).exists():
+            self._ensure_session_indexed(session_id)
+            with self._sqlite_connect() as connection:
+                rows = connection.execute(
+                    """
+                    SELECT session_id, sequence, event_id, timestamp, event_type,
+                           payload_json, metadata_json, prev_hash, event_hash
+                    FROM events
+                    WHERE session_id=? AND event_type='tool_result_projected'
+                    ORDER BY sequence DESC
+                    """,
+                    (session_id,),
+                )
+                for row in rows:
+                    payload = json.loads(str(row["payload_json"]))
+                    if payload.get("source_event_sequence") != source_event_sequence:
+                        continue
+                    if source_event_hash and str(payload.get("source_event_hash", "")) != source_event_hash:
+                        continue
+                    projected_tokens = payload.get("projected_tokens")
+                    if (
+                        not isinstance(projected_tokens, int)
+                        or isinstance(projected_tokens, bool)
+                        or not 0 < projected_tokens <= max_projected_tokens
+                    ):
+                        continue
+                    return HistoryEvent(
+                        id=str(row["event_id"]),
+                        session_id=str(row["session_id"]),
+                        sequence=int(row["sequence"]),
+                        timestamp=str(row["timestamp"]),
+                        type=str(row["event_type"]),
+                        version=1,
+                        payload=payload,
+                        metadata=json.loads(str(row["metadata_json"])),
+                        prev_hash=row["prev_hash"],
+                        hash=str(row["event_hash"]),
+                    )
+            return None
+
+        # Archived histories are immutable and already read in bounded shards.
+        for event in reversed(HistoryArchiveStore(self.root).read_events(session_id)):
+            if event.event_type != "tool_result_projected":
+                continue
+            payload = event.payload
+            if payload.get("source_event_sequence") != source_event_sequence:
+                continue
+            if source_event_hash and str(payload.get("source_event_hash", "")) != source_event_hash:
+                continue
+            projected_tokens = payload.get("projected_tokens")
+            if (
+                isinstance(projected_tokens, int)
+                and not isinstance(projected_tokens, bool)
+                and 0 < projected_tokens <= max_projected_tokens
+            ):
+                return event
+        return None
+
     def iter_history_chunks(
         self,
         session_id: str,
@@ -1036,6 +1103,7 @@ class HistoryStore:
                 preview = stable_json_dumps(event.payload)[:preview_chars]
                 matches.append({
                     "sequence": event.sequence,
+                    "hash": event.hash,
                     "event_type": event.event_type,
                     "timestamp": event.timestamp,
                     "payload": to_jsonable(event.payload),
@@ -1131,6 +1199,7 @@ class HistoryStore:
         matches = [
             {
                 "sequence": event.sequence,
+                "hash": event.hash,
                 "event_type": event.event_type,
                 "timestamp": event.timestamp,
                 "payload": to_jsonable(event.payload),
@@ -1184,11 +1253,28 @@ class HistoryStore:
             state.session_name_source = str(payload.get("reason") or "explicit")
             return
         if event.event_type == "message_added":
-            state.messages.append(Message(**payload["message"]))
+            message = Message(**payload["message"])
+            message.metadata.setdefault("source_message_event_sequence", event.sequence)
+            message.metadata.setdefault("source_message_event_hash", event.hash)
+            message.metadata.setdefault("source_message_event_type", event.event_type)
+            message.metadata.setdefault("source_message_session_id", event.session_id)
+            state.messages.append(message)
             return
         if event.event_type in {"history_compacted", "history_compressed"}:
             source_count = int(payload["source_message_count"])
-            summary_message = Message(**payload["summary_message"])
+            summary_payload = dict(payload["summary_message"])
+            summary_metadata = dict(summary_payload.get("metadata", {}))
+            # Legacy summaries stored this projection fact beside Message
+            # fields. Normalize it into metadata while replaying old histories.
+            legacy_source_count = summary_payload.pop("source_message_count", None)
+            if legacy_source_count is not None:
+                summary_metadata.setdefault("source_message_count", int(legacy_source_count))
+            summary_payload["metadata"] = summary_metadata
+            summary_message = Message(**summary_payload)
+            summary_message.metadata.setdefault("projection_event_sequence", event.sequence)
+            summary_message.metadata.setdefault("projection_event_hash", event.hash)
+            summary_message.metadata.setdefault("projection_event_type", event.event_type)
+            summary_message.metadata.setdefault("projection_session_id", event.session_id)
             state.messages = [summary_message, *state.messages[source_count:]]
             state.compaction_count += 1
             return

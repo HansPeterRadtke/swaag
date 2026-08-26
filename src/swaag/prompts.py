@@ -3,6 +3,7 @@ from __future__ import annotations
 from importlib import resources
 from typing import Iterable
 
+from swaag.compression import summary_provenance_text
 from swaag.config import AgentConfig
 from swaag.types import Message, ModelCallKind, PromptAssembly, PromptComponent
 from swaag.utils import stable_json_dumps
@@ -66,7 +67,9 @@ class PromptBuilder:
             label = message.role.upper()
             if message.name:
                 label = f"{label}:{message.name}"
-            rendered.append(f"[{label}]\n{message.content.strip()}")
+            rendered.append(
+                f"[{label}]\n{summary_provenance_text(message)}{message.content.strip()}"
+            )
         return "\n\n".join(rendered)
 
     def message_prompt_components(
@@ -114,6 +117,8 @@ class PromptBuilder:
                         "[SEMANTIC PROJECTION; raw source remains authoritative and retrievable]\n"
                         + tool_result_projections[event_sequence].strip()
                     )
+            elif message.role == "summary":
+                provenance = summary_provenance_text(message)
             components.append(
                 PromptComponent(
                     name=component_name,

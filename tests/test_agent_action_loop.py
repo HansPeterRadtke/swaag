@@ -194,6 +194,32 @@ def test_output_limit_rebuilds_action_with_more_headroom(make_config) -> None:
     assert len(exhausted) == 1
 
 
+def test_history_compaction_creates_replayable_summary_with_exact_sources(
+    make_config,
+) -> None:
+    config = make_config(model__context_limit=32_000, context__max_recent_messages=2)
+    client = FakeModelClient(
+        [json.dumps({"summary": "Earlier facts summarized.", "preserve_recent_messages": 0})]
+    )
+    runtime = AgentRuntime(config, model_client=client)
+    state = runtime.create_or_load_session()
+    for role, content in (
+        ("user", "first"),
+        ("assistant", "second"),
+        ("user", "third"),
+        ("assistant", "fourth"),
+    ):
+        runtime._record_message(state, Message(role=role, content=content, created_at="t"))
+
+    assert runtime._compact_once(state) is True
+
+    assert state.messages[0].role == "summary"
+    assert state.messages[0].metadata["source_event_references"]
+    assert state.messages[0].metadata["projection_event_sequence"] > 0
+    rebuilt = runtime.history.rebuild_from_history(state.session_id, prefer_checkpoint=False)
+    assert rebuilt.messages == state.messages
+
+
 def test_multiple_tool_calls_execute_in_order_and_exact_results_reach_next_call(make_config) -> None:
     request = "Calculate 21 * 2 and 5 + 7, then tell me both results."
 

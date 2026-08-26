@@ -61,6 +61,43 @@ def test_derived_embedding_index_is_non_authoritative_and_ranked(tmp_path: Path)
     assert matches[0].score > matches[1].score
 
 
+def test_runtime_can_enable_background_derived_embedding_index(
+    make_config, tmp_path: Path, monkeypatch
+) -> None:
+    config = make_config()
+    config.sessions.root = tmp_path / "sessions"
+    config.embedding_index.enabled = True
+    config.embedding_index.base_url = "http://embedding.invalid"
+    config.embedding_index.model = "fake-embedding"
+    monkeypatch.setattr(
+        "swaag.runtime.OpenAICompatibleEmbeddingProvider",
+        lambda *_args, **_kwargs: _FakeEmbeddingProvider(),
+    )
+
+    runtime = AgentRuntime(config, model_client=object())
+    state = runtime.create_or_load_session()
+    runtime.history.record_event(
+        state,
+        "agent_status",
+        {
+            "action_index": 1,
+            "situation": "cache regression",
+            "action": "inspect release",
+            "reason": "network evidence",
+            "importance": "normal",
+            "importance_rank": 1,
+        },
+    )
+    assert runtime._embedding_indexer is not None
+    runtime._embedding_indexer.flush(timeout=2)
+    matches = runtime._embedding_indexer.index.search(
+        "cache regression", session_id=state.session_id, limit=1
+    )
+    runtime._embedding_indexer.close()
+
+    assert matches[0].field == "situation"
+
+
 def test_communication_store_prioritizes_stop_and_preserves_correlation(make_config, tmp_path: Path) -> None:
     config = make_config()
     config.sessions.root = tmp_path / "sessions"
