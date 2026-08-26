@@ -1472,6 +1472,123 @@ class AgentRuntime:
                 return event.sequence, projection, projected_tokens
         return None
 
+    def _project_tool_result_text_hierarchically(
+        self,
+        state: SessionState,
+        *,
+        original_request: str,
+        tool_name: str,
+        source_text: str,
+        source_event_sequence: int,
+        source_event_hash: str,
+        target_tokens: int,
+        remaining_calls: list[int],
+        depth: int = 0,
+    ) -> tuple[str, BudgetReport]:
+        contract = tool_result_projection_contract()
+        minimum_output_tokens = min(
+            target_tokens + 64,
+            self.config.context.reserved_response_tokens,
+        )
+        assembly = self.prompts.build_tool_result_projection_prompt(
+            original_request=original_request,
+            tool_name=tool_name,
+            raw_tool_result=source_text,
+            source_event_sequence=source_event_sequence,
+            source_event_hash=source_event_hash,
+            target_tokens=target_tokens,
+        )
+        compilation = self._compile_context(
+            state,
+            assembly,
+            contract,
+            minimum_output_tokens=minimum_output_tokens,
+            desired_output_tokens=target_tokens + 64,
+        )
+        if compilation.report.fits:
+            if remaining_calls[0] <= 0:
+                raise BudgetExceededError(
+                    "Tool-result projection exhausted its bounded semantic call budget",
+                    compilation.report,
+                )
+            remaining_calls[0] -= 1
+            self.history.record_event(
+                state,
+                "context_compiled",
+                {
+                    "kind": "tool_result_projection",
+                    "prompt_mode": "lean",
+                    "accounting": compilation.accounting(),
+                    "hierarchical_depth": depth,
+                },
+            )
+            self._record_prompt_built(
+                state,
+                assembly,
+                contract,
+                compilation.report,
+            )
+            try:
+                payload, final_prepared = self._execute_with_output_recovery(
+                    state,
+                    PreparedCall(
+                        assembly,
+                        compilation.report,
+                        "lean",
+                        contract,
+                    ),
+                    minimum_output_tokens=minimum_output_tokens,
+                    desired_output_tokens=target_tokens + 64,
+                )
+            except _OutputRecoveryContextOverflow:
+                pass
+            else:
+                projection = str(payload.get("projection", "")).strip()
+                if not projection:
+                    raise ValueError("tool-result projection must not be empty")
+                return projection, final_prepared.report
+
+        if depth >= 16 or len(source_text) < 2:
+            raise BudgetExceededError(
+                "An exact tool result cannot be segmented enough to fit the projection operation",
+                compilation.report,
+            )
+        midpoint = len(source_text) // 2
+        child_target = max(64, (target_tokens + 1) // 2)
+        fragments = []
+        for index, fragment_text in enumerate(
+            (source_text[:midpoint], source_text[midpoint:]),
+            start=1,
+        ):
+            projection, _report = self._project_tool_result_text_hierarchically(
+                state,
+                original_request=original_request,
+                tool_name=f"{tool_name} exact fragment {index}/2",
+                source_text=fragment_text,
+                source_event_sequence=source_event_sequence,
+                source_event_hash=source_event_hash,
+                target_tokens=child_target,
+                remaining_calls=remaining_calls,
+                depth=depth + 1,
+            )
+            fragments.append(projection)
+        return self._project_tool_result_text_hierarchically(
+            state,
+            original_request=original_request,
+            tool_name=f"{tool_name} semantic fragment projections",
+            source_text=(
+                "[SEMANTIC PROJECTION OF EXACT FRAGMENT 1]\n"
+                + fragments[0]
+                + "\n\n[SEMANTIC PROJECTION OF EXACT FRAGMENT 2]\n"
+                + fragments[1]
+            ),
+            source_event_sequence=source_event_sequence,
+            source_event_hash=source_event_hash,
+            target_tokens=target_tokens,
+            remaining_calls=remaining_calls,
+            depth=depth + 1,
+        )
+
     def _create_tool_result_projection(
         self,
         state: SessionState,
@@ -1486,76 +1603,38 @@ class AgentRuntime:
         source_hash = str(message.metadata.get("source_event_hash", ""))
         if not isinstance(sequence, int):
             return ""
-        contract = tool_result_projection_contract()
-        assembly = self.prompts.build_tool_result_projection_prompt(
-            original_request=original_request,
-            tool_name=message.name or "tool",
-            raw_tool_result=message.content,
-            source_event_sequence=sequence,
-            source_event_hash=source_hash,
-            target_tokens=target_tokens,
-        )
-        minimum_output_tokens = min(
-            target_tokens + 64,
-            self.config.context.reserved_response_tokens,
-        )
-        compilation = self._compile_context(
-            state,
-            assembly,
-            contract,
-            minimum_output_tokens=minimum_output_tokens,
-            desired_output_tokens=target_tokens + 64,
-        )
-        if not compilation.report.fits:
-            self.history.record_event(
-                state,
-                "tool_result_projection_skipped",
-                {
-                    "source_event_sequence": sequence,
-                    "source_event_hash": source_hash,
-                    "reason": "projection_prompt_does_not_fit",
-                    "target_tokens": target_tokens,
-                    "original_tokens": original_tokens,
-                    "overflow_tokens": overflow_tokens,
-                    "budget_report": asdict(compilation.report),
-                },
-            )
-            return ""
-        self.history.record_event(
-            state,
-            "context_compiled",
-            {
-                "kind": "tool_result_projection",
-                "prompt_mode": "lean",
-                "accounting": compilation.accounting(),
-            },
-        )
-        self._record_prompt_built(state, assembly, contract, compilation.report)
         try:
-            payload, _final_prepared = self._execute_with_output_recovery(
+            projection, final_report = self._project_tool_result_text_hierarchically(
                 state,
-                PreparedCall(assembly, compilation.report, "lean", contract),
-                minimum_output_tokens=minimum_output_tokens,
-                desired_output_tokens=target_tokens + 64,
+                original_request=original_request,
+                tool_name=message.name or "tool",
+                source_text=message.content,
+                source_event_sequence=sequence,
+                source_event_hash=source_hash,
+                target_tokens=target_tokens,
+                remaining_calls=[
+                    max(16, int(self.config.context.max_compaction_rounds) * 16)
+                ],
             )
-        except _OutputRecoveryContextOverflow as exc:
+        except (BudgetExceededError, OutputBudgetExhaustedError) as exc:
             self.history.record_event(
                 state,
                 "tool_result_projection_skipped",
                 {
                     "source_event_sequence": sequence,
                     "source_event_hash": source_hash,
-                    "reason": "output_recovery_context_does_not_fit",
+                    "reason": f"{type(exc).__name__}: {exc}",
                     "target_tokens": target_tokens,
                     "original_tokens": original_tokens,
                     "overflow_tokens": overflow_tokens,
-                    "minimum_output_tokens": exc.minimum_output_tokens,
-                    "budget_report": asdict(exc.compilation.report),
+                    "budget_report": (
+                        asdict(exc.report)
+                        if isinstance(exc, BudgetExceededError)
+                        and exc.report is not None
+                        else None
+                    ),
                 },
             )
-            return ""
-        projection = str(payload.get("projection", "")).strip()
-        if not projection:
             return ""
         projected_tokens = self._counter(state).count_text(projection).tokens
         self.history.record_event(
@@ -1572,6 +1651,7 @@ class AgentRuntime:
                 "original_tokens": original_tokens,
                 "projected_tokens": projected_tokens,
                 "overflow_tokens": overflow_tokens,
+                "projection_budget_report": asdict(final_report),
                 "projection": projection,
             },
         )
