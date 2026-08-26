@@ -7,6 +7,7 @@ from pathlib import Path
 import pytest
 
 from swaag.attachments import AttachmentStore
+from swaag.environment.artifacts import TextArtifactStore
 from swaag.runtime import AgentRuntime
 from swaag.task_api import TaskApi
 from swaag.tokens import ConservativeEstimator
@@ -144,6 +145,20 @@ def test_extract_attachment_retains_complete_derived_artifact(make_config, tmp_p
     history = runtime.history.read_history(state.session_id)
     assert any(event.event_type == "attachment_extracted" for event in history)
     assert any(event.event_type == "artifact_created" for event in history)
+
+    archived = runtime.history.archive_session(state.session_id, remove_active=True)
+    archived_store = TextArtifactStore(config.sessions.root, state.session_id)
+    archived_text = archived_store.read(
+        result.output["artifact_id"], start_offset=0, max_chars=1000
+    )
+    archived_manifest = archived_store.read(
+        result.output["manifest_artifact_id"], start_offset=0, max_chars=10_000
+    )
+
+    assert archived["artifact_count"] == 2
+    assert archived_text["text"] == "derived text from report.txt\n"
+    assert json.loads(archived_manifest["text"])["schema"] == "all2text.conversion_manifest.v1"
+    assert not (config.sessions.root / state.session_id).exists()
 
 
 def test_task_api_accepts_attachments_before_worker_start(make_config, tmp_path: Path) -> None:

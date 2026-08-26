@@ -208,9 +208,14 @@ class ExtractAttachmentTool(Tool):
         except ValueError as exc:
             raise RuntimeError("all2text returned an output path outside its extraction root") from exc
         full_text = output_path.read_text(encoding="utf-8")
-        artifact = TextArtifactStore(
+        artifact_store = TextArtifactStore(
             context.config.sessions.root, context.session_state.session_id
-        ).create(full_text, kind="attachment_extraction")
+        )
+        artifact = artifact_store.create(full_text, kind="attachment_extraction")
+        manifest_artifact = artifact_store.create(
+            stable_json_dumps(manifest, indent=2) + "\n",
+            kind="attachment_extraction_manifest",
+        )
         preview = full_text[: context.config.attachments.preview_chars]
         manifest_summary = {
             "schema": manifest.get("schema"),
@@ -238,6 +243,8 @@ class ExtractAttachmentTool(Tool):
             "profile": validated_input["profile"],
             "artifact_id": artifact.artifact_id,
             "artifact_sha256": artifact.sha256,
+            "manifest_artifact_id": manifest_artifact.artifact_id,
+            "manifest_artifact_sha256": manifest_artifact.sha256,
             "total_chars": artifact.size_chars,
             "text": preview,
             "truncated": len(preview) < len(full_text),
@@ -255,11 +262,21 @@ class ExtractAttachmentTool(Tool):
                 },
             ),
             ToolGeneratedEvent(
+                "artifact_created",
+                {
+                    "artifact_id": manifest_artifact.artifact_id,
+                    "kind": manifest_artifact.kind,
+                    "size_chars": manifest_artifact.size_chars,
+                    "sha256": manifest_artifact.sha256,
+                },
+            ),
+            ToolGeneratedEvent(
                 "attachment_extracted",
                 {
                     "attachment_id": reference.attachment_id,
                     "attachment_sha256": reference.sha256,
                     "artifact_id": artifact.artifact_id,
+                    "manifest_artifact_id": manifest_artifact.artifact_id,
                     "extractor": "all2text",
                     "profile": validated_input["profile"],
                     "manifest": manifest_summary,

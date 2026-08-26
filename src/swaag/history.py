@@ -1057,7 +1057,11 @@ class HistoryStore:
             str(entry_info.get("session_name") or session_id),
             events,
         )
+        artifact_count = 0
         if remove_active:
+            from swaag.environment.artifacts import TextArtifactStore
+
+            artifact_count = TextArtifactStore(self.root, session_id).archive()
             with self._sqlite_connect() as connection:
                 connection.execute("DELETE FROM events_fts WHERE session_id=?", (session_id,))
                 connection.execute("DELETE FROM events WHERE session_id=?", (session_id,))
@@ -1066,7 +1070,7 @@ class HistoryStore:
             if session_dir.exists():
                 import shutil
                 shutil.rmtree(session_dir)
-        return asdict(entry)
+        return {**asdict(entry), "artifact_count": artifact_count}
 
     def list_archived_sessions(self) -> list[dict[str, Any]]:
         return [asdict(item) for item in HistoryArchiveStore(self.root).list_entries()]

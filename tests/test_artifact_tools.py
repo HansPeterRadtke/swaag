@@ -56,6 +56,30 @@ def test_text_artifact_store_rejects_tampered_metadata_path(tmp_path: Path) -> N
         store.get(artifact.artifact_id)
 
 
+def test_text_artifact_store_archive_is_exact_and_read_only(tmp_path: Path) -> None:
+    store = TextArtifactStore(tmp_path, "session_a")
+    artifact = store.create("durable exact artifact", kind="test")
+
+    assert store.archive() == 1
+    assert store.archive() == 1
+    archived = store.get(artifact.artifact_id)
+
+    assert store.read(artifact.artifact_id, max_chars=100)["text"] == "durable exact artifact"
+    assert Path(archived.path).is_relative_to(tmp_path / "archives" / "artifacts")
+    assert Path(archived.path).stat().st_mode & 0o222 == 0
+    with pytest.raises(RuntimeError, match="archived session"):
+        store.create("late", kind="test")
+
+
+def test_text_artifact_store_rejects_tampered_content(tmp_path: Path) -> None:
+    store = TextArtifactStore(tmp_path, "session_a")
+    artifact = store.create("safe", kind="test")
+    Path(artifact.path).write_text("changed", encoding="utf-8")
+
+    with pytest.raises(ValueError, match="integrity"):
+        store.get(artifact.artifact_id)
+
+
 def test_read_artifact_tool_is_bounded_by_reader_config(make_config, tmp_path: Path) -> None:
     config = make_config()
     config.sessions.root = tmp_path / "sessions"
