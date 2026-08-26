@@ -105,6 +105,8 @@ class ToolRegistry:
         tools = [self.get(name) for name in config.tools.enabled if name != "load_tools"]
         result: list[Tool] = []
         for tool in tools:
+            if not tool.available(config):
+                continue
             if tool.kind == "stateful" and not config.tools.allow_stateful_tools:
                 continue
             if tool.kind == "side_effect" and not config.tools.allow_side_effect_tools:
@@ -142,6 +144,8 @@ class ToolRegistry:
         semantic_call: Callable[[SemanticCallRequest], dict] | None = None,
     ) -> tuple[Tool, ToolContext, ToolInvocation]:
         tool = self.get(name)
+        if not tool.available(config):
+            raise RuntimeError(f"Tool is unavailable in the current environment: {name}")
         session_copy = copy.deepcopy(session_state)
         context = ToolContext(
             config=config,

@@ -77,6 +77,9 @@ class Tool(abc.ABC):
     def prompt_tuple(self) -> tuple[str, str, dict[str, Any], str]:
         return self.name, self.description, self.input_schema, self.usage_guidance
 
+    def available(self, config: AgentConfig) -> bool:
+        return True
+
     def effective_kind(self, validated_input: dict[str, Any]) -> ToolKind:
         return self.kind
 

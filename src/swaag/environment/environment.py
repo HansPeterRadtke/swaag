@@ -873,6 +873,60 @@ class AgentEnvironment:
         generated = [ToolGeneratedEvent("process_killed", record_payload)]
         return BackgroundProcessUpdate(record=killed, tool_result=None, generated_events=generated, completed=True)
 
+    def _browser_raw_evidence(
+        self,
+        result: Any,
+        *,
+        kind: str,
+    ) -> tuple[dict[str, Any], dict[str, Any], list[ToolGeneratedEvent]]:
+        raw_stdout = result.process_result.stdout
+        raw_stderr = result.process_result.stderr
+        artifact = self.artifacts.create(raw_stdout, kind=f"{kind}_raw_response")
+        events = [
+            ToolGeneratedEvent(
+                "artifact_created",
+                {
+                    "artifact_id": artifact.artifact_id,
+                    "kind": artifact.kind,
+                    "size_chars": artifact.size_chars,
+                    "sha256": artifact.sha256,
+                },
+            )
+        ]
+        stderr_artifact_id = ""
+        stderr_sha256 = sha256_text(raw_stderr)
+        if raw_stderr:
+            stderr_artifact = self.artifacts.create(
+                raw_stderr, kind=f"{kind}_raw_stderr"
+            )
+            stderr_artifact_id = stderr_artifact.artifact_id
+            stderr_sha256 = stderr_artifact.sha256
+            events.append(
+                ToolGeneratedEvent(
+                    "artifact_created",
+                    {
+                        "artifact_id": stderr_artifact.artifact_id,
+                        "kind": stderr_artifact.kind,
+                        "size_chars": stderr_artifact.size_chars,
+                        "sha256": stderr_artifact.sha256,
+                    },
+                )
+            )
+        limit = int(self.config.environment.max_capture_chars)
+        process_record = asdict(result.process_result.record)
+        process_record["stdout"] = raw_stdout[:limit]
+        process_record["stderr"] = raw_stderr[:limit]
+        process_record["output_artifacts"] = {
+            "artifact_id": artifact.artifact_id,
+            "artifact_sha256": artifact.sha256,
+            "artifact_chars": artifact.size_chars,
+            "stderr_artifact_id": stderr_artifact_id,
+            "stderr_sha256": stderr_sha256,
+            "stderr_chars": len(raw_stderr),
+        }
+        evidence = dict(process_record["output_artifacts"])
+        return evidence, process_record, events
+
     def browser_search(self, *, query: str, engine: str, limit: int) -> ToolExecutionResult:
         result = run_aubro_command(
             config=self.config,
@@ -888,15 +942,21 @@ class AgentEnvironment:
             raise ToolValidationError("aubro search returned invalid results payload")
         if not isinstance(raw_attempts, list):
             raise ToolValidationError("aubro search returned invalid attempts payload")
-        results = [
-            {
-                "title": str(item.get("title", "")),
-                "url": str(item.get("url", "")),
-                "snippet": str(item.get("snippet", ""))[: self.config.environment.aubro_max_text_chars],
-            }
-            for item in raw_results[: self.config.environment.aubro_max_results]
-            if isinstance(item, dict)
-        ]
+        results = []
+        for item in raw_results[: self.config.environment.aubro_max_results]:
+            if not isinstance(item, dict):
+                continue
+            raw_snippet = str(item.get("snippet", ""))
+            snippet = raw_snippet[: self.config.environment.aubro_max_text_chars]
+            results.append(
+                {
+                    "title": str(item.get("title", "")),
+                    "url": str(item.get("url", "")),
+                    "snippet": snippet,
+                    "snippet_chars": len(raw_snippet),
+                    "snippet_truncated": len(snippet) < len(raw_snippet),
+                }
+            )
         attempts = [
             {
                 "engine": str(item.get("engine", "")),
@@ -907,18 +967,33 @@ class AgentEnvironment:
             for item in raw_attempts[: self.config.environment.aubro_max_results]
             if isinstance(item, dict)
         ]
+        evidence, record, artifact_events = self._browser_raw_evidence(
+            result, kind="browser_search"
+        )
         output = {
             "query": str(payload.get("query", query)),
             "engine": str(payload.get("engine", engine)),
             "url": str(payload.get("url", "")),
-            "result_count": len(results),
+            "result_count": len(raw_results),
+            "returned_result_count": len(results),
+            "results_truncated": (
+                len(results) < len(raw_results)
+                or any(item["snippet_truncated"] for item in results)
+            ),
             "results": results,
+            "attempt_count": len(raw_attempts),
+            "returned_attempt_count": len(attempts),
+            "attempts_truncated": len(attempts) < len(raw_attempts),
             "attempts": attempts,
+            **evidence,
         }
-        record = asdict(result.process_result.record)
         generated = [
+            *artifact_events,
             ToolGeneratedEvent("process_started", record),
-            ToolGeneratedEvent("process_completed", record | {"stdout": result.process_result.stdout, "stderr": result.process_result.stderr, "return_code": result.process_result.record.return_code}),
+            ToolGeneratedEvent(
+                "process_completed",
+                record | {"return_code": result.process_result.record.return_code},
+            ),
         ]
         return ToolExecutionResult(tool_name="browser_search", output=output, display_text=f"browser_search result: {stable_json_dumps(output, indent=2)}", generated_events=generated)
 
@@ -934,30 +1009,52 @@ class AgentEnvironment:
         raw_links = payload.get("links", [])
         if not isinstance(raw_links, list):
             raise ToolValidationError("aubro browse returned invalid links payload")
-        links = [
-            {
-                "text": str(item.get("text", ""))[: self.config.environment.aubro_max_text_chars],
-                "href": str(item.get("href", "")),
-            }
-            for item in raw_links[: self.config.environment.aubro_max_links]
-            if isinstance(item, dict)
-        ]
+        links = []
+        for item in raw_links[: self.config.environment.aubro_max_links]:
+            if not isinstance(item, dict):
+                continue
+            raw_text = str(item.get("text", ""))
+            text = raw_text[: self.config.environment.aubro_max_text_chars]
+            links.append(
+                {
+                    "text": text,
+                    "text_chars": len(raw_text),
+                    "text_truncated": len(text) < len(raw_text),
+                    "href": str(item.get("href", "")),
+                }
+            )
+        raw_text = str(payload.get("text", ""))
+        text_excerpt = raw_text[: self.config.environment.aubro_max_text_chars]
+        evidence, record, artifact_events = self._browser_raw_evidence(
+            result, kind="browser_browse"
+        )
         output = {
             "url": str(payload.get("url", url)),
             "title": str(payload.get("title", "")),
             "backend": str(payload.get("backend", "")),
             "blocked": bool(payload.get("blocked", False)),
             "block_reason": "" if payload.get("block_reason") in {None, ""} else str(payload.get("block_reason")),
-            "text_excerpt": str(payload.get("text", ""))[: self.config.environment.aubro_max_text_chars],
+            "text_excerpt": text_excerpt,
+            "text_chars": len(raw_text),
+            "text_truncated": len(text_excerpt) < len(raw_text),
             "link_count": len(raw_links),
+            "returned_link_count": len(links),
+            "links_truncated": (
+                len(links) < len(raw_links)
+                or any(item["text_truncated"] for item in links)
+            ),
             "links": links,
             "form_count": len(payload.get("forms", [])) if isinstance(payload.get("forms"), list) else 0,
             "button_count": len(payload.get("buttons", [])) if isinstance(payload.get("buttons"), list) else 0,
+            **evidence,
         }
-        record = asdict(result.process_result.record)
         generated = [
+            *artifact_events,
             ToolGeneratedEvent("process_started", record),
-            ToolGeneratedEvent("process_completed", record | {"stdout": result.process_result.stdout, "stderr": result.process_result.stderr, "return_code": result.process_result.record.return_code}),
+            ToolGeneratedEvent(
+                "process_completed",
+                record | {"return_code": result.process_result.record.return_code},
+            ),
         ]
         return ToolExecutionResult(tool_name="browser_browse", output=output, display_text=f"browser_browse result: {stable_json_dumps(output, indent=2)}", generated_events=generated)
 

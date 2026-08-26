@@ -34,11 +34,21 @@ class AubroCommandResult:
 def _repo_aubro_src_candidates() -> list[Path]:
     here = Path(__file__).resolve()
     candidates: list[Path] = []
-    for parent in here.parents:
+    anchors = [here, Path.cwd().resolve()]
+    repository_parents: list[Path] = []
+    for anchor in anchors:
+        for parent in (anchor, *anchor.parents):
+            if (parent / ".git").exists() and parent.parent not in repository_parents:
+                repository_parents.append(parent.parent)
+                break
+    for parent in [*here.parents, *repository_parents]:
         candidate = parent / "aubro" / "src"
         if (candidate / "aubro" / "__init__.py").exists():
             candidates.append(candidate)
-    return candidates
+        for nested in sorted(parent.glob("*/aubro/src")):
+            if (nested / "aubro" / "__init__.py").exists():
+                candidates.append(nested)
+    return list(dict.fromkeys(candidates))
 
 
 def discover_aubro_src(config: AgentConfig) -> Path | None:
@@ -59,8 +69,11 @@ def aubro_available(config: AgentConfig) -> bool:
     entrypoint = (os.environ.get("SWAAG_AUBRO_ENTRYPOINT") or config.environment.aubro_entrypoint or "").strip()
     if entrypoint:
         return True
-    if importlib.util.find_spec("aubro.cli") is not None:
-        return True
+    try:
+        if importlib.util.find_spec("aubro.cli") is not None:
+            return True
+    except ModuleNotFoundError:
+        pass
     return discover_aubro_src(config) is not None
 
 
@@ -70,8 +83,15 @@ def resolve_aubro_invocation(config: AgentConfig) -> AubroInvocation:
         return AubroInvocation(command_prefix=shlex.split(entrypoint), env_overrides={}, source_path=None)
 
     command_prefix = [sys.executable, "-m", "aubro.cli"]
-    if importlib.util.find_spec("aubro.cli") is not None:
-        return AubroInvocation(command_prefix=command_prefix, env_overrides={}, source_path=None)
+    try:
+        if importlib.util.find_spec("aubro.cli") is not None:
+            return AubroInvocation(
+                command_prefix=command_prefix,
+                env_overrides={},
+                source_path=None,
+            )
+    except ModuleNotFoundError:
+        pass
 
     source_path = discover_aubro_src(config)
     if source_path is None:
@@ -113,8 +133,6 @@ def run_aubro_command(
     raw_stderr = process_result.stderr
     stdout = _trim_text(raw_stdout, config.environment.max_capture_chars)
     stderr = _trim_text(raw_stderr, config.environment.max_capture_chars)
-    process_result.record.stdout = stdout
-    process_result.record.stderr = stderr
     if process_result.record.return_code != 0:
         raise BrowserAutomationError(
             f"aubro command failed with exit code {process_result.record.return_code}: {stderr or stdout}"

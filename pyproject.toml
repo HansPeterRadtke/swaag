@@ -17,6 +17,7 @@ classifiers = [
 dependencies = [
   "opentelemetry-api>=1.44,<2",
   "requests>=2.31,<3",
+  "websocket-client>=1.8,<2",
 ]
 
 [project.urls]

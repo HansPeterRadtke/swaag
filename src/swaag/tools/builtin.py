@@ -9,7 +9,9 @@ from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any
 
+from swaag.config import AgentConfig
 from swaag.editing import EditError, TextEditor
+from swaag.environment.browser import aubro_available
 from swaag.notes import compact_notes, enforce_limits, make_note, render_notes
 from swaag.reader import ReaderError, SequentialReader
 from swaag.tools.base import Tool, ToolContext, ToolValidationError
@@ -1025,7 +1027,8 @@ class RunTestsTool(Tool):
 
 class BrowserSearchTool(Tool):
     name = "browser_search"
-    description = "Search the web through the external aubro browser automation layer and return structured top results."
+    description = "Search the web through the external aubro browser automation layer, returning a bounded structured preview plus an exact durable raw-response artifact."
+    usage_guidance = "Use result URLs for targeted browsing. If results_truncated or attempts_truncated is true, or complete raw provider evidence matters, read the returned exact artifact_id with read_artifact in a later action."
     kind = "stateful"
     output_schema = {
         "type": "object",
@@ -1034,6 +1037,8 @@ class BrowserSearchTool(Tool):
             "engine": {"type": "string"},
             "url": {"type": "string"},
             "result_count": {"type": "integer"},
+            "returned_result_count": {"type": "integer"},
+            "results_truncated": {"type": "boolean"},
             "results": {
                 "type": "array",
                 "items": {
@@ -1042,11 +1047,22 @@ class BrowserSearchTool(Tool):
                         "title": {"type": "string"},
                         "url": {"type": "string"},
                         "snippet": {"type": "string"},
+                        "snippet_chars": {"type": "integer"},
+                        "snippet_truncated": {"type": "boolean"},
                     },
-                    "required": ["title", "url", "snippet"],
+                    "required": [
+                        "title",
+                        "url",
+                        "snippet",
+                        "snippet_chars",
+                        "snippet_truncated",
+                    ],
                     "additionalProperties": False,
                 },
             },
+            "attempt_count": {"type": "integer"},
+            "returned_attempt_count": {"type": "integer"},
+            "attempts_truncated": {"type": "boolean"},
             "attempts": {
                 "type": "array",
                 "items": {
@@ -1061,8 +1077,32 @@ class BrowserSearchTool(Tool):
                     "additionalProperties": False,
                 },
             },
+            "artifact_id": {"type": "string"},
+            "artifact_sha256": {"type": "string"},
+            "artifact_chars": {"type": "integer"},
+            "stderr_artifact_id": {"type": "string"},
+            "stderr_sha256": {"type": "string"},
+            "stderr_chars": {"type": "integer"},
         },
-        "required": ["query", "engine", "url", "result_count", "results", "attempts"],
+        "required": [
+            "query",
+            "engine",
+            "url",
+            "result_count",
+            "returned_result_count",
+            "results_truncated",
+            "results",
+            "attempt_count",
+            "returned_attempt_count",
+            "attempts_truncated",
+            "attempts",
+            "artifact_id",
+            "artifact_sha256",
+            "artifact_chars",
+            "stderr_artifact_id",
+            "stderr_sha256",
+            "stderr_chars",
+        ],
         "additionalProperties": False,
     }
     input_schema = _closed_input(
@@ -1072,6 +1112,9 @@ class BrowserSearchTool(Tool):
             "limit": _integer_or_null(),
         }
     )
+
+    def available(self, config: AgentConfig) -> bool:
+        return aubro_available(config)
 
     def validate(self, raw_input: dict[str, Any]) -> dict[str, Any]:
         query = raw_input.get("query")
@@ -1088,7 +1131,7 @@ class BrowserSearchTool(Tool):
         return {"query": query.strip(), "engine": engine, "limit": limit}
 
     def required_generated_event_types(self, validated_input: dict[str, Any]) -> set[str]:
-        return {"process_started", "process_completed"}
+        return {"artifact_created", "process_started", "process_completed"}
 
     def execute(self, validated_input: dict[str, Any], context: ToolContext) -> ToolExecutionResult:
         limit = min(validated_input["limit"], context.config.environment.aubro_max_results)
@@ -1101,7 +1144,8 @@ class BrowserSearchTool(Tool):
 
 class BrowserBrowseTool(Tool):
     name = "browser_browse"
-    description = "Browse one URL through the external aubro browser automation layer and return a structured page summary."
+    description = "Browse one URL through the external aubro browser automation layer, returning a bounded page preview plus an exact durable raw-response artifact."
+    usage_guidance = "Use the bounded preview normally. If text_truncated or links_truncated is true, or exact complete page evidence matters, read the returned artifact_id with read_artifact in a later action."
     kind = "stateful"
     output_schema = {
         "type": "object",
@@ -1112,21 +1156,38 @@ class BrowserBrowseTool(Tool):
             "blocked": {"type": "boolean"},
             "block_reason": {"type": "string"},
             "text_excerpt": {"type": "string"},
+            "text_chars": {"type": "integer"},
+            "text_truncated": {"type": "boolean"},
             "link_count": {"type": "integer"},
+            "returned_link_count": {"type": "integer"},
+            "links_truncated": {"type": "boolean"},
             "links": {
                 "type": "array",
                 "items": {
                     "type": "object",
                     "properties": {
                         "text": {"type": "string"},
+                        "text_chars": {"type": "integer"},
+                        "text_truncated": {"type": "boolean"},
                         "href": {"type": "string"},
                     },
-                    "required": ["text", "href"],
+                    "required": [
+                        "text",
+                        "text_chars",
+                        "text_truncated",
+                        "href",
+                    ],
                     "additionalProperties": False,
                 },
             },
             "form_count": {"type": "integer"},
             "button_count": {"type": "integer"},
+            "artifact_id": {"type": "string"},
+            "artifact_sha256": {"type": "string"},
+            "artifact_chars": {"type": "integer"},
+            "stderr_artifact_id": {"type": "string"},
+            "stderr_sha256": {"type": "string"},
+            "stderr_chars": {"type": "integer"},
         },
         "required": [
             "url",
@@ -1135,10 +1196,20 @@ class BrowserBrowseTool(Tool):
             "blocked",
             "block_reason",
             "text_excerpt",
+            "text_chars",
+            "text_truncated",
             "link_count",
+            "returned_link_count",
+            "links_truncated",
             "links",
             "form_count",
             "button_count",
+            "artifact_id",
+            "artifact_sha256",
+            "artifact_chars",
+            "stderr_artifact_id",
+            "stderr_sha256",
+            "stderr_chars",
         ],
         "additionalProperties": False,
     }
@@ -1149,6 +1220,9 @@ class BrowserBrowseTool(Tool):
         "additionalProperties": False,
     }
 
+    def available(self, config: AgentConfig) -> bool:
+        return aubro_available(config)
+
     def validate(self, raw_input: dict[str, Any]) -> dict[str, Any]:
         url = raw_input.get("url")
         if not isinstance(url, str) or not url.strip():
@@ -1158,7 +1232,7 @@ class BrowserBrowseTool(Tool):
         return {"url": url.strip()}
 
     def required_generated_event_types(self, validated_input: dict[str, Any]) -> set[str]:
-        return {"process_started", "process_completed"}
+        return {"artifact_created", "process_started", "process_completed"}
 
     def execute(self, validated_input: dict[str, Any], context: ToolContext) -> ToolExecutionResult:
         return context.environment.browser_browse(url=validated_input["url"])
