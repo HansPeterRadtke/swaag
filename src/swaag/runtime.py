@@ -1286,7 +1286,7 @@ class AgentRuntime:
             raise HistoryInvariantError(
                 f"Tool {decision.tool_name} completed without required generated events: {', '.join(sorted(missing))}"
             )
-        guard.record(
+        tool_result_event = guard.record(
             "tool_result",
             {
                 "tool_name": result.tool_name,
@@ -1308,6 +1308,9 @@ class AgentRuntime:
                     "raw_input": invocation.raw_input,
                     "validated_input": invocation.validated_input,
                     "output": result.output,
+                    "source_event_sequence": tool_result_event.sequence,
+                    "source_event_hash": tool_result_event.hash,
+                    "source_event_type": tool_result_event.event_type,
                 },
             ),
         )

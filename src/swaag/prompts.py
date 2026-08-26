@@ -69,6 +69,54 @@ class PromptBuilder:
             rendered.append(f"[{label}]\n{message.content.strip()}")
         return "\n\n".join(rendered)
 
+    def message_prompt_components(
+        self,
+        messages: list[Message],
+        *,
+        prefix: str,
+        category: str,
+        header: str,
+        optional: bool = False,
+    ) -> list[PromptComponent]:
+        components = [
+            PromptComponent(
+                name=f"{prefix}_header",
+                category=category,
+                text=header + "\n",
+                optional=optional,
+            )
+        ]
+        if not messages:
+            components.append(
+                PromptComponent(
+                    name=f"{prefix}_empty",
+                    category=category,
+                    text="(none)\n\n",
+                    optional=optional,
+                )
+            )
+            return components
+        for index, message in enumerate(messages, start=1):
+            label = message.role.upper()
+            if message.name:
+                label = f"{label}:{message.name}"
+            event_sequence = message.metadata.get("source_event_sequence")
+            event_hash = message.metadata.get("source_event_hash")
+            provenance = ""
+            component_name = f"{prefix}_{index}"
+            if message.role == "tool" and isinstance(event_sequence, int):
+                component_name = f"{prefix}_tool_event_{event_sequence}"
+                provenance = f"[SOURCE EVENT sequence={event_sequence} hash={event_hash or 'unknown'}]\n"
+            components.append(
+                PromptComponent(
+                    name=component_name,
+                    category="tool_result" if message.role == "tool" else category,
+                    text=f"[{label}]\n{provenance}{message.content.strip()}\n\n",
+                    optional=optional,
+                )
+            )
+        return components
+
     def partition_turn(self, messages: list[Message]) -> tuple[list[Message], Message | None, list[Message]]:
         for index in range(len(messages) - 1, -1, -1):
             if messages[index].role == "user":
@@ -117,10 +165,11 @@ class PromptBuilder:
                 category="current_user",
                 text=f"Original user request, verbatim and authoritative:\n{original_request}\n\n",
             ),
-            PromptComponent(
-                name="conversation_history",
+            *self.message_prompt_components(
+                history,
+                prefix="conversation_history",
                 category="history",
-                text=f"Previous conversation messages, verbatim:\n{self.render_messages(history)}\n\n",
+                header="Previous conversation messages, verbatim:",
                 optional=True,
             ),
             PromptComponent(
@@ -131,13 +180,11 @@ class PromptBuilder:
                     f"{current_user.content if current_user is not None else original_request}\n\n"
                 ),
             ),
-            PromptComponent(
-                name="current_turn_transcript",
+            *self.message_prompt_components(
+                turn_transcript,
+                prefix="current_turn",
                 category="turn_context",
-                text=(
-                    "Exact assistant actions and tool results since the current user message:\n"
-                    f"{self.render_messages(turn_transcript)}\n\n"
-                ),
+                header="Exact assistant actions and tool results since the current user message:",
             ),
         ]
         if pending_user_messages:
