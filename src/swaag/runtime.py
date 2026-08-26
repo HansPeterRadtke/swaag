@@ -16,7 +16,7 @@ from swaag.context_compiler import ContextCompilation, ContextCompiler
 from swaag.config import AgentConfig, load_config
 from swaag.environment.environment import AgentEnvironment
 from swaag.fsops import ensure_dir, restore_tree, snapshot_tree, write_text
-from swaag.grammar import agent_action_contract, summary_contract, yes_no_contract
+from swaag.grammar import agent_action_contract, completion_evaluation_contract, summary_contract, yes_no_contract
 from swaag.history import HistoryInvariantError, HistoryStore
 from swaag.model import LlamaCppClient, ModelClientError
 from swaag.preemption import ModelCallPreempted, ModelCallStateChanged, ModelPreemptionCoordinator
@@ -617,6 +617,22 @@ class AgentRuntime:
                     )
                 continue
 
+            completion = (
+                self._evaluate_completion(state, original_request=original_request, selected_action=selected_action, tool_results=tool_results)
+                if self.config.runtime.completion_evaluation_enabled
+                else {"complete": True, "reason": "completion evaluation disabled", "remaining_work": []}
+            )
+            if not completion["complete"]:
+                remaining = [str(item).strip() for item in completion.get("remaining_work", []) if str(item).strip()]
+                recovery_feedback = (
+                    "An independent semantic completion evaluation found that the user's objective is not complete. "
+                    f"Reason: {str(completion.get('reason', '')).strip()}. "
+                    + ("Remaining work: " + "; ".join(remaining) + ". " if remaining else "")
+                    + "Continue with a materially useful next action; do not merely restate the candidate final answer."
+                )
+                self.history.record_event(state, "completion_rejected", {"action_index": action_index, "reason": str(completion.get("reason", "")), "remaining_work": remaining})
+                continue
+
             self.history.record_event(
                 state,
                 "agent_action_terminal",
@@ -767,6 +783,24 @@ class AgentRuntime:
             "The exact action prompt, tool schemas, output reserve, and safety margin do not fit the model context.",
             last_report,
         )
+
+    def _evaluate_completion(self, state: SessionState, *, original_request: str, selected_action: AgentAction, tool_results: list[ToolExecutionResult]) -> dict[str, Any]:
+        contract = completion_evaluation_contract()
+        evidence_rows = [{"tool_name": r.tool_name, "output": to_jsonable(r.output), "display_text": r.display_text} for r in tool_results]
+        assembly = self.prompts.build_completion_evaluation_prompt(
+            original_request=original_request, assistant_message=selected_action.assistant_message,
+            status_json=stable_json_dumps(asdict(selected_action.status), indent=None), tool_evidence=stable_json_dumps(evidence_rows, indent=None),
+        )
+        compilation = self._compile_context(state, assembly, contract, minimum_output_tokens=128)
+        if not compilation.report.fits:
+            self.history.record_event(state, "completion_evaluation_unavailable", {"reason": "evaluation_context_does_not_fit", "budget_report": asdict(compilation.report)})
+            return {"complete": False, "reason": "The completion evaluator could not fit its evidence context.", "remaining_work": ["Reduce or retrieve the evidence needed for a completion decision."]}
+        self.history.record_event(state, "context_compiled", {"kind": "completion_evaluation", "prompt_mode": "lean", "accounting": compilation.accounting()})
+        self._record_prompt_built(state, assembly, contract, compilation.report)
+        payload = self._execute_structured_call(state, PreparedCall(assembly, compilation.report, "lean", contract))
+        result = {"complete": bool(payload.get("complete", False)), "reason": str(payload.get("reason", "")).strip(), "remaining_work": [str(x) for x in payload.get("remaining_work", []) if isinstance(x, str)]}
+        self.history.record_event(state, "completion_evaluated", result)
+        return result
 
     def _project_largest_tool_result_for_overflow(
         self,

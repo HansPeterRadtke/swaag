@@ -54,6 +54,13 @@ def tool_result_projection_contract() -> ContractSpec:
     )
 
 
+def completion_evaluation_contract() -> ContractSpec:
+    return _contract(
+        "completion_evaluation",
+        _closed_object({"complete": _boolean(), "reason": _string(), "remaining_work": _array(_string())}),
+    )
+
+
 def agent_action_contract(tool_specs: Iterable[tuple], *, allow_silent_completion: bool = False) -> ContractSpec:
     tool_call_variants: list[dict[str, Any]] = []
     seen: set[str] = set()

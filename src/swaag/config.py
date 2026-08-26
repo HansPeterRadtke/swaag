@@ -62,6 +62,7 @@ class RuntimeConfig:
     lean_on_overflow: bool
     strict_budget: bool
     max_repeated_action_occurrences: int
+    completion_evaluation_enabled: bool
 
 
 @dataclass(slots=True)
@@ -101,6 +102,8 @@ class PromptConfig:
     summary_template: str
     tool_result_projection_system_template: str
     tool_result_projection_template: str
+    completion_evaluation_system_template: str
+    completion_evaluation_template: str
 
 
 @dataclass(slots=True)

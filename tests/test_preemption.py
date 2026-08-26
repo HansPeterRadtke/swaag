@@ -199,7 +199,9 @@ def test_target_changing_communication_invalidates_replay_and_refreshes_history(
 
     thread = threading.Thread(target=lambda: holder.setdefault("result", runtime.run_turn_in_session(state, "Original objective.")), daemon=True)
     thread.start()
-    assert client.main_started.wait(timeout=2)
+    # This is a synchronization wait, not a latency SLO. Context compilation and
+    # constrained-schema preparation can exceed two seconds under full-suite load.
+    assert client.main_started.wait(timeout=10)
 
     request = service.submit(state.session_id, "redirect to the new objective")
 

@@ -8,7 +8,7 @@ from swaag.environment.state import EnvironmentState
 
 Role = Literal["user", "assistant", "tool", "summary"]
 ContractMode = Literal["json_schema"]
-ModelCallKind = Literal["action", "summary", "tool_result_projection", "doctor", "benchmark_quality_judge"]
+ModelCallKind = Literal["action", "summary", "tool_result_projection", "completion_evaluation", "doctor", "benchmark_quality_judge"]
 ToolAction = Literal["respond", "call_tool"]
 ToolKind = Literal["pure", "stateful", "side_effect"]
 SourceKind = Literal["file", "buffer"]

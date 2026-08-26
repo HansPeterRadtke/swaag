@@ -1,0 +1,13 @@
+Original user objective:
+{original_request}
+
+Candidate final answer:
+{assistant_message}
+
+Current action status:
+{status_json}
+
+Deterministic/tool evidence from this turn:
+{tool_evidence}
+
+Evaluate whether the user's objective is actually complete. If not, state concise remaining work that the worker can act on.

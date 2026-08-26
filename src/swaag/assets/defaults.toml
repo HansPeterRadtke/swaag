@@ -62,6 +62,7 @@ capture_model_io = true
 lean_on_overflow = true
 strict_budget = true
 max_repeated_action_occurrences = 2
+completion_evaluation_enabled = true
 tool_timeout_seconds = 10
 background_poll_seconds = 0.1
 
@@ -166,6 +167,8 @@ summary_system_template = "summary_system.txt"
 summary_template = "summary_user.txt"
 tool_result_projection_system_template = "tool_result_projection_system.txt"
 tool_result_projection_template = "tool_result_projection_user.txt"
+completion_evaluation_system_template = "completion_evaluation_system.txt"
+completion_evaluation_template = "completion_evaluation_user.txt"
 
 # -----------------------------------------------------------
 # [budget_policy] — SCALE-FREE OUTPUT/SAFETY/SECTION RATIOS
@@ -188,6 +191,7 @@ safe_input_floor_tokens = 128
 action = "large"
 summary = "medium"
 tool_result_projection = "medium"
+completion_evaluation = "small"
 doctor = "tiny"
 benchmark_quality_judge = "small"
 
@@ -207,6 +211,7 @@ large = 0.10
 action = 0.30
 summary = 0.18
 tool_result_projection = 0.14
+completion_evaluation = 0.10
 doctor = 0.05
 benchmark_quality_judge = 0.12
 
@@ -214,6 +219,7 @@ benchmark_quality_judge = 0.12
 action = 0.22
 summary = 0.10
 tool_result_projection = 0.08
+completion_evaluation = 0.06
 doctor = 0.03
 benchmark_quality_judge = 0.08
 
@@ -221,6 +227,7 @@ benchmark_quality_judge = 0.08
 agent_action = 1.10
 summary = 1.10
 tool_result_projection = 1.10
+completion_evaluation = 1.10
 yes_no = 1.10
 benchmark_quality = 1.10
 
