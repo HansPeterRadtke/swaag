@@ -25,7 +25,12 @@ from swaag.grammar import agent_action_contract, completion_evaluation_contract,
 from swaag.history import HistoryInvariantError, HistoryStore
 from swaag.heartbeat import heartbeat_payload, systemd_notify
 from swaag.model import LlamaCppClient, ModelClientError
-from swaag.preemption import ModelCallPreempted, ModelCallStateChanged, ModelPreemptionCoordinator
+from swaag.preemption import (
+    ModelCallPreempted,
+    ModelCallStateChanged,
+    ModelPreemptionCoordinator,
+    RunCancellationRequested,
+)
 from swaag.model_cache import build_model_client
 from swaag.notes import select_notes_for_prompt
 from swaag.prompts import PromptBuilder
@@ -236,6 +241,36 @@ class AgentRuntime:
             )
             self._heartbeat(state, run_id=run_id, phase="completed", detail="turn completed")
             return result
+        except RunCancellationRequested as exc:
+            self.preemption.complete_run_cancellation(state.session_id, run_id)
+            self._heartbeat(state, run_id=run_id, phase="cancelled", detail=str(exc))
+            raise
+        except Exception as exc:
+            self._heartbeat(state, run_id=run_id, phase="failed", detail=f"{type(exc).__name__}: {exc}")
+            raise
+        finally:
+            self.history.clear_active_run(state.session_id, run_id=run_id)
+
+    def resume_turn_in_session(self, state: SessionState, original_request: str) -> TurnResult:
+        """Resume an interrupted durable task without duplicating its user request."""
+        objective = original_request.strip()
+        if not objective:
+            raise ValueError("original_request must not be empty")
+        run_id = f"{state.session_id}:{new_id('run')}"
+        self.history.set_active_run(state.session_id, run_id=run_id, user_text=objective)
+        self._heartbeat(state, run_id=run_id, phase="starting", detail="resuming turn")
+        try:
+            result = self._run_model_tool_loop(
+                state,
+                objective,
+                record_user_message=False,
+            )
+            self._heartbeat(state, run_id=run_id, phase="completed", detail="resumed turn completed")
+            return result
+        except RunCancellationRequested as exc:
+            self.preemption.complete_run_cancellation(state.session_id, run_id)
+            self._heartbeat(state, run_id=run_id, phase="cancelled", detail=str(exc))
+            raise
         except Exception as exc:
             self._heartbeat(state, run_id=run_id, phase="failed", detail=f"{type(exc).__name__}: {exc}")
             raise
@@ -256,6 +291,10 @@ class AgentRuntime:
             result = self._run_model_tool_loop(state, original_request, record_user_message=False)
             self._heartbeat(state, run_id=run_id, phase="completed", detail="pending controls completed")
             return result
+        except RunCancellationRequested as exc:
+            self.preemption.complete_run_cancellation(state.session_id, run_id)
+            self._heartbeat(state, run_id=run_id, phase="cancelled", detail=str(exc))
+            raise
         except Exception as exc:
             self._heartbeat(state, run_id=run_id, phase="failed", detail=f"{type(exc).__name__}: {exc}")
             raise
@@ -343,6 +382,7 @@ class AgentRuntime:
         )
 
         for mechanical_attempt in range(1, max_mechanical_attempts + 1):
+            self._raise_if_run_cancelled(state)
             if accepted_actions >= self.config.runtime.max_total_actions:
                 break
             action_index = accepted_actions + 1
@@ -1495,9 +1535,28 @@ class AgentRuntime:
                 if supports_progress:
                     kwargs["progress_callback"] = progress_callback
                 if supports_cancel:
-                    kwargs["cancel_check"] = lambda: self.preemption.pending_for_call(state.session_id, call_id) is not None
+                    kwargs["cancel_check"] = lambda: (
+                        self._run_cancellation_requested(state)
+                        or self.preemption.pending_for_call(state.session_id, call_id) is not None
+                    )
                 completion = send(frozen_request, **kwargs)
             except ModelCallPreempted:
+                if self._run_cancellation_requested(state):
+                    run_id = self._active_run_id(state)
+                    guard.record(
+                        "model_call_preempted",
+                        {
+                            "kind": prepared.assembly.kind,
+                            "prompt_mode": prepared.prompt_mode,
+                            "attempt": total_attempt,
+                            "call_id": call_id,
+                            "preemption_id": f"run_cancellation:{run_id}",
+                            "request_sha256": active_call.request_sha256,
+                            "reason": "run_cancellation_requested",
+                        },
+                    )
+                    self.preemption.clear_active(state.session_id, call_id)
+                    raise RunCancellationRequested("worker run cancellation requested")
                 pending = self.preemption.pending_for_call(state.session_id, call_id)
                 if pending is None:
                     self.preemption.clear_active(state.session_id, call_id)
@@ -1619,6 +1678,18 @@ class AgentRuntime:
                 flush=True,
             )
             return completion
+
+    def _active_run_id(self, state: SessionState) -> str:
+        active = self.history.read_active_run(state.session_id)
+        return "" if active is None else str(active.get("run_id", ""))
+
+    def _run_cancellation_requested(self, state: SessionState) -> bool:
+        run_id = self._active_run_id(state)
+        return bool(run_id) and self.preemption.cancellation_requested(state.session_id, run_id)
+
+    def _raise_if_run_cancelled(self, state: SessionState) -> None:
+        if self._run_cancellation_requested(state):
+            raise RunCancellationRequested("worker run cancellation requested")
 
     def _execute_tool(self, state: SessionState, decision: ToolDecision) -> ToolExecutionResult | None:
         guard = self.history.guard(state, f"tool:{decision.tool_name}")

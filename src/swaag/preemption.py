@@ -18,6 +18,10 @@ class ModelCallStateChanged(RuntimeError):
     """Raised when communication changed target state, so a stale request must not replay."""
 
 
+class RunCancellationRequested(RuntimeError):
+    """Raised when a durable cancellation request stops the active worker run."""
+
+
 @dataclass(slots=True, frozen=True)
 class ActiveModelCall:
     session_id: str
@@ -46,6 +50,16 @@ class PreemptionRequest:
     target_changed: bool
     reply: str | None
     created_at: str
+    updated_at: str
+
+
+@dataclass(slots=True, frozen=True)
+class RunCancellation:
+    session_id: str
+    run_id: str
+    reason: str
+    status: str
+    requested_at: str
     updated_at: str
 
 
@@ -80,6 +94,17 @@ class ModelPreemptionCoordinator:
                 );
                 CREATE INDEX IF NOT EXISTS preemptions_call_status
                     ON preemptions(call_id, status, created_at);
+                CREATE TABLE IF NOT EXISTS run_cancellations (
+                    session_id TEXT NOT NULL,
+                    run_id TEXT NOT NULL,
+                    reason TEXT NOT NULL,
+                    status TEXT NOT NULL,
+                    requested_at TEXT NOT NULL,
+                    updated_at TEXT NOT NULL,
+                    PRIMARY KEY (session_id, run_id)
+                );
+                CREATE INDEX IF NOT EXISTS run_cancellations_status
+                    ON run_cancellations(status, requested_at);
                 """
             )
 
@@ -129,6 +154,60 @@ class ModelPreemptionCoordinator:
         with self._connect() as connection:
             row = connection.execute("SELECT * FROM active_calls WHERE session_id=?", (session_id,)).fetchone()
         return ActiveModelCall(**dict(row)) if row else None
+
+    def request_run_cancellation(
+        self,
+        session_id: str,
+        run_id: str,
+        *,
+        reason: str,
+    ) -> RunCancellation:
+        if not session_id or not run_id:
+            raise ValueError("session_id and run_id are required for cancellation")
+        now = utc_now_iso()
+        with self._connect() as connection:
+            connection.execute(
+                """
+                INSERT INTO run_cancellations(
+                    session_id, run_id, reason, status, requested_at, updated_at
+                ) VALUES (?, ?, ?, 'requested', ?, ?)
+                ON CONFLICT(session_id, run_id) DO UPDATE SET
+                    reason=excluded.reason,
+                    status=CASE
+                        WHEN run_cancellations.status='completed' THEN run_cancellations.status
+                        ELSE 'requested'
+                    END,
+                    updated_at=excluded.updated_at
+                """,
+                (session_id, run_id, reason.strip(), now, now),
+            )
+        item = self.run_cancellation(session_id, run_id)
+        if item is None:
+            raise RuntimeError("failed to persist run cancellation")
+        return item
+
+    def run_cancellation(self, session_id: str, run_id: str) -> RunCancellation | None:
+        with self._connect() as connection:
+            row = connection.execute(
+                "SELECT * FROM run_cancellations WHERE session_id=? AND run_id=?",
+                (session_id, run_id),
+            ).fetchone()
+        return RunCancellation(**dict(row)) if row is not None else None
+
+    def cancellation_requested(self, session_id: str, run_id: str) -> bool:
+        item = self.run_cancellation(session_id, run_id)
+        return item is not None and item.status == "requested"
+
+    def complete_run_cancellation(self, session_id: str, run_id: str) -> None:
+        with self._connect() as connection:
+            connection.execute(
+                """
+                UPDATE run_cancellations
+                SET status='completed', updated_at=?
+                WHERE session_id=? AND run_id=? AND status='requested'
+                """,
+                (utc_now_iso(), session_id, run_id),
+            )
 
     def request_preemption(self, session_id: str, message: str, *, source: str = "communication") -> PreemptionRequest | None:
         active = self.active_call(session_id)

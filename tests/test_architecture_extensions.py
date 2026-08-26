@@ -124,18 +124,47 @@ def test_mcp_adapter_lists_and_calls_canonical_tools(make_config, tmp_path: Path
     runtime = AgentRuntime(config)
     state = runtime.create_or_load_session()
     mcp = McpAdapter(runtime)
-    initialized = mcp.handle({"jsonrpc": "2.0", "id": 1, "method": "initialize", "params": {}})
-    assert initialized["result"]["protocolVersion"] == "2026-07-28"
-    listed = mcp.handle({"jsonrpc": "2.0", "id": 2, "method": "tools/list", "params": {}})
+    metadata = {
+        "_meta": {
+            "io.modelcontextprotocol/protocolVersion": "2026-07-28",
+            "io.modelcontextprotocol/clientInfo": {"name": "test", "version": "1"},
+            "io.modelcontextprotocol/clientCapabilities": {},
+        }
+    }
+    discovered = mcp.handle(
+        {"jsonrpc": "2.0", "id": 1, "method": "server/discover", "params": metadata}
+    )
+    assert discovered["result"]["supportedVersions"] == ["2026-07-28"]
+    assert discovered["result"]["resultType"] == "complete"
+    listed = mcp.handle(
+        {"jsonrpc": "2.0", "id": 2, "method": "tools/list", "params": metadata}
+    )
     names = {item["name"] for item in listed["result"]["tools"]}
     assert "calculator" in names
     called = mcp.handle({
         "jsonrpc": "2.0", "id": 3, "method": "tools/call",
-        "params": {"name": "calculator", "arguments": {"expression": "6 * 7"}, "session": state.session_id},
+        "params": {
+            "_meta": {
+                **metadata["_meta"],
+                "com.swaag/sessionId": state.session_id,
+            },
+            "name": "calculator",
+            "arguments": {"expression": "6 * 7"},
+        },
     })
     assert called["result"]["isError"] is False
-    assert called["result"]["session_id"] == state.session_id
+    assert called["result"]["_meta"]["com.swaag/sessionId"] == state.session_id
     assert called["result"]["structuredContent"]["result"] == 42
+
+
+def test_mcp_2026_rejects_missing_per_request_metadata(make_config) -> None:
+    runtime = AgentRuntime(make_config(), model_client=object())
+    response = McpAdapter(runtime).handle(
+        {"jsonrpc": "2.0", "id": 1, "method": "tools/list", "params": {}}
+    )
+
+    assert response["error"]["code"] == -32602
+    assert "requires params._meta" in response["error"]["message"]
 
 
 def test_control_tools_read_status_and_queue_priority(make_config, tmp_path: Path) -> None:

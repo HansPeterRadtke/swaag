@@ -9,7 +9,7 @@ from swaag.runtime import AgentRuntime
 
 
 class McpAdapter:
-    """Minimal MCP JSON-RPC adapter over SWAAG's canonical runtime/tool registry."""
+    """Stateless MCP adapter over SWAAG's canonical capability registry."""
 
     protocol_version = "2026-07-28"
 
@@ -17,6 +17,18 @@ class McpAdapter:
         self.runtime = runtime
 
     def _result(self, request_id: Any, result: Any) -> dict[str, Any]:
+        if isinstance(result, dict):
+            result = {
+                "resultType": "complete",
+                **result,
+                "_meta": {
+                    **dict(result.get("_meta", {})),
+                    "io.modelcontextprotocol/serverInfo": {
+                        "name": "swaag",
+                        "version": "0.1",
+                    },
+                },
+            }
         return {"jsonrpc": "2.0", "id": request_id, "result": result}
 
     def _error(self, request_id: Any, code: int, message: str) -> dict[str, Any]:
@@ -26,14 +38,40 @@ class McpAdapter:
         request_id = request.get("id")
         method = request.get("method")
         params = request.get("params") or {}
-        if method == "notifications/initialized":
-            return None
-        if method == "initialize":
-            return self._result(request_id, {
-                "protocolVersion": self.protocol_version,
-                "capabilities": {"tools": {"listChanged": False}},
-                "serverInfo": {"name": "swaag", "version": "0.1"},
-            })
+        if not isinstance(params, dict):
+            return self._error(request_id, -32602, "params must be an object")
+        metadata = params.get("_meta")
+        if not isinstance(metadata, dict):
+            return self._error(request_id, -32602, "Every MCP request requires params._meta")
+        requested_version = metadata.get("io.modelcontextprotocol/protocolVersion")
+        if requested_version != self.protocol_version:
+            return self._error(
+                request_id,
+                -32001,
+                f"UnsupportedProtocolVersion: {requested_version!r}; supported={self.protocol_version}",
+            )
+        if not isinstance(
+            metadata.get("io.modelcontextprotocol/clientCapabilities"), dict
+        ):
+            return self._error(
+                request_id,
+                -32602,
+                "params._meta.io.modelcontextprotocol/clientCapabilities must be an object",
+            )
+        if method == "server/discover":
+            return self._result(
+                request_id,
+                {
+                    "supportedVersions": [self.protocol_version],
+                    "capabilities": {"tools": {}},
+                    "instructions": (
+                        "SWAAG exposes model-controlled capabilities. Worker/task lifecycle "
+                        "uses the separate transport-neutral task API. Stateful capability "
+                        "calls may carry the explicit com.swaag/sessionId request metadata handle."
+                    ),
+                    "cacheScope": "public",
+                },
+            )
         if method == "ping":
             return self._result(request_id, {})
         if method == "tools/list":
@@ -50,7 +88,11 @@ class McpAdapter:
             arguments = params.get("arguments") or {}
             if not isinstance(arguments, dict):
                 return self._error(request_id, -32602, "tools/call arguments must be an object")
-            session_ref = params.get("session")
+            session_ref = metadata.get("com.swaag/sessionId")
+            if session_ref is not None and not isinstance(session_ref, str):
+                return self._error(
+                    request_id, -32602, "com.swaag/sessionId metadata must be a string"
+                )
             session_id = self.runtime.resolve_session_ref(session_ref, latest_if_none=True)
             try:
                 run = self.runtime.execute_tool_once(name, arguments, session_id=session_id)
@@ -63,7 +105,7 @@ class McpAdapter:
                 "content": [{"type": "text", "text": display or json.dumps(payload, sort_keys=True)}],
                 "structuredContent": payload,
                 "isError": False,
-                "session_id": run.session_id,
+                "_meta": {"com.swaag/sessionId": run.session_id},
             })
         return self._error(request_id, -32601, f"Method not found: {method}")
 

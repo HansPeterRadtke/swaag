@@ -11,8 +11,9 @@ from typing import Any
 from swaag.config import AgentConfig
 from swaag.heartbeat import systemd_notify, watchdog_interval_seconds
 from swaag.runtime import AgentRuntime
-from swaag.preemption import ModelPreemptionCoordinator
+from swaag.task_api import TaskApi
 from swaag.utils import new_id, utc_now_iso
+from swaag.workers import WorkerManager
 
 
 @dataclass(slots=True, frozen=True)
@@ -105,6 +106,8 @@ class CommunicationService:
         self.assistant_runtime = assistant_runtime
         self.store = CommunicationStore(runtime.config.sessions.root)
         self._semaphore = asyncio.Semaphore(max(1, int(max_concurrency)))
+        self.workers = WorkerManager(runtime, max_workers=max_concurrency)
+        self.task_api = TaskApi(self.workers)
 
     @classmethod
     def from_config(cls, config: AgentConfig) -> "CommunicationService":
@@ -256,6 +259,16 @@ class CommunicationService:
                                 str(request.get("question", "What is the current status?")),
                             )
                         response = {"answer": answer}
+                    elif op.startswith("task."):
+                        params = request.get("params") or {}
+                        if not isinstance(params, dict):
+                            raise ValueError("task operation params must be an object")
+                        async with self._semaphore:
+                            response = await asyncio.to_thread(
+                                self.task_api.execute,
+                                op.removeprefix("task."),
+                                params,
+                            )
                     else:
                         raise ValueError(f"unknown communication op: {op}")
                     payload = {"ok": True, "result": response}
@@ -274,6 +287,7 @@ class CommunicationService:
             await asyncio.sleep(interval)
 
     async def serve_tcp(self, host: str, port: int) -> None:
+        self.workers.reconcile_orphans()
         server = await asyncio.start_server(self.handle_client, host, port)
         systemd_notify("READY=1", f"STATUS=swaag communication listening on {host}:{port}")
         watchdog_task = asyncio.create_task(self._watchdog_loop(), name="swaag-systemd-watchdog")
@@ -286,4 +300,5 @@ class CommunicationService:
                 await watchdog_task
             except asyncio.CancelledError:
                 pass
+            self.workers.shutdown(wait=False)
             systemd_notify("STOPPING=1", "STATUS=swaag communication stopping")

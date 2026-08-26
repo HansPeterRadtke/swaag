@@ -8,6 +8,13 @@ Relevant evaluation families include FollowBench for multi-constraint instructio
 
 AG-UI defines rich streamed agent-to-UI events. A2A defines durable task-oriented interoperability including long-running task states. Open WebUI exposes status/progress, user input and confirmation, files, citations, and custom events and can be supported through an adapter. MCP is useful for capability discovery and structured tools. These solve different layers; keep Swaag's internal event/state model transport-independent.
 
+Rechecked on 2026-08-26 against primary specifications:
+
+- AG-UI's current event model includes `RUN_STARTED`, `RUN_FINISHED`, `RUN_ERROR`, text/tool events, RFC 6902 state deltas, activity events, and custom events; it has no dedicated run-canceled event. Swaag therefore projects cancellation as a named custom event plus a coded run error rather than pretending completion: <https://github.com/ag-ui-protocol/ag-ui/blob/main/docs/sdk/js/core/events.mdx>.
+- A2A 1.0 defines submitted, working, input-required, auth-required, completed, failed, canceled, and rejected task states plus get/list/cancel/subscribe operations. Swaag maps only states with matching semantics and keeps archive as metadata, not an A2A task state: <https://github.com/a2aproject/A2A/blob/main/docs/specification.md>.
+- Open WebUI persists only selected short event names such as `status`, `message`, `files`, and `source`; interactive `input`/`confirmation` depends on a live bidirectional connection, and Pipe final content must use the return/yield channel. Critical Swaag questions therefore retain a normal textual return/fallback: <https://docs.openwebui.com/features/extensibility/plugin/development/events/>.
+- MCP 2026-07-28 remains a model-controlled tool/capability protocol and now requires request `_meta` protocol/client fields. It is not Swaag's task lifecycle: <https://github.com/modelcontextprotocol/modelcontextprotocol/blob/main/docs/specification/2026-07-28/server/tools.mdx>.
+
 Docling is a strong broad document conversion/extraction system. Jetson also has the separate all2text project with multiple format-specific and provider-backed conversion paths. Neither is a universal semantic ingestion standard. Preserve raw files and let an LLM choose whether and how to inspect them based on user intent.
 
 llama.cpp supports continuous batching and parallel serving configurations, but cancellation/preemption behavior must be tested for the deployed version. vLLM provides alternative scheduling mechanisms. Swaag's runtime abstraction should be stronger than any backend and must not claim true suspend/resume unless the backend actually provides it.

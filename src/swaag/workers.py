@@ -1,0 +1,600 @@
+from __future__ import annotations
+
+import json
+import os
+import sqlite3
+import time
+from concurrent.futures import Future, ThreadPoolExecutor
+from dataclasses import asdict, dataclass
+from pathlib import Path
+from typing import Any, Iterable
+
+from swaag.preemption import RunCancellationRequested
+from swaag.runtime import AgentRuntime
+from swaag.utils import new_id, stable_json_dumps, utc_now_iso
+
+
+WORKER_TERMINAL_STATES = frozenset({"completed", "failed", "canceled"})
+WORKER_RESUMABLE_STATES = frozenset({"failed", "canceled", "input_required", "completed"})
+WORKER_ACTIVE_STATES = frozenset({"queued", "working", "cancellation_requested"})
+
+
+@dataclass(slots=True, frozen=True)
+class WorkerRecord:
+    worker_id: str
+    session_id: str
+    objective: str
+    status: str
+    created_at: str
+    updated_at: str
+    started_at: str | None
+    completed_at: str | None
+    archived_at: str | None
+    result: str | None
+    error: str | None
+    run_count: int
+
+
+@dataclass(slots=True, frozen=True)
+class WorkerEvent:
+    event_id: str
+    worker_id: str
+    sequence: int
+    timestamp: str
+    event_type: str
+    payload: dict[str, Any]
+
+
+class WorkerStore:
+    """Durable mechanical worker/task state, separate from semantic session history."""
+
+    def __init__(self, root: Path):
+        self.path = Path(root).expanduser() / "workers.sqlite3"
+        self.path.parent.mkdir(parents=True, exist_ok=True)
+        with self._connect() as connection:
+            connection.executescript(
+                """
+                CREATE TABLE IF NOT EXISTS workers (
+                    worker_id TEXT PRIMARY KEY,
+                    session_id TEXT NOT NULL UNIQUE,
+                    objective TEXT NOT NULL,
+                    status TEXT NOT NULL,
+                    created_at TEXT NOT NULL,
+                    updated_at TEXT NOT NULL,
+                    started_at TEXT,
+                    completed_at TEXT,
+                    archived_at TEXT,
+                    result TEXT,
+                    error TEXT,
+                    run_count INTEGER NOT NULL DEFAULT 0
+                );
+                CREATE INDEX IF NOT EXISTS workers_status_updated
+                    ON workers(status, updated_at, worker_id);
+                CREATE TABLE IF NOT EXISTS worker_events (
+                    worker_id TEXT NOT NULL,
+                    sequence INTEGER NOT NULL,
+                    event_id TEXT NOT NULL UNIQUE,
+                    timestamp TEXT NOT NULL,
+                    event_type TEXT NOT NULL,
+                    payload_json TEXT NOT NULL,
+                    PRIMARY KEY (worker_id, sequence),
+                    FOREIGN KEY (worker_id) REFERENCES workers(worker_id)
+                );
+                """
+            )
+
+    def _connect(self) -> sqlite3.Connection:
+        connection = sqlite3.connect(self.path, timeout=30.0)
+        connection.row_factory = sqlite3.Row
+        connection.execute("PRAGMA journal_mode=WAL")
+        connection.execute("PRAGMA synchronous=FULL")
+        connection.execute("PRAGMA foreign_keys=ON")
+        connection.execute("PRAGMA busy_timeout=30000")
+        return connection
+
+    @staticmethod
+    def _record(row: sqlite3.Row) -> WorkerRecord:
+        return WorkerRecord(**dict(row))
+
+    @staticmethod
+    def _event(row: sqlite3.Row) -> WorkerEvent:
+        payload = dict(row)
+        payload["payload"] = json.loads(str(payload.pop("payload_json")))
+        return WorkerEvent(**payload)
+
+    def create(self, session_id: str, objective: str) -> WorkerRecord:
+        text = objective.strip()
+        if not text:
+            raise ValueError("worker objective must not be empty")
+        worker_id = new_id("worker")
+        now = utc_now_iso()
+        with self._connect() as connection:
+            connection.execute("BEGIN IMMEDIATE")
+            connection.execute(
+                """
+                INSERT INTO workers(
+                    worker_id, session_id, objective, status, created_at, updated_at
+                ) VALUES (?, ?, ?, 'created', ?, ?)
+                """,
+                (worker_id, session_id, text, now, now),
+            )
+            self._append_event(
+                connection,
+                worker_id,
+                "worker_created",
+                {"session_id": session_id, "objective": text, "status": "created"},
+                timestamp=now,
+            )
+            connection.commit()
+        return self.get(worker_id)
+
+    def get(self, worker_id: str) -> WorkerRecord:
+        with self._connect() as connection:
+            row = connection.execute(
+                "SELECT * FROM workers WHERE worker_id=?", (worker_id,)
+            ).fetchone()
+        if row is None:
+            raise FileNotFoundError(f"Unknown worker: {worker_id}")
+        return self._record(row)
+
+    def list(
+        self,
+        *,
+        statuses: Iterable[str] | None = None,
+        include_archived: bool = False,
+    ) -> list[WorkerRecord]:
+        clauses: list[str] = []
+        params: list[Any] = []
+        status_values = sorted({str(item) for item in statuses or () if str(item)})
+        if status_values:
+            clauses.append("status IN (" + ",".join("?" for _ in status_values) + ")")
+            params.extend(status_values)
+        if not include_archived:
+            clauses.append("archived_at IS NULL")
+        sql = "SELECT * FROM workers"
+        if clauses:
+            sql += " WHERE " + " AND ".join(clauses)
+        sql += " ORDER BY created_at, worker_id"
+        with self._connect() as connection:
+            return [self._record(row) for row in connection.execute(sql, params)]
+
+    def events(self, worker_id: str, *, after_sequence: int = 0) -> list[WorkerEvent]:
+        self.get(worker_id)
+        with self._connect() as connection:
+            rows = connection.execute(
+                """
+                SELECT event_id, worker_id, sequence, timestamp, event_type, payload_json
+                FROM worker_events
+                WHERE worker_id=? AND sequence>?
+                ORDER BY sequence
+                """,
+                (worker_id, max(0, int(after_sequence))),
+            ).fetchall()
+        return [self._event(row) for row in rows]
+
+    def append_event(
+        self, worker_id: str, event_type: str, payload: dict[str, Any]
+    ) -> WorkerEvent:
+        with self._connect() as connection:
+            connection.execute("BEGIN IMMEDIATE")
+            if connection.execute(
+                "SELECT 1 FROM workers WHERE worker_id=?", (worker_id,)
+            ).fetchone() is None:
+                raise FileNotFoundError(f"Unknown worker: {worker_id}")
+            event = self._append_event(connection, worker_id, event_type, payload)
+            connection.commit()
+        return event
+
+    def transition(
+        self,
+        worker_id: str,
+        status: str,
+        *,
+        expected: Iterable[str] | None = None,
+        result: str | None = None,
+        error: str | None = None,
+        increment_run_count: bool = False,
+        event_type: str = "worker_status_changed",
+        event_payload: dict[str, Any] | None = None,
+    ) -> WorkerRecord:
+        now = utc_now_iso()
+        expected_states = set(expected or ())
+        with self._connect() as connection:
+            connection.execute("BEGIN IMMEDIATE")
+            row = connection.execute(
+                "SELECT * FROM workers WHERE worker_id=?", (worker_id,)
+            ).fetchone()
+            if row is None:
+                raise FileNotFoundError(f"Unknown worker: {worker_id}")
+            current = self._record(row)
+            if expected_states and current.status not in expected_states:
+                raise ValueError(
+                    f"Worker {worker_id} is {current.status}; expected one of {sorted(expected_states)}"
+                )
+            started_at = current.started_at
+            if status == "working" and started_at is None:
+                started_at = now
+            completed_at = now if status in {"completed", "failed", "canceled"} else None
+            run_count = current.run_count + (1 if increment_run_count else 0)
+            connection.execute(
+                """
+                UPDATE workers SET
+                    status=?, updated_at=?, started_at=?, completed_at=?, archived_at=?,
+                    result=?, error=?, run_count=?
+                WHERE worker_id=?
+                """,
+                (
+                    status,
+                    now,
+                    started_at,
+                    completed_at,
+                    current.archived_at,
+                    result,
+                    error,
+                    run_count,
+                    worker_id,
+                ),
+            )
+            payload = {
+                "from_status": current.status,
+                "to_status": status,
+                "run_count": run_count,
+                **dict(event_payload or {}),
+            }
+            self._append_event(connection, worker_id, event_type, payload, timestamp=now)
+            connection.commit()
+        return self.get(worker_id)
+
+    def mark_archived(
+        self, worker_id: str, *, archive: dict[str, Any]
+    ) -> WorkerRecord:
+        now = utc_now_iso()
+        with self._connect() as connection:
+            connection.execute("BEGIN IMMEDIATE")
+            row = connection.execute(
+                "SELECT * FROM workers WHERE worker_id=?", (worker_id,)
+            ).fetchone()
+            if row is None:
+                raise FileNotFoundError(f"Unknown worker: {worker_id}")
+            current = self._record(row)
+            if current.archived_at is not None:
+                return current
+            connection.execute(
+                "UPDATE workers SET archived_at=?, updated_at=? WHERE worker_id=?",
+                (now, now, worker_id),
+            )
+            self._append_event(
+                connection,
+                worker_id,
+                "worker_archived",
+                {"status": current.status, "archive": archive},
+                timestamp=now,
+            )
+            connection.commit()
+        return self.get(worker_id)
+
+    def _append_event(
+        self,
+        connection: sqlite3.Connection,
+        worker_id: str,
+        event_type: str,
+        payload: dict[str, Any],
+        *,
+        timestamp: str | None = None,
+    ) -> WorkerEvent:
+        row = connection.execute(
+            "SELECT COALESCE(MAX(sequence), 0) + 1 FROM worker_events WHERE worker_id=?",
+            (worker_id,),
+        ).fetchone()
+        sequence = int(row[0])
+        event = WorkerEvent(
+            event_id=new_id("worker_event"),
+            worker_id=worker_id,
+            sequence=sequence,
+            timestamp=timestamp or utc_now_iso(),
+            event_type=event_type,
+            payload=dict(payload),
+        )
+        connection.execute(
+            """
+            INSERT INTO worker_events(
+                worker_id, sequence, event_id, timestamp, event_type, payload_json
+            ) VALUES (?, ?, ?, ?, ?, ?)
+            """,
+            (
+                event.worker_id,
+                event.sequence,
+                event.event_id,
+                event.timestamp,
+                event.event_type,
+                stable_json_dumps(event.payload, indent=None),
+            ),
+        )
+        return event
+
+
+class WorkerManager:
+    """Runs simple sequential agents as independently addressable durable workers."""
+
+    def __init__(self, runtime: AgentRuntime, *, max_workers: int = 4):
+        self.runtime = runtime
+        self.store = WorkerStore(runtime.config.sessions.root)
+        self._executor = ThreadPoolExecutor(
+            max_workers=max(1, int(max_workers)), thread_name_prefix="swaag-worker"
+        )
+        self._futures: dict[str, Future[None]] = {}
+
+    def create(self, objective: str, *, name: str | None = None) -> WorkerRecord:
+        state = self.runtime.create_or_load_session()
+        if name and name.strip():
+            state = self.runtime.history.rename_session(state.session_id, name.strip())
+        return self.store.create(state.session_id, objective)
+
+    def start(self, worker_id: str) -> WorkerRecord:
+        current = self.store.get(worker_id)
+        if current.archived_at is not None:
+            raise ValueError(f"Worker {worker_id} is archived")
+        queued = self.store.transition(
+            worker_id,
+            "queued",
+            expected={"created"},
+            event_type="worker_queued",
+        )
+        self._submit(worker_id)
+        return queued
+
+    def resume(self, worker_id: str, *, message: str | None = None) -> WorkerRecord:
+        current = self.store.get(worker_id)
+        if current.archived_at is not None:
+            raise ValueError(f"Worker {worker_id} is archived")
+        if current.status not in WORKER_RESUMABLE_STATES:
+            raise ValueError(f"Worker {worker_id} cannot resume from {current.status}")
+        if message is not None and message.strip():
+            self._queue_message(current, message.strip(), source="worker_resume")
+        queued = self.store.transition(
+            worker_id,
+            "queued",
+            expected=WORKER_RESUMABLE_STATES,
+            event_type="worker_resumed",
+        )
+        self._submit(worker_id)
+        return queued
+
+    def message(
+        self,
+        worker_id: str,
+        message: str,
+        *,
+        source: str = "worker_control",
+        resume_if_idle: bool = True,
+    ) -> WorkerRecord:
+        current = self.store.get(worker_id)
+        if current.archived_at is not None:
+            raise ValueError(f"Worker {worker_id} is archived")
+        if current.status == "cancellation_requested":
+            raise ValueError(f"Worker {worker_id} is being canceled")
+        self._queue_message(current, message, source=source)
+        if current.status == "working":
+            preemption = self.runtime.preemption.request_preemption(
+                current.session_id, message, source=source
+            )
+            if preemption is not None:
+                timeout = max(
+                    1.0,
+                    float(self.runtime.config.model.timeout_seconds),
+                    float(self.runtime.config.model.structured_timeout_seconds),
+                )
+                interrupted = self.runtime.preemption.wait_for_status(
+                    preemption.preemption_id,
+                    {"interrupted", "failed"},
+                    timeout_seconds=timeout,
+                )
+                if interrupted.status == "failed":
+                    raise RuntimeError(interrupted.reply or "worker redirect preemption failed")
+                self.runtime.preemption.complete(
+                    preemption.preemption_id,
+                    target_changed=True,
+                    reply="worker control queued",
+                )
+        elif resume_if_idle and current.status in WORKER_RESUMABLE_STATES:
+            return self.resume(worker_id)
+        return self.store.get(worker_id)
+
+    def cancel(self, worker_id: str, *, reason: str = "user requested cancellation") -> WorkerRecord:
+        current = self.store.get(worker_id)
+        if current.status == "canceled":
+            return current
+        if current.status in {"completed", "failed"} or current.archived_at is not None:
+            raise ValueError(f"Worker {worker_id} cannot be canceled from {current.status}")
+        requested = self.store.transition(
+            worker_id,
+            "cancellation_requested",
+            expected={"created", "queued", "working", "input_required"},
+            event_type="worker_cancellation_requested",
+            event_payload={"reason": reason},
+        )
+        active = self.runtime.history.read_active_run(current.session_id)
+        if active is None:
+            return self.store.transition(
+                worker_id,
+                "canceled",
+                expected={"cancellation_requested"},
+                event_type="worker_canceled",
+                event_payload={"reason": reason, "active_run": False},
+            )
+        run_id = str(active.get("run_id", ""))
+        self.runtime.preemption.request_run_cancellation(
+            current.session_id, run_id, reason=reason
+        )
+        return requested
+
+    def archive(self, worker_id: str) -> WorkerRecord:
+        current = self.store.get(worker_id)
+        if current.status in WORKER_ACTIVE_STATES:
+            raise ValueError(f"Worker {worker_id} cannot be archived while {current.status}")
+        if current.archived_at is not None:
+            return current
+        archived = self.runtime.history.archive_session(current.session_id, remove_active=True)
+        return self.store.mark_archived(worker_id, archive=archived)
+
+    def inspect(self, worker_id: str) -> dict[str, Any]:
+        record = self.store.get(worker_id)
+        active_run = self.runtime.history.read_active_run(record.session_id)
+        state = self.runtime.history.rebuild_from_history(
+            record.session_id, write_projections=False
+        )
+        return {
+            **asdict(record),
+            "active_run": active_run,
+            "semantic_status": self.runtime.session_status_payload(state),
+            "latest_event_sequence": self.store.events(worker_id)[-1].sequence,
+        }
+
+    def list(self, *, include_archived: bool = False) -> list[WorkerRecord]:
+        return self.store.list(include_archived=include_archived)
+
+    def events(self, worker_id: str, *, after_sequence: int = 0) -> list[WorkerEvent]:
+        return self.store.events(worker_id, after_sequence=after_sequence)
+
+    def wait(self, worker_id: str, *, timeout_seconds: float = 30.0) -> WorkerRecord:
+        deadline = time.monotonic() + max(0.0, float(timeout_seconds))
+        while True:
+            item = self.store.get(worker_id)
+            if item.status in WORKER_TERMINAL_STATES or item.status == "input_required":
+                return item
+            if time.monotonic() >= deadline:
+                raise TimeoutError(f"Timed out waiting for worker {worker_id}; status={item.status}")
+            time.sleep(0.02)
+
+    def reconcile_orphans(self) -> list[WorkerRecord]:
+        reconciled: list[WorkerRecord] = []
+        for item in self.store.list(statuses=WORKER_ACTIVE_STATES, include_archived=True):
+            active = self.runtime.history.read_active_run(item.session_id)
+            if active is not None and _pid_is_alive(active.get("pid")):
+                continue
+            if item.status == "cancellation_requested":
+                status, event_type, error = "canceled", "worker_canceled", None
+            else:
+                status, event_type = "failed", "worker_orphaned"
+                error = "Worker process ended before its durable run reached a terminal state"
+            reconciled.append(
+                self.store.transition(
+                    item.worker_id,
+                    status,
+                    expected={item.status},
+                    error=error,
+                    event_type=event_type,
+                    event_payload={"recovered_orphan": True},
+                )
+            )
+        return reconciled
+
+    def shutdown(self, *, wait: bool = True) -> None:
+        self._executor.shutdown(wait=wait, cancel_futures=not wait)
+
+    def _submit(self, worker_id: str) -> None:
+        previous = self._futures.get(worker_id)
+        if previous is not None and not previous.done():
+            raise RuntimeError(f"Worker {worker_id} already has a local run")
+        self._futures[worker_id] = self._executor.submit(self._run_worker, worker_id)
+
+    def _run_worker(self, worker_id: str) -> None:
+        queued = self.store.get(worker_id)
+        if queued.status == "cancellation_requested":
+            self.store.transition(
+                worker_id,
+                "canceled",
+                expected={"cancellation_requested"},
+                event_type="worker_canceled",
+            )
+            return
+        if queued.status != "queued":
+            return
+        working = self.store.transition(
+            worker_id,
+            "working",
+            expected={"queued"},
+            increment_run_count=True,
+            event_type="worker_started",
+        )
+        state = self.runtime.history.rebuild_from_history(
+            working.session_id, write_projections=False
+        )
+        first_sequence = state.event_count + 1
+        try:
+            if working.run_count == 1 and not state.messages:
+                result = self.runtime.run_turn_in_session(state, working.objective)
+            else:
+                result = self.runtime.resume_turn_in_session(state, working.objective)
+            latest = self.store.get(worker_id)
+            if latest.status == "cancellation_requested":
+                self.store.transition(
+                    worker_id,
+                    "canceled",
+                    expected={"cancellation_requested"},
+                    result=result.assistant_text,
+                    event_type="worker_canceled",
+                    event_payload={"completion_raced_cancellation": True},
+                )
+                return
+            blocking = any(
+                event.event_type == "agent_question"
+                and event.payload.get("criticality") == "blocking"
+                for event in self.runtime.history.iter_history(
+                    working.session_id, start_sequence=first_sequence
+                )
+            )
+            self.store.transition(
+                worker_id,
+                "input_required" if blocking else "completed",
+                expected={"working"},
+                result=result.assistant_text,
+                event_type="worker_input_required" if blocking else "worker_completed",
+            )
+        except RunCancellationRequested as exc:
+            self.store.transition(
+                worker_id,
+                "canceled",
+                expected={"working", "cancellation_requested"},
+                error=str(exc),
+                event_type="worker_canceled",
+            )
+        except Exception as exc:
+            self.store.transition(
+                worker_id,
+                "failed",
+                expected={"working", "cancellation_requested"},
+                error=f"{type(exc).__name__}: {exc}",
+                event_type="worker_failed",
+            )
+
+    def _queue_message(self, current: WorkerRecord, message: str, *, source: str) -> None:
+        text = message.strip()
+        if not text:
+            raise ValueError("worker message must not be empty")
+        control = self.runtime.history.enqueue_control_message(
+            current.session_id, text, source=source
+        )
+        self.store.append_event(
+            current.worker_id,
+            "worker_message_queued",
+            {
+                "control_id": control["control_id"],
+                "message": text,
+                "source": source,
+            },
+        )
+
+
+def _pid_is_alive(value: Any) -> bool:
+    try:
+        pid = int(value)
+    except (TypeError, ValueError):
+        return False
+    if pid <= 0:
+        return False
+    try:
+        os.kill(pid, 0)
+    except OSError:
+        return False
+    return True

@@ -58,9 +58,9 @@ This is the gap list between the current repository and the intended architectur
 
 ## P1 - worker lifecycle, multi-tasking, and communication
 
-- [ ] **Implement multiple independently addressable worker instances.** Each worker needs its own task identity, durable history/projection state, lifecycle state, current semantic step, and cancellation/control path.
-- [ ] **Add worker lifecycle operations: create/start, inspect, message/redirect, pause where representable, cancel/stop, resume/reconstruct, and archive.**
-- [ ] **Separate user-facing communication from busy worker execution.** **Partial.** `communication.py` and preemption infrastructure exist, but target is a responsive control path that can service the user while a worker is in inference or a tool call.
+- [x] **Implement multiple independently addressable worker instances.** Each durable worker has its own task identity, session/history/projection state, mechanical lifecycle, event cursor, and control/cancellation path while retaining the simple sequential inner agent loop.
+- [x] **Add worker lifecycle operations: create/start, inspect, message/redirect, cancel/stop, resume/reconstruct, and archive.** Cancellation is durable and stops active inference; archive retains the actual terminal state rather than inventing a new execution state. A true suspended backend state is intentionally not claimed as pause.
+- [ ] **Separate user-facing communication from busy worker execution.** **Partial.** The long-running communication service now owns a bounded multi-worker executor and transport-neutral task API, can redirect/cancel active inference, and remains available while worker threads run. Benchmark priority/latency under real long inference and tools, and separate the communication model/context fully.
 - [ ] **Implement a communication agent with explicit escalation.** A smaller/faster model may handle cheap status or routing only after benchmark evidence; difficult semantic requests must escalate to a stronger model.
 - [ ] **Let the communication agent read durable worker history and deterministic runtime state without receiving entire worker contexts.** Its own context must be compiled and budgeted like every other LLM call.
 - [ ] **Support user interruption at arbitrary worker stages.** New instructions should enter durable history/control state and influence the next semantically valid continuation.
@@ -68,7 +68,7 @@ This is the gap list between the current repository and the intended architectur
 
 ## P1 - inference scheduling, cancellation, and preemption
 
-- [ ] **Turn cooperative model preemption into a backend-independent request lifecycle.** **Partial.** `preemption.py` exists. Track queued, active, cancellation-requested, cancelled, completed, failed, and superseded states durably.
+- [ ] **Turn cooperative model preemption into a backend-independent request lifecycle.** **Partial.** Worker/task states and cancellation requests are durable; active inference observes cancellation and records terminal preemption evidence, while redirects invalidate stale requests. Add a backend-neutral inference request table for queued/completed/failed/superseded calls and queue priority.
 - [ ] **Do not claim true suspend/resume unless a backend proves it.** For llama.cpp/OpenAI-compatible backends, distinguish cancellation plus replay/reconstruction from actual continuation of the same generation state.
 - [ ] **Benchmark live llama.cpp cancellation behavior on the deployed Jetson version.** The previous direct experiment could not run because the endpoint was unavailable.
 - [ ] **Benchmark llama.cpp parallel slots/continuous batching versus vLLM scheduling for the actual Jetson workload.** Include latency to interactive communication requests while long worker generations are active.
@@ -77,7 +77,7 @@ This is the gap list between the current repository and the intended architectur
 
 ## P1 - status, questions, heartbeat, and failure reporting
 
-- [ ] **Define a deterministic runtime state machine for worker activity.** At minimum distinguish context compilation, queued inference, inference, tool execution, result evaluation, waiting for user, scheduled wait, verification, idle/completed, cancellation, and failure.
+- [ ] **Define a deterministic runtime state machine for worker activity.** **Partial.** Durable worker states now distinguish created, queued, working, input-required, cancellation-requested, canceled, completed, and failed; heartbeat phases cover the inner run. Scheduled wait and every tool/evaluation substate still need unified task-state projection.
 - [ ] **Generate semantic status with an LLM from a separately budgeted status context.** Include enough goal/current-step/recent-event context to explain meaning; benchmark alternatives rather than hard-coding one prompt.
 - [ ] **Support status importance/criticality as semantic output.** Keep elapsed time and mechanical state deterministic.
 - [ ] **Implement heartbeat independent of semantic status generation.** A wedged LLM/status call must not suppress mechanical liveness evidence.
@@ -88,10 +88,10 @@ This is the gap list between the current repository and the intended architectur
 
 ## P1 - interfaces and structured output
 
-- [ ] **Define a transport-independent internal task/event API.** Do not make CLI, voice, Open WebUI, AG-UI, A2A, or MCP semantics the internal domain model.
-- [ ] **Add an AG-UI adapter for rich streaming UI events.** Map text, status/activity, tool events, state snapshots/deltas, questions, and custom Swaag events where appropriate.
-- [ ] **Evaluate/add an A2A adapter for durable external task semantics.** Map working/input-required/completed/failed/cancelled state only where semantics actually match Swaag.
-- [ ] **Add an Open WebUI adapter.** Use existing status, input/confirmation, files, citations, and custom-event support rather than rebuilding a browser UI first.
+- [x] **Define a transport-independent internal task/event API.** `TaskApi`, `WorkerStore`, and `WorkerManager` own the internal command/query/event model; the communication TCP service is one transport and MCP remains a capability boundary.
+- [ ] **Add an AG-UI adapter for rich streaming UI events.** **Partial.** A tested projection maps durable run/result/failure/cancellation/input-required events to current AG-UI run, text, activity, and custom shapes. Add a streaming endpoint and map canonical tool/state events rather than only worker lifecycle events.
+- [ ] **Evaluate/add an A2A adapter for durable external task semantics.** **Partial.** A tested A2A 1.0 projection maps submitted/working/input-required/completed/failed/canceled and artifacts without letting A2A own internal state. Add protocol operations, pagination/subscription, authentication, and conformance tests before claiming an A2A server.
+- [ ] **Add an Open WebUI adapter.** **Partial.** A tested projection uses persistence-safe `status` events and the normal return channel for final or critical input-required text. Add the actual Pipe/tool integration plus file/source mapping.
 - [ ] **Keep durable fallback semantics independent of live WebSocket UI connections.**
 - [ ] **Support caller-defined structured output schemas.** LLM-generated semantic fields should use schema-constrained generation; deterministic runtime fields such as timings/state/IDs should be filled mechanically.
 - [ ] **Keep normal conversation as the universal common-denominator output.** Rich structured fields/events augment it rather than making basic clients impossible.
