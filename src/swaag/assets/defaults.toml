@@ -171,6 +171,8 @@ tool_result_projection_system_template = "tool_result_projection_system.txt"
 tool_result_projection_template = "tool_result_projection_user.txt"
 completion_evaluation_system_template = "completion_evaluation_system.txt"
 completion_evaluation_template = "completion_evaluation_user.txt"
+caller_structured_output_system_template = "caller_structured_output_system.txt"
+caller_structured_output_template = "caller_structured_output_user.txt"
 
 # -----------------------------------------------------------
 # [budget_policy] — DESIRED OUTPUT AND ESTIMATOR-SAFETY RATIOS
@@ -194,6 +196,7 @@ action = "large"
 summary = "medium"
 tool_result_projection = "medium"
 completion_evaluation = "small"
+caller_structured_output = "small"
 doctor = "tiny"
 benchmark_quality_judge = "small"
 
@@ -214,6 +217,7 @@ action = 0.30
 summary = 0.18
 tool_result_projection = 0.14
 completion_evaluation = 0.10
+caller_structured_output = 0.12
 doctor = 0.05
 benchmark_quality_judge = 0.12
 
@@ -222,6 +226,7 @@ action = 0.22
 summary = 0.10
 tool_result_projection = 0.08
 completion_evaluation = 0.06
+caller_structured_output = 0.06
 doctor = 0.03
 benchmark_quality_judge = 0.08
 
@@ -230,6 +235,7 @@ agent_action = 1.10
 summary = 1.10
 tool_result_projection = 1.10
 completion_evaluation = 1.10
+caller_structured_output = 1.10
 yes_no = 1.10
 benchmark_quality = 1.10
 

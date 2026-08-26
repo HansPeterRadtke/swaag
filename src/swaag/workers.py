@@ -11,6 +11,11 @@ from typing import Any, Iterable
 
 from swaag.preemption import RunCancellationRequested
 from swaag.runtime import AgentRuntime
+from swaag.structured_output import (
+    CallerOutputSpec,
+    merge_caller_output,
+    prepare_caller_output_spec,
+)
 from swaag.types import AttachmentReference
 from swaag.utils import new_id, stable_json_dumps, utc_now_iso
 
@@ -103,7 +108,13 @@ class WorkerStore:
         payload["payload"] = json.loads(str(payload.pop("payload_json")))
         return WorkerEvent(**payload)
 
-    def create(self, session_id: str, objective: str) -> WorkerRecord:
+    def create(
+        self,
+        session_id: str,
+        objective: str,
+        *,
+        output_spec: CallerOutputSpec | None = None,
+    ) -> WorkerRecord:
         text = objective.strip()
         if not text:
             raise ValueError("worker objective must not be empty")
@@ -123,7 +134,14 @@ class WorkerStore:
                 connection,
                 worker_id,
                 "worker_created",
-                {"session_id": session_id, "objective": text, "status": "created"},
+                {
+                    "session_id": session_id,
+                    "objective": text,
+                    "status": "created",
+                    "caller_output_spec": (
+                        output_spec.payload() if output_spec is not None else None
+                    ),
+                },
                 timestamp=now,
             )
             connection.commit()
@@ -325,11 +343,23 @@ class WorkerManager:
         )
         self._futures: dict[str, Future[None]] = {}
 
-    def create(self, objective: str, *, name: str | None = None) -> WorkerRecord:
+    def create(
+        self,
+        objective: str,
+        *,
+        name: str | None = None,
+        output_schema: dict[str, Any] | None = None,
+        mechanical_fields: dict[str, str] | None = None,
+    ) -> WorkerRecord:
+        output_spec = prepare_caller_output_spec(output_schema, mechanical_fields)
         state = self.runtime.create_or_load_session()
         if name and name.strip():
             state = self.runtime.history.rename_session(state.session_id, name.strip())
-        return self.store.create(state.session_id, objective)
+        return self.store.create(
+            state.session_id,
+            objective,
+            output_spec=output_spec,
+        )
 
     def start(self, worker_id: str) -> WorkerRecord:
         current = self.store.get(worker_id)
@@ -484,6 +514,8 @@ class WorkerManager:
 
     def inspect(self, worker_id: str) -> dict[str, Any]:
         record = self.store.get(worker_id)
+        events = self.store.events(worker_id)
+        output_spec = self._output_spec(record, events=events)
         active_run = self.runtime.history.read_active_run(record.session_id)
         state = self.runtime.history.rebuild_from_history(
             record.session_id, write_projections=False
@@ -500,7 +532,11 @@ class WorkerManager:
                 }
                 for item in state.attachments
             ],
-            "latest_event_sequence": self.store.events(worker_id)[-1].sequence,
+            "caller_output_spec": (
+                output_spec.payload() if output_spec is not None else None
+            ),
+            "structured_output": self._structured_output_from_events(events),
+            "latest_event_sequence": events[-1].sequence,
         }
 
     def list(self, *, include_archived: bool = False) -> list[WorkerRecord]:
@@ -508,6 +544,19 @@ class WorkerManager:
 
     def events(self, worker_id: str, *, after_sequence: int = 0) -> list[WorkerEvent]:
         return self.store.events(worker_id, after_sequence=after_sequence)
+
+    def structured_output(self, worker_id: str) -> dict[str, Any] | None:
+        return self._structured_output_from_events(self.store.events(worker_id))
+
+    @staticmethod
+    def _structured_output_from_events(
+        events: list[WorkerEvent],
+    ) -> dict[str, Any] | None:
+        for event in reversed(events):
+            output = event.payload.get("structured_output")
+            if isinstance(output, dict):
+                return dict(output)
+        return None
 
     def wait(self, worker_id: str, *, timeout_seconds: float = 30.0) -> WorkerRecord:
         deadline = time.monotonic() + max(0.0, float(timeout_seconds))
@@ -573,6 +622,7 @@ class WorkerManager:
         state = self.runtime.history.rebuild_from_history(
             working.session_id, write_projections=False
         )
+        output_spec = self._output_spec(working)
         first_sequence = state.event_count + 1
         try:
             if working.run_count == 1 and not state.messages:
@@ -597,12 +647,50 @@ class WorkerManager:
                     working.session_id, start_sequence=first_sequence
                 )
             )
+            structured_output = None
+            if not blocking and output_spec is not None:
+                semantic_output = self.runtime.generate_caller_structured_output(
+                    state,
+                    original_request=working.objective,
+                    assistant_message=result.assistant_text,
+                    tool_results=result.tool_results,
+                    semantic_schema=output_spec.semantic_schema,
+                )
+                structured_output = merge_caller_output(
+                    output_spec,
+                    semantic_output,
+                    {
+                        "worker_id": working.worker_id,
+                        "session_id": working.session_id,
+                        "objective": working.objective,
+                        "status": "completed",
+                        "created_at": working.created_at,
+                        "started_at": working.started_at or "",
+                        "run_count": working.run_count,
+                    },
+                )
+                latest = self.store.get(worker_id)
+                if latest.status == "cancellation_requested":
+                    self.store.transition(
+                        worker_id,
+                        "canceled",
+                        expected={"cancellation_requested"},
+                        result=result.assistant_text,
+                        event_type="worker_canceled",
+                        event_payload={"structured_output_raced_cancellation": True},
+                    )
+                    return
             self.store.transition(
                 worker_id,
                 "input_required" if blocking else "completed",
                 expected={"working"},
                 result=result.assistant_text,
                 event_type="worker_input_required" if blocking else "worker_completed",
+                event_payload=(
+                    {"structured_output": structured_output}
+                    if structured_output is not None
+                    else None
+                ),
             )
         except RunCancellationRequested as exc:
             self.store.transition(
@@ -637,6 +725,24 @@ class WorkerManager:
                 "source": source,
             },
         )
+
+    def _output_spec(
+        self,
+        record: WorkerRecord,
+        *,
+        events: list[WorkerEvent] | None = None,
+    ) -> CallerOutputSpec | None:
+        events = self.store.events(record.worker_id) if events is None else events
+        if not events:
+            return None
+        payload = events[0].payload.get("caller_output_spec")
+        if not isinstance(payload, dict):
+            return None
+        schema = payload.get("schema")
+        mechanical_fields = payload.get("mechanical_fields")
+        if not isinstance(schema, dict) or not isinstance(mechanical_fields, dict):
+            raise RuntimeError(f"Worker {record.worker_id} has an invalid caller output spec")
+        return prepare_caller_output_spec(schema, mechanical_fields)
 
 
 def _pid_is_alive(value: Any) -> bool:

@@ -1,0 +1,1 @@
+Return one JSON object containing the requested semantic fields. Use the worker result and evidence, not field-name formulas or guessed defaults.

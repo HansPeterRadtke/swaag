@@ -20,6 +20,18 @@ class TaskApi:
         args = dict(payload or {})
         if operation == "create":
             objective = _required_text(args, "objective")
+            output_schema = args.get("output_schema")
+            if output_schema is not None and not isinstance(output_schema, dict):
+                raise ValueError("output_schema must be an object or null")
+            mechanical_fields = args.get("mechanical_fields")
+            if mechanical_fields is not None and (
+                not isinstance(mechanical_fields, dict)
+                or any(
+                    not isinstance(name, str) or not isinstance(source, str)
+                    for name, source in mechanical_fields.items()
+                )
+            ):
+                raise ValueError("mechanical_fields must map output field names to source names")
             attachment_payloads = args.get("attachments", [])
             if not isinstance(attachment_payloads, list):
                 raise ValueError("attachments must be an array")
@@ -27,7 +39,12 @@ class TaskApi:
             max_bytes = self.workers.runtime.config.attachments.max_upload_bytes
             if any(len(data) > max_bytes for _name, _media_type, data in decoded_attachments):
                 raise ValueError(f"attachment exceeds max_upload_bytes: {max_bytes}")
-            record = self.workers.create(objective, name=_optional_text(args, "name"))
+            record = self.workers.create(
+                objective,
+                name=_optional_text(args, "name"),
+                output_schema=output_schema,
+                mechanical_fields=mechanical_fields,
+            )
             for name, media_type, data in decoded_attachments:
                 self.workers.add_attachment(
                     record.worker_id,
@@ -111,7 +128,9 @@ class TaskApi:
         raise ValueError(f"Unknown task operation: {operation}")
 
     def _record(self, record) -> dict[str, Any]:
-        return {"version": self.version, "worker": asdict(record)}
+        payload = asdict(record)
+        payload["structured_output"] = self.workers.structured_output(record.worker_id)
+        return {"version": self.version, "worker": payload}
 
 
 def _required_text(payload: dict[str, Any], key: str) -> str:

@@ -20,6 +20,10 @@ def test_cli_tools_command(capsys) -> None:
 def test_cli_budget_demo(capsys, monkeypatch) -> None:
     monkeypatch.setattr("swaag.model.LlamaCppClient.tokenize", lambda self, text: max(1, len(text) // 4))
     monkeypatch.setattr("swaag.model.LlamaCppClient.tokenize_selection", lambda self, text: max(1, len(text) // 4))
+    monkeypatch.setattr(
+        "swaag.model.LlamaCppClient.context_limit_resolution",
+        lambda self: (self.config.model.context_limit, "configured:test"),
+    )
     rc = main(["budget-demo", "hello"])
     out = capsys.readouterr().out
     assert rc == 0

@@ -42,7 +42,9 @@ from swaag.model_cache import build_model_client
 from swaag.notes import select_notes_for_prompt
 from swaag.prompts import PromptBuilder
 from swaag.scheduler import WakeupStore
+from swaag.schema_portability import assert_portable_json_schema
 from swaag.tokens import ConservativeEstimator, CountResult, ExactTokenCounter, build_budget
+from swaag.tools.base import _validate_schema_value
 from swaag.tools.registry import ToolRegistry
 from swaag.types import (
     AttachmentReference,
@@ -80,6 +82,13 @@ class OutputBudgetExhaustedError(ValueError):
         )
         self.finish_reason = finish_reason
         self.reserved_tokens = int(reserved_tokens)
+
+
+def _validated_caller_output(
+    payload: dict[str, Any], schema: dict[str, Any]
+) -> dict[str, Any]:
+    _validate_schema_value(payload, schema, path="caller_structured_output")
+    return payload
 
 
 @dataclass(slots=True)
@@ -1077,6 +1086,169 @@ class AgentRuntime:
                 "Retrieve or semantically reduce additional evidence before deciding completion."
             ],
         }
+
+    def generate_caller_structured_output(
+        self,
+        state: SessionState,
+        *,
+        original_request: str,
+        assistant_message: str,
+        tool_results: list[ToolExecutionResult],
+        semantic_schema: dict[str, Any],
+    ) -> dict[str, Any]:
+        """Run caller-output generation as its own cancellable inference lifecycle."""
+        run_id = f"{state.session_id}:{new_id('run')}"
+        self.history.set_active_run(
+            state.session_id,
+            run_id=run_id,
+            user_text=original_request,
+        )
+        try:
+            self._heartbeat(
+                state,
+                run_id=run_id,
+                phase="structured_output",
+                detail="generating caller-defined semantic fields",
+            )
+            output = self._generate_caller_structured_output(
+                state,
+                original_request=original_request,
+                assistant_message=assistant_message,
+                tool_results=tool_results,
+                semantic_schema=semantic_schema,
+            )
+            self._heartbeat(
+                state,
+                run_id=run_id,
+                phase="completed",
+                detail="caller-defined semantic fields completed",
+            )
+            return output
+        except RunCancellationRequested as exc:
+            self.preemption.complete_run_cancellation(state.session_id, run_id)
+            self._heartbeat(
+                state,
+                run_id=run_id,
+                phase="cancelled",
+                detail=str(exc),
+            )
+            raise
+        except Exception as exc:
+            self._heartbeat(
+                state,
+                run_id=run_id,
+                phase="failed",
+                detail=f"{type(exc).__name__}: {exc}",
+            )
+            raise
+        finally:
+            self.history.clear_active_run(state.session_id, run_id=run_id)
+
+    def _generate_caller_structured_output(
+        self,
+        state: SessionState,
+        *,
+        original_request: str,
+        assistant_message: str,
+        tool_results: list[ToolExecutionResult],
+        semantic_schema: dict[str, Any],
+    ) -> dict[str, Any]:
+        """Generate only caller-declared semantic fields under a constrained schema."""
+        assert_portable_json_schema(
+            semantic_schema, schema_name="caller_structured_output"
+        )
+        if not semantic_schema.get("properties"):
+            return {}
+        contract = ContractSpec(
+            name="caller_structured_output",
+            mode="json_schema",
+            json_schema=semantic_schema,
+        )
+        evidence_rows = self._completion_evidence_rows(state, tool_results)
+        projections: dict[int, str] = {}
+        last_compilation: ContextCompilation | None = None
+        max_rounds = max(0, int(self.config.context.max_compaction_rounds))
+        for reduction_round in range(max_rounds + 1):
+            assembly = self.prompts.build_caller_structured_output_prompt(
+                original_request=original_request,
+                assistant_message=assistant_message,
+                tool_evidence_rows=evidence_rows,
+                tool_result_projections=projections,
+            )
+            compilation = self._compile_context(
+                state,
+                assembly,
+                contract,
+                minimum_output_tokens=128,
+            )
+            last_compilation = compilation
+            cap_error = "" if compilation.report.fits else "context_limit_exceeded"
+            self.history.record_event(
+                state,
+                "context_compiled",
+                {
+                    "kind": "caller_structured_output",
+                    "prompt_mode": "lean",
+                    "accounting": compilation.accounting(),
+                    "cap_error": cap_error,
+                    "reduction_round": reduction_round,
+                },
+            )
+            self.history.record_event(
+                state,
+                "budget_checked",
+                {
+                    "kind": "caller_structured_output",
+                    "prompt_mode": "lean",
+                    "budget_report": asdict(compilation.report),
+                    "cap_error": cap_error,
+                },
+            )
+            if compilation.report.fits:
+                self._record_prompt_built(state, assembly, contract, compilation.report)
+                payload = self._execute_structured_call(
+                    state,
+                    PreparedCall(assembly, compilation.report, "lean", contract),
+                    validator=lambda value: _validated_caller_output(
+                        value, semantic_schema
+                    ),
+                )
+                source_references = [
+                    reference
+                    for row in evidence_rows
+                    for reference in row.get("source_event_references", [])
+                ]
+                self.history.record_event(
+                    state,
+                    "caller_structured_output_created",
+                    {
+                        "schema": semantic_schema,
+                        "semantic_output": payload,
+                        "evidence_source_references": source_references,
+                        "projected_source_event_sequences": sorted(projections),
+                    },
+                )
+                return payload
+            if (
+                not self.config.context.compact_on_overflow
+                or reduction_round >= max_rounds
+            ):
+                break
+            projected = self._project_largest_tool_result_for_overflow(
+                state,
+                original_request=original_request,
+                assembly=assembly,
+                compilation=compilation,
+                existing_projections=projections,
+            )
+            if projected is None:
+                break
+            sequence, projection = projected
+            projections[sequence] = projection
+        raise BudgetExceededError(
+            "The caller-defined structured output prompt does not fit after bounded semantic reduction.",
+            last_compilation.report if last_compilation is not None else None,
+        )
 
     @staticmethod
     def _completion_evidence_rows(

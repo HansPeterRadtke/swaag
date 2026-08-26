@@ -93,8 +93,8 @@ This is the gap list between the current repository and the intended architectur
 - [ ] **Evaluate/add an A2A adapter for durable external task semantics.** **Partial.** A tested A2A 1.0 projection maps submitted/working/input-required/completed/failed/canceled and artifacts without letting A2A own internal state. Add protocol operations, pagination/subscription, authentication, and conformance tests before claiming an A2A server.
 - [ ] **Add an Open WebUI adapter.** **Partial.** A tested projection uses persistence-safe `status` events and the normal return channel for final or critical input-required text. Add the actual Pipe/tool integration plus file/source mapping.
 - [ ] **Keep durable fallback semantics independent of live WebSocket UI connections.**
-- [ ] **Support caller-defined structured output schemas.** LLM-generated semantic fields should use schema-constrained generation; deterministic runtime fields such as timings/state/IDs should be filled mechanically.
-- [ ] **Keep normal conversation as the universal common-denominator output.** Rich structured fields/events augment it rather than making basic clients impossible.
+- [x] **Support caller-defined structured output schemas.** `TaskApi.create` accepts a portable closed JSON schema and explicit top-level mechanical bindings. Semantic fields are generated in a separately compiled, schema-constrained, cancellable LLM call; IDs, lifecycle state, timestamps, objective, and run count bindings are filled and validated deterministically. The merged output is durable in the terminal worker event and returned by worker inspection.
+- [x] **Keep normal conversation as the universal common-denominator output.** Worker `result` remains the complete conversational answer; caller-defined structured output is an optional durable augmentation rather than a replacement channel.
 
 ## P1 - attachment and file handling
 

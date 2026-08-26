@@ -292,6 +292,7 @@ class PromptBuilder:
                 text="Deterministic/tool evidence from this turn:\n",
             ),
             *self._completion_evidence_components(
+                prefix="completion",
                 tool_evidence=tool_evidence,
                 rows=tool_evidence_rows or [],
                 projections=tool_result_projections or {},
@@ -308,9 +309,66 @@ class PromptBuilder:
         ]
         return PromptAssembly(kind="completion_evaluation", prompt_mode="lean", prompt_text="".join(c.text for c in components), components=components)
 
+    def build_caller_structured_output_prompt(
+        self,
+        *,
+        original_request: str,
+        assistant_message: str,
+        tool_evidence_rows: list[dict],
+        tool_result_projections: dict[int, str] | None = None,
+    ) -> PromptAssembly:
+        system_prompt = self._load_template(
+            self._config.prompts.caller_structured_output_system_template
+        )
+        components = [
+            PromptComponent(name="llama3_begin", category="wrapper", text=LLAMA3_BEGIN),
+            PromptComponent(name="system_header", category="wrapper", text=LLAMA3_SYSTEM_HEADER),
+            PromptComponent(name="system_prompt", category="system_prompt", text=system_prompt),
+            PromptComponent(name="system_eot", category="wrapper", text=LLAMA3_EOT),
+            PromptComponent(name="user_header", category="wrapper", text=LLAMA3_USER_HEADER),
+            PromptComponent(
+                name="caller_output_objective",
+                category="current_user",
+                text=f"Original user objective:\n{original_request}\n\n",
+            ),
+            PromptComponent(
+                name="caller_output_candidate",
+                category="turn_context",
+                text=f"Verified worker answer:\n{assistant_message}\n\n",
+            ),
+            PromptComponent(
+                name="caller_output_evidence_header",
+                category="tool_result",
+                text="Exact tool evidence from this turn:\n",
+            ),
+            *self._completion_evidence_components(
+                prefix="caller_output",
+                tool_evidence="",
+                rows=tool_evidence_rows,
+                projections=tool_result_projections or {},
+            ),
+            PromptComponent(
+                name="caller_output_instruction",
+                category="instruction",
+                text="\n"
+                + self._load_template(
+                    self._config.prompts.caller_structured_output_template
+                ),
+            ),
+            PromptComponent(name="user_eot", category="wrapper", text=LLAMA3_EOT),
+            PromptComponent(name="assistant_header", category="wrapper", text=LLAMA3_ASSISTANT_HEADER),
+        ]
+        return PromptAssembly(
+            kind="caller_structured_output",
+            prompt_mode="lean",
+            prompt_text="".join(component.text for component in components),
+            components=components,
+        )
+
     @staticmethod
     def _completion_evidence_components(
         *,
+        prefix: str,
         tool_evidence: str,
         rows: list[dict],
         projections: dict[int, str],
@@ -318,7 +376,7 @@ class PromptBuilder:
         if not rows:
             return [
                 PromptComponent(
-                    name="completion_tool_evidence_empty" if not tool_evidence else "completion_tool_evidence_legacy",
+                    name=f"{prefix}_tool_evidence_empty" if not tool_evidence else f"{prefix}_tool_evidence_legacy",
                     category="tool_result",
                     text=(tool_evidence or "(none)") + "\n",
                 )
@@ -327,11 +385,11 @@ class PromptBuilder:
         for index, row in enumerate(rows, start=1):
             sequence = row.get("source_event_sequence")
             source_hash = str(row.get("source_event_hash", ""))
-            name = f"completion_tool_evidence_{index}"
+            name = f"{prefix}_tool_evidence_{index}"
             body = stable_json_dumps(row, indent=None)
             provenance = ""
             if isinstance(sequence, int):
-                name = f"completion_tool_event_{sequence}"
+                name = f"{prefix}_tool_event_{sequence}"
                 provenance = f"[SOURCE EVENT sequence={sequence} hash={source_hash or 'unknown'}]\n"
                 if sequence in projections:
                     body = (

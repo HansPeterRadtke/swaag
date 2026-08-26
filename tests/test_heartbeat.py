@@ -11,6 +11,7 @@ def test_heartbeat_payload_has_mechanical_phase_and_timestamp():
     assert payload["phase"] == "inference"
     assert payload["heartbeat_at"]
     assert "inference" in WORKER_PHASES
+    assert "structured_output" in WORKER_PHASES
 
 
 def test_active_run_update_preserves_identity_and_updates_phase(make_config):

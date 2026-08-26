@@ -104,6 +104,8 @@ class PromptConfig:
     tool_result_projection_template: str
     completion_evaluation_system_template: str
     completion_evaluation_template: str
+    caller_structured_output_system_template: str
+    caller_structured_output_template: str
 
 
 @dataclass(slots=True)
