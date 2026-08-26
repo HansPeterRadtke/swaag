@@ -1022,6 +1022,16 @@ def _build_parser() -> argparse.ArgumentParser:
     context_order_parser.add_argument("--output", default="context_order_output.json", help="JSON result path.")
     context_order_parser.add_argument("--json", action="store_true", help="Print the full JSON report.")
 
+    tool_strategy_parser = subparsers.add_parser(
+        "tool-strategy",
+        help="Compare generic shell use with bespoke structured tools on identical live tasks.",
+    )
+    tool_strategy_parser.add_argument("--output", default="tool_strategy_output", help="Artifact directory.")
+    tool_strategy_parser.add_argument("--task", action="append", default=[], help="Run only the named experiment task.")
+    tool_strategy_parser.add_argument("--strategy", action="append", default=[], help="Run only the named tool strategy.")
+    tool_strategy_parser.add_argument("--clean", action="store_true", help="Replace an existing artifact directory.")
+    tool_strategy_parser.add_argument("--json", action="store_true", help="Print the full JSON report.")
+
     subparsers.add_parser("list", help="List available benchmark task ids.")
     external_parser = subparsers.add_parser("external", help="Run optional official external benchmark harness integrations.")
     external_parser.add_argument("external_args", nargs=argparse.REMAINDER, help="Arguments forwarded to the external benchmark runner.")
@@ -1138,6 +1148,23 @@ def main(argv: Sequence[str] | None = None) -> int:
             for position, values in report["by_position"].items():
                 print(f"{position}={values['passed']}/{values['total']}")
             print(f"output={args.output}")
+        return 0 if report["passed"] == report["total"] else 1
+    if args.command == "tool-strategy":
+        from swaag.benchmark.tool_strategy import run_tool_strategy_benchmark
+
+        report = run_tool_strategy_benchmark(
+            output_dir=Path(args.output),
+            task_ids=list(args.task),
+            strategy_names=list(args.strategy),
+            clean=bool(args.clean),
+        )
+        if args.json:
+            print(stable_json_dumps(report, indent=2))
+        else:
+            print(f"passed={report['passed']}/{report['total']}")
+            for strategy, values in report["by_strategy"].items():
+                print(f"{strategy}={values['passed']}/{values['total']}")
+            print(f"output={Path(args.output) / 'tool_strategy_results.json'}")
         return 0 if report["passed"] == report["total"] else 1
     if args.command == "external":
         forwarded = list(args.external_args)
