@@ -10,7 +10,7 @@ export UV_PROJECT_ENVIRONMENT="$RUNTIME_ROOT/venv"
 mkdir -p "$RUNTIME_ROOT" "$UV_CACHE_DIR"
 "$UV_BIN" python install --install-dir "$UV_PYTHON_INSTALL_DIR" "$PYTHON_VERSION"
 cd "$ROOT"
-"$UV_BIN" sync --frozen --no-dev --no-editable --python "$PYTHON_VERSION"
+"$UV_BIN" sync --frozen --no-dev --no-editable --reinstall-package swaag --python "$PYTHON_VERSION"
 "$RUNTIME_ROOT/venv/bin/python" -c 'import swaag, requests; print("swaag runtime environment ok")'
 "$RUNTIME_ROOT/venv/bin/swaag" --help >/dev/null
 printf '%s\n' "$RUNTIME_ROOT/venv"
