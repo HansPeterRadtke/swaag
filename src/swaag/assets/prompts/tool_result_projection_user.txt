@@ -1,0 +1,10 @@
+User goal:
+{original_request}
+
+Canonical raw tool-result source event: sequence={source_event_sequence} hash={source_event_hash}
+Tool name: {tool_name}
+
+Raw tool observation:
+{raw_tool_result}
+
+Produce a semantic projection for continuing the user goal. The `projection` value should fit within approximately {target_tokens} tokens. Preserve exact details when they may affect correctness. The raw source remains retrievable, so omit irrelevant bulk rather than blindly truncating.

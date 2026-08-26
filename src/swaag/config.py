@@ -99,6 +99,8 @@ class PromptConfig:
     action_template: str
     summary_system_template: str
     summary_template: str
+    tool_result_projection_system_template: str
+    tool_result_projection_template: str
 
 
 @dataclass(slots=True)

@@ -164,6 +164,8 @@ lean_system_template = "system_lean.txt"
 action_template = "agent_action_user.txt"
 summary_system_template = "summary_system.txt"
 summary_template = "summary_user.txt"
+tool_result_projection_system_template = "tool_result_projection_system.txt"
+tool_result_projection_template = "tool_result_projection_user.txt"
 
 # -----------------------------------------------------------
 # [budget_policy] — SCALE-FREE OUTPUT/SAFETY/SECTION RATIOS
@@ -185,6 +187,7 @@ safe_input_floor_tokens = 128
 [budget_policy.call_classes]
 action = "large"
 summary = "medium"
+tool_result_projection = "medium"
 doctor = "tiny"
 benchmark_quality_judge = "small"
 
@@ -203,18 +206,21 @@ large = 0.10
 [budget_policy.output_ratio_by_kind]
 action = 0.30
 summary = 0.18
+tool_result_projection = 0.14
 doctor = 0.05
 benchmark_quality_judge = 0.12
 
 [budget_policy.output_floor_ratio_by_kind]
 action = 0.22
 summary = 0.10
+tool_result_projection = 0.08
 doctor = 0.03
 benchmark_quality_judge = 0.08
 
 [budget_policy.structured_output_json_factor_by_contract]
 agent_action = 1.10
 summary = 1.10
+tool_result_projection = 1.10
 yes_no = 1.10
 benchmark_quality = 1.10
 

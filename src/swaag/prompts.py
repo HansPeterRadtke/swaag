@@ -77,6 +77,7 @@ class PromptBuilder:
         category: str,
         header: str,
         optional: bool = False,
+        tool_result_projections: dict[int, str] | None = None,
     ) -> list[PromptComponent]:
         components = [
             PromptComponent(
@@ -103,15 +104,21 @@ class PromptBuilder:
             event_sequence = message.metadata.get("source_event_sequence")
             event_hash = message.metadata.get("source_event_hash")
             provenance = ""
+            body = message.content.strip()
             component_name = f"{prefix}_{index}"
             if message.role == "tool" and isinstance(event_sequence, int):
                 component_name = f"{prefix}_tool_event_{event_sequence}"
                 provenance = f"[SOURCE EVENT sequence={event_sequence} hash={event_hash or 'unknown'}]\n"
+                if tool_result_projections and event_sequence in tool_result_projections:
+                    body = (
+                        "[SEMANTIC PROJECTION; raw source remains authoritative and retrievable]\n"
+                        + tool_result_projections[event_sequence].strip()
+                    )
             components.append(
                 PromptComponent(
                     name=component_name,
                     category="tool_result" if message.role == "tool" else category,
-                    text=f"[{label}]\n{provenance}{message.content.strip()}\n\n",
+                    text=f"[{label}]\n{provenance}{body}\n\n",
                     optional=optional,
                 )
             )
@@ -156,6 +163,7 @@ class PromptBuilder:
         prompt_mode: str,
         context_components: list[PromptComponent] | None = None,
         capability_index: Iterable[tuple[str, str, str]] | None = None,
+        tool_result_projections: dict[int, str] | None = None,
         validation_feedback: str = "",
     ) -> PromptAssembly:
         history, current_user, turn_transcript = self.partition_turn(messages)
@@ -171,6 +179,7 @@ class PromptBuilder:
                 category="history",
                 header="Previous conversation messages, verbatim:",
                 optional=True,
+                tool_result_projections=tool_result_projections,
             ),
             PromptComponent(
                 name="current_user_turn",
@@ -185,6 +194,7 @@ class PromptBuilder:
                 prefix="current_turn",
                 category="turn_context",
                 header="Exact assistant actions and tool results since the current user message:",
+                tool_result_projections=tool_result_projections,
             ),
         ]
         if pending_user_messages:
@@ -238,6 +248,42 @@ class PromptBuilder:
             )
         )
         return self._assemble("action", prompt_mode, components)
+
+    def build_tool_result_projection_prompt(
+        self,
+        *,
+        original_request: str,
+        tool_name: str,
+        raw_tool_result: str,
+        source_event_sequence: int,
+        source_event_hash: str,
+        target_tokens: int,
+    ) -> PromptAssembly:
+        system_prompt = self._load_template(self._config.prompts.tool_result_projection_system_template)
+        user_text = self._load_template(self._config.prompts.tool_result_projection_template).format(
+            original_request=original_request,
+            tool_name=tool_name,
+            raw_tool_result=raw_tool_result,
+            source_event_sequence=int(source_event_sequence),
+            source_event_hash=source_event_hash,
+            target_tokens=max(1, int(target_tokens)),
+        )
+        components = [
+            PromptComponent(name="llama3_begin", category="wrapper", text=LLAMA3_BEGIN),
+            PromptComponent(name="system_header", category="wrapper", text=LLAMA3_SYSTEM_HEADER),
+            PromptComponent(name="system_prompt", category="system_prompt", text=system_prompt),
+            PromptComponent(name="system_eot", category="wrapper", text=LLAMA3_EOT),
+            PromptComponent(name="user_header", category="wrapper", text=LLAMA3_USER_HEADER),
+            PromptComponent(name="projection_task", category="tool_result", text=user_text),
+            PromptComponent(name="user_eot", category="wrapper", text=LLAMA3_EOT),
+            PromptComponent(name="assistant_header", category="wrapper", text=LLAMA3_ASSISTANT_HEADER),
+        ]
+        return PromptAssembly(
+            kind="tool_result_projection",
+            prompt_mode="lean",
+            prompt_text="".join(component.text for component in components),
+            components=components,
+        )
 
     def build_summary_prompt(
         self,

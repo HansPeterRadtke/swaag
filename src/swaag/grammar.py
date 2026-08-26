@@ -47,6 +47,13 @@ def summary_contract() -> ContractSpec:
     )
 
 
+def tool_result_projection_contract() -> ContractSpec:
+    return _contract(
+        "tool_result_projection",
+        _closed_object({"projection": _string()}),
+    )
+
+
 def agent_action_contract(tool_specs: Iterable[tuple], *, allow_silent_completion: bool = False) -> ContractSpec:
     tool_call_variants: list[dict[str, Any]] = []
     seen: set[str] = set()

@@ -698,6 +698,7 @@ class AgentRuntime:
         validation_feedback: str,
     ) -> PreparedCall:
         last_report: BudgetReport | None = None
+        tool_result_projections: dict[int, str] = {}
         max_rounds = max(0, int(self.config.context.max_compaction_rounds))
         for compaction_round in range(max_rounds + 1):
             counter = self._counter(state)
@@ -710,6 +711,7 @@ class AgentRuntime:
                 prompt_mode="standard",
                 context_components=context_components,
                 capability_index=capability_index,
+                tool_result_projections=tool_result_projections,
                 validation_feedback=validation_feedback,
             )
             compilation = self._compile_context(
@@ -747,6 +749,17 @@ class AgentRuntime:
                 )
             if not self.config.context.compact_on_overflow or compaction_round >= max_rounds:
                 break
+            projected = self._project_largest_tool_result_for_overflow(
+                state,
+                original_request=original_request,
+                assembly=assembly,
+                compilation=compilation,
+                existing_projections=tool_result_projections,
+            )
+            if projected is not None:
+                sequence, projection = projected
+                tool_result_projections[sequence] = projection
+                continue
             if not self._compact_once(state):
                 break
 
@@ -754,6 +767,134 @@ class AgentRuntime:
             "The exact action prompt, tool schemas, output reserve, and safety margin do not fit the model context.",
             last_report,
         )
+
+    def _project_largest_tool_result_for_overflow(
+        self,
+        state: SessionState,
+        *,
+        original_request: str,
+        assembly: PromptAssembly,
+        compilation: ContextCompilation,
+        existing_projections: dict[int, str],
+    ) -> tuple[int, str] | None:
+        overflow = compilation.overflow_tokens
+        if overflow <= 0:
+            return None
+        report_by_name = {item.name: item for item in compilation.report.breakdown}
+        candidates: list[tuple[int, int, Message]] = []
+        for message in state.messages:
+            if message.role != "tool":
+                continue
+            sequence = message.metadata.get("source_event_sequence")
+            if not isinstance(sequence, int) or sequence in existing_projections:
+                continue
+            matching_tokens = 0
+            suffix = f"_tool_event_{sequence}"
+            for component in assembly.components:
+                if component.name.endswith(suffix):
+                    item = report_by_name.get(component.name)
+                    if item is not None:
+                        matching_tokens = int(item.tokens)
+                    break
+            if matching_tokens > 0:
+                candidates.append((matching_tokens, sequence, message))
+        if not candidates:
+            return None
+        current_tokens, sequence, message = max(candidates, key=lambda item: item[0])
+        # Reduce enough to clear the measured overflow plus a small deterministic
+        # cushion for JSON/provenance framing, while preserving useful room when possible.
+        target_tokens = max(64, current_tokens - overflow - max(32, int(current_tokens * 0.05)))
+        if target_tokens >= current_tokens:
+            return None
+        projection = self._create_tool_result_projection(
+            state,
+            original_request=original_request,
+            message=message,
+            target_tokens=target_tokens,
+            original_tokens=current_tokens,
+            overflow_tokens=overflow,
+        )
+        if not projection:
+            return None
+        return sequence, projection
+
+    def _create_tool_result_projection(
+        self,
+        state: SessionState,
+        *,
+        original_request: str,
+        message: Message,
+        target_tokens: int,
+        original_tokens: int,
+        overflow_tokens: int,
+    ) -> str:
+        sequence = message.metadata.get("source_event_sequence")
+        source_hash = str(message.metadata.get("source_event_hash", ""))
+        if not isinstance(sequence, int):
+            return ""
+        contract = tool_result_projection_contract()
+        assembly = self.prompts.build_tool_result_projection_prompt(
+            original_request=original_request,
+            tool_name=message.name or "tool",
+            raw_tool_result=message.content,
+            source_event_sequence=sequence,
+            source_event_hash=source_hash,
+            target_tokens=target_tokens,
+        )
+        compilation = self._compile_context(
+            state,
+            assembly,
+            contract,
+            minimum_output_tokens=min(target_tokens + 64, self.config.context.reserved_response_tokens),
+        )
+        if not compilation.report.fits:
+            self.history.record_event(
+                state,
+                "tool_result_projection_skipped",
+                {
+                    "source_event_sequence": sequence,
+                    "source_event_hash": source_hash,
+                    "reason": "projection_prompt_does_not_fit",
+                    "target_tokens": target_tokens,
+                    "original_tokens": original_tokens,
+                    "overflow_tokens": overflow_tokens,
+                    "budget_report": asdict(compilation.report),
+                },
+            )
+            return ""
+        self.history.record_event(
+            state,
+            "context_compiled",
+            {
+                "kind": "tool_result_projection",
+                "prompt_mode": "lean",
+                "accounting": compilation.accounting(),
+            },
+        )
+        self._record_prompt_built(state, assembly, contract, compilation.report)
+        payload = self._execute_structured_call(
+            state,
+            PreparedCall(assembly, compilation.report, "lean", contract),
+        )
+        projection = str(payload.get("projection", "")).strip()
+        if not projection:
+            return ""
+        projected_tokens = self._counter(state).count_text(projection).tokens
+        self.history.record_event(
+            state,
+            "tool_result_projected",
+            {
+                "source_event_sequence": sequence,
+                "source_event_hash": source_hash,
+                "tool_name": message.name or "tool",
+                "target_tokens": target_tokens,
+                "original_tokens": original_tokens,
+                "projected_tokens": projected_tokens,
+                "overflow_tokens": overflow_tokens,
+                "projection": projection,
+            },
+        )
+        return projection
 
     def _runtime_context_components(
         self,
