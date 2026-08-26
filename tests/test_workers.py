@@ -171,6 +171,11 @@ def test_multiple_workers_have_independent_durable_sessions(make_config) -> None
     assert alpha_done.result == "alpha complete"
     assert beta_done.result == "beta complete"
     assert manager.events(alpha.worker_id)[0].event_type == "worker_created"
+    completed_event = next(
+        event for event in manager.events(alpha.worker_id) if event.event_type == "worker_completed"
+    )
+    assert completed_event.payload["result"] == "alpha complete"
+    assert completed_event.payload["run_count"] == 1
 
 
 def test_worker_cancellation_is_durable_and_stops_active_inference(make_config) -> None:

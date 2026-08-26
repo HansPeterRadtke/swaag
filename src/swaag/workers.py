@@ -260,6 +260,10 @@ class WorkerStore:
                 "run_count": run_count,
                 **dict(event_payload or {}),
             }
+            if result is not None:
+                payload["result"] = result
+            if error is not None:
+                payload["error"] = error
             self._append_event(connection, worker_id, event_type, payload, timestamp=now)
             connection.commit()
         return self.get(worker_id)

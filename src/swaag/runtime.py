@@ -103,6 +103,7 @@ class TurnResult:
 class ToolRunResult:
     session_id: str
     tool_result: ToolExecutionResult | None
+    error: dict[str, Any] | None = None
 
 
 @dataclass(slots=True)
@@ -2088,7 +2089,9 @@ class AgentRuntime:
         if self._run_cancellation_requested(state):
             raise RunCancellationRequested("worker run cancellation requested")
 
-    def _execute_tool(self, state: SessionState, decision: ToolDecision) -> ToolExecutionResult | None:
+    def _execute_tool_with_error(
+        self, state: SessionState, decision: ToolDecision
+    ) -> tuple[ToolExecutionResult | None, dict[str, Any] | None]:
         guard = self.history.guard(state, f"tool:{decision.tool_name}")
         guard.record(
             "tool_called",
@@ -2141,7 +2144,7 @@ class AgentRuntime:
                     },
                 ),
             )
-            return None
+            return None, error_payload
 
         emitted_types: set[str] = set()
         for event in result.generated_events:
@@ -2191,6 +2194,10 @@ class AgentRuntime:
                 },
             ),
         )
+        return result, None
+
+    def _execute_tool(self, state: SessionState, decision: ToolDecision) -> ToolExecutionResult | None:
+        result, _error = self._execute_tool_with_error(state, decision)
         return result
 
     def execute_tool_once(
@@ -2201,7 +2208,7 @@ class AgentRuntime:
         session_id: str | None = None,
     ) -> ToolRunResult:
         state = self.create_or_load_session(session_id)
-        result = self._execute_tool(
+        result, error = self._execute_tool_with_error(
             state,
             ToolDecision(
                 action="call_tool",
@@ -2210,7 +2217,7 @@ class AgentRuntime:
                 tool_input=raw_input,
             ),
         )
-        return ToolRunResult(session_id=state.session_id, tool_result=result)
+        return ToolRunResult(session_id=state.session_id, tool_result=result, error=error)
 
     def _finish_turn(
         self,

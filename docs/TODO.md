@@ -35,7 +35,7 @@ This is the gap list between the current repository and the intended architectur
 - [x] **Give tool-result reducers overarching task context.** The projection operation receives the original user goal, raw result, source provenance, and a token target.
 - [x] **Add explicit token accounting per loaded tool schema and individual tool-result prompt component.** Export these measurements in benchmark reporting next.
 - [ ] **Benchmark generic shell versus bespoke structured tools per model.** **Partial.** A reproducible live harness now alternates strategy order over identical inspection/calculation and exact-edit tasks, disables replay, checkpoints every case, retains full sessions/workspaces, and verifies exact external effects. Run and record it against the Jetson model after the currently active context-order experiment releases the single inference slot; do not infer a general tool policy from one model or a tiny sample.
-- [ ] **Keep MCP as a replaceable capability adapter, not the core agent protocol.** **Partial.** `mcp.py` exists. Verify it follows current MCP direction and does not leak MCP assumptions into context/history/lifecycle architecture.
+- [ ] **Keep MCP as a replaceable capability adapter, not the core agent protocol.** **Partial.** `mcp.py` follows the 2026-07-28 request metadata, discovery, list-cache, deterministic-listing, validation-error, and execution-error contracts without leaking MCP assumptions into context/history/lifecycle architecture. Add upstream SDK/schema conformance coverage as the draft evolves.
 
 ## P0 - research, uncertainty, and autonomous continuation
 
@@ -89,7 +89,7 @@ This is the gap list between the current repository and the intended architectur
 ## P1 - interfaces and structured output
 
 - [x] **Define a transport-independent internal task/event API.** `TaskApi`, `WorkerStore`, and `WorkerManager` own the internal command/query/event model; the communication TCP service is one transport and MCP remains a capability boundary.
-- [ ] **Add an AG-UI adapter for rich streaming UI events.** **Partial.** A tested projection maps durable run/result/failure/cancellation/input-required events to current AG-UI run, text, activity, and custom shapes. Add a streaming endpoint and map canonical tool/state events rather than only worker lifecycle events.
+- [ ] **Add an AG-UI adapter for rich streaming UI events.** **Partial.** A tested projection maps durable run/result/failure/cancellation/input-required events to current AG-UI run, text, activity, custom, stable run-ID, success-outcome, and typed interrupt shapes. Add a streaming endpoint and map canonical tool/state events rather than only worker lifecycle events.
 - [ ] **Evaluate/add an A2A adapter for durable external task semantics.** **Partial.** A tested A2A 1.0 projection maps submitted/working/input-required/completed/failed/canceled and artifacts without letting A2A own internal state. Add protocol operations, pagination/subscription, authentication, and conformance tests before claiming an A2A server.
 - [ ] **Add an Open WebUI adapter.** **Partial.** A tested projection uses persistence-safe `status` events and the normal return channel for final or critical input-required text. Add the actual Pipe/tool integration plus file/source mapping.
 - [ ] **Keep durable fallback semantics independent of live WebSocket UI connections.**

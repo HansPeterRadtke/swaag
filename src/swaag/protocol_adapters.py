@@ -81,18 +81,20 @@ class AgUiProjectionAdapter:
                         **base,
                         "type": "RUN_STARTED",
                         "threadId": record.session_id,
-                        "runId": event.event_id,
+                        "runId": self._run_id(record, event),
                     }
                 )
             elif event.event_type == "worker_completed":
+                event_result = self._event_text(event, "result", record.result)
                 output.extend(self._assistant_result(record, event, base))
                 output.append(
                     {
                         **base,
                         "type": "RUN_FINISHED",
                         "threadId": record.session_id,
-                        "runId": event.event_id,
-                        "result": record.result,
+                        "runId": self._run_id(record, event),
+                        "result": event_result,
+                        "outcome": {"type": "success"},
                     }
                 )
             elif event.event_type in {"worker_failed", "worker_orphaned"}:
@@ -100,11 +102,13 @@ class AgUiProjectionAdapter:
                     {
                         **base,
                         "type": "RUN_ERROR",
-                        "message": record.error or event.event_type,
+                        "message": self._event_text(event, "error", record.error)
+                        or event.event_type,
                         "code": "SWAAG_WORKER_FAILED",
                     }
                 )
             elif event.event_type == "worker_canceled":
+                event_error = self._event_text(event, "error", record.error)
                 output.append(
                     {
                         **base,
@@ -117,11 +121,13 @@ class AgUiProjectionAdapter:
                     {
                         **base,
                         "type": "RUN_ERROR",
-                        "message": record.error or "Worker canceled",
+                        "message": event_error or "Worker canceled",
                         "code": "SWAAG_WORKER_CANCELED",
                     }
                 )
             elif event.event_type == "worker_input_required":
+                event_result = self._event_text(event, "result", record.result)
+                output.extend(self._assistant_result(record, event, base))
                 output.append(
                     {
                         **base,
@@ -129,7 +135,30 @@ class AgUiProjectionAdapter:
                         "name": "swaag.worker.input_required",
                         "value": {
                             "workerId": record.worker_id,
-                            "message": record.result or "Input required",
+                            "message": event_result or "Input required",
+                        },
+                    }
+                )
+                output.append(
+                    {
+                        **base,
+                        "type": "RUN_FINISHED",
+                        "threadId": record.session_id,
+                        "runId": self._run_id(record, event),
+                        "result": event_result,
+                        "outcome": {
+                            "type": "interrupt",
+                            "interrupts": [
+                                {
+                                    "id": f"{record.worker_id}-input-{event.sequence}",
+                                    "reason": "human_input",
+                                    "message": event_result or "Input required",
+                                    "metadata": {
+                                        "swaagWorkerId": record.worker_id,
+                                        "swaagEventId": event.event_id,
+                                    },
+                                }
+                            ],
                         },
                     }
                 )
@@ -151,15 +180,28 @@ class AgUiProjectionAdapter:
         return output
 
     @staticmethod
+    def _run_id(record: WorkerRecord, event: WorkerEvent) -> str:
+        run_count = event.payload.get("run_count", record.run_count)
+        if not isinstance(run_count, int) or run_count < 1:
+            run_count = record.run_count
+        return f"{record.worker_id}-run-{run_count}"
+
+    @staticmethod
+    def _event_text(event: WorkerEvent, key: str, fallback: str | None) -> str | None:
+        value = event.payload.get(key)
+        return value if isinstance(value, str) else fallback
+
+    @staticmethod
     def _assistant_result(
         record: WorkerRecord, event: WorkerEvent, base: dict[str, Any]
     ) -> list[dict[str, Any]]:
-        if not record.result:
+        result = AgUiProjectionAdapter._event_text(event, "result", record.result)
+        if not result:
             return []
         message_id = f"{record.worker_id}-result-{event.sequence}"
         return [
             {**base, "type": "TEXT_MESSAGE_START", "messageId": message_id, "role": "assistant"},
-            {**base, "type": "TEXT_MESSAGE_CONTENT", "messageId": message_id, "delta": record.result},
+            {**base, "type": "TEXT_MESSAGE_CONTENT", "messageId": message_id, "delta": result},
             {**base, "type": "TEXT_MESSAGE_END", "messageId": message_id},
         ]
 

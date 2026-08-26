@@ -27,14 +27,16 @@ def _record(*, status: str = "completed", archived_at: str | None = None) -> Wor
     )
 
 
-def _event(event_type: str, sequence: int = 2) -> WorkerEvent:
+def _event(
+    event_type: str, sequence: int = 2, payload: dict[str, object] | None = None
+) -> WorkerEvent:
     return WorkerEvent(
         event_id=f"event_{sequence}",
         worker_id="worker_1",
         sequence=sequence,
         timestamp="2026-08-26T10:01:00+00:00",
         event_type=event_type,
-        payload={"to_status": event_type.removeprefix("worker_")},
+        payload={"to_status": event_type.removeprefix("worker_"), **dict(payload or {})},
     )
 
 
@@ -68,7 +70,7 @@ def test_a2a_projection_preserves_internal_task_state_and_archive_metadata() -> 
     assert waiting["status"]["state"] == "TASK_STATE_INPUT_REQUIRED"
 
 
-def test_ag_ui_projection_uses_current_run_message_and_custom_event_shapes() -> None:
+def test_ag_ui_projection_uses_stable_run_message_and_terminal_event_shapes() -> None:
     adapter = AgUiProjectionAdapter()
     completed = adapter.events(_record(), [_event("worker_started", 1), _event("worker_completed", 2)])
     canceled = adapter.events(_record(status="canceled"), [_event("worker_canceled")])
@@ -81,8 +83,46 @@ def test_ag_ui_projection_uses_current_run_message_and_custom_event_shapes() -> 
         "RUN_FINISHED",
     ]
     assert completed[2]["delta"] == "exact result"
+    assert completed[0]["runId"] == completed[-1]["runId"] == "worker_1-run-1"
+    assert completed[-1]["outcome"] == {"type": "success"}
     assert [item["type"] for item in canceled] == ["CUSTOM", "RUN_ERROR"]
     assert canceled[-1]["code"] == "SWAAG_WORKER_CANCELED"
+
+    historical = adapter.events(
+        _record(),
+        [_event("worker_completed", 8, {"run_count": 2, "result": "prior exact result"})],
+    )
+    assert historical[1]["delta"] == "prior exact result"
+    assert historical[-1]["result"] == "prior exact result"
+    assert historical[-1]["runId"] == "worker_1-run-2"
+
+
+def test_ag_ui_projects_input_required_as_a_resumable_interrupt() -> None:
+    waiting = AgUiProjectionAdapter().events(
+        _record(status="input_required"), [_event("worker_input_required")]
+    )
+
+    assert [item["type"] for item in waiting] == [
+        "TEXT_MESSAGE_START",
+        "TEXT_MESSAGE_CONTENT",
+        "TEXT_MESSAGE_END",
+        "CUSTOM",
+        "RUN_FINISHED",
+    ]
+    finished = waiting[-1]
+    assert finished["runId"] == "worker_1-run-1"
+    assert finished["outcome"]["type"] == "interrupt"
+    assert finished["outcome"]["interrupts"] == [
+        {
+            "id": "worker_1-input-2",
+            "reason": "human_input",
+            "message": "exact result",
+            "metadata": {
+                "swaagWorkerId": "worker_1",
+                "swaagEventId": "event_2",
+            },
+        }
+    ]
 
 
 def test_open_webui_projection_uses_persisted_status_and_final_return_channel() -> None:

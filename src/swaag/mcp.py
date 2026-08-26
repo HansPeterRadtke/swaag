@@ -6,6 +6,7 @@ from dataclasses import asdict
 from typing import Any, TextIO
 
 from swaag.runtime import AgentRuntime
+from swaag.tools.base import ToolValidationError
 
 
 class McpAdapter:
@@ -69,38 +70,72 @@ class McpAdapter:
                         "uses the separate transport-neutral task API. Stateful capability "
                         "calls may carry the explicit com.swaag/sessionId request metadata handle."
                     ),
-                    "cacheScope": "public",
+                    "ttlMs": 0,
+                    "cacheScope": "private",
                 },
             )
         if method == "ping":
             return self._result(request_id, {})
         if method == "tools/list":
             tools = []
-            for tool in self.runtime.tools.enabled_tools(self.runtime.config):
+            for tool in sorted(
+                self.runtime.tools.enabled_tools(self.runtime.config), key=lambda item: item.name
+            ):
                 tools.append({
                     "name": tool.name,
                     "description": tool.description + (f" {tool.usage_guidance}" if tool.usage_guidance else ""),
                     "inputSchema": tool.input_schema,
                 })
-            return self._result(request_id, {"tools": tools})
+            return self._result(
+                request_id,
+                {"tools": tools, "ttlMs": 0, "cacheScope": "private"},
+            )
         if method == "tools/call":
-            name = str(params.get("name", ""))
-            arguments = params.get("arguments") or {}
+            name = params.get("name")
+            if not isinstance(name, str) or not name:
+                return self._error(request_id, -32602, "tools/call name must be a non-empty string")
+            arguments = params.get("arguments", {})
             if not isinstance(arguments, dict):
                 return self._error(request_id, -32602, "tools/call arguments must be an object")
+            enabled = {
+                tool.name: tool for tool in self.runtime.tools.enabled_tools(self.runtime.config)
+            }
+            tool = enabled.get(name)
+            if tool is None:
+                return self._error(request_id, -32602, f"Unknown or disabled tool: {name}")
+            try:
+                tool.validate(arguments)
+            except ToolValidationError as exc:
+                return self._error(request_id, -32602, str(exc))
             session_ref = metadata.get("com.swaag/sessionId")
             if session_ref is not None and not isinstance(session_ref, str):
                 return self._error(
                     request_id, -32602, "com.swaag/sessionId metadata must be a string"
                 )
-            session_id = self.runtime.resolve_session_ref(session_ref, latest_if_none=True)
             try:
+                session_id = self.runtime.resolve_session_ref(session_ref, latest_if_none=True)
                 run = self.runtime.execute_tool_once(name, arguments, session_id=session_id)
+            except FileNotFoundError as exc:
+                return self._error(request_id, -32602, str(exc))
             except Exception as exc:
                 return self._error(request_id, -32000, f"{type(exc).__name__}: {exc}")
+            if run.error is not None:
+                return self._result(
+                    request_id,
+                    {
+                        "content": [
+                            {"type": "text", "text": json.dumps(run.error, sort_keys=True)}
+                        ],
+                        "structuredContent": {"error": run.error},
+                        "isError": True,
+                        "_meta": {"com.swaag/sessionId": run.session_id},
+                    },
+                )
             result = run.tool_result
-            payload = result.output if result is not None else {}
-            display = result.display_text if result is not None else ""
+            if result is None:
+                return self._error(request_id, -32000, "Tool finished without a result or error")
+            payload = result.output
+            display = result.display_text
             return self._result(request_id, {
                 "content": [{"type": "text", "text": display or json.dumps(payload, sort_keys=True)}],
                 "structuredContent": payload,

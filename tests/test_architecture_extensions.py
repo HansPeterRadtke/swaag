@@ -136,11 +136,17 @@ def test_mcp_adapter_lists_and_calls_canonical_tools(make_config, tmp_path: Path
     )
     assert discovered["result"]["supportedVersions"] == ["2026-07-28"]
     assert discovered["result"]["resultType"] == "complete"
+    assert discovered["result"]["ttlMs"] == 0
+    assert discovered["result"]["cacheScope"] == "private"
     listed = mcp.handle(
         {"jsonrpc": "2.0", "id": 2, "method": "tools/list", "params": metadata}
     )
-    names = {item["name"] for item in listed["result"]["tools"]}
+    ordered_names = [item["name"] for item in listed["result"]["tools"]]
+    names = set(ordered_names)
     assert "calculator" in names
+    assert ordered_names == sorted(ordered_names)
+    assert listed["result"]["ttlMs"] == 0
+    assert listed["result"]["cacheScope"] == "private"
     called = mcp.handle({
         "jsonrpc": "2.0", "id": 3, "method": "tools/call",
         "params": {
@@ -155,6 +161,55 @@ def test_mcp_adapter_lists_and_calls_canonical_tools(make_config, tmp_path: Path
     assert called["result"]["isError"] is False
     assert called["result"]["_meta"]["com.swaag/sessionId"] == state.session_id
     assert called["result"]["structuredContent"]["result"] == 42
+
+
+def test_mcp_distinguishes_invalid_calls_from_tool_execution_errors(
+    make_config, tmp_path: Path
+) -> None:
+    config = make_config()
+    config.sessions.root = tmp_path / "sessions"
+    mcp = McpAdapter(AgentRuntime(config))
+    metadata = {
+        "_meta": {
+            "io.modelcontextprotocol/protocolVersion": "2026-07-28",
+            "io.modelcontextprotocol/clientCapabilities": {},
+        }
+    }
+
+    unknown = mcp.handle(
+        {
+            "jsonrpc": "2.0",
+            "id": 1,
+            "method": "tools/call",
+            "params": {**metadata, "name": "not_registered", "arguments": {}},
+        }
+    )
+    invalid = mcp.handle(
+        {
+            "jsonrpc": "2.0",
+            "id": 2,
+            "method": "tools/call",
+            "params": {**metadata, "name": "calculator", "arguments": {}},
+        }
+    )
+    failed = mcp.handle(
+        {
+            "jsonrpc": "2.0",
+            "id": 3,
+            "method": "tools/call",
+            "params": {
+                **metadata,
+                "name": "calculator",
+                "arguments": {"expression": "1 / 0"},
+            },
+        }
+    )
+
+    assert unknown["error"]["code"] == -32602
+    assert invalid["error"]["code"] == -32602
+    assert failed["result"]["isError"] is True
+    assert failed["result"]["structuredContent"]["error"]["error_type"] == "ZeroDivisionError"
+    assert failed["result"]["_meta"]["com.swaag/sessionId"]
 
 
 def test_mcp_2026_rejects_missing_per_request_metadata(make_config) -> None:
