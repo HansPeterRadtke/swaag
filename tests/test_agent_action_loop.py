@@ -395,6 +395,28 @@ def test_context_discovery_retries_transient_failures(monkeypatch) -> None:
     assert calls["count"] == 3
 
 
+def test_context_discovery_reads_current_props_shape(monkeypatch) -> None:
+    import json
+
+    from swaag.benchmark import benchmark_runner
+
+    class Response:
+        def __enter__(self):
+            return self
+
+        def __exit__(self, *args):
+            return False
+
+        def read(self):
+            return json.dumps({"default_generation_settings": {"n_ctx": 22016}}).encode()
+
+    monkeypatch.setattr(benchmark_runner.urllib.request, "urlopen", lambda request, timeout: Response())
+
+    assert benchmark_runner._discover_server_context_limit(
+        "http://127.0.0.1:14829", timeout_seconds=5
+    ) == 22016
+
+
 def test_duration_parser_supports_recording_units() -> None:
     from swaag.scheduler import parse_duration
 

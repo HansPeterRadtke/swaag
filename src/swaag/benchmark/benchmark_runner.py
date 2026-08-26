@@ -115,7 +115,9 @@ def _discover_server_context_limit(base_url: str, *, timeout_seconds: int) -> in
             if isinstance(payload, dict):
                 settings = payload.get("default_generation_settings")
                 params = settings.get("params") if isinstance(settings, dict) else None
-                n_ctx = params.get("n_ctx") if isinstance(params, dict) else None
+                n_ctx = settings.get("n_ctx") if isinstance(settings, dict) else None
+                if not isinstance(n_ctx, int) and isinstance(params, dict):
+                    n_ctx = params.get("n_ctx")
                 if isinstance(n_ctx, int) and n_ctx > 0:
                     return int(n_ctx)
     return None
@@ -1146,7 +1148,7 @@ def main(argv: Sequence[str] | None = None) -> int:
         else:
             print(f"passed={report['passed']}/{report['total']}")
             for position, values in report["by_position"].items():
-                print(f"{position}={values['passed']}/{values['total']}")
+                print(f"{position}={values['passed']}/{values['completed']}")
             print(f"output={args.output}")
         return 0 if report["passed"] == report["total"] else 1
     if args.command == "tool-strategy":

@@ -3,7 +3,7 @@ from __future__ import annotations
 from dataclasses import asdict, dataclass
 import json
 from pathlib import Path
-from typing import Iterable
+from typing import Callable, Iterable
 
 from swaag.config import AgentConfig, load_config
 from swaag.model import LlamaCppClient
@@ -11,7 +11,7 @@ from swaag.types import ContractSpec
 from swaag.utils import stable_json_dumps
 
 POSITIONS = ("early", "middle", "late")
-DEFAULT_UTILIZATIONS = (0.10, 0.25, 0.50)
+DEFAULT_UTILIZATIONS = (0.10, 0.25, 0.50, 0.75, 0.90)
 
 
 @dataclass(slots=True, frozen=True)
@@ -30,13 +30,16 @@ class ContextOrderResult:
     expected_code: str
     answer: str
     passed: bool
+    preflight_prompt_tokens: int
     prompt_tokens: int | None
     completion_tokens: int | None
     context_limit: int
     actual_input_utilization: float | None
     marker_char_fraction: float
+    marker_token_fraction: float
     elapsed_seconds: float | None
     first_token_seconds: float | None
+    finish_reason: str | None
 
 
 def answer_contract() -> ContractSpec:
@@ -60,13 +63,9 @@ def _filler_block(index: int) -> str:
     )
 
 
-def build_case(*, position: str, requested_utilization: float, context_limit: int, seed: int = 17) -> ContextOrderCase:
+def _render_case(*, position: str, requested_utilization: float, filler: str, seed: int) -> ContextOrderCase:
     if position not in POSITIONS:
         raise ValueError(f"position must be one of {POSITIONS}")
-    if not 0.02 <= requested_utilization <= 0.95:
-        raise ValueError("requested_utilization must be between 0.02 and 0.95")
-    # Conservative character target; live results record actual tokenizer counts.
-    target_chars = max(2400, int(context_limit * requested_utilization * 3.2))
     expected = f"SWAAG-{seed:04d}-ORBIT"
     marker = (
         "CRITICAL RETRIEVAL RECORD. The exact retrieval code for this experiment is "
@@ -76,15 +75,6 @@ def build_case(*, position: str, requested_utilization: float, context_limit: in
         "\nRETRIEVAL QUESTION: What is the exact retrieval code stated in the critical retrieval record? "
         "Return it in the constrained answer field.\n"
     )
-    blocks: list[str] = []
-    size = 0
-    i = 0
-    while size < target_chars:
-        block = _filler_block(i)
-        blocks.append(block)
-        size += len(block)
-        i += 1
-    filler = "".join(blocks)
     if position == "early":
         insert_at = max(0, int(len(filler) * 0.05))
     elif position == "middle":
@@ -99,12 +89,106 @@ def build_case(*, position: str, requested_utilization: float, context_limit: in
     )
 
 
-def build_matrix(*, context_limit: int, utilizations: Iterable[float] = DEFAULT_UTILIZATIONS, seed: int = 17) -> list[ContextOrderCase]:
-    return [
-        build_case(position=position, requested_utilization=float(util), context_limit=context_limit, seed=seed)
-        for util in utilizations
-        for position in POSITIONS
-    ]
+def _filler_for_target(
+    *,
+    requested_utilization: float,
+    context_limit: int,
+    seed: int,
+    token_counter: Callable[[str], int] | None,
+) -> str:
+    target_chars = max(2400, int(context_limit * requested_utilization * 3.2))
+    initial_blocks = max(1, target_chars // max(1, len(_filler_block(0))))
+    if token_counter is None:
+        count = initial_blocks
+        filler = "".join(_filler_block(index) for index in range(count))
+        while len(filler) < target_chars:
+            filler += _filler_block(count)
+            count += 1
+        return filler
+
+    target_tokens = max(1, int(round(context_limit * requested_utilization)))
+
+    def measured(block_count: int) -> tuple[int, str]:
+        filler = "".join(_filler_block(index) for index in range(block_count))
+        case = _render_case(
+            position="middle",
+            requested_utilization=requested_utilization,
+            filler=filler,
+            seed=seed,
+        )
+        return int(token_counter(case.prompt)), filler
+
+    low = 0
+    high = initial_blocks
+    high_tokens, _ = measured(high)
+    while high_tokens < target_tokens:
+        low = high
+        high *= 2
+        high_tokens, _ = measured(high)
+    while high - low > 1:
+        middle = (low + high) // 2
+        middle_tokens, _ = measured(middle)
+        if middle_tokens < target_tokens:
+            low = middle
+        else:
+            high = middle
+    candidates = [measured(low), measured(high)]
+    _tokens, filler = min(candidates, key=lambda item: abs(item[0] - target_tokens))
+    return filler
+
+
+def build_case(
+    *,
+    position: str,
+    requested_utilization: float,
+    context_limit: int,
+    seed: int = 17,
+    token_counter: Callable[[str], int] | None = None,
+) -> ContextOrderCase:
+    if not 0.02 <= requested_utilization <= 0.95:
+        raise ValueError("requested_utilization must be between 0.02 and 0.95")
+    filler = _filler_for_target(
+        requested_utilization=requested_utilization,
+        context_limit=context_limit,
+        seed=seed,
+        token_counter=token_counter,
+    )
+    return _render_case(
+        position=position,
+        requested_utilization=requested_utilization,
+        filler=filler,
+        seed=seed,
+    )
+
+
+def build_matrix(
+    *,
+    context_limit: int,
+    utilizations: Iterable[float] = DEFAULT_UTILIZATIONS,
+    seed: int = 17,
+    token_counter: Callable[[str], int] | None = None,
+) -> list[ContextOrderCase]:
+    cases: list[ContextOrderCase] = []
+    for raw_utilization in utilizations:
+        utilization = float(raw_utilization)
+        if not 0.02 <= utilization <= 0.95:
+            raise ValueError("requested_utilization must be between 0.02 and 0.95")
+        filler = _filler_for_target(
+            requested_utilization=utilization,
+            context_limit=context_limit,
+            seed=seed,
+            token_counter=token_counter,
+        )
+        cases.extend(
+            _render_case(
+                position=position,
+                requested_utilization=utilization,
+                filler=filler,
+                seed=seed,
+            )
+            for position in POSITIONS
+        )
+    return cases
 
 
 def run_context_order_benchmark(
@@ -114,10 +198,63 @@ def run_context_order_benchmark(
     config = config or load_config()
     client = LlamaCppClient(config)
     identity = client.cache_identity()
-    cases = build_matrix(context_limit=config.model.context_limit, utilizations=utilizations, seed=seed)
+    context_limit, context_limit_source = client.context_limit_resolution()
+    utilization_values = tuple(float(value) for value in utilizations)
+    cases = build_matrix(
+        context_limit=context_limit,
+        utilizations=utilization_values,
+        seed=seed,
+        token_counter=client.tokenize,
+    )
     results: list[ContextOrderResult] = []
     contract = answer_contract()
+
+    def build_report(*, complete: bool) -> dict:
+        rows = [asdict(result) for result in results]
+        by_position = {
+            position: {
+                "passed": sum(1 for row in rows if row["position"] == position and row["passed"]),
+                "completed": sum(1 for row in rows if row["position"] == position),
+                "planned": sum(1 for case in cases if case.position == position),
+            }
+            for position in POSITIONS
+        }
+        return {
+            "benchmark": "context_order_retrieval",
+            "model_identity": identity,
+            "context_limit": context_limit,
+            "context_limit_source": context_limit_source,
+            "seed": seed,
+            "requested_utilizations": list(utilization_values),
+            "results": rows,
+            "by_position": by_position,
+            "passed": sum(1 for row in rows if row["passed"]),
+            "completed": len(rows),
+            "planned": len(cases),
+            "complete": complete,
+            # Retain the original final-report field for existing consumers.
+            "total": len(rows),
+        }
+
+    def checkpoint(report: dict) -> None:
+        if output_path is None:
+            return
+        output_path.parent.mkdir(parents=True, exist_ok=True)
+        temporary_path = output_path.with_name(output_path.name + ".tmp")
+        temporary_path.write_text(
+            stable_json_dumps(report, indent=2) + "\n",
+            encoding="utf-8",
+        )
+        temporary_path.replace(output_path)
+
     for case in cases:
+        preflight_prompt_tokens = client.tokenize(case.prompt)
+        if preflight_prompt_tokens + 96 + int(config.context.safety_margin_tokens) > context_limit:
+            raise ValueError(
+                "Context-order case does not fit the authoritative server capacity: "
+                f"input={preflight_prompt_tokens} output=96 safety={config.context.safety_margin_tokens} "
+                f"limit={context_limit}"
+            )
         completion = client.complete(
             case.prompt, max_tokens=96, contract=contract, temperature=0.0, kind="verification", live_mode=True
         )
@@ -127,34 +264,26 @@ def run_context_order_benchmark(
             payload = {}
         answer = str(payload.get("answer", "")).strip()
         prompt_tokens = completion.prompt_tokens
-        actual = (prompt_tokens / config.model.context_limit) if isinstance(prompt_tokens, int) else None
+        actual_prompt_tokens = prompt_tokens if isinstance(prompt_tokens, int) else preflight_prompt_tokens
+        actual = actual_prompt_tokens / context_limit
+        marker_start = case.prompt.index("CRITICAL RETRIEVAL RECORD.")
+        marker_token_fraction = client.tokenize(case.prompt[:marker_start]) / max(
+            1, preflight_prompt_tokens
+        )
         results.append(ContextOrderResult(
             position=case.position, requested_utilization=case.requested_utilization, expected_code=case.expected_code,
-            answer=answer, passed=answer == case.expected_code, prompt_tokens=prompt_tokens,
-            completion_tokens=completion.completion_tokens, context_limit=config.model.context_limit,
+            answer=answer,
+            passed=answer == case.expected_code and completion.finish_reason not in {"length", "context_overflow"},
+            preflight_prompt_tokens=preflight_prompt_tokens,
+            prompt_tokens=prompt_tokens,
+            completion_tokens=completion.completion_tokens, context_limit=context_limit,
             actual_input_utilization=actual, marker_char_fraction=case.marker_char_fraction,
+            marker_token_fraction=marker_token_fraction,
             elapsed_seconds=completion.elapsed_seconds, first_token_seconds=completion.first_token_seconds,
+            finish_reason=completion.finish_reason,
         ))
-    rows = [asdict(result) for result in results]
-    by_position = {
-        position: {
-            "passed": sum(1 for row in rows if row["position"] == position and row["passed"]),
-            "total": sum(1 for row in rows if row["position"] == position),
-        }
-        for position in POSITIONS
-    }
-    report = {
-        "benchmark": "context_order_retrieval",
-        "model_identity": identity,
-        "context_limit": config.model.context_limit,
-        "seed": seed,
-        "requested_utilizations": [float(value) for value in utilizations],
-        "results": rows,
-        "by_position": by_position,
-        "passed": sum(1 for row in rows if row["passed"]),
-        "total": len(rows),
-    }
-    if output_path is not None:
-        output_path.parent.mkdir(parents=True, exist_ok=True)
-        output_path.write_text(stable_json_dumps(report, indent=2) + "\n", encoding="utf-8")
+        checkpoint(build_report(complete=len(results) == len(cases)))
+    report = build_report(complete=True)
+    if not cases:
+        checkpoint(report)
     return report
