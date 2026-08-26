@@ -1,6 +1,8 @@
 from __future__ import annotations
 
 import asyncio
+import base64
+import binascii
 import copy
 import json
 import sqlite3
@@ -19,7 +21,7 @@ from swaag.runtime import AgentRuntime
 from swaag.sqlite_schema import apply_sqlite_migrations
 from swaag.task_api import TaskApi
 from swaag.utils import new_id, utc_now_iso
-from swaag.workers import WorkerManager
+from swaag.workers import WORKER_TERMINAL_STATES, WorkerManager, WorkerRecord
 
 
 _COMMUNICATION_STORE_MIGRATIONS = (
@@ -251,15 +253,43 @@ class CommunicationService:
         operation: str,
         params: dict[str, Any],
     ) -> dict[str, Any]:
-        worker_id = str(params.get("worker_id", "")).strip()
+        if protocol == "a2a" and operation == "send":
+            return self._a2a_send(params, wait_for_completion=True)
+        if protocol == "a2a" and operation == "list":
+            return self._a2a_list(params)
+        worker_id = str(
+            params.get("worker_id")
+            or (params.get("id") if protocol == "a2a" else "")
+        ).strip()
         if not worker_id:
-            raise ValueError("worker_id must be a non-empty string")
+            raise ValueError(
+                ("id" if protocol == "a2a" else "worker_id")
+                + " must be a non-empty string"
+            )
         record = self.workers.store.get(worker_id)
         if protocol == "a2a" and operation == "get":
             return {
                 "protocol": A2AProjectionAdapter.protocol_version,
                 "task": A2AProjectionAdapter().task(record),
             }
+        if protocol == "a2a" and operation == "cancel":
+            canceled = self.workers.cancel(
+                worker_id,
+                reason=str(params.get("reason") or "A2A cancellation"),
+            )
+            return {
+                "protocol": A2AProjectionAdapter.protocol_version,
+                "task": A2AProjectionAdapter().task(canceled),
+            }
+        if protocol == "a2a" and operation == "subscribe":
+            if record.status in {"completed", "failed", "canceled"}:
+                raise ValueError("A2A cannot subscribe to a terminal task")
+            page = self.task_api.execute(
+                "events.wait",
+                {**params, "worker_id": worker_id},
+            )
+            current = self.workers.store.get(worker_id)
+            return self._a2a_subscription_response(record, current, page)
         if protocol == "open_webui" and operation == "get":
             return OpenWebUiProjectionAdapter().response(record)
         if protocol == "ag_ui" and operation in {"events", "subscribe"}:
@@ -291,6 +321,133 @@ class CommunicationService:
             }
         raise ValueError(f"unsupported protocol operation: {protocol}.{operation}")
 
+    def _a2a_subscription_response(
+        self,
+        initial_record: WorkerRecord,
+        current_record: WorkerRecord,
+        page: dict[str, Any],
+    ) -> dict[str, Any]:
+        adapter = A2AProjectionAdapter()
+        updates = adapter.updates(
+            current_record,
+            [
+                self.workers.event_from_payload(item)
+                for item in page["events"]
+            ],
+        )
+        return {
+            "protocol": adapter.protocol_version,
+            "worker_id": current_record.worker_id,
+            "stream": [{"task": adapter.task(initial_record)}, *updates],
+            "next_sequence": page["next_sequence"],
+            "has_more": page["has_more"],
+            "terminal": page["terminal"],
+            "timed_out": page["timed_out"],
+        }
+
+    def _a2a_list(self, params: dict[str, Any]) -> dict[str, Any]:
+        page_size = params.get("pageSize", params.get("page_size", 50))
+        if (
+            not isinstance(page_size, int)
+            or isinstance(page_size, bool)
+            or not 1 <= page_size <= 1000
+        ):
+            raise ValueError("A2A pageSize must be an integer between 1 and 1000")
+        context_id = params.get("contextId", params.get("context_id"))
+        if context_id is not None and (
+            not isinstance(context_id, str) or not context_id.strip()
+        ):
+            raise ValueError("A2A contextId must be a non-empty string when provided")
+        state_filter = params.get("status")
+        if state_filter is not None and (
+            not isinstance(state_filter, str) or not state_filter.strip()
+        ):
+            raise ValueError("A2A status must be a non-empty string when provided")
+        adapter = A2AProjectionAdapter()
+        records = self.workers.list()
+        if context_id is not None:
+            records = [item for item in records if item.session_id == context_id.strip()]
+        if state_filter is not None:
+            records = [
+                item
+                for item in records
+                if adapter.task(item)["status"]["state"] == state_filter.strip()
+            ]
+        records.sort(key=lambda item: (item.updated_at, item.worker_id), reverse=True)
+        total_size = len(records)
+        page_token = params.get("pageToken", params.get("page_token", ""))
+        if not isinstance(page_token, str):
+            raise ValueError("A2A pageToken must be a string")
+        if page_token:
+            cursor = _decode_a2a_page_token(page_token)
+            records = [
+                item
+                for item in records
+                if (item.updated_at, item.worker_id) < cursor
+            ]
+        page = records[:page_size]
+        next_page_token = (
+            _encode_a2a_page_token(page[-1])
+            if len(records) > len(page) and page
+            else ""
+        )
+        return {
+            "protocol": adapter.protocol_version,
+            "tasks": [adapter.task(item) for item in page],
+            "totalSize": total_size,
+            "pageSize": page_size,
+            "nextPageToken": next_page_token,
+        }
+
+    def _a2a_send(
+        self,
+        params: dict[str, Any],
+        *,
+        wait_for_completion: bool,
+    ) -> dict[str, Any]:
+        adapter = A2AProjectionAdapter()
+        message = adapter.user_message(params)
+        if message.task_id is None:
+            if message.context_id is not None:
+                raise ValueError(
+                    "A2A client-provided contextId is not accepted for a new task"
+                )
+            created = self.task_api.execute(
+                "create",
+                {
+                    "objective": message.text,
+                    "attachments": list(message.attachments),
+                    "start": True,
+                },
+            )
+            worker_id = str(created["worker"]["worker_id"])
+            record = self.workers.store.get(worker_id)
+        else:
+            worker_id = message.task_id
+            record = self.workers.store.get(worker_id)
+            if (
+                message.context_id is not None
+                and message.context_id != record.session_id
+            ):
+                raise ValueError("A2A taskId and contextId refer to different contexts")
+            for attachment in message.attachments:
+                self.task_api.execute(
+                    "attachment.add",
+                    {**attachment, "worker_id": worker_id, "source": "a2a"},
+                )
+            message_id = str(params["message"].get("messageId") or "").strip()
+            record = self.workers.message(
+                worker_id,
+                message.text,
+                source=f"a2a:{message_id}" if message_id else "a2a",
+            )
+        if wait_for_completion and not message.return_immediately:
+            record = self.workers.wait(worker_id, timeout_seconds=None)
+        return {
+            "protocol": adapter.protocol_version,
+            "task": adapter.task(record),
+        }
+
     async def _wait_task_events(self, params: dict[str, Any]) -> dict[str, Any]:
         timeout = params.get("timeout_seconds", 30.0)
         if (
@@ -320,6 +477,27 @@ class CommunicationService:
         operation: str,
         params: dict[str, Any],
     ) -> dict[str, Any]:
+        if protocol == "a2a" and operation == "send":
+            message = A2AProjectionAdapter().user_message(params)
+            response = await asyncio.to_thread(
+                self._a2a_send,
+                params,
+                wait_for_completion=False,
+            )
+            if message.return_immediately:
+                return response
+            worker_id = str(response["task"]["id"])
+            while True:
+                record = self.workers.store.get(worker_id)
+                if (
+                    record.status in WORKER_TERMINAL_STATES
+                    or record.status == "input_required"
+                ):
+                    return {
+                        "protocol": A2AProjectionAdapter.protocol_version,
+                        "task": A2AProjectionAdapter().task(record),
+                    }
+                await asyncio.sleep(0.05)
         if protocol == "ag_ui" and operation == "subscribe":
             page = await self._wait_task_events(params)
             record = self.workers.store.get(str(params.get("worker_id", "")).strip())
@@ -338,6 +516,14 @@ class CommunicationService:
                 "terminal": page["terminal"],
                 "timed_out": page["timed_out"],
             }
+        if protocol == "a2a" and operation == "subscribe":
+            worker_id = str(params.get("worker_id") or params.get("id") or "").strip()
+            initial = self.workers.store.get(worker_id)
+            if initial.status in {"completed", "failed", "canceled"}:
+                raise ValueError("A2A cannot subscribe to a terminal task")
+            page = await self._wait_task_events({**params, "worker_id": worker_id})
+            current = self.workers.store.get(worker_id)
+            return self._a2a_subscription_response(initial, current, page)
         async with self._semaphore:
             return await asyncio.to_thread(
                 self.protocol_projection,
@@ -430,3 +616,28 @@ class CommunicationService:
                 pass
             self.workers.shutdown(wait=False)
             systemd_notify("STOPPING=1", "STATUS=swaag communication stopping")
+
+
+def _encode_a2a_page_token(record: WorkerRecord) -> str:
+    payload = json.dumps(
+        [record.updated_at, record.worker_id],
+        separators=(",", ":"),
+    ).encode("utf-8")
+    return base64.urlsafe_b64encode(payload).decode("ascii").rstrip("=")
+
+
+def _decode_a2a_page_token(value: str) -> tuple[str, str]:
+    try:
+        padding = "=" * (-len(value) % 4)
+        payload = json.loads(
+            base64.urlsafe_b64decode(value + padding).decode("utf-8")
+        )
+    except (ValueError, UnicodeDecodeError, json.JSONDecodeError, binascii.Error) as exc:
+        raise ValueError("A2A pageToken is invalid") from exc
+    if (
+        not isinstance(payload, list)
+        or len(payload) != 2
+        or any(not isinstance(item, str) or not item for item in payload)
+    ):
+        raise ValueError("A2A pageToken is invalid")
+    return payload[0], payload[1]

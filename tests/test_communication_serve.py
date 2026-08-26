@@ -77,7 +77,20 @@ def test_communication_transport_exposes_task_api(make_config):
             }
         )
         a2a = await request(
-            {"op": "a2a.get", "params": {"worker_id": worker_id}}
+            {"op": "a2a.get", "params": {"id": worker_id}}
+        )
+        a2a_subscription = await request(
+            {
+                "op": "a2a.subscribe",
+                "params": {
+                    "id": worker_id,
+                    "after_sequence": ag_ui["result"]["next_sequence"],
+                    "timeout_seconds": 0.01,
+                },
+            }
+        )
+        a2a_canceled = await request(
+            {"op": "a2a.cancel", "params": {"id": worker_id}}
         )
         open_webui = await request(
             {"op": "open_webui.get", "params": {"worker_id": worker_id}}
@@ -96,6 +109,9 @@ def test_communication_transport_exposes_task_api(make_config):
         assert subscribed["result"]["timed_out"] is True
         assert subscribed["result"]["terminal"] is False
         assert a2a["result"]["task"]["id"] == worker_id
+        assert a2a_subscription["result"]["stream"][0]["task"]["id"] == worker_id
+        assert a2a_subscription["result"]["timed_out"] is True
+        assert a2a_canceled["result"]["task"]["status"]["state"] == "TASK_STATE_CANCELED"
         assert open_webui["result"]["metadata"]["worker_id"] == worker_id
 
     asyncio.run(exercise())

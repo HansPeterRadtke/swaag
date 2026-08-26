@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+from dataclasses import dataclass
 from datetime import datetime
 from typing import Any, Iterable
 
@@ -19,10 +20,84 @@ _A2A_STATES = {
 }
 
 
+@dataclass(slots=True, frozen=True)
+class A2AUserMessage:
+    text: str
+    task_id: str | None
+    context_id: str | None
+    attachments: tuple[dict[str, str], ...]
+    return_immediately: bool
+
+
 class A2AProjectionAdapter:
     """Projects internal tasks into A2A 1.0 task objects without owning lifecycle state."""
 
     protocol_version = "1.0"
+
+    def user_message(self, request: dict[str, Any]) -> A2AUserMessage:
+        message = request.get("message")
+        if not isinstance(message, dict):
+            raise ValueError("A2A message must be an object")
+        if message.get("role") != "ROLE_USER":
+            raise ValueError("A2A message role must be ROLE_USER")
+        parts = message.get("parts")
+        if not isinstance(parts, list) or not parts:
+            raise ValueError("A2A message parts must be a non-empty array")
+        text_parts: list[str] = []
+        attachments: list[dict[str, str]] = []
+        for index, part in enumerate(parts, start=1):
+            if not isinstance(part, dict):
+                raise ValueError("Every A2A message part must be an object")
+            if isinstance(part.get("text"), str) and str(part["text"]).strip():
+                text_parts.append(str(part["text"]).strip())
+                continue
+            if "data" in part:
+                text_parts.append(stable_json_dumps(part["data"], indent=None))
+                continue
+            raw = part.get("raw")
+            if isinstance(raw, str) and raw:
+                attachments.append(
+                    {
+                        "original_name": str(
+                            part.get("filename") or f"attachment-{index}"
+                        ),
+                        "media_type": str(part.get("mediaType") or ""),
+                        "content_base64": raw,
+                    }
+                )
+                continue
+            if "url" in part:
+                raise ValueError(
+                    "A2A URL parts require an authenticated fetch adapter and are not enabled"
+                )
+            raise ValueError("Unsupported A2A message part")
+        text = "\n\n".join(text_parts).strip()
+        if not text:
+            raise ValueError("A2A message must contain text or structured data")
+        configuration = request.get("configuration") or {}
+        if not isinstance(configuration, dict):
+            raise ValueError("A2A message configuration must be an object")
+        return_immediately = configuration.get(
+            "returnImmediately",
+            configuration.get("return_immediately", False),
+        )
+        if not isinstance(return_immediately, bool):
+            raise ValueError("A2A returnImmediately must be a boolean")
+        task_id = message.get("taskId")
+        context_id = message.get("contextId")
+        if task_id is not None and (not isinstance(task_id, str) or not task_id.strip()):
+            raise ValueError("A2A taskId must be a non-empty string when provided")
+        if context_id is not None and (
+            not isinstance(context_id, str) or not context_id.strip()
+        ):
+            raise ValueError("A2A contextId must be a non-empty string when provided")
+        return A2AUserMessage(
+            text=text,
+            task_id=None if task_id is None else task_id.strip(),
+            context_id=None if context_id is None else context_id.strip(),
+            attachments=tuple(attachments),
+            return_immediately=return_immediately,
+        )
 
     def task(self, record: WorkerRecord) -> dict[str, Any]:
         state = _A2A_STATES[record.status]
@@ -56,6 +131,74 @@ class A2AProjectionAdapter:
                 }
             ]
         return task
+
+    def updates(
+        self,
+        record: WorkerRecord,
+        events: Iterable[WorkerEvent],
+    ) -> list[dict[str, Any]]:
+        output: list[dict[str, Any]] = []
+        for event in events:
+            internal_status = event.payload.get("to_status")
+            text = event.payload.get("result") or event.payload.get("error")
+            if event.event_type == "worker_created":
+                internal_status = "created"
+            elif event.event_type == "worker_queued":
+                internal_status = "queued"
+            elif event.event_type == "worker_history_event":
+                source = event.payload.get("canonical_event")
+                if not isinstance(source, dict) or source.get("type") != "agent_status":
+                    continue
+                payload = source.get("payload")
+                if not isinstance(payload, dict):
+                    continue
+                internal_status = "working"
+                text = " ".join(
+                    str(payload.get(key, "")).strip()
+                    for key in ("situation", "action", "reason")
+                    if str(payload.get(key, "")).strip()
+                )
+            if not isinstance(internal_status, str) or internal_status not in _A2A_STATES:
+                continue
+            if internal_status == "completed" and isinstance(text, str) and text:
+                output.append(
+                    {
+                        "artifactUpdate": {
+                            "taskId": record.worker_id,
+                            "contextId": record.session_id,
+                            "artifact": {
+                                "artifactId": f"{record.worker_id}-result",
+                                "name": "result",
+                                "parts": [{"text": text}],
+                            },
+                            "append": False,
+                            "lastChunk": True,
+                        }
+                    }
+                )
+            status: dict[str, Any] = {
+                "state": _A2A_STATES[internal_status],
+                "timestamp": event.timestamp,
+            }
+            if isinstance(text, str) and text:
+                status["message"] = {
+                    "role": "ROLE_AGENT",
+                    "parts": [{"text": text}],
+                    "messageId": f"{event.event_id}-status",
+                    "taskId": record.worker_id,
+                    "contextId": record.session_id,
+                }
+            output.append(
+                {
+                    "statusUpdate": {
+                        "taskId": record.worker_id,
+                        "contextId": record.session_id,
+                        "status": status,
+                        "final": internal_status in {"completed", "failed", "canceled"},
+                    }
+                }
+            )
+        return output
 
 
 class AgUiProjectionAdapter:

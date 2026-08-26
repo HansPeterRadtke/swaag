@@ -858,13 +858,22 @@ class WorkerManager:
                 return dict(output)
         return None
 
-    def wait(self, worker_id: str, *, timeout_seconds: float = 30.0) -> WorkerRecord:
-        deadline = time.monotonic() + max(0.0, float(timeout_seconds))
+    def wait(
+        self,
+        worker_id: str,
+        *,
+        timeout_seconds: float | None = 30.0,
+    ) -> WorkerRecord:
+        deadline = (
+            None
+            if timeout_seconds is None
+            else time.monotonic() + max(0.0, float(timeout_seconds))
+        )
         while True:
             item = self.store.get(worker_id)
             if item.status in WORKER_TERMINAL_STATES or item.status == "input_required":
                 return item
-            if time.monotonic() >= deadline:
+            if deadline is not None and time.monotonic() >= deadline:
                 raise TimeoutError(f"Timed out waiting for worker {worker_id}; status={item.status}")
             time.sleep(0.02)
 

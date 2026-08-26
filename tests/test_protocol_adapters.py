@@ -5,6 +5,7 @@ from swaag.protocol_adapters import (
     AgUiProjectionAdapter,
     OpenWebUiProjectionAdapter,
 )
+from swaag.communication import CommunicationService
 from swaag.runtime import AgentRuntime
 from swaag.task_api import TaskApi
 from swaag.workers import WorkerEvent, WorkerManager, WorkerRecord
@@ -112,6 +113,203 @@ def test_a2a_projection_preserves_internal_task_state_and_archive_metadata() -> 
     assert task["artifacts"][0]["parts"] == [{"text": "exact result"}]
     assert task["metadata"]["archivedAt"]
     assert waiting["status"]["state"] == "TASK_STATE_INPUT_REQUIRED"
+
+
+def test_a2a_projects_durable_status_and_artifact_updates() -> None:
+    updates = A2AProjectionAdapter().updates(
+        _record(),
+        [
+            _event("worker_started", 2, {"to_status": "working"}),
+            _event(
+                "worker_completed",
+                3,
+                {"to_status": "completed", "result": "historical exact result"},
+            ),
+        ],
+    )
+
+    assert updates[0]["statusUpdate"]["status"]["state"] == "TASK_STATE_WORKING"
+    assert updates[0]["statusUpdate"]["final"] is False
+    assert updates[1]["artifactUpdate"]["artifact"]["parts"] == [
+        {"text": "historical exact result"}
+    ]
+    assert updates[2]["statusUpdate"]["status"]["state"] == "TASK_STATE_COMPLETED"
+    assert updates[2]["statusUpdate"]["final"] is True
+
+
+def test_a2a_message_parser_preserves_text_data_and_raw_attachments() -> None:
+    message = A2AProjectionAdapter().user_message(
+        {
+            "message": {
+                "role": "ROLE_USER",
+                "messageId": "message_1",
+                "parts": [
+                    {"text": "Inspect the attached facts."},
+                    {"data": {"priority": "high"}},
+                    {
+                        "raw": "ZXhhY3QgYnl0ZXM=",
+                        "filename": "facts.txt",
+                        "mediaType": "text/plain",
+                    },
+                ],
+            },
+            "configuration": {"returnImmediately": True},
+        }
+    )
+
+    assert message.text == 'Inspect the attached facts.\n\n{"priority":"high"}'
+    assert message.attachments == (
+        {
+            "original_name": "facts.txt",
+            "media_type": "text/plain",
+            "content_base64": "ZXhhY3QgYnl0ZXM=",
+        },
+    )
+    assert message.return_immediately is True
+
+
+def test_a2a_send_creates_started_task_with_raw_attachment(
+    make_config, monkeypatch
+) -> None:
+    service = CommunicationService(AgentRuntime(make_config(), model_client=object()))
+
+    def queue_without_executor(worker_id: str):
+        return service.workers.store.transition(
+            worker_id,
+            "queued",
+            expected={"created"},
+            event_type="worker_queued",
+        )
+
+    monkeypatch.setattr(service.workers, "start", queue_without_executor)
+    response = service.protocol_projection(
+        "a2a",
+        "send",
+        {
+            "message": {
+                "role": "ROLE_USER",
+                "messageId": "message_2",
+                "parts": [
+                    {"text": "Inspect the exact attachment."},
+                    {
+                        "raw": "ZXhhY3QgYnl0ZXM=",
+                        "filename": "facts.txt",
+                        "mediaType": "text/plain",
+                    },
+                ],
+            },
+            "configuration": {"returnImmediately": True},
+        },
+    )
+    worker_id = response["task"]["id"]
+    record = service.workers.store.get(worker_id)
+    attachments = service.workers.attachments(worker_id)
+    service.workers.shutdown()
+
+    assert response["task"]["status"]["state"] == "TASK_STATE_SUBMITTED"
+    assert record.objective == "Inspect the exact attachment."
+    assert attachments[0].original_name == "facts.txt"
+    assert attachments[0].sha256
+
+
+def test_a2a_send_blocks_by_default_until_worker_interrupt_or_terminal(
+    make_config, monkeypatch
+) -> None:
+    service = CommunicationService(AgentRuntime(make_config(), model_client=object()))
+    observed: dict[str, object] = {}
+
+    def queue_without_executor(worker_id: str):
+        return service.workers.store.transition(
+            worker_id,
+            "queued",
+            expected={"created"},
+            event_type="worker_queued",
+        )
+
+    def complete_wait(worker_id: str, *, timeout_seconds):
+        observed["timeout_seconds"] = timeout_seconds
+        return service.workers.store.transition(
+            worker_id,
+            "completed",
+            expected={"queued"},
+            result="blocking exact result",
+            event_type="worker_completed",
+        )
+
+    monkeypatch.setattr(service.workers, "start", queue_without_executor)
+    monkeypatch.setattr(service.workers, "wait", complete_wait)
+    response = service.protocol_projection(
+        "a2a",
+        "send",
+        {
+            "message": {
+                "role": "ROLE_USER",
+                "parts": [{"text": "Complete before returning."}],
+            }
+        },
+    )
+    service.workers.shutdown()
+
+    assert observed["timeout_seconds"] is None
+    assert response["task"]["status"]["state"] == "TASK_STATE_COMPLETED"
+    assert response["task"]["artifacts"][0]["parts"] == [
+        {"text": "blocking exact result"}
+    ]
+
+
+def test_a2a_followup_rejects_mismatched_task_and_context(make_config) -> None:
+    service = CommunicationService(AgentRuntime(make_config(), model_client=object()))
+    worker = service.workers.create("existing task")
+
+    try:
+        service.protocol_projection(
+            "a2a",
+            "send",
+            {
+                "message": {
+                    "role": "ROLE_USER",
+                    "taskId": worker.worker_id,
+                    "contextId": "different-context",
+                    "parts": [{"text": "Continue."}],
+                },
+                "configuration": {"returnImmediately": True},
+            },
+        )
+    except ValueError as exc:
+        assert "different contexts" in str(exc)
+    else:
+        raise AssertionError("mismatched A2A context was accepted")
+    finally:
+        service.workers.shutdown()
+
+
+def test_a2a_list_uses_stable_cursor_pagination_and_state_filter(make_config) -> None:
+    service = CommunicationService(AgentRuntime(make_config(), model_client=object()))
+    workers = [service.workers.create(f"task {index}") for index in range(3)]
+    canceled = service.workers.cancel(workers[0].worker_id)
+
+    first = service.protocol_projection("a2a", "list", {"pageSize": 2})
+    second = service.protocol_projection(
+        "a2a",
+        "list",
+        {"pageSize": 2, "pageToken": first["nextPageToken"]},
+    )
+    filtered = service.protocol_projection(
+        "a2a",
+        "list",
+        {"status": "TASK_STATE_CANCELED"},
+    )
+    service.workers.shutdown()
+
+    first_ids = {task["id"] for task in first["tasks"]}
+    second_ids = {task["id"] for task in second["tasks"]}
+    assert first["totalSize"] == 3
+    assert first["nextPageToken"]
+    assert len(first_ids) == 2
+    assert len(second_ids) == 1
+    assert not first_ids & second_ids
+    assert second["nextPageToken"] == ""
+    assert [task["id"] for task in filtered["tasks"]] == [canceled.worker_id]
 
 
 def test_ag_ui_projection_uses_stable_run_message_and_terminal_event_shapes() -> None:
