@@ -1,4 +1,4 @@
-Summarize this transcript for future continuation:
+Summarize this transcript for future continuation. The summary field should fit within approximately {target_summary_tokens} tokens; preserve meaning according to the task and do not pad to fill the budget.
 {history_block}
 
 Choose `preserve_recent_messages` from 0 through {maximum_preserve_recent_messages}. Use a larger value only when those exact recent messages, tool outputs, code fragments, or user wording must remain verbatim; otherwise use 0. The summary must still cover all messages, including any preserved messages, so replay remains understandable.

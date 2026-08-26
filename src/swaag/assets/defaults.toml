@@ -153,8 +153,7 @@ allowed_write_paths = []
 # -----------------------------------------------------------
 # -----------------------------------------------------------
 [compression]
-max_messages_before_compress = 12
-summary_chars = 800
+# Compression is driven by actual next-call token pressure, not message count or character limits.
 
 # -----------------------------------------------------------
 # -----------------------------------------------------------

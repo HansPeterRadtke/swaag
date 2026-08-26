@@ -130,8 +130,9 @@ class EditorConfig:
 
 @dataclass(slots=True)
 class CompressionConfig:
-    max_messages_before_compress: int
-    summary_chars: int
+    """Reserved namespace for future non-semantic compression mechanics."""
+
+    pass
 
 
 @dataclass(slots=True)
@@ -368,7 +369,7 @@ def _coerce_config(data: dict[str, Any]) -> AgentConfig:
     notes = NotesConfig(**data["notes"])
     reader = ReaderConfig(**data["reader"])
     editor = EditorConfig(**data["editor"])
-    compression = CompressionConfig(**data["compression"])
+    compression = CompressionConfig()
     budget_policy = BudgetPolicyConfig(
         call_classes={str(key): str(value) for key, value in data["budget_policy"]["call_classes"].items()},
         output_ratio={str(key): float(value) for key, value in data["budget_policy"]["output_ratio"].items()},
@@ -628,8 +629,6 @@ def _coerce_config(data: dict[str, Any]) -> AgentConfig:
         raise ValueError("external_benchmarks.agent_generation.prompt_template must not be empty")
     if not external_benchmarks.agent_generation.empty_patch_retry_prompt.strip():
         raise ValueError("external_benchmarks.agent_generation.empty_patch_retry_prompt must not be empty")
-    _validate_positive("compression.max_messages_before_compress", compression.max_messages_before_compress)
-    _validate_positive("compression.summary_chars", compression.summary_chars)
     if reader.default_overlap_chars >= reader.default_chunk_chars:
         raise ValueError("reader.default_overlap_chars must be smaller than reader.default_chunk_chars")
     if not tools.enabled:

@@ -11,8 +11,8 @@ from typing import Any, Callable
 import requests
 
 from swaag.action import ActionValidationError, AgentAction, action_from_payload
-from swaag.budgeting import compute_call_budget, structured_output_token_floor
 from swaag.compression import summary_message_payload
+from swaag.context_compiler import ContextCompilation, ContextCompiler
 from swaag.config import AgentConfig, load_config
 from swaag.environment.environment import AgentEnvironment
 from swaag.fsops import ensure_dir, restore_tree, snapshot_tree, write_text
@@ -87,6 +87,7 @@ class AgentRuntime:
         token_counter: ExactTokenCounter | ConservativeEstimator | None = None,
     ):
         self.config = config
+        self.context_compiler = ContextCompiler(config)
         self.client = model_client or build_model_client(
             config,
             request_metadata={"cache_scope": "default_agent_runtime"},
@@ -683,8 +684,21 @@ class AgentRuntime:
                 context_components=context_components,
                 validation_feedback=validation_feedback,
             )
-            report = self._budget_report(state, assembly, contract)
+            compilation = self._compile_context(
+                state, assembly, contract, minimum_output_tokens=self.config.context.reserved_response_tokens
+            )
+            report = compilation.report
             last_report = report
+            self.history.record_event(
+                state,
+                "context_compiled",
+                {
+                    "kind": "action",
+                    "prompt_mode": "standard",
+                    "accounting": compilation.accounting(),
+                    "cap_error": "" if report.fits else "context_limit_exceeded",
+                },
+            )
             self.history.record_event(
                 state,
                 "budget_checked",
@@ -802,42 +816,33 @@ class AgentRuntime:
             )
         return components
 
+    def _compile_context(
+        self,
+        state: SessionState | None,
+        assembly: PromptAssembly,
+        contract: ContractSpec,
+        *,
+        minimum_output_tokens: int,
+    ) -> ContextCompilation:
+        return self.context_compiler.compile(
+            assembly,
+            contract,
+            self._counter(state),
+            minimum_output_tokens=minimum_output_tokens,
+        )
+
     def _budget_report(
         self,
         state: SessionState | None,
         assembly: PromptAssembly,
         contract: ContractSpec,
     ) -> BudgetReport:
-        counter = self._counter(state)
-        plan = compute_call_budget(self.config, call_kind=assembly.kind)
-        structured_floor = structured_output_token_floor(
+        return self._compile_context(
+            state,
+            assembly,
             contract,
-            config=self.config,
-            counter=counter,
-            call_kind=assembly.kind,
-        )
-        reserved = max(
-            int(self.config.context.reserved_response_tokens),
-            int(plan.output_tokens),
-            int(structured_floor),
-        )
-        components = [
-            *assembly.components,
-            PromptComponent(
-                name="constraint_schema",
-                category="constraint_schema",
-                text=stable_json_dumps(contract.json_schema or {}, indent=None),
-                include_in_context=False,
-            ),
-        ]
-        return build_budget(
-            counter,
-            components,
-            self.config.context,
-            self.config.model.context_limit,
-            reserved_response_tokens=reserved,
-            safety_margin_tokens=plan.safety_margin_tokens,
-        )
+            minimum_output_tokens=self.config.context.reserved_response_tokens,
+        ).report
 
     def _record_prompt_built(
         self,
@@ -871,14 +876,33 @@ class AgentRuntime:
         for source_count in range(maximum_source, 0, -1):
             source_messages = state.messages[:source_count]
             adaptive_cap = min(max(0, source_count - 1), max(0, int(self.config.context.max_recent_messages) * 4))
+            summary_plan = self.context_compiler.plan(call_kind="summary")
+            target_summary_tokens = max(
+                int(self.config.context.reserved_summary_tokens),
+                int(summary_plan.output_tokens) - 32,
+            )
             assembly = self.prompts.build_summary_prompt(
                 source_messages,
                 prompt_mode="lean",
                 maximum_preserve_recent_messages=adaptive_cap,
+                target_summary_tokens=target_summary_tokens,
             )
-            report = self._summary_budget_report(state, assembly, contract)
+            compilation = self._compile_context(
+                state, assembly, contract, minimum_output_tokens=self.config.context.reserved_summary_tokens
+            )
+            report = compilation.report
             if not report.fits:
                 continue
+            self.history.record_event(
+                state,
+                "context_compiled",
+                {
+                    "kind": "summary",
+                    "prompt_mode": "lean",
+                    "accounting": compilation.accounting(),
+                    "target_summary_tokens": target_summary_tokens,
+                },
+            )
             self._record_prompt_built(state, assembly, contract, report)
             payload = self._execute_structured_call(state, PreparedCall(assembly, report, "lean", contract))
             summary_text = str(payload.get("summary", "")).strip()
@@ -923,30 +947,12 @@ class AgentRuntime:
         assembly: PromptAssembly,
         contract: ContractSpec,
     ) -> BudgetReport:
-        counter = self._counter(state)
-        floor = structured_output_token_floor(
+        return self._compile_context(
+            state,
+            assembly,
             contract,
-            config=self.config,
-            counter=counter,
-            call_kind="summary",
-        )
-        reserved = max(int(self.config.context.reserved_summary_tokens), int(floor))
-        return build_budget(
-            counter,
-            [
-                *assembly.components,
-                PromptComponent(
-                    name="constraint_schema",
-                    category="constraint_schema",
-                    text=stable_json_dumps(contract.json_schema or {}, indent=None),
-                    include_in_context=False,
-                ),
-            ],
-            self.config.context,
-            self.config.model.context_limit,
-            reserved_response_tokens=reserved,
-            safety_margin_tokens=self.config.context.safety_margin_tokens,
-        )
+            minimum_output_tokens=self.config.context.reserved_summary_tokens,
+        ).report
 
     def _execute_structured_call(
         self,
