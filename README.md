@@ -4,6 +4,10 @@ SWAAG is a local-first autonomous agent runtime for llama.cpp and OpenAI-compati
 
 The model owns semantic choices. Python owns schemas, constrained decoding, path and permission policy, exact context accounting, tool execution, persistence, replay, retries, and deterministic verification. The runtime never silently repairs semantic output with hard-coded planner logic.
 
+## Runtime environment
+
+Swaag is a standard `pyproject.toml` package. Development environments may live in the checkout, but long-running services use a reproducible runtime environment under `/data/var/swaag` so service execution never depends on a user's home directory. `uv.lock` pins the resolved dependency graph, and `scripts/install-runtime-env.sh` installs the required Python under `/data/var/swaag/python`, creates `/data/var/swaag/venv`, and synchronizes only the base runtime dependencies unless extras are explicitly requested.
+
 ## Design documentation
 
 The implementation is intentionally small while the intended harness architecture is broader. Read these before architectural changes:
