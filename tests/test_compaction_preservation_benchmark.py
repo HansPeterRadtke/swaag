@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import json
 
+from swaag.benchmark import benchmark_runner
 from swaag.benchmark.compaction_preservation import (
     PRESERVATION_FACTS,
     run_compaction_preservation_benchmark,
@@ -121,3 +122,38 @@ def test_compaction_preservation_benchmark_resumes_completed_checkpoint(
 
     assert resumed == first
     assert len(client.requests) == calls
+
+
+def test_compaction_preservation_cli_passes_checkpoint_options(
+    monkeypatch, tmp_path
+) -> None:
+    output = tmp_path / "compaction.json"
+    captured = {}
+
+    def fake_run(**kwargs):
+        captured.update(kwargs)
+        return {
+            "complete": True,
+            "passed": 4,
+            "total": 4,
+            "cycles_completed": 4,
+        }
+
+    monkeypatch.setattr(
+        "swaag.benchmark.compaction_preservation.run_compaction_preservation_benchmark",
+        fake_run,
+    )
+
+    exit_code = benchmark_runner.main(
+        [
+            "compaction-preservation",
+            "--cycles",
+            "4",
+            "--output",
+            str(output),
+            "--no-resume",
+        ]
+    )
+
+    assert exit_code == 0
+    assert captured == {"cycles": 4, "output_path": output, "resume": False}

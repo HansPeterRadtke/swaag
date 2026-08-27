@@ -64,6 +64,12 @@ Live tool and attachment-context experiments retain complete run histories and v
 .venv/bin/python -m swaag.benchmark attachment-context --output /data/var/swaag/benchmarks/attachment-context
 ```
 
+Repeated live compaction checks are resumable and preserve a checkpoint after every cycle:
+
+```text
+.venv/bin/python -m swaag.benchmark compaction-preservation --cycles 3 --output /data/var/swaag/benchmarks/compaction-preservation.json
+```
+
 Runtime state belongs under `/data/var`; source code belongs under `/data/src`.
 
 ## Documentation

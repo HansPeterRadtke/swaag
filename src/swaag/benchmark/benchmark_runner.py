@@ -1152,6 +1152,16 @@ def _build_parser() -> argparse.ArgumentParser:
     attachment_context_parser.add_argument("--clean", action="store_true", help="Replace an existing artifact directory.")
     attachment_context_parser.add_argument("--json", action="store_true", help="Print the full JSON report.")
 
+    compaction_parser = subparsers.add_parser(
+        "compaction-preservation",
+        help="Run repeated live history-compaction preservation experiments.",
+    )
+    compaction_parser.add_argument("--cycles", type=int, default=3, help="Number of semantic compaction cycles to run.")
+    compaction_parser.add_argument("--output", default="compaction_preservation_output.json", help="Checkpointed JSON result path.")
+    compaction_parser.add_argument("--no-resume", dest="resume", action="store_false", help="Reject reuse of an existing checkpoint.")
+    compaction_parser.set_defaults(resume=True)
+    compaction_parser.add_argument("--json", action="store_true", help="Print the full JSON report.")
+
     subparsers.add_parser("list", help="List available benchmark task ids.")
     external_parser = subparsers.add_parser("external", help="Run optional official external benchmark harness integrations.")
     external_parser.add_argument("external_args", nargs=argparse.REMAINDER, help="Arguments forwarded to the external benchmark runner.")
@@ -1351,6 +1361,23 @@ def main(argv: Sequence[str] | None = None) -> int:
                 f"output={Path(args.output) / 'attachment_context_results.json'}"
             )
         return 0 if report["passed"] == report["total"] else 1
+    if args.command == "compaction-preservation":
+        from swaag.benchmark.compaction_preservation import (
+            run_compaction_preservation_benchmark,
+        )
+
+        report = run_compaction_preservation_benchmark(
+            cycles=int(args.cycles),
+            output_path=Path(args.output),
+            resume=bool(args.resume),
+        )
+        if args.json:
+            print(stable_json_dumps(report, indent=2))
+        else:
+            print(f"passed={report['passed']}/{report['total']}")
+            print(f"cycles_completed={report['cycles_completed']}")
+            print(f"output={args.output}")
+        return 0 if report["complete"] and report["passed"] == report["total"] else 1
     if args.command == "external":
         forwarded = list(args.external_args)
         if forwarded and forwarded[0] == "--":
