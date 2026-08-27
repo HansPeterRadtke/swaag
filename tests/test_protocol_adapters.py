@@ -700,6 +700,52 @@ def test_open_webui_projection_uses_persisted_status_and_final_return_channel() 
     assert all(event["type"] not in {"input", "confirmation"} for event in response["events"])
 
 
+def test_open_webui_projection_emits_persistence_safe_canonical_sources() -> None:
+    source = _event(
+        "worker_history_event",
+        9,
+        {
+            "canonical_event": {
+                "sequence": 14,
+                "hash": "history_hash_14",
+                "type": "external_source_observed",
+                "payload": {
+                    "source_id": "source_1",
+                    "name": "Primary documentation",
+                    "url": "https://example.test/docs",
+                    "document": "Exact evidence passage.",
+                    "document_truncated": False,
+                    "tool_name": "browser_browse",
+                },
+            }
+        },
+    )
+
+    response = OpenWebUiProjectionAdapter().response(
+        _record(status="working"),
+        [source],
+    )
+
+    assert response["events"][0] == {
+        "type": "source",
+        "data": {
+            "source": {"id": "source_1", "name": "Primary documentation"},
+            "document": ["Exact evidence passage."],
+            "metadata": [
+                {
+                    "source": "https://example.test/docs",
+                    "name": "Primary documentation",
+                    "url": "https://example.test/docs",
+                    "swaagHistorySequence": 14,
+                    "swaagHistoryHash": "history_hash_14",
+                    "swaagDocumentTruncated": False,
+                }
+            ],
+        },
+    }
+    assert response["events"][1]["type"] == "status"
+
+
 def test_open_webui_send_durably_maps_conversation_and_deduplicates_requests(
     make_config, monkeypatch
 ) -> None:

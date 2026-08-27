@@ -136,22 +136,40 @@ class Pipe:
             await self._emit_projection(__event_emitter__, current)
             cursor = int(current.get("next_sequence", 0))
 
-            while str(current.get("metadata", {}).get("status", "")) not in _PIPE_TERMINAL_STATES:
-                page = await client.request(
-                    "task.events.wait",
-                    {
-                        "worker_id": str(current["metadata"]["worker_id"]),
-                        "after_sequence": cursor,
-                        "limit": 200,
-                        "timeout_seconds": 30,
-                    },
+            while True:
+                worker_id = str(current["metadata"]["worker_id"])
+                terminal = (
+                    str(current.get("metadata", {}).get("status", ""))
+                    in _PIPE_TERMINAL_STATES
                 )
-                cursor = int(page["next_sequence"])
-                current = await client.request(
-                    "open_webui.get",
-                    {"worker_id": str(current["metadata"]["worker_id"])},
-                )
-                await self._emit_projection(__event_emitter__, current)
+                if not terminal:
+                    await client.request(
+                        "task.events.wait",
+                        {
+                            "worker_id": worker_id,
+                            "after_sequence": cursor,
+                            "limit": 200,
+                            "timeout_seconds": 30,
+                        },
+                    )
+                while True:
+                    current = await client.request(
+                        "open_webui.get",
+                        {
+                            "worker_id": worker_id,
+                            "after_sequence": cursor,
+                            "limit": 200,
+                        },
+                    )
+                    await self._emit_projection(__event_emitter__, current)
+                    cursor = int(current["next_sequence"])
+                    if not bool(current.get("has_more", False)):
+                        break
+                if (
+                    str(current.get("metadata", {}).get("status", ""))
+                    in _PIPE_TERMINAL_STATES
+                ):
+                    break
 
             result = current.get("return")
             if isinstance(result, str) and result:
@@ -178,13 +196,13 @@ class Pipe:
         emitter: EventEmitter | None,
         projection: dict[str, Any],
     ) -> None:
-        if not self.valves.EMIT_STATUS:
-            return
         events = projection.get("events", [])
         if not isinstance(events, list):
             return
         for event in events:
             if isinstance(event, dict):
+                if event.get("type") == "status" and not self.valves.EMIT_STATUS:
+                    continue
                 await self._emit(emitter, event)
 
     @staticmethod

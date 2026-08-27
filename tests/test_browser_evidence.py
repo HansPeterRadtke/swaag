@@ -10,6 +10,7 @@ from swaag.environment.process import ProcessResult
 from swaag.environment.state import ProcessRecord
 from swaag.history import HistoryStore
 from swaag.tools.registry import ToolRegistry
+from swaag.utils import sha256_text
 
 
 def _state(config, session_id: str):
@@ -104,6 +105,21 @@ def test_browser_search_preserves_exact_raw_evidence_behind_bounded_preview(
     assert len(completed.payload["stdout"]) == 32
     assert completed.payload["output_artifacts"]["artifact_id"] == result.output["artifact_id"]
     assert result.output["stderr_artifact_id"]
+    sources = [
+        event.payload
+        for event in result.generated_events
+        if event.event_type == "external_source_observed"
+    ]
+    assert sources == [
+        {
+            "source_id": "source_" + sha256_text("https://example.test/one")[:16],
+            "name": "first",
+            "url": "https://example.test/one",
+            "document": "first ex",
+            "document_truncated": True,
+            "tool_name": "browser_search",
+        }
+    ]
 
 
 def test_browser_browse_preserves_full_text_and_links_for_reexpansion(
@@ -154,6 +170,14 @@ def test_browser_browse_preserves_full_text_and_links_for_reexpansion(
     assert sum(
         event.event_type == "artifact_created" for event in result.generated_events
     ) == 1
+    source = next(
+        event.payload
+        for event in result.generated_events
+        if event.event_type == "external_source_observed"
+    )
+    assert source["url"] == "https://example.test/page"
+    assert source["document"] == "complete a"
+    assert source["document_truncated"] is True
 
 
 def test_browser_capabilities_are_exposed_only_when_backend_is_available(

@@ -487,7 +487,21 @@ class CommunicationService:
             current = self.workers.store.get(worker_id)
             return self._a2a_subscription_response(record, current, page)
         if protocol == "open_webui" and operation == "get":
-            return OpenWebUiProjectionAdapter().response(record)
+            page = self.task_api.execute(
+                "events",
+                {**params, "worker_id": worker_id},
+            )
+            return {
+                **OpenWebUiProjectionAdapter().response(
+                    record,
+                    [
+                        self.workers.event_from_payload(item)
+                        for item in page["events"]
+                    ],
+                ),
+                "next_sequence": page["next_sequence"],
+                "has_more": page["has_more"],
+            }
         if protocol == "ag_ui" and operation in {"events", "subscribe"}:
             page = self.task_api.execute(
                 "events.wait" if operation == "subscribe" else "events",
@@ -532,18 +546,18 @@ class CommunicationService:
             raise ValueError("Open WebUI attachments must be an array of objects")
 
         with self._protocol_send_lock:
-            duplicate = self.store.protocol_message("open_webui", request_id)
+            duplicate = self.store.protocol_message_bounds("open_webui", request_id)
             if duplicate is not None:
-                duplicate_context_id, worker_id = duplicate
+                duplicate_context_id, worker_id, start_sequence, _end_sequence = duplicate
                 if duplicate_context_id != conversation_id:
                     raise ValueError(
                         "Open WebUI request_id is already bound to another conversation"
                     )
-                record, cursor = self.workers.stream_snapshot(worker_id)
+                record = self.workers.store.get(worker_id)
                 return {
                     **OpenWebUiProjectionAdapter().response(record),
                     "conversation_id": conversation_id,
-                    "next_sequence": cursor,
+                    "next_sequence": start_sequence,
                     "duplicate": True,
                 }
 
@@ -565,14 +579,17 @@ class CommunicationService:
                         "objective": message,
                         "attachments": attachments,
                         "attachment_source": "open_webui",
-                        "start": True,
+                        "start": False,
                     },
                 )
                 worker_id = str(created["worker"]["worker_id"])
                 self.store.set_protocol_worker(
                     "open_webui", conversation_id, worker_id
                 )
+                _created, start_sequence = self.workers.stream_snapshot(worker_id)
+                record = self.workers.start(worker_id)
             else:
+                _current, start_sequence = self.workers.stream_snapshot(worker_id)
                 for attachment in attachments:
                     self.task_api.execute(
                         "attachment.add",
@@ -582,7 +599,7 @@ class CommunicationService:
                             "source": "open_webui",
                         },
                     )
-                self.workers.message(
+                record = self.workers.message(
                     worker_id,
                     message,
                     source=f"open_webui:{request_id}",
@@ -593,12 +610,14 @@ class CommunicationService:
                 request_id,
                 conversation_id,
                 worker_id,
+                start_sequence=start_sequence,
             )
-            record, cursor = self.workers.stream_snapshot(worker_id)
+            if record is None:
+                raise RuntimeError("Open WebUI worker did not start")
             return {
                 **OpenWebUiProjectionAdapter().response(record),
                 "conversation_id": conversation_id,
-                "next_sequence": cursor,
+                "next_sequence": start_sequence,
                 "duplicate": False,
             }
 

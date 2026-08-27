@@ -812,25 +812,69 @@ def _with_raw_references(text: str, references: list[str]) -> str:
 class OpenWebUiProjectionAdapter:
     """Builds persistence-safe Open WebUI status events plus a final return value."""
 
-    def response(self, record: WorkerRecord) -> dict[str, Any]:
+    def response(
+        self,
+        record: WorkerRecord,
+        events: Iterable[WorkerEvent] = (),
+    ) -> dict[str, Any]:
         done = record.status in {"completed", "failed", "canceled", "input_required"}
         description = record.result or record.error or f"Worker is {record.status}"
+        projected = [
+            source
+            for event in events
+            if (source := self._source_event(event)) is not None
+        ]
+        projected.append(
+            {
+                "type": "status",
+                "data": {
+                    "description": description,
+                    "done": done,
+                    "hidden": False,
+                },
+            }
+        )
         return {
             "return": record.result or (record.error if done else None),
-            "events": [
-                {
-                    "type": "status",
-                    "data": {
-                        "description": description,
-                        "done": done,
-                        "hidden": False,
-                    },
-                }
-            ],
+            "events": projected,
             "metadata": {
                 "worker_id": record.worker_id,
                 "session_id": record.session_id,
                 "status": record.status,
+            },
+        }
+
+    @staticmethod
+    def _source_event(event: WorkerEvent) -> dict[str, Any] | None:
+        canonical = event.payload.get("canonical_event")
+        if not isinstance(canonical, dict) or canonical.get("type") != "external_source_observed":
+            return None
+        payload = canonical.get("payload")
+        if not isinstance(payload, dict):
+            return None
+        required = ("source_id", "name", "url", "document")
+        if any(not isinstance(payload.get(key), str) for key in required):
+            return None
+        return {
+            "type": "source",
+            "data": {
+                "source": {
+                    "id": payload["source_id"],
+                    "name": payload["name"],
+                },
+                "document": [payload["document"]],
+                "metadata": [
+                    {
+                        "source": payload["url"],
+                        "name": payload["name"],
+                        "url": payload["url"],
+                        "swaagHistorySequence": canonical.get("sequence"),
+                        "swaagHistoryHash": canonical.get("hash"),
+                        "swaagDocumentTruncated": bool(
+                            payload.get("document_truncated", False)
+                        ),
+                    }
+                ],
             },
         }
 

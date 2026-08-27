@@ -65,6 +65,8 @@ def test_open_webui_pipe_returns_durable_result_and_emits_status(
                         }
                     ],
                     "metadata": {"worker_id": "worker-1", "status": "completed"},
+                    "next_sequence": 7,
+                    "has_more": False,
                 }
             raise AssertionError(operation)
 
@@ -90,7 +92,65 @@ def test_open_webui_pipe_returns_durable_result_and_emits_status(
         "open_webui.get",
     ]
     assert calls[1][1]["after_sequence"] == 4
+    assert calls[2][1]["after_sequence"] == 4
     assert [item["data"]["done"] for item in emitted] == [False, True]
+
+
+def test_open_webui_pipe_emits_sources_when_status_events_are_disabled(
+    monkeypatch,
+) -> None:
+    module = _load_pipe_module(monkeypatch)
+
+    class FakeClient:
+        def __init__(self, *_args):
+            pass
+
+        async def request(self, operation, _params):
+            if operation == "open_webui.send":
+                return {
+                    "return": "done",
+                    "events": [{"type": "status", "data": {"done": True}}],
+                    "metadata": {"worker_id": "worker-1", "status": "completed"},
+                    "next_sequence": 3,
+                }
+            if operation == "open_webui.get":
+                return {
+                    "return": "done",
+                    "events": [
+                        {
+                            "type": "source",
+                            "data": {
+                                "source": {"id": "source-1", "name": "Docs"},
+                                "document": ["Exact passage"],
+                                "metadata": [{"url": "https://example.test"}],
+                            },
+                        },
+                        {"type": "status", "data": {"done": True}},
+                    ],
+                    "metadata": {"worker_id": "worker-1", "status": "completed"},
+                    "next_sequence": 4,
+                    "has_more": False,
+                }
+            raise AssertionError(operation)
+
+    monkeypatch.setattr(module, "_JsonLineClient", FakeClient)
+    emitted: list[dict] = []
+
+    async def emit(event):
+        emitted.append(event)
+
+    pipe = module.Pipe()
+    pipe.valves.EMIT_STATUS = False
+    result = asyncio.run(
+        pipe.pipe(
+            {"messages": [{"role": "user", "content": "Find evidence."}]},
+            __metadata__={"chat_id": "chat-1", "message_id": "request-1"},
+            __event_emitter__=emit,
+        )
+    )
+
+    assert result == "done"
+    assert [event["type"] for event in emitted] == ["source"]
 
 
 def test_open_webui_pipe_preserves_raw_images_files_and_remote_references(

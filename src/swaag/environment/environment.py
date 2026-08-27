@@ -989,6 +989,21 @@ class AgentEnvironment:
         }
         generated = [
             *artifact_events,
+            *[
+                ToolGeneratedEvent(
+                    "external_source_observed",
+                    {
+                        "source_id": "source_" + sha256_text(item["url"])[:16],
+                        "name": item["title"] or item["url"],
+                        "url": item["url"],
+                        "document": item["snippet"],
+                        "document_truncated": item["snippet_truncated"],
+                        "tool_name": "browser_search",
+                    },
+                )
+                for item in results
+                if item["url"]
+            ],
             ToolGeneratedEvent("process_started", record),
             ToolGeneratedEvent(
                 "process_completed",
@@ -1050,6 +1065,23 @@ class AgentEnvironment:
         }
         generated = [
             *artifact_events,
+            *(
+                [
+                    ToolGeneratedEvent(
+                        "external_source_observed",
+                        {
+                            "source_id": "source_" + sha256_text(output["url"])[:16],
+                            "name": output["title"] or output["url"],
+                            "url": output["url"],
+                            "document": output["text_excerpt"],
+                            "document_truncated": output["text_truncated"],
+                            "tool_name": "browser_browse",
+                        },
+                    )
+                ]
+                if output["url"]
+                else []
+            ),
             ToolGeneratedEvent("process_started", record),
             ToolGeneratedEvent(
                 "process_completed",

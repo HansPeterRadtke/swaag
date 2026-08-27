@@ -40,6 +40,7 @@ ALLOWED_EVENT_TYPES = frozenset(
         "history_analyzed",
         "artifact_created",
         "artifact_read",
+        "external_source_observed",
         "attachment_added",
         "attachment_extracted",
         "terminal_create",
@@ -319,6 +320,16 @@ REQUIRED_PAYLOAD_KEYS: dict[str, frozenset[str]] = {
     "history_window_read": frozenset({"session_id", "start_sequence", "event_count", "sequences"}),
     "artifact_created": frozenset({"artifact_id", "kind", "size_chars", "sha256"}),
     "artifact_read": frozenset({"artifact_id", "start_offset", "end_offset", "finished"}),
+    "external_source_observed": frozenset(
+        {
+            "source_id",
+            "name",
+            "url",
+            "document",
+            "document_truncated",
+            "tool_name",
+        }
+    ),
     "attachment_added": frozenset({"attachment"}),
     "attachment_extracted": frozenset(
         {"attachment_id", "attachment_sha256", "artifact_id", "extractor", "profile", "manifest"}
