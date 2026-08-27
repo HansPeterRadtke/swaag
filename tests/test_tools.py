@@ -87,6 +87,18 @@ def test_unknown_tool_raises(make_config) -> None:
         ToolRegistry().dispatch("missing", {}, make_config(), _empty_state())
 
 
+def test_registered_but_unconfigured_tool_is_blocked(make_config) -> None:
+    config = make_config(tools__enabled=["echo"])
+
+    with pytest.raises(PermissionError, match="not enabled by configuration"):
+        ToolRegistry().dispatch(
+            "calculator",
+            {"expression": "1 + 1"},
+            config,
+            _empty_state(),
+        )
+
+
 
 def test_side_effect_tool_blocked_by_policy(make_config, tmp_path: Path) -> None:
     path = tmp_path / "f.txt"

@@ -231,7 +231,10 @@ def test_mcp_2026_rejects_missing_per_request_metadata(make_config) -> None:
 
 
 def test_control_tools_read_status_and_queue_priority(make_config, tmp_path: Path) -> None:
-    config = make_config(tools__allow_side_effect_tools=True)
+    config = make_config(
+        tools__enabled=["agent_status_lookup", "agent_control"],
+        tools__allow_side_effect_tools=True,
+    )
     config.sessions.root = tmp_path / "sessions"
     runtime = AgentRuntime(config)
     source = runtime.create_or_load_session()
@@ -263,3 +266,18 @@ def test_control_tools_read_status_and_queue_priority(make_config, tmp_path: Pat
     pending = runtime.history.list_pending_control_messages(target.session_id)
     assert pending[0]["message"] == "pause"
     assert pending[0]["priority"] == 80
+
+
+def test_direct_runtime_tool_call_cannot_bypass_configured_enablement(
+    make_config, tmp_path: Path
+) -> None:
+    config = make_config(tools__enabled=["echo"])
+    config.sessions.root = tmp_path / "sessions"
+    runtime = AgentRuntime(config)
+
+    run = runtime.execute_tool_once("calculator", {"expression": "1 + 1"})
+
+    assert run.tool_result is None
+    assert run.error is not None
+    assert run.error["error_type"] == "PermissionError"
+    assert "not enabled by configuration" in run.error["error"]

@@ -144,6 +144,9 @@ class ToolRegistry:
         semantic_call: Callable[[SemanticCallRequest], dict] | None = None,
     ) -> tuple[Tool, ToolContext, ToolInvocation]:
         tool = self.get(name)
+        configured_names = set(config.tools.enabled)
+        if name != "load_tools" and name not in configured_names:
+            raise PermissionError(f"Tool is not enabled by configuration: {name}")
         if not tool.available(config):
             raise RuntimeError(f"Tool is unavailable in the current environment: {name}")
         session_copy = copy.deepcopy(session_state)
