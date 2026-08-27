@@ -181,6 +181,7 @@ def test_status_uses_full_fidelity_when_exact_snapshot_fits(make_config) -> None
     assert [request["contract"] for request in client.requests] == [
         "communication_status"
     ]
+    assert client.requests[0]["n_predict"] == 5_000
     assert marker in client.requests[0]["prompt"]
     assert runtime.history.read_history(target.session_id) == events_before
     assert runtime.resolve_session_ref(None, latest_if_none=True) == target.session_id

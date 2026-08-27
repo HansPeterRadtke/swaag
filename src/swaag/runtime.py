@@ -1883,7 +1883,12 @@ class AgentRuntime:
         exact_evidence_tokens = self._counter(state).count_text(exact_evidence).tokens
         context_limit_resolution = self._resolve_context_limit()
         minimum_output_tokens = 128
-        desired_output_tokens = min(512, context_limit_resolution[0])
+        # Let the central budget policy derive this operation's soft output
+        # maximum from the live context limit. A fixed cap can repeatedly
+        # starve reasoning-capable backends before they emit the JSON object;
+        # the desired reserve still yields to full-fidelity input in the
+        # context compiler.
+        desired_output_tokens = None
         evidence_projection = ""
         evidence_projected = False
         projection_target_tokens: int | None = None
