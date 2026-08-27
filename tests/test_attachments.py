@@ -83,7 +83,24 @@ def test_read_attachment_is_model_selected_bounded_and_provenanced(make_config, 
     assert result is not None
     assert result.output["text"] == "abcde"
     assert result.output["truncated"] is True
+    assert result.output["start_offset"] == 0
+    assert result.output["next_offset"] == 5
+    assert result.output["finished"] is False
     assert result.output["source_event_references"][0]["event_type"] == "attachment_added"
+
+    continued = runtime.execute_tool_once(
+        "read_attachment",
+        {
+            "attachment_id": reference.attachment_id,
+            "start_offset": result.output["next_offset"],
+            "max_chars": None,
+        },
+        session_id=state.session_id,
+    ).tool_result
+    assert continued is not None
+    assert continued.output["text"] == "fghij"
+    assert continued.output["start_offset"] == 5
+    assert continued.output["finished"] is True
 
 
 def _write_fake_all2text(path: Path) -> None:

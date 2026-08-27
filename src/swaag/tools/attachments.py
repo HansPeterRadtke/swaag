@@ -71,32 +71,48 @@ class ListAttachmentsTool(Tool):
 
 class ReadAttachmentTool(Tool):
     name = "read_attachment"
-    description = "Read a bounded UTF-8 preview from one raw attachment after deciding that direct text inspection is useful."
+    description = "Read an exact bounded UTF-8 slice from one raw attachment after deciding that direct text inspection is useful."
     usage_guidance = (
         "Use the exact attachment_id. Binary or non-UTF-8 content is not coerced to text; select extract_attachment "
-        "or another specialist capability instead. Raw bytes remain authoritative outside context."
+        "or another specialist capability instead. Raw bytes remain authoritative outside context. If finished=false, "
+        "advance start_offset to next_offset and continue until the evidence needed by the task is complete."
     )
     kind = "pure"
     input_schema = {
         "type": "object",
         "properties": {
             "attachment_id": {"type": "string"},
+            "start_offset": {"anyOf": [{"type": "integer"}, {"type": "null"}]},
             "max_chars": {"anyOf": [{"type": "integer"}, {"type": "null"}]},
         },
-        "required": ["attachment_id", "max_chars"],
+        "required": ["attachment_id", "start_offset", "max_chars"],
         "additionalProperties": False,
     }
 
     def validate(self, raw_input: dict) -> dict:
         attachment_id = raw_input.get("attachment_id")
+        start_offset = raw_input.get("start_offset")
+        start_offset = 0 if start_offset is None else start_offset
         max_chars = raw_input.get("max_chars")
         if not isinstance(attachment_id, str) or not attachment_id.strip():
             raise ToolValidationError("read_attachment.attachment_id must be a non-empty string")
+        if (
+            not isinstance(start_offset, int)
+            or isinstance(start_offset, bool)
+            or start_offset < 0
+        ):
+            raise ToolValidationError(
+                "read_attachment.start_offset must be a non-negative integer or null"
+            )
         if max_chars is not None and (
             not isinstance(max_chars, int) or isinstance(max_chars, bool) or max_chars <= 0
         ):
             raise ToolValidationError("read_attachment.max_chars must be a positive integer or null")
-        return {"attachment_id": attachment_id.strip(), "max_chars": max_chars}
+        return {
+            "attachment_id": attachment_id.strip(),
+            "start_offset": start_offset,
+            "max_chars": max_chars,
+        }
 
     def execute(self, validated_input: dict, context: ToolContext) -> ToolExecutionResult:
         reference = _reference(context, validated_input["attachment_id"])
@@ -109,7 +125,9 @@ class ReadAttachmentTool(Tool):
             text_available = False
         requested = validated_input["max_chars"] or context.config.attachments.preview_chars
         limit = min(int(requested), int(context.config.attachments.preview_chars))
-        preview = text[:limit]
+        start = min(validated_input["start_offset"], len(text))
+        end = min(len(text), start + limit)
+        preview = text[start:end]
         output = {
             "attachment_id": reference.attachment_id,
             "original_name": reference.original_name,
@@ -119,7 +137,11 @@ class ReadAttachmentTool(Tool):
             "text_available": text_available,
             "text": preview,
             "text_chars": len(text) if text_available else 0,
-            "truncated": text_available and len(preview) < len(text),
+            "start_offset": start,
+            "end_offset": end,
+            "next_offset": end,
+            "finished": not text_available or end >= len(text),
+            "truncated": text_available and (start > 0 or end < len(text)),
             "source_event_references": _source_references(reference),
         }
         return ToolExecutionResult(self.name, output, stable_json_dumps(output, indent=2))
