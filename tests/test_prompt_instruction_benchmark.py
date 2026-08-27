@@ -4,11 +4,13 @@ import json
 from typing import Any
 
 from swaag.benchmark.prompt_instruction_behavior import (
+    _verify_case,
     run_prompt_instruction_behavior_benchmark,
+    select_cases,
 )
 from swaag.model import CompletionRequestPolicy
 from swaag.runtime import AgentRuntime
-from swaag.types import CompletionResult, ContractSpec
+from swaag.types import CompletionResult, ContractSpec, PromptInstruction
 
 
 def _action(
@@ -154,6 +156,8 @@ def test_prompt_instruction_behavior_benchmark_uses_production_agent_loop(
     ]
     assert result["verification"]["passed"] is True
     assert result["context_compilations"]
+    assert result["source_event_references"]
+    assert len(result["source_prompt_sha256"]) == 64
     assert (
         output / "prompt_instruction_behavior_results.json"
     ).exists()
@@ -169,3 +173,45 @@ def test_prompt_instruction_behavior_benchmark_uses_production_agent_loop(
         model_identity=report["model_identity"],
     )
     assert resumed["results"] == report["results"]
+
+
+def test_distillation_case_accepts_semantic_category_split() -> None:
+    case = next(
+        item for item in select_cases() if item.case_id == "distill_messy_categories"
+    )
+    now = "2026-08-27T00:00:00+00:00"
+    instructions = [
+        PromptInstruction(
+            instruction_id="instruction_relevance",
+            title="Meaningful user reports",
+            content=(
+                "Preserve every meaningful outcome, caveat, blocker, and requested "
+                "piece of evidence. Omit internal identifiers unless requested."
+            ),
+            scopes=["response_relevance"],
+            created_at=now,
+            updated_at=now,
+        ),
+        PromptInstruction(
+            instruction_id="instruction_audio",
+            title="Listenable rendering",
+            content=(
+                "Turn visual tables and lists into listenable spoken prose while "
+                "preserving all selected information."
+            ),
+            scopes=["audio_rendering"],
+            created_at=now,
+            updated_at=now,
+        ),
+    ]
+
+    result = _verify_case(
+        case,
+        seeded_ids=[],
+        user_instructions=instructions,
+        session_instructions=[],
+        store_actions=["add", "add"],
+        tool_actions=["list", "add", "add"],
+    )
+
+    assert result["passed"] is True

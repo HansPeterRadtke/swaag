@@ -12,7 +12,7 @@ from swaag.config import AgentConfig, load_config
 from swaag.prompt_instruction_store import PromptInstructionStore
 from swaag.runtime import AgentRuntime
 from swaag.types import PromptInstruction, SessionState
-from swaag.utils import stable_json_dumps
+from swaag.utils import sha256_text, stable_json_dumps
 
 
 @dataclass(slots=True, frozen=True)
@@ -44,6 +44,25 @@ CASES = (
             "Use the prompt_instructions capability now. Add this task-only rule to the "
             "session store, scoped only to action calls: verify explicit units before using "
             "a calculator. Do not place it in the cross-session user store."
+        ),
+    ),
+    PromptInstructionBehaviorCase(
+        case_id="distill_messy_categories",
+        split="baseline",
+        setup="empty",
+        prompt=(
+            "Use the prompt_instructions capability to inspect the local-user store and "
+            "semantically distill the durable corrections in this rough spoken feedback. "
+            "Split different concerns into the model-call scopes where each concern actually "
+            "belongs; do not copy filler, examples, or equivalent duplicates into an "
+            "instruction. Here is the rough feedback: 'Uh, when you report results to me, I "
+            "keep getting process chatter and internal identifiers that mean nothing unless I "
+            "asked for them. I still need every meaningful outcome, caveat, blocker, and "
+            "requested piece of evidence. That's about selecting user-facing information, not "
+            "about changing how tools are called. Also, if the selected answer is going to be "
+            "listened to, visual tables and dense lists need to become understandable spoken "
+            "prose and numbers need to be listenable, but absolutely no selected information "
+            "may disappear.' Store the resulting corrections for this local user."
         ),
     ),
     PromptInstructionBehaviorCase(
@@ -178,6 +197,7 @@ def _verify_case(
     user_instructions: list[PromptInstruction],
     session_instructions: list[PromptInstruction],
     store_actions: list[str],
+    tool_actions: list[str],
 ) -> dict[str, Any]:
     user_text = "\n".join(
         f"{item.title}\n{item.content}" for item in user_instructions
@@ -203,6 +223,44 @@ def _verify_case(
             and session_instructions[0].scopes == ["action"],
             "meaning_preserved": "unit" in session_text
             and "calculator" in session_text,
+        }
+    elif case.case_id == "distill_messy_categories":
+        relevance = [
+            item
+            for item in user_instructions
+            if "response_relevance" in item.scopes
+        ]
+        audio = [
+            item for item in user_instructions if "audio_rendering" in item.scopes
+        ]
+        relevance_text = "\n".join(
+            f"{item.title}\n{item.content}" for item in relevance
+        ).casefold()
+        audio_text = "\n".join(
+            f"{item.title}\n{item.content}" for item in audio
+        ).casefold()
+        checks = {
+            "inspected_before_mutation": bool(tool_actions)
+            and tool_actions[0] == "list",
+            "two_distinct_instructions": len(user_instructions) == 2,
+            "relevance_scope": len(relevance) == 1
+            and "action" not in relevance[0].scopes
+            and "audio_rendering" not in relevance[0].scopes,
+            "relevance_meaning_preserved": (
+                "meaningful" in relevance_text
+                and "blocker" in relevance_text
+                and "identifier" in relevance_text
+            ),
+            "audio_scope": len(audio) == 1
+            and "action" not in audio[0].scopes
+            and "response_relevance" not in audio[0].scopes,
+            "audio_meaning_preserved": (
+                ("table" in audio_text or "list" in audio_text)
+                and ("listen" in audio_text or "spoken" in audio_text)
+                and ("preserve" in audio_text or "information" in audio_text)
+            ),
+            "no_duplicate_mutation": store_actions == ["add", "add"],
+            "session_store_unchanged": not session_instructions,
         }
     elif case.case_id == "revise_stale_rule":
         checks = {
@@ -316,6 +374,12 @@ def run_prompt_instruction_behavior_benchmark(
             user_instructions=user_instructions,
             session_instructions=rebuilt.prompt_instructions,
             store_actions=[event.action for event in store_events],
+            tool_actions=[
+                str(event.payload.get("tool_input", {}).get("action", ""))
+                for event in runtime.history.read_history(state.session_id)
+                if event.event_type == "tool_called"
+                and event.payload.get("tool_name") == "prompt_instructions"
+            ],
         )
         if error is not None:
             verification = {
@@ -324,6 +388,14 @@ def run_prompt_instruction_behavior_benchmark(
                 "execution_error": error,
             }
         history_events = runtime.history.read_history(state.session_id)
+        source_events = [
+            event
+            for event in history_events
+            if event.event_type == "message_added"
+            and isinstance(event.payload.get("message"), dict)
+            and event.payload["message"].get("role") == "user"
+            and event.payload["message"].get("content") == case.prompt
+        ]
         results.append(
             {
                 "case_id": case.case_id,
@@ -331,6 +403,16 @@ def run_prompt_instruction_behavior_benchmark(
                 "session_id": state.session_id,
                 "elapsed_seconds": time.monotonic() - started,
                 "assistant_text": assistant_text,
+                "source_prompt_sha256": sha256_text(case.prompt),
+                "source_event_references": [
+                    {
+                        "session_id": event.session_id,
+                        "sequence": event.sequence,
+                        "event_id": event.id,
+                        "event_hash": event.hash,
+                    }
+                    for event in source_events
+                ],
                 "seeded_instruction_ids": seeded_ids,
                 "user_instructions": _semantic_rows(user_instructions),
                 "session_instructions": _semantic_rows(
