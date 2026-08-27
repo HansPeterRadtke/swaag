@@ -61,6 +61,13 @@ def evidence_projection_contract() -> ContractSpec:
     )
 
 
+def notes_compaction_contract() -> ContractSpec:
+    return _contract(
+        "notes_compaction",
+        _closed_object({"title": _string(), "content": _string()}),
+    )
+
+
 def communication_status_contract() -> ContractSpec:
     return _contract(
         "communication_status",

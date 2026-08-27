@@ -8,7 +8,13 @@ import pytest
 
 from swaag.environment.environment import AgentEnvironment
 from swaag.notes import make_note
-from swaag.tools.base import Tool, ToolContext, ToolValidationError, _validate_schema_value
+from swaag.tools.base import (
+    SemanticCallContextOverflow,
+    Tool,
+    ToolContext,
+    ToolValidationError,
+    _validate_schema_value,
+)
 from swaag.tools.builtin import EditTextTool, ReadFileTool, ReadTextTool, RunTestsTool, ShellCommandTool, WriteFileTool
 from swaag.tools.registry import ToolRegistry
 from swaag.types import SessionState, ToolExecutionResult
@@ -98,6 +104,159 @@ def test_notes_tool_add_returns_generated_events(make_config) -> None:
     _, result = registry.dispatch("notes", {"action": "add", "title": "Todo", "content": "Check file"}, config, _empty_state())
     assert result.generated_events
     assert result.generated_events[0].event_type == "note_added"
+
+
+def test_notes_tool_add_fails_closed_at_capacity_without_generated_mutation(
+    make_config,
+) -> None:
+    registry = ToolRegistry()
+    config = make_config(notes__max_notes=1)
+    state = _empty_state()
+    state.notes.append(make_note(config, title="Existing", content="exact fact"))
+
+    with pytest.raises(ToolValidationError, match="compact existing notes"):
+        registry.dispatch(
+            "notes",
+            {"action": "add", "title": "New", "content": "new exact fact"},
+            config,
+            state,
+        )
+
+    assert len(state.notes) == 1
+    assert state.notes[0].content == "exact fact"
+
+
+def test_notes_tool_compaction_is_central_semantic_call_with_exact_sources(
+    make_config,
+) -> None:
+    registry = ToolRegistry()
+    config = make_config()
+    state = _empty_state()
+    state.notes.extend(
+        [
+            make_note(config, title="Constraint", content="Never remove marker-17"),
+            make_note(config, title="Evidence", content="Tool check passed at 12:30"),
+        ]
+    )
+    observed = {}
+
+    def semantic_call(request):
+        observed["request"] = request
+        exact = "".join(component.text for component in request.components)
+        assert "marker-17" in exact
+        assert "12:30" in exact
+        return {
+            "title": "Exact durable state",
+            "content": "Never remove marker-17. Tool check passed at 12:30.",
+        }
+
+    _, result = registry.dispatch(
+        "notes",
+        {"action": "compact"},
+        config,
+        state,
+        semantic_call=semantic_call,
+    )
+
+    request = observed["request"]
+    assert request.kind == "notes_compaction"
+    assert request.contract.name == "notes_compaction"
+    assert result.output["compacted"] is True
+    assert result.output["compacted_note"]["content"].endswith("12:30.")
+    event = next(
+        item for item in result.generated_events if item.event_type == "notes_compacted"
+    )
+    assert event.payload["semantic"] is True
+    assert event.payload["source_note_ids"] == [note.note_id for note in state.notes]
+
+
+def test_notes_tool_compaction_recovers_from_measured_context_overflow(
+    make_config,
+) -> None:
+    registry = ToolRegistry()
+    config = make_config()
+    state = _empty_state()
+    state.notes.extend(
+        [
+            make_note(config, title="Left", content="left-marker"),
+            make_note(config, title="Right", content="right-marker"),
+        ]
+    )
+    calls = []
+
+    def semantic_call(request):
+        source = request.components[-1].text
+        calls.append(source)
+        if len(calls) == 1:
+            raise SemanticCallContextOverflow(None)
+        if "Semantic fragment projections" in source:
+            assert "left-fragment" in source
+            assert "right-fragment" in source
+            return {
+                "title": "Recovered",
+                "content": "left-marker and right-marker are both preserved",
+            }
+        if "left-marker" in source:
+            return {"title": "Left", "content": "left-fragment"}
+        return {"title": "Right", "content": "right-fragment"}
+
+    _, result = registry.dispatch(
+        "notes",
+        {"action": "compact"},
+        config,
+        state,
+        semantic_call=semantic_call,
+    )
+
+    assert len(calls) == 4
+    assert result.output["compacted_note"]["content"] == (
+        "left-marker and right-marker are both preserved"
+    )
+
+
+def test_notes_tool_compaction_repairs_mechanical_storage_failure(
+    make_config,
+) -> None:
+    registry = ToolRegistry()
+    config = make_config(notes__max_note_chars=40, model__max_retries=1)
+    state = _empty_state()
+    state.notes.extend(
+        [
+            make_note(config, title="Left", content="left-marker"),
+            make_note(config, title="Right", content="right-marker"),
+        ]
+    )
+    requests = []
+
+    def semantic_call(request):
+        requests.append(request)
+        if len(requests) == 1:
+            return {"title": "Too large", "content": "x" * 41}
+        feedback = next(
+            component
+            for component in request.components
+            if component.name == "notes_compaction_validation_feedback"
+        )
+        assert "max_note_chars" in feedback.text
+        exact_sources = next(
+            component
+            for component in request.components
+            if component.name == "notes_compaction_sources"
+        )
+        assert "left-marker" in exact_sources.text
+        assert "right-marker" in exact_sources.text
+        return {"title": "Repaired", "content": "left-marker; right-marker"}
+
+    _, result = registry.dispatch(
+        "notes",
+        {"action": "compact"},
+        config,
+        state,
+        semantic_call=semantic_call,
+    )
+
+    assert len(requests) == 2
+    assert result.output["compacted_note"]["content"] == "left-marker; right-marker"
 
 
 

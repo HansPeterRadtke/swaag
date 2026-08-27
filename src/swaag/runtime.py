@@ -2322,6 +2322,20 @@ class AgentRuntime:
                     optional=True,
                 )
             )
+        if selected.omitted_note_ids:
+            components.append(
+                PromptComponent(
+                    name="omitted_durable_note_references",
+                    category="notes",
+                    text=(
+                        "Additional exact durable notes exist outside this bounded preview. "
+                        "Use the notes list action or read_text with a note_id when their "
+                        "content may matter. Omitted note IDs:\n"
+                        + stable_json_dumps(selected.omitted_note_ids, indent=None)
+                        + "\n\n"
+                    ),
+                )
+            )
         return components
 
     def _compile_context(
@@ -2366,6 +2380,16 @@ class AgentRuntime:
         )
         minimum_output_tokens = max(1, int(request.minimum_output_tokens))
         output_retry = 0
+
+        def validate_semantic_payload(payload: dict[str, Any]) -> dict[str, Any]:
+            if request.contract.json_schema is not None:
+                _validate_schema_value(
+                    payload,
+                    request.contract.json_schema,
+                    path=request.contract.name,
+                )
+            return payload
+
         while True:
             compilation = self._compile_context(
                 state,
@@ -2411,6 +2435,7 @@ class AgentRuntime:
                 return self._execute_structured_call(
                     state,
                     prepared,
+                    validator=validate_semantic_payload,
                     seed_offset=output_retry,
                 )
             except OutputBudgetExhaustedError:

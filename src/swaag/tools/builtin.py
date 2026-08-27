@@ -12,11 +12,23 @@ from typing import Any
 from swaag.config import AgentConfig
 from swaag.editing import EditError, TextEditor
 from swaag.environment.browser import aubro_available
-from swaag.notes import compact_notes, enforce_limits, make_note, render_notes
+from swaag.grammar import notes_compaction_contract
+from swaag.notes import NoteError, compact_notes, enforce_limits, make_note, render_notes
 from swaag.reader import ReaderError, SequentialReader
-from swaag.tools.base import Tool, ToolContext, ToolValidationError
+from swaag.tools.base import (
+    SemanticCallContextOverflow,
+    SemanticCallRequest,
+    Tool,
+    ToolContext,
+    ToolValidationError,
+)
 from swaag.scheduler import WakeupStore, parse_duration
-from swaag.types import DerivedFileWrite, ToolExecutionResult, ToolGeneratedEvent
+from swaag.types import (
+    DerivedFileWrite,
+    PromptComponent,
+    ToolExecutionResult,
+    ToolGeneratedEvent,
+)
 from swaag.utils import sha256_text, stable_json_dumps
 
 
@@ -266,7 +278,8 @@ class ReadTextTool(Tool):
 
 class NotesTool(Tool):
     name = "notes"
-    description = "List, add, replace, and compact durable working notes with strict size limits."
+    description = "List, add, replace, and semantically compact durable working notes without silently truncating their content."
+    usage_guidance = "Add and replace fail closed when exact content exceeds storage limits. Use compact as a separate action when capacity is exhausted; an LLM semantically consolidates every current note through the central context compiler while raw note events remain authoritative."
     kind = "stateful"
     output_schema = {
         "type": "object",
@@ -307,6 +320,120 @@ class NotesTool(Tool):
             raise ToolValidationError("notes list takes only action")
         return {"action": action, "note_id": note_id, "title": title, "content": content}
 
+    def execution_timeout_seconds(self, context: ToolContext) -> float | None:
+        return None
+
+    def _semantic_compaction(
+        self,
+        context: ToolContext,
+        *,
+        source_text: str,
+        target_chars: int,
+        max_total_chars: int,
+        remaining_calls: list[int],
+        validation_feedback: str = "",
+        depth: int = 0,
+    ) -> dict[str, Any]:
+        if not remaining_calls or remaining_calls[0] <= 0:
+            raise ToolValidationError(
+                "notes compaction exhausted its bounded semantic reduction attempts"
+            )
+        remaining_calls[0] -= 1
+        request = SemanticCallRequest(
+            kind="notes_compaction",
+            system_instruction=(
+                "Consolidate durable working notes without inventing or silently dropping "
+                "meaning. Preserve every user constraint, correction, negative constraint, "
+                "identifier, path, date, decision, promise, uncertainty, unresolved question, "
+                "causal relationship, and verified tool outcome that may matter later. Remove "
+                "only redundancy and obsolete wording. Raw note events remain authoritative."
+            ),
+            components=[
+                PromptComponent(
+                    name="notes_compaction_limit",
+                    category="instruction",
+                    text=(
+                        "Return one concise title of at most 200 characters and consolidated "
+                        "content. The content must fit the mechanical storage limit of "
+                        f"{target_chars} characters, and title plus content must not exceed "
+                        f"{max_total_chars} characters.\n\n"
+                    ),
+                ),
+                PromptComponent(
+                    name="notes_compaction_sources",
+                    category="notes",
+                    text="Exact notes or prior semantic fragment projections:\n" + source_text,
+                ),
+            ],
+            contract=notes_compaction_contract(),
+            minimum_output_tokens=64,
+            desired_output_tokens=max(
+                64,
+                min(
+                    int(context.config.context.note_prompt_token_cap),
+                    (target_chars + 3) // 4 + 32,
+                ),
+            ),
+        )
+        if validation_feedback:
+            request.components.insert(
+                1,
+                PromptComponent(
+                    name="notes_compaction_validation_feedback",
+                    category="instruction",
+                    text=(
+                        "The previous semantic result failed a mechanical storage check. "
+                        "Repair the result without dropping source meaning. Exact failure: "
+                        + validation_feedback
+                        + "\n\n"
+                    ),
+                ),
+            )
+        try:
+            return context.call_semantic(request)
+        except SemanticCallContextOverflow:
+            if depth >= 16 or len(source_text) < 2:
+                raise
+            midpoint = len(source_text) // 2
+            child_target = max(128, (target_chars + 1) // 2)
+            left = self._semantic_compaction(
+                context,
+                source_text=(
+                    "[Exact source fragment 1/2; raw source remains authoritative]\n"
+                    + source_text[:midpoint]
+                ),
+                target_chars=child_target,
+                max_total_chars=max_total_chars,
+                remaining_calls=remaining_calls,
+                validation_feedback=validation_feedback,
+                depth=depth + 1,
+            )
+            right = self._semantic_compaction(
+                context,
+                source_text=(
+                    "[Exact source fragment 2/2; raw source remains authoritative]\n"
+                    + source_text[midpoint:]
+                ),
+                target_chars=child_target,
+                max_total_chars=max_total_chars,
+                remaining_calls=remaining_calls,
+                validation_feedback=validation_feedback,
+                depth=depth + 1,
+            )
+            return self._semantic_compaction(
+                context,
+                source_text=(
+                    "[Semantic fragment projections to consolidate; raw note events remain "
+                    "authoritative]\n"
+                    + stable_json_dumps([left, right], indent=2)
+                ),
+                target_chars=target_chars,
+                max_total_chars=max_total_chars,
+                remaining_calls=remaining_calls,
+                validation_feedback=validation_feedback,
+                depth=depth + 1,
+            )
+
     def execute(self, validated_input: dict[str, Any], context: ToolContext) -> ToolExecutionResult:
         state = context.session_state
         action = validated_input["action"]
@@ -317,19 +444,19 @@ class NotesTool(Tool):
             return ToolExecutionResult(tool_name=self.name, output=output, display_text=tool_result_display(self.name, output))
 
         if action == "add":
-            note = make_note(context.config, title=validated_input["title"], content=validated_input["content"])
+            try:
+                note = make_note(
+                    context.config,
+                    title=validated_input["title"],
+                    content=validated_input["content"],
+                )
+                enforce_limits(context.config, [*state.notes, note])
+            except NoteError as exc:
+                raise ToolValidationError(
+                    f"notes add failed without modifying notes: {exc}. "
+                    "Semantically compact existing notes first when capacity is exhausted."
+                ) from exc
             generated.append(ToolGeneratedEvent("note_added", {"note": asdict(note)}))
-            notes_after = enforce_limits(context.config, [*state.notes, note])
-            if len(notes_after) < len(state.notes) + 1:
-                compaction = compact_notes(context.config, [*state.notes, note])
-                if compaction is not None:
-                    removed_ids, compacted_note = compaction
-                    generated.append(
-                        ToolGeneratedEvent(
-                            "notes_compacted",
-                            {"removed_note_ids": removed_ids, "compacted_note": asdict(compacted_note)},
-                        )
-                    )
             output = {"note_id": note.note_id, "title": note.title, "content": note.content}
             return ToolExecutionResult(tool_name=self.name, output=output, display_text=tool_result_display(self.name, output), generated_events=generated)
 
@@ -337,23 +464,86 @@ class NotesTool(Tool):
             existing = next((note for note in state.notes if note.note_id == validated_input["note_id"]), None)
             if existing is None:
                 raise ToolValidationError(f"Unknown note_id: {validated_input['note_id']}")
-            replacement = make_note(
-                context.config,
-                title=validated_input["title"],
-                content=validated_input["content"],
-                note_id=existing.note_id,
-            )
+            try:
+                replacement = make_note(
+                    context.config,
+                    title=validated_input["title"],
+                    content=validated_input["content"],
+                    note_id=existing.note_id,
+                )
+                enforce_limits(
+                    context.config,
+                    [
+                        replacement if note.note_id == existing.note_id else note
+                        for note in state.notes
+                    ],
+                )
+            except NoteError as exc:
+                raise ToolValidationError(
+                    f"notes replace failed without modifying notes: {exc}"
+                ) from exc
             replacement.created_at = existing.created_at
             generated.append(ToolGeneratedEvent("note_replaced", {"note": asdict(replacement)}))
             output = {"note_id": replacement.note_id, "title": replacement.title, "content": replacement.content}
             return ToolExecutionResult(tool_name=self.name, output=output, display_text=tool_result_display(self.name, output), generated_events=generated)
 
-        compaction = compact_notes(context.config, state.notes)
-        if compaction is None:
+        if len(state.notes) < 2:
             output = {"notes": [{"note_id": note.note_id, "title": note.title, "content": note.content} for note in state.notes], "compacted": False}
             return ToolExecutionResult(tool_name=self.name, output=output, display_text=tool_result_display(self.name, output))
+        source_notes = [asdict(note) for note in state.notes]
+        target_chars = min(
+            int(context.config.notes.max_note_chars),
+            int(context.config.notes.max_total_chars),
+        )
+        source_text = stable_json_dumps(source_notes, indent=2)
+        remaining_calls = [
+            max(8, int(context.config.context.max_compaction_rounds) * 8)
+        ]
+        validation_feedback = ""
+        compaction = None
+        max_validation_attempts = max(1, int(context.config.model.max_retries) + 1)
+        for validation_attempt in range(max_validation_attempts):
+            payload = self._semantic_compaction(
+                context,
+                source_text=source_text,
+                target_chars=target_chars,
+                max_total_chars=int(context.config.notes.max_total_chars),
+                remaining_calls=remaining_calls,
+                validation_feedback=validation_feedback,
+            )
+            try:
+                title = payload["title"]
+                content = payload["content"]
+                if not isinstance(title, str) or not isinstance(content, str):
+                    raise NoteError("title and content must both be strings")
+                compaction = compact_notes(
+                    context.config,
+                    state.notes,
+                    title=title,
+                    content=content,
+                )
+                break
+            except (KeyError, NoteError) as exc:
+                validation_feedback = str(exc)
+                if validation_attempt + 1 >= max_validation_attempts:
+                    raise ToolValidationError(
+                        "semantic note compaction did not satisfy storage constraints after "
+                        f"{max_validation_attempts} bounded attempts: {exc}"
+                    ) from exc
+        if compaction is None:
+            raise RuntimeError("semantic note compaction lost its source notes")
         removed_ids, compacted_note = compaction
-        generated.append(ToolGeneratedEvent("notes_compacted", {"removed_note_ids": removed_ids, "compacted_note": asdict(compacted_note)}))
+        generated.append(
+            ToolGeneratedEvent(
+                "notes_compacted",
+                {
+                    "removed_note_ids": removed_ids,
+                    "source_note_ids": removed_ids,
+                    "compacted_note": asdict(compacted_note),
+                    "semantic": True,
+                },
+            )
+        )
         output = {"removed_note_ids": removed_ids, "compacted_note": asdict(compacted_note), "compacted": True}
         return ToolExecutionResult(tool_name=self.name, output=output, display_text=tool_result_display(self.name, output), generated_events=generated)
 

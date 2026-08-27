@@ -17,6 +17,7 @@ ModelCallKind = Literal[
     "caller_structured_output",
     "communication_status",
     "history_analysis",
+    "notes_compaction",
     "doctor",
     "benchmark_quality_judge",
 ]

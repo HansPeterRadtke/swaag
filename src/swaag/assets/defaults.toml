@@ -206,6 +206,7 @@ completion_evaluation = "small"
 caller_structured_output = "small"
 communication_status = "small"
 history_analysis = "small"
+notes_compaction = "small"
 doctor = "tiny"
 benchmark_quality_judge = "small"
 
@@ -229,6 +230,7 @@ evidence_projection = 0.14
 completion_evaluation = 0.10
 caller_structured_output = 0.12
 communication_status = 0.10
+notes_compaction = 0.10
 doctor = 0.05
 benchmark_quality_judge = 0.12
 
@@ -240,6 +242,7 @@ evidence_projection = 0.08
 completion_evaluation = 0.06
 caller_structured_output = 0.06
 communication_status = 0.06
+notes_compaction = 0.06
 doctor = 0.03
 benchmark_quality_judge = 0.08
 
@@ -251,6 +254,7 @@ evidence_projection = 1.10
 completion_evaluation = 1.10
 caller_structured_output = 1.10
 communication_status = 1.10
+notes_compaction = 1.10
 yes_no = 1.10
 benchmark_quality = 1.10
 
