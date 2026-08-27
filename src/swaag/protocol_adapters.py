@@ -20,13 +20,27 @@ _A2A_STATES = {
 }
 
 
+class A2AProtocolError(ValueError):
+    jsonrpc_code = -32602
+
+
+class A2AUnsupportedOperationError(A2AProtocolError):
+    jsonrpc_code = -32004
+
+
+class A2ATaskNotCancelableError(A2AProtocolError):
+    jsonrpc_code = -32002
+
+
 @dataclass(slots=True, frozen=True)
 class A2AUserMessage:
     text: str
+    message_id: str
     task_id: str | None
     context_id: str | None
     attachments: tuple[dict[str, str], ...]
     return_immediately: bool
+    history_length: int | None
 
 
 class A2AProjectionAdapter:
@@ -40,6 +54,9 @@ class A2AProjectionAdapter:
             raise ValueError("A2A message must be an object")
         if message.get("role") != "ROLE_USER":
             raise ValueError("A2A message role must be ROLE_USER")
+        message_id = message.get("messageId")
+        if not isinstance(message_id, str) or not message_id.strip():
+            raise ValueError("A2A messageId must be a non-empty string")
         parts = message.get("parts")
         if not isinstance(parts, list) or not parts:
             raise ValueError("A2A message parts must be a non-empty array")
@@ -48,6 +65,11 @@ class A2AProjectionAdapter:
         for index, part in enumerate(parts, start=1):
             if not isinstance(part, dict):
                 raise ValueError("Every A2A message part must be an object")
+            content_fields = [
+                key for key in ("text", "raw", "url", "data") if key in part
+            ]
+            if len(content_fields) != 1:
+                raise ValueError("Every A2A message part must contain exactly one content field")
             if isinstance(part.get("text"), str) and str(part["text"]).strip():
                 text_parts.append(str(part["text"]).strip())
                 continue
@@ -67,7 +89,7 @@ class A2AProjectionAdapter:
                 )
                 continue
             if "url" in part:
-                raise ValueError(
+                raise A2AUnsupportedOperationError(
                     "A2A URL parts require an authenticated fetch adapter and are not enabled"
                 )
             raise ValueError("Unsupported A2A message part")
@@ -83,6 +105,13 @@ class A2AProjectionAdapter:
         )
         if not isinstance(return_immediately, bool):
             raise ValueError("A2A returnImmediately must be a boolean")
+        history_length = configuration.get("historyLength")
+        if history_length is not None and (
+            not isinstance(history_length, int)
+            or isinstance(history_length, bool)
+            or history_length < 0
+        ):
+            raise ValueError("A2A historyLength must be a non-negative integer")
         task_id = message.get("taskId")
         context_id = message.get("contextId")
         if task_id is not None and (not isinstance(task_id, str) or not task_id.strip()):
@@ -93,13 +122,21 @@ class A2AProjectionAdapter:
             raise ValueError("A2A contextId must be a non-empty string when provided")
         return A2AUserMessage(
             text=text,
+            message_id=message_id.strip(),
             task_id=None if task_id is None else task_id.strip(),
             context_id=None if context_id is None else context_id.strip(),
             attachments=tuple(attachments),
             return_immediately=return_immediately,
+            history_length=history_length,
         )
 
-    def task(self, record: WorkerRecord) -> dict[str, Any]:
+    def task(
+        self,
+        record: WorkerRecord,
+        *,
+        history: Iterable[dict[str, Any]] = (),
+        include_artifacts: bool = True,
+    ) -> dict[str, Any]:
         state = _A2A_STATES[record.status]
         text = record.result or record.error or ""
         status: dict[str, Any] = {
@@ -123,7 +160,10 @@ class A2AProjectionAdapter:
                 "archivedAt": record.archived_at,
             },
         }
-        if record.status == "completed" and record.result:
+        history_items = list(history)
+        if history_items:
+            task["history"] = history_items
+        if include_artifacts and record.status == "completed" and record.result:
             task["artifacts"] = [
                 {
                     "artifactId": f"{record.worker_id}-result",
@@ -195,7 +235,6 @@ class A2AProjectionAdapter:
                         "taskId": record.worker_id,
                         "contextId": record.session_id,
                         "status": status,
-                        "final": internal_status in {"completed", "failed", "canceled"},
                     }
                 }
             )

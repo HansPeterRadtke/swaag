@@ -225,6 +225,21 @@ class WorkerStore:
             raise FileNotFoundError(f"Unknown worker: {worker_id}")
         return self._record(row)
 
+    def snapshot_with_event_cursor(self, worker_id: str) -> tuple[WorkerRecord, int]:
+        """Read task state and its event cursor from one SQLite snapshot."""
+        with self._connect() as connection:
+            connection.execute("BEGIN")
+            row = connection.execute(
+                "SELECT * FROM workers WHERE worker_id=?", (worker_id,)
+            ).fetchone()
+            if row is None:
+                raise FileNotFoundError(f"Unknown worker: {worker_id}")
+            cursor = connection.execute(
+                "SELECT COALESCE(MAX(sequence), 0) FROM worker_events WHERE worker_id=?",
+                (worker_id,),
+            ).fetchone()
+        return self._record(row), int(cursor[0])
+
     def list(
         self,
         *,
@@ -807,6 +822,11 @@ class WorkerManager:
         self._sync_history_events(record)
         events = self.store.events(worker_id, after_sequence=after_sequence)
         return self._hydrate_history_events(record, events)
+
+    def stream_snapshot(self, worker_id: str) -> tuple[WorkerRecord, int]:
+        record = self.store.get(worker_id)
+        self._sync_history_events(record)
+        return self.store.snapshot_with_event_cursor(worker_id)
 
     def _sync_history_events(self, record: WorkerRecord) -> None:
         cursor = self.store.history_cursor(record.worker_id)

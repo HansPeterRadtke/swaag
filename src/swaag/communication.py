@@ -4,16 +4,21 @@ import asyncio
 import base64
 import binascii
 import copy
+import hashlib
 import json
 import sqlite3
 from dataclasses import asdict, dataclass
+from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any
 
 from swaag.config import AgentConfig
 from swaag.heartbeat import systemd_notify, watchdog_interval_seconds
 from swaag.protocol_adapters import (
+    A2AProtocolError,
     A2AProjectionAdapter,
+    A2ATaskNotCancelableError,
+    A2AUnsupportedOperationError,
     AgUiProjectionAdapter,
     OpenWebUiProjectionAdapter,
 )
@@ -270,9 +275,16 @@ class CommunicationService:
         if protocol == "a2a" and operation == "get":
             return {
                 "protocol": A2AProjectionAdapter.protocol_version,
-                "task": A2AProjectionAdapter().task(record),
+                "task": self._a2a_task(
+                    record,
+                    history_length=_a2a_history_length(params),
+                ),
             }
         if protocol == "a2a" and operation == "cancel":
+            if record.status in {"completed", "failed"} or record.archived_at is not None:
+                raise A2ATaskNotCancelableError(
+                    f"A2A task {worker_id} cannot be canceled from {record.status}"
+                )
             canceled = self.workers.cancel(
                 worker_id,
                 reason=str(params.get("reason") or "A2A cancellation"),
@@ -350,9 +362,9 @@ class CommunicationService:
         if (
             not isinstance(page_size, int)
             or isinstance(page_size, bool)
-            or not 1 <= page_size <= 1000
+            or not 1 <= page_size <= 100
         ):
-            raise ValueError("A2A pageSize must be an integer between 1 and 1000")
+            raise ValueError("A2A pageSize must be an integer between 1 and 100")
         context_id = params.get("contextId", params.get("context_id"))
         if context_id is not None and (
             not isinstance(context_id, str) or not context_id.strip()
@@ -363,6 +375,20 @@ class CommunicationService:
             not isinstance(state_filter, str) or not state_filter.strip()
         ):
             raise ValueError("A2A status must be a non-empty string when provided")
+        history_length = _a2a_history_length(params, default=0)
+        include_artifacts = params.get(
+            "includeArtifacts", params.get("include_artifacts", False)
+        )
+        if not isinstance(include_artifacts, bool):
+            raise ValueError("A2A includeArtifacts must be a boolean")
+        timestamp_after = params.get(
+            "statusTimestampAfter", params.get("status_timestamp_after")
+        )
+        parsed_timestamp_after = (
+            None
+            if timestamp_after is None
+            else _parse_a2a_timestamp(timestamp_after, "statusTimestampAfter")
+        )
         adapter = A2AProjectionAdapter()
         records = self.workers.list()
         if context_id is not None:
@@ -372,6 +398,13 @@ class CommunicationService:
                 item
                 for item in records
                 if adapter.task(item)["status"]["state"] == state_filter.strip()
+            ]
+        if parsed_timestamp_after is not None:
+            records = [
+                item
+                for item in records
+                if _parse_a2a_timestamp(item.updated_at, "worker updated_at")
+                >= parsed_timestamp_after
             ]
         records.sort(key=lambda item: (item.updated_at, item.worker_id), reverse=True)
         total_size = len(records)
@@ -393,7 +426,14 @@ class CommunicationService:
         )
         return {
             "protocol": adapter.protocol_version,
-            "tasks": [adapter.task(item) for item in page],
+            "tasks": [
+                self._a2a_task(
+                    item,
+                    history_length=history_length,
+                    include_artifacts=include_artifacts,
+                )
+                for item in page
+            ],
             "totalSize": total_size,
             "pageSize": page_size,
             "nextPageToken": next_page_token,
@@ -425,6 +465,10 @@ class CommunicationService:
         else:
             worker_id = message.task_id
             record = self.workers.store.get(worker_id)
+            if record.status in WORKER_TERMINAL_STATES:
+                raise A2AUnsupportedOperationError(
+                    f"A2A task {worker_id} cannot accept messages from {record.status}"
+                )
             if (
                 message.context_id is not None
                 and message.context_id != record.session_id
@@ -435,20 +479,67 @@ class CommunicationService:
                     "attachment.add",
                     {**attachment, "worker_id": worker_id, "source": "a2a"},
                 )
-            message_id = str(params["message"].get("messageId") or "").strip()
             record = self.workers.message(
                 worker_id,
                 message.text,
-                source=f"a2a:{message_id}" if message_id else "a2a",
+                source=f"a2a:{message.message_id}",
             )
         if wait_for_completion and not message.return_immediately:
             record = self.workers.wait(worker_id, timeout_seconds=None)
         return {
             "protocol": adapter.protocol_version,
-            "task": adapter.task(record),
+            "task": self._a2a_task(
+                record,
+                history_length=message.history_length,
+            ),
         }
 
-    async def _wait_task_events(self, params: dict[str, Any]) -> dict[str, Any]:
+    def _a2a_task(
+        self,
+        record: WorkerRecord,
+        *,
+        history_length: int | None = 0,
+        include_artifacts: bool = True,
+    ) -> dict[str, Any]:
+        history: list[dict[str, Any]] = []
+        if history_length != 0:
+            for event in self.runtime.history.read_history(record.session_id):
+                if event.event_type != "message_added":
+                    continue
+                message = event.payload.get("message")
+                if not isinstance(message, dict):
+                    continue
+                role = message.get("role")
+                content = message.get("content")
+                if role not in {"user", "assistant"} or not isinstance(content, str):
+                    continue
+                history.append(
+                    {
+                        "messageId": event.id,
+                        "contextId": record.session_id,
+                        "taskId": record.worker_id,
+                        "role": "ROLE_USER" if role == "user" else "ROLE_AGENT",
+                        "parts": [{"text": content}],
+                        "metadata": {
+                            "swaagHistorySequence": event.sequence,
+                            "swaagHistoryHash": event.hash,
+                        },
+                    }
+                )
+            if history_length is not None:
+                history = history[-history_length:]
+        return A2AProjectionAdapter().task(
+            record,
+            history=history,
+            include_artifacts=include_artifacts,
+        )
+
+    async def _wait_task_events(
+        self,
+        params: dict[str, Any],
+        *,
+        input_required_is_terminal: bool = True,
+    ) -> dict[str, Any]:
         timeout = params.get("timeout_seconds", 30.0)
         if (
             not isinstance(timeout, (int, float))
@@ -457,18 +548,32 @@ class CommunicationService:
         ):
             raise ValueError("timeout_seconds must be between 0 and 60")
         deadline = asyncio.get_running_loop().time() + float(timeout)
-        probe = {**params, "timeout_seconds": 0}
+        probe = {
+            key: value for key, value in params.items() if key != "timeout_seconds"
+        }
         while True:
             page = await asyncio.to_thread(
                 self.task_api.execute,
-                "events.wait",
+                "events",
                 probe,
             )
-            if page["events"] or page["terminal"]:
-                return page
+            record = self.workers.store.get(str(params.get("worker_id", "")).strip())
+            terminal = record.status in WORKER_TERMINAL_STATES or (
+                input_required_is_terminal and record.status == "input_required"
+            )
+            if terminal and not page["events"]:
+                # State and its transition event commit together; re-read after
+                # observing terminal state so a racing transition is not skipped.
+                page = await asyncio.to_thread(
+                    self.task_api.execute,
+                    "events",
+                    probe,
+                )
+            if page["events"] or terminal:
+                return {**page, "terminal": terminal, "timed_out": False}
             remaining = deadline - asyncio.get_running_loop().time()
             if remaining <= 0:
-                return page
+                return {**page, "terminal": False, "timed_out": True}
             await asyncio.sleep(min(0.05, remaining))
 
     async def _protocol_projection_async(
@@ -495,7 +600,10 @@ class CommunicationService:
                 ):
                     return {
                         "protocol": A2AProjectionAdapter.protocol_version,
-                        "task": A2AProjectionAdapter().task(record),
+                        "task": self._a2a_task(
+                            record,
+                            history_length=message.history_length,
+                        ),
                     }
                 await asyncio.sleep(0.05)
         if protocol == "ag_ui" and operation == "subscribe":
@@ -532,10 +640,365 @@ class CommunicationService:
                 params,
             )
 
+    def _a2a_agent_card(self) -> dict[str, Any]:
+        host = str(self.runtime.config.communication.host).strip()
+        if host in {"", "0.0.0.0", "::"}:
+            host = "127.0.0.1"
+        port = int(self.runtime.config.communication.port)
+        return {
+            "name": "Swaag",
+            "description": (
+                "Durable autonomous workers with resumable tasks, exact history, "
+                "attachments, semantic completion evaluation, and cancellation."
+            ),
+            "supportedInterfaces": [
+                {
+                    "url": f"http://{host}:{port}/a2a/v1",
+                    "protocolBinding": "JSONRPC",
+                    "protocolVersion": A2AProjectionAdapter.protocol_version,
+                }
+            ],
+            "version": "0.1.0",
+            "capabilities": {
+                "streaming": True,
+                "pushNotifications": False,
+            },
+            "defaultInputModes": ["text/plain", "application/octet-stream"],
+            "defaultOutputModes": ["text/plain", "application/json"],
+            "skills": [
+                {
+                    "id": "durable-autonomous-work",
+                    "name": "Durable autonomous work",
+                    "description": (
+                        "Start, inspect, redirect, cancel, and stream independently "
+                        "addressable long-running workers."
+                    ),
+                    "tags": ["agent", "durable", "long-running", "tools"],
+                }
+            ],
+        }
+
+    @staticmethod
+    async def _write_http_response(
+        writer: asyncio.StreamWriter,
+        *,
+        status: int,
+        reason: str,
+        body: bytes = b"",
+        content_type: str = "application/json",
+        headers: dict[str, str] | None = None,
+    ) -> None:
+        response_headers = {
+            "Content-Length": str(len(body)),
+            "Content-Type": content_type,
+            "Connection": "close",
+            "X-Content-Type-Options": "nosniff",
+            **(headers or {}),
+        }
+        head = [f"HTTP/1.1 {status} {reason}"]
+        head.extend(f"{key}: {value}" for key, value in response_headers.items())
+        writer.write(("\r\n".join(head) + "\r\n\r\n").encode("ascii") + body)
+        await writer.drain()
+
+    @staticmethod
+    def _a2a_error(request_id: Any, code: int, message: str) -> dict[str, Any]:
+        return {
+            "jsonrpc": "2.0",
+            "id": request_id,
+            "error": {"code": code, "message": message},
+        }
+
+    @classmethod
+    def _a2a_exception_payload(
+        cls,
+        request_id: Any,
+        exc: Exception,
+    ) -> dict[str, Any]:
+        if isinstance(exc, A2AProtocolError):
+            return cls._a2a_error(request_id, exc.jsonrpc_code, str(exc))
+        if isinstance(exc, FileNotFoundError):
+            return cls._a2a_error(request_id, -32001, str(exc))
+        if isinstance(exc, (TypeError, ValueError)):
+            return cls._a2a_error(request_id, -32602, str(exc))
+        return cls._a2a_error(request_id, -32603, "Internal error")
+
+    async def _read_http_headers(
+        self,
+        reader: asyncio.StreamReader,
+    ) -> dict[str, str]:
+        headers: dict[str, str] = {}
+        total = 0
+        while True:
+            line = await reader.readline()
+            total += len(line)
+            if total > 65_536:
+                raise ValueError("HTTP headers exceed 65536 bytes")
+            if line in {b"\r\n", b"\n", b""}:
+                break
+            try:
+                name, value = line.decode("ascii").split(":", 1)
+            except (UnicodeDecodeError, ValueError) as exc:
+                raise ValueError("malformed HTTP header") from exc
+            normalized = name.strip().casefold()
+            if not normalized or normalized in headers:
+                raise ValueError("duplicate or empty HTTP header")
+            headers[normalized] = value.strip()
+        return headers
+
+    async def _write_a2a_sse(
+        self,
+        writer: asyncio.StreamWriter,
+        *,
+        request_id: Any,
+        initial: WorkerRecord,
+        after_sequence: int,
+        history_length: int | None = 0,
+    ) -> None:
+        headers = (
+            "HTTP/1.1 200 OK\r\n"
+            "Content-Type: text/event-stream\r\n"
+            "Cache-Control: no-cache\r\n"
+            "Connection: close\r\n"
+            "X-Content-Type-Options: nosniff\r\n\r\n"
+        )
+        writer.write(headers.encode("ascii"))
+
+        async def emit(result: dict[str, Any]) -> None:
+            payload = {"jsonrpc": "2.0", "id": request_id, "result": result}
+            writer.write(("data: " + json.dumps(payload, sort_keys=True) + "\n\n").encode())
+            await writer.drain()
+
+        adapter = A2AProjectionAdapter()
+        await emit(
+            {
+                "task": self._a2a_task(
+                    initial,
+                    history_length=history_length,
+                )
+            }
+        )
+        cursor = after_sequence
+        while not writer.is_closing():
+            page = await self._wait_task_events(
+                {
+                    "worker_id": initial.worker_id,
+                    "after_sequence": cursor,
+                    "limit": 100,
+                    "timeout_seconds": 30,
+                },
+                input_required_is_terminal=False,
+            )
+            current = self.workers.store.get(initial.worker_id)
+            updates = adapter.updates(
+                current,
+                [
+                    self.workers.event_from_payload(item)
+                    for item in page["events"]
+                ],
+            )
+            for update in updates:
+                await emit(update)
+            cursor = int(page["next_sequence"])
+            if page["terminal"] and not page["has_more"]:
+                break
+            if not updates:
+                writer.write(b": keepalive\n\n")
+                await writer.drain()
+
+    async def _handle_a2a_http(
+        self,
+        *,
+        request: dict[str, Any],
+        headers: dict[str, str],
+        writer: asyncio.StreamWriter,
+    ) -> None:
+        request_id = request.get("id")
+        if headers.get("a2a-version") != A2AProjectionAdapter.protocol_version:
+            payload = self._a2a_error(
+                request_id,
+                -32009,
+                "Version not supported; send A2A-Version: 1.0",
+            )
+            await self._write_http_response(
+                writer,
+                status=200,
+                reason="OK",
+                body=json.dumps(payload, sort_keys=True).encode(),
+            )
+            return
+        if request.get("jsonrpc") != "2.0" or request_id is None:
+            payload = self._a2a_error(request_id, -32600, "Invalid request")
+        else:
+            method = request.get("method")
+            params = request.get("params") or {}
+            if not isinstance(method, str) or not isinstance(params, dict):
+                payload = self._a2a_error(request_id, -32600, "Invalid request")
+            else:
+                operation_by_method = {
+                    "SendMessage": "send",
+                    "GetTask": "get",
+                    "ListTasks": "list",
+                    "CancelTask": "cancel",
+                }
+                if method in {"SendStreamingMessage", "SubscribeToTask"}:
+                    try:
+                        if method == "SendStreamingMessage":
+                            parsed_message = A2AProjectionAdapter().user_message(params)
+                            response = await asyncio.to_thread(
+                                self._a2a_send,
+                                params,
+                                wait_for_completion=False,
+                            )
+                            initial, cursor = self.workers.stream_snapshot(
+                                str(response["task"]["id"])
+                            )
+                            history_length = parsed_message.history_length
+                        else:
+                            worker_id = str(params.get("id", "")).strip()
+                            initial, cursor = self.workers.stream_snapshot(worker_id)
+                            if initial.status in WORKER_TERMINAL_STATES:
+                                raise A2AUnsupportedOperationError(
+                                    "A2A cannot subscribe to a terminal task"
+                                )
+                            history_length = 0
+                    except Exception as exc:
+                        error = self._a2a_exception_payload(request_id, exc)
+                        await self._write_http_response(
+                            writer,
+                            status=200,
+                            reason="OK",
+                            body=json.dumps(error, sort_keys=True).encode(),
+                        )
+                        return
+                    try:
+                        await self._write_a2a_sse(
+                            writer,
+                            request_id=request_id,
+                            initial=initial,
+                            after_sequence=cursor,
+                            history_length=history_length,
+                        )
+                    except (ConnectionError, BrokenPipeError):
+                        pass
+                    return
+                operation = operation_by_method.get(method)
+                if operation is None:
+                    payload = self._a2a_error(request_id, -32601, "Method not found")
+                else:
+                    try:
+                        response = await self._protocol_projection_async(
+                            "a2a", operation, params
+                        )
+                        if operation == "send":
+                            result: Any = {"task": response["task"]}
+                        elif operation in {"get", "cancel"}:
+                            result = response["task"]
+                        else:
+                            result = {
+                                key: value
+                                for key, value in response.items()
+                                if key != "protocol"
+                            }
+                        payload = {
+                            "jsonrpc": "2.0",
+                            "id": request_id,
+                            "result": result,
+                        }
+                    except Exception as exc:
+                        payload = self._a2a_exception_payload(request_id, exc)
+        await self._write_http_response(
+            writer,
+            status=200,
+            reason="OK",
+            body=json.dumps(payload, sort_keys=True).encode(),
+        )
+
+    async def _handle_http_client(
+        self,
+        first_line: bytes,
+        reader: asyncio.StreamReader,
+        writer: asyncio.StreamWriter,
+    ) -> None:
+        try:
+            parts = first_line.decode("ascii").strip().split()
+            if len(parts) != 3 or parts[2] not in {"HTTP/1.0", "HTTP/1.1"}:
+                raise ValueError("malformed HTTP request line")
+            method, path, _version = parts
+            headers = await self._read_http_headers(reader)
+            if method == "GET" and path == "/.well-known/agent-card.json":
+                body = json.dumps(self._a2a_agent_card(), sort_keys=True).encode()
+                etag = '"' + hashlib.sha256(body).hexdigest() + '"'
+                if headers.get("if-none-match") == etag:
+                    await self._write_http_response(
+                        writer,
+                        status=304,
+                        reason="Not Modified",
+                        headers={"Cache-Control": "public, max-age=300", "ETag": etag},
+                    )
+                else:
+                    await self._write_http_response(
+                        writer,
+                        status=200,
+                        reason="OK",
+                        body=body,
+                        headers={"Cache-Control": "public, max-age=300", "ETag": etag},
+                    )
+                return
+            if method != "POST" or path != "/a2a/v1":
+                await self._write_http_response(
+                    writer,
+                    status=404,
+                    reason="Not Found",
+                    body=b'{"error":"not found"}',
+                )
+                return
+            content_type = headers.get("content-type", "").split(";", 1)[0].strip()
+            if content_type != "application/json":
+                raise ValueError("Content-Type must be application/json")
+            raw_length = headers.get("content-length", "")
+            if not raw_length.isdigit() or not 0 < int(raw_length) <= 1_048_576:
+                raise ValueError("Content-Length must be between 1 and 1048576")
+            body = await reader.readexactly(int(raw_length))
+            try:
+                request = json.loads(body)
+            except json.JSONDecodeError:
+                payload = self._a2a_error(None, -32700, "Invalid JSON payload")
+                await self._write_http_response(
+                    writer,
+                    status=200,
+                    reason="OK",
+                    body=json.dumps(payload, sort_keys=True).encode(),
+                )
+                return
+            if not isinstance(request, dict):
+                payload = self._a2a_error(None, -32600, "Invalid request")
+                await self._write_http_response(
+                    writer,
+                    status=200,
+                    reason="OK",
+                    body=json.dumps(payload, sort_keys=True).encode(),
+                )
+                return
+            await self._handle_a2a_http(
+                request=request,
+                headers=headers,
+                writer=writer,
+            )
+        except (asyncio.IncompleteReadError, ValueError) as exc:
+            await self._write_http_response(
+                writer,
+                status=400,
+                reason="Bad Request",
+                body=json.dumps({"error": str(exc)}, sort_keys=True).encode(),
+            )
+
     async def handle_client(self, reader: asyncio.StreamReader, writer: asyncio.StreamWriter) -> None:
         try:
-            while not reader.at_eof():
-                line = await reader.readline()
+            line = await reader.readline()
+            if line.startswith((b"GET ", b"POST ")):
+                await self._handle_http_client(line, reader, writer)
+                return
+            while line and not reader.at_eof():
                 if not line:
                     break
                 try:
@@ -590,6 +1053,7 @@ class CommunicationService:
                     payload = {"ok": False, "error": f"{type(exc).__name__}: {exc}"}
                 writer.write((json.dumps(payload, sort_keys=True) + "\n").encode("utf-8"))
                 await writer.drain()
+                line = await reader.readline()
         finally:
             writer.close()
             await writer.wait_closed()
@@ -624,6 +1088,31 @@ def _encode_a2a_page_token(record: WorkerRecord) -> str:
         separators=(",", ":"),
     ).encode("utf-8")
     return base64.urlsafe_b64encode(payload).decode("ascii").rstrip("=")
+
+
+def _a2a_history_length(
+    payload: dict[str, Any],
+    *,
+    default: int | None = None,
+) -> int | None:
+    value = payload.get("historyLength", payload.get("history_length", default))
+    if value is not None and (
+        not isinstance(value, int) or isinstance(value, bool) or value < 0
+    ):
+        raise ValueError("A2A historyLength must be a non-negative integer")
+    return value
+
+
+def _parse_a2a_timestamp(value: Any, field: str) -> datetime:
+    if not isinstance(value, str) or not value.strip():
+        raise ValueError(f"A2A {field} must be an ISO 8601 timestamp")
+    try:
+        parsed = datetime.fromisoformat(value.strip().replace("Z", "+00:00"))
+    except ValueError as exc:
+        raise ValueError(f"A2A {field} must be an ISO 8601 timestamp") from exc
+    if parsed.tzinfo is None:
+        raise ValueError(f"A2A {field} must include a timezone")
+    return parsed.astimezone(timezone.utc)
 
 
 def _decode_a2a_page_token(value: str) -> tuple[str, str]:

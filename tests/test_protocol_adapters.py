@@ -2,6 +2,7 @@ from __future__ import annotations
 
 from swaag.protocol_adapters import (
     A2AProjectionAdapter,
+    A2AUnsupportedOperationError,
     AgUiProjectionAdapter,
     OpenWebUiProjectionAdapter,
 )
@@ -104,6 +105,34 @@ def test_task_api_event_wait_is_resumable_and_reports_timeout_or_terminal(make_c
     assert terminal["terminal"] is True
 
 
+def test_task_api_event_wait_does_not_skip_a_racing_terminal_event(make_config) -> None:
+    manager = WorkerManager(AgentRuntime(make_config(), model_client=object()))
+    api = TaskApi(manager)
+    created = api.execute("create", {"objective": "observe racing terminal event"})
+    worker_id = created["worker"]["worker_id"]
+    cursor = api.execute("events", {"worker_id": worker_id})["next_sequence"]
+    original_page = api._event_page
+    calls = 0
+
+    def racing_page(target_worker_id: str, *, after: int, limit: int):
+        nonlocal calls
+        calls += 1
+        page = original_page(target_worker_id, after=after, limit=limit)
+        if calls == 1:
+            manager.cancel(target_worker_id)
+        return page
+
+    api._event_page = racing_page  # type: ignore[method-assign]
+    result = api.execute(
+        "events.wait",
+        {"worker_id": worker_id, "after_sequence": cursor, "timeout_seconds": 0},
+    )
+    manager.shutdown()
+
+    assert result["terminal"] is True
+    assert result["events"][-1]["event_type"] == "worker_canceled"
+
+
 def test_a2a_projection_preserves_internal_task_state_and_archive_metadata() -> None:
     adapter = A2AProjectionAdapter()
     task = adapter.task(_record(archived_at="2026-08-26T11:00:00+00:00"))
@@ -131,12 +160,12 @@ def test_a2a_projects_durable_status_and_artifact_updates() -> None:
     )
 
     assert updates[0]["statusUpdate"]["status"]["state"] == "TASK_STATE_WORKING"
-    assert updates[0]["statusUpdate"]["final"] is False
+    assert "final" not in updates[0]["statusUpdate"]
     assert updates[1]["artifactUpdate"]["artifact"]["parts"] == [
         {"text": "historical exact result"}
     ]
     assert updates[2]["statusUpdate"]["status"]["state"] == "TASK_STATE_COMPLETED"
-    assert updates[2]["statusUpdate"]["final"] is True
+    assert "final" not in updates[2]["statusUpdate"]
 
 
 def test_a2a_message_parser_preserves_text_data_and_raw_attachments() -> None:
@@ -168,6 +197,25 @@ def test_a2a_message_parser_preserves_text_data_and_raw_attachments() -> None:
         },
     )
     assert message.return_immediately is True
+
+
+def test_a2a_message_parser_requires_proto_message_id_and_part_oneof() -> None:
+    adapter = A2AProjectionAdapter()
+    invalid_messages = [
+        {"role": "ROLE_USER", "parts": [{"text": "missing id"}]},
+        {
+            "role": "ROLE_USER",
+            "messageId": "message_invalid_part",
+            "parts": [{"text": "ambiguous", "data": {"value": 1}}],
+        },
+    ]
+
+    for message in invalid_messages:
+        try:
+            adapter.user_message({"message": message})
+        except ValueError:
+            continue
+        raise AssertionError("invalid A2A message was accepted")
 
 
 def test_a2a_send_creates_started_task_with_raw_attachment(
@@ -246,6 +294,7 @@ def test_a2a_send_blocks_by_default_until_worker_interrupt_or_terminal(
         {
             "message": {
                 "role": "ROLE_USER",
+                "messageId": "message_blocking",
                 "parts": [{"text": "Complete before returning."}],
             }
         },
@@ -270,6 +319,7 @@ def test_a2a_followup_rejects_mismatched_task_and_context(make_config) -> None:
             {
                 "message": {
                     "role": "ROLE_USER",
+                    "messageId": "message_followup",
                     "taskId": worker.worker_id,
                     "contextId": "different-context",
                     "parts": [{"text": "Continue."}],
@@ -281,6 +331,33 @@ def test_a2a_followup_rejects_mismatched_task_and_context(make_config) -> None:
         assert "different contexts" in str(exc)
     else:
         raise AssertionError("mismatched A2A context was accepted")
+    finally:
+        service.workers.shutdown()
+
+
+def test_a2a_followup_does_not_restart_a_terminal_task(make_config) -> None:
+    service = CommunicationService(AgentRuntime(make_config(), model_client=object()))
+    worker = service.workers.create("terminal task")
+    service.workers.cancel(worker.worker_id)
+
+    try:
+        service.protocol_projection(
+            "a2a",
+            "send",
+            {
+                "message": {
+                    "role": "ROLE_USER",
+                    "messageId": "message_after_terminal",
+                    "taskId": worker.worker_id,
+                    "parts": [{"text": "Do not restart this task."}],
+                },
+                "configuration": {"returnImmediately": True},
+            },
+        )
+    except A2AUnsupportedOperationError:
+        pass
+    else:
+        raise AssertionError("terminal A2A task accepted another message")
     finally:
         service.workers.shutdown()
 
@@ -312,6 +389,66 @@ def test_a2a_list_uses_stable_cursor_pagination_and_state_filter(make_config) ->
     assert not first_ids & second_ids
     assert second["nextPageToken"] == ""
     assert [task["id"] for task in filtered["tasks"]] == [canceled.worker_id]
+
+
+def test_a2a_get_and_list_project_exact_requested_history_and_artifacts(
+    make_config,
+) -> None:
+    runtime = AgentRuntime(make_config(), model_client=object())
+    service = CommunicationService(runtime)
+    worker = service.workers.create("preserve protocol history")
+    state = runtime.create_or_load_session(worker.session_id)
+    for role, content in (("user", "first exact turn"), ("assistant", "second exact turn")):
+        runtime.history.record_event(
+            state,
+            "message_added",
+            {
+                "message": {
+                    "role": role,
+                    "content": content,
+                    "created_at": "2026-08-26T10:00:00+00:00",
+                    "name": None,
+                    "metadata": {},
+                }
+            },
+        )
+    service.workers.store.transition(
+        worker.worker_id,
+        "queued",
+        expected={"created"},
+        event_type="worker_queued",
+    )
+    service.workers.store.transition(
+        worker.worker_id,
+        "working",
+        expected={"queued"},
+        event_type="worker_started",
+    )
+    service.workers.store.transition(
+        worker.worker_id,
+        "completed",
+        expected={"working"},
+        result="durable artifact",
+        event_type="worker_completed",
+    )
+
+    fetched = service.protocol_projection(
+        "a2a", "get", {"id": worker.worker_id, "historyLength": 1}
+    )["task"]
+    default_list = service.protocol_projection("a2a", "list", {})["tasks"][0]
+    detailed_list = service.protocol_projection(
+        "a2a",
+        "list",
+        {"historyLength": 1, "includeArtifacts": True},
+    )["tasks"][0]
+    service.workers.shutdown()
+
+    assert fetched["history"][0]["parts"] == [{"text": "second exact turn"}]
+    assert fetched["history"][0]["metadata"]["swaagHistoryHash"]
+    assert "history" not in default_list
+    assert "artifacts" not in default_list
+    assert detailed_list["history"] == fetched["history"]
+    assert detailed_list["artifacts"][0]["parts"] == [{"text": "durable artifact"}]
 
 
 def test_ag_ui_projection_uses_stable_run_message_and_terminal_event_shapes() -> None:
