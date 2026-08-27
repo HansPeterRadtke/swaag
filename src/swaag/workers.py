@@ -804,9 +804,7 @@ class WorkerManager:
             **asdict(record),
             "active_run": active_run,
             "execution_diagnostics": execution_diagnostics,
-            "inference_requests": [
-                asdict(item) for item in inference_requests[-10:]
-            ],
+            "inference_requests": [asdict(item) for item in inference_requests],
             "mechanical_status": self.runtime.session_status_payload(state),
             "semantic_status": self.runtime.latest_semantic_status_payload(state),
             "attachments": [

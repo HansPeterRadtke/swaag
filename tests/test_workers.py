@@ -293,6 +293,30 @@ def test_multiple_workers_have_independent_durable_sessions(make_config) -> None
     assert completed_event.payload["run_count"] == 1
 
 
+def test_worker_inspection_returns_complete_inference_lifecycle(make_config) -> None:
+    from swaag.runtime import AgentRuntime
+
+    runtime = AgentRuntime(make_config(), model_client=object())
+    manager = WorkerManager(runtime)
+    worker = manager.create("inspect every inference request")
+    for index in range(12):
+        runtime.inference.enqueue(
+            session_id=worker.session_id,
+            run_id=f"run-{index}",
+            call_id=f"call-{index}",
+            call_kind="agent_action",
+            priority=0,
+            source="test",
+        )
+
+    inspection = manager.inspect(worker.worker_id)
+    manager.shutdown()
+
+    assert [item["call_id"] for item in inspection["inference_requests"]] == [
+        f"call-{index}" for index in range(12)
+    ]
+
+
 def test_worker_response_presentations_are_opt_in_and_durable(
     make_config,
     monkeypatch,

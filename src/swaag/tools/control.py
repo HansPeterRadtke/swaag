@@ -12,7 +12,7 @@ from swaag.utils import stable_json_dumps
 class AgentStatusLookupTool(Tool):
     name = "agent_status_lookup"
     description = "Read durable status for another SWAAG session without changing it."
-    usage_guidance = "Use an exact session id/name. Returns active goal, waiting/running state, pending controls, turn/event counts, and recent durable status events."
+    usage_guidance = "Use an exact session id/name. Returns active goal, waiting/running state, pending controls, turn/event counts, and the complete durable semantic status history."
     kind = "pure"
     repeated_observation_is_redundant = True
     input_schema = {
@@ -36,11 +36,11 @@ class AgentStatusLookupTool(Tool):
             raise FileNotFoundError("No session available")
         state = store.rebuild_from_history(session_id, write_projections=False)
         latest_user = next((m.content for m in reversed(state.messages) if m.role == "user"), "")
-        recent_status = [
+        status_history = [
             event.payload
             for event in store.iter_history(session_id)
             if event.event_type == "agent_status"
-        ][-5:]
+        ]
         active_run = store.read_active_run(session_id)
         output = {
             "session_id": session_id,
@@ -55,7 +55,7 @@ class AgentStatusLookupTool(Tool):
             "pending_control_count": len(store.list_pending_control_messages(session_id)),
             "turn_count": state.turn_count,
             "event_count": state.event_count,
-            "recent_status": recent_status,
+            "status_history": status_history,
         }
         return ToolExecutionResult(self.name, output, f"agent_status_lookup result: {stable_json_dumps(output, indent=2)}")
 

@@ -288,6 +288,19 @@ def test_control_tools_read_status_and_queue_exact_message(make_config, tmp_path
         "message_added",
         {"message": {"role": "user", "content": "Deploy release 12", "created_at": "2026-01-01T00:00:00+00:00", "name": None, "metadata": {}}},
     )
+    for action_index in range(7):
+        runtime.history.record_event(
+            target,
+            "agent_status",
+            {
+                "action_index": action_index,
+                "situation": f"status {action_index}",
+                "action": "inspect",
+                "reason": "test status provenance",
+                "importance": "normal",
+                "importance_rank": 1,
+            },
+        )
     status_run = runtime.execute_tool_once(
         "agent_status_lookup",
         {"session_ref": "target-agent"},
@@ -295,6 +308,9 @@ def test_control_tools_read_status_and_queue_exact_message(make_config, tmp_path
     )
     assert status_run.tool_result.output["session_id"] == target.session_id
     assert status_run.tool_result.output["active_goal"] == "Deploy release 12"
+    assert [item["situation"] for item in status_run.tool_result.output["status_history"]] == [
+        f"status {index}" for index in range(7)
+    ]
 
     control_run = runtime.execute_tool_once(
         "agent_control",
