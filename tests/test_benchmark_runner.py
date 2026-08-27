@@ -73,6 +73,42 @@ def test_benchmark_model_cache_namespace_changes_when_model_replaced_on_same_end
     assert first != second
 
 
+def test_benchmark_model_cache_namespace_ignores_volatile_server_state(
+    monkeypatch,
+) -> None:
+    import json
+    from swaag.benchmark.benchmark_runner import _benchmark_model_cache_namespace
+
+    class _Response:
+        def __init__(self, payload):
+            self.payload = payload
+        def __enter__(self): return self
+        def __exit__(self, *args): return False
+        def read(self): return json.dumps(self.payload).encode("utf-8")
+
+    stable = {
+        "model_alias": "same-model",
+        "model_path": "/missing/model.gguf",
+        "model_ftype": "Q4_K_M",
+        "build_info": "build-a",
+        "chat_template": "template-a",
+        "default_generation_settings": {"n_ctx": 22016, "params": {"top_p": 1.0}},
+    }
+    payloads = [
+        stable | {"is_sleeping": False, "media_marker": "random-a", "total_slots": 1},
+        stable | {"is_sleeping": True, "media_marker": "random-b", "total_slots": 4},
+    ]
+    monkeypatch.setattr(
+        "swaag.benchmark.benchmark_runner.urllib.request.urlopen",
+        lambda *args, **kwargs: _Response(payloads.pop(0)),
+    )
+
+    first = _benchmark_model_cache_namespace("http://10.8.0.7:14832")
+    second = _benchmark_model_cache_namespace("http://10.8.0.7:14832")
+
+    assert first == second
+
+
 def test_planned_cache_mode_uses_model_namespace(tmp_path, monkeypatch) -> None:
     from swaag.benchmark.benchmark_runner import _planned_cache_mode
     from swaag.benchmark.task_definitions import get_benchmark_tasks

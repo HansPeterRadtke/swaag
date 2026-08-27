@@ -51,6 +51,25 @@ def completion_url(base_url: str, completion_endpoint: str) -> str:
     return f"{base}{endpoint}"
 
 
+def stable_llama_server_properties(props: dict[str, Any]) -> dict[str, Any]:
+    """Select output-affecting /props fields and exclude runtime-instance noise."""
+    generation = props.get("default_generation_settings")
+    return {
+        "model_alias": props.get("model_alias"),
+        "model_path": props.get("model_path"),
+        "model_ftype": props.get("model_ftype"),
+        "default_generation_settings": (
+            generation if isinstance(generation, dict) else {}
+        ),
+        "chat_template_sha256": sha256_text(str(props.get("chat_template", ""))),
+        "chat_template_caps": props.get("chat_template_caps"),
+        "bos_token": props.get("bos_token"),
+        "eos_token": props.get("eos_token"),
+        "modalities": props.get("modalities"),
+        "build_info": props.get("build_info"),
+    }
+
+
 @dataclass(slots=True)
 class LlamaCppClient:
     config: AgentConfig
@@ -137,10 +156,10 @@ class LlamaCppClient:
                     model_file.update({"size": stat.st_size, "mtime_ns": stat.st_mtime_ns})
                 except OSError as exc:
                     model_file["stat_error"] = exc.__class__.__name__
-            full_props = dict(props)
-            full_props["model_file"] = model_file
+            stable_props = stable_llama_server_properties(props)
+            stable_props["model_file"] = model_file
             identity["server_properties_sha256"] = sha256_text(
-                stable_json_dumps(full_props, indent=None)
+                stable_json_dumps(stable_props, indent=None)
             )
             identity["model_alias"] = props.get("model_alias")
             identity["model_file"] = model_file

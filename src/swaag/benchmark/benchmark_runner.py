@@ -27,7 +27,7 @@ from swaag.benchmark.task_definitions import (
 )
 from swaag.config import AgentConfig, load_config
 from swaag.live_runtime_profiles import get_documented_final_live_benchmark_recommendation
-from swaag.model import LlamaCppClient
+from swaag.model import LlamaCppClient, stable_llama_server_properties
 from swaag.runtime import AgentRuntime
 from swaag.communication import CommunicationService
 from swaag.types import SessionState
@@ -286,7 +286,19 @@ def _benchmark_model_cache_namespace(base_url: str, *, connect_timeout_seconds: 
             props = json.loads(response.read().decode("utf-8"))
         if not isinstance(props, dict):
             raise ValueError("model /props response must be a JSON object")
-        identity["props"] = props
+        stable_props = stable_llama_server_properties(props)
+        model_path = str(stable_props.get("model_path") or "").strip()
+        model_file: dict[str, Any] = {"path": model_path}
+        if model_path:
+            try:
+                stat = Path(model_path).stat()
+                model_file.update(
+                    {"size": stat.st_size, "mtime_ns": stat.st_mtime_ns}
+                )
+            except OSError as exc:
+                model_file["stat_error"] = exc.__class__.__name__
+        stable_props["model_file"] = model_file
+        identity["props"] = stable_props
         identity["status"] = "resolved"
     except Exception as exc:
         # The base URL still prevents cross-endpoint reuse. The request-level

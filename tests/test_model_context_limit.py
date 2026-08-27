@@ -3,7 +3,11 @@ from __future__ import annotations
 import pytest
 
 from swaag.grammar import yes_no_contract
-from swaag.model import LlamaCppClient, ModelClientError
+from swaag.model import (
+    LlamaCppClient,
+    ModelClientError,
+    stable_llama_server_properties,
+)
 from swaag.utils import sha256_text
 
 
@@ -20,6 +24,25 @@ def test_server_context_limit_comes_from_props(make_config, monkeypatch):
     monkeypatch.setattr("swaag.model.requests.get", lambda *a, **k: Response())
     assert client.server_context_limit() == 22016
     assert client.context_limit_resolution() == (22016, "server_props:n_ctx")
+
+
+def test_stable_server_properties_exclude_runtime_instance_noise() -> None:
+    stable = {
+        "model_alias": "model-a",
+        "model_path": "/models/a.gguf",
+        "model_ftype": "Q4_K_M",
+        "default_generation_settings": {"n_ctx": 22016},
+        "chat_template": "template-a",
+        "build_info": "build-a",
+    }
+    first = stable_llama_server_properties(
+        stable | {"is_sleeping": False, "media_marker": "instance-a"}
+    )
+    second = stable_llama_server_properties(
+        stable | {"is_sleeping": True, "media_marker": "instance-b"}
+    )
+
+    assert first == second
 
 
 @pytest.mark.parametrize("value", [None, True, False, 0, -1, "22016"])
