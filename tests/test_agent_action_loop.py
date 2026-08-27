@@ -208,6 +208,19 @@ def test_direct_answer_is_one_constrained_model_call_with_all_tools(make_config)
     events = runtime.history.read_history(result.session_id)
     assert not any(event.event_type in {"plan_created", "plan_updated"} for event in events)
     assert not any(event.event_type.startswith("plan_") for event in events)
+    sent = next(event for event in events if event.event_type == "model_request_sent")
+    provenance = sent.payload["context_provenance"]
+    context_reference = provenance["context_compiled"]
+    prompt_reference = provenance["prompt_built"]
+    by_sequence = {event.sequence: event for event in events}
+    assert by_sequence[context_reference["sequence"]].hash == context_reference["event_hash"]
+    assert by_sequence[prompt_reference["sequence"]].hash == prompt_reference["event_hash"]
+    assert provenance["input_tokens"] == sent.payload["budget_report"]["input_tokens"]
+    assert {item["category"] for item in provenance["components"]} >= {
+        "instruction",
+        "current_user",
+        "constraint_schema",
+    }
 
 
 def test_output_limit_rebuilds_action_with_more_headroom(make_config) -> None:

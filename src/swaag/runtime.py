@@ -4419,6 +4419,76 @@ class AgentRuntime:
             },
         )
 
+    def _context_provenance_for_request(
+        self,
+        state: SessionState,
+        prepared: PreparedCall,
+    ) -> dict[str, Any]:
+        """Link a request to the exact durable compilation and prompt records."""
+        expected = asdict(prepared.report)
+        start_sequence = max(1, int(state.event_count) - 63)
+        recent = self.history.read_history_window(
+            state.session_id,
+            start_sequence=start_sequence,
+            limit=64,
+        )
+        context_event: HistoryEvent | None = None
+        prompt_event: HistoryEvent | None = None
+        for event in reversed(recent):
+            payload = event.payload
+            if str(payload.get("kind", "")) != prepared.assembly.kind:
+                continue
+            if event.event_type == "prompt_built" and prompt_event is None:
+                if payload.get("budget_report") == expected:
+                    prompt_event = event
+            elif event.event_type == "context_compiled" and context_event is None:
+                accounting = payload.get("accounting")
+                if isinstance(accounting, dict) and all(
+                    accounting.get(key) == expected.get(key)
+                    for key in (
+                        "context_limit",
+                        "input_tokens",
+                        "reserved_response_tokens",
+                        "safety_margin_tokens",
+                        "required_tokens",
+                        "exact",
+                        "fits",
+                    )
+                ):
+                    context_event = event
+            if context_event is not None and prompt_event is not None:
+                break
+
+        def reference(event: HistoryEvent | None) -> dict[str, Any] | None:
+            if event is None:
+                return None
+            return {
+                "session_id": event.session_id,
+                "sequence": event.sequence,
+                "event_hash": event.hash,
+            }
+
+        return {
+            "context_compiled": reference(context_event),
+            "prompt_built": reference(prompt_event),
+            "context_limit": prepared.report.context_limit,
+            "input_tokens": prepared.report.input_tokens,
+            "reserved_response_tokens": prepared.report.reserved_response_tokens,
+            "safety_margin_tokens": prepared.report.safety_margin_tokens,
+            "required_tokens": prepared.report.required_tokens,
+            "exact": prepared.report.exact,
+            "components": [
+                {
+                    "name": component.name,
+                    "category": component.category,
+                    "tokens": component.tokens,
+                    "exact": component.exact,
+                    "include_in_context": component.include_in_context,
+                }
+                for component in prepared.report.breakdown
+            ],
+        }
+
     def _summarize_oversized_message(
         self,
         state: SessionState,
@@ -5352,6 +5422,7 @@ class AgentRuntime:
         # Reusing one fixed seed caused malformed JSON and exact bad actions to recur
         # deterministically even after validation feedback changed.
         request["seed"] = int(self.config.model.seed) + int(seed_offset)
+        context_provenance = self._context_provenance_for_request(state, prepared)
         self._heartbeat(state, phase="queued_inference", detail=f"queued {prepared.assembly.kind}", active_kind="model", active_id=call_id)
         active_call = self.preemption.register_active(
             state.session_id,
@@ -5385,6 +5456,7 @@ class AgentRuntime:
                 "source": inference_request.source,
                 "priority": inference_request.priority,
                 "backend_key": inference_request.backend_key,
+                "context_provenance": context_provenance,
             },
         )
         transient_attempts = 0
@@ -5440,6 +5512,7 @@ class AgentRuntime:
                     "token_timeout_seconds": policy.effective_timeout_seconds,
                     "requested_contract_mode": prepared.contract.mode,
                     "effective_contract_mode": resolved_contract.mode,
+                    "context_provenance": context_provenance,
                 },
             )
             self._heartbeat(state, phase="inference", detail=f"running {prepared.assembly.kind}", active_kind="model", active_id=call_id)
@@ -6183,7 +6256,38 @@ class AgentRuntime:
                 )
             ],
         )
-        report = self._budget_report(state, assembly, contract)
+        compilation = self._compile_context(
+            state,
+            assembly,
+            contract,
+            minimum_output_tokens=self.config.context.reserved_response_tokens,
+        )
+        report = compilation.report
+        self.history.record_event(
+            state,
+            "context_compiled",
+            {
+                "kind": "doctor",
+                "prompt_mode": "lean",
+                "accounting": compilation.accounting(),
+                "cap_error": "" if report.fits else "context_limit_exceeded",
+            },
+        )
+        self.history.record_event(
+            state,
+            "budget_checked",
+            {
+                "kind": "doctor",
+                "prompt_mode": "lean",
+                "budget_report": asdict(report),
+                "cap_error": "" if report.fits else "context_limit_exceeded",
+            },
+        )
+        if not report.fits:
+            raise BudgetExceededError(
+                "The doctor constrained-output probe does not fit the model context",
+                report,
+            )
         self._record_prompt_built(state, assembly, contract, report)
         payload, _final_prepared = self._execute_with_output_recovery(
             state,

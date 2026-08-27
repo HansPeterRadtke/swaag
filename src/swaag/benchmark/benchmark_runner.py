@@ -193,6 +193,7 @@ def _build_config(
 
 def _task_trace_metrics(events: Sequence[Any]) -> dict[str, Any]:
     model_call_kinds: dict[str, int] = {}
+    context_call_explanations: list[dict[str, Any]] = []
     tool_call_names: list[str] = []
     event_counts: dict[str, int] = {}
     max_action_occurrence = 0
@@ -205,6 +206,16 @@ def _task_trace_metrics(events: Sequence[Any]) -> dict[str, Any]:
         if event_type == "model_request_sent":
             kind = str(payload.get("kind", "unknown"))
             model_call_kinds[kind] = model_call_kinds.get(kind, 0) + 1
+            provenance = payload.get("context_provenance")
+            if isinstance(provenance, dict):
+                context_call_explanations.append(
+                    {
+                        "call_id": str(payload.get("call_id", "")),
+                        "kind": kind,
+                        "attempt": int(payload.get("attempt", 0) or 0),
+                        **provenance,
+                    }
+                )
         elif event_type == "tool_called":
             tool_call_names.append(str(payload.get("tool_name", "")))
         elif event_type == "agent_action_selected":
@@ -212,6 +223,7 @@ def _task_trace_metrics(events: Sequence[Any]) -> dict[str, Any]:
     return {
         "model_call_kinds": model_call_kinds,
         "model_call_count": sum(model_call_kinds.values()),
+        "context_call_explanations": context_call_explanations,
         "action_count": event_counts.get("agent_action_selected", 0),
         "tool_call_names": tool_call_names,
         "tool_call_count": len(tool_call_names),

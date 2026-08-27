@@ -201,6 +201,7 @@ def render_benchmark_report(report) -> str:
                     f"### {item.task_id}",
                     f"- Model calls: `{item.metrics.get('model_call_count', 0)}`",
                     f"- Model call kinds: `{item.metrics.get('model_call_kinds', {})}`",
+                    f"- Context call explanations: `{len(item.metrics.get('context_call_explanations', []))}`",
                     f"- Constrained actions: `{item.metrics.get('action_count', 0)}`",
                     f"- Tool calls: `{item.metrics.get('tool_call_names', [])}`",
                     f"- Tool errors: `{item.metrics.get('tool_error_count', 0)}`",

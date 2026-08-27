@@ -1,6 +1,61 @@
 from pathlib import Path
+from types import SimpleNamespace
 
 import requests
+
+
+def test_trace_metrics_export_context_provenance() -> None:
+    from swaag.benchmark.benchmark_runner import _task_trace_metrics
+
+    provenance = {
+        "context_compiled": {
+            "session_id": "session-a",
+            "sequence": 7,
+            "event_hash": "hash-7",
+        },
+        "prompt_built": {
+            "session_id": "session-a",
+            "sequence": 9,
+            "event_hash": "hash-9",
+        },
+        "context_limit": 2048,
+        "input_tokens": 320,
+        "reserved_response_tokens": 256,
+        "safety_margin_tokens": 64,
+        "required_tokens": 640,
+        "exact": True,
+        "components": [
+            {
+                "name": "current_user",
+                "category": "current_user",
+                "tokens": 12,
+                "exact": True,
+                "include_in_context": True,
+            }
+        ],
+    }
+    events = [
+        SimpleNamespace(
+            event_type="model_request_sent",
+            payload={
+                "call_id": "model-call-a",
+                "kind": "action",
+                "attempt": 1,
+                "context_provenance": provenance,
+            },
+        )
+    ]
+
+    metrics = _task_trace_metrics(events)
+
+    assert metrics["context_call_explanations"] == [
+        {
+            "call_id": "model-call-a",
+            "kind": "action",
+            "attempt": 1,
+            **provenance,
+        }
+    ]
 
 
 def test_benchmark_contract_write_allowlist_is_applied_to_runtime_config(tmp_path, monkeypatch) -> None:
