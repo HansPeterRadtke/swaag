@@ -508,41 +508,6 @@ class AgentEnvironment:
             generated_events=[ToolGeneratedEvent("workspace_snapshot_inspected", output | {"captured_at": utc_now_iso()})],
         )
 
-    def detect_stuck_patterns(self, history_events: list[Any]) -> list[str]:
-        repeated_failures: list[str] = []
-        recent_commands = [
-            event.payload
-            for event in history_events
-            if event.event_type == "shell_command_completed"
-        ][-3:]
-        if len(recent_commands) >= 2:
-            same_command = len({item.get("command") for item in recent_commands}) == 1
-            same_exit = len({item.get("exit_code") for item in recent_commands}) == 1
-            no_changes = all(
-                not item.get("created_files") and not item.get("modified_files") and not item.get("deleted_files")
-                for item in recent_commands
-            )
-            if same_command and same_exit and no_changes:
-                repeated_failures.append("repeated_useless_command")
-        recent_edits = [
-            event.payload
-            for event in history_events
-            if event.event_type in {"edit_previewed", "edit_applied"}
-        ][-3:]
-        if recent_edits and all(not bool(item.get("changed", True)) for item in recent_edits):
-            repeated_failures.append("repeated_noop_edit")
-        recent_tests = [
-            event.payload
-            for event in history_events
-            if event.event_type == "process_completed" and event.payload.get("metadata", {}).get("kind") == "run_tests"
-        ][-3:]
-        if len(recent_tests) >= 2:
-            same_test = len({tuple(item.get("command", [])) for item in recent_tests}) == 1
-            all_failed = all(item.get("return_code") not in {0, None} for item in recent_tests)
-            if same_test and all_failed:
-                repeated_failures.append("repeated_failed_tests_without_change")
-        return repeated_failures
-
     def _bounded_output(self, stdout: str, stderr: str, *, kind: str) -> tuple[dict[str, Any], list[ToolGeneratedEvent]]:
         limit = int(self.config.environment.max_capture_chars)
         stdout_preview = stdout if len(stdout) <= limit else stdout[:limit]
