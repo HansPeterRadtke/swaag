@@ -1258,6 +1258,34 @@ def _build_parser() -> argparse.ArgumentParser:
         "--json", action="store_true", help="Print the full JSON report."
     )
 
+    autonomy_behavior_parser = subparsers.add_parser(
+        "autonomy-behavior",
+        help="Measure research, ambiguity, refusal, persistence, and stopping behavior.",
+    )
+    autonomy_behavior_parser.add_argument(
+        "--output",
+        default="autonomy_behavior_output",
+        help="Checkpointed artifact directory.",
+    )
+    autonomy_behavior_parser.add_argument(
+        "--case",
+        action="append",
+        default=[],
+        help="Run only the named autonomy-behavior case.",
+    )
+    autonomy_behavior_parser.add_argument(
+        "--model-base-url",
+        help="Optional alternate model endpoint for model-size comparisons.",
+    )
+    autonomy_behavior_parser.add_argument(
+        "--clean",
+        action="store_true",
+        help="Replace an existing artifact directory.",
+    )
+    autonomy_behavior_parser.add_argument(
+        "--json", action="store_true", help="Print the full JSON report."
+    )
+
     communication_routing_parser = subparsers.add_parser(
         "communication-routing",
         help="Measure communication-model escalation and end-to-end status quality.",
@@ -1599,6 +1627,40 @@ def main(argv: Sequence[str] | None = None) -> int:
             and report["instruction_success"] == report["total"]
             else 1
         )
+    if args.command == "autonomy-behavior":
+        from swaag.benchmark.autonomy_behavior import (
+            run_autonomy_behavior_benchmark,
+        )
+
+        config = load_config()
+        if args.model_base_url:
+            config.model.base_url = str(args.model_base_url).rstrip("/")
+        report = run_autonomy_behavior_benchmark(
+            output_dir=Path(args.output),
+            config=config,
+            case_ids=list(args.case),
+            clean=bool(args.clean),
+        )
+        if args.json:
+            print(stable_json_dumps(report, indent=2))
+        else:
+            print(f"passed={report['passed']}/{report['total']}")
+            print(f"blocked={report['blocked']}")
+            for result in report["results"]:
+                outcome = (
+                    "blocked"
+                    if result["execution_blocked"]
+                    else "passed"
+                    if result["passed"]
+                    else "failed"
+                )
+                print(f"{result['case_id']}={outcome}")
+            print(
+                f"output={Path(args.output) / 'autonomy_behavior_results.json'}"
+            )
+        if report["blocked"]:
+            return 2
+        return 0 if report["complete"] and report["passed"] == report["total"] else 1
     if args.command == "communication-routing":
         from swaag.benchmark.communication_routing import (
             run_communication_routing_benchmark,
