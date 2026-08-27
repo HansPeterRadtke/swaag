@@ -1,1 +1,1 @@
-Evaluate whether the user's objective is actually complete. If not, state concise remaining work that the worker can act on.
+Evaluate whether the user's objective is actually complete. Request exact referenced evidence only when the supplied bounded evidence is insufficient for that semantic decision. If not complete, state concise remaining work that the worker can act on.

@@ -27,6 +27,8 @@ ALLOWED_EVENT_TYPES = frozenset(
         "completion_evaluated",
         "completion_rejected",
         "completion_evaluation_unavailable",
+        "completion_evidence_reexpanded",
+        "completion_evidence_projected",
         "caller_structured_output_created",
         "communication_status_requested",
         "communication_status_generated",
@@ -318,6 +320,32 @@ REQUIRED_PAYLOAD_KEYS: dict[str, frozenset[str]] = {
     "completion_evaluated": frozenset({"complete", "reason", "remaining_work"}),
     "completion_rejected": frozenset({"action_index", "reason", "remaining_work"}),
     "completion_evaluation_unavailable": frozenset({"reason", "budget_report"}),
+    "completion_evidence_reexpanded": frozenset(
+        {
+            "source_kind",
+            "source_id",
+            "sha256",
+            "source_event_references",
+            "purpose",
+            "exact_chars",
+            "integrity_verified",
+        }
+    ),
+    "completion_evidence_projected": frozenset(
+        {
+            "source_kind",
+            "source_id",
+            "source_sha256",
+            "source_event_references",
+            "target_tokens",
+            "original_tokens",
+            "previous_tokens",
+            "projected_tokens",
+            "overflow_tokens",
+            "projection",
+            "budget_report",
+        }
+    ),
     "caller_structured_output_created": frozenset(
         {"schema", "semantic_output", "evidence_source_references"}
     ),

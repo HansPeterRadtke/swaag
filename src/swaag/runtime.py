@@ -14,7 +14,7 @@ from typing import Any, Callable, Iterator
 import requests
 
 from swaag.action import ActionValidationError, AgentAction, action_from_payload
-from swaag.attachments import AttachmentStore
+from swaag.attachments import AttachmentStore, find_attachment
 from swaag.compression import message_source_event_references, summary_message_payload
 from swaag.context_compiler import ContextCompilation, ContextCompiler
 from swaag.config import AgentConfig, load_config
@@ -24,6 +24,7 @@ from swaag.embedding_index import (
     OpenAICompatibleEmbeddingProvider,
 )
 from swaag.environment.environment import AgentEnvironment
+from swaag.environment.artifacts import TextArtifactStore
 from swaag.fsops import ensure_dir, restore_tree, snapshot_tree, write_text
 from swaag.grammar import (
     agent_action_contract,
@@ -1161,7 +1162,6 @@ class AgentRuntime:
             detail="evaluating task completion",
             active_kind="completion_evaluation",
         )
-        contract = completion_evaluation_contract()
         evidence_rows = self._completion_evidence_rows(state, tool_results)
         history_snapshot = self.history.read_history(state.session_id)
         current_user_sequence = next(
@@ -1191,6 +1191,11 @@ class AgentRuntime:
             self._communication_evidence_reference(event)
             for event in historical_events
         ]
+        evidence_source_inventory = self._completion_evidence_source_inventory(
+            state,
+            evidence_rows=evidence_rows,
+            historical_events=historical_events,
+        )
         historical_evidence = (
             stable_json_dumps(historical_rows, indent=None)
             if historical_rows
@@ -1209,9 +1214,12 @@ class AgentRuntime:
         ]
         context_limit_resolution = self._resolve_context_limit()
         projections: dict[int, str] = {}
+        reexpanded_evidence: dict[str, dict[str, Any]] = {}
+        reexpanded_evidence_projections: dict[str, str] = {}
         last_compilation: ContextCompilation | None = None
         minimum_output_tokens = 128
         max_rounds = max(0, int(self.config.context.max_compaction_rounds))
+        reduction_round = 0
 
         def validate_completion_payload(payload: dict[str, Any]) -> dict[str, Any]:
             if contract.json_schema is not None:
@@ -1222,7 +1230,20 @@ class AgentRuntime:
                 )
             return payload
 
-        for reduction_round in range(max_rounds + 1):
+        while reduction_round <= max_rounds:
+            available_sources = [
+                item
+                for item in evidence_source_inventory
+                if self._completion_evidence_source_key(item)
+                not in reexpanded_evidence
+            ]
+            contract = completion_evaluation_contract(
+                (
+                    str(item["source_kind"]),
+                    str(item["source_id"]),
+                )
+                for item in available_sources
+            )
             assembly = self.prompts.build_completion_evaluation_prompt(
                 original_request=original_request,
                 assistant_message=selected_action.assistant_message,
@@ -1233,6 +1254,9 @@ class AgentRuntime:
                     "" if historical_evidence_projection else historical_evidence
                 ),
                 historical_evidence_projection=historical_evidence_projection,
+                evidence_source_inventory=available_sources,
+                reexpanded_evidence_rows=list(reexpanded_evidence.values()),
+                reexpanded_evidence_projections=reexpanded_evidence_projections,
             )
             compilation = self._compile_context(
                 state,
@@ -1283,6 +1307,45 @@ class AgentRuntime:
                     last_compilation = compilation
                     minimum_output_tokens = exc.minimum_output_tokens
                 else:
+                    requested_sources = payload.get("evidence_requests", [])
+                    if requested_sources:
+                        inventory_by_key = {
+                            self._completion_evidence_source_key(item): item
+                            for item in available_sources
+                        }
+                        for request in requested_sources:
+                            source_key = self._completion_evidence_request_key(request)
+                            if source_key in reexpanded_evidence:
+                                continue
+                            source = inventory_by_key.get(source_key)
+                            if source is None:
+                                raise HistoryInvariantError(
+                                    "Completion evaluator requested evidence outside its constrained inventory"
+                                )
+                            expanded = self._reexpand_completion_evidence_source(
+                                state,
+                                source=source,
+                                purpose=str(request.get("purpose", "")).strip(),
+                            )
+                            reexpanded_evidence[source_key] = expanded
+                            self.history.record_event(
+                                state,
+                                "completion_evidence_reexpanded",
+                                {
+                                    key: value
+                                    for key, value in expanded.items()
+                                    if key != "text"
+                                }
+                                | {
+                                    "purpose": str(
+                                        request.get("purpose", "")
+                                    ).strip(),
+                                    "exact_chars": len(
+                                        str(expanded.get("text", ""))
+                                    ),
+                                },
+                            )
+                        continue
                     result = {
                         "complete": bool(payload.get("complete", False)),
                         "reason": str(payload.get("reason", "")).strip(),
@@ -1311,6 +1374,18 @@ class AgentRuntime:
                             historical_projection_budget_report
                         ),
                         "projected_source_event_sequences": sorted(projections),
+                        "reexpanded_evidence_sources": [
+                            {
+                                key: value
+                                for key, value in row.items()
+                                if key != "text"
+                            }
+                            | {
+                                "projected": source_key
+                                in reexpanded_evidence_projections
+                            }
+                            for source_key, row in reexpanded_evidence.items()
+                        ],
                     }
                     self.history.record_event(state, "completion_evaluated", result)
                     return result
@@ -1333,9 +1408,52 @@ class AgentRuntime:
                 ),
                 default=0,
             )
+            expanded_component_tokens = [
+                (
+                    int(
+                        report_by_name.get(
+                            f"completion_reexpanded_evidence_{index}", 0
+                        )
+                    ),
+                    source_key,
+                )
+                for index, source_key in enumerate(reexpanded_evidence, start=1)
+            ]
+            largest_expanded_tokens, largest_expanded_key = max(
+                expanded_component_tokens,
+                default=(0, ""),
+            )
+            if largest_expanded_tokens >= max(
+                historical_component_tokens,
+                largest_tool_component_tokens,
+            ):
+                expanded_projection = (
+                    self._project_completion_evidence_source_for_overflow(
+                        state,
+                        original_request=original_request,
+                        source_key=largest_expanded_key,
+                        source_row=reexpanded_evidence.get(
+                            largest_expanded_key, {}
+                        ),
+                        current_tokens=largest_expanded_tokens,
+                        overflow_tokens=compilation.overflow_tokens,
+                        existing_projection=reexpanded_evidence_projections.get(
+                            largest_expanded_key
+                        ),
+                        context_limit_resolution=context_limit_resolution,
+                    )
+                )
+                if expanded_projection is not None:
+                    reexpanded_evidence_projections[largest_expanded_key] = (
+                        expanded_projection
+                    )
+                    reduction_round += 1
+                    continue
+                largest_expanded_tokens = 0
             if (
                 historical_evidence
-                and historical_component_tokens >= largest_tool_component_tokens
+                and historical_component_tokens
+                >= max(largest_tool_component_tokens, largest_expanded_tokens)
             ):
                 placeholder = self.prompts.build_completion_evaluation_prompt(
                     original_request=original_request,
@@ -1345,6 +1463,11 @@ class AgentRuntime:
                     ),
                     tool_evidence_rows=evidence_rows,
                     tool_result_projections=projections,
+                    evidence_source_inventory=available_sources,
+                    reexpanded_evidence_rows=list(reexpanded_evidence.values()),
+                    reexpanded_evidence_projections=(
+                        reexpanded_evidence_projections
+                    ),
                     historical_evidence_projection=(
                         "[purpose-specific historical evidence projection]"
                     ),
@@ -1397,6 +1520,7 @@ class AgentRuntime:
                         )
                     )
                     historical_projection_budget_report = asdict(projection_report)
+                    reduction_round += 1
                     continue
             projected = self._project_largest_tool_result_for_overflow(
                 state,
@@ -1409,6 +1533,7 @@ class AgentRuntime:
                 break
             sequence, projection = projected
             projections[sequence] = projection
+            reduction_round += 1
 
         report = asdict(last_compilation.report) if last_compilation is not None else None
         self.history.record_event(
@@ -2066,6 +2191,243 @@ class AgentRuntime:
                 }
             )
         return rows
+
+    @staticmethod
+    def _completion_evidence_source_key(source: dict[str, Any]) -> str:
+        return f"{source.get('source_kind', '')}:{source.get('source_id', '')}"
+
+    @classmethod
+    def _completion_evidence_request_key(cls, request: dict[str, Any]) -> str:
+        return cls._completion_evidence_source_key(request)
+
+    @staticmethod
+    def _string_leaves(value: Any) -> set[str]:
+        leaves: set[str] = set()
+        pending = [value]
+        while pending:
+            item = pending.pop()
+            if isinstance(item, str):
+                leaves.add(item)
+            elif isinstance(item, dict):
+                pending.extend(item.values())
+            elif isinstance(item, (list, tuple)):
+                pending.extend(item)
+        return leaves
+
+    @staticmethod
+    def _is_generated_id(value: str, prefix: str) -> bool:
+        stem = f"{prefix}_"
+        suffix = value[len(stem) :] if value.startswith(stem) else ""
+        return len(suffix) == 12 and all(
+            character in "0123456789abcdef" for character in suffix
+        )
+
+    def _completion_evidence_source_inventory(
+        self,
+        state: SessionState,
+        *,
+        evidence_rows: list[dict[str, Any]],
+        historical_events: list[HistoryEvent],
+    ) -> list[dict[str, Any]]:
+        referenced_values = self._string_leaves(
+            [
+                evidence_rows,
+                [
+                    {
+                        "payload": event.payload,
+                        "metadata": event.metadata,
+                    }
+                    for event in historical_events
+                ],
+            ]
+        )
+        source_events = self.history.read_history(state.session_id)
+        inventory: list[dict[str, Any]] = []
+        artifact_ids = sorted(
+            value
+            for value in referenced_values
+            if self._is_generated_id(value, "artifact")
+        )
+        for artifact_id in artifact_ids:
+            references = [
+                event
+                for event in source_events
+                if event.event_type == "artifact_created"
+                and event.payload.get("artifact_id") == artifact_id
+            ]
+            if not references:
+                continue
+            source_event = references[-1]
+            inventory.append(
+                {
+                    "source_kind": "text_artifact",
+                    "source_id": artifact_id,
+                    "content_kind": str(source_event.payload.get("kind", "")),
+                    "size_chars": int(
+                        source_event.payload.get("size_chars", 0)
+                    ),
+                    "sha256": str(source_event.payload.get("sha256", "")),
+                    "source_event_references": [
+                        self._communication_evidence_reference(event)
+                        for event in references
+                    ],
+                }
+            )
+
+        referenced_attachment_ids = {
+            value
+            for value in referenced_values
+            if self._is_generated_id(value, "attachment")
+        }
+        for reference in state.attachments:
+            if reference.attachment_id not in referenced_attachment_ids:
+                continue
+            metadata = reference.metadata
+            source_references = []
+            sequence = metadata.get("source_event_sequence")
+            source_hash = metadata.get("source_event_hash")
+            if isinstance(sequence, int) and isinstance(source_hash, str):
+                source_references.append(
+                    {
+                        "session_id": str(
+                            metadata.get(
+                                "source_event_session_id", state.session_id
+                            )
+                        ),
+                        "sequence": sequence,
+                        "hash": source_hash,
+                        "event_type": str(
+                            metadata.get("source_event_type", "attachment_added")
+                        ),
+                    }
+                )
+            inventory.append(
+                {
+                    "source_kind": "raw_attachment",
+                    "source_id": reference.attachment_id,
+                    "original_name": reference.original_name,
+                    "media_type": reference.media_type,
+                    "size_bytes": reference.size_bytes,
+                    "sha256": reference.sha256,
+                    "source_event_references": source_references,
+                }
+            )
+        return sorted(
+            inventory,
+            key=lambda item: (str(item["source_kind"]), str(item["source_id"])),
+        )
+
+    def _reexpand_completion_evidence_source(
+        self,
+        state: SessionState,
+        *,
+        source: dict[str, Any],
+        purpose: str,
+    ) -> dict[str, Any]:
+        source_kind = str(source["source_kind"])
+        source_id = str(source["source_id"])
+        row = dict(source)
+        row["requested_purpose"] = purpose
+        row["integrity_verified"] = True
+        if source_kind == "text_artifact":
+            artifact = TextArtifactStore(
+                self.config.sessions.root, state.session_id
+            ).get(source_id)
+            if (
+                artifact.sha256 != str(source.get("sha256", ""))
+                or artifact.size_chars != int(source.get("size_chars", -1))
+            ):
+                raise HistoryInvariantError(
+                    "Completion evidence artifact metadata differs from its source event"
+                )
+            row["text"] = Path(artifact.path).read_text(encoding="utf-8")
+            return row
+        if source_kind == "raw_attachment":
+            reference = find_attachment(state.attachments, source_id)
+            data = AttachmentStore(
+                self.config.sessions.root,
+                max_upload_bytes=self.config.attachments.max_upload_bytes,
+            ).read_bytes(reference)
+            try:
+                row["text"] = data.decode("utf-8")
+            except UnicodeDecodeError as exc:
+                row["integrity_verified"] = True
+                row["read_error"] = (
+                    "The exact raw bytes are not UTF-8 text; a selected specialist "
+                    f"reader is required ({exc})."
+                )
+                row["text"] = ""
+            return row
+        raise ValueError(f"Unsupported completion evidence source: {source_kind}")
+
+    def _project_completion_evidence_source_for_overflow(
+        self,
+        state: SessionState,
+        *,
+        original_request: str,
+        source_key: str,
+        source_row: dict[str, Any],
+        current_tokens: int,
+        overflow_tokens: int,
+        existing_projection: str | None,
+        context_limit_resolution: tuple[int, str],
+    ) -> str | None:
+        raw_text = str(source_row.get("text", ""))
+        if not raw_text or current_tokens <= 0 or overflow_tokens <= 0:
+            return None
+        current_semantic_text = existing_projection or raw_text
+        semantic_tokens = self._counter(state).count_text(
+            current_semantic_text
+        ).tokens
+        target_tokens = max(64, semantic_tokens - overflow_tokens - 32)
+        if target_tokens >= semantic_tokens:
+            return None
+        projection, projection_report = self._reduce_text_hierarchically(
+            state,
+            source_text=raw_text,
+            source_label=(
+                "integrity-checked completion evidence source " + source_key
+            ),
+            target_tokens=target_tokens,
+            contract=evidence_projection_contract(),
+            output_key="projection",
+            build_assembly=lambda text, label, target: (
+                self.prompts.build_evidence_projection_prompt(
+                    purpose=(
+                        "Evaluate whether this user objective is complete: "
+                        + original_request
+                    ),
+                    source_label=label,
+                    raw_evidence=text,
+                    target_tokens=target,
+                )
+            ),
+            remaining_calls=[
+                max(16, int(self.config.context.max_compaction_rounds) * 16)
+            ],
+            context_limit_resolution=context_limit_resolution,
+        )
+        projected_tokens = self._counter(state).count_text(projection).tokens
+        self.history.record_event(
+            state,
+            "completion_evidence_projected",
+            {
+                "source_kind": str(source_row.get("source_kind", "")),
+                "source_id": str(source_row.get("source_id", "")),
+                "source_sha256": str(source_row.get("sha256", "")),
+                "source_event_references": source_row.get(
+                    "source_event_references", []
+                ),
+                "target_tokens": target_tokens,
+                "original_tokens": self._counter(state).count_text(raw_text).tokens,
+                "previous_tokens": semantic_tokens,
+                "projected_tokens": projected_tokens,
+                "overflow_tokens": overflow_tokens,
+                "projection": projection,
+                "budget_report": asdict(projection_report),
+            },
+        )
+        return projection
 
     def _project_largest_tool_result_for_overflow(
         self,

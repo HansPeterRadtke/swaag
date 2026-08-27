@@ -372,6 +372,9 @@ class PromptBuilder:
         tool_result_projections: dict[int, str] | None = None,
         historical_evidence: str = "",
         historical_evidence_projection: str = "",
+        evidence_source_inventory: list[dict] | None = None,
+        reexpanded_evidence_rows: list[dict] | None = None,
+        reexpanded_evidence_projections: dict[str, str] | None = None,
     ) -> PromptAssembly:
         system_prompt = self._load_template(self._config.prompts.completion_evaluation_system_template)
         user_components = [
@@ -400,6 +403,28 @@ class PromptBuilder:
                 tool_evidence=tool_evidence,
                 rows=tool_evidence_rows or [],
                 projections=tool_result_projections or {},
+            ),
+            *(
+                [
+                    PromptComponent(
+                        name="completion_evidence_source_inventory",
+                        category="tool_result",
+                        text=(
+                            "\nExact evidence sources available for semantic re-expansion. "
+                            "Request only a source whose complete content is needed to decide completion:\n"
+                            + stable_json_dumps(
+                                evidence_source_inventory or [], indent=None
+                            )
+                            + "\n"
+                        ),
+                    )
+                ]
+                if evidence_source_inventory
+                else []
+            ),
+            *self._completion_reexpanded_evidence_components(
+                reexpanded_evidence_rows or [],
+                reexpanded_evidence_projections or {},
             ),
             *(
                 [
@@ -440,6 +465,35 @@ class PromptBuilder:
                 self._config.prompts.completion_evaluation_template,
             ),
         )
+
+    @staticmethod
+    def _completion_reexpanded_evidence_components(
+        rows: list[dict],
+        projections: dict[str, str],
+    ) -> list[PromptComponent]:
+        components: list[PromptComponent] = []
+        for index, row in enumerate(rows, start=1):
+            source_key = f"{row.get('source_kind', '')}:{row.get('source_id', '')}"
+            body = stable_json_dumps(row, indent=None)
+            if source_key in projections:
+                projected = dict(row)
+                projected.pop("text", None)
+                projected["semantic_projection"] = projections[source_key].strip()
+                projected["projection_notice"] = (
+                    "Derived view only; the exact integrity-checked source remains authoritative."
+                )
+                body = stable_json_dumps(projected, indent=None)
+            components.append(
+                PromptComponent(
+                    name=f"completion_reexpanded_evidence_{index}",
+                    category="tool_result",
+                    text=(
+                        "\nSemantically requested exact evidence source:\n"
+                        f"{body}\n"
+                    ),
+                )
+            )
+        return components
 
     def build_caller_structured_output_prompt(
         self,

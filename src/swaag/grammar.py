@@ -88,10 +88,40 @@ def communication_status_contract() -> ContractSpec:
     )
 
 
-def completion_evaluation_contract() -> ContractSpec:
+def completion_evaluation_contract(
+    evidence_sources: Iterable[tuple[str, str]] = (),
+) -> ContractSpec:
+    request_variants = [
+        _closed_object(
+            {
+                "source_kind": {"type": "string", "enum": [source_kind]},
+                "source_id": {"type": "string", "enum": [source_id]},
+                "purpose": _string(),
+            }
+        )
+        for source_kind, source_id in evidence_sources
+    ]
+    request_schema: dict[str, Any]
+    if request_variants:
+        request_schema = {"anyOf": request_variants}
+    else:
+        request_schema = _closed_object(
+            {
+                "source_kind": {"type": "string", "enum": []},
+                "source_id": {"type": "string", "enum": []},
+                "purpose": _string(),
+            }
+        )
     return _contract(
         "completion_evaluation",
-        _closed_object({"complete": _boolean(), "reason": _string(), "remaining_work": _array(_string())}),
+        _closed_object(
+            {
+                "complete": _boolean(),
+                "reason": _string(),
+                "remaining_work": _array(_string()),
+                "evidence_requests": _array(request_schema),
+            }
+        ),
     )
 
 
