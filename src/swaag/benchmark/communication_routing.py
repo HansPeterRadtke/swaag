@@ -222,8 +222,12 @@ def _verify_case(
         "evidence_citation_is_valid": bool(cited & seeded)
         and cited.issubset(available),
     }
+    answer_quality_passed = all(
+        value for name, value in checks.items() if name != "route_matches_oracle"
+    )
     return {
         "passed": all(checks.values()),
+        "answer_quality_passed": answer_quality_passed,
         "checks": checks,
         "expected_escalation": case.expected_escalation,
         "observed_escalation": escalated,
@@ -236,11 +240,26 @@ def _report(
     selected_ids: list[str],
     results: list[dict[str, Any]],
 ) -> dict[str, Any]:
+    def answer_quality_passed(item: dict[str, Any]) -> bool:
+        verification = item.get("verification", {})
+        explicit = verification.get("answer_quality_passed")
+        if isinstance(explicit, bool):
+            return explicit
+        checks = verification.get("checks", {})
+        return isinstance(checks, dict) and all(
+            bool(value)
+            for name, value in checks.items()
+            if name != "route_matches_oracle"
+        )
+
     positives = [item for item in results if item["expected_escalation"]]
     negatives = [item for item in results if not item["expected_escalation"]]
     total_prompt_tokens = sum(int(item.get("prompt_tokens") or 0) for item in results)
     total_completion_tokens = sum(
         int(item.get("completion_tokens") or 0) for item in results
+    )
+    distinct_endpoints = bool(
+        model_identities and model_identities.get("distinct_endpoints")
     )
     return {
         "benchmark": "communication_model_routing",
@@ -249,6 +268,9 @@ def _report(
         "planned_cases": selected_ids,
         "results": results,
         "passed": sum(bool(item["verification"]["passed"]) for item in results),
+        "answer_quality_passed": sum(
+            answer_quality_passed(item) for item in results
+        ),
         "total": len(results),
         "routing_correct": sum(
             bool(item["verification"]["checks"]["route_matches_oracle"])
@@ -265,6 +287,9 @@ def _report(
             if negatives
             else None
         ),
+        "routing_pair_is_distinct": distinct_endpoints,
+        "routing_policy_selection_supported": distinct_endpoints
+        and len(results) == len(selected_ids),
         "mean_elapsed_seconds": (
             sum(float(item["elapsed_seconds"]) for item in results) / len(results)
             if results

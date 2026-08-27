@@ -126,8 +126,11 @@ def test_communication_routing_benchmark_uses_production_escalation_and_resumes(
 
     assert report["complete"] is True
     assert report["passed"] == report["routing_correct"] == report["total"] == 4
+    assert report["answer_quality_passed"] == report["total"]
     assert report["escalation_recall"] == 1.0
     assert report["non_escalation_specificity"] == 1.0
+    assert report["routing_pair_is_distinct"] is True
+    assert report["routing_policy_selection_supported"] is True
     assert [item["model_call_count"] for item in report["results"]] == [1, 1, 2, 2]
     assert report["prompt_tokens"] == 600
     assert report["completion_tokens"] == 120
