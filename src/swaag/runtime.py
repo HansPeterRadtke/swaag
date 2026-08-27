@@ -1846,6 +1846,7 @@ class AgentRuntime:
                     phase="failed",
                     detail=f"{type(exc).__name__}: {exc}",
                 )
+                exc.swaag_operation_session_id = operation_state.session_id
                 raise
             finally:
                 self.history.clear_active_run(

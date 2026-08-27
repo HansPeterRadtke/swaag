@@ -422,15 +422,55 @@ class CommunicationService:
             mechanical_status = self.runtime.session_status_payload(state)
             source_events = self.runtime.history.read_history(session_id)
             semantic_runtime = self.assistant_runtime or self.runtime
-            with semantic_runtime.inference_priority(
-                100, source="communication_status"
-            ):
-                semantic_status = semantic_runtime.generate_communication_status(
-                    target_session_id=session_id,
-                    question=question,
-                    mechanical_status=mechanical_status,
-                    source_events=source_events,
+            assistant_failure: Exception | None = None
+            try:
+                with semantic_runtime.inference_priority(
+                    100, source="communication_status"
+                ):
+                    semantic_status = semantic_runtime.generate_communication_status(
+                        target_session_id=session_id,
+                        question=question,
+                        mechanical_status=mechanical_status,
+                        source_events=source_events,
+                    )
+            except Exception as exc:
+                if self.assistant_runtime is None:
+                    raise
+                assistant_failure = exc
+                operation_session_id = str(
+                    getattr(exc, "swaag_operation_session_id", "")
                 )
+                if not operation_session_id:
+                    raise
+                operation_state = self.assistant_runtime.history.rebuild_from_history(
+                    operation_session_id,
+                    write_projections=False,
+                )
+                unavailable_event = next(
+                    (
+                        event
+                        for event in reversed(
+                            self.assistant_runtime.history.read_history(
+                                operation_session_id
+                            )
+                        )
+                        if event.event_type == "communication_status_unavailable"
+                    ),
+                    None,
+                )
+                if unavailable_event is None:
+                    raise
+                semantic_status = {
+                    "operation_session_id": operation_session_id,
+                    "escalate_to_stronger_model": True,
+                    "escalation_reason": (
+                        "The separate communication status operation failed "
+                        f"mechanically: {type(exc).__name__}: {exc}"
+                    ),
+                    "source_event_references": unavailable_event.payload[
+                        "source_event_references"
+                    ],
+                }
             if (
                 self.assistant_runtime is not None
                 and bool(semantic_status["escalate_to_stronger_model"])
@@ -449,6 +489,11 @@ class CommunicationService:
                         "target_session_id": session_id,
                         "question": question,
                         "reason": semantic_status["escalation_reason"],
+                        "trigger": (
+                            "assistant_failure"
+                            if assistant_failure is not None
+                            else "semantic_request"
+                        ),
                         "status_operation_session_id": operation_session_id,
                         "source_event_references": semantic_status[
                             "source_event_references"

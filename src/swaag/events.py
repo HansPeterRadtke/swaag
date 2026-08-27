@@ -395,6 +395,7 @@ REQUIRED_PAYLOAD_KEYS: dict[str, frozenset[str]] = {
             "target_session_id",
             "question",
             "reason",
+            "trigger",
             "status_operation_session_id",
             "source_event_references",
         }

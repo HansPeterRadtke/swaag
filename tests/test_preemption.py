@@ -393,6 +393,43 @@ def test_separate_assistant_semantically_escalates_to_stronger_model(
     assert resolved.payload["request_event_sequence"] == requested.sequence
     assert resolved.payload["request_event_hash"] == requested.hash
     assert resolved.payload["stronger_model_requested_further_escalation"] is False
+    assert requested.payload["trigger"] == "semantic_request"
+
+
+def test_separate_assistant_failure_falls_back_to_stronger_model(make_config) -> None:
+    main = AgentRuntime(
+        make_config(model__context_limit=32_000),
+        model_client=_ImmediateClient("strong status"),
+    )
+    assistant = AgentRuntime(
+        make_config(model__context_limit=32_000, model__max_retries=0),
+        model_client=_FailingStatusClient("unused"),
+    )
+    state = main.create_or_load_session()
+    service = CommunicationService(main, assistant_runtime=assistant)
+
+    answer = service.answer_status_question(state.session_id, "Explain the status.")
+
+    assert answer == "strong status"
+    assistant_events = [
+        event
+        for entry in assistant.history.list_session_entries(include_internal=True)
+        for event in assistant.history.read_history(str(entry["session_id"]))
+    ]
+    requested = next(
+        event
+        for event in assistant_events
+        if event.event_type == "communication_status_escalation_requested"
+    )
+    assert requested.payload["trigger"] == "assistant_failure"
+    assert any(
+        event.event_type == "communication_status_unavailable"
+        for event in assistant_events
+    )
+    assert any(
+        event.event_type == "communication_status_escalation_resolved"
+        for event in assistant_events
+    )
 
 
 def test_failed_stronger_status_escalation_is_durable(make_config) -> None:
