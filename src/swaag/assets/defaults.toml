@@ -50,7 +50,8 @@ temperature = 0.0
 top_p = 1.0
 seed = 42
 context_limit = 2048
-stop = ["<|eot_id|>", "<|end_of_text|>"]
+# Optional extra text stops. Leave empty to use the connected model's EOS behavior.
+stop = []
 
 # -----------------------------------------------------------
 # [runtime] — OPERATIONAL LIMITS  (most user-tunable)

@@ -24,7 +24,7 @@ def test_template_backed_prompt_records_canonical_artifact_versions(make_config)
     )
     artifacts = _artifact_map(assembly)
 
-    assert "prompt_protocol:llama3" in artifacts
+    assert "prompt_protocol:explicit_text_fallback_v1" in artifacts
     assert "rendered_system:action" in artifacts
     assert f"assets/prompts/{config.prompts.standard_system_template}" in artifacts
     action_source = f"assets/prompts/{config.prompts.action_template}"
@@ -77,4 +77,62 @@ def test_prompt_built_event_persists_prompt_and_artifact_hashes(make_config) -> 
     assert event.payload["prompt_artifacts"] == [
         {"source": artifact.source, "sha256": artifact.sha256}
         for artifact in assembly.prompt_artifacts
+    ]
+    assert event.payload["message_ranges"] == [
+        {
+            "role": message_range.role,
+            "component_start": message_range.component_start,
+            "component_end": message_range.component_end,
+        }
+        for message_range in assembly.message_ranges
+    ]
+
+
+def test_live_prompt_materialization_accounts_exact_server_chat_template(
+    make_config,
+) -> None:
+    template_hash = sha256_text("qwen-template")
+    protocol_hash = sha256_text("qwen-model-and-template")
+
+    class TemplateClient:
+        def render_chat_prompt(self, messages):
+            assert [item["role"] for item in messages] == ["system", "user"]
+            return {
+                "prompt": (
+                    "<|im_start|>system\n"
+                    + messages[0]["content"]
+                    + "<|im_end|>\n<|im_start|>user\n"
+                    + messages[1]["content"]
+                    + "<|im_end|>\n<|im_start|>assistant\n"
+                ),
+                "chat_template_sha256": template_hash,
+                "prompt_protocol_sha256": protocol_hash,
+            }
+
+    runtime = AgentRuntime(
+        make_config(model__context_limit=8_000),
+        model_client=TemplateClient(),
+        token_counter=ConservativeEstimator(),
+    )
+    state = runtime.create_or_load_session()
+    assembly = runtime.prompts.build_semantic_operation_prompt(
+        kind="history_analysis",
+        system_instruction="Exact system instruction.",
+        components=[PromptComponent(name="evidence", text="Exact evidence.")],
+    )
+
+    runtime._compile_context(
+        state,
+        assembly,
+        yes_no_contract(),
+        minimum_output_tokens=64,
+    )
+
+    assert assembly.prompt_text.startswith("<|im_start|>system\n")
+    assert "".join(component.text for component in assembly.components) == assembly.prompt_text
+    assert not any(component.name.startswith("fallback_") for component in assembly.components)
+    assert _artifact_map(assembly)["prompt_protocol:server_chat_template"] == protocol_hash
+    assert [message["content"] for message in runtime._assembly_chat_messages(assembly)] == [
+        "Exact system instruction.",
+        "Exact evidence.",
     ]

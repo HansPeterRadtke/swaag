@@ -155,6 +155,8 @@ class RecordReplayModelClient:
         self.request_metadata = {}
         self._refresh_request_metadata()
         self._entries = self._load_entries()
+        self._prompt_renderings = self._load_prompt_renderings()
+        self._token_counts = self._load_token_counts()
         self._replayed_count = 0
         self._recorded_count = 0
 
@@ -180,12 +182,17 @@ class RecordReplayModelClient:
     def _default_request_metadata(self) -> dict[str, Any]:
         metadata: dict[str, Any] = {
             "client_class": type(self.delegate).__name__,
-            "replay_contract_version": "2026-07-24-exact-request-cache-v2",
+            "replay_contract_version": "2026-08-26-server-prompt-protocol-v3",
             "model_transport": "streaming_token_timeout",
             "canonicalize_dynamic_values": self.canonicalize_dynamic_values,
         }
         identity_provider = getattr(self.delegate, "cache_identity", None)
-        if callable(identity_provider):
+        if self.mode == "replay":
+            metadata["model_identity"] = {
+                "status": "unresolved",
+                "probe_skipped": "offline_replay",
+            }
+        elif callable(identity_provider):
             try:
                 metadata["model_identity"] = identity_provider()
             except Exception as exc:  # never reuse a possibly different unresolved model
@@ -285,12 +292,49 @@ class RecordReplayModelClient:
                 )
         return entries
 
+    def _load_prompt_renderings(self) -> dict[str, dict[str, str]]:
+        if not self.cassette_path.exists():
+            return {}
+        payload = json.loads(self.cassette_path.read_text(encoding="utf-8"))
+        raw = payload.get("prompt_renderings", {})
+        if not isinstance(raw, dict):
+            return {}
+        return {
+            str(key): dict(value)
+            for key, value in raw.items()
+            if isinstance(value, dict)
+            and all(isinstance(name, str) and isinstance(item, str) for name, item in value.items())
+            and isinstance(value.get("prompt"), str)
+            and isinstance(value.get("prompt_protocol_sha256"), str)
+        }
+
+    def _load_token_counts(self) -> dict[str, int]:
+        if not self.cassette_path.exists():
+            return {}
+        payload = json.loads(self.cassette_path.read_text(encoding="utf-8"))
+        raw = payload.get("token_counts", {})
+        if not isinstance(raw, dict):
+            return {}
+        return {
+            str(key): int(value)
+            for key, value in raw.items()
+            if isinstance(value, int) and not isinstance(value, bool) and value >= 0
+        }
+
     def _serialized_entries(self) -> str:
         payload = {
             "mode": "record_replay",
             "request_metadata": self._canonicalize(self.request_metadata),
             "hash_basis": "request_metadata_plus_payload",
             "transport_metadata_not_in_hash": ["send_completion_timeout_seconds"],
+            "prompt_renderings": {
+                key: self._prompt_renderings[key]
+                for key in sorted(self._prompt_renderings)
+            },
+            "token_counts": {
+                key: self._token_counts[key]
+                for key in sorted(self._token_counts)
+            },
             "entries": [asdict(entry) for entry in sorted(self._entries.values(), key=lambda item: item.request_hash)],
         }
         return stable_json_dumps(payload, indent=2) + "\n"
@@ -350,16 +394,105 @@ class RecordReplayModelClient:
         return {"status": "ok", "mode": self.mode}
 
     def tokenize(self, text: str) -> int:
-        tokenize = getattr(self.delegate, "tokenize", None)
-        if callable(tokenize):
-            return int(tokenize(text))
-        return len(text.split()) if text.strip() else 0
+        return self._tokenize_record_replay(text, operation="tokenize")
 
     def tokenize_selection(self, text: str) -> int:
-        tokenize_selection = getattr(self.delegate, "tokenize_selection", None)
-        if callable(tokenize_selection):
-            return int(tokenize_selection(text))
-        return self.tokenize(text)
+        return self._tokenize_record_replay(text, operation="tokenize_selection")
+
+    def _tokenize_record_replay(self, text: str, *, operation: str) -> int:
+        self._refresh_request_metadata()
+        self._token_counts = self._load_token_counts()
+        key = sha256_text(
+            stable_json_dumps(
+                {
+                    "request_metadata": self.request_metadata,
+                    "operation": operation,
+                    "text": text,
+                },
+                indent=None,
+            )
+        )
+        recorded = self._token_counts.get(key)
+        if recorded is not None:
+            return int(recorded)
+        if self.mode == "replay":
+            raise MissingReplayEntryError(
+                f"No exact recorded {operation} result for {key}"
+            )
+        tokenizer = getattr(self.delegate, operation, None)
+        if not callable(tokenizer) and operation == "tokenize_selection":
+            tokenizer = getattr(self.delegate, "tokenize", None)
+        count = int(tokenizer(text)) if callable(tokenizer) else len(text.split()) if text.strip() else 0
+        if count < 0:
+            raise RuntimeError(f"Model client returned a negative {operation} count")
+        with _exclusive_file_lock(self._cache_lock_path):
+            self._entries = self._load_entries()
+            self._prompt_renderings = self._load_prompt_renderings()
+            self._token_counts = self._load_token_counts()
+            existing = self._token_counts.get(key)
+            if existing is not None and existing != count:
+                raise RuntimeError(
+                    f"The same model/text produced different {operation} counts"
+                )
+            self._token_counts[key] = count
+            self._write_entries_atomic()
+        return count
+
+    def render_chat_prompt(self, messages: list[dict[str, str]]) -> dict[str, str]:
+        self._refresh_request_metadata()
+        self._prompt_renderings = self._load_prompt_renderings()
+        key = sha256_text(
+            stable_json_dumps(
+                {
+                    "request_metadata": self.request_metadata,
+                    "messages": self._canonicalize(messages),
+                },
+                indent=None,
+            )
+        )
+        recorded = self._prompt_renderings.get(key)
+        if recorded is not None:
+            return dict(recorded)
+        if self.mode == "replay":
+            raise MissingReplayEntryError(
+                f"No exact recorded chat-template rendering for {key}"
+            )
+        renderer = getattr(self.delegate, "render_chat_prompt", None)
+        if not callable(renderer):
+            raise RuntimeError("Model client cannot render its chat template")
+        rendered = renderer(messages)
+        if (
+            not isinstance(rendered, dict)
+            or not isinstance(rendered.get("prompt"), str)
+            or not rendered["prompt"]
+            or not isinstance(rendered.get("prompt_protocol_sha256"), str)
+            or len(rendered["prompt_protocol_sha256"]) != 64
+            or any(
+                not isinstance(name, str) or not isinstance(value, str)
+                for name, value in rendered.items()
+            )
+        ):
+            raise RuntimeError("Model client returned an invalid chat-template rendering")
+        normalized = dict(rendered)
+        with _exclusive_file_lock(self._cache_lock_path):
+            self._entries = self._load_entries()
+            self._prompt_renderings = self._load_prompt_renderings()
+            self._token_counts = self._load_token_counts()
+            existing = self._prompt_renderings.get(key)
+            if existing is not None and existing != normalized:
+                raise RuntimeError(
+                    "The same model/messages produced different chat-template renderings"
+                )
+            self._prompt_renderings[key] = normalized
+            self._write_entries_atomic()
+        return dict(normalized)
+
+    def verify_prompt_protocol(self, prompt_protocol_sha256: str) -> None:
+        if self.mode == "replay":
+            return
+        verifier = getattr(self.delegate, "verify_prompt_protocol", None)
+        if callable(verifier):
+            verifier(prompt_protocol_sha256)
 
     def context_limit_resolution(self) -> tuple[int, str]:
         """Resolve capacity without making replay-only execution depend on a server."""
@@ -395,13 +528,22 @@ class RecordReplayModelClient:
         max_tokens: int,
         contract: ContractSpec,
         temperature: float | None = None,
+        messages: list[dict[str, str]] | None = None,
     ) -> dict[str, Any]:
-        return self.delegate.build_completion_request(
-            prompt,
-            max_tokens=max_tokens,
-            contract=contract,
-            temperature=temperature,
-        )
+        builder = self.delegate.build_completion_request
+        kwargs: dict[str, Any] = {
+            "max_tokens": max_tokens,
+            "contract": contract,
+            "temperature": temperature,
+        }
+        parameters = inspect.signature(builder).parameters.values()
+        if messages is not None and any(
+            parameter.name == "messages"
+            or parameter.kind == inspect.Parameter.VAR_KEYWORD
+            for parameter in parameters
+        ):
+            kwargs["messages"] = messages
+        return builder(prompt, **kwargs)
 
     def select_request_policy(
         self,
@@ -508,6 +650,8 @@ class RecordReplayModelClient:
                 concurrent_entry = self._reload_and_find(request_hash)
                 if concurrent_entry is not None:
                     return self._return_from_entry(concurrent_entry, payload)
+                self._prompt_renderings = self._load_prompt_renderings()
+                self._token_counts = self._load_token_counts()
                 self._entries[request_hash] = new_entry
                 self._write_entries_atomic()
             self._recorded_count += 1

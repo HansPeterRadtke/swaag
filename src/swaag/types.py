@@ -121,6 +121,13 @@ class PromptArtifact:
     sha256: str
 
 
+@dataclass(slots=True, frozen=True)
+class PromptMessageRange:
+    role: Literal["system", "user", "assistant"]
+    component_start: int
+    component_end: int
+
+
 @dataclass(slots=True)
 class PromptAssembly:
     kind: ModelCallKind
@@ -128,6 +135,7 @@ class PromptAssembly:
     components: list[PromptComponent]
     prompt_mode: str
     prompt_artifacts: list[PromptArtifact] = field(default_factory=list)
+    message_ranges: list[PromptMessageRange] = field(default_factory=list)
 
 
 @dataclass(slots=True)

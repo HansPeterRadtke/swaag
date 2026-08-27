@@ -657,8 +657,6 @@ def _coerce_config(data: dict[str, Any]) -> AgentConfig:
         raise ValueError("reader.default_overlap_chars must be smaller than reader.default_chunk_chars")
     if not tools.enabled:
         raise ValueError("tools.enabled must not be empty")
-    if not model.stop:
-        raise ValueError("model.stop must not be empty")
     _validate_positive("embedding_index.max_results", embedding_index.max_results)
     if embedding_index.enabled and (not embedding_index.base_url or not embedding_index.model):
         raise ValueError("embedding_index.base_url and embedding_index.model are required when embeddings are enabled")

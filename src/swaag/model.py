@@ -177,6 +177,90 @@ class LlamaCppClient:
             raise ModelClientError(f"Model props contain invalid n_ctx: {n_ctx!r}")
         return int(n_ctx)
 
+    def _prompt_protocol_identity(self) -> dict[str, str]:
+        response = requests.get(
+            f"{self._base}/props",
+            timeout=(
+                self.config.model.connect_timeout_seconds,
+                min(self.config.model.timeout_seconds, 15),
+            ),
+        )
+        response.raise_for_status()
+        props = response.json()
+        if not isinstance(props, dict):
+            raise ModelClientError(f"Unexpected model props response: {props!r}")
+        template = props.get("chat_template")
+        if not isinstance(template, str) or not template.strip():
+            raise ModelClientError("Model props are missing a usable chat_template")
+        model_path = str(props.get("model_path", ""))
+        model_file: dict[str, Any] = {"path": model_path}
+        if model_path:
+            try:
+                stat = Path(model_path).stat()
+                model_file.update({"size": stat.st_size, "mtime_ns": stat.st_mtime_ns})
+            except OSError as exc:
+                model_file["stat_error"] = exc.__class__.__name__
+        generation = props.get("default_generation_settings")
+        n_ctx = generation.get("n_ctx") if isinstance(generation, dict) else None
+        return {
+            "chat_template_sha256": sha256_text(template),
+            "chat_template_caps_sha256": sha256_text(
+                stable_json_dumps(props.get("chat_template_caps"), indent=None)
+            ),
+            "bos_token_sha256": sha256_text(str(props.get("bos_token", ""))),
+            "eos_token_sha256": sha256_text(str(props.get("eos_token", ""))),
+            "context_limit": str(n_ctx if isinstance(n_ctx, int) else ""),
+            "model_file_sha256": sha256_text(
+                stable_json_dumps(model_file, indent=None)
+            ),
+            "model_alias": str(props.get("model_alias", "")),
+            "server_build_info": str(props.get("build_info", "")),
+        }
+
+    def render_chat_prompt(self, messages: list[dict[str, str]]) -> dict[str, str]:
+        if not messages or any(
+            not isinstance(item, dict)
+            or item.get("role") not in {"system", "user", "assistant"}
+            or not isinstance(item.get("content"), str)
+            for item in messages
+        ):
+            raise ModelClientError("Chat-template messages are invalid")
+        before = self._prompt_protocol_identity()
+        response = requests.post(
+            f"{self._base}/apply-template",
+            json={"messages": messages},
+            timeout=(
+                self.config.model.connect_timeout_seconds,
+                min(self.config.model.timeout_seconds, 30),
+            ),
+        )
+        response.raise_for_status()
+        payload = response.json()
+        prompt = payload.get("prompt") if isinstance(payload, dict) else None
+        if not isinstance(prompt, str) or not prompt:
+            raise ModelClientError(f"Unexpected apply-template response: {payload!r}")
+        after = self._prompt_protocol_identity()
+        if before != after:
+            raise ModelClientError(
+                "Model or chat template changed while serializing the request"
+            )
+        return {
+            "prompt": prompt,
+            "prompt_protocol_sha256": sha256_text(
+                stable_json_dumps(before, indent=None)
+            ),
+            **before,
+        }
+
+    def verify_prompt_protocol(self, prompt_protocol_sha256: str) -> None:
+        current = sha256_text(
+            stable_json_dumps(self._prompt_protocol_identity(), indent=None)
+        )
+        if current != prompt_protocol_sha256:
+            raise ModelClientError(
+                "Model or chat template changed after context compilation"
+            )
+
     def server_slot_count(self) -> int:
         response = requests.get(
             f"{self._base}/props",
@@ -288,18 +372,18 @@ class LlamaCppClient:
         max_tokens: int,
         contract: ContractSpec,
         temperature: float | None = None,
+        messages: list[dict[str, str]] | None = None,
     ) -> dict[str, Any]:
         schema = self._require_portable_schema(contract)
         effective_temperature = self.config.model.temperature if temperature is None else temperature
         if uses_chat_completions_transport(self.config.model.base_url, self.config.model.completion_endpoint):
-            return {
+            request = {
                 "model": self.config.model.profile_name,
-                "messages": [{"role": "user", "content": prompt}],
+                "messages": messages or [{"role": "user", "content": prompt}],
                 "max_tokens": max_tokens,
                 "temperature": effective_temperature,
                 "top_p": self.config.model.top_p,
                 "seed": self.config.model.seed,
-                "stop": list(self.config.model.stop),
                 "response_format": {
                     "type": "json_schema",
                     "json_schema": {
@@ -310,15 +394,20 @@ class LlamaCppClient:
                 },
                 "provider": {"require_parameters": True},
             }
-        return {
+            if self.config.model.stop:
+                request["stop"] = list(self.config.model.stop)
+            return request
+        request = {
             "prompt": prompt,
             "n_predict": max_tokens,
             "temperature": effective_temperature,
             "top_p": self.config.model.top_p,
             "seed": self.config.model.seed,
-            "stop": list(self.config.model.stop),
             "json_schema": schema,
         }
+        if self.config.model.stop:
+            request["stop"] = list(self.config.model.stop)
+        return request
 
     def _token_timeout_seconds(self, timeout_seconds: int | None = None) -> float:
         raw = os.environ.get("SWAAG_MODEL_TOKEN_TIMEOUT_SECONDS")

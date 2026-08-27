@@ -13,26 +13,30 @@ History compaction receives the exact deficit from the failed next call. It cons
 ## Compilation pipeline
 
 1. Identify the semantic operation and model.
-2. Read model context capacity and tokenizer/chat-format behavior.
+2. Read model context capacity and the active server/model chat-template identity.
 3. Identify the operation's minimum useful output and desired output headroom.
 4. Account for mandatory input: system and operation instructions, current request, required tool/protocol framing, and other nonoptional material.
 5. Calculate the remaining dynamic-input budget.
 6. Present candidate history, tools, tool results, retrieved sources, files, summaries, and state to semantic selection/reduction operations as needed.
-7. Assemble the candidate request.
-8. Tokenize the actual serialized request.
+7. Assemble role-preserving messages, ask the connected backend to serialize them with its active model template, and account for every returned wrapper segment.
+8. Tokenize the exact serialized request that will be sent.
 9. If it exceeds budget, calculate the required reduction and perform another semantic reduction pass. Never silently truncate semantic data.
 10. Send only after the hard invariant passes.
 11. Record request, response, token accounting, selected projections, and source references in durable history.
 
 ## Accounting and allocation
 
-For every call, the implementation records model identifier, context capacity, output reserve, safety margin if any, every actual serialized component, final input tokens, actual output tokens, and provenance identifying which source records produced projections or summaries. There is no unmeasured fixed-overhead or safe-input reservation: exact serialized framing is counted directly, while estimator uncertainty belongs only to the disclosed conservative safety strategy. Each prompt assembly also carries content hashes for its protocol wrapper, rendered system instruction, and canonical template artifacts; `prompt_built` persists those versions with the complete rendered-prompt hash so behavior can be correlated and replayed without guessing from a package version.
+For every call, the implementation records model identifier, context capacity, output reserve, safety margin if any, every actual serialized component, final input tokens, actual output tokens, and provenance identifying which source records produced projections or summaries. There is no unmeasured fixed-overhead or safe-input reservation: exact serialized framing is counted directly, while estimator uncertainty belongs only to the disclosed conservative safety strategy. Prompt builders retain model-neutral system/user component ranges. For live llama.cpp, `/apply-template` supplies the active model's exact prefix, inter-message framing, and generation suffix; Swaag proves that semantic message bytes are unchanged, reconstructs named accounting components whose concatenation equals the returned prompt, and rejects a model/template identity change during compilation or before inference. Each prompt assembly also carries content hashes for that server protocol identity, rendered system instruction, and canonical template artifacts; `prompt_built` persists those versions with the complete rendered-prompt hash so behavior can be correlated and replayed without guessing from a package version.
+
+Clients without server-side template rendering use an explicit model-neutral text envelope only as a disclosed offline/fake fallback. It is not used for live llama.cpp. Record/replay stores exact server renderings and exact tokenizer counts keyed by the complete role/content or text plus model/request identity. Replay never probes the model server and fails on a missing rendering or token count instead of falling back to a hardcoded model-family template, estimating silently, or performing a network call.
 
 Avoid a universal percentage allocation. A document-extraction call may devote almost all input to a document; a communication call may need status and recent history; a tool-selection call may need capability descriptions and little history. Deterministic code calculates capacities. An LLM decides semantic allocation within them.
 
 Output budgeting has two distinct values. The operation minimum is a hard validity/usefulness requirement; desired headroom is a soft maximum. Both can be supplied per call, so a dynamically sized projection is not forced into a static call-class output ratio. Compile and measure the richest candidate against the minimum first. If it fits, reserve as much desired headroom as remains without dropping that candidate. A desired amount or percentage must never cause otherwise-valid semantic input to be reduced. If the backend later reports output-limit exhaustion, raise the minimum, reconstruct and re-tokenize the call under the new hard constraint, and record the evidence. This recovery applies to actions, summaries, completion evaluation, caller-defined structured output, model-backed capabilities, tool-result projections, and health probes. When the larger minimum makes a reducible evidence call overflow, its normal bounded semantic reduction loop receives that measured overflow rather than silently shrinking output or input.
 
-For live llama.cpp calls, `GET /props` `default_generation_settings.n_ctx` is the authoritative per-slot capacity. Packaged `model.context_limit` is an explicit fallback for offline replay, fakes, and clients without a capacity probe. Probe failures in live operation are errors rather than silent fallback. Exact `/tokenize` accounting uses a fixed safety allowance for transport/template details; estimator fallback records its strategy and uses a proportional conservative margin.
+For live llama.cpp calls, `GET /props` `default_generation_settings.n_ctx` is the authoritative per-slot capacity, while `chat_template` plus model/server identity define the prompt protocol. Packaged `model.context_limit` is an explicit fallback for offline replay, fakes, and clients without a capacity probe. Probe failures in live operation are errors rather than silent fallback. Exact `/tokenize` accounting measures the `/apply-template` result and uses only the configured fixed safety allowance; estimator fallback records its strategy and uses a proportional conservative margin.
+
+Text stop sequences are model-specific decoding configuration, not universal prompt framing. The package default supplies none and relies on the connected model's EOS behavior. A deployment may configure extra stops explicitly, in which case they are preserved in the exact request/cache identity.
 
 ## History and results
 

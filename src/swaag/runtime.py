@@ -66,7 +66,9 @@ from swaag.types import (
     HistoryEvent,
     Message,
     PromptAssembly,
+    PromptArtifact,
     PromptComponent,
+    PromptMessageRange,
     SessionState,
     ToolDecision,
     ToolExecutionResult,
@@ -2492,6 +2494,121 @@ class AgentRuntime:
             )
         return components
 
+    @staticmethod
+    def _assembly_chat_messages(
+        assembly: PromptAssembly,
+    ) -> list[dict[str, str]]:
+        messages: list[dict[str, str]] = []
+        previous_end = 0
+        for message_range in assembly.message_ranges:
+            start = int(message_range.component_start)
+            end = int(message_range.component_end)
+            if start < previous_end or end <= start or end > len(assembly.components):
+                raise ModelClientError("Prompt assembly has invalid chat-message ranges")
+            content = "".join(
+                component.text for component in assembly.components[start:end]
+            )
+            if not content:
+                raise ModelClientError("Prompt assembly contains an empty chat message")
+            messages.append({"role": message_range.role, "content": content})
+            previous_end = end
+        return messages
+
+    def _materialize_prompt_protocol(self, assembly: PromptAssembly) -> None:
+        protocol_source = "prompt_protocol:server_chat_template"
+        if any(
+            artifact.source == protocol_source
+            for artifact in assembly.prompt_artifacts
+        ):
+            return
+        renderer = getattr(self.client, "render_chat_prompt", None)
+        if not callable(renderer):
+            return
+        if not assembly.message_ranges:
+            raise ModelClientError(
+                "Prompt assembly does not expose chat-message component ranges"
+            )
+        messages = self._assembly_chat_messages(assembly)
+        rendering = renderer(messages)
+        if not isinstance(rendering, dict):
+            raise ModelClientError("Model returned an invalid chat-template rendering")
+        rendered = rendering.get("prompt")
+        protocol_hash = rendering.get("prompt_protocol_sha256")
+        if (
+            not isinstance(rendered, str)
+            or not rendered
+            or not isinstance(protocol_hash, str)
+            or len(protocol_hash) != 64
+        ):
+            raise ModelClientError("Model chat-template rendering lacks prompt identity")
+        source_components = assembly.components
+        semantic_indices: set[int] = set()
+        for message_range in assembly.message_ranges:
+            semantic_indices.update(
+                range(message_range.component_start, message_range.component_end)
+            )
+        if any(
+            index not in semantic_indices and component.category != "wrapper"
+            for index, component in enumerate(source_components)
+        ):
+            raise ModelClientError(
+                "Prompt assembly has unassigned semantic components outside chat messages"
+            )
+
+        materialized: list[PromptComponent] = []
+        materialized_ranges: list[PromptMessageRange] = []
+        cursor = 0
+        for index, (message, message_range) in enumerate(
+            zip(messages, assembly.message_ranges, strict=True),
+            start=1,
+        ):
+            content = message["content"]
+            offset = rendered.find(content, cursor)
+            if offset < 0:
+                raise ModelClientError(
+                    "Model chat template transformed message content; exact component accounting is unavailable"
+                )
+            materialized.append(
+                PromptComponent(
+                    name=f"chat_template_wrapper_{index}",
+                    category="wrapper",
+                    text=rendered[cursor:offset],
+                )
+            )
+            start = len(materialized)
+            materialized.extend(
+                source_components[
+                    message_range.component_start : message_range.component_end
+                ]
+            )
+            materialized_ranges.append(
+                PromptMessageRange(
+                    role=message_range.role,
+                    component_start=start,
+                    component_end=len(materialized),
+                )
+            )
+            cursor = offset + len(content)
+        materialized.append(
+            PromptComponent(
+                name="chat_template_generation_suffix",
+                category="wrapper",
+                text=rendered[cursor:],
+            )
+        )
+        if "".join(component.text for component in materialized) != rendered:
+            raise ModelClientError(
+                "Materialized chat-template components do not reproduce the exact prompt"
+            )
+        assembly.components = materialized
+        assembly.message_ranges = materialized_ranges
+        assembly.prompt_text = rendered
+        assembly.prompt_artifacts = [
+            artifact
+            for artifact in assembly.prompt_artifacts
+            if not artifact.source.startswith("prompt_protocol:")
+        ] + [PromptArtifact(source=protocol_source, sha256=protocol_hash)]
+
     def _compile_context(
         self,
         state: SessionState | None,
@@ -2502,6 +2619,7 @@ class AgentRuntime:
         desired_output_tokens: int | None = None,
         context_limit_resolution: tuple[int, str] | None = None,
     ) -> ContextCompilation:
+        self._materialize_prompt_protocol(assembly)
         context_limit, context_limit_source = (
             self._resolve_context_limit()
             if context_limit_resolution is None
@@ -2658,6 +2776,9 @@ class AgentRuntime:
                     asdict(artifact) for artifact in assembly.prompt_artifacts
                 ],
                 "components": [asdict(component) for component in assembly.components],
+                "message_ranges": [
+                    asdict(message_range) for message_range in assembly.message_ranges
+                ],
                 "budget_report": asdict(report),
             },
         )
@@ -3492,16 +3613,40 @@ class AgentRuntime:
         telemetry_operation: TelemetryOperation,
         seed_offset: int = 0,
     ) -> CompletionResult:
+        protocol_artifact = next(
+            (
+                artifact
+                for artifact in prepared.assembly.prompt_artifacts
+                if artifact.source == "prompt_protocol:server_chat_template"
+            ),
+            None,
+        )
+        verifier = getattr(self.client, "verify_prompt_protocol", None)
+        if protocol_artifact is not None and callable(verifier):
+            verifier(protocol_artifact.sha256)
         resolved_contract, policy = self.client.resolve_contract(
             prepared.contract,
             kind=prepared.assembly.kind,
             prompt=prepared.assembly.prompt_text,
             max_tokens=prepared.report.reserved_response_tokens,
         )
-        request = self.client.build_completion_request(
+        request_builder = self.client.build_completion_request
+        request_kwargs: dict[str, Any] = {
+            "max_tokens": prepared.report.reserved_response_tokens,
+            "contract": resolved_contract,
+        }
+        builder_parameters = inspect.signature(request_builder).parameters.values()
+        if prepared.assembly.message_ranges and any(
+            parameter.name == "messages"
+            or parameter.kind == inspect.Parameter.VAR_KEYWORD
+            for parameter in builder_parameters
+        ):
+            request_kwargs["messages"] = self._assembly_chat_messages(
+                prepared.assembly
+            )
+        request = request_builder(
             prepared.assembly.prompt_text,
-            max_tokens=prepared.report.reserved_response_tokens,
-            contract=resolved_contract,
+            **request_kwargs,
         )
         # Reproducible but non-identical decoding across semantic action/retry attempts.
         # Reusing one fixed seed caused malformed JSON and exact bad actions to recur

@@ -56,7 +56,19 @@ def test_default_model_profile_and_mode_match_documented_live_profile(tmp_path: 
     assert config.model.structured_output_mode == recommendation.structured_output_mode
     assert config.model.cache_enabled is True
     assert config.model.cache_mode == "record"
+    assert config.model.stop == []
     assert recommendation.timeout_seconds >= 900
+
+
+def test_model_specific_stop_sequences_are_optional_and_explicit(tmp_path: Path) -> None:
+    config = load_config(
+        env={
+            "SWAAG__SESSIONS__ROOT": str(tmp_path / "sessions"),
+            "SWAAG__MODEL__STOP": '["MODEL_SPECIFIC_STOP"]',
+        }
+    )
+
+    assert config.model.stop == ["MODEL_SPECIFIC_STOP"]
 
 
 def test_visible_editor_backups_are_disabled_by_default() -> None:

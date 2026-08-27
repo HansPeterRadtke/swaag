@@ -11,14 +11,13 @@ from swaag.types import (
     PromptArtifact,
     PromptAssembly,
     PromptComponent,
+    PromptMessageRange,
 )
 from swaag.utils import sha256_text, stable_json_dumps
 
-LLAMA3_BEGIN = "<|begin_of_text|>"
-LLAMA3_SYSTEM_HEADER = "<|start_header_id|>system<|end_header_id|>\n\n"
-LLAMA3_USER_HEADER = "<|start_header_id|>user<|end_header_id|>\n\n"
-LLAMA3_ASSISTANT_HEADER = "<|start_header_id|>assistant<|end_header_id|>\n\n"
-LLAMA3_EOT = "<|eot_id|>"
+FALLBACK_SYSTEM_PREFIX = "[SYSTEM MESSAGE]\n"
+FALLBACK_MESSAGE_SEPARATOR = "\n[USER MESSAGE]\n"
+FALLBACK_GENERATION_SUFFIX = "\n[ASSISTANT RESPONSE]\n"
 
 
 class PromptBuilder:
@@ -48,16 +47,13 @@ class PromptBuilder:
     ) -> list[PromptArtifact]:
         artifacts = [
             PromptArtifact(
-                source="prompt_protocol:llama3",
+                source="prompt_protocol:explicit_text_fallback_v1",
                 sha256=sha256_text(
-                    LLAMA3_BEGIN
-                    + LLAMA3_SYSTEM_HEADER
+                    FALLBACK_SYSTEM_PREFIX
                     + "{system}"
-                    + LLAMA3_EOT
-                    + LLAMA3_USER_HEADER
+                    + FALLBACK_MESSAGE_SEPARATOR
                     + "{user}"
-                    + LLAMA3_EOT
-                    + LLAMA3_ASSISTANT_HEADER
+                    + FALLBACK_GENERATION_SUFFIX
                 ),
             ),
             PromptArtifact(
@@ -210,19 +206,29 @@ class PromptBuilder:
         template_names: tuple[str, ...] = (),
     ) -> PromptAssembly:
         components = [
-            PromptComponent(name="llama3_begin", category="wrapper", text=LLAMA3_BEGIN),
-            PromptComponent(name="system_header", category="wrapper", text=LLAMA3_SYSTEM_HEADER),
+            PromptComponent(
+                name="fallback_system_prefix",
+                category="wrapper",
+                text=FALLBACK_SYSTEM_PREFIX,
+            ),
             PromptComponent(
                 name="system_prompt",
                 category="system_prompt",
                 text=system_instruction.strip(),
             ),
-            PromptComponent(name="system_eot", category="wrapper", text=LLAMA3_EOT),
-            PromptComponent(name="user_header", category="wrapper", text=LLAMA3_USER_HEADER),
+            PromptComponent(
+                name="fallback_message_separator",
+                category="wrapper",
+                text=FALLBACK_MESSAGE_SEPARATOR,
+            ),
             *user_components,
-            PromptComponent(name="user_eot", category="wrapper", text=LLAMA3_EOT),
-            PromptComponent(name="assistant_header", category="wrapper", text=LLAMA3_ASSISTANT_HEADER),
+            PromptComponent(
+                name="fallback_generation_suffix",
+                category="wrapper",
+                text=FALLBACK_GENERATION_SUFFIX,
+            ),
         ]
+        user_end = 3 + len(user_components)
         return PromptAssembly(
             kind=kind,
             prompt_mode=prompt_mode,
@@ -233,6 +239,10 @@ class PromptBuilder:
                 system_instruction=system_instruction,
                 template_names=template_names,
             ),
+            message_ranges=[
+                PromptMessageRange(role="system", component_start=1, component_end=2),
+                PromptMessageRange(role="user", component_start=3, component_end=user_end),
+            ],
         )
 
     def build_semantic_operation_prompt(
@@ -364,12 +374,7 @@ class PromptBuilder:
         historical_evidence_projection: str = "",
     ) -> PromptAssembly:
         system_prompt = self._load_template(self._config.prompts.completion_evaluation_system_template)
-        components = [
-            PromptComponent(name="llama3_begin", category="wrapper", text=LLAMA3_BEGIN),
-            PromptComponent(name="system_header", category="wrapper", text=LLAMA3_SYSTEM_HEADER),
-            PromptComponent(name="system_prompt", category="system_prompt", text=system_prompt),
-            PromptComponent(name="system_eot", category="wrapper", text=LLAMA3_EOT),
-            PromptComponent(name="user_header", category="wrapper", text=LLAMA3_USER_HEADER),
+        user_components = [
             PromptComponent(
                 name="completion_objective",
                 category="current_user",
@@ -424,21 +429,15 @@ class PromptBuilder:
                     self._config.prompts.completion_evaluation_template
                 ),
             ),
-            PromptComponent(name="user_eot", category="wrapper", text=LLAMA3_EOT),
-            PromptComponent(name="assistant_header", category="wrapper", text=LLAMA3_ASSISTANT_HEADER),
         ]
-        return PromptAssembly(
-            kind="completion_evaluation",
-            prompt_mode="lean",
-            prompt_text="".join(c.text for c in components),
-            components=components,
-            prompt_artifacts=self._prompt_artifacts(
-                kind="completion_evaluation",
-                system_instruction=system_prompt,
-                template_names=(
-                    self._config.prompts.completion_evaluation_system_template,
-                    self._config.prompts.completion_evaluation_template,
-                ),
+        return self._assemble_with_system(
+            "completion_evaluation",
+            "lean",
+            system_prompt,
+            user_components,
+            template_names=(
+                self._config.prompts.completion_evaluation_system_template,
+                self._config.prompts.completion_evaluation_template,
             ),
         )
 
@@ -453,12 +452,7 @@ class PromptBuilder:
         system_prompt = self._load_template(
             self._config.prompts.caller_structured_output_system_template
         )
-        components = [
-            PromptComponent(name="llama3_begin", category="wrapper", text=LLAMA3_BEGIN),
-            PromptComponent(name="system_header", category="wrapper", text=LLAMA3_SYSTEM_HEADER),
-            PromptComponent(name="system_prompt", category="system_prompt", text=system_prompt),
-            PromptComponent(name="system_eot", category="wrapper", text=LLAMA3_EOT),
-            PromptComponent(name="user_header", category="wrapper", text=LLAMA3_USER_HEADER),
+        user_components = [
             PromptComponent(
                 name="caller_output_objective",
                 category="current_user",
@@ -488,21 +482,15 @@ class PromptBuilder:
                     self._config.prompts.caller_structured_output_template
                 ),
             ),
-            PromptComponent(name="user_eot", category="wrapper", text=LLAMA3_EOT),
-            PromptComponent(name="assistant_header", category="wrapper", text=LLAMA3_ASSISTANT_HEADER),
         ]
-        return PromptAssembly(
-            kind="caller_structured_output",
-            prompt_mode="lean",
-            prompt_text="".join(component.text for component in components),
-            components=components,
-            prompt_artifacts=self._prompt_artifacts(
-                kind="caller_structured_output",
-                system_instruction=system_prompt,
-                template_names=(
-                    self._config.prompts.caller_structured_output_system_template,
-                    self._config.prompts.caller_structured_output_template,
-                ),
+        return self._assemble_with_system(
+            "caller_structured_output",
+            "lean",
+            system_prompt,
+            user_components,
+            template_names=(
+                self._config.prompts.caller_structured_output_system_template,
+                self._config.prompts.caller_structured_output_template,
             ),
         )
 
@@ -565,28 +553,14 @@ class PromptBuilder:
             source_event_hash=source_event_hash,
             target_tokens=max(1, int(target_tokens)),
         )
-        components = [
-            PromptComponent(name="llama3_begin", category="wrapper", text=LLAMA3_BEGIN),
-            PromptComponent(name="system_header", category="wrapper", text=LLAMA3_SYSTEM_HEADER),
-            PromptComponent(name="system_prompt", category="system_prompt", text=system_prompt),
-            PromptComponent(name="system_eot", category="wrapper", text=LLAMA3_EOT),
-            PromptComponent(name="user_header", category="wrapper", text=LLAMA3_USER_HEADER),
-            PromptComponent(name="projection_task", category="tool_result", text=user_text),
-            PromptComponent(name="user_eot", category="wrapper", text=LLAMA3_EOT),
-            PromptComponent(name="assistant_header", category="wrapper", text=LLAMA3_ASSISTANT_HEADER),
-        ]
-        return PromptAssembly(
-            kind="tool_result_projection",
-            prompt_mode="lean",
-            prompt_text="".join(component.text for component in components),
-            components=components,
-            prompt_artifacts=self._prompt_artifacts(
-                kind="tool_result_projection",
-                system_instruction=system_prompt,
-                template_names=(
-                    self._config.prompts.tool_result_projection_system_template,
-                    self._config.prompts.tool_result_projection_template,
-                ),
+        return self._assemble_with_system(
+            "tool_result_projection",
+            "lean",
+            system_prompt,
+            [PromptComponent(name="projection_task", category="tool_result", text=user_text)],
+            template_names=(
+                self._config.prompts.tool_result_projection_system_template,
+                self._config.prompts.tool_result_projection_template,
             ),
         )
 
@@ -754,27 +728,13 @@ class PromptBuilder:
             maximum_preserve_recent_messages=max(0, int(maximum_preserve_recent_messages)),
             target_summary_tokens=max(1, int(target_summary_tokens)),
         )
-        components = [
-            PromptComponent(name="llama3_begin", category="wrapper", text=LLAMA3_BEGIN),
-            PromptComponent(name="system_header", category="wrapper", text=LLAMA3_SYSTEM_HEADER),
-            PromptComponent(name="system_prompt", category="system_prompt", text=system_prompt),
-            PromptComponent(name="system_eot", category="wrapper", text=LLAMA3_EOT),
-            PromptComponent(name="user_header", category="wrapper", text=LLAMA3_USER_HEADER),
-            PromptComponent(name="summary_history", category="history", text=user_text),
-            PromptComponent(name="user_eot", category="wrapper", text=LLAMA3_EOT),
-            PromptComponent(name="assistant_header", category="wrapper", text=LLAMA3_ASSISTANT_HEADER),
-        ]
-        return PromptAssembly(
-            kind="summary",
-            prompt_mode=prompt_mode,
-            prompt_text="".join(component.text for component in components),
-            components=components,
-            prompt_artifacts=self._prompt_artifacts(
-                kind="summary",
-                system_instruction=system_prompt,
-                template_names=(
-                    self._config.prompts.summary_system_template,
-                    self._config.prompts.summary_template,
-                ),
+        return self._assemble_with_system(
+            "summary",
+            prompt_mode,
+            system_prompt,
+            [PromptComponent(name="summary_history", category="history", text=user_text)],
+            template_names=(
+                self._config.prompts.summary_system_template,
+                self._config.prompts.summary_template,
             ),
         )

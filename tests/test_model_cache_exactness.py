@@ -5,7 +5,9 @@ import json
 from pathlib import Path
 from types import SimpleNamespace
 
-from swaag.model_cache import RecordReplayModelClient
+import pytest
+
+from swaag.model_cache import MissingReplayEntryError, RecordReplayModelClient
 from swaag.types import CompletionResult
 
 
@@ -25,8 +27,12 @@ class Delegate:
         )
         self.context_probes = 0
         self.cancel_checks = []
+        self.render_calls = 0
+        self.identity_calls = 0
+        self.token_calls = 0
 
     def cache_identity(self):
+        self.identity_calls += 1
         return {
             "status": "resolved",
             "configured_model_identity": "model-a",
@@ -36,6 +42,18 @@ class Delegate:
     def context_limit_resolution(self):
         self.context_probes += 1
         return 22016, "server_props:n_ctx"
+
+    def render_chat_prompt(self, messages):
+        self.render_calls += 1
+        return {
+            "prompt": f"SYS:{messages[0]['content']} USER:{messages[1]['content']}",
+            "chat_template_sha256": "a" * 64,
+            "prompt_protocol_sha256": "b" * 64,
+        }
+
+    def tokenize(self, text):
+        self.token_calls += 1
+        return len(text)
 
     def send_completion(
         self,
@@ -119,6 +137,57 @@ def test_model_identity_refreshes_before_every_lookup(tmp_path: Path) -> None:
     assert delegate.calls == 2
     assert cached.send_completion(payload).text == "response-2"
     assert delegate.calls == 2
+
+
+def test_chat_template_rendering_records_and_replays_without_network(
+    tmp_path: Path,
+) -> None:
+    recorded_delegate = Delegate()
+    recorded = client(tmp_path, recorded_delegate)
+    messages = [
+        {"role": "system", "content": "policy"},
+        {"role": "user", "content": "task"},
+    ]
+    first = recorded.render_chat_prompt(messages)
+    assert recorded_delegate.render_calls == 1
+    assert recorded.render_chat_prompt(messages) == first
+    assert recorded_delegate.render_calls == 1
+
+    replay_delegate = Delegate()
+    replay = RecordReplayModelClient(
+        cassette_path=tmp_path / "cassette.json",
+        mode="replay",
+        delegate=replay_delegate,
+        request_metadata={"task": "cache-exactness"},
+    )
+
+    assert replay.render_chat_prompt(messages) == first
+    assert replay_delegate.render_calls == 0
+    assert replay_delegate.identity_calls == 0
+
+
+def test_token_counts_record_and_replay_without_network(tmp_path: Path) -> None:
+    recorded_delegate = Delegate()
+    recorded = client(tmp_path, recorded_delegate)
+
+    assert recorded.tokenize("exact text") == 10
+    assert recorded.tokenize("exact text") == 10
+    assert recorded_delegate.token_calls == 1
+
+    replay_delegate = Delegate()
+    replay = RecordReplayModelClient(
+        cassette_path=tmp_path / "cassette.json",
+        mode="replay",
+        delegate=replay_delegate,
+        request_metadata={"task": "cache-exactness"},
+    )
+
+    assert replay.tokenize("exact text") == 10
+    assert replay_delegate.token_calls == 0
+    assert replay_delegate.identity_calls == 0
+    with pytest.raises(MissingReplayEntryError, match="tokenize result"):
+        replay.tokenize("not recorded")
+    assert replay_delegate.token_calls == 0
 
 
 def test_cassette_is_reloaded_from_disk_before_every_lookup(tmp_path: Path) -> None:
