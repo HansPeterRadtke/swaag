@@ -360,6 +360,8 @@ class PromptBuilder:
         tool_evidence: str = "",
         tool_evidence_rows: list[dict] | None = None,
         tool_result_projections: dict[int, str] | None = None,
+        historical_evidence: str = "",
+        historical_evidence_projection: str = "",
     ) -> PromptAssembly:
         system_prompt = self._load_template(self._config.prompts.completion_evaluation_system_template)
         components = [
@@ -393,6 +395,27 @@ class PromptBuilder:
                 tool_evidence=tool_evidence,
                 rows=tool_evidence_rows or [],
                 projections=tool_result_projections or {},
+            ),
+            *(
+                [
+                    PromptComponent(
+                        name="completion_historical_evidence",
+                        category="history",
+                        text=(
+                            "\nDurable evidence from before the current user turn:\n"
+                            + (
+                                "[SEMANTIC PROJECTION; exact events remain authoritative "
+                                "and retrievable]\n"
+                                + historical_evidence_projection
+                                if historical_evidence_projection
+                                else historical_evidence
+                            )
+                            + "\n"
+                        ),
+                    )
+                ]
+                if historical_evidence or historical_evidence_projection
+                else []
             ),
             PromptComponent(
                 name="completion_instruction",

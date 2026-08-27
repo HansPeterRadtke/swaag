@@ -38,6 +38,38 @@ def test_completion_prompt_contains_goal_candidate_and_evidence(make_config):
     )
 
 
+def test_completion_prompt_accounts_for_exact_or_projected_historical_evidence(
+    make_config,
+):
+    builder = PromptBuilder(make_config())
+    exact = builder.build_completion_evaluation_prompt(
+        original_request="verify the complete task",
+        assistant_message="done",
+        status_json='{"importance":"normal"}',
+        historical_evidence='[{"sequence":7,"payload":"prior-marker"}]',
+    )
+    projected = builder.build_completion_evaluation_prompt(
+        original_request="verify the complete task",
+        assistant_message="done",
+        status_json='{"importance":"normal"}',
+        historical_evidence_projection="prior-marker remained relevant",
+    )
+
+    exact_component = next(
+        item
+        for item in exact.components
+        if item.name == "completion_historical_evidence"
+    )
+    projected_component = next(
+        item
+        for item in projected.components
+        if item.name == "completion_historical_evidence"
+    )
+    assert "prior-marker" in exact_component.text
+    assert "SEMANTIC PROJECTION" not in exact_component.text
+    assert "SEMANTIC PROJECTION" in projected_component.text
+
+
 def test_runtime_defaults_enable_completion_evaluation(make_config):
     config = make_config(runtime__completion_evaluation_enabled=True)
     assert config.runtime.completion_evaluation_enabled is True
@@ -144,6 +176,145 @@ class _OutputLimitedCompletionClient(_CompletionClient):
                 finish_reason="length",
             )
         return super().send_completion(payload, **kwargs)
+
+
+class _HistoricalProjectionClient(_CompletionClient):
+    def __init__(self):
+        super().__init__([])
+
+    def send_completion(self, payload: dict, **_kwargs) -> CompletionResult:
+        self.requests.append(payload)
+        if payload["contract"] == "evidence_projection":
+            response = json.dumps(
+                {"projection": "historical-marker-91 remains completion evidence"}
+            )
+        else:
+            response = json.dumps(
+                {"complete": True, "reason": "Verified.", "remaining_work": []}
+            )
+        return CompletionResult(
+            text=response,
+            raw_request=payload,
+            raw_response={"content": response},
+            prompt_tokens=None,
+            completion_tokens=None,
+            finish_reason="stop",
+        )
+
+
+def test_completion_evaluation_keeps_prior_turn_history_exact_when_it_fits(
+    make_config,
+) -> None:
+    client = _CompletionClient(
+        [json.dumps({"complete": True, "reason": "Verified.", "remaining_work": []})]
+    )
+    runtime = AgentRuntime(
+        make_config(model__context_limit=12_000),
+        model_client=client,
+    )
+    state = runtime.create_or_load_session()
+    runtime._record_message(
+        state,
+        Message(role="user", content="Earlier objective", created_at="t"),
+    )
+    runtime._record_message(
+        state,
+        Message(
+            role="assistant",
+            content="Verified historical-marker-83 with the user.",
+            created_at="t",
+        ),
+    )
+    runtime._record_message(
+        state,
+        Message(role="user", content="Finish the current objective", created_at="t"),
+    )
+    prior_events = runtime.history.read_history(state.session_id)[:-1]
+    action = AgentAction(
+        assistant_message="The current objective is complete.",
+        tool_calls=[],
+        continue_loop=False,
+        silent_completion=False,
+        status=AgentStatus("Done.", "Finish.", "Evidence is sufficient.", "normal"),
+        questions=[],
+    )
+
+    result = runtime._evaluate_completion(
+        state,
+        original_request="Finish the current objective",
+        selected_action=action,
+        tool_results=[],
+    )
+
+    assert result["complete"] is True
+    assert result["historical_evidence_projected"] is False
+    assert "historical-marker-83" in client.requests[-1]["prompt"]
+    assert {
+        reference["sequence"]
+        for reference in result["historical_source_event_references"]
+    } == {event.sequence for event in prior_events}
+
+
+def test_completion_evaluation_projects_all_prior_history_only_after_overflow(
+    make_config,
+) -> None:
+    client = _HistoricalProjectionClient()
+    runtime = AgentRuntime(
+        make_config(model__context_limit=900, context__max_compaction_rounds=3),
+        model_client=client,
+    )
+    state = runtime.create_or_load_session()
+    runtime._record_message(
+        state,
+        Message(role="user", content="Earlier objective", created_at="t"),
+    )
+    runtime._record_message(
+        state,
+        Message(
+            role="assistant",
+            content=("historical-marker-91 " * 1_500),
+            created_at="t",
+        ),
+    )
+    runtime._record_message(
+        state,
+        Message(role="user", content="Finish now", created_at="t"),
+    )
+    action = AgentAction(
+        assistant_message="Finished.",
+        tool_calls=[],
+        continue_loop=False,
+        silent_completion=False,
+        status=AgentStatus("Done.", "Finish.", "Evidence exists.", "normal"),
+        questions=[],
+    )
+
+    result = runtime._evaluate_completion(
+        state,
+        original_request="Finish now",
+        selected_action=action,
+        tool_results=[],
+    )
+
+    projection_requests = [
+        request
+        for request in client.requests
+        if request["contract"] == "evidence_projection"
+    ]
+    completion_request = client.requests[-1]
+    assert result["complete"] is True
+    assert result["historical_evidence_projected"] is True
+    assert projection_requests
+    assert any("historical-marker-91" in request["prompt"] for request in projection_requests)
+    assert "SEMANTIC PROJECTION" in completion_request["prompt"]
+    assert ("historical-marker-91 " * 100) not in completion_request["prompt"]
+    event = next(
+        event
+        for event in runtime.history.read_history(state.session_id)
+        if event.event_type == "completion_evaluated"
+    )
+    assert event.payload["historical_evidence_projection"]
+    assert event.payload["historical_projection_budget_report"]
 
 
 def test_completion_evaluation_recompiles_after_output_starvation(make_config) -> None:

@@ -1126,10 +1126,65 @@ class AgentRuntime:
         )
         contract = completion_evaluation_contract()
         evidence_rows = self._completion_evidence_rows(state, tool_results)
+        history_snapshot = self.history.read_history(state.session_id)
+        current_user_sequence = next(
+            (
+                event.sequence
+                for event in reversed(history_snapshot)
+                if event.event_type == "message_added"
+                and isinstance(event.payload.get("message"), dict)
+                and event.payload["message"].get("role") == "user"
+            ),
+            None,
+        )
+        historical_events = (
+            [
+                event
+                for event in history_snapshot
+                if current_user_sequence is not None
+                and event.sequence < current_user_sequence
+            ]
+            if current_user_sequence is not None
+            else []
+        )
+        historical_rows = [
+            self._communication_evidence_row(event) for event in historical_events
+        ]
+        historical_source_references = [
+            self._communication_evidence_reference(event)
+            for event in historical_events
+        ]
+        historical_evidence = (
+            stable_json_dumps(historical_rows, indent=None)
+            if historical_rows
+            else ""
+        )
+        historical_evidence_tokens = (
+            self._counter(state).count_text(historical_evidence).tokens
+            if historical_evidence
+            else 0
+        )
+        historical_evidence_projection = ""
+        historical_projection_target_tokens: int | None = None
+        historical_projection_budget_report: dict[str, Any] | None = None
+        remaining_historical_projection_calls = [
+            max(16, int(self.config.context.max_compaction_rounds) * 16)
+        ]
+        context_limit_resolution = self._resolve_context_limit()
         projections: dict[int, str] = {}
         last_compilation: ContextCompilation | None = None
         minimum_output_tokens = 128
         max_rounds = max(0, int(self.config.context.max_compaction_rounds))
+
+        def validate_completion_payload(payload: dict[str, Any]) -> dict[str, Any]:
+            if contract.json_schema is not None:
+                _validate_schema_value(
+                    payload,
+                    contract.json_schema,
+                    path=contract.name,
+                )
+            return payload
+
         for reduction_round in range(max_rounds + 1):
             assembly = self.prompts.build_completion_evaluation_prompt(
                 original_request=original_request,
@@ -1137,12 +1192,17 @@ class AgentRuntime:
                 status_json=stable_json_dumps(asdict(selected_action.status), indent=None),
                 tool_evidence_rows=evidence_rows,
                 tool_result_projections=projections,
+                historical_evidence=(
+                    "" if historical_evidence_projection else historical_evidence
+                ),
+                historical_evidence_projection=historical_evidence_projection,
             )
             compilation = self._compile_context(
                 state,
                 assembly,
                 contract,
                 minimum_output_tokens=minimum_output_tokens,
+                context_limit_resolution=context_limit_resolution,
             )
             last_compilation = compilation
             self.history.record_event(
@@ -1178,6 +1238,8 @@ class AgentRuntime:
                             contract,
                         ),
                         minimum_output_tokens=minimum_output_tokens,
+                        validator=validate_completion_payload,
+                        context_limit_resolution=context_limit_resolution,
                     )
                 except _OutputRecoveryContextOverflow as exc:
                     compilation = exc.compilation
@@ -1196,7 +1258,21 @@ class AgentRuntime:
                             reference
                             for row in evidence_rows
                             for reference in row.get("source_event_references", [])
-                        ],
+                        ]
+                        + historical_source_references,
+                        "historical_source_event_references": historical_source_references,
+                        "historical_evidence_projected": bool(
+                            historical_evidence_projection
+                        ),
+                        "historical_projection_target_tokens": (
+                            historical_projection_target_tokens
+                        ),
+                        "historical_evidence_projection": (
+                            historical_evidence_projection
+                        ),
+                        "historical_projection_budget_report": (
+                            historical_projection_budget_report
+                        ),
                         "projected_source_event_sequences": sorted(projections),
                     }
                     self.history.record_event(state, "completion_evaluated", result)
@@ -1206,6 +1282,90 @@ class AgentRuntime:
                 or reduction_round >= max_rounds
             ):
                 break
+            report_by_name = {
+                item.name: item.tokens for item in compilation.report.breakdown
+            }
+            historical_component_tokens = int(
+                report_by_name.get("completion_historical_evidence", 0)
+            )
+            largest_tool_component_tokens = max(
+                (
+                    int(item.tokens)
+                    for item in compilation.report.breakdown
+                    if item.name.startswith("completion_tool_event_")
+                ),
+                default=0,
+            )
+            if (
+                historical_evidence
+                and historical_component_tokens >= largest_tool_component_tokens
+            ):
+                placeholder = self.prompts.build_completion_evaluation_prompt(
+                    original_request=original_request,
+                    assistant_message=selected_action.assistant_message,
+                    status_json=stable_json_dumps(
+                        asdict(selected_action.status), indent=None
+                    ),
+                    tool_evidence_rows=evidence_rows,
+                    tool_result_projections=projections,
+                    historical_evidence_projection=(
+                        "[purpose-specific historical evidence projection]"
+                    ),
+                )
+                base_compilation = self._compile_context(
+                    state,
+                    placeholder,
+                    contract,
+                    minimum_output_tokens=minimum_output_tokens,
+                    context_limit_resolution=context_limit_resolution,
+                )
+                projection_capacity = (
+                    base_compilation.available_input_tokens
+                    - base_compilation.report.input_tokens
+                )
+                if projection_capacity >= 32:
+                    reduction = max(32, compilation.overflow_tokens + 16)
+                    previous_target = (
+                        historical_evidence_tokens
+                        if historical_projection_target_tokens is None
+                        else historical_projection_target_tokens
+                    )
+                    projection_plan = self.context_compiler.plan(
+                        call_kind="evidence_projection",
+                        context_limit=context_limit_resolution[0],
+                    )
+                    historical_projection_target_tokens = min(
+                        projection_capacity,
+                        max(32, int(projection_plan.output_tokens) - 64),
+                        max(32, previous_target - reduction),
+                    )
+                    historical_evidence_projection, projection_report = (
+                        self._reduce_text_hierarchically(
+                            state,
+                            source_text=historical_evidence,
+                            source_label=(
+                                "exact durable history events before the current user turn"
+                            ),
+                            target_tokens=historical_projection_target_tokens,
+                            contract=evidence_projection_contract(),
+                            output_key="projection",
+                            build_assembly=lambda text, label, target: (
+                                self.prompts.build_evidence_projection_prompt(
+                                    purpose=(
+                                        "Evaluate whether this user objective is complete: "
+                                        + original_request
+                                    ),
+                                    source_label=label,
+                                    raw_evidence=text,
+                                    target_tokens=target,
+                                )
+                            ),
+                            remaining_calls=remaining_historical_projection_calls,
+                            context_limit_resolution=context_limit_resolution,
+                        )
+                    )
+                    historical_projection_budget_report = asdict(projection_report)
+                    continue
             projected = self._project_largest_tool_result_for_overflow(
                 state,
                 original_request=original_request,
