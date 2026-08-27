@@ -86,6 +86,17 @@ def test_legacy_note_compaction_target_is_accepted_but_no_longer_controls_semant
     assert config.notes.max_note_chars == 2000
 
 
+def test_legacy_recent_message_limit_is_accepted_but_no_longer_controls_semantics(
+    tmp_path: Path,
+) -> None:
+    legacy = tmp_path / "legacy.toml"
+    legacy.write_text("[context]\nmax_recent_messages = 2\n", encoding="utf-8")
+
+    config = load_config(config_paths=[legacy])
+
+    assert not hasattr(config.context, "max_recent_messages")
+
+
 
 
 def test_budget_policy_safe_input_floor_is_loaded_from_defaults() -> None:

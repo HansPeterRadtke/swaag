@@ -44,7 +44,6 @@ class ContextConfig:
     reserved_response_tokens: int
     reserved_summary_tokens: int
     safety_margin_tokens: int
-    max_recent_messages: int
     max_compaction_rounds: int
     workspace_manifest_max_files: int
     note_prompt_token_cap: int
@@ -372,7 +371,9 @@ def _validate_non_negative(name: str, value: int) -> None:
 def _coerce_config(data: dict[str, Any]) -> AgentConfig:
     data = expand_env_in_value(data)
     model = ModelConfig(**data["model"])
-    context = ContextConfig(**data["context"])
+    context_data = dict(data["context"])
+    context_data.pop("max_recent_messages", None)
+    context = ContextConfig(**context_data)
     runtime = RuntimeConfig(**data["runtime"])
     sessions = SessionConfig(
         root=Path(data["sessions"]["root"]).expanduser(),

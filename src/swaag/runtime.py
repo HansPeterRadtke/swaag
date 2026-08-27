@@ -2804,8 +2804,10 @@ class AgentRuntime:
     def _compact_once(self, state: SessionState) -> bool:
         if len(state.messages) <= 2:
             return False
-        keep = max(2, min(int(self.config.context.max_recent_messages), len(state.messages) - 1))
-        maximum_source = len(state.messages) - keep
+        # Keep one message outside the candidate and require at least one exact
+        # source to be replaced. Semantic retention within the candidate belongs
+        # to the summary model, not a configured age cutoff.
+        maximum_source = len(state.messages) - 1
         if maximum_source <= 0:
             return False
 
@@ -2814,7 +2816,7 @@ class AgentRuntime:
         minimum_summary_tokens = int(self.config.context.reserved_summary_tokens)
         for source_count in range(maximum_source, 0, -1):
             source_messages = state.messages[:source_count]
-            adaptive_cap = min(max(0, source_count - 1), max(0, int(self.config.context.max_recent_messages) * 4))
+            adaptive_cap = max(0, source_count - 1)
             summary_context_limit, _summary_context_source = context_limit_resolution
             summary_plan = self.context_compiler.plan(call_kind="summary", context_limit=summary_context_limit)
             target_summary_tokens = max(

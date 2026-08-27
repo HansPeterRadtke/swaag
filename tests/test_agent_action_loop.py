@@ -228,7 +228,7 @@ def test_output_limit_rebuilds_action_with_more_headroom(make_config) -> None:
 def test_history_compaction_creates_replayable_summary_with_exact_sources(
     make_config,
 ) -> None:
-    config = make_config(model__context_limit=32_000, context__max_recent_messages=2)
+    config = make_config(model__context_limit=32_000)
     client = FakeModelClient(
         [json.dumps({"summary": "Earlier facts summarized.", "preserve_recent_messages": 0})]
     )
@@ -247,6 +247,12 @@ def test_history_compaction_creates_replayable_summary_with_exact_sources(
     assert state.messages[0].role == "summary"
     assert state.messages[0].metadata["source_event_references"]
     assert state.messages[0].metadata["projection_event_sequence"] > 0
+    compressed = next(
+        event
+        for event in runtime.history.read_history(state.session_id)
+        if event.event_type == "history_compressed"
+    )
+    assert compressed.payload["candidate_source_message_count"] == 3
     rebuilt = runtime.history.rebuild_from_history(state.session_id, prefer_checkpoint=False)
     assert rebuilt.messages == state.messages
 
@@ -255,7 +261,6 @@ def test_history_summary_recompiles_after_output_starvation(make_config) -> None
     config = make_config(
         model__context_limit=32_000,
         model__max_retries=1,
-        context__max_recent_messages=2,
     )
     client = OutputLimitedFakeModelClient(
         [json.dumps({"summary": "Earlier facts retained.", "preserve_recent_messages": 0})]
@@ -285,7 +290,6 @@ def test_oversized_single_history_message_is_hierarchically_summarized(
     marker = "critical-history-marker-731"
     config = make_config(
         model__context_limit=2_000,
-        context__max_recent_messages=2,
         context__max_compaction_rounds=4,
         context__safety_margin_tokens=32,
     )
