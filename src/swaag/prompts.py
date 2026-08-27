@@ -548,6 +548,104 @@ class PromptBuilder:
             ),
         )
 
+    def build_response_relevance_prompt(
+        self,
+        *,
+        original_request: str,
+        source_answer: str,
+        validation_feedback: str = "",
+    ) -> PromptAssembly:
+        system_template = self._config.prompts.response_relevance_system_template
+        user_template = self._config.prompts.response_relevance_template
+        user_text = self._load_template(user_template).format(
+            original_request=original_request,
+            source_answer=source_answer,
+            validation_feedback=(
+                "The previous candidate was independently rejected. Correct these issues:\n"
+                + validation_feedback.strip()
+                + "\n"
+                if validation_feedback.strip()
+                else ""
+            ),
+        )
+        return self._assemble_with_system(
+            "response_relevance",
+            "lean",
+            self._load_template(system_template),
+            [
+                PromptComponent(
+                    name="response_relevance_task",
+                    category="turn_context",
+                    text=user_text,
+                )
+            ],
+            template_names=(system_template, user_template),
+        )
+
+    def build_audio_rendering_prompt(
+        self,
+        *,
+        original_request: str,
+        source_answer: str,
+        validation_feedback: str = "",
+    ) -> PromptAssembly:
+        system_template = self._config.prompts.audio_rendering_system_template
+        user_template = self._config.prompts.audio_rendering_template
+        user_text = self._load_template(user_template).format(
+            original_request=original_request,
+            source_answer=source_answer,
+            validation_feedback=(
+                "The previous candidate was independently rejected. Correct these issues:\n"
+                + validation_feedback.strip()
+                + "\n"
+                if validation_feedback.strip()
+                else ""
+            ),
+        )
+        return self._assemble_with_system(
+            "audio_rendering",
+            "lean",
+            self._load_template(system_template),
+            [
+                PromptComponent(
+                    name="audio_rendering_task",
+                    category="turn_context",
+                    text=user_text,
+                )
+            ],
+            template_names=(system_template, user_template),
+        )
+
+    def build_presentation_evaluation_prompt(
+        self,
+        *,
+        mode: str,
+        original_request: str,
+        source_answer: str,
+        candidate_answer: str,
+    ) -> PromptAssembly:
+        system_template = self._config.prompts.presentation_evaluation_system_template
+        user_template = self._config.prompts.presentation_evaluation_template
+        user_text = self._load_template(user_template).format(
+            mode=mode,
+            original_request=original_request,
+            source_answer=source_answer,
+            candidate_answer=candidate_answer,
+        )
+        return self._assemble_with_system(
+            "presentation_evaluation",
+            "lean",
+            self._load_template(system_template),
+            [
+                PromptComponent(
+                    name="presentation_evaluation_task",
+                    category="turn_context",
+                    text=user_text,
+                )
+            ],
+            template_names=(system_template, user_template),
+        )
+
     @staticmethod
     def _completion_evidence_components(
         *,

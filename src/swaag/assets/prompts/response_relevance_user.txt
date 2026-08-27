@@ -1,0 +1,8 @@
+Original user request, verbatim:
+{original_request}
+
+Verified worker result, exact and authoritative:
+{source_answer}
+
+{validation_feedback}
+Produce a complete user-facing answer. List only genuinely omitted operational details in omitted_as_irrelevant; do not use that list to excuse lost requested information.

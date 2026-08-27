@@ -28,9 +28,12 @@ from swaag.environment.artifacts import TextArtifactStore
 from swaag.fsops import ensure_dir, restore_tree, snapshot_tree, write_text
 from swaag.grammar import (
     agent_action_contract,
+    audio_rendering_contract,
     communication_status_contract,
     completion_evaluation_contract,
     evidence_projection_contract,
+    presentation_evaluation_contract,
+    response_relevance_contract,
     summary_contract,
     tool_result_projection_contract,
     yes_no_contract,
@@ -121,6 +124,40 @@ def _validated_caller_output(
     payload: dict[str, Any], schema: dict[str, Any]
 ) -> dict[str, Any]:
     _validate_schema_value(payload, schema, path="caller_structured_output")
+    return payload
+
+
+def _validated_presentation_text(
+    payload: dict[str, Any],
+    *,
+    field_name: str,
+) -> dict[str, Any]:
+    text = payload.get(field_name)
+    if not isinstance(text, str) or not text.strip():
+        raise ValueError(f"{field_name} must be a non-empty string")
+    if field_name == "answer":
+        omitted = payload.get("omitted_as_irrelevant")
+        if not isinstance(omitted, list) or not all(
+            isinstance(item, str) for item in omitted
+        ):
+            raise ValueError("omitted_as_irrelevant must be an array of strings")
+    return payload
+
+
+def _validated_presentation_evaluation(payload: dict[str, Any]) -> dict[str, Any]:
+    if not isinstance(payload.get("acceptable"), bool):
+        raise ValueError("presentation acceptable must be boolean")
+    if not isinstance(payload.get("reason"), str):
+        raise ValueError("presentation reason must be a string")
+    for field_name in (
+        "missing_or_changed_information",
+        "irrelevant_operational_details",
+    ):
+        value = payload.get(field_name)
+        if not isinstance(value, list) or not all(
+            isinstance(item, str) for item in value
+        ):
+            raise ValueError(f"{field_name} must be an array of strings")
     return payload
 
 
@@ -2128,6 +2165,344 @@ class AgentRuntime:
             "The caller-defined structured output prompt does not fit after bounded semantic reduction.",
             last_compilation.report if last_compilation is not None else None,
         )
+
+    def generate_response_presentations(
+        self,
+        state: SessionState,
+        *,
+        original_request: str,
+        assistant_message: str,
+        modes: set[str] | list[str] | tuple[str, ...],
+    ) -> dict[str, Any]:
+        """Create separately verified visual/audio views without changing raw history."""
+        requested = {str(mode).strip() for mode in modes if str(mode).strip()}
+        unknown = requested - {"visual", "audio"}
+        if unknown:
+            raise ValueError(
+                "response presentation modes must be visual and/or audio: "
+                + ", ".join(sorted(unknown))
+            )
+        source = assistant_message
+        result: dict[str, Any] = {
+            "raw": source,
+            "visual": None,
+            "audio": None,
+            "requested_modes": sorted(requested),
+            "completed_modes": [],
+        }
+        if not requested:
+            return result
+        if not source.strip():
+            raise ValueError("assistant_message must not be empty for presentation")
+
+        run_id = f"{state.session_id}:{new_id('run')}"
+        self.history.set_active_run(
+            state.session_id,
+            run_id=run_id,
+            user_text=original_request,
+        )
+        try:
+            self._heartbeat(
+                state,
+                run_id=run_id,
+                phase="response_presentation",
+                detail="selecting user-facing information",
+            )
+            visual = self._generate_validated_response_presentation(
+                state,
+                mode="response_relevance",
+                original_request=original_request,
+                source_answer=source,
+            )
+            if visual is not None:
+                result["visual"] = visual
+                if "visual" in requested:
+                    result["completed_modes"].append("visual")
+            else:
+                result["visual"] = source
+
+            if "audio" in requested and visual is not None:
+                self._heartbeat(
+                    state,
+                    run_id=run_id,
+                    phase="response_presentation",
+                    detail="rendering verified information for audio",
+                )
+                audio = self._generate_validated_response_presentation(
+                    state,
+                    mode="audio_rendering",
+                    original_request=original_request,
+                    source_answer=str(result["visual"]),
+                )
+                if audio is not None:
+                    result["audio"] = audio
+                    result["completed_modes"].append("audio")
+            elif "audio" in requested:
+                source_references = self._presentation_source_event_references(
+                    state,
+                    source,
+                )
+                self.history.record_event(
+                    state,
+                    "response_presentation_unavailable",
+                    {
+                        "mode": "audio_rendering",
+                        "source_answer": source,
+                        "source_answer_sha256": sha256_text(source),
+                        "source_event_references": source_references,
+                        "error": (
+                            "verified response-relevance selection was unavailable; "
+                            "audio rendering was not allowed to bypass it"
+                        ),
+                        "error_type": "PresentationPrerequisiteUnavailable",
+                    },
+                )
+            self._heartbeat(
+                state,
+                run_id=run_id,
+                phase="completed",
+                detail="response presentation completed",
+            )
+            return result
+        except RunCancellationRequested as exc:
+            self.preemption.complete_run_cancellation(state.session_id, run_id)
+            self._heartbeat(
+                state,
+                run_id=run_id,
+                phase="cancelled",
+                detail=str(exc),
+            )
+            raise
+        except Exception as exc:
+            self._heartbeat(
+                state,
+                run_id=run_id,
+                phase="failed",
+                detail=f"{type(exc).__name__}: {exc}",
+            )
+            raise
+        finally:
+            self.history.clear_active_run(state.session_id, run_id=run_id)
+
+    def _generate_validated_response_presentation(
+        self,
+        state: SessionState,
+        *,
+        mode: str,
+        original_request: str,
+        source_answer: str,
+    ) -> str | None:
+        if mode not in {"response_relevance", "audio_rendering"}:
+            raise ValueError(f"Unknown response presentation mode: {mode}")
+        source_hash = sha256_text(source_answer)
+        source_references = self._presentation_source_event_references(
+            state,
+            source_answer,
+        )
+        validation_feedback = ""
+        max_attempts = max(1, int(self.config.model.max_retries) + 1)
+        last_error = "independent presentation evaluation rejected every candidate"
+        last_error_type = "PresentationRejected"
+        for attempt in range(1, max_attempts + 1):
+            try:
+                if mode == "response_relevance":
+                    assembly = self.prompts.build_response_relevance_prompt(
+                        original_request=original_request,
+                        source_answer=source_answer,
+                        validation_feedback=validation_feedback,
+                    )
+                    contract = response_relevance_contract()
+                    field_name = "answer"
+                else:
+                    assembly = self.prompts.build_audio_rendering_prompt(
+                        original_request=original_request,
+                        source_answer=source_answer,
+                        validation_feedback=validation_feedback,
+                    )
+                    contract = audio_rendering_contract()
+                    field_name = "audio_text"
+                payload = self._execute_compiled_presentation_call(
+                    state,
+                    assembly,
+                    contract,
+                    validator=lambda value: _validated_presentation_text(
+                        value,
+                        field_name=field_name,
+                    ),
+                )
+                candidate = str(payload[field_name]).strip()
+                evaluation = self._evaluate_response_presentation(
+                    state,
+                    mode=mode,
+                    original_request=original_request,
+                    source_answer=source_answer,
+                    candidate_answer=candidate,
+                )
+            except (RunCancellationRequested, ModelCallStateChanged):
+                raise
+            except Exception as exc:
+                last_error = str(exc)
+                last_error_type = type(exc).__name__
+                validation_feedback = (
+                    "The prior attempt failed mechanical validation or execution: "
+                    f"{type(exc).__name__}: {exc}"
+                )
+                continue
+            if bool(evaluation["acceptable"]):
+                self.history.record_event(
+                    state,
+                    "response_presentation_generated",
+                    {
+                        "mode": mode,
+                        "source_answer": source_answer,
+                        "source_answer_sha256": source_hash,
+                        "source_event_references": source_references,
+                        "presentation_sha256": sha256_text(candidate),
+                        "presentation": candidate,
+                        "transformation": payload,
+                        "evaluation": evaluation,
+                        "attempt": attempt,
+                    },
+                )
+                return candidate
+            self.history.record_event(
+                state,
+                "response_presentation_rejected",
+                {
+                    "mode": mode,
+                    "source_answer": source_answer,
+                    "source_answer_sha256": source_hash,
+                    "source_event_references": source_references,
+                    "candidate_sha256": sha256_text(candidate),
+                    "candidate": candidate,
+                    "transformation": payload,
+                    "evaluation": evaluation,
+                    "attempt": attempt,
+                },
+            )
+            last_error = str(evaluation.get("reason", last_error)).strip() or last_error
+            last_error_type = "PresentationRejected"
+            validation_feedback = stable_json_dumps(evaluation, indent=2)
+        self.history.record_event(
+            state,
+            "response_presentation_unavailable",
+            {
+                "mode": mode,
+                "source_answer": source_answer,
+                "source_answer_sha256": source_hash,
+                "source_event_references": source_references,
+                "error": last_error,
+                "error_type": last_error_type,
+            },
+        )
+        return None
+
+    def _presentation_source_event_references(
+        self,
+        state: SessionState,
+        source_answer: str,
+    ) -> list[dict[str, Any]]:
+        for event in reversed(self.history.read_history(state.session_id)):
+            candidate: Any = None
+            if event.event_type == "turn_finished":
+                candidate = event.payload.get("assistant_text")
+            elif event.event_type == "response_presentation_generated":
+                candidate = event.payload.get("presentation")
+            elif event.event_type == "message_added":
+                message = event.payload.get("message")
+                if isinstance(message, dict) and message.get("role") == "assistant":
+                    candidate = message.get("content")
+            if candidate == source_answer:
+                return [
+                    {
+                        **self._communication_evidence_reference(event),
+                        "relationship": "presentation_source",
+                    }
+                ]
+        return []
+
+    def _evaluate_response_presentation(
+        self,
+        state: SessionState,
+        *,
+        mode: str,
+        original_request: str,
+        source_answer: str,
+        candidate_answer: str,
+    ) -> dict[str, Any]:
+        assembly = self.prompts.build_presentation_evaluation_prompt(
+            mode=mode,
+            original_request=original_request,
+            source_answer=source_answer,
+            candidate_answer=candidate_answer,
+        )
+        return self._execute_compiled_presentation_call(
+            state,
+            assembly,
+            presentation_evaluation_contract(),
+            validator=_validated_presentation_evaluation,
+        )
+
+    def _execute_compiled_presentation_call(
+        self,
+        state: SessionState,
+        assembly: PromptAssembly,
+        contract: ContractSpec,
+        *,
+        validator: Callable[[dict[str, Any]], dict[str, Any]],
+    ) -> dict[str, Any]:
+        minimum_output_tokens = 128
+        compilation = self._compile_context(
+            state,
+            assembly,
+            contract,
+            minimum_output_tokens=minimum_output_tokens,
+        )
+        cap_error = "" if compilation.report.fits else "context_limit_exceeded"
+        self.history.record_event(
+            state,
+            "context_compiled",
+            {
+                "kind": assembly.kind,
+                "prompt_mode": assembly.prompt_mode,
+                "accounting": compilation.accounting(),
+                "cap_error": cap_error,
+            },
+        )
+        self.history.record_event(
+            state,
+            "budget_checked",
+            {
+                "kind": assembly.kind,
+                "prompt_mode": assembly.prompt_mode,
+                "budget_report": asdict(compilation.report),
+                "cap_error": cap_error,
+            },
+        )
+        if not compilation.report.fits:
+            raise BudgetExceededError(
+                f"The {assembly.kind} prompt does not fit without semantic loss",
+                compilation.report,
+            )
+        self._record_prompt_built(state, assembly, contract, compilation.report)
+        try:
+            payload, _prepared = self._execute_with_output_recovery(
+                state,
+                PreparedCall(
+                    assembly,
+                    compilation.report,
+                    assembly.prompt_mode,
+                    contract,
+                ),
+                minimum_output_tokens=minimum_output_tokens,
+                validator=validator,
+            )
+        except _OutputRecoveryContextOverflow as exc:
+            raise BudgetExceededError(
+                f"The {assembly.kind} retry cannot preserve exact input and output headroom",
+                exc.compilation.report,
+            ) from exc
+        return payload
 
     @staticmethod
     def _completion_evidence_rows(

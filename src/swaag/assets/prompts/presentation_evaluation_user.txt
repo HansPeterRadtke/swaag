@@ -1,0 +1,13 @@
+Presentation mode:
+{mode}
+
+Original user request, verbatim:
+{original_request}
+
+Authoritative source answer, exact:
+{source_answer}
+
+Proposed presentation, exact:
+{candidate_answer}
+
+Judge whether this presentation is acceptable under the system criteria.

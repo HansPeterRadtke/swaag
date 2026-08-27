@@ -108,6 +108,12 @@ class PromptConfig:
     caller_structured_output_template: str
     communication_status_system_template: str
     communication_status_template: str
+    response_relevance_system_template: str
+    response_relevance_template: str
+    audio_rendering_system_template: str
+    audio_rendering_template: str
+    presentation_evaluation_system_template: str
+    presentation_evaluation_template: str
 
 
 @dataclass(slots=True)

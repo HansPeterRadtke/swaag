@@ -25,6 +25,8 @@ Status questions use an independent constrained LLM operation over deterministic
 
 Tools are registered centrally and exposed with closed JSON schemas. Built-ins cover file reading and editing, shell and test execution, calculations, working notes, durable call-scoped prompt instructions, browsing, short waits, and durable wakeups. Model-authored prompt instructions carry explicit operation scopes; the central compiler injects every matching exact entry into the system role and records its IDs, hashes, and token cost. Durable wakeups support human-readable relative durations and timezone-aware absolute times, survive process restarts, and are delivered exactly once as session control messages.
 
+Task callers may opt into separately compiled `visual` and `audio` response presentations. The raw verified worker result remains authoritative; relevance selection and listenable rendering are distinct semantic calls, and independent constrained evaluation rejects information loss or operational spam before a variant is exposed. No extra presentation call runs by default while live strategy and small-model benchmarks remain incomplete.
+
 ## Installation
 
 Create the project environment and install the package in editable mode:

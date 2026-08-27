@@ -96,7 +96,7 @@ def test_all_runtime_sqlite_stores_record_explicit_schema_versions(tmp_path) -> 
     embeddings = DerivedEmbeddingIndex(sessions, _Embeddings())
 
     assert _version(communication.path) == 3
-    assert _version(workers.path) == 3
+    assert _version(workers.path) == 4
     assert _version(history.sqlite_history_path()) == 1
     assert _version(archives.catalog_path) == 1
     assert _version(inference.path) == 1
@@ -136,7 +136,7 @@ def test_communication_stream_bounds_migration_preserves_protocol_mappings(
     )
 
 
-def test_worker_completion_mode_migration_preserves_existing_rows(tmp_path) -> None:
+def test_worker_lifecycle_option_migrations_preserve_existing_rows(tmp_path) -> None:
     sessions = tmp_path / "sessions"
     sessions.mkdir()
     path = sessions / "workers.sqlite3"
@@ -171,6 +171,7 @@ def test_worker_completion_mode_migration_preserves_existing_rows(tmp_path) -> N
     store = WorkerStore(sessions)
     record = store.get("worker_old")
 
-    assert _version(store.path) == 3
+    assert _version(store.path) == 4
     assert record.objective == "preserved"
     assert record.completion_mode == "natural"
+    assert record.presentation_modes == []

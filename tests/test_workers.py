@@ -242,6 +242,53 @@ def test_multiple_workers_have_independent_durable_sessions(make_config) -> None
     assert completed_event.payload["run_count"] == 1
 
 
+def test_worker_response_presentations_are_opt_in_and_durable(
+    make_config,
+    monkeypatch,
+) -> None:
+    from swaag.runtime import AgentRuntime
+
+    runtime = AgentRuntime(
+        make_config(model__context_limit=32_000), model_client=_ObjectiveClient()
+    )
+    calls: list[dict[str, Any]] = []
+
+    def generate(_state, **kwargs):
+        calls.append(kwargs)
+        return {
+            "raw": kwargs["assistant_message"],
+            "visual": "Alpha is complete.",
+            "audio": "Alpha is complete.",
+            "requested_modes": ["audio", "visual"],
+            "completed_modes": ["visual", "audio"],
+        }
+
+    monkeypatch.setattr(runtime, "generate_response_presentations", generate)
+    manager = WorkerManager(runtime)
+    worker = manager.create(
+        "alpha objective",
+        presentation_modes=["visual", "audio", "visual"],
+    )
+
+    manager.start(worker.worker_id)
+    finished = manager.wait(worker.worker_id, timeout_seconds=10)
+    presentations = manager.presentations(worker.worker_id)
+    inspection = manager.inspect(worker.worker_id)
+    manager.shutdown()
+
+    assert worker.presentation_modes == ["audio", "visual"]
+    assert finished.result == "alpha complete"
+    assert calls[0]["modes"] == ["audio", "visual"]
+    assert presentations is not None
+    assert presentations["audio"] == "Alpha is complete."
+    assert inspection["presentations"] == presentations
+    assert next(
+        event
+        for event in manager.events(worker.worker_id)
+        if event.event_type == "worker_completed"
+    ).payload["presentations"] == presentations
+
+
 def test_worker_cancellation_is_durable_and_stops_active_inference(make_config) -> None:
     from swaag.runtime import AgentRuntime
 
@@ -409,6 +456,14 @@ def test_continuous_worker_mode_is_explicit_and_rejects_terminal_schema(
                 "additionalProperties": False,
             },
         )
+    with pytest.raises(ValueError, match="terminal response presentations"):
+        manager.create(
+            "objective",
+            completion_mode="continuous",
+            presentation_modes=["audio"],
+        )
+    with pytest.raises(ValueError, match="visual and/or audio"):
+        manager.create("objective", presentation_modes=["hologram"])
     manager.shutdown()
 
 

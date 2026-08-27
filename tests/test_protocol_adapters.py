@@ -27,6 +27,7 @@ def _record(*, status: str = "completed", archived_at: str | None = None) -> Wor
         error="failed exactly" if status == "failed" else None,
         run_count=1,
         completion_mode="natural",
+        presentation_modes=[],
     )
 
 
@@ -47,7 +48,14 @@ def test_task_api_is_transport_neutral_and_cursor_based(make_config) -> None:
     manager = WorkerManager(AgentRuntime(make_config(), model_client=object()))
     api = TaskApi(manager)
 
-    created = api.execute("create", {"objective": "inspect durable state", "name": "worker-api"})
+    created = api.execute(
+        "create",
+        {
+            "objective": "inspect durable state",
+            "name": "worker-api",
+            "presentation_modes": ["audio"],
+        },
+    )
     worker_id = created["worker"]["worker_id"]
     listed = api.execute("list")
     events = api.execute("events", {"worker_id": worker_id, "after_sequence": 0})
@@ -66,6 +74,8 @@ def test_task_api_is_transport_neutral_and_cursor_based(make_config) -> None:
     manager.shutdown()
 
     assert created["version"] == "swaag.task.v1"
+    assert created["worker"]["presentation_modes"] == ["audio"]
+    assert created["worker"]["presentations"] is None
     assert listed["workers"][0]["worker_id"] == worker_id
     assert events["events"][0]["event_type"] == "worker_created"
     assert events["next_sequence"] == 1

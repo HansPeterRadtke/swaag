@@ -24,6 +24,11 @@ class TaskApi:
             completion_mode = args.get("completion_mode", "natural")
             if not isinstance(completion_mode, str):
                 raise ValueError("completion_mode must be a string")
+            presentation_modes = args.get("presentation_modes", [])
+            if not isinstance(presentation_modes, list) or not all(
+                isinstance(item, str) for item in presentation_modes
+            ):
+                raise ValueError("presentation_modes must be an array of strings")
             output_schema = args.get("output_schema")
             if output_schema is not None and not isinstance(output_schema, dict):
                 raise ValueError("output_schema must be an object or null")
@@ -50,6 +55,7 @@ class TaskApi:
                 output_schema=output_schema,
                 mechanical_fields=mechanical_fields,
                 completion_mode=completion_mode,
+                presentation_modes=presentation_modes,
             )
             for name, media_type, data in decoded_attachments:
                 self.workers.add_attachment(
@@ -162,6 +168,7 @@ class TaskApi:
     def _record(self, record) -> dict[str, Any]:
         payload = asdict(record)
         payload["structured_output"] = self.workers.structured_output(record.worker_id)
+        payload["presentations"] = self.workers.presentations(record.worker_id)
         return {"version": self.version, "worker": payload}
 
 

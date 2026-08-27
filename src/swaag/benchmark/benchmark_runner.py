@@ -1162,6 +1162,34 @@ def _build_parser() -> argparse.ArgumentParser:
     compaction_parser.set_defaults(resume=True)
     compaction_parser.add_argument("--json", action="store_true", help="Print the full JSON report.")
 
+    response_presentation_parser = subparsers.add_parser(
+        "response-presentation",
+        help="Compare user-relevance and audio-presentation strategies on the live model.",
+    )
+    response_presentation_parser.add_argument(
+        "--output",
+        default="response_presentation_output",
+        help="Checkpointed artifact directory.",
+    )
+    response_presentation_parser.add_argument(
+        "--strategy",
+        action="append",
+        default=[],
+        help="Run only the named presentation strategy.",
+    )
+    response_presentation_parser.add_argument(
+        "--model-base-url",
+        help="Optional alternate model endpoint for small-model/device experiments.",
+    )
+    response_presentation_parser.add_argument(
+        "--clean",
+        action="store_true",
+        help="Replace an existing artifact directory.",
+    )
+    response_presentation_parser.add_argument(
+        "--json", action="store_true", help="Print the full JSON report."
+    )
+
     subparsers.add_parser("list", help="List available benchmark task ids.")
     external_parser = subparsers.add_parser("external", help="Run optional official external benchmark harness integrations.")
     external_parser.add_argument("external_args", nargs=argparse.REMAINDER, help="Arguments forwarded to the external benchmark runner.")
@@ -1377,6 +1405,33 @@ def main(argv: Sequence[str] | None = None) -> int:
             print(f"passed={report['passed']}/{report['total']}")
             print(f"cycles_completed={report['cycles_completed']}")
             print(f"output={args.output}")
+        return 0 if report["complete"] and report["passed"] == report["total"] else 1
+    if args.command == "response-presentation":
+        from swaag.benchmark.response_presentation import (
+            run_response_presentation_benchmark,
+        )
+
+        config = load_config()
+        if args.model_base_url:
+            config.model.base_url = str(args.model_base_url).rstrip("/")
+        report = run_response_presentation_benchmark(
+            output_dir=Path(args.output),
+            config=config,
+            strategy_names=list(args.strategy),
+            clean=bool(args.clean),
+        )
+        if args.json:
+            print(stable_json_dumps(report, indent=2))
+        else:
+            print(f"passed={report['passed']}/{report['total']}")
+            for result in report["results"]:
+                print(
+                    f"{result['strategy']}="
+                    f"{'passed' if result['verification']['passed'] else 'failed'}"
+                )
+            print(
+                f"output={Path(args.output) / 'response_presentation_results.json'}"
+            )
         return 0 if report["complete"] and report["passed"] == report["total"] else 1
     if args.command == "external":
         forwarded = list(args.external_args)

@@ -14,6 +14,7 @@ def test_heartbeat_payload_has_mechanical_phase_and_timestamp():
     assert payload["heartbeat_at"]
     assert "inference" in WORKER_PHASES
     assert "structured_output" in WORKER_PHASES
+    assert "response_presentation" in WORKER_PHASES
     assert "semantic_status" in WORKER_PHASES
 
 

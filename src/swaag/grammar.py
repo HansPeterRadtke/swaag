@@ -88,6 +88,39 @@ def communication_status_contract() -> ContractSpec:
     )
 
 
+def response_relevance_contract() -> ContractSpec:
+    return _contract(
+        "response_relevance",
+        _closed_object(
+            {
+                "answer": _string(),
+                "omitted_as_irrelevant": _array(_string()),
+            }
+        ),
+    )
+
+
+def audio_rendering_contract() -> ContractSpec:
+    return _contract(
+        "audio_rendering",
+        _closed_object({"audio_text": _string()}),
+    )
+
+
+def presentation_evaluation_contract() -> ContractSpec:
+    return _contract(
+        "presentation_evaluation",
+        _closed_object(
+            {
+                "acceptable": _boolean(),
+                "reason": _string(),
+                "missing_or_changed_information": _array(_string()),
+                "irrelevant_operational_details": _array(_string()),
+            }
+        ),
+    )
+
+
 def completion_evaluation_contract(
     evidence_sources: Iterable[tuple[str, str]] = (),
 ) -> ContractSpec:

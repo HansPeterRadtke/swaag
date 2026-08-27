@@ -26,6 +26,7 @@ WORKER_TERMINAL_STATES = frozenset({"completed", "failed", "canceled"})
 WORKER_RESUMABLE_STATES = frozenset({"failed", "canceled", "input_required", "completed"})
 WORKER_ACTIVE_STATES = frozenset({"queued", "working", "cancellation_requested"})
 WORKER_COMPLETION_MODES = frozenset({"natural", "continuous"})
+WORKER_PRESENTATION_MODES = frozenset({"visual", "audio"})
 _CONTINUOUS_WORKER_CONTROL = (
     "This worker has explicit continuous completion mode. Treat the previous cycle's "
     "result as provisional, reassess the original objective and authoritative evidence, "
@@ -106,6 +107,12 @@ _WORKER_STORE_MIGRATIONS = (
         ADD COLUMN completion_mode TEXT NOT NULL DEFAULT 'natural'
         """,
     ),
+    (
+        """
+        ALTER TABLE workers
+        ADD COLUMN presentation_modes_json TEXT NOT NULL DEFAULT '[]'
+        """,
+    ),
 )
 
 
@@ -124,6 +131,7 @@ class WorkerRecord:
     error: str | None
     run_count: int
     completion_mode: str
+    presentation_modes: list[str]
 
 
 @dataclass(slots=True, frozen=True)
@@ -160,7 +168,15 @@ class WorkerStore:
 
     @staticmethod
     def _record(row: sqlite3.Row) -> WorkerRecord:
-        return WorkerRecord(**dict(row))
+        payload = dict(row)
+        raw_modes = json.loads(str(payload.pop("presentation_modes_json", "[]")))
+        if not isinstance(raw_modes, list) or not all(
+            isinstance(item, str) and item in WORKER_PRESENTATION_MODES
+            for item in raw_modes
+        ):
+            raise RuntimeError("worker store contains invalid presentation modes")
+        payload["presentation_modes"] = list(raw_modes)
+        return WorkerRecord(**payload)
 
     @staticmethod
     def _event(row: sqlite3.Row) -> WorkerEvent:
@@ -175,6 +191,7 @@ class WorkerStore:
         *,
         output_spec: CallerOutputSpec | None = None,
         completion_mode: str = "natural",
+        presentation_modes: list[str] | None = None,
     ) -> WorkerRecord:
         text = objective.strip()
         if not text:
@@ -185,6 +202,14 @@ class WorkerStore:
                 "worker completion_mode must be one of "
                 f"{sorted(WORKER_COMPLETION_MODES)}"
             )
+        requested_presentations = sorted(set(presentation_modes or []))
+        unknown_presentations = (
+            set(requested_presentations) - WORKER_PRESENTATION_MODES
+        )
+        if unknown_presentations:
+            raise ValueError(
+                "worker presentation_modes must contain only visual and/or audio"
+            )
         worker_id = new_id("worker")
         now = utc_now_iso()
         with self._connect() as connection:
@@ -193,10 +218,18 @@ class WorkerStore:
                 """
                 INSERT INTO workers(
                     worker_id, session_id, objective, status, created_at, updated_at,
-                    completion_mode
-                ) VALUES (?, ?, ?, 'created', ?, ?, ?)
+                    completion_mode, presentation_modes_json
+                ) VALUES (?, ?, ?, 'created', ?, ?, ?, ?)
                 """,
-                (worker_id, session_id, text, now, now, mode),
+                (
+                    worker_id,
+                    session_id,
+                    text,
+                    now,
+                    now,
+                    mode,
+                    stable_json_dumps(requested_presentations, indent=None),
+                ),
             )
             self._append_event(
                 connection,
@@ -207,6 +240,7 @@ class WorkerStore:
                     "objective": text,
                     "status": "created",
                     "completion_mode": mode,
+                    "presentation_modes": requested_presentations,
                     "caller_output_spec": (
                         output_spec.payload() if output_spec is not None else None
                     ),
@@ -533,6 +567,7 @@ class WorkerManager:
         output_schema: dict[str, Any] | None = None,
         mechanical_fields: dict[str, str] | None = None,
         completion_mode: str = "natural",
+        presentation_modes: list[str] | None = None,
     ) -> WorkerRecord:
         output_spec = prepare_caller_output_spec(output_schema, mechanical_fields)
         mode = str(completion_mode).strip()
@@ -545,6 +580,15 @@ class WorkerManager:
             raise ValueError(
                 "continuous workers cannot have a terminal output_schema"
             )
+        requested_presentations = sorted(set(presentation_modes or []))
+        if set(requested_presentations) - WORKER_PRESENTATION_MODES:
+            raise ValueError(
+                "presentation_modes must contain only visual and/or audio"
+            )
+        if mode == "continuous" and requested_presentations:
+            raise ValueError(
+                "continuous workers cannot have terminal response presentations"
+            )
         state = self.runtime.create_or_load_session()
         if name and name.strip():
             state = self.runtime.history.rename_session(state.session_id, name.strip())
@@ -553,6 +597,7 @@ class WorkerManager:
             objective,
             output_spec=output_spec,
             completion_mode=mode,
+            presentation_modes=requested_presentations,
         )
 
     def start(self, worker_id: str) -> WorkerRecord:
@@ -745,6 +790,7 @@ class WorkerManager:
                 output_spec.payload() if output_spec is not None else None
             ),
             "structured_output": self._structured_output_from_events(events),
+            "presentations": self._presentations_from_events(events),
             "latest_event_sequence": events[-1].sequence,
         }
 
@@ -905,6 +951,9 @@ class WorkerManager:
     def structured_output(self, worker_id: str) -> dict[str, Any] | None:
         return self._structured_output_from_events(self.store.events(worker_id))
 
+    def presentations(self, worker_id: str) -> dict[str, Any] | None:
+        return self._presentations_from_events(self.store.events(worker_id))
+
     @staticmethod
     def _structured_output_from_events(
         events: list[WorkerEvent],
@@ -913,6 +962,16 @@ class WorkerManager:
             output = event.payload.get("structured_output")
             if isinstance(output, dict):
                 return dict(output)
+        return None
+
+    @staticmethod
+    def _presentations_from_events(
+        events: list[WorkerEvent],
+    ) -> dict[str, Any] | None:
+        for event in reversed(events):
+            presentations = event.payload.get("presentations")
+            if isinstance(presentations, dict):
+                return dict(presentations)
         return None
 
     def wait(
@@ -1076,6 +1135,29 @@ class WorkerManager:
                     )
                     continue
 
+                presentations = None
+                if working.presentation_modes:
+                    presentations = self.runtime.generate_response_presentations(
+                        state,
+                        original_request=working.objective,
+                        assistant_message=result.assistant_text,
+                        modes=working.presentation_modes,
+                    )
+                    latest = self.store.get(worker_id)
+                    if latest.status == "cancellation_requested":
+                        self._sync_history_events(working)
+                        self.store.transition(
+                            worker_id,
+                            "canceled",
+                            expected={"cancellation_requested"},
+                            result=result.assistant_text,
+                            event_type="worker_canceled",
+                            event_payload={
+                                "presentation_raced_cancellation": True
+                            },
+                        )
+                        return
+
                 structured_output = None
                 if output_spec is not None:
                     semantic_output = self.runtime.generate_caller_structured_output(
@@ -1113,17 +1195,18 @@ class WorkerManager:
                         )
                         return
                 self._sync_history_events(working)
+                terminal_payload = {}
+                if structured_output is not None:
+                    terminal_payload["structured_output"] = structured_output
+                if presentations is not None:
+                    terminal_payload["presentations"] = presentations
                 self.store.transition(
                     worker_id,
                     "completed",
                     expected={"working"},
                     result=result.assistant_text,
                     event_type="worker_completed",
-                    event_payload=(
-                        {"structured_output": structured_output}
-                        if structured_output is not None
-                        else None
-                    ),
+                    event_payload=terminal_payload or None,
                 )
                 return
         except RunCancellationRequested as exc:

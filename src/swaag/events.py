@@ -34,6 +34,9 @@ ALLOWED_EVENT_TYPES = frozenset(
         "communication_status_generated",
         "communication_status_rejected",
         "communication_status_unavailable",
+        "response_presentation_generated",
+        "response_presentation_rejected",
+        "response_presentation_unavailable",
         "budget_checked",
         "budget_rejected",
         "budget_repaired",
@@ -381,6 +384,42 @@ REQUIRED_PAYLOAD_KEYS: dict[str, frozenset[str]] = {
             "error",
             "error_type",
             "source_event_references",
+        }
+    ),
+    "response_presentation_generated": frozenset(
+        {
+            "mode",
+            "source_answer",
+            "source_answer_sha256",
+            "source_event_references",
+            "presentation_sha256",
+            "presentation",
+            "transformation",
+            "evaluation",
+            "attempt",
+        }
+    ),
+    "response_presentation_rejected": frozenset(
+        {
+            "mode",
+            "source_answer",
+            "source_answer_sha256",
+            "source_event_references",
+            "candidate_sha256",
+            "candidate",
+            "transformation",
+            "evaluation",
+            "attempt",
+        }
+    ),
+    "response_presentation_unavailable": frozenset(
+        {
+            "mode",
+            "source_answer",
+            "source_answer_sha256",
+            "source_event_references",
+            "error",
+            "error_type",
         }
     ),
     "budget_checked": frozenset({"kind", "prompt_mode", "budget_report", "cap_error"}),

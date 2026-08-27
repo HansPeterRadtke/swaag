@@ -1,0 +1,8 @@
+Original user request, verbatim:
+{original_request}
+
+Selected user-facing answer, exact and authoritative:
+{source_answer}
+
+{validation_feedback}
+Produce listenable prose that preserves the complete selected answer in audio_text.
