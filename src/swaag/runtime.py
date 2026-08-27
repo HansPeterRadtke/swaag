@@ -3233,6 +3233,15 @@ class AgentRuntime:
             if not artifact.source.startswith("prompt_protocol:")
         ] + [PromptArtifact(source=protocol_source, sha256=protocol_hash)]
 
+    def _require_system_prompt(self, assembly: PromptAssembly) -> None:
+        messages = self._assembly_chat_messages(assembly)
+        if not messages or messages[0]["role"] != "system":
+            raise ModelClientError(
+                "Every model call requires a leading system message"
+            )
+        if not messages[0]["content"].strip():
+            raise ModelClientError("Model call system message must not be blank")
+
     def _compile_context(
         self,
         state: SessionState | None,
@@ -3244,6 +3253,7 @@ class AgentRuntime:
         context_limit_resolution: tuple[int, str] | None = None,
     ) -> ContextCompilation:
         self._inject_prompt_instructions(state, assembly)
+        self._require_system_prompt(assembly)
         self._materialize_prompt_protocol(assembly)
         context_limit, context_limit_source = (
             self._resolve_context_limit()

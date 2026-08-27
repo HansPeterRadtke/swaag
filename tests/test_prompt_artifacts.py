@@ -1,11 +1,19 @@
 from __future__ import annotations
 
+import pytest
+
 from swaag.grammar import yes_no_contract
+from swaag.model import ModelClientError
 from swaag.prompt_instructions import make_prompt_instruction
 from swaag.prompts import PromptBuilder
 from swaag.runtime import AgentRuntime
 from swaag.tokens import ConservativeEstimator
-from swaag.types import Message, PromptComponent
+from swaag.types import (
+    Message,
+    PromptAssembly,
+    PromptComponent,
+    PromptMessageRange,
+)
 from swaag.utils import sha256_text
 
 
@@ -146,3 +154,42 @@ def test_live_prompt_materialization_accounts_exact_server_chat_template(
     assert "Preserve every cited source event." in messages[0]["content"]
     assert messages[1]["content"] == "Exact evidence."
     assert "Preserve every cited source event." in assembly.prompt_text
+
+
+@pytest.mark.parametrize(
+    ("role", "content", "error"),
+    [
+        ("user", "No system role.", "leading system message"),
+        ("system", "   ", "must not be blank"),
+    ],
+)
+def test_central_compiler_rejects_calls_without_a_real_system_prompt(
+    make_config,
+    role,
+    content,
+    error,
+) -> None:
+    runtime = AgentRuntime(
+        make_config(model__context_limit=8_000),
+        model_client=object(),
+        token_counter=ConservativeEstimator(),
+    )
+    component = PromptComponent(name="message", text=content)
+    assembly = PromptAssembly(
+        kind="history_analysis",
+        prompt_text=content,
+        components=[component],
+        prompt_mode="lean",
+        message_ranges=[
+            PromptMessageRange(role=role, component_start=0, component_end=1)
+        ],
+    )
+
+    with pytest.raises(ModelClientError, match=error):
+        runtime._compile_context(
+            None,
+            assembly,
+            yes_no_contract(),
+            minimum_output_tokens=64,
+            context_limit_resolution=(8_000, "test"),
+        )
