@@ -4649,22 +4649,31 @@ class AgentRuntime:
     ) -> dict[str, Any]:
         """Link a request to the exact durable compilation and prompt records."""
         expected = asdict(prepared.report)
-        start_sequence = max(1, int(state.event_count) - 63)
-        recent = self.history.read_history_window(
+        matching_prompt_sha256 = sha256_text(prepared.assembly.prompt_text)
+        candidates = self.history.iter_history_reverse(
             state.session_id,
-            start_sequence=start_sequence,
-            limit=64,
+            end_sequence=state.event_count,
+            event_types=("context_compiled", "prompt_built"),
         )
         context_event: HistoryEvent | None = None
         prompt_event: HistoryEvent | None = None
-        for event in reversed(recent):
+        for event in candidates:
             payload = event.payload
             if str(payload.get("kind", "")) != prepared.assembly.kind:
                 continue
+            if str(payload.get("prompt_mode", "")) != prepared.prompt_mode:
+                continue
             if event.event_type == "prompt_built" and prompt_event is None:
-                if payload.get("budget_report") == expected:
+                if (
+                    payload.get("budget_report") == expected
+                    and payload.get("prompt_sha256") == matching_prompt_sha256
+                ):
                     prompt_event = event
-            elif event.event_type == "context_compiled" and context_event is None:
+            elif (
+                prompt_event is not None
+                and event.sequence < prompt_event.sequence
+                and event.event_type == "context_compiled"
+            ):
                 accounting = payload.get("accounting")
                 if isinstance(accounting, dict) and all(
                     accounting.get(key) == expected.get(key)
@@ -4679,7 +4688,7 @@ class AgentRuntime:
                     )
                 ):
                     context_event = event
-            if context_event is not None and prompt_event is not None:
+            if context_event is not None:
                 break
 
         def reference(event: HistoryEvent | None) -> dict[str, Any] | None:

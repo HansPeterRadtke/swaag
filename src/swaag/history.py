@@ -783,6 +783,67 @@ class HistoryStore:
     def read_history(self, session_id: str) -> list[HistoryEvent]:
         return list(self.iter_history(session_id))
 
+    def iter_history_reverse(
+        self,
+        session_id: str,
+        *,
+        end_sequence: int | None = None,
+        event_types: Iterable[str] = (),
+    ) -> Iterator[HistoryEvent]:
+        """Read newest events first without imposing an arbitrary history window."""
+        selected_types = tuple(dict.fromkeys(str(item) for item in event_types))
+        if not self.history_path(session_id).exists():
+            archived = HistoryArchiveStore(self.root).resolve(session_id)
+            if archived is not None:
+                events = HistoryArchiveStore(self.root).read_events(
+                    session_id,
+                    end_sequence=end_sequence,
+                )
+                for event in reversed(events):
+                    if not selected_types or event.event_type in selected_types:
+                        yield event
+                return
+        self._ensure_session_indexed(session_id)
+        if self._sqlite_complete_through(session_id) <= 0:
+            events = list(
+                self._iter_history_jsonl(
+                    session_id,
+                    end_sequence=end_sequence,
+                )
+            )
+            for event in reversed(events):
+                if not selected_types or event.event_type in selected_types:
+                    yield event
+            return
+
+        sql = (
+            "SELECT session_id, sequence, event_id, timestamp, event_type, payload_json, "
+            "metadata_json, prev_hash, event_hash FROM events WHERE session_id=?"
+        )
+        params: list[Any] = [session_id]
+        if end_sequence is not None:
+            sql += " AND sequence<=?"
+            params.append(int(end_sequence))
+        if selected_types:
+            placeholders = ",".join("?" for _ in selected_types)
+            sql += f" AND event_type IN ({placeholders})"
+            params.extend(selected_types)
+        sql += " ORDER BY sequence DESC"
+        with self._sqlite_connect() as connection:
+            for row in connection.execute(sql, params):
+                yield HistoryEvent(
+                    id=str(row["event_id"]),
+                    session_id=str(row["session_id"]),
+                    sequence=int(row["sequence"]),
+                    timestamp=str(row["timestamp"]),
+                    type=str(row["event_type"]),
+                    version=1,
+                    payload=json.loads(str(row["payload_json"])),
+                    metadata=json.loads(str(row["metadata_json"])),
+                    prev_hash=row["prev_hash"],
+                    hash=str(row["event_hash"]),
+                )
+
     def latest_communication_status(
         self, target_session_id: str
     ) -> HistoryEvent | None:

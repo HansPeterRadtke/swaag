@@ -223,6 +223,35 @@ def test_direct_answer_is_one_constrained_model_call_with_all_tools(make_config)
     }
 
 
+def test_request_provenance_is_not_limited_to_a_fixed_recent_window(make_config) -> None:
+    runtime, _client = _runtime(make_config, [_action(message="done")])
+    record_prompt_built = runtime._record_prompt_built
+
+    def record_prompt_with_intervening_events(state, assembly, contract, report):
+        record_prompt_built(state, assembly, contract, report)
+        for action_index in range(80):
+            runtime.history.record_event(
+                state,
+                "assistant_progress",
+                {
+                    "action_index": action_index,
+                    "assistant_text": "durable progress",
+                },
+            )
+
+    runtime._record_prompt_built = record_prompt_with_intervening_events
+
+    result = runtime.run_turn("Return a concise answer.")
+    sent = next(
+        event
+        for event in runtime.history.read_history(result.session_id)
+        if event.event_type == "model_request_sent"
+    )
+
+    assert sent.payload["context_provenance"]["context_compiled"] is not None
+    assert sent.payload["context_provenance"]["prompt_built"] is not None
+
+
 def test_output_limit_rebuilds_action_with_more_headroom(make_config) -> None:
     config = make_config(model__context_limit=12_000)
     client = OutputLimitedFakeModelClient([_action(message="done")])
