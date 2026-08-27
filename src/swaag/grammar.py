@@ -68,6 +68,40 @@ def prompt_instruction_projection_contract() -> ContractSpec:
     )
 
 
+def prompt_instruction_selection_contract(
+    instruction_references: Iterable[tuple[str, str]],
+) -> ContractSpec:
+    variants = [
+        _closed_object(
+            {
+                "instruction_store": {
+                    "type": "string",
+                    "enum": [instruction_store],
+                },
+                "instruction_id": {
+                    "type": "string",
+                    "enum": [instruction_id],
+                },
+            }
+        )
+        for instruction_store, instruction_id in instruction_references
+    ]
+    if not variants:
+        raise ValueError(
+            "prompt instruction selection requires at least one candidate"
+        )
+    return _contract(
+        "prompt_instruction_selection",
+        _closed_object(
+            {
+                "operation_categories": _array(_string()),
+                "selected_instructions": _array({"anyOf": variants}),
+                "reason": _string(),
+            }
+        ),
+    )
+
+
 def notes_compaction_contract() -> ContractSpec:
     return _contract(
         "notes_compaction",

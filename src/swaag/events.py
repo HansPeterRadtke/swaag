@@ -187,6 +187,7 @@ ALLOWED_EVENT_TYPES = frozenset(
         "prompt_instruction_replaced",
         "prompt_instruction_removed",
         "prompt_instructions_selected",
+        "prompt_instruction_selection_failed",
         "prompt_instruction_projection_created",
         "reader_opened",
         "reader_chunk_read",
@@ -684,6 +685,16 @@ REQUIRED_PAYLOAD_KEYS: dict[str, frozenset[str]] = {
     "prompt_instruction_removed": frozenset({"instruction_id"}),
     "prompt_instructions_selected": frozenset(
         {"kind", "instruction_ids", "instruction_hashes", "exact"}
+    ),
+    "prompt_instruction_selection_failed": frozenset(
+        {
+            "kind",
+            "target_context_sha256",
+            "candidate_instruction_references",
+            "error",
+            "error_type",
+            "fallback",
+        }
     ),
     "prompt_instruction_projection_created": frozenset(
         {

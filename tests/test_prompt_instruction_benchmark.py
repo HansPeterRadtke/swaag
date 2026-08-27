@@ -55,6 +55,7 @@ class _PromptInstructionBenchmarkClient:
                             "title": None,
                             "content": None,
                             "scopes": None,
+                            "categories": None,
                         },
                     )
                 ],
@@ -74,6 +75,7 @@ class _PromptInstructionBenchmarkClient:
                                 "explicitly requests them."
                             ),
                             "scopes": ["communication_status"],
+                            "categories": [],
                         },
                     )
                 ],
@@ -202,6 +204,46 @@ def test_distillation_case_accepts_semantic_category_split() -> None:
             scopes=["audio_rendering"],
             created_at=now,
             updated_at=now,
+        ),
+    ]
+
+    result = _verify_case(
+        case,
+        seeded_ids=[],
+        user_instructions=instructions,
+        session_instructions=[],
+        store_actions=["add", "add"],
+        tool_actions=["list", "add", "add"],
+    )
+
+    assert result["passed"] is True
+
+
+def test_fine_grained_category_case_accepts_distinct_semantic_labels() -> None:
+    case = next(
+        item
+        for item in select_cases()
+        if item.case_id == "fine_grained_action_categories"
+    )
+    now = "2026-08-27T00:00:00+00:00"
+    instructions = [
+        PromptInstruction(
+            instruction_id="instruction_implementation",
+            title="Implementation discipline",
+            content="Reproduce claimed defects before changing code and test every change.",
+            scopes=["action"],
+            created_at=now,
+            updated_at=now,
+            categories=["software implementation", "testing"],
+        ),
+        PromptInstruction(
+            instruction_id="instruction_research",
+            title="Source verification",
+            content="Prefer primary sources and verify version-specific research claims.",
+            scopes=["action"],
+            created_at=now,
+            updated_at=now,
+            categories=["research", "source verification"],
         ),
     ]
 

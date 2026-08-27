@@ -86,6 +86,8 @@ class SemanticCallRequest:
     desired_output_tokens: int | None = None
     prompt_mode: str = "lean"
     allow_prompt_instruction_projection: bool = False
+    include_prompt_instructions: bool = True
+    prompt_template_names: tuple[str, ...] = ()
 
 
 @dataclass(slots=True)

@@ -1,0 +1,10 @@
+Upcoming broad model-call kind: {call_kind}
+Exact target-context SHA-256: {target_context_sha256}
+
+Exact semantically meaningful components of the upcoming call:
+{target_context}
+
+Exact categorized durable instruction candidates already matched by broad call-kind scope:
+{candidate_instructions}
+
+Identify the actual operation categories and select every candidate instruction that applies to this specific call.

@@ -66,6 +66,21 @@ CASES = (
         ),
     ),
     PromptInstructionBehaviorCase(
+        case_id="fine_grained_action_categories",
+        split="baseline",
+        setup="empty",
+        prompt=(
+            "Use the prompt_instructions capability to inspect the local-user store, "
+            "then add two different durable rules under the broad action call scope. "
+            "The first governs software implementation and testing steps: reproduce a "
+            "claimed defect before changing code and test each change. The second governs "
+            "research and source-verification steps: prefer primary sources and verify "
+            "version-specific claims. Give each rule concise free-form semantic categories "
+            "so neither becomes an unconditional instruction on every action call. Do not "
+            "copy either rule into the session store."
+        ),
+    ),
+    PromptInstructionBehaviorCase(
         case_id="revise_stale_rule",
         split="held_out",
         setup="stale_user_rule",
@@ -185,6 +200,7 @@ def _semantic_rows(instructions: list[PromptInstruction]) -> list[dict[str, Any]
             "title": item.title,
             "content": item.content,
             "scopes": list(item.scopes),
+            "categories": list(item.categories),
         }
         for item in instructions
     ]
@@ -260,6 +276,49 @@ def _verify_case(
                 and ("preserve" in audio_text or "information" in audio_text)
             ),
             "no_duplicate_mutation": store_actions == ["add", "add"],
+            "session_store_unchanged": not session_instructions,
+        }
+    elif case.case_id == "fine_grained_action_categories":
+        implementation = [
+            item
+            for item in user_instructions
+            if "defect" in item.content.casefold()
+            or "code" in item.content.casefold()
+        ]
+        research = [
+            item
+            for item in user_instructions
+            if "source" in item.content.casefold()
+            or "research" in item.content.casefold()
+        ]
+        implementation_categories = " ".join(
+            implementation[0].categories if len(implementation) == 1 else []
+        ).casefold()
+        research_categories = " ".join(
+            research[0].categories if len(research) == 1 else []
+        ).casefold()
+        checks = {
+            "inspected_before_mutation": bool(tool_actions)
+            and tool_actions[0] == "list",
+            "two_distinct_instructions": len(user_instructions) == 2,
+            "action_scopes": all(
+                item.scopes == ["action"] for item in user_instructions
+            ),
+            "implementation_categories": len(implementation) == 1
+            and bool(implementation[0].categories)
+            and any(
+                word in implementation_categories
+                for word in ("software", "program", "implement", "test", "code")
+            ),
+            "research_categories": len(research) == 1
+            and bool(research[0].categories)
+            and any(
+                word in research_categories
+                for word in ("research", "source", "verification", "fact")
+            ),
+            "category_sets_differ": len(implementation) == 1
+            and len(research) == 1
+            and set(implementation[0].categories) != set(research[0].categories),
             "session_store_unchanged": not session_instructions,
         }
     elif case.case_id == "revise_stale_rule":

@@ -21,6 +21,7 @@ ModelCallKind = Literal[
     "presentation_evaluation",
     "history_analysis",
     "notes_compaction",
+    "prompt_instruction_selection",
     "prompt_instruction_projection",
     "doctor",
     "benchmark_quality_judge",
@@ -58,6 +59,7 @@ class PromptInstruction:
     scopes: list[str]
     created_at: str
     updated_at: str
+    categories: list[str] = field(default_factory=list)
     metadata: dict[str, Any] = field(default_factory=dict)
 
 
@@ -151,6 +153,7 @@ class PromptAssembly:
     prompt_mode: str
     prompt_artifacts: list[PromptArtifact] = field(default_factory=list)
     message_ranges: list[PromptMessageRange] = field(default_factory=list)
+    metadata: dict[str, Any] = field(default_factory=dict)
 
 
 @dataclass(slots=True)

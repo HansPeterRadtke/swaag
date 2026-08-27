@@ -252,13 +252,18 @@ class PromptBuilder:
         system_instruction: str,
         components: list[PromptComponent],
         prompt_mode: str = "lean",
+        template_names: tuple[str, ...] = (),
     ) -> PromptAssembly:
         return self._assemble_with_system(
             kind,
             prompt_mode,
             system_instruction,
             components,
+            template_names=template_names,
         )
+
+    def template_text(self, template_name: str) -> str:
+        return self._load_template(template_name)
 
     def build_agent_action_prompt(
         self,

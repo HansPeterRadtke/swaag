@@ -1,10 +1,13 @@
 from __future__ import annotations
 
+import json
 import sqlite3
+from typing import Any
 
 import pytest
 
 from swaag.grammar import yes_no_contract
+from swaag.model import CompletionRequestPolicy
 from swaag.prompt_instructions import (
     PromptInstructionError,
     enforce_prompt_instruction_limits,
@@ -18,7 +21,7 @@ from swaag.runtime import AgentRuntime
 from swaag.tokens import ExactTokenCounter
 from swaag.tools.base import ToolValidationError
 from swaag.tools.registry import ToolRegistry
-from swaag.types import PromptComponent
+from swaag.types import CompletionResult, ContractSpec, PromptComponent
 
 
 def _tool_input(
@@ -29,6 +32,7 @@ def _tool_input(
     title: str | None = None,
     content: str | None = None,
     scopes: list[str] | None = None,
+    categories: list[str] | None = None,
 ) -> dict:
     return {
         "action": action,
@@ -37,7 +41,65 @@ def _tool_input(
         "title": title,
         "content": content,
         "scopes": scopes,
+        "categories": categories,
     }
+
+
+class _InstructionSelectionClient:
+    is_deterministic_test_client = True
+
+    def __init__(self) -> None:
+        self.selected: list[dict[str, str]] = []
+        self.requests: list[dict[str, Any]] = []
+        self.fail_selection = False
+
+    def context_limit_resolution(self) -> tuple[int, str]:
+        return 12_000, "test"
+
+    def select_request_policy(self, *, contract: ContractSpec, **_kwargs):
+        return CompletionRequestPolicy(
+            "test", "server_schema", contract.mode, 10, 0.01
+        )
+
+    def resolve_contract(self, contract: ContractSpec, **kwargs):
+        return contract, self.select_request_policy(contract=contract, **kwargs)
+
+    def build_completion_request(
+        self,
+        prompt: str,
+        *,
+        max_tokens: int,
+        contract: ContractSpec,
+        temperature: float | None = None,
+    ) -> dict[str, Any]:
+        return {
+            "prompt": prompt,
+            "n_predict": max_tokens,
+            "contract": contract.name,
+        }
+
+    def send_completion(
+        self, payload: dict[str, Any], **_kwargs
+    ) -> CompletionResult:
+        self.requests.append(payload)
+        assert payload["contract"] == "prompt_instruction_selection"
+        if self.fail_selection:
+            raise ValueError("simulated semantic selector failure")
+        text = json.dumps(
+            {
+                "operation_categories": ["programming", "implementation"],
+                "selected_instructions": self.selected,
+                "reason": "The next call is implementing and testing code.",
+            }
+        )
+        return CompletionResult(
+            text=text,
+            raw_request=payload,
+            raw_response={"content": text},
+            prompt_tokens=None,
+            completion_tokens=None,
+            finish_reason="stop",
+        )
 
 
 def test_prompt_instruction_scopes_and_storage_limits_fail_closed(make_config) -> None:
@@ -56,6 +118,22 @@ def test_prompt_instruction_scopes_and_storage_limits_fail_closed(make_config) -
             title="Too long",
             content="123456",
             scopes=["action"],
+        )
+    with pytest.raises(PromptInstructionError, match="category"):
+        make_prompt_instruction(
+            config,
+            title="Invalid category",
+            content="valid",
+            scopes=["action"],
+            categories=["x" * 121],
+        )
+    with pytest.raises(PromptInstructionError, match="only strings"):
+        make_prompt_instruction(
+            config,
+            title="Invalid category type",
+            content="valid",
+            scopes=["action"],
+            categories=[42],  # type: ignore[list-item]
         )
 
     config = make_config(prompt_instructions__max_instructions=1)
@@ -85,6 +163,7 @@ def test_prompt_instruction_tool_crud_is_durable_and_scoped(make_config) -> None
             title="Reporting rule",
             content="Do not include hashes unless explicitly requested.",
             scopes=["communication_status", "caller_structured_output"],
+            categories=["user-reporting"],
         ),
         config,
         state,
@@ -101,6 +180,7 @@ def test_prompt_instruction_tool_crud_is_durable_and_scoped(make_config) -> None
             title="Reporting rule",
             content="Report only meaningful user-facing evidence.",
             scopes=["communication_status"],
+            categories=["user-reporting", "status-reporting"],
         ),
         config,
         state,
@@ -115,6 +195,10 @@ def test_prompt_instruction_tool_crud_is_durable_and_scoped(make_config) -> None
     assert len(rebuilt.prompt_instructions) == 1
     assert rebuilt.prompt_instructions[0].content.endswith("evidence.")
     assert rebuilt.prompt_instructions[0].scopes == ["communication_status"]
+    assert rebuilt.prompt_instructions[0].categories == [
+        "user-reporting",
+        "status-reporting",
+    ]
 
     _, removed = registry.dispatch(
         "prompt_instructions",
@@ -153,6 +237,7 @@ def test_prompt_instruction_tool_rejects_duplicate_capacity_without_mutation(
                 title="Duplicate",
                 content="exact existing rule",
                 scopes=["action"],
+                categories=["programming"],
             ),
             config,
             state,
@@ -247,6 +332,165 @@ def test_central_compiler_injects_every_matching_instruction_into_system_role(
         context_limit_resolution=(12_000, "test"),
     )
     assert state.event_count == event_count
+
+
+def test_central_compiler_semantically_selects_fine_grained_instruction_categories(
+    make_config,
+) -> None:
+    config = make_config(model__context_limit=12_000)
+    client = _InstructionSelectionClient()
+    runtime = AgentRuntime(
+        config,
+        model_client=client,
+        token_counter=ExactTokenCounter(
+            lambda text: len(text.split()) if text.strip() else 0
+        ),
+    )
+    state = runtime.create_or_load_session()
+    programming = make_prompt_instruction(
+        config,
+        title="Programming discipline",
+        content="Reproduce defects and test every implementation change.",
+        scopes=["action"],
+        categories=["programming", "implementation", "testing"],
+    )
+    reporting = make_prompt_instruction(
+        config,
+        title="User reporting",
+        content="Report complete user-relevant information without internal noise.",
+        scopes=["action"],
+        categories=["user-reporting"],
+    )
+    call_wide = make_prompt_instruction(
+        config,
+        title="Action-wide safety",
+        content="Never claim an unverified result.",
+        scopes=["action"],
+        categories=[],
+    )
+    state.prompt_instructions.extend([programming, reporting, call_wide])
+    client.selected = [
+        {
+            "instruction_store": "session",
+            "instruction_id": programming.instruction_id,
+        }
+    ]
+    assembly = runtime.prompts.build_semantic_operation_prompt(
+        kind="action",
+        system_instruction="Choose and execute the next useful action.",
+        components=[
+            PromptComponent(
+                name="request",
+                category="current_user",
+                text="Implement the parser repair and run its tests.",
+            )
+        ],
+    )
+
+    compilation = runtime._compile_context(
+        state,
+        assembly,
+        yes_no_contract(),
+        minimum_output_tokens=64,
+        context_limit_resolution=(12_000, "test"),
+    )
+
+    assert compilation.report.fits is True
+    exact = next(
+        item for item in assembly.components if item.name == "durable_prompt_instructions"
+    )
+    assert programming.content in exact.text
+    assert call_wide.content in exact.text
+    assert reporting.content not in exact.text
+    assert len(client.requests) == 1
+    selector_prompt = str(client.requests[0]["prompt"])
+    assert programming.content in selector_prompt
+    assert reporting.content in selector_prompt
+    assert "Implement the parser repair and run its tests." in selector_prompt
+    assert "[DURABLE MODEL-AUTHORED INSTRUCTIONS" not in selector_prompt
+    selected = next(
+        event
+        for event in reversed(runtime.history.read_history(state.session_id))
+        if event.event_type == "prompt_instructions_selected"
+    )
+    assert selected.payload["semantic_selection"] is True
+    assert selected.payload["operation_categories"] == [
+        "programming",
+        "implementation",
+    ]
+    assert selected.payload["instruction_ids"] == [
+        programming.instruction_id,
+        call_wide.instruction_id,
+    ]
+
+
+def test_instruction_selector_failure_conservatively_includes_every_candidate(
+    make_config,
+) -> None:
+    config = make_config(model__context_limit=12_000, model__max_retries=0)
+    client = _InstructionSelectionClient()
+    client.fail_selection = True
+    runtime = AgentRuntime(
+        config,
+        model_client=client,
+        token_counter=ExactTokenCounter(
+            lambda text: len(text.split()) if text.strip() else 0
+        ),
+    )
+    state = runtime.create_or_load_session()
+    first = make_prompt_instruction(
+        config,
+        title="Programming",
+        content="Test implementation changes.",
+        scopes=["action"],
+        categories=["programming"],
+    )
+    second = make_prompt_instruction(
+        config,
+        title="Reporting",
+        content="Keep user reports complete.",
+        scopes=["action"],
+        categories=["user-reporting"],
+    )
+    state.prompt_instructions.extend([first, second])
+    assembly = runtime.prompts.build_semantic_operation_prompt(
+        kind="action",
+        system_instruction="Choose the next action.",
+        components=[
+            PromptComponent(
+                name="request",
+                category="current_user",
+                text="Continue safely.",
+            )
+        ],
+    )
+
+    compilation = runtime._compile_context(
+        state,
+        assembly,
+        yes_no_contract(),
+        minimum_output_tokens=64,
+        context_limit_resolution=(12_000, "test"),
+    )
+
+    assert compilation.report.fits is True
+    exact = next(
+        item for item in assembly.components if item.name == "durable_prompt_instructions"
+    )
+    assert first.content in exact.text
+    assert second.content in exact.text
+    events = runtime.history.read_history(state.session_id)
+    failure = next(
+        event
+        for event in events
+        if event.event_type == "prompt_instruction_selection_failed"
+    )
+    assert failure.payload["fallback"] == "include_all_scoped_candidates"
+    selected = next(
+        event for event in events if event.event_type == "prompt_instructions_selected"
+    )
+    assert selected.payload["semantic_selection"] is False
+    assert selected.payload["selection_fallback"] is True
 
 
 def test_default_config_exposes_prompt_instruction_capability(make_config) -> None:

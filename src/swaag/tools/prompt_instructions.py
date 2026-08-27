@@ -23,16 +23,21 @@ class PromptInstructionsTool(Tool):
     name = "prompt_instructions"
     description = (
         "List, add, replace, or remove durable model-authored instructions scoped "
-        "to explicit LLM call kinds and either this session or the local user."
+        "to explicit LLM call kinds, optional semantic step categories, and either "
+        "this session or the local user."
     )
     usage_guidance = (
         "Use this for durable corrections or learned operating rules that must become "
-        "system instructions on matching future model calls. Choose scopes semantically; "
-        "choose the user store only when the rule should reach independent future sessions, "
+        "system instructions on matching future model calls. Choose broad call-kind scopes "
+        "and fine-grained free-form categories semantically. An empty categories array means "
+        "the instruction applies to every call in its broad scope; categorized entries are "
+        "selected by an LLM from the exact next-call context. "
+        "Choose the user store only when the rule should reach independent future sessions, "
         "and the session store when it belongs only to the current task. "
-        "ordinary task facts and temporary plans belong in notes instead. Replace or remove "
-        "obsolete/redundant entries rather than appending duplicates. Every matching entry is "
-        "included exactly and context-accounted, so storage overflow fails closed."
+        "Ordinary task facts and temporary plans belong in notes instead. Consolidate "
+        "duplicates by replacing one complete entry and removing the obsolete entries rather "
+        "than appending. Selected entries are included exactly and context-accounted; selector "
+        "failure conservatively includes all broad-scope candidates."
     )
     kind = "stateful"
     input_schema = {
@@ -58,6 +63,12 @@ class PromptInstructionsTool(Tool):
                     },
                 }
             ),
+            "categories": _nullable(
+                {
+                    "type": "array",
+                    "items": {"type": "string"},
+                }
+            ),
         },
         "required": [
             "action",
@@ -66,6 +77,7 @@ class PromptInstructionsTool(Tool):
             "title",
             "content",
             "scopes",
+            "categories",
         ],
         "additionalProperties": False,
     }
@@ -77,6 +89,7 @@ class PromptInstructionsTool(Tool):
             "title": {"type": "string"},
             "content": {"type": "string"},
             "scopes": {"type": "array", "items": {"type": "string"}},
+            "categories": {"type": "array", "items": {"type": "string"}},
             "instructions": {"type": "array", "items": {"type": "object"}},
             "removed": {"type": "boolean"},
         },
@@ -98,6 +111,7 @@ class PromptInstructionsTool(Tool):
         title = raw_input.get("title")
         content = raw_input.get("content")
         scopes = raw_input.get("scopes")
+        categories = raw_input.get("categories")
         if action in {"replace", "remove"} and (
             not isinstance(instruction_id, str) or not instruction_id.strip()
         ):
@@ -115,9 +129,19 @@ class PromptInstructionsTool(Tool):
                 raise ToolValidationError(
                     f"prompt_instructions {action} requires a scopes array"
                 )
-        elif any(value is not None for value in (title, content, scopes)):
+            if categories is None:
+                categories = []
+            if not isinstance(categories, list) or not all(
+                isinstance(item, str) for item in categories
+            ):
+                raise ToolValidationError(
+                    f"prompt_instructions {action} requires a categories array"
+                )
+        elif any(
+            value is not None for value in (title, content, scopes, categories)
+        ):
             raise ToolValidationError(
-                f"prompt_instructions {action} does not accept title, content, or scopes"
+                f"prompt_instructions {action} does not accept title, content, scopes, or categories"
             )
         if action in {"list", "add"} and instruction_id is not None:
             raise ToolValidationError(
@@ -132,6 +156,9 @@ class PromptInstructionsTool(Tool):
             "title": title,
             "content": content,
             "scopes": list(scopes) if isinstance(scopes, list) else None,
+            "categories": (
+                list(categories) if isinstance(categories, list) else None
+            ),
         }
 
     def required_generated_event_types(
@@ -205,6 +232,7 @@ class PromptInstructionsTool(Tool):
                 title=validated_input["title"],
                 content=validated_input["content"],
                 scopes=validated_input["scopes"],
+                categories=validated_input["categories"],
                 instruction_id=(
                     existing.instruction_id if existing is not None else None
                 ),
@@ -233,6 +261,7 @@ class PromptInstructionsTool(Tool):
             "title": instruction.title,
             "content": instruction.content,
             "scopes": instruction.scopes,
+            "categories": instruction.categories,
         }
         return ToolExecutionResult(
             self.name,
@@ -276,6 +305,7 @@ class PromptInstructionsTool(Tool):
                     title=validated_input["title"],
                     content=validated_input["content"],
                     scopes=validated_input["scopes"],
+                    categories=validated_input["categories"],
                     origin_session_id=context.session_state.session_id,
                 )
             elif action == "replace":
@@ -284,6 +314,7 @@ class PromptInstructionsTool(Tool):
                     title=validated_input["title"],
                     content=validated_input["content"],
                     scopes=validated_input["scopes"],
+                    categories=validated_input["categories"],
                     origin_session_id=context.session_state.session_id,
                 )
             else:
@@ -324,6 +355,7 @@ class PromptInstructionsTool(Tool):
                 "title": instruction.title,
                 "content": instruction.content,
                 "scopes": instruction.scopes,
+                "categories": instruction.categories,
             }
             payload = {
                 "instruction": asdict(instruction),

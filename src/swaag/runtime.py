@@ -33,6 +33,7 @@ from swaag.grammar import (
     communication_status_contract,
     completion_evaluation_contract,
     evidence_projection_contract,
+    prompt_instruction_selection_contract,
     prompt_instruction_projection_contract,
     presentation_evaluation_contract,
     response_relevance_contract,
@@ -51,6 +52,8 @@ from swaag.preemption import (
     RunCancellationRequested,
 )
 from swaag.prompt_instructions import (
+    MAX_PROMPT_INSTRUCTION_CATEGORIES,
+    MAX_PROMPT_INSTRUCTION_CATEGORY_CHARS,
     prompt_instructions_for_kind,
 )
 from swaag.prompt_instruction_store import PromptInstructionStore
@@ -4157,21 +4160,36 @@ class AgentRuntime:
             for component in assembly.components
         ):
             return
-        selected_sources = [
-            ("user", item)
-            for item in prompt_instructions_for_kind(
-                self.prompt_instruction_store.list(),
-                assembly.kind,
-            )
-        ] + [
-            ("session", item)
-            for item in prompt_instructions_for_kind(
-                state.prompt_instructions,
-                assembly.kind,
-            )
-        ]
-        if not selected_sources:
+        scoped_sources = self._prompt_instruction_sources(state, assembly.kind)
+        if not scoped_sources:
             return
+        selected_sources, selection = self._select_prompt_instruction_sources(
+            state,
+            assembly,
+            scoped_sources,
+        )
+        if not selected_sources:
+            self.history.record_event(
+                state,
+                "prompt_instructions_selected",
+                {
+                    "kind": assembly.kind,
+                    "instruction_ids": [],
+                    "instruction_sources": [],
+                    "instruction_hashes": [],
+                    "exact": True,
+                    **selection,
+                },
+            )
+            return
+        selected_references = [
+            {
+                "instruction_store": instruction_store,
+                "instruction_id": item.instruction_id,
+            }
+            for instruction_store, item in selected_sources
+        ]
+        assembly.metadata["prompt_instruction_sources"] = selected_references
         rendered_rows = [
             {"instruction_store": instruction_store, **asdict(item)}
             for instruction_store, item in selected_sources
@@ -4181,9 +4199,9 @@ class AgentRuntime:
             name="durable_prompt_instructions",
             category="system_prompt_instruction",
             text=(
-                "\n\n[DURABLE MODEL-AUTHORED INSTRUCTIONS FOR THIS CALL KIND]\n"
-                "Apply every instruction below. Their scopes were chosen semantically by "
-                "the agent; deterministic runtime code only matches the current call kind.\n"
+                "\n\n[DURABLE MODEL-AUTHORED INSTRUCTIONS SELECTED FOR THIS CALL]\n"
+                "Apply every instruction below. Broad call-kind scopes and any "
+                "fine-grained semantic selection are recorded in durable provenance.\n"
                 + rendered
             ),
         )
@@ -4251,41 +4269,203 @@ class AgentRuntime:
                 "instruction_ids": [
                     item.instruction_id for _, item in selected_sources
                 ],
-                "instruction_sources": [
-                    {
-                        "instruction_store": instruction_store,
-                        "instruction_id": item.instruction_id,
-                    }
-                    for instruction_store, item in selected_sources
-                ],
+                "instruction_sources": selected_references,
                 "instruction_hashes": instruction_hashes,
                 "exact": True,
+                **selection,
             },
         )
+
+    def _prompt_instruction_sources(
+        self,
+        state: SessionState,
+        kind: ModelCallKind,
+    ) -> list[tuple[str, Any]]:
+        return [
+            ("user", item)
+            for item in prompt_instructions_for_kind(
+                self.prompt_instruction_store.list(),
+                kind,
+            )
+        ] + [
+            ("session", item)
+            for item in prompt_instructions_for_kind(
+                state.prompt_instructions,
+                kind,
+            )
+        ]
+
+    def _select_prompt_instruction_sources(
+        self,
+        state: SessionState,
+        assembly: PromptAssembly,
+        scoped_sources: list[tuple[str, Any]],
+    ) -> tuple[list[tuple[str, Any]], dict[str, Any]]:
+        candidates = [
+            source for source in scoped_sources if source[1].categories
+        ]
+        if not candidates:
+            return scoped_sources, {
+                "semantic_selection": False,
+                "selection_fallback": False,
+                "operation_categories": [],
+                "selection_reason": "No fine-grained categorized candidates.",
+            }
+        target_rows = [
+            asdict(component)
+            for component in assembly.components
+            if component.category != "wrapper" and component.include_in_context
+        ]
+        target_context = stable_json_dumps(
+            {"call_kind": assembly.kind, "components": target_rows},
+            indent=2,
+        )
+        target_context_sha256 = sha256_text(target_context)
+        candidate_rows = [
+            {"instruction_store": instruction_store, **asdict(instruction)}
+            for instruction_store, instruction in candidates
+        ]
+        candidate_references = [
+            {
+                "instruction_store": instruction_store,
+                "instruction_id": instruction.instruction_id,
+                "sha256": sha256_text(
+                    stable_json_dumps(
+                        {
+                            "instruction_store": instruction_store,
+                            **asdict(instruction),
+                        },
+                        indent=None,
+                    )
+                ),
+            }
+            for instruction_store, instruction in candidates
+        ]
+        system_template = (
+            self.config.prompts.prompt_instruction_selection_system_template
+        )
+        user_template = self.config.prompts.prompt_instruction_selection_template
+        user_text = self.prompts.template_text(user_template).format(
+            call_kind=assembly.kind,
+            target_context_sha256=target_context_sha256,
+            target_context=target_context,
+            candidate_instructions=stable_json_dumps(candidate_rows, indent=2),
+        )
+        request = SemanticCallRequest(
+            kind="prompt_instruction_selection",
+            system_instruction=self.prompts.template_text(system_template),
+            components=[
+                PromptComponent(
+                    name="prompt_instruction_selection_task",
+                    category="system_prompt_instruction",
+                    text=user_text,
+                )
+            ],
+            contract=prompt_instruction_selection_contract(
+                (
+                    instruction_store,
+                    instruction.instruction_id,
+                )
+                for instruction_store, instruction in candidates
+            ),
+            minimum_output_tokens=128,
+            desired_output_tokens=384,
+            include_prompt_instructions=False,
+            prompt_template_names=(system_template, user_template),
+        )
+        try:
+            payload = self._execute_tool_semantic_call(state, request)
+            operation_categories: list[str] = []
+            for raw_category in payload["operation_categories"]:
+                category = str(raw_category).strip()
+                if (
+                    not category
+                    or len(category) > MAX_PROMPT_INSTRUCTION_CATEGORY_CHARS
+                ):
+                    raise ValueError(
+                        "prompt instruction selector returned an invalid operation category"
+                    )
+                if category not in operation_categories:
+                    operation_categories.append(category)
+            if len(operation_categories) > MAX_PROMPT_INSTRUCTION_CATEGORIES:
+                raise ValueError(
+                    "prompt instruction selector returned too many operation categories"
+                )
+            selected_keys = {
+                (
+                    str(reference["instruction_store"]),
+                    str(reference["instruction_id"]),
+                )
+                for reference in payload["selected_instructions"]
+            }
+            selected_sources = [
+                source
+                for source in scoped_sources
+                if not source[1].categories
+                or (source[0], source[1].instruction_id) in selected_keys
+            ]
+            return selected_sources, {
+                "semantic_selection": True,
+                "selection_fallback": False,
+                "operation_categories": operation_categories,
+                "selection_reason": str(payload["reason"]),
+                "selection_target_context_sha256": target_context_sha256,
+                "selection_candidate_references": candidate_references,
+            }
+        except (ModelCallStateChanged, RunCancellationRequested):
+            raise
+        except Exception as exc:
+            self.history.record_event(
+                state,
+                "prompt_instruction_selection_failed",
+                {
+                    "kind": assembly.kind,
+                    "target_context_sha256": target_context_sha256,
+                    "candidate_instruction_references": candidate_references,
+                    "error": str(exc),
+                    "error_type": type(exc).__name__,
+                    "fallback": "include_all_scoped_candidates",
+                },
+            )
+            return scoped_sources, {
+                "semantic_selection": False,
+                "selection_fallback": True,
+                "operation_categories": [],
+                "selection_reason": (
+                    "Semantic selector failed; every broad-scope candidate was included."
+                ),
+                "selection_target_context_sha256": target_context_sha256,
+                "selection_candidate_references": candidate_references,
+            }
 
     def _selected_prompt_instruction_rows(
         self,
         state: SessionState,
-        kind: ModelCallKind,
+        assembly: PromptAssembly,
     ) -> list[dict[str, Any]]:
-        return [
+        rows = [
             {"instruction_store": instruction_store, **asdict(item)}
-            for instruction_store, item in (
-                [
-                    ("user", instruction)
-                    for instruction in prompt_instructions_for_kind(
-                        self.prompt_instruction_store.list(),
-                        kind,
-                    )
-                ]
-                + [
-                    ("session", instruction)
-                    for instruction in prompt_instructions_for_kind(
-                        state.prompt_instructions,
-                        kind,
-                    )
-                ]
+            for instruction_store, item in self._prompt_instruction_sources(
+                state,
+                assembly.kind,
             )
+        ]
+        references = assembly.metadata.get("prompt_instruction_sources")
+        if not isinstance(references, list):
+            return rows
+        selected = {
+            (
+                str(reference.get("instruction_store", "")),
+                str(reference.get("instruction_id", "")),
+            )
+            for reference in references
+            if isinstance(reference, dict)
+        }
+        return [
+            row
+            for row in rows
+            if (str(row["instruction_store"]), str(row["instruction_id"]))
+            in selected
         ]
 
     def _recover_prompt_instruction_overflow(
@@ -4330,7 +4510,7 @@ class AgentRuntime:
 
         source_rows = self._selected_prompt_instruction_rows(
             state,
-            assembly.kind,
+            assembly,
         )
         if not source_rows:
             return None
@@ -4472,6 +4652,7 @@ class AgentRuntime:
             system_instruction=request.system_instruction,
             components=request.components,
             prompt_mode=request.prompt_mode,
+            template_names=request.prompt_template_names,
         )
         minimum_output_tokens = max(1, int(request.minimum_output_tokens))
         output_retry = 0
@@ -4492,6 +4673,7 @@ class AgentRuntime:
                 request.contract,
                 minimum_output_tokens=minimum_output_tokens,
                 desired_output_tokens=request.desired_output_tokens,
+                include_prompt_instructions=request.include_prompt_instructions,
             )
             cap_error = "" if compilation.report.fits else "context_limit_exceeded"
             self.history.record_event(
@@ -4517,6 +4699,7 @@ class AgentRuntime:
             )
             if (
                 not compilation.report.fits
+                and request.include_prompt_instructions
                 and request.allow_prompt_instruction_projection
             ):
                 recovered = self._recover_prompt_instruction_overflow(
@@ -4639,6 +4822,7 @@ class AgentRuntime:
                 "message_ranges": [
                     asdict(message_range) for message_range in assembly.message_ranges
                 ],
+                "assembly_metadata": assembly.metadata,
                 "budget_report": asdict(report),
             },
         )

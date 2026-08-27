@@ -116,6 +116,8 @@ class PromptConfig:
     audio_rendering_template: str
     presentation_evaluation_system_template: str
     presentation_evaluation_template: str
+    prompt_instruction_selection_system_template: str
+    prompt_instruction_selection_template: str
     prompt_instruction_projection_system_template: str
     prompt_instruction_projection_template: str
 

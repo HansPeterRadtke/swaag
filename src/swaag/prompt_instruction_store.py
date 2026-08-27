@@ -316,6 +316,7 @@ class PromptInstructionStore:
         title: str,
         content: str,
         scopes: list[str],
+        categories: list[str] | None = None,
         origin_session_id: str,
     ) -> PromptInstructionStoreMutation:
         instruction = make_prompt_instruction(
@@ -323,6 +324,7 @@ class PromptInstructionStore:
             title=title,
             content=content,
             scopes=scopes,
+            categories=categories,
         )
         return self._append(
             action="add",
@@ -338,6 +340,7 @@ class PromptInstructionStore:
         title: str,
         content: str,
         scopes: list[str],
+        categories: list[str] | None = None,
         origin_session_id: str,
     ) -> PromptInstructionStoreMutation:
         instruction = make_prompt_instruction(
@@ -345,6 +348,7 @@ class PromptInstructionStore:
             title=title,
             content=content,
             scopes=scopes,
+            categories=categories,
             instruction_id=instruction_id,
         )
         return self._append(

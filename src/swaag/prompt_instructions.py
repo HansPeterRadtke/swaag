@@ -12,7 +12,16 @@ class PromptInstructionError(ValueError):
     pass
 
 
-PROMPT_INSTRUCTION_SCOPES = ("all", *get_args(ModelCallKind))
+PROMPT_INSTRUCTION_SCOPES = (
+    "all",
+    *(
+        kind
+        for kind in get_args(ModelCallKind)
+        if kind != "prompt_instruction_selection"
+    ),
+)
+MAX_PROMPT_INSTRUCTION_CATEGORIES = 16
+MAX_PROMPT_INSTRUCTION_CATEGORY_CHARS = 120
 
 
 def validate_prompt_instruction_fields(
@@ -21,7 +30,8 @@ def validate_prompt_instruction_fields(
     title: str,
     content: str,
     scopes: list[str],
-) -> tuple[str, str, list[str]]:
+    categories: list[str] | None = None,
+) -> tuple[str, str, list[str], list[str]]:
     title = title.strip()
     content = content.strip()
     if not title:
@@ -51,7 +61,30 @@ def validate_prompt_instruction_fields(
         raise PromptInstructionError(
             "prompt instruction requires at least one model-call scope"
         )
-    return title, content, normalized
+    normalized_categories: list[str] = []
+    for raw_category in categories or []:
+        if not isinstance(raw_category, str):
+            raise PromptInstructionError(
+                "prompt instruction categories must contain only strings"
+            )
+        category = raw_category.strip()
+        if not category:
+            raise PromptInstructionError(
+                "prompt instruction categories must not contain empty values"
+            )
+        if len(category) > MAX_PROMPT_INSTRUCTION_CATEGORY_CHARS:
+            raise PromptInstructionError(
+                "prompt instruction category exceeds the "
+                f"{MAX_PROMPT_INSTRUCTION_CATEGORY_CHARS}-character storage limit"
+            )
+        if category not in normalized_categories:
+            normalized_categories.append(category)
+    if len(normalized_categories) > MAX_PROMPT_INSTRUCTION_CATEGORIES:
+        raise PromptInstructionError(
+            "prompt instruction category count exceeds the "
+            f"{MAX_PROMPT_INSTRUCTION_CATEGORIES}-category storage limit"
+        )
+    return title, content, normalized, normalized_categories
 
 
 def make_prompt_instruction(
@@ -60,13 +93,15 @@ def make_prompt_instruction(
     title: str,
     content: str,
     scopes: list[str],
+    categories: list[str] | None = None,
     instruction_id: str | None = None,
 ) -> PromptInstruction:
-    title, content, scopes = validate_prompt_instruction_fields(
+    title, content, scopes, categories = validate_prompt_instruction_fields(
         config,
         title=title,
         content=content,
         scopes=scopes,
+        categories=categories,
     )
     now = utc_now_iso()
     return PromptInstruction(
@@ -76,6 +111,7 @@ def make_prompt_instruction(
         scopes=scopes,
         created_at=now,
         updated_at=now,
+        categories=categories,
     )
 
 
@@ -90,7 +126,10 @@ def enforce_prompt_instruction_limits(
             f"storage limit: {config.prompt_instructions.max_instructions}"
         )
     total = sum(
-        len(item.title) + len(item.content) + sum(len(scope) for scope in item.scopes)
+        len(item.title)
+        + len(item.content)
+        + sum(len(scope) for scope in item.scopes)
+        + sum(len(category) for category in item.categories)
         for item in result
     )
     if total > config.prompt_instructions.max_total_chars:
