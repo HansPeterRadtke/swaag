@@ -57,6 +57,13 @@ Live context-position diagnostics are resumable and use the connected server's a
 .venv/bin/python -m swaag.benchmark context-layout --output /data/var/swaag/benchmarks/context-layout.json
 ```
 
+Live tool and attachment-context experiments retain complete run histories and verification evidence:
+
+```text
+.venv/bin/python -m swaag.benchmark tool-strategy --output /data/var/swaag/benchmarks/tool-strategy
+.venv/bin/python -m swaag.benchmark attachment-context --output /data/var/swaag/benchmarks/attachment-context
+```
+
 Runtime state belongs under `/data/var`; source code belongs under `/data/src`.
 
 ## Documentation

@@ -1043,6 +1043,15 @@ def _build_parser() -> argparse.ArgumentParser:
     tool_strategy_parser.add_argument("--clean", action="store_true", help="Replace an existing artifact directory.")
     tool_strategy_parser.add_argument("--json", action="store_true", help="Print the full JSON report.")
 
+    attachment_context_parser = subparsers.add_parser(
+        "attachment-context",
+        help="Run live attachment inspection, re-expansion, and overflow-projection experiments.",
+    )
+    attachment_context_parser.add_argument("--output", default="attachment_context_output", help="Artifact directory.")
+    attachment_context_parser.add_argument("--case", action="append", default=[], help="Run only the named attachment-context case.")
+    attachment_context_parser.add_argument("--clean", action="store_true", help="Replace an existing artifact directory.")
+    attachment_context_parser.add_argument("--json", action="store_true", help="Print the full JSON report.")
+
     subparsers.add_parser("list", help="List available benchmark task ids.")
     external_parser = subparsers.add_parser("external", help="Run optional official external benchmark harness integrations.")
     external_parser.add_argument("external_args", nargs=argparse.REMAINDER, help="Arguments forwarded to the external benchmark runner.")
@@ -1195,6 +1204,29 @@ def main(argv: Sequence[str] | None = None) -> int:
             for strategy, values in report["by_strategy"].items():
                 print(f"{strategy}={values['passed']}/{values['total']}")
             print(f"output={Path(args.output) / 'tool_strategy_results.json'}")
+        return 0 if report["passed"] == report["total"] else 1
+    if args.command == "attachment-context":
+        from swaag.benchmark.attachment_context import (
+            run_attachment_context_benchmark,
+        )
+
+        report = run_attachment_context_benchmark(
+            output_dir=Path(args.output),
+            case_ids=list(args.case),
+            clean=bool(args.clean),
+        )
+        if args.json:
+            print(stable_json_dumps(report, indent=2))
+        else:
+            print(f"passed={report['passed']}/{report['total']}")
+            for result in report["results"]:
+                print(
+                    f"{result['case_id']}="
+                    f"{'passed' if result['verification']['passed'] else 'failed'}"
+                )
+            print(
+                f"output={Path(args.output) / 'attachment_context_results.json'}"
+            )
         return 0 if report["passed"] == report["total"] else 1
     if args.command == "external":
         forwarded = list(args.external_args)
