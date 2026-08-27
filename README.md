@@ -72,6 +72,12 @@ Repeated live compaction checks are resumable and preserve a checkpoint after ev
 .venv/bin/python -m swaag.benchmark compaction-preservation --cycles 3 --output /data/var/swaag/benchmarks/compaction-preservation.json
 ```
 
+The scoped-instruction benchmark exercises baseline persistence plus held-out stale-rule revision, duplicate self-repair, and erasure through the production agent loop:
+
+```text
+.venv/bin/python -m swaag.benchmark prompt-instructions --output /data/var/swaag/benchmarks/prompt-instructions
+```
+
 Runtime state belongs under `/data/var`; source code belongs under `/data/src`.
 
 ## Documentation

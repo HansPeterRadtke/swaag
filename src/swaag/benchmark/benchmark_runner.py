@@ -1190,6 +1190,34 @@ def _build_parser() -> argparse.ArgumentParser:
         "--json", action="store_true", help="Print the full JSON report."
     )
 
+    prompt_instruction_parser = subparsers.add_parser(
+        "prompt-instructions",
+        help="Run live scoped-instruction persistence, revision, and self-repair experiments.",
+    )
+    prompt_instruction_parser.add_argument(
+        "--output",
+        default="prompt_instruction_behavior_output",
+        help="Checkpointed artifact directory.",
+    )
+    prompt_instruction_parser.add_argument(
+        "--case",
+        action="append",
+        default=[],
+        help="Run only the named prompt-instruction behavior case.",
+    )
+    prompt_instruction_parser.add_argument(
+        "--model-base-url",
+        help="Optional alternate model endpoint for model-size comparisons.",
+    )
+    prompt_instruction_parser.add_argument(
+        "--clean",
+        action="store_true",
+        help="Replace an existing artifact directory.",
+    )
+    prompt_instruction_parser.add_argument(
+        "--json", action="store_true", help="Print the full JSON report."
+    )
+
     subparsers.add_parser("list", help="List available benchmark task ids.")
     external_parser = subparsers.add_parser("external", help="Run optional official external benchmark harness integrations.")
     external_parser.add_argument("external_args", nargs=argparse.REMAINDER, help="Arguments forwarded to the external benchmark runner.")
@@ -1431,6 +1459,33 @@ def main(argv: Sequence[str] | None = None) -> int:
                 )
             print(
                 f"output={Path(args.output) / 'response_presentation_results.json'}"
+            )
+        return 0 if report["complete"] and report["passed"] == report["total"] else 1
+    if args.command == "prompt-instructions":
+        from swaag.benchmark.prompt_instruction_behavior import (
+            run_prompt_instruction_behavior_benchmark,
+        )
+
+        config = load_config()
+        if args.model_base_url:
+            config.model.base_url = str(args.model_base_url).rstrip("/")
+        report = run_prompt_instruction_behavior_benchmark(
+            output_dir=Path(args.output),
+            config=config,
+            case_ids=list(args.case),
+            clean=bool(args.clean),
+        )
+        if args.json:
+            print(stable_json_dumps(report, indent=2))
+        else:
+            print(f"passed={report['passed']}/{report['total']}")
+            for result in report["results"]:
+                print(
+                    f"{result['case_id']}="
+                    f"{'passed' if result['verification']['passed'] else 'failed'}"
+                )
+            print(
+                f"output={Path(args.output) / 'prompt_instruction_behavior_results.json'}"
             )
         return 0 if report["complete"] and report["passed"] == report["total"] else 1
     if args.command == "external":
