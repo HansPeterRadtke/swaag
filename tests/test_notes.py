@@ -31,7 +31,7 @@ def test_enforce_limits_rejects_overflow_without_dropping_old_notes(make_config)
 
 
 def test_compact_notes_uses_complete_semantic_result_without_clipping(make_config) -> None:
-    config = make_config(notes__compact_target_chars=50)
+    config = make_config()
     notes = [make_note(config, title="A", content="111"), make_note(config, title="B", content="222")]
     compacted = compact_notes(
         config,

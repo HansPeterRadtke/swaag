@@ -123,7 +123,6 @@ class NotesConfig:
     max_notes: int
     max_note_chars: int
     max_total_chars: int
-    compact_target_chars: int
 
 
 @dataclass(slots=True)
@@ -389,7 +388,9 @@ def _coerce_config(data: dict[str, Any]) -> AgentConfig:
     )
     prompts = PromptConfig(**data["prompts"])
     logging_cfg = LoggingConfig(**data["logging"])
-    notes = NotesConfig(**data["notes"])
+    notes_data = dict(data["notes"])
+    notes_data.pop("compact_target_chars", None)
+    notes = NotesConfig(**notes_data)
     reader = ReaderConfig(**data["reader"])
     editor = EditorConfig(**data["editor"])
     compression = CompressionConfig()
@@ -554,7 +555,6 @@ def _coerce_config(data: dict[str, Any]) -> AgentConfig:
     _validate_positive("notes.max_notes", notes.max_notes)
     _validate_positive("notes.max_note_chars", notes.max_note_chars)
     _validate_positive("notes.max_total_chars", notes.max_total_chars)
-    _validate_positive("notes.compact_target_chars", notes.compact_target_chars)
     _validate_positive("reader.default_chunk_chars", reader.default_chunk_chars)
     _validate_non_negative("reader.default_overlap_chars", reader.default_overlap_chars)
     _validate_positive("reader.max_chunk_chars", reader.max_chunk_chars)

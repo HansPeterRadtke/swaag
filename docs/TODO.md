@@ -126,7 +126,7 @@ This is the gap list between the current repository and the intended architectur
 
 ## P2 - architecture cleanup after P0/P1 semantics exist
 
-- [ ] **Remove obsolete configuration knobs whose semantics are superseded by per-call context compilation.** Do this only after migration/tests; candidates include fixed message-count compression and fixed summary-character controls.
+- [ ] **Remove obsolete configuration knobs whose semantics are superseded by per-call context compilation.** **Partial.** The fixed note-compaction character target is removed; legacy config files remain loadable while semantic compaction derives its target from current mechanical storage/context constraints. Continue only with migration/tests; candidates include fixed message-count compression controls.
 - [ ] **Document each remaining deterministic policy and why it is non-semantic.** Anything that decides meaning belongs under suspicion and should be justified or moved to an LLM.
 - [ ] **Ensure benchmark adapters use the same production context compiler and semantic policies.** Avoid benchmark-only shortcuts that hide real overflow/compaction behavior.
 - [ ] **Make context/accounting replayable for recorded model tests.** A recorded trajectory should show exactly why each call saw its context and be usable for regression testing without live inference.

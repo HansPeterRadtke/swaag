@@ -74,6 +74,18 @@ def test_attachment_defaults_preserve_raw_bytes_without_automatic_extraction() -
     assert {"list_attachments", "read_attachment", "extract_attachment"}.issubset(config.tools.enabled)
 
 
+def test_legacy_note_compaction_target_is_accepted_but_no_longer_controls_semantics(
+    tmp_path: Path,
+) -> None:
+    legacy = tmp_path / "legacy.toml"
+    legacy.write_text("[notes]\ncompact_target_chars = 17\n", encoding="utf-8")
+
+    config = load_config(config_paths=[legacy])
+
+    assert not hasattr(config.notes, "compact_target_chars")
+    assert config.notes.max_note_chars == 2000
+
+
 
 
 def test_budget_policy_safe_input_floor_is_loaded_from_defaults() -> None:

@@ -136,7 +136,6 @@ level = "INFO"
 max_notes = 32
 max_note_chars = 2000
 max_total_chars = 16000
-compact_target_chars = 800
 
 # -----------------------------------------------------------
 # [reader] — SEQUENTIAL FILE READER LIMITS
