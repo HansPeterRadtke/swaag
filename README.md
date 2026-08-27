@@ -14,6 +14,7 @@ The implementation is intentionally small while the intended harness architectur
 
 - `docs/design-principles.md` — semantic/deterministic boundary, agent behavior, tools, communication, interfaces, and current-versus-target scope.
 - `docs/context-management.md` — primary implementation contract for per-call context calculation, output reservation, history projection, summaries, and tool-result sizing.
+- `docs/deterministic-policies.md` — audited hard/mechanical production policies and the semantic branches they must never replace.
 - `docs/research-and-standards.md` — external systems, protocols, benchmarks, and research discipline.
 - `docs/task-api.md` — durable worker operations and caller-defined structured output.
 
