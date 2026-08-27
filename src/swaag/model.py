@@ -863,6 +863,13 @@ class LlamaCppClient:
             if cancel_observed.is_set():
                 raise ModelCallPreempted("model call preempted for communication") from exc
             raise
+        except Exception as exc:
+            # Closing a live urllib3 stream can surface transport-internal
+            # exceptions outside requests' public hierarchy. Once cancellation
+            # is observed, the close-induced exception is a preemption outcome.
+            if cancel_observed.is_set():
+                raise ModelCallPreempted("model call preempted for communication") from exc
+            raise
         finally:
             stop_watcher.set()
             if watcher is not None:

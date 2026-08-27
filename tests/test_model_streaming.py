@@ -1,9 +1,13 @@
 from __future__ import annotations
 
 import json
+import threading
+
+import pytest
 
 from swaag.grammar import yes_no_contract
 from swaag.model import LlamaCppClient
+from swaag.preemption import ModelCallPreempted
 
 
 class _FakeResponse:
@@ -38,6 +42,20 @@ class _LimitedResponse(_FakeResponse):
         )
 
 
+class _CloseInterruptedResponse(_FakeResponse):
+    def __init__(self) -> None:
+        self.closed = threading.Event()
+
+    def close(self) -> None:
+        self.closed.set()
+
+    def iter_lines(self, *, decode_unicode: bool):
+        assert decode_unicode is True
+        self.closed.wait(timeout=1)
+        raise AttributeError("stream reader disappeared during close")
+        yield ""  # pragma: no cover - keep this method an iterator
+
+
 def test_streaming_client_ignores_sse_comments_and_keepalives(make_config, monkeypatch) -> None:
     config = make_config()
     client = LlamaCppClient(config)
@@ -69,6 +87,26 @@ def test_streaming_client_preserves_output_limit_finish_reason(make_config, monk
 
     assert result.finish_reason == "length"
     assert result.raw_response["stop_type"] == "limit"
+
+
+def test_close_induced_transport_error_is_reported_as_preemption(
+    make_config, monkeypatch
+) -> None:
+    response = _CloseInterruptedResponse()
+    client = LlamaCppClient(make_config())
+    monkeypatch.setattr(
+        "swaag.model.requests.post",
+        lambda *args, **kwargs: response,
+    )
+
+    with pytest.raises(ModelCallPreempted):
+        client.send_completion(
+            {"prompt": "x", "n_predict": 16},
+            cancel_check=lambda: True,
+            cancel_poll_seconds=0.001,
+        )
+
+    assert response.closed.is_set()
 
 
 def test_long_live_verification_uses_benchmark_timeout(make_config) -> None:
