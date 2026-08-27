@@ -6,6 +6,8 @@ import time
 from types import SimpleNamespace
 from typing import Any
 
+import pytest
+
 from swaag.communication import CommunicationService
 from swaag.model import CompletionRequestPolicy
 from swaag.preemption import ModelCallPreempted
@@ -31,7 +33,12 @@ def _action(message: str) -> str:
     )
 
 
-def _status(message: str) -> str:
+def _status(
+    message: str,
+    *,
+    escalate: bool = False,
+    escalation_reason: str = "",
+) -> str:
     return json.dumps(
         {
             "answer": message,
@@ -41,6 +48,8 @@ def _status(message: str) -> str:
             "importance": "normal",
             "evidence_sequences": [],
             "uncertainty": "No event citation was needed for this test response.",
+            "escalate_to_stronger_model": escalate,
+            "escalation_reason": escalation_reason,
         }
     )
 
@@ -177,6 +186,38 @@ class _ImmediateClient(_BaseClient):
         return self._result(payload, response)
 
 
+class _EscalatingStatusClient(_ImmediateClient):
+    def send_completion(
+        self,
+        payload: dict[str, Any],
+        *,
+        timeout_seconds: int | None = None,
+        progress_callback=None,
+        cancel_check=None,
+    ) -> CompletionResult:
+        self.requests.append(json.loads(stable_json_dumps(payload, indent=None)))
+        if payload.get("contract") == "communication_status":
+            return self._result(
+                payload,
+                _status(
+                    self.answer,
+                    escalate=True,
+                    escalation_reason=(
+                        "The question requires stronger semantic interpretation."
+                    ),
+                ),
+            )
+        return self._result(payload, _action(self.answer))
+
+
+class _FailingStatusClient(_ImmediateClient):
+    def send_completion(self, payload: dict[str, Any], **_kwargs) -> CompletionResult:
+        self.requests.append(json.loads(stable_json_dumps(payload, indent=None)))
+        if payload.get("contract") == "communication_status":
+            raise RuntimeError("strong status backend unavailable")
+        return self._result(payload, _action(self.answer))
+
+
 def test_same_model_communication_preempts_and_exactly_replays_main_request(make_config) -> None:
     config = make_config(model__context_limit=32_000)
     client = _PreemptReplayClient()
@@ -294,6 +335,99 @@ def test_separate_assistant_model_answers_without_preempting_main(make_config) -
     thread.join(timeout=5)
     assert not thread.is_alive()
     assert holder["result"].assistant_text == "main finished"
+
+
+def test_configured_communication_endpoint_builds_separate_runtime(make_config) -> None:
+    config = make_config()
+    config.communication.enabled = True
+    config.communication.model_base_url = "http://127.0.0.1:14830"
+    config.communication.enabled_tools = ["calculator"]
+    main = AgentRuntime(config, model_client=_ImmediateClient("main"))
+
+    service = CommunicationService.from_runtime(main)
+
+    assert service.runtime is main
+    assert service.assistant_runtime is not None
+    assert service.assistant_runtime.config is not config
+    assert service.assistant_runtime.config.model.base_url == "http://127.0.0.1:14830"
+    assert service.assistant_runtime.config.tools.enabled == ["calculator"]
+    assert service.assistant_runtime.config.tools.allow_side_effect_tools is False
+
+
+def test_separate_assistant_semantically_escalates_to_stronger_model(
+    make_config,
+) -> None:
+    main_client = _ImmediateClient("strong status")
+    assistant_client = _EscalatingStatusClient("small-model draft")
+    main = AgentRuntime(
+        make_config(model__context_limit=32_000),
+        model_client=main_client,
+    )
+    assistant = AgentRuntime(
+        make_config(model__context_limit=32_000),
+        model_client=assistant_client,
+    )
+    state = main.create_or_load_session()
+    service = CommunicationService(main, assistant_runtime=assistant)
+
+    answer = service.answer_status_question(state.session_id, "Explain the status.")
+
+    assert answer == "strong status"
+    assert len(assistant_client.requests) == 1
+    assert len(main_client.requests) == 1
+    assistant_events = [
+        event
+        for entry in assistant.history.list_session_entries(include_internal=True)
+        for event in assistant.history.read_history(str(entry["session_id"]))
+    ]
+    requested = next(
+        event
+        for event in assistant_events
+        if event.event_type == "communication_status_escalation_requested"
+    )
+    resolved = next(
+        event
+        for event in assistant_events
+        if event.event_type == "communication_status_escalation_resolved"
+    )
+    assert resolved.payload["request_event_sequence"] == requested.sequence
+    assert resolved.payload["request_event_hash"] == requested.hash
+    assert resolved.payload["stronger_model_requested_further_escalation"] is False
+
+
+def test_failed_stronger_status_escalation_is_durable(make_config) -> None:
+    main = AgentRuntime(
+        make_config(model__context_limit=32_000),
+        model_client=_FailingStatusClient("unused"),
+    )
+    assistant = AgentRuntime(
+        make_config(model__context_limit=32_000),
+        model_client=_EscalatingStatusClient("small-model draft"),
+    )
+    state = main.create_or_load_session()
+    service = CommunicationService(main, assistant_runtime=assistant)
+
+    with pytest.raises(RuntimeError, match="strong status backend unavailable"):
+        service.answer_status_question(state.session_id, "Explain the status.")
+
+    assistant_events = [
+        event
+        for entry in assistant.history.list_session_entries(include_internal=True)
+        for event in assistant.history.read_history(str(entry["session_id"]))
+    ]
+    requested = next(
+        event
+        for event in assistant_events
+        if event.event_type == "communication_status_escalation_requested"
+    )
+    failed = next(
+        event
+        for event in assistant_events
+        if event.event_type == "communication_status_escalation_failed"
+    )
+    assert failed.payload["request_event_sequence"] == requested.sequence
+    assert failed.payload["request_event_hash"] == requested.hash
+    assert failed.payload["error_type"] == "RuntimeError"
 
 
 def test_benchmark_communication_probe_exercises_exact_replay(make_config, tmp_path) -> None:

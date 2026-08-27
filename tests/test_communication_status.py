@@ -84,6 +84,8 @@ class _CharacterStatusClient:
                     "importance": "major",
                     "evidence_sequences": cited,
                     "uncertainty": "The snapshot may become stale after generation.",
+                    "escalate_to_stronger_model": False,
+                    "escalation_reason": "",
                 }
             )
         return CompletionResult(
@@ -123,6 +125,8 @@ def test_communication_status_contracts_are_closed() -> None:
         "major",
         "critical",
     ]
+    assert "escalate_to_stronger_model" in status.json_schema["required"]
+    assert "escalation_reason" in status.json_schema["required"]
     assert projection.json_schema["additionalProperties"] is False
     assert projection.json_schema["required"] == ["projection"]
 

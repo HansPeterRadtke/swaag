@@ -1246,6 +1246,38 @@ def _build_parser() -> argparse.ArgumentParser:
         "--json", action="store_true", help="Print the full JSON report."
     )
 
+    communication_routing_parser = subparsers.add_parser(
+        "communication-routing",
+        help="Measure communication-model escalation and end-to-end status quality.",
+    )
+    communication_routing_parser.add_argument(
+        "--output",
+        default="communication_routing_output",
+        help="Checkpointed artifact directory.",
+    )
+    communication_routing_parser.add_argument(
+        "--case",
+        action="append",
+        default=[],
+        help="Run only the named communication-routing case.",
+    )
+    communication_routing_parser.add_argument(
+        "--model-base-url",
+        help="Optional strong/main model endpoint override.",
+    )
+    communication_routing_parser.add_argument(
+        "--assistant-model-base-url",
+        help="Optional small communication-model endpoint override.",
+    )
+    communication_routing_parser.add_argument(
+        "--clean",
+        action="store_true",
+        help="Replace an existing artifact directory.",
+    )
+    communication_routing_parser.add_argument(
+        "--json", action="store_true", help="Print the full JSON report."
+    )
+
     subparsers.add_parser("list", help="List available benchmark task ids.")
     external_parser = subparsers.add_parser("external", help="Run optional official external benchmark harness integrations.")
     external_parser.add_argument("external_args", nargs=argparse.REMAINDER, help="Arguments forwarded to the external benchmark runner.")
@@ -1555,6 +1587,40 @@ def main(argv: Sequence[str] | None = None) -> int:
             and report["instruction_success"] == report["total"]
             else 1
         )
+    if args.command == "communication-routing":
+        from swaag.benchmark.communication_routing import (
+            run_communication_routing_benchmark,
+        )
+
+        config = load_config()
+        if args.model_base_url:
+            config.model.base_url = str(args.model_base_url).rstrip("/")
+        report = run_communication_routing_benchmark(
+            output_dir=Path(args.output),
+            config=config,
+            assistant_model_base_url=args.assistant_model_base_url,
+            case_ids=list(args.case),
+            clean=bool(args.clean),
+        )
+        if args.json:
+            print(stable_json_dumps(report, indent=2))
+        else:
+            print(f"passed={report['passed']}/{report['total']}")
+            print(f"routing_correct={report['routing_correct']}/{report['total']}")
+            print(f"escalation_recall={report['escalation_recall']}")
+            print(
+                "non_escalation_specificity="
+                f"{report['non_escalation_specificity']}"
+            )
+            for result in report["results"]:
+                print(
+                    f"{result['case_id']}="
+                    f"{'passed' if result['verification']['passed'] else 'failed'}"
+                )
+            print(
+                f"output={Path(args.output) / 'communication_routing_results.json'}"
+            )
+        return 0 if report["complete"] and report["passed"] == report["total"] else 1
     if args.command == "external":
         forwarded = list(args.external_args)
         if forwarded and forwarded[0] == "--":

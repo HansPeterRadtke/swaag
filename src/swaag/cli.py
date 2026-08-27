@@ -411,7 +411,7 @@ def _run_edit_dry_run(runtime: AgentRuntime, args) -> int:
 
 
 def _run_communication(runtime: AgentRuntime, args) -> int:
-    service = CommunicationService(runtime)
+    service = CommunicationService.from_runtime(runtime)
     if args.communication_command == "submit":
         request = service.submit(args.session, args.message, source=args.source)
         print(stable_json_dumps(asdict(request), indent=2))

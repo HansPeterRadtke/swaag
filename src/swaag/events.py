@@ -34,6 +34,9 @@ ALLOWED_EVENT_TYPES = frozenset(
         "communication_status_generated",
         "communication_status_rejected",
         "communication_status_unavailable",
+        "communication_status_escalation_requested",
+        "communication_status_escalation_resolved",
+        "communication_status_escalation_failed",
         "response_presentation_generated",
         "response_presentation_rejected",
         "response_presentation_unavailable",
@@ -385,6 +388,36 @@ REQUIRED_PAYLOAD_KEYS: dict[str, frozenset[str]] = {
             "error",
             "error_type",
             "source_event_references",
+        }
+    ),
+    "communication_status_escalation_requested": frozenset(
+        {
+            "target_session_id",
+            "question",
+            "reason",
+            "status_operation_session_id",
+            "source_event_references",
+        }
+    ),
+    "communication_status_escalation_resolved": frozenset(
+        {
+            "target_session_id",
+            "question",
+            "request_event_sequence",
+            "request_event_hash",
+            "stronger_operation_session_id",
+            "answer_sha256",
+            "stronger_model_requested_further_escalation",
+        }
+    ),
+    "communication_status_escalation_failed": frozenset(
+        {
+            "target_session_id",
+            "question",
+            "request_event_sequence",
+            "request_event_hash",
+            "error",
+            "error_type",
         }
     ),
     "response_presentation_generated": frozenset(

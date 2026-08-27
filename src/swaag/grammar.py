@@ -90,6 +90,8 @@ def communication_status_contract() -> ContractSpec:
                 },
                 "evidence_sequences": _array({"type": "integer"}),
                 "uncertainty": _string(),
+                "escalate_to_stronger_model": _boolean(),
+                "escalation_reason": _string(),
             }
         ),
     )

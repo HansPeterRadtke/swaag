@@ -317,7 +317,11 @@ class CommunicationService:
 
     @classmethod
     def from_config(cls, config: AgentConfig) -> "CommunicationService":
-        main = AgentRuntime(config)
+        return cls.from_runtime(AgentRuntime(config))
+
+    @classmethod
+    def from_runtime(cls, main: AgentRuntime) -> "CommunicationService":
+        config = main.config
         assistant = None
         if getattr(config, "communication", None) and config.communication.enabled:
             if config.communication.model_base_url:
@@ -427,7 +431,77 @@ class CommunicationService:
                     mechanical_status=mechanical_status,
                     source_events=source_events,
                 )
-            answer = str(semantic_status["answer"])
+            if (
+                self.assistant_runtime is not None
+                and bool(semantic_status["escalate_to_stronger_model"])
+            ):
+                operation_session_id = str(
+                    semantic_status["operation_session_id"]
+                )
+                operation_state = self.assistant_runtime.history.rebuild_from_history(
+                    operation_session_id,
+                    write_projections=False,
+                )
+                escalation_event = self.assistant_runtime.history.record_event(
+                    operation_state,
+                    "communication_status_escalation_requested",
+                    {
+                        "target_session_id": session_id,
+                        "question": question,
+                        "reason": semantic_status["escalation_reason"],
+                        "status_operation_session_id": operation_session_id,
+                        "source_event_references": semantic_status[
+                            "source_event_references"
+                        ],
+                    },
+                )
+                preemption = self._preempt_active_main_call(session_id, question)
+                try:
+                    with self.runtime.inference_priority(
+                        100, source="communication_status_escalation"
+                    ):
+                        stronger_status = self.runtime.generate_communication_status(
+                            target_session_id=session_id,
+                            question=question,
+                            mechanical_status=mechanical_status,
+                            source_events=source_events,
+                        )
+                except Exception as exc:
+                    self.assistant_runtime.history.record_event(
+                        operation_state,
+                        "communication_status_escalation_failed",
+                        {
+                            "target_session_id": session_id,
+                            "question": question,
+                            "request_event_sequence": escalation_event.sequence,
+                            "request_event_hash": escalation_event.hash,
+                            "error": str(exc),
+                            "error_type": type(exc).__name__,
+                        },
+                    )
+                    raise
+                answer = str(stronger_status["answer"])
+                self.assistant_runtime.history.record_event(
+                    operation_state,
+                    "communication_status_escalation_resolved",
+                    {
+                        "target_session_id": session_id,
+                        "question": question,
+                        "request_event_sequence": escalation_event.sequence,
+                        "request_event_hash": escalation_event.hash,
+                        "stronger_operation_session_id": stronger_status[
+                            "operation_session_id"
+                        ],
+                        "answer_sha256": hashlib.sha256(
+                            answer.encode("utf-8")
+                        ).hexdigest(),
+                        "stronger_model_requested_further_escalation": bool(
+                            stronger_status["escalate_to_stronger_model"]
+                        ),
+                    },
+                )
+            else:
+                answer = str(semantic_status["answer"])
             self._complete_preemption(preemption, target_changed=False, reply=answer)
             return answer
         except Exception as exc:

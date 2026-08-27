@@ -1797,6 +1797,7 @@ class AgentRuntime:
                     mechanical_status=mechanical_status,
                     source_events=source_events,
                 )
+                result["operation_session_id"] = operation_state.session_id
                 self.history.record_event(
                     operation_state,
                     "communication_status_generated",
@@ -1903,6 +1904,12 @@ class AgentRuntime:
             for key in ("answer", "situation", "action", "reason"):
                 if not str(payload.get(key, "")).strip():
                     raise ValueError(f"communication_status.{key} must not be empty")
+            if bool(payload.get("escalate_to_stronger_model")) and not str(
+                payload.get("escalation_reason", "")
+            ).strip():
+                raise ValueError(
+                    "communication_status.escalation_reason must explain a requested escalation"
+                )
             cited = payload.get("evidence_sequences", [])
             unknown = sorted({int(sequence) for sequence in cited} - valid_sequences)
             if unknown:
@@ -2057,6 +2064,12 @@ class AgentRuntime:
                         "importance_rank": importance_rank,
                         "evidence_sequences": cited_sequences,
                         "uncertainty": str(payload["uncertainty"]).strip(),
+                        "escalate_to_stronger_model": bool(
+                            payload["escalate_to_stronger_model"]
+                        ),
+                        "escalation_reason": str(
+                            payload["escalation_reason"]
+                        ).strip(),
                         "target_session_id": target_session_id,
                         "generated_at": utc_now_iso(),
                         "source_event_references": source_references,
