@@ -181,6 +181,7 @@ ALLOWED_EVENT_TYPES = frozenset(
         "prompt_instruction_replaced",
         "prompt_instruction_removed",
         "prompt_instructions_selected",
+        "prompt_instruction_projection_created",
         "reader_opened",
         "reader_chunk_read",
         "file_read_requested",
@@ -634,6 +635,19 @@ REQUIRED_PAYLOAD_KEYS: dict[str, frozenset[str]] = {
     "prompt_instruction_removed": frozenset({"instruction_id"}),
     "prompt_instructions_selected": frozenset(
         {"kind", "instruction_ids", "instruction_hashes", "exact"}
+    ),
+    "prompt_instruction_projection_created": frozenset(
+        {
+            "kind",
+            "source_instruction_references",
+            "source_sha256",
+            "source_tokens",
+            "overflow_tokens",
+            "target_tokens",
+            "projected_tokens",
+            "projection",
+            "projection_sha256",
+        }
     ),
     "reader_opened": frozenset({"reader_state"}),
     "reader_chunk_read": frozenset({"reader_state", "chunk"}),

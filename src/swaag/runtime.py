@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import copy
 import inspect
 import json
 import sys
@@ -32,6 +33,7 @@ from swaag.grammar import (
     communication_status_contract,
     completion_evaluation_contract,
     evidence_projection_contract,
+    prompt_instruction_projection_contract,
     presentation_evaluation_contract,
     response_relevance_contract,
     summary_contract,
@@ -73,6 +75,7 @@ from swaag.types import (
     DeferredTask,
     HistoryEvent,
     Message,
+    ModelCallKind,
     PromptAssembly,
     PromptArtifact,
     PromptComponent,
@@ -1188,6 +1191,54 @@ class AgentRuntime:
             ):
                 break
 
+        effective_minimum = (
+            self.config.context.reserved_response_tokens
+            if minimum_output_tokens is None
+            else minimum_output_tokens
+        )
+        recovered = self._recover_prompt_instruction_overflow(
+            state,
+            assembly,
+            contract,
+            compilation,
+            minimum_output_tokens=effective_minimum,
+        )
+        if recovered is not None:
+            self.history.record_event(
+                state,
+                "context_compiled",
+                {
+                    "kind": "action",
+                    "prompt_mode": "standard",
+                    "accounting": recovered.accounting(),
+                    "cap_error": "",
+                    "prompt_instruction_projection": True,
+                },
+            )
+            self.history.record_event(
+                state,
+                "budget_checked",
+                {
+                    "kind": "action",
+                    "prompt_mode": "standard",
+                    "budget_report": asdict(recovered.report),
+                    "cap_error": "",
+                    "prompt_instruction_projection": True,
+                },
+            )
+            self._record_prompt_built(
+                state,
+                assembly,
+                contract,
+                recovered.report,
+            )
+            return PreparedCall(
+                assembly=assembly,
+                report=recovered.report,
+                prompt_mode="standard",
+                contract=contract,
+            )
+
         raise BudgetExceededError(
             "The exact action prompt, tool schemas, output reserve, and safety margin do not fit the model context.",
             last_report,
@@ -1332,6 +1383,52 @@ class AgentRuntime:
                     "cap_error": "" if compilation.report.fits else "context_limit_exceeded",
                 },
             )
+            if (
+                not compilation.report.fits
+                and (
+                    not self.config.context.compact_on_overflow
+                    or reduction_round >= max_rounds
+                    or (
+                        not historical_evidence
+                        and not evidence_rows
+                        and not reexpanded_evidence
+                    )
+                )
+            ):
+                recovered = self._recover_prompt_instruction_overflow(
+                    state,
+                    assembly,
+                    contract,
+                    compilation,
+                    minimum_output_tokens=minimum_output_tokens,
+                    context_limit_resolution=context_limit_resolution,
+                )
+                if recovered is not None:
+                    compilation = recovered
+                    last_compilation = recovered
+                    self.history.record_event(
+                        state,
+                        "context_compiled",
+                        {
+                            "kind": "completion_evaluation",
+                            "prompt_mode": "lean",
+                            "accounting": recovered.accounting(),
+                            "cap_error": "",
+                            "reduction_round": reduction_round,
+                            "prompt_instruction_projection": True,
+                        },
+                    )
+                    self.history.record_event(
+                        state,
+                        "budget_checked",
+                        {
+                            "kind": "completion_evaluation",
+                            "prompt_mode": "lean",
+                            "budget_report": asdict(recovered.report),
+                            "cap_error": "",
+                            "prompt_instruction_projection": True,
+                        },
+                    )
             if compilation.report.fits:
                 self._record_prompt_built(state, assembly, contract, compilation.report)
                 try:
@@ -1859,6 +1956,51 @@ class AgentRuntime:
                     "validation_attempt": validation_attempt,
                 },
             )
+            if (
+                not compilation.report.fits
+                and (
+                    not self.config.context.compact_on_overflow
+                    or reduction_round >= max_reduction_rounds
+                    or (not evidence_rows and not runtime_semantic_evidence)
+                )
+            ):
+                recovered = self._recover_prompt_instruction_overflow(
+                    state,
+                    assembly,
+                    contract,
+                    compilation,
+                    minimum_output_tokens=minimum_output_tokens,
+                    desired_output_tokens=desired_output_tokens,
+                    context_limit_resolution=context_limit_resolution,
+                )
+                if recovered is not None:
+                    compilation = recovered
+                    self.history.record_event(
+                        state,
+                        "context_compiled",
+                        {
+                            "kind": "communication_status",
+                            "prompt_mode": "lean",
+                            "accounting": recovered.accounting(),
+                            "cap_error": "",
+                            "reduction_round": reduction_round,
+                            "validation_attempt": validation_attempt,
+                            "prompt_instruction_projection": True,
+                        },
+                    )
+                    self.history.record_event(
+                        state,
+                        "budget_checked",
+                        {
+                            "kind": "communication_status",
+                            "prompt_mode": "lean",
+                            "budget_report": asdict(recovered.report),
+                            "cap_error": "",
+                            "reduction_round": reduction_round,
+                            "validation_attempt": validation_attempt,
+                            "prompt_instruction_projection": True,
+                        },
+                    )
             if compilation.report.fits:
                 self._record_prompt_built(
                     state, assembly, contract, compilation.report
@@ -2112,6 +2254,47 @@ class AgentRuntime:
                     "cap_error": cap_error,
                 },
             )
+            if (
+                not compilation.report.fits
+                and (
+                    not self.config.context.compact_on_overflow
+                    or reduction_round >= max_rounds
+                    or not evidence_rows
+                )
+            ):
+                recovered = self._recover_prompt_instruction_overflow(
+                    state,
+                    assembly,
+                    contract,
+                    compilation,
+                    minimum_output_tokens=minimum_output_tokens,
+                )
+                if recovered is not None:
+                    compilation = recovered
+                    last_compilation = recovered
+                    self.history.record_event(
+                        state,
+                        "context_compiled",
+                        {
+                            "kind": "caller_structured_output",
+                            "prompt_mode": "lean",
+                            "accounting": recovered.accounting(),
+                            "cap_error": "",
+                            "reduction_round": reduction_round,
+                            "prompt_instruction_projection": True,
+                        },
+                    )
+                    self.history.record_event(
+                        state,
+                        "budget_checked",
+                        {
+                            "kind": "caller_structured_output",
+                            "prompt_mode": "lean",
+                            "budget_report": asdict(recovered.report),
+                            "cap_error": "",
+                            "prompt_instruction_projection": True,
+                        },
+                    )
             if compilation.report.fits:
                 self._record_prompt_built(state, assembly, contract, compilation.report)
                 try:
@@ -2484,6 +2667,38 @@ class AgentRuntime:
             },
         )
         if not compilation.report.fits:
+            recovered = self._recover_prompt_instruction_overflow(
+                state,
+                assembly,
+                contract,
+                compilation,
+                minimum_output_tokens=minimum_output_tokens,
+            )
+            if recovered is not None:
+                compilation = recovered
+                self.history.record_event(
+                    state,
+                    "context_compiled",
+                    {
+                        "kind": assembly.kind,
+                        "prompt_mode": assembly.prompt_mode,
+                        "accounting": recovered.accounting(),
+                        "cap_error": "",
+                        "prompt_instruction_projection": True,
+                    },
+                )
+                self.history.record_event(
+                    state,
+                    "budget_checked",
+                    {
+                        "kind": assembly.kind,
+                        "prompt_mode": assembly.prompt_mode,
+                        "budget_report": asdict(recovered.report),
+                        "cap_error": "",
+                        "prompt_instruction_projection": True,
+                    },
+                )
+        if not compilation.report.fits:
             raise BudgetExceededError(
                 f"The {assembly.kind} prompt does not fit without semantic loss",
                 compilation.report,
@@ -2500,6 +2715,7 @@ class AgentRuntime:
                 ),
                 minimum_output_tokens=minimum_output_tokens,
                 validator=validator,
+                allow_prompt_instruction_projection=True,
             )
         except _OutputRecoveryContextOverflow as exc:
             raise BudgetExceededError(
@@ -2932,6 +3148,7 @@ class AgentRuntime:
         build_assembly: Callable[[str, str, int], PromptAssembly],
         remaining_calls: list[int],
         context_limit_resolution: tuple[int, str] | None = None,
+        include_prompt_instructions: bool = True,
         depth: int = 0,
     ) -> tuple[str, BudgetReport]:
         minimum_output_tokens = min(
@@ -2946,7 +3163,27 @@ class AgentRuntime:
             minimum_output_tokens=minimum_output_tokens,
             context_limit_resolution=context_limit_resolution,
             desired_output_tokens=target_tokens + 64,
+            include_prompt_instructions=include_prompt_instructions,
         )
+        prompt_instruction_projected = False
+        if (
+            not compilation.report.fits
+            and include_prompt_instructions
+            and self._counter(state).count_text(source_text).tokens
+            <= compilation.overflow_tokens + 32
+        ):
+            recovered = self._recover_prompt_instruction_overflow(
+                state,
+                assembly,
+                contract,
+                compilation,
+                minimum_output_tokens=minimum_output_tokens,
+                desired_output_tokens=target_tokens + 64,
+                context_limit_resolution=context_limit_resolution,
+            )
+            if recovered is not None:
+                compilation = recovered
+                prompt_instruction_projected = True
         if compilation.report.fits:
             if remaining_calls[0] <= 0:
                 raise BudgetExceededError(
@@ -2967,6 +3204,9 @@ class AgentRuntime:
                     "prompt_mode": "lean",
                     "accounting": compilation.accounting(),
                     "hierarchical_depth": depth,
+                    "prompt_instruction_projection": (
+                        prompt_instruction_projected
+                    ),
                 },
             )
             self._record_prompt_built(
@@ -2998,6 +3238,7 @@ class AgentRuntime:
                     desired_output_tokens=target_tokens + 64,
                     validator=validate_reduction,
                     context_limit_resolution=context_limit_resolution,
+                    include_prompt_instructions=include_prompt_instructions,
                 )
             except _OutputRecoveryContextOverflow:
                 pass
@@ -3029,6 +3270,7 @@ class AgentRuntime:
                 build_assembly=build_assembly,
                 remaining_calls=remaining_calls,
                 context_limit_resolution=context_limit_resolution,
+                include_prompt_instructions=include_prompt_instructions,
                 depth=depth + 1,
             )
             fragments.append(projection)
@@ -3047,6 +3289,7 @@ class AgentRuntime:
             build_assembly=build_assembly,
             remaining_calls=remaining_calls,
             context_limit_resolution=context_limit_resolution,
+            include_prompt_instructions=include_prompt_instructions,
             depth=depth + 1,
         )
 
@@ -3630,8 +3873,10 @@ class AgentRuntime:
         minimum_output_tokens: int,
         desired_output_tokens: int | None = None,
         context_limit_resolution: tuple[int, str] | None = None,
+        include_prompt_instructions: bool = True,
     ) -> ContextCompilation:
-        self._inject_prompt_instructions(state, assembly)
+        if include_prompt_instructions:
+            self._inject_prompt_instructions(state, assembly)
         self._require_system_prompt(assembly)
         self._materialize_prompt_protocol(assembly)
         context_limit, context_limit_source = (
@@ -3661,7 +3906,11 @@ class AgentRuntime:
         assembly: PromptAssembly,
     ) -> None:
         if state is None or any(
-            component.name == "durable_prompt_instructions"
+            component.name
+            in {
+                "durable_prompt_instructions",
+                "durable_prompt_instruction_projection",
+            }
             for component in assembly.components
         ):
             return
@@ -3771,6 +4020,207 @@ class AgentRuntime:
             },
         )
 
+    def _selected_prompt_instruction_rows(
+        self,
+        state: SessionState,
+        kind: ModelCallKind,
+    ) -> list[dict[str, Any]]:
+        return [
+            {"instruction_store": instruction_store, **asdict(item)}
+            for instruction_store, item in (
+                [
+                    ("user", instruction)
+                    for instruction in prompt_instructions_for_kind(
+                        self.prompt_instruction_store.list(),
+                        kind,
+                    )
+                ]
+                + [
+                    ("session", instruction)
+                    for instruction in prompt_instructions_for_kind(
+                        state.prompt_instructions,
+                        kind,
+                    )
+                ]
+            )
+        ]
+
+    def _recover_prompt_instruction_overflow(
+        self,
+        state: SessionState,
+        assembly: PromptAssembly,
+        contract: ContractSpec,
+        failed: ContextCompilation,
+        *,
+        minimum_output_tokens: int,
+        desired_output_tokens: int | None = None,
+        context_limit_resolution: tuple[int, str] | None = None,
+    ) -> ContextCompilation | None:
+        if (
+            failed.report.fits
+            or not self.config.context.compact_on_overflow
+            or assembly.kind == "prompt_instruction_projection"
+        ):
+            return None
+        source_component = next(
+            (
+                component
+                for component in assembly.components
+                if component.name == "durable_prompt_instructions"
+            ),
+            None,
+        )
+        source_report = next(
+            (
+                component
+                for component in failed.report.breakdown
+                if component.name == "durable_prompt_instructions"
+            ),
+            None,
+        )
+        if source_component is None or source_report is None:
+            return None
+        source_tokens = int(source_report.tokens)
+        overflow_tokens = max(1, int(failed.overflow_tokens))
+        if source_tokens <= overflow_tokens + 32:
+            return None
+
+        source_rows = self._selected_prompt_instruction_rows(
+            state,
+            assembly.kind,
+        )
+        if not source_rows:
+            return None
+        exact_source = stable_json_dumps(source_rows, indent=2)
+        source_sha256 = sha256_text(exact_source)
+        references = [
+            {
+                "instruction_store": str(row["instruction_store"]),
+                "instruction_id": str(row["instruction_id"]),
+                "sha256": sha256_text(stable_json_dumps(row, indent=None)),
+            }
+            for row in source_rows
+        ]
+        projection_header = (
+            "\n\n[DURABLE MODEL-AUTHORED INSTRUCTION PROJECTION FOR THIS CALL KIND]\n"
+            "Measured context overflow required this model-authored derived view. "
+            "Apply every operative rule below. Exact source instructions remain "
+            "authoritative and recoverable through the prompt_instructions capability.\n"
+        )
+        counter = self._counter(state)
+        header_tokens = counter.count_text(projection_header).tokens
+        target_tokens = max(
+            32,
+            source_tokens - overflow_tokens - header_tokens - 16,
+        )
+        if target_tokens >= source_tokens:
+            return None
+        remaining_calls = [max(8, int(self.config.context.max_compaction_rounds) * 8)]
+        maximum_rounds = max(1, int(self.config.context.max_compaction_rounds) + 1)
+        for round_index in range(maximum_rounds):
+            projection, projection_report = self._reduce_text_hierarchically(
+                state,
+                source_text=exact_source,
+                source_label=(
+                    f"exact durable instructions for {assembly.kind} calls"
+                ),
+                target_tokens=target_tokens,
+                contract=prompt_instruction_projection_contract(),
+                output_key="projection",
+                build_assembly=lambda text, _label, target: (
+                    self.prompts.build_prompt_instruction_projection_prompt(
+                        call_kind=assembly.kind,
+                        source_instructions=text,
+                        source_sha256=sha256_text(text),
+                        source_tokens=counter.count_text(text).tokens,
+                        overflow_tokens=overflow_tokens,
+                        target_tokens=target,
+                    )
+                ),
+                remaining_calls=remaining_calls,
+                context_limit_resolution=context_limit_resolution,
+                include_prompt_instructions=False,
+            )
+            projected_tokens = counter.count_text(projection).tokens
+            candidate = copy.deepcopy(assembly)
+            replacement_index = next(
+                index
+                for index, component in enumerate(candidate.components)
+                if component.name == "durable_prompt_instructions"
+            )
+            candidate.components[replacement_index] = PromptComponent(
+                name="durable_prompt_instruction_projection",
+                category="system_prompt_instruction",
+                text=projection_header + projection,
+            )
+            candidate.prompt_text = "".join(
+                component.text for component in candidate.components
+            )
+            candidate.prompt_artifacts = [
+                artifact
+                for artifact in candidate.prompt_artifacts
+                if artifact.source != "prompt_protocol:server_chat_template"
+                and not artifact.source.startswith("durable_prompt_instructions:")
+                and not artifact.source.startswith(
+                    "durable_prompt_instruction_projection:"
+                )
+            ] + [
+                PromptArtifact(
+                    source=(
+                        f"durable_prompt_instruction_projection:{assembly.kind}:"
+                        f"{source_sha256}"
+                    ),
+                    sha256=sha256_text(projection),
+                )
+            ]
+            recovered = self._compile_context(
+                state,
+                candidate,
+                contract,
+                minimum_output_tokens=minimum_output_tokens,
+                desired_output_tokens=desired_output_tokens,
+                context_limit_resolution=context_limit_resolution,
+                include_prompt_instructions=False,
+            )
+            if recovered.report.fits:
+                assembly.components = candidate.components
+                assembly.message_ranges = candidate.message_ranges
+                assembly.prompt_text = candidate.prompt_text
+                assembly.prompt_artifacts = candidate.prompt_artifacts
+                self.history.record_event(
+                    state,
+                    "prompt_instruction_projection_created",
+                    {
+                        "kind": assembly.kind,
+                        "source_instruction_references": references,
+                        "source_sha256": source_sha256,
+                        "source_tokens": source_tokens,
+                        "overflow_tokens": overflow_tokens,
+                        "target_tokens": target_tokens,
+                        "projected_tokens": projected_tokens,
+                        "projection": projection,
+                        "projection_sha256": sha256_text(projection),
+                        "projection_budget_report": asdict(projection_report),
+                        "reduction_round": round_index,
+                        "exact_source_recovery": {
+                            "session_id": state.session_id,
+                            "capability": "prompt_instructions",
+                            "instruction_references": references,
+                        },
+                    },
+                )
+                return recovered
+            reduction = max(
+                16,
+                int(recovered.overflow_tokens) + 16,
+                projected_tokens - target_tokens,
+            )
+            next_target = max(32, target_tokens - reduction)
+            if next_target >= target_tokens:
+                break
+            target_tokens = next_target
+        return None
+
     def _execute_tool_semantic_call(
         self, state: SessionState, request: SemanticCallRequest
     ) -> dict[str, Any]:
@@ -3822,6 +4272,43 @@ class AgentRuntime:
                     "cap_error": cap_error,
                 },
             )
+            if (
+                not compilation.report.fits
+                and request.allow_prompt_instruction_projection
+            ):
+                recovered = self._recover_prompt_instruction_overflow(
+                    state,
+                    assembly,
+                    request.contract,
+                    compilation,
+                    minimum_output_tokens=minimum_output_tokens,
+                    desired_output_tokens=request.desired_output_tokens,
+                )
+                if recovered is not None:
+                    compilation = recovered
+                    self.history.record_event(
+                        state,
+                        "context_compiled",
+                        {
+                            "kind": request.kind,
+                            "prompt_mode": request.prompt_mode,
+                            "accounting": recovered.accounting(),
+                            "cap_error": "",
+                            "output_retry": output_retry,
+                            "prompt_instruction_projection": True,
+                        },
+                    )
+                    self.history.record_event(
+                        state,
+                        "budget_checked",
+                        {
+                            "kind": request.kind,
+                            "prompt_mode": request.prompt_mode,
+                            "budget_report": asdict(recovered.report),
+                            "cap_error": "",
+                            "prompt_instruction_projection": True,
+                        },
+                    )
             if not compilation.report.fits:
                 raise SemanticCallContextOverflow(compilation.report)
             self._record_prompt_built(
@@ -3942,6 +4429,24 @@ class AgentRuntime:
             desired_output_tokens=target_summary_tokens + 64,
             context_limit_resolution=context_limit_resolution,
         )
+        prompt_instruction_projected = False
+        if (
+            not compilation.report.fits
+            and self._counter(state).count_text(message.content).tokens
+            <= compilation.overflow_tokens + 32
+        ):
+            recovered = self._recover_prompt_instruction_overflow(
+                state,
+                assembly,
+                contract,
+                compilation,
+                minimum_output_tokens=minimum_output_tokens,
+                desired_output_tokens=target_summary_tokens + 64,
+                context_limit_resolution=context_limit_resolution,
+            )
+            if recovered is not None:
+                compilation = recovered
+                prompt_instruction_projected = True
         if compilation.report.fits:
             if remaining_calls[0] <= 0:
                 raise BudgetExceededError(
@@ -3962,6 +4467,9 @@ class AgentRuntime:
                     "prompt_mode": "lean",
                     "accounting": compilation.accounting(),
                     "hierarchical_depth": depth,
+                    "prompt_instruction_projection": (
+                        prompt_instruction_projected
+                    ),
                 },
             )
             self._record_prompt_built(
@@ -4340,6 +4848,8 @@ class AgentRuntime:
         desired_output_tokens: int | None = None,
         validator: Callable[[dict[str, Any]], Any] | None = None,
         context_limit_resolution: tuple[int, str] | None = None,
+        include_prompt_instructions: bool = True,
+        allow_prompt_instruction_projection: bool = False,
     ) -> tuple[Any, PreparedCall]:
         current = prepared
         current_minimum = max(1, int(minimum_output_tokens))
@@ -4381,6 +4891,7 @@ class AgentRuntime:
                     minimum_output_tokens=current_minimum,
                     desired_output_tokens=desired_output_tokens,
                     context_limit_resolution=context_limit_resolution,
+                    include_prompt_instructions=include_prompt_instructions,
                 )
                 cap_error = (
                     "" if compilation.report.fits else "context_limit_exceeded"
@@ -4407,6 +4918,46 @@ class AgentRuntime:
                         "output_retry": output_retry + 1,
                     },
                 )
+                if (
+                    not compilation.report.fits
+                    and include_prompt_instructions
+                    and allow_prompt_instruction_projection
+                ):
+                    recovered = self._recover_prompt_instruction_overflow(
+                        state,
+                        current.assembly,
+                        current.contract,
+                        compilation,
+                        minimum_output_tokens=current_minimum,
+                        desired_output_tokens=desired_output_tokens,
+                        context_limit_resolution=context_limit_resolution,
+                    )
+                    if recovered is not None:
+                        compilation = recovered
+                        self.history.record_event(
+                            state,
+                            "context_compiled",
+                            {
+                                "kind": current.assembly.kind,
+                                "prompt_mode": current.prompt_mode,
+                                "accounting": recovered.accounting(),
+                                "cap_error": "",
+                                "output_retry": output_retry + 1,
+                                "prompt_instruction_projection": True,
+                            },
+                        )
+                        self.history.record_event(
+                            state,
+                            "budget_checked",
+                            {
+                                "kind": current.assembly.kind,
+                                "prompt_mode": current.prompt_mode,
+                                "budget_report": asdict(recovered.report),
+                                "cap_error": "",
+                                "output_retry": output_retry + 1,
+                                "prompt_instruction_projection": True,
+                            },
+                        )
                 if not compilation.report.fits:
                     raise _OutputRecoveryContextOverflow(
                         compilation,
@@ -5619,6 +6170,7 @@ class AgentRuntime:
             state,
             PreparedCall(assembly, report, "lean", contract),
             minimum_output_tokens=self.config.context.reserved_response_tokens,
+            allow_prompt_instruction_projection=True,
         )
         if payload.get("answer") != "yes":
             raise ValueError("Doctor constrained-output probe did not return yes")

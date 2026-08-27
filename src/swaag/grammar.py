@@ -61,6 +61,13 @@ def evidence_projection_contract() -> ContractSpec:
     )
 
 
+def prompt_instruction_projection_contract() -> ContractSpec:
+    return _contract(
+        "prompt_instruction_projection",
+        _closed_object({"projection": _string()}),
+    )
+
+
 def notes_compaction_contract() -> ContractSpec:
     return _contract(
         "notes_compaction",

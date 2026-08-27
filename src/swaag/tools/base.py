@@ -28,11 +28,35 @@ class ToolValidationError(ValueError):
 
 
 class SemanticCallContextOverflow(RuntimeError):
-    def __init__(self, report: BudgetReport):
+    def __init__(self, report: BudgetReport | None):
         super().__init__(
             "The complete semantic-call input does not fit the resolved model context"
         )
         self.report = report
+
+
+def semantic_sources_cannot_recover_overflow(
+    error: SemanticCallContextOverflow,
+    source_component_names: set[str],
+    *,
+    fixed_slack_tokens: int = 32,
+) -> bool:
+    """Return true when removing every named reducible source still cannot fit."""
+    if error.report is None:
+        return False
+    matched = [
+        component
+        for component in error.report.breakdown
+        if component.name in source_component_names
+    ]
+    if not matched:
+        return False
+    overflow = max(
+        1,
+        int(error.report.required_tokens) - int(error.report.context_limit),
+    )
+    recoverable = sum(max(0, int(component.tokens)) for component in matched)
+    return recoverable <= overflow + max(0, int(fixed_slack_tokens))
 
 
 @dataclass(slots=True, frozen=True)
@@ -44,6 +68,7 @@ class SemanticCallRequest:
     minimum_output_tokens: int
     desired_output_tokens: int | None = None
     prompt_mode: str = "lean"
+    allow_prompt_instruction_projection: bool = False
 
 
 @dataclass(slots=True)

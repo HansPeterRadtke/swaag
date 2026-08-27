@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from dataclasses import asdict, dataclass
+from dataclasses import asdict, dataclass, replace
 from typing import Any
 
 from swaag.history import HistoryStore
@@ -9,6 +9,7 @@ from swaag.grammar import history_analysis_contract, tool_result_projection_cont
 from swaag.tools.base import (
     SemanticCallContextOverflow,
     SemanticCallRequest,
+    semantic_sources_cannot_recover_overflow,
     Tool,
     ToolContext,
     ToolValidationError,
@@ -121,15 +122,39 @@ def _project_history_text(
             ),
         ),
         desired_output_tokens=target + 64,
+        allow_prompt_instruction_projection=(depth >= 16 or len(source_text) < 2),
     )
     call_budget.consume()
     try:
         payload = context.call_semantic(request)
-    except SemanticCallContextOverflow:
+    except SemanticCallContextOverflow as exc:
+        if (
+            not request.allow_prompt_instruction_projection
+            and semantic_sources_cannot_recover_overflow(
+                exc,
+                {"projection_exact_source"},
+            )
+        ):
+            try:
+                payload = context.call_semantic(
+                    replace(
+                        request,
+                        allow_prompt_instruction_projection=True,
+                    )
+                )
+            except SemanticCallContextOverflow as retry_exc:
+                exc = retry_exc
+            else:
+                projection = str(payload.get("projection", "")).strip()
+                if not projection:
+                    raise ToolValidationError(
+                        "history projection must not be empty"
+                    )
+                return projection
         if depth >= 16 or len(source_text) < 2:
             raise ToolValidationError(
                 "history analysis exact source still overflows after bounded semantic segmentation"
-            )
+            ) from exc
         midpoint = len(source_text) // 2
         child_target = max(32, (target + 1) // 2)
         left = _project_history_text(
@@ -538,11 +563,32 @@ class HistoryAnalyzeTool(Tool):
                 components=components,
                 contract=contract,
                 minimum_output_tokens=minimum_output_tokens,
+                allow_prompt_instruction_projection=(
+                    reduction_round >= max_reduction_rounds
+                ),
             )
             try:
                 analysis = context.call_semantic(request)
                 break
             except SemanticCallContextOverflow as exc:
+                if (
+                    not request.allow_prompt_instruction_projection
+                    and semantic_sources_cannot_recover_overflow(
+                        exc,
+                        {raw_history_component.name},
+                    )
+                ):
+                    try:
+                        analysis = context.call_semantic(
+                            replace(
+                                request,
+                                allow_prompt_instruction_projection=True,
+                            )
+                        )
+                    except SemanticCallContextOverflow as retry_exc:
+                        exc = retry_exc
+                    else:
+                        break
                 if (
                     not context.config.context.compact_on_overflow
                     or reduction_round >= max_reduction_rounds

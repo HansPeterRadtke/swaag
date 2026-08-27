@@ -4,7 +4,7 @@ import ast
 import re
 import sys
 import time
-from dataclasses import asdict
+from dataclasses import asdict, replace
 from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any
@@ -18,6 +18,7 @@ from swaag.reader import ReaderError, SequentialReader
 from swaag.tools.base import (
     SemanticCallContextOverflow,
     SemanticCallRequest,
+    semantic_sources_cannot_recover_overflow,
     Tool,
     ToolContext,
     ToolValidationError,
@@ -371,6 +372,9 @@ class NotesTool(Tool):
                 64,
                 (target_chars + 3) // 4 + 32,
             ),
+            allow_prompt_instruction_projection=(
+                depth >= 16 or len(source_text) < 2
+            ),
         )
         if validation_feedback:
             request.components.insert(
@@ -388,9 +392,25 @@ class NotesTool(Tool):
             )
         try:
             return context.call_semantic(request)
-        except SemanticCallContextOverflow:
+        except SemanticCallContextOverflow as exc:
+            if (
+                not request.allow_prompt_instruction_projection
+                and semantic_sources_cannot_recover_overflow(
+                    exc,
+                    {"notes_compaction_sources"},
+                )
+            ):
+                try:
+                    return context.call_semantic(
+                        replace(
+                            request,
+                            allow_prompt_instruction_projection=True,
+                        )
+                    )
+                except SemanticCallContextOverflow as retry_exc:
+                    exc = retry_exc
             if depth >= 16 or len(source_text) < 2:
-                raise
+                raise exc
             midpoint = len(source_text) // 2
             child_target = max(128, (target_chars + 1) // 2)
             left = self._semantic_compaction(

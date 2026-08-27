@@ -21,6 +21,7 @@ ModelCallKind = Literal[
     "presentation_evaluation",
     "history_analysis",
     "notes_compaction",
+    "prompt_instruction_projection",
     "doctor",
     "benchmark_quality_judge",
 ]

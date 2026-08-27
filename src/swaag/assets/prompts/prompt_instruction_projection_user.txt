@@ -1,0 +1,10 @@
+Target model-call kind: {call_kind}
+Exact source SHA-256: {source_sha256}
+Measured source component tokens: {source_tokens}
+Measured overflow to recover: {overflow_tokens}
+Requested projection target: approximately {target_tokens} tokens
+
+Exact durable instruction records:
+{source_instructions}
+
+Produce the faithful compact system-instruction projection now.

@@ -752,6 +752,43 @@ class PromptBuilder:
             ),
         )
 
+    def build_prompt_instruction_projection_prompt(
+        self,
+        *,
+        call_kind: ModelCallKind,
+        source_instructions: str,
+        source_sha256: str,
+        source_tokens: int,
+        overflow_tokens: int,
+        target_tokens: int,
+    ) -> PromptAssembly:
+        system_template = (
+            self._config.prompts.prompt_instruction_projection_system_template
+        )
+        user_template = self._config.prompts.prompt_instruction_projection_template
+        system_prompt = self._load_template(system_template)
+        user_text = self._load_template(user_template).format(
+            call_kind=call_kind,
+            source_instructions=source_instructions,
+            source_sha256=source_sha256,
+            source_tokens=max(1, int(source_tokens)),
+            overflow_tokens=max(1, int(overflow_tokens)),
+            target_tokens=max(1, int(target_tokens)),
+        )
+        return self._assemble_with_system(
+            "prompt_instruction_projection",
+            "lean",
+            system_prompt,
+            [
+                PromptComponent(
+                    name="prompt_instruction_projection_task",
+                    category="system_prompt_instruction",
+                    text=user_text,
+                )
+            ],
+            template_names=(system_template, user_template),
+        )
+
     def build_communication_status_prompt(
         self,
         *,
