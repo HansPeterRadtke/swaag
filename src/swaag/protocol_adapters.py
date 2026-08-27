@@ -512,7 +512,7 @@ class OpenWebUiProjectionAdapter:
     """Builds persistence-safe Open WebUI status events plus a final return value."""
 
     def response(self, record: WorkerRecord) -> dict[str, Any]:
-        done = record.status in {"completed", "failed", "canceled"}
+        done = record.status in {"completed", "failed", "canceled", "input_required"}
         description = record.result or record.error or f"Worker is {record.status}"
         return {
             "return": record.result or (record.error if done else None),

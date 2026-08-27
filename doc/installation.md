@@ -80,3 +80,13 @@ python3 -m swaag doctor --json
 python3 -m swaag.tests
 pytest -q tests/test_config.py tests/test_cli.py -x
 ```
+
+## Open WebUI Pipe
+
+The tested standalone Pipe is `integrations/open_webui_pipe.py`. In an existing
+Open WebUI deployment, review and import that source as an administrator, then
+keep its default `127.0.0.1:13401` valves only when Open WebUI shares the Jetson
+network namespace with the repo-backed Swaag communication service. The Pipe
+has no model or session state of its own; Open WebUI chat/message identifiers
+map to durable Swaag worker/message state. Do not expose the unauthenticated
+communication listener beyond localhost.

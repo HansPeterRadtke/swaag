@@ -7,6 +7,7 @@ import copy
 import hashlib
 import json
 import sqlite3
+import threading
 from dataclasses import asdict, dataclass
 from datetime import datetime, timezone
 from pathlib import Path
@@ -47,6 +48,32 @@ _COMMUNICATION_STORE_MIGRATIONS = (
         """
         CREATE INDEX IF NOT EXISTS requests_pending
         ON requests(status, priority DESC, created_at, correlation_id)
+        """,
+    ),
+    (
+        """
+        CREATE TABLE protocol_contexts (
+            protocol TEXT NOT NULL,
+            external_context_id TEXT NOT NULL,
+            worker_id TEXT NOT NULL,
+            created_at TEXT NOT NULL,
+            updated_at TEXT NOT NULL,
+            PRIMARY KEY (protocol, external_context_id)
+        )
+        """,
+        """
+        CREATE TABLE protocol_messages (
+            protocol TEXT NOT NULL,
+            external_message_id TEXT NOT NULL,
+            external_context_id TEXT NOT NULL,
+            worker_id TEXT NOT NULL,
+            created_at TEXT NOT NULL,
+            PRIMARY KEY (protocol, external_message_id)
+        )
+        """,
+        """
+        CREATE INDEX protocol_messages_context
+        ON protocol_messages(protocol, external_context_id, created_at)
         """,
     ),
 )
@@ -121,6 +148,76 @@ class CommunicationStore:
                 (status, completed, reply, correlation_id),
             )
 
+    def protocol_worker(self, protocol: str, external_context_id: str) -> str | None:
+        with self._connect() as connection:
+            row = connection.execute(
+                """
+                SELECT worker_id FROM protocol_contexts
+                WHERE protocol=? AND external_context_id=?
+                """,
+                (protocol, external_context_id),
+            ).fetchone()
+        return None if row is None else str(row[0])
+
+    def set_protocol_worker(
+        self,
+        protocol: str,
+        external_context_id: str,
+        worker_id: str,
+    ) -> None:
+        now = utc_now_iso()
+        with self._connect() as connection:
+            connection.execute(
+                """
+                INSERT INTO protocol_contexts(
+                    protocol, external_context_id, worker_id, created_at, updated_at
+                ) VALUES (?, ?, ?, ?, ?)
+                ON CONFLICT(protocol, external_context_id) DO UPDATE SET
+                    worker_id=excluded.worker_id,
+                    updated_at=excluded.updated_at
+                """,
+                (protocol, external_context_id, worker_id, now, now),
+            )
+
+    def protocol_message(
+        self,
+        protocol: str,
+        external_message_id: str,
+    ) -> tuple[str, str] | None:
+        with self._connect() as connection:
+            row = connection.execute(
+                """
+                SELECT external_context_id, worker_id FROM protocol_messages
+                WHERE protocol=? AND external_message_id=?
+                """,
+                (protocol, external_message_id),
+            ).fetchone()
+        return None if row is None else (str(row[0]), str(row[1]))
+
+    def record_protocol_message(
+        self,
+        protocol: str,
+        external_message_id: str,
+        external_context_id: str,
+        worker_id: str,
+    ) -> None:
+        with self._connect() as connection:
+            connection.execute(
+                """
+                INSERT OR IGNORE INTO protocol_messages(
+                    protocol, external_message_id, external_context_id,
+                    worker_id, created_at
+                ) VALUES (?, ?, ?, ?, ?)
+                """,
+                (
+                    protocol,
+                    external_message_id,
+                    external_context_id,
+                    worker_id,
+                    utc_now_iso(),
+                ),
+            )
+
 
 class CommunicationService:
     """Separate correlated communication/control service using the canonical AgentRuntime."""
@@ -129,6 +226,7 @@ class CommunicationService:
         self.runtime = runtime
         self.assistant_runtime = assistant_runtime
         self.store = CommunicationStore(runtime.config.sessions.root)
+        self._protocol_send_lock = threading.Lock()
         self._semaphore = asyncio.Semaphore(max(1, int(max_concurrency)))
         self.workers = WorkerManager(runtime, max_workers=max_concurrency)
         self.task_api = TaskApi(self.workers)
@@ -258,6 +356,8 @@ class CommunicationService:
         operation: str,
         params: dict[str, Any],
     ) -> dict[str, Any]:
+        if protocol == "open_webui" and operation == "send":
+            return self._open_webui_send(params)
         if protocol == "a2a" and operation == "send":
             return self._a2a_send(params, wait_for_completion=True)
         if protocol == "a2a" and operation == "list":
@@ -332,6 +432,91 @@ class CommunicationService:
                 ),
             }
         raise ValueError(f"unsupported protocol operation: {protocol}.{operation}")
+
+    def _open_webui_send(self, params: dict[str, Any]) -> dict[str, Any]:
+        conversation_id = _required_protocol_text(
+            params, "conversation_id", protocol="Open WebUI"
+        )
+        request_id = _required_protocol_text(
+            params, "request_id", protocol="Open WebUI"
+        )
+        message = _required_protocol_text(params, "message", protocol="Open WebUI")
+        attachments = params.get("attachments", [])
+        if not isinstance(attachments, list) or any(
+            not isinstance(item, dict) for item in attachments
+        ):
+            raise ValueError("Open WebUI attachments must be an array of objects")
+
+        with self._protocol_send_lock:
+            duplicate = self.store.protocol_message("open_webui", request_id)
+            if duplicate is not None:
+                duplicate_context_id, worker_id = duplicate
+                if duplicate_context_id != conversation_id:
+                    raise ValueError(
+                        "Open WebUI request_id is already bound to another conversation"
+                    )
+                record, cursor = self.workers.stream_snapshot(worker_id)
+                return {
+                    **OpenWebUiProjectionAdapter().response(record),
+                    "conversation_id": conversation_id,
+                    "next_sequence": cursor,
+                    "duplicate": True,
+                }
+
+            worker_id = self.store.protocol_worker("open_webui", conversation_id)
+            record = None
+            if worker_id is not None:
+                try:
+                    record = self.workers.store.get(worker_id)
+                except FileNotFoundError:
+                    worker_id = None
+            if record is not None and record.archived_at is not None:
+                worker_id = None
+                record = None
+
+            if worker_id is None:
+                created = self.task_api.execute(
+                    "create",
+                    {
+                        "objective": message,
+                        "attachments": attachments,
+                        "attachment_source": "open_webui",
+                        "start": True,
+                    },
+                )
+                worker_id = str(created["worker"]["worker_id"])
+                self.store.set_protocol_worker(
+                    "open_webui", conversation_id, worker_id
+                )
+            else:
+                for attachment in attachments:
+                    self.task_api.execute(
+                        "attachment.add",
+                        {
+                            **attachment,
+                            "worker_id": worker_id,
+                            "source": "open_webui",
+                        },
+                    )
+                self.workers.message(
+                    worker_id,
+                    message,
+                    source=f"open_webui:{request_id}",
+                )
+
+            self.store.record_protocol_message(
+                "open_webui",
+                request_id,
+                conversation_id,
+                worker_id,
+            )
+            record, cursor = self.workers.stream_snapshot(worker_id)
+            return {
+                **OpenWebUiProjectionAdapter().response(record),
+                "conversation_id": conversation_id,
+                "next_sequence": cursor,
+                "duplicate": False,
+            }
 
     def _a2a_subscription_response(
         self,
@@ -457,6 +642,7 @@ class CommunicationService:
                 {
                     "objective": message.text,
                     "attachments": list(message.attachments),
+                    "attachment_source": "a2a",
                     "start": True,
                 },
             )
@@ -1101,6 +1287,18 @@ def _a2a_history_length(
     ):
         raise ValueError("A2A historyLength must be a non-negative integer")
     return value
+
+
+def _required_protocol_text(
+    payload: dict[str, Any],
+    key: str,
+    *,
+    protocol: str,
+) -> str:
+    value = payload.get(key)
+    if not isinstance(value, str) or not value.strip():
+        raise ValueError(f"{protocol} {key} must be a non-empty string")
+    return value.strip()
 
 
 def _parse_a2a_timestamp(value: Any, field: str) -> datetime:

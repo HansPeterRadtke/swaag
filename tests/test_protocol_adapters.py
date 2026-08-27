@@ -570,12 +570,88 @@ def test_open_webui_projection_uses_persisted_status_and_final_return_channel() 
             "type": "status",
             "data": {
                 "description": "exact result",
-                "done": False,
+                "done": True,
                 "hidden": False,
             },
         }
     ]
     assert all(event["type"] not in {"input", "confirmation"} for event in response["events"])
+
+
+def test_open_webui_send_durably_maps_conversation_and_deduplicates_requests(
+    make_config, monkeypatch
+) -> None:
+    config = make_config()
+    service = CommunicationService(AgentRuntime(config, model_client=object()))
+
+    def queue_without_executor(worker_id: str):
+        return service.workers.store.transition(
+            worker_id,
+            "queued",
+            expected={"created"},
+            event_type="worker_queued",
+        )
+
+    monkeypatch.setattr(service.workers, "start", queue_without_executor)
+    first = service.protocol_projection(
+        "open_webui",
+        "send",
+        {
+            "conversation_id": "chat-1",
+            "request_id": "request-1",
+            "message": "Inspect the raw attachment.",
+            "attachments": [
+                {
+                    "original_name": "facts.bin",
+                    "media_type": "application/octet-stream",
+                    "content_base64": "ZXhhY3QgYnl0ZXM=",
+                }
+            ],
+        },
+    )
+    duplicate = service.protocol_projection(
+        "open_webui",
+        "send",
+        {
+            "conversation_id": "chat-1",
+            "request_id": "request-1",
+            "message": "This retry must not be queued twice.",
+        },
+    )
+    followup = service.protocol_projection(
+        "open_webui",
+        "send",
+        {
+            "conversation_id": "chat-1",
+            "request_id": "request-2",
+            "message": "Continue in the same durable worker.",
+        },
+    )
+    worker_id = first["metadata"]["worker_id"]
+    attachments = service.workers.attachments(worker_id)
+    service.workers.shutdown()
+    restarted = CommunicationService(AgentRuntime(config, model_client=object()))
+    duplicate_after_restart = restarted.protocol_projection(
+        "open_webui",
+        "send",
+        {
+            "conversation_id": "chat-1",
+            "request_id": "request-1",
+            "message": "A process restart must retain request deduplication.",
+        },
+    )
+    mapped_worker_id = restarted.store.protocol_worker("open_webui", "chat-1")
+    restarted.workers.shutdown()
+
+    assert first["duplicate"] is False
+    assert duplicate["duplicate"] is True
+    assert duplicate["metadata"]["worker_id"] == worker_id
+    assert duplicate_after_restart["duplicate"] is True
+    assert duplicate_after_restart["metadata"]["worker_id"] == worker_id
+    assert followup["metadata"]["worker_id"] == worker_id
+    assert attachments[0].original_name == "facts.bin"
+    assert attachments[0].source == "open_webui"
+    assert mapped_worker_id == worker_id
 
 
 def test_critical_failure_remains_retrievable_by_every_projection_after_restart(

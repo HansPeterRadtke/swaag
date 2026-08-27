@@ -39,6 +39,7 @@ class TaskApi:
             attachment_payloads = args.get("attachments", [])
             if not isinstance(attachment_payloads, list):
                 raise ValueError("attachments must be an array")
+            attachment_source = _optional_text(args, "attachment_source") or "task_api_create"
             decoded_attachments = [_attachment_payload(item) for item in attachment_payloads]
             max_bytes = self.workers.runtime.config.attachments.max_upload_bytes
             if any(len(data) > max_bytes for _name, _media_type, data in decoded_attachments):
@@ -56,7 +57,7 @@ class TaskApi:
                     data,
                     original_name=name,
                     media_type=media_type,
-                    source="task_api_create",
+                    source=attachment_source,
                 )
             if bool(args.get("start", False)):
                 record = self.workers.start(record.worker_id)

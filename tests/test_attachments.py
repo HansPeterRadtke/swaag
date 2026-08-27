@@ -178,6 +178,7 @@ def test_task_api_accepts_attachments_before_worker_start(make_config, tmp_path:
                     "content_base64": base64.b64encode(b"evidence").decode("ascii"),
                 }
             ],
+            "attachment_source": "upload_transport",
         },
     )
     worker_id = created["worker"]["worker_id"]
@@ -186,5 +187,6 @@ def test_task_api_accepts_attachments_before_worker_start(make_config, tmp_path:
     manager.shutdown()
 
     assert listed["attachments"][0]["original_name"] == "evidence.txt"
+    assert listed["attachments"][0]["source"] == "upload_transport"
     assert "storage_ref" not in listed["attachments"][0]
     assert inspected["attachments"][0]["size_bytes"] == len(b"evidence")

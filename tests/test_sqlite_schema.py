@@ -95,7 +95,7 @@ def test_all_runtime_sqlite_stores_record_explicit_schema_versions(tmp_path) -> 
     preemption = ModelPreemptionCoordinator(sessions)
     embeddings = DerivedEmbeddingIndex(sessions, _Embeddings())
 
-    assert _version(communication.path) == 1
+    assert _version(communication.path) == 2
     assert _version(workers.path) == 3
     assert _version(history.sqlite_history_path()) == 1
     assert _version(archives.catalog_path) == 1
