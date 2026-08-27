@@ -8,6 +8,7 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import Any, Callable, Iterable
 
+from swaag.benchmark.context_order import _stable_model_identity
 from swaag.communication import CommunicationService
 from swaag.config import AgentConfig, load_config
 from swaag.runtime import AgentRuntime
@@ -127,6 +128,16 @@ def _case_config(
 def _model_identity(runtime: AgentRuntime) -> Any:
     provider = getattr(runtime.client, "cache_identity", None)
     return provider() if callable(provider) else type(runtime.client).__name__
+
+
+def _stable_model_identities(identities: object) -> object:
+    if not isinstance(identities, dict):
+        return identities
+    return {
+        "strong": _stable_model_identity(identities.get("strong")),
+        "assistant": _stable_model_identity(identities.get("assistant")),
+        "distinct_endpoints": identities.get("distinct_endpoints"),
+    }
 
 
 def _write_report(path: Path, report: dict[str, Any]) -> None:
@@ -299,7 +310,9 @@ def run_communication_routing_benchmark(
             raise ValueError("Communication-routing checkpoint results are invalid")
         results = [dict(item) for item in raw_results]
         checkpoint_identities = checkpoint.get("model_identities")
-        if model_identities is not None and model_identities != checkpoint_identities:
+        if model_identities is not None and _stable_model_identities(
+            model_identities
+        ) != _stable_model_identities(checkpoint_identities):
             raise ValueError("Communication-routing checkpoint model identity changed")
         if model_identities is None and len(results) == len(selected):
             probe_root = output_dir / "identity-probe" / "sessions"
@@ -322,7 +335,9 @@ def run_communication_routing_benchmark(
                 "assistant": _model_identity(probe_assistant),
                 "distinct_endpoints": strong_url != assistant_url,
             }
-            if model_identities != checkpoint_identities:
+            if _stable_model_identities(model_identities) != _stable_model_identities(
+                checkpoint_identities
+            ):
                 raise ValueError(
                     "Communication-routing checkpoint model identity changed"
                 )
@@ -347,7 +362,9 @@ def run_communication_routing_benchmark(
         }
         if model_identities is None:
             model_identities = current_identities
-        elif current_identities != model_identities:
+        elif _stable_model_identities(current_identities) != _stable_model_identities(
+            model_identities
+        ):
             raise ValueError("Communication-routing runtime model identity changed")
         state = main.create_or_load_session()
         seeded_events = _seed_evidence(main, state, case.evidence)

@@ -14,12 +14,18 @@ from swaag.types import CompletionResult, ContractSpec
 
 class _RoutingBenchmarkClient:
     is_deterministic_test_client = True
+    identity_generation = 0
 
     def __init__(self, label: str) -> None:
         self.label = label
 
     def cache_identity(self) -> dict[str, str]:
-        return {"model": self.label}
+        type(self).identity_generation += 1
+        return {
+            "base_url": f"http://{self.label}",
+            "model_alias": self.label,
+            "server_properties_sha256": str(type(self).identity_generation),
+        }
 
     def tokenize(self, text: str) -> int:
         return len(text.split()) if text.strip() else 0
