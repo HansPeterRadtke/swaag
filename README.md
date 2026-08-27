@@ -77,6 +77,7 @@ The scoped-instruction benchmarks exercise persistence/self-repair and measure s
 
 ```text
 .venv/bin/python -m swaag.benchmark prompt-instructions --output /data/var/swaag/benchmarks/prompt-instructions
+.venv/bin/python -m swaag.benchmark note-behavior --output /data/var/swaag/benchmarks/note-behavior
 .venv/bin/python -m swaag.benchmark instruction-following --output /data/var/swaag/benchmarks/instruction-following
 ```
 

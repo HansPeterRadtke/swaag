@@ -1288,6 +1288,39 @@ def _build_parser() -> argparse.ArgumentParser:
         "--json", action="store_true", help="Print the full JSON report."
     )
 
+    note_behavior_parser = subparsers.add_parser(
+        "note-behavior",
+        help="Run live categorized-note lifecycle and semantic-selection experiments.",
+    )
+    note_behavior_parser.add_argument(
+        "--output",
+        default="note_behavior_output",
+        help="Checkpointed artifact directory.",
+    )
+    note_behavior_parser.add_argument(
+        "--case",
+        action="append",
+        default=[],
+        help="Run only the named note behavior case.",
+    )
+    note_behavior_parser.add_argument(
+        "--model-base-url",
+        help="Optional alternate model endpoint for model-size comparisons.",
+    )
+    note_behavior_parser.add_argument(
+        "--timeout-seconds",
+        type=int,
+        help="Override the no-token timeout for this live experiment.",
+    )
+    note_behavior_parser.add_argument(
+        "--clean",
+        action="store_true",
+        help="Replace an existing artifact directory.",
+    )
+    note_behavior_parser.add_argument(
+        "--json", action="store_true", help="Print the full JSON report."
+    )
+
     instruction_following_parser = subparsers.add_parser(
         "instruction-following",
         help="Measure simultaneous standing-constraint following in production calls.",
@@ -1680,6 +1713,30 @@ def main(argv: Sequence[str] | None = None) -> int:
             print(
                 f"output={Path(args.output) / 'prompt_instruction_behavior_results.json'}"
             )
+        return 0 if report["complete"] and report["passed"] == report["total"] else 1
+    if args.command == "note-behavior":
+        from swaag.benchmark.note_behavior import run_note_behavior_benchmark
+
+        config = _live_experiment_config(
+            model_base_url=args.model_base_url,
+            timeout_seconds=args.timeout_seconds,
+        )
+        report = run_note_behavior_benchmark(
+            output_dir=Path(args.output),
+            config=config,
+            case_ids=list(args.case),
+            clean=bool(args.clean),
+        )
+        if args.json:
+            print(stable_json_dumps(report, indent=2))
+        else:
+            print(f"passed={report['passed']}/{report['total']}")
+            for result in report["results"]:
+                print(
+                    f"{result['case_id']}="
+                    f"{'passed' if result['verification']['passed'] else 'failed'}"
+                )
+            print(f"output={Path(args.output) / 'note_behavior_results.json'}")
         return 0 if report["complete"] and report["passed"] == report["total"] else 1
     if args.command == "instruction-following":
         from swaag.benchmark.instruction_following import (
