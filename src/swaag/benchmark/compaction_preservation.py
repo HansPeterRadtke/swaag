@@ -36,6 +36,9 @@ class CompactionPreservationResult:
     source_reference_count: int
     context_compilation_sequence: int
     context_accounting: dict[str, Any]
+    required_recovery_tokens: int = 0
+    target_summary_tokens: int = 0
+    actual_recovered_tokens: int = 0
 
 
 def _fact_message() -> str:
@@ -202,6 +205,15 @@ def run_compaction_preservation_benchmark(
                 context_compilation_sequence=compilation_event.sequence,
                 context_accounting=dict(
                     compilation_event.payload.get("accounting", {})
+                ),
+                required_recovery_tokens=int(
+                    summary_event.payload.get("required_recovery_tokens", 0)
+                ),
+                target_summary_tokens=int(
+                    summary_event.payload.get("target_summary_tokens", 0)
+                ),
+                actual_recovered_tokens=int(
+                    summary_event.payload.get("actual_recovered_tokens", 0)
                 ),
             )
         )

@@ -183,17 +183,12 @@ communication_status_template = "communication_status_user.txt"
 # ADVANCED TUNING — changes here affect all model calls globally.
 # Output ratios produce desired headroom, not mandatory input exclusions.
 # Percentage safety applies only when exact tokenizer counting is unavailable.
-#
-# safe_input_floor_tokens: minimum input budget preserved even when
-# the context is very tight (structural safety floor, not a soft guide).
 # -----------------------------------------------------------
 [budget_policy]
-fixed_overhead_min_tokens = 160
 structured_output_json_factor_default = 1.50
 structured_output_json_floor_tokens = 192
 structured_output_schema_factor = 1.25
 structured_output_schema_floor_tokens = 16
-safe_input_floor_tokens = 128
 
 [budget_policy.call_classes]
 action = "large"
@@ -261,12 +256,6 @@ tiny = 0.05
 small = 0.06
 medium = 0.08
 large = 0.10
-
-[budget_policy.fixed_overhead_ratio]
-tiny = 0.18
-small = 0.18
-medium = 0.16
-large = 0.14
 
 [history_search]
 max_results = 12

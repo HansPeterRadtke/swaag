@@ -154,14 +154,11 @@ class BudgetPolicyConfig:
     output_ratio_by_kind: dict[str, float]
     output_floor_ratio_by_kind: dict[str, float]
     safety_ratio: dict[str, float]
-    fixed_overhead_ratio: dict[str, float]
-    fixed_overhead_min_tokens: int
     structured_output_json_factor_by_contract: dict[str, float]
     structured_output_json_factor_default: float
     structured_output_json_floor_tokens: int
     structured_output_schema_factor: float
     structured_output_schema_floor_tokens: int
-    safe_input_floor_tokens: int
 
 
 @dataclass(slots=True)
@@ -402,8 +399,6 @@ def _coerce_config(data: dict[str, Any]) -> AgentConfig:
         output_ratio_by_kind={str(key): float(value) for key, value in data["budget_policy"]["output_ratio_by_kind"].items()},
         output_floor_ratio_by_kind={str(key): float(value) for key, value in data["budget_policy"]["output_floor_ratio_by_kind"].items()},
         safety_ratio={str(key): float(value) for key, value in data["budget_policy"]["safety_ratio"].items()},
-        fixed_overhead_ratio={str(key): float(value) for key, value in data["budget_policy"]["fixed_overhead_ratio"].items()},
-        fixed_overhead_min_tokens=int(data["budget_policy"]["fixed_overhead_min_tokens"]),
         structured_output_json_factor_by_contract={
             str(key): float(value)
             for key, value in data["budget_policy"]["structured_output_json_factor_by_contract"].items()
@@ -412,7 +407,6 @@ def _coerce_config(data: dict[str, Any]) -> AgentConfig:
         structured_output_json_floor_tokens=int(data["budget_policy"]["structured_output_json_floor_tokens"]),
         structured_output_schema_factor=float(data["budget_policy"]["structured_output_schema_factor"]),
         structured_output_schema_floor_tokens=int(data["budget_policy"]["structured_output_schema_floor_tokens"]),
-        safe_input_floor_tokens=int(data["budget_policy"]["safe_input_floor_tokens"]),
     )
     history_search = HistorySearchConfig(
         max_results=int(data["history_search"]["max_results"]),
@@ -559,10 +553,8 @@ def _coerce_config(data: dict[str, Any]) -> AgentConfig:
     _validate_positive("reader.default_chunk_chars", reader.default_chunk_chars)
     _validate_non_negative("reader.default_overlap_chars", reader.default_overlap_chars)
     _validate_positive("reader.max_chunk_chars", reader.max_chunk_chars)
-    _validate_positive("budget_policy.fixed_overhead_min_tokens", budget_policy.fixed_overhead_min_tokens)
     _validate_positive("budget_policy.structured_output_json_floor_tokens", budget_policy.structured_output_json_floor_tokens)
     _validate_positive("budget_policy.structured_output_schema_floor_tokens", budget_policy.structured_output_schema_floor_tokens)
-    _validate_positive("budget_policy.safe_input_floor_tokens", budget_policy.safe_input_floor_tokens)
     if budget_policy.structured_output_json_factor_default <= 0:
         raise ValueError("budget_policy.structured_output_json_factor_default must be positive")
     if budget_policy.structured_output_schema_factor <= 0:

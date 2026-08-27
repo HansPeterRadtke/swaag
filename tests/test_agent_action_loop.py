@@ -235,7 +235,7 @@ def test_history_compaction_creates_replayable_summary_with_exact_sources(
     runtime = AgentRuntime(config, model_client=client)
     state = runtime.create_or_load_session()
     for role, content in (
-        ("user", "first"),
+        ("user", "first " * 200),
         ("assistant", "second"),
         ("user", "third"),
         ("assistant", "fourth"),
@@ -252,7 +252,9 @@ def test_history_compaction_creates_replayable_summary_with_exact_sources(
         for event in runtime.history.read_history(state.session_id)
         if event.event_type == "history_compressed"
     )
-    assert compressed.payload["candidate_source_message_count"] == 3
+    assert compressed.payload["candidate_source_message_count"] == 1
+    assert compressed.payload["actual_recovered_tokens"] > 0
+    assert compressed.payload["required_recovery_tokens"] == 1
     rebuilt = runtime.history.rebuild_from_history(state.session_id, prefer_checkpoint=False)
     assert rebuilt.messages == state.messages
 
@@ -268,7 +270,7 @@ def test_history_summary_recompiles_after_output_starvation(make_config) -> None
     runtime = AgentRuntime(config, model_client=client)
     state = runtime.create_or_load_session()
     for role, content in (
-        ("user", "first fact"),
+        ("user", "first fact " * 200),
         ("assistant", "second fact"),
         ("user", "third fact"),
         ("assistant", "fourth fact"),
@@ -282,6 +284,36 @@ def test_history_summary_recompiles_after_output_starvation(make_config) -> None
     assert len(client.requests) == 2
     assert client.requests[1]["n_predict"] > client.requests[0]["n_predict"]
     assert state.messages[0].content == "Earlier facts retained."
+
+
+def test_history_compaction_target_recovers_only_the_measured_deficit(
+    make_config,
+) -> None:
+    runtime = AgentRuntime(
+        make_config(model__context_limit=32_000),
+        model_client=FakeModelClient([]),
+    )
+    state = runtime.create_or_load_session()
+    runtime._record_message(
+        state,
+        Message(role="user", content="durable evidence " * 400, created_at="t"),
+    )
+    source = state.messages[:1]
+
+    small = runtime._history_compaction_target(
+        state,
+        source,
+        required_recovery_tokens=50,
+    )
+    large = runtime._history_compaction_target(
+        state,
+        source,
+        required_recovery_tokens=250,
+    )
+
+    assert small is not None and large is not None
+    assert small[1] == large[1]
+    assert small[0] - large[0] == 200
 
 
 def test_oversized_single_history_message_is_hierarchically_summarized(

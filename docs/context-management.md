@@ -8,6 +8,8 @@ Before invoking any semantic reducer, compile the richest available candidate co
 
 When overflow occurs, measure which components consume the failed request and use semantic reduction targeted to that operation. Rebuild and re-tokenize after every reduction.
 
+History compaction receives the exact deficit from the failed next call. It considers the smallest prefix that can mechanically recover that deficit, derives the summary target from the measured source and replacement-provenance cost, and asks the model what meaning to preserve. It records requested, estimated, and actual recovery and refuses to replace exact prompt history with a derived view that recovers no tokens. Tool-result, completion-evidence, communication-evidence, and history-analysis projections likewise reduce only the current measured deficit plus fixed serialization slack; they do not halve content or cap targets with a permanent context percentage.
+
 ## Compilation pipeline
 
 1. Identify the semantic operation and model.
@@ -24,7 +26,7 @@ When overflow occurs, measure which components consume the failed request and us
 
 ## Accounting and allocation
 
-For every call, the implementation records model identifier, context capacity, output reserve, safety margin if any, mandatory-input tokens, each dynamic component's tokens, final input tokens, actual output tokens, and provenance identifying which source records produced projections or summaries. Each prompt assembly also carries content hashes for its protocol wrapper, rendered system instruction, and canonical template artifacts; `prompt_built` persists those versions with the complete rendered-prompt hash so behavior can be correlated and replayed without guessing from a package version.
+For every call, the implementation records model identifier, context capacity, output reserve, safety margin if any, every actual serialized component, final input tokens, actual output tokens, and provenance identifying which source records produced projections or summaries. There is no unmeasured fixed-overhead or safe-input reservation: exact serialized framing is counted directly, while estimator uncertainty belongs only to the disclosed conservative safety strategy. Each prompt assembly also carries content hashes for its protocol wrapper, rendered system instruction, and canonical template artifacts; `prompt_built` persists those versions with the complete rendered-prompt hash so behavior can be correlated and replayed without guessing from a package version.
 
 Avoid a universal percentage allocation. A document-extraction call may devote almost all input to a document; a communication call may need status and recent history; a tool-selection call may need capability descriptions and little history. Deterministic code calculates capacities. An LLM decides semantic allocation within them.
 

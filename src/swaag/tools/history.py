@@ -575,14 +575,11 @@ class HistoryAnalyzeTool(Tool):
                 overflow_tokens = max(
                     1, exc.report.required_tokens - exc.report.context_limit
                 )
-                previous_target = projection_records.get(sequence, {}).get(
-                    "target_tokens"
-                )
                 target_tokens = max(64, current_tokens - overflow_tokens - 32)
-                if isinstance(previous_target, int):
-                    target_tokens = min(target_tokens, max(64, previous_target // 2))
                 if target_tokens >= current_tokens:
-                    target_tokens = max(64, current_tokens // 2)
+                    raise ToolValidationError(
+                        "history analysis cannot recover the measured overflow from its largest source"
+                    )
                 source_event = allowed_events[sequence]
                 original_component = raw_event_components[sequence]
                 projection = _project_history_text(

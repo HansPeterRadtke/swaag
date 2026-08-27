@@ -1,18 +1,11 @@
 from __future__ import annotations
 
-"""Dynamic, scale-free prompt budgeting.
+"""Mechanical output planning for exactly measured model requests.
 
-The agent previously relied on fixed absolute token reserves and tiny
-per-section caps. That worked only for one context size and silently
-distorted behavior at other sizes. This module defines a call-type-aware
-budget policy:
-
-1. derive an output reserve from the call kind and context size,
-2. reserve fixed overhead and a safety margin,
-3. compute the maximum safe input budget,
-4. reserve enough output for the constrained JSON schema.
-
-The runtime performs the final exact fit check with ``build_budget``.
+Per-kind ratios express desired output headroom only. They never reserve
+context ahead of useful input. The context compiler accounts for the actual
+serialized request, applies an operation/schema minimum, and uses
+proportional safety only when exact tokenizer accounting is unavailable.
 """
 
 from dataclasses import dataclass
@@ -34,8 +27,6 @@ class CallBudgetPlan:
     context_limit: int
     output_tokens: int
     safety_margin_tokens: int
-    fixed_overhead_tokens: int
-    safe_input_budget: int
 
 
 def classify_call_budget(call_kind: str) -> CallBudgetClass:
@@ -72,19 +63,12 @@ def compute_call_budget(
         int(round(context_limit * float(config.budget_policy.safety_ratio[budget_class]))),
         int(config.context.safety_margin_tokens),
     )
-    fixed_overhead = max(
-        int(round(context_limit * float(config.budget_policy.fixed_overhead_ratio[budget_class]))),
-        int(config.budget_policy.fixed_overhead_min_tokens),
-    )
-    safe_input_budget = max(context_limit - output_tokens - safety_margin - fixed_overhead, int(config.budget_policy.safe_input_floor_tokens))
     return CallBudgetPlan(
         call_kind=call_kind,
         budget_class=budget_class,
         context_limit=context_limit,
         output_tokens=output_tokens,
         safety_margin_tokens=safety_margin,
-        fixed_overhead_tokens=fixed_overhead,
-        safe_input_budget=safe_input_budget,
     )
 
 

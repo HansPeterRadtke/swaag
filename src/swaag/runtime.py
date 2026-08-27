@@ -1102,7 +1102,10 @@ class AgentRuntime:
                 sequence, projection = projected
                 tool_result_projections[sequence] = projection
                 continue
-            if not self._compact_once(state):
+            if not self._compact_once(
+                state,
+                required_recovery_tokens=compilation.overflow_tokens,
+            ):
                 break
 
         raise BudgetExceededError(
@@ -1330,13 +1333,8 @@ class AgentRuntime:
                         if historical_projection_target_tokens is None
                         else historical_projection_target_tokens
                     )
-                    projection_plan = self.context_compiler.plan(
-                        call_kind="evidence_projection",
-                        context_limit=context_limit_resolution[0],
-                    )
                     historical_projection_target_tokens = min(
                         projection_capacity,
-                        max(32, int(projection_plan.output_tokens) - 64),
                         max(32, previous_target - reduction),
                     )
                     historical_evidence_projection, projection_report = (
@@ -1763,13 +1761,8 @@ class AgentRuntime:
                 if projection_target_tokens is None
                 else projection_target_tokens
             )
-            projection_plan = self.context_compiler.plan(
-                call_kind="evidence_projection",
-                context_limit=context_limit_resolution[0],
-            )
             projection_target_tokens = min(
                 projection_capacity,
-                max(32, int(projection_plan.output_tokens) - 64),
                 max(32, previous_target - reduction),
             )
             projection, projection_report = self._reduce_text_hierarchically(
@@ -2078,9 +2071,10 @@ class AgentRuntime:
         if not candidates:
             return None
         current_tokens, sequence, message = max(candidates, key=lambda item: item[0])
-        # Reduce enough to clear the measured overflow plus a small deterministic
-        # cushion for JSON/provenance framing, while preserving useful room when possible.
-        target_tokens = max(64, current_tokens - overflow - max(32, int(current_tokens * 0.05)))
+        # Recover only the measured deficit plus fixed framing slack. The next
+        # complete prompt is rebuilt and counted, so no proportional semantic
+        # reduction is needed as a substitute for exact admission.
+        target_tokens = max(64, current_tokens - overflow - 32)
         if sequence in existing_projections:
             projected_text_tokens = self._counter(state).count_text(
                 existing_projections[sequence]
@@ -2801,7 +2795,63 @@ class AgentRuntime:
             depth=depth + 1,
         )
 
-    def _compact_once(self, state: SessionState) -> bool:
+    def _history_compaction_target(
+        self,
+        state: SessionState,
+        source_messages: list[Message],
+        *,
+        required_recovery_tokens: int,
+    ) -> tuple[int, int] | None:
+        counter = self._counter(state)
+        source_tokens = counter.count_text(
+            self.prompts.render_messages(source_messages)
+        ).tokens
+        references = message_source_event_references(source_messages)
+        empty_summary = Message(
+            **summary_message_payload(
+                "",
+                source_message_count=len(source_messages),
+                created_at=utc_now_iso(),
+                source_event_references=references,
+            )
+        )
+        replacement_overhead = counter.count_text(
+            self.prompts.render_messages([empty_summary])
+        ).tokens
+        target = (
+            int(source_tokens)
+            - int(replacement_overhead)
+            - max(1, int(required_recovery_tokens))
+        )
+        if target < 1:
+            return None
+        return target, int(source_tokens)
+
+    def _compaction_recovery(
+        self,
+        state: SessionState,
+        source_messages: list[Message],
+        summary_payload: dict[str, Any],
+    ) -> tuple[int, int, int]:
+        counter = self._counter(state)
+        source_tokens = counter.count_text(
+            self.prompts.render_messages(source_messages)
+        ).tokens
+        replacement_tokens = counter.count_text(
+            self.prompts.render_messages([Message(**summary_payload)])
+        ).tokens
+        return (
+            int(source_tokens) - int(replacement_tokens),
+            int(source_tokens),
+            int(replacement_tokens),
+        )
+
+    def _compact_once(
+        self,
+        state: SessionState,
+        *,
+        required_recovery_tokens: int = 1,
+    ) -> bool:
         if len(state.messages) <= 2:
             return False
         # Keep one message outside the candidate and require at least one exact
@@ -2814,15 +2864,21 @@ class AgentRuntime:
         contract = summary_contract()
         context_limit_resolution = self._resolve_context_limit()
         minimum_summary_tokens = int(self.config.context.reserved_summary_tokens)
-        for source_count in range(maximum_source, 0, -1):
+        required_recovery = max(1, int(required_recovery_tokens))
+        hierarchical_target: tuple[int, int] | None = None
+        for source_count in range(1, maximum_source + 1):
             source_messages = state.messages[:source_count]
-            adaptive_cap = max(0, source_count - 1)
-            summary_context_limit, _summary_context_source = context_limit_resolution
-            summary_plan = self.context_compiler.plan(call_kind="summary", context_limit=summary_context_limit)
-            target_summary_tokens = max(
-                int(self.config.context.reserved_summary_tokens),
-                int(summary_plan.output_tokens) - 32,
+            target = self._history_compaction_target(
+                state,
+                source_messages,
+                required_recovery_tokens=required_recovery,
             )
+            if target is None:
+                continue
+            target_summary_tokens, estimated_source_tokens = target
+            if source_count == 1:
+                hierarchical_target = target
+            adaptive_cap = max(0, source_count - 1)
             assembly = self.prompts.build_summary_prompt(
                 source_messages,
                 prompt_mode="lean",
@@ -2886,6 +2942,15 @@ class AgentRuntime:
                 created_at=utc_now_iso(),
                 source_event_references=source_event_references,
             )
+            recovered_tokens, actual_source_tokens, replacement_tokens = (
+                self._compaction_recovery(
+                    state,
+                    source_messages[:effective_source_count],
+                    summary_payload,
+                )
+            )
+            if recovered_tokens <= 0:
+                continue
             event_payload = {
                 "source_message_count": effective_source_count,
                 "source_event_references": source_event_references,
@@ -2894,6 +2959,12 @@ class AgentRuntime:
                 "summary_budget_report": asdict(report),
                 "adaptive_preserve_recent_messages": preserve_recent,
                 "candidate_source_message_count": source_count,
+                "required_recovery_tokens": required_recovery,
+                "target_summary_tokens": target_summary_tokens,
+                "estimated_source_tokens": estimated_source_tokens,
+                "actual_source_tokens": actual_source_tokens,
+                "actual_replacement_tokens": replacement_tokens,
+                "actual_recovered_tokens": recovered_tokens,
             }
             self.history.record_event(state, "summary_created", event_payload)
             self.history.record_event(state, "history_compressed", event_payload)
@@ -2903,15 +2974,8 @@ class AgentRuntime:
             )
             return True
         source_messages = state.messages[:1]
-        if source_messages:
-            summary_plan = self.context_compiler.plan(
-                call_kind="summary",
-                context_limit=context_limit_resolution[0],
-            )
-            target_summary_tokens = max(
-                int(self.config.context.reserved_summary_tokens),
-                int(summary_plan.output_tokens) - 32,
-            )
+        if source_messages and hierarchical_target is not None:
+            target_summary_tokens, estimated_source_tokens = hierarchical_target
             summary_text, report = self._summarize_oversized_message(
                 state,
                 source_messages[0],
@@ -2928,6 +2992,11 @@ class AgentRuntime:
                 created_at=utc_now_iso(),
                 source_event_references=source_event_references,
             )
+            recovered_tokens, actual_source_tokens, replacement_tokens = (
+                self._compaction_recovery(state, source_messages, summary_payload)
+            )
+            if recovered_tokens <= 0:
+                return False
             event_payload = {
                 "source_message_count": 1,
                 "source_event_references": source_event_references,
@@ -2937,6 +3006,12 @@ class AgentRuntime:
                 "adaptive_preserve_recent_messages": 0,
                 "candidate_source_message_count": 1,
                 "hierarchical": True,
+                "required_recovery_tokens": required_recovery,
+                "target_summary_tokens": target_summary_tokens,
+                "estimated_source_tokens": estimated_source_tokens,
+                "actual_source_tokens": actual_source_tokens,
+                "actual_replacement_tokens": replacement_tokens,
+                "actual_recovered_tokens": recovered_tokens,
             }
             self.history.record_event(state, "summary_created", event_payload)
             self.history.record_event(state, "history_compressed", event_payload)

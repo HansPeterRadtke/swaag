@@ -87,8 +87,11 @@ def test_compaction_preservation_benchmark_repeats_and_checkpoints(
 
     assert report["complete"] is True
     assert report["passed"] == report["total"] == 3
-    assert len(client.requests) == 3
+    assert len(client.requests) >= 3
     assert all(row["source_reference_count"] > 0 for row in report["results"])
+    assert all(row["required_recovery_tokens"] == 1 for row in report["results"])
+    assert all(row["target_summary_tokens"] > 0 for row in report["results"])
+    assert all(row["actual_recovered_tokens"] > 0 for row in report["results"])
     assert all(row["context_accounting"]["context_limit"] == 12_000 for row in report["results"])
     checkpoint = json.loads(output.read_text(encoding="utf-8"))
     assert checkpoint == report

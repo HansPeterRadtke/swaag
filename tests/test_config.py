@@ -99,21 +99,6 @@ def test_legacy_recent_message_limit_is_accepted_but_no_longer_controls_semantic
 
 
 
-def test_budget_policy_safe_input_floor_is_loaded_from_defaults() -> None:
-    """safe_input_floor_tokens must load from defaults.toml."""
-    config = load_config()
-    assert config.budget_policy.safe_input_floor_tokens == 128
-
-
-def test_budget_policy_safe_input_floor_can_be_overridden_via_env() -> None:
-    """safe_input_floor_tokens must be overridable via environment variable."""
-    env = {"SWAAG__BUDGET_POLICY__SAFE_INPUT_FLOOR_TOKENS": "64"}
-    config = load_config(env=env)
-    assert config.budget_policy.safe_input_floor_tokens == 64
-
-
-
-
 def test_environment_aubro_overrides_are_loaded(tmp_path: Path) -> None:
     env = {
         "SWAAG__SESSIONS__ROOT": str(tmp_path / "sessions"),
