@@ -14,7 +14,9 @@ from dataclasses import asdict
 from pathlib import Path
 from typing import Any, Sequence
 
-from swaag.benchmark.failure_analyzer import FailureAnalyzer
+import requests
+
+from swaag.benchmark.failure_analyzer import FailureAnalysis, FailureAnalyzer
 from swaag.benchmark import external as external_benchmarks
 from swaag.benchmark.result_collector import BenchmarkTaskResult, ResultCollector
 from swaag.benchmark.scoring import build_task_rubric
@@ -31,13 +33,29 @@ from swaag.model import LlamaCppClient, stable_llama_server_properties
 from swaag.runtime import AgentRuntime
 from swaag.communication import CommunicationService
 from swaag.types import SessionState
-from swaag.model_cache import RecordReplayModelClient
+from swaag.model_cache import MissingReplayEntryError, RecordReplayModelClient
 from swaag.utils import sha256_text, stable_json_dumps
 from swaag.benchmark.verifier import verify_benchmark_contract
 
 
 class BenchmarkSeedTimeout(BaseException):
     """Abort a benchmark seed after a mechanical wall-clock budget expires."""
+
+
+def _benchmark_execution_blocker(error: Exception | None) -> dict[str, str] | None:
+    if isinstance(error, MissingReplayEntryError):
+        return {
+            "kind": "missing_exact_replay_entry",
+            "error_type": type(error).__name__,
+            "reason": str(error),
+        }
+    if isinstance(error, (requests.ConnectionError, urllib.error.URLError)):
+        return {
+            "kind": "model_endpoint_unreachable",
+            "error_type": type(error).__name__,
+            "reason": str(error),
+        }
+    return None
 
 
 @contextlib.contextmanager
@@ -269,9 +287,12 @@ def _normalize_agent_behavior_mode(raw: str | None) -> str | None:
         raise SystemExit(f"Unsupported agent behavior test mode: {raw}. The test system only supports cached mode.")
     return value
 
-def _benchmark_replay_cache_root() -> Path:
-    raw = os.environ.get("SWAAG_BENCHMARK_REPLAY_CACHE_ROOT", "/data/var/swaag/benchmark_replay_cache").strip()
-    root = Path(raw).expanduser()
+def _benchmark_replay_cache_root(override: Path | None = None) -> Path:
+    raw = os.environ.get(
+        "SWAAG_BENCHMARK_REPLAY_CACHE_ROOT",
+        "/data/var/swaag/benchmark_replay_cache",
+    ).strip()
+    root = (Path(raw) if override is None else Path(override)).expanduser()
     root.mkdir(parents=True, exist_ok=True)
     return root
 
@@ -346,6 +367,7 @@ def _build_agent_behavior_model_client(
     agent_behavior_mode: str | None,
     live_subset: bool,
     model_cache_namespace: str,
+    replay_cache_root: Path,
 ):
     delegate = scenario.model_client if scenario is not None else None
     if agent_behavior_mode != "cached":
@@ -355,9 +377,9 @@ def _build_agent_behavior_model_client(
     if delegate is not None and getattr(delegate, "is_record_replay_client", False):
         return delegate, None
     delegate = LlamaCppClient(config) if delegate is None else delegate
-    replay_cache_root = _benchmark_replay_cache_root() / model_cache_namespace / task.task_id
-    os.makedirs(replay_cache_root, exist_ok=True)
-    cassette_path = replay_cache_root / f"seed_{seed}.json"
+    task_cache_root = replay_cache_root / model_cache_namespace / task.task_id
+    os.makedirs(task_cache_root, exist_ok=True)
+    cassette_path = task_cache_root / f"seed_{seed}.json"
     replay_policy = _cached_replay_policy()
     mode = "record" if replay_policy == "record_if_missing" else "replay"
     planned_mode = "replay" if cassette_path.exists() else mode
@@ -529,13 +551,26 @@ def _print_benchmark_progress(*, current: int, total: int, task: BenchmarkTaskDe
     )
 
 
-def _planned_cache_mode(output_dir: Path, task: BenchmarkTaskDefinition, seeds: Sequence[int], *, cached: bool, model_cache_namespace: str) -> str:
+def _planned_cache_mode(
+    output_dir: Path,
+    task: BenchmarkTaskDefinition,
+    seeds: Sequence[int],
+    *,
+    cached: bool,
+    model_cache_namespace: str,
+    replay_cache_root: Path | None = None,
+) -> str:
     if not cached:
         return "uncached"
     policy = _cached_replay_policy()
     modes = []
     for seed in seeds:
-        cassette_path = _benchmark_replay_cache_root() / model_cache_namespace / task.task_id / f"seed_{seed}.json"
+        cassette_path = (
+            _benchmark_replay_cache_root(replay_cache_root)
+            / model_cache_namespace
+            / task.task_id
+            / f"seed_{seed}.json"
+        )
         if cassette_path.exists():
             modes.append("replay")
         else:
@@ -575,7 +610,10 @@ def _print_benchmark_summary(report: dict[str, Any]) -> None:
     run_metadata = report.get("run_metadata", {})
     print("agent_test_summary", flush=True)
     print(f"  execution_mode={run_metadata.get('execution_mode', 'executed_cached_benchmark')}", flush=True)
+    print(f"  execution_valid={bool(run_metadata.get('execution_valid', True))}", flush=True)
     print(f"  total_tasks={summary.get('total_tasks', 0)}", flush=True)
+    print(f"  executed_tasks={summary.get('executed_tasks', 0)}", flush=True)
+    print(f"  blocked_tasks={summary.get('blocked_tasks', 0)}", flush=True)
     print(f"  successful_tasks={summary.get('successful_tasks', 0)}", flush=True)
     print(f"  failed_tasks={summary.get('failed_tasks', 0)}", flush=True)
     print(f"  false_positives={summary.get('false_positives', 0)}", flush=True)
@@ -629,6 +667,8 @@ def _print_agent_test_category_cli_summary(report: dict[str, Any]) -> None:
     print("agent_test_category_summary", flush=True)
     print(f"  execution_mode={report.get('execution_mode', 'executed_cached_benchmark')}", flush=True)
     print(f"  total_tasks={report['summary']['total_tasks']}", flush=True)
+    print(f"  executed_tasks={report['summary'].get('executed_tasks', report['summary']['total_tasks'])}", flush=True)
+    print(f"  blocked_tasks={report['summary'].get('blocked_tasks', 0)}", flush=True)
     print(f"  successful_tasks={report['summary']['successful_tasks']}", flush=True)
     print(f"  failed_tasks={report['summary']['failed_tasks']}", flush=True)
     print(f"  false_positives={report['summary']['false_positives']}", flush=True)
@@ -675,6 +715,7 @@ def run_benchmarks(
     task_timeout_seconds: int | None = None,
     seeds: list[int] | None = None,
     agent_behavior_mode: str | None = None,
+    replay_cache_root: Path | None = None,
 ) -> dict[str, object]:
     if clean and output_dir.exists():
         shutil.rmtree(output_dir)
@@ -715,6 +756,9 @@ def run_benchmarks(
         effective_base_url,
         connect_timeout_seconds=effective_connect_timeout,
     )
+    effective_replay_cache_root = _benchmark_replay_cache_root(
+        replay_cache_root
+    )
     total_tasks = len(selected_tasks)
     for task_index, task in enumerate(selected_tasks, start=1):
         planned_cache_mode = _planned_cache_mode(
@@ -723,6 +767,7 @@ def run_benchmarks(
             effective_seeds,
             cached=resolved_agent_behavior_mode == "cached",
             model_cache_namespace=benchmark_model_cache_namespace,
+            replay_cache_root=effective_replay_cache_root,
         )
         _print_benchmark_progress(
             current=task_index - 1,
@@ -743,6 +788,7 @@ def run_benchmarks(
         aggregate_quality_summary: dict[str, Any] | None = None
         aggregate_wall_clock = 0.0
         aggregate_session_id: str | None = None
+        aggregate_execution_blockers: list[dict[str, str]] = []
         for seed in effective_seeds:
             scenario_root = workspaces_root if not use_live_model else workspaces_root / f"seed_{seed}"
             scenario = task.create(scenario_root, live_mode=use_live_model)
@@ -777,6 +823,7 @@ def run_benchmarks(
                 agent_behavior_mode=resolved_agent_behavior_mode,
                 live_subset=live_subset,
                 model_cache_namespace=benchmark_model_cache_namespace,
+                replay_cache_root=effective_replay_cache_root,
             )
             runtime = AgentRuntime(config, model_client=runtime_model_client)
             state = runtime.create_or_load_session()
@@ -794,6 +841,11 @@ def run_benchmarks(
                 state = _record_benchmark_timeout_event(runtime, state, runtime_error)
             except Exception as exc:
                 runtime_error = exc
+            execution_blocker = _benchmark_execution_blocker(runtime_error)
+            if execution_blocker is not None:
+                aggregate_execution_blockers.append(
+                    {"seed": str(seed), **execution_blocker}
+                )
 
             after_snapshot = _snapshot_workspace(scenario.workspace)
             rebuilt = runtime.history.rebuild_from_history(state.session_id)
@@ -826,7 +878,15 @@ def run_benchmarks(
             assert verification is not None
             assert quality is not None
             failure = None
-            if not verification.passed or scenario.expected_outcome == "expected_failure" or not quality["passed"]:
+            if execution_blocker is not None:
+                failure = FailureAnalysis(
+                    category="benchmark_execution_blocked",
+                    reason=execution_blocker["reason"],
+                    evidence=execution_blocker,
+                    subsystem="benchmark_harness",
+                    improvement_hints=[],
+                )
+            elif not verification.passed or scenario.expected_outcome == "expected_failure" or not quality["passed"]:
                 failure = analyzer.analyze(
                     state=rebuilt,
                     events=events,
@@ -870,6 +930,15 @@ def run_benchmarks(
                     "verification_repair_rounds": repair_rounds_used,
                     "wall_clock_seconds": task_elapsed,
                     "replay_cache": replay_cache_info or {},
+                    "runtime_error": (
+                        None
+                        if runtime_error is None
+                        else {
+                            "error_type": type(runtime_error).__name__,
+                            "reason": str(runtime_error),
+                        }
+                    ),
+                    "execution_blocker": execution_blocker,
                 }
             )
             aggregate_success = aggregate_success and success
@@ -918,6 +987,8 @@ def run_benchmarks(
                         seed_results,
                         cached=resolved_agent_behavior_mode == "cached",
                     ),
+                    "execution_blocked": bool(aggregate_execution_blockers),
+                    "execution_blockers": aggregate_execution_blockers,
                 },
                 failure_category=aggregate_failure.category if aggregate_failure is not None else None,
                 failure_reason=aggregate_failure.reason if aggregate_failure is not None else None,
@@ -933,13 +1004,18 @@ def run_benchmarks(
             verification_summary=aggregate_verification_summary or {"checks": {}, "evidence": {}, "reason": ""},
             quality_summary=aggregate_quality_summary or {"passed": True, "checks": {}, "evidence": {}, "oracle": {}},
         )
+        if aggregate_execution_blockers:
+            task_score_percent = 0.0
         failure_label = aggregate_failure.category if aggregate_failure is not None else "none"
+        execution_label = (
+            "blocked" if aggregate_execution_blockers else "executed"
+        )
         _print_benchmark_progress(
             current=task_index,
             total=total_tasks,
             task=task,
             status=(
-                f"finished success={aggregate_success} false_positive={aggregate_false_positive} "
+                f"finished {execution_label} success={aggregate_success} false_positive={aggregate_false_positive} "
                 f"score={task_score_percent:.1f} failure={failure_label} "
                 f"model_calls={trace_metrics.get('model_call_count', 0)} tools={trace_metrics.get('tool_call_count', 0)} "
                 f"cache={_actual_cache_mode(seed_results, cached=resolved_agent_behavior_mode == 'cached')}"
@@ -949,16 +1025,28 @@ def run_benchmarks(
         artifact_prefix = "agent_test_cached"
     else:
         artifact_prefix = "manual_validation" if live_subset and use_live_model else "benchmark"
+    blocked_task_count = sum(
+        1
+        for result in collector.results
+        if result.metrics.get("execution_blocked")
+    )
+    blocked_seed_count = sum(
+        len(result.metrics.get("execution_blockers", []))
+        for result in collector.results
+    )
     report = collector.write(
         output_dir,
         prefix=artifact_prefix,
         run_metadata={
             "execution_mode": "executed_cached_benchmark",
+            "execution_valid": blocked_task_count == 0,
+            "blocked_task_count": blocked_task_count,
+            "blocked_seed_count": blocked_seed_count,
             "mode": "live_subset" if live_subset else "full",
             "use_live_model": use_live_model,
             "agent_behavior_mode": resolved_agent_behavior_mode or "",
             "replay_cache_enabled": resolved_agent_behavior_mode == "cached",
-            "replay_cache_root": str(_benchmark_replay_cache_root() / benchmark_model_cache_namespace) if resolved_agent_behavior_mode == "cached" else "",
+            "replay_cache_root": str(effective_replay_cache_root / benchmark_model_cache_namespace) if resolved_agent_behavior_mode == "cached" else "",
             "replay_cache_model_namespace": benchmark_model_cache_namespace if resolved_agent_behavior_mode == "cached" else "",
             "replay_cache_policy": _cached_replay_policy() if resolved_agent_behavior_mode == "cached" else "",
             "request_observability_mode": (
@@ -1092,10 +1180,14 @@ def main(argv: Sequence[str] | None = None) -> int:
         else:
             summary = report["summary"]
             print(f"total_tasks={summary['total_tasks']}")
+            print(f"executed_tasks={summary.get('executed_tasks', summary['total_tasks'])}")
+            print(f"blocked_tasks={summary.get('blocked_tasks', 0)}")
             print(f"successful_tasks={summary['successful_tasks']}")
             print(f"failed_tasks={summary['failed_tasks']}")
             print(f"false_positives={summary['false_positives']}")
         summary = report["summary"]
+        if summary.get("blocked_tasks", 0):
+            return 2
         return 0 if summary["failed_tasks"] == 0 and summary["false_positives"] == 0 else 1
     if args.command == "evaluate":
         from swaag.benchmark.evaluation_runner import run_full_evaluation
@@ -1122,7 +1214,14 @@ def main(argv: Sequence[str] | None = None) -> int:
             print(stable_json_dumps(report, indent=2))
         else:
             _print_agent_test_category_cli_summary(report)
-        return 0
+        if report["summary"].get("blocked_tasks", 0):
+            return 2
+        return (
+            0
+            if report["summary"].get("failed_tasks", 0) == 0
+            and report["summary"].get("false_positives", 0) == 0
+            else 1
+        )
     if args.command == "test-categories":
         from swaag.benchmark.evaluation_runner import run_test_category_evaluation
 
@@ -1141,7 +1240,17 @@ def main(argv: Sequence[str] | None = None) -> int:
                 _print_agent_test_category_cli_summary(report["agent_test"])
             if report.get("skip_reason"):
                 print(f"skip_reason={report['skip_reason']}")
-        return 0 if report["code_correctness_binary_passed"] else 1
+        if not report["code_correctness_binary_passed"]:
+            return 1
+        agent_summary = (report.get("agent_test") or {}).get("summary", {})
+        if agent_summary.get("blocked_tasks", 0):
+            return 2
+        return (
+            0
+            if agent_summary.get("failed_tasks", 0) == 0
+            and agent_summary.get("false_positives", 0) == 0
+            else 1
+        )
     if args.command == "manual-validation":
         from swaag.manual_validation.runner import run_manual_validation
 
@@ -1165,6 +1274,8 @@ def main(argv: Sequence[str] | None = None) -> int:
             print("manual_validation_not_test_category=true")
             print(f"percent={report['percent']}")
             print(f"task_count={report['summary']['total_tasks']}")
+        if report["summary"].get("blocked_tasks", 0):
+            return 2
         return 0 if report["summary"].get("failed_tasks", 0) == 0 and report["summary"].get("false_positives", 0) == 0 else 1
     if args.command == "context-order":
         from swaag.benchmark.context_order import DEFAULT_UTILIZATIONS, run_context_order_benchmark

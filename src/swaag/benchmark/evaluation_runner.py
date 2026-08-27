@@ -136,6 +136,8 @@ def _group_average(mapping: dict[str, float]) -> float:
 def _score_mapping_from_tasks(tasks: Sequence[dict[str, Any]], key: str) -> dict[str, float]:
     buckets: dict[str, list[float]] = {}
     for task in tasks:
+        if bool(task.get("metrics", {}).get("execution_blocked")):
+            continue
         group = str(task.get(key, "")).strip()
         if not group:
             continue
@@ -332,6 +334,8 @@ def _render_agent_test_category_report(payload: dict[str, Any]) -> str:
         f"- execution_mode: `{payload.get('execution_mode', 'executed_cached_benchmark')}`",
         f"- full_artifact_reuse: `{payload.get('full_artifact_reuse', False)}`",
         f"- total_tasks: `{summary['total_tasks']}`",
+        f"- executed_tasks: `{summary.get('executed_tasks', summary['total_tasks'])}`",
+        f"- blocked_tasks: `{summary.get('blocked_tasks', 0)}`",
         f"- successful_tasks: `{summary['successful_tasks']}`",
         f"- failed_tasks: `{summary['failed_tasks']}`",
         f"- false_positives: `{summary['false_positives']}`",
@@ -400,13 +404,18 @@ def run_agent_test_category(
 
     # Always run a fresh benchmark. Full-run artifact reuse is NOT allowed in the
     # authoritative agent_test path. Only LLM response cassettes are cached/replayed.
+    if clean and output_dir.exists():
+        shutil.rmtree(output_dir)
     ensure_dir(output_dir)
     _seed_full_catalog_replay_cache(output_dir, benchmark_task_ids)
+    seeded_replay_root = (
+        output_dir / "replay_cache" if not benchmark_task_ids else None
+    )
     model_settings = _cached_benchmark_run_settings()
     benchmark_report = run_benchmarks(
         output_dir=output_dir,
         task_ids=list(benchmark_task_ids) if benchmark_task_ids is not None else None,
-        clean=clean,
+        clean=False,
         live_subset=False,
         use_live_model=False,
         agent_behavior_mode="cached",
@@ -416,12 +425,16 @@ def run_agent_test_category(
         connect_timeout_seconds=model_settings["connect_timeout_seconds"],
         timeout_seconds=model_settings["timeout_seconds"],
         progress_poll_seconds=model_settings["progress_poll_seconds"],
+        replay_cache_root=seeded_replay_root,
     )
     execution_mode = "executed_cached_benchmark"
     benchmark_report.setdefault("run_metadata", {})["execution_mode"] = execution_mode
+    blocked_tasks = int(
+        benchmark_report.get("summary", {}).get("blocked_tasks", 0)
+    )
     payload = {
         "category": "agent_test",
-        "status": "complete",
+        "status": "blocked" if blocked_tasks else "complete",
         "execution_mode": execution_mode,
         "full_artifact_reuse": False,
         "summary": benchmark_report["summary"],
@@ -527,7 +540,11 @@ def run_test_category_evaluation(
         return payload
     agent = run_agent_test_category(output_dir=output_dir / "agent_test", benchmark_task_ids=benchmark_task_ids, clean=False)
     payload = {
-        "status": "complete",
+        "status": (
+            "agent_test_blocked"
+            if agent.get("summary", {}).get("blocked_tasks", 0)
+            else "complete"
+        ),
         "code_correctness_binary_passed": True,
         "agent_test_ran": True,
         "code_correctness": code,

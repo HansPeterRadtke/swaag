@@ -1,5 +1,7 @@
 from pathlib import Path
 
+import requests
+
 
 def test_benchmark_contract_write_allowlist_is_applied_to_runtime_config(tmp_path, monkeypatch) -> None:
     # This verifies the policy transformation independently of model execution by
@@ -121,3 +123,42 @@ def test_planned_cache_mode_uses_model_namespace(tmp_path, monkeypatch) -> None:
     (path14 / "seed_11.json").write_text("{}", encoding="utf-8")
     assert _planned_cache_mode(tmp_path, task, [11], cached=True, model_cache_namespace=ns14) == "replay"
     assert _planned_cache_mode(tmp_path, task, [11], cached=True, model_cache_namespace=ns32) == "record"
+
+
+def test_benchmark_execution_blockers_are_external_not_task_failures() -> None:
+    from swaag.benchmark.benchmark_runner import _benchmark_execution_blocker
+    from swaag.model_cache import MissingReplayEntryError
+
+    missing = _benchmark_execution_blocker(
+        MissingReplayEntryError("missing exact request")
+    )
+    unreachable = _benchmark_execution_blocker(
+        requests.ConnectionError("endpoint unavailable")
+    )
+
+    assert missing["kind"] == "missing_exact_replay_entry"
+    assert unreachable["kind"] == "model_endpoint_unreachable"
+    assert _benchmark_execution_blocker(ValueError("model output was invalid")) is None
+
+
+def test_benchmark_run_cli_returns_distinct_blocked_status(
+    monkeypatch, tmp_path
+) -> None:
+    from swaag.benchmark import benchmark_runner
+
+    monkeypatch.setattr(
+        benchmark_runner,
+        "run_benchmarks",
+        lambda **_kwargs: {
+            "summary": {
+                "total_tasks": 9,
+                "executed_tasks": 0,
+                "blocked_tasks": 9,
+                "successful_tasks": 0,
+                "failed_tasks": 0,
+                "false_positives": 0,
+            }
+        },
+    )
+
+    assert benchmark_runner.main(["run", "--output", str(tmp_path)]) == 2

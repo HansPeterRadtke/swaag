@@ -15,6 +15,8 @@ def test_render_benchmark_report_includes_quality_sections() -> None:
             false_positives=0,
             success_rate_by_type={"coding": 1.0},
             failure_breakdown={},
+            executed_tasks=1,
+            blocked_tasks=0,
             score_by_difficulty={"extremely_easy": 100.0},
             average_task_score_percent=100.0,
         ),
@@ -106,6 +108,7 @@ def test_render_benchmark_report_includes_quality_sections() -> None:
     assert "Per-Task Scores" in text
     assert "Cache / Replay Summary" in text
     assert "Top Failure Diagnostics" in text
+    assert "Execution Blockers" in text
     assert "/tmp/benchmark_results.json" in text
 
 

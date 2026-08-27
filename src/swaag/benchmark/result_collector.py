@@ -48,6 +48,8 @@ class BenchmarkSummary:
     false_positives: int
     success_rate_by_type: dict[str, float]
     failure_breakdown: dict[str, int]
+    executed_tasks: int = 0
+    blocked_tasks: int = 0
     score_by_family: dict[str, float] = field(default_factory=dict)
     score_by_difficulty: dict[str, float] = field(default_factory=dict)
     full_task_success_percent: float = 0.0
@@ -109,7 +111,13 @@ class ResultCollector:
         score_by_difficulty_totals: dict[str, list[float]] = {}
         false_positives = 0
         hints: list[str] = []
+        executed_results: list[BenchmarkTaskResult] = []
         for result in self._results:
+            if bool(result.metrics.get("execution_blocked")):
+                result.score_percent = 0.0
+                result.rubric_breakdown = {}
+                continue
+            executed_results.append(result)
             score_percent, rubric_breakdown = build_task_rubric(
                 success=result.success,
                 verification_summary=result.verification_summary,
@@ -142,9 +150,11 @@ class ResultCollector:
             if values
         }
         full_task_success_percent = round(
-            sum(1 for item in self._results if item.success) / len(self._results) * 100.0,
+            sum(1 for item in executed_results if item.success)
+            / len(executed_results)
+            * 100.0,
             2,
-        ) if self._results else 0.0
+        ) if executed_results else 0.0
         family_group_average_percent = round(
             sum(score_by_family.values()) / len(score_by_family),
             2,
@@ -165,11 +175,13 @@ class ResultCollector:
         summary = BenchmarkSummary(
             generated_at=datetime.now(timezone.utc).isoformat(),
             total_tasks=len(self._results),
-            successful_tasks=sum(1 for item in self._results if item.success),
-            failed_tasks=sum(1 for item in self._results if not item.success),
+            successful_tasks=sum(1 for item in executed_results if item.success),
+            failed_tasks=sum(1 for item in executed_results if not item.success),
             false_positives=false_positives,
             success_rate_by_type=success_rate_by_type,
             failure_breakdown=dict(sorted(failure_breakdown.items())),
+            executed_tasks=len(executed_results),
+            blocked_tasks=len(self._results) - len(executed_results),
             score_by_family=score_by_family,
             score_by_difficulty=score_by_difficulty,
             full_task_success_percent=full_task_success_percent,
@@ -177,11 +189,12 @@ class ResultCollector:
             difficulty_group_average_percent=difficulty_group_average_percent,
             group_average_percent=group_average_percent,
             average_task_score_percent=round(
-                sum(float(item.score_percent) for item in self._results) / len(self._results),
+                sum(float(item.score_percent) for item in executed_results)
+                / len(executed_results),
                 2,
-            ) if self._results else 0.0,
+            ) if executed_results else 0.0,
         )
-        aggregate_metrics = compute_benchmark_metrics(self._results)
+        aggregate_metrics = compute_benchmark_metrics(executed_results)
         ranked_hints = [
             item[0]
             for item in sorted(

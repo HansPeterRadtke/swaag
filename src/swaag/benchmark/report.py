@@ -55,6 +55,8 @@ def render_benchmark_report(report) -> str:
             "## Summary",
             "",
             f"- Total tasks: `{summary.total_tasks}`",
+            f"- Executed tasks: `{summary.executed_tasks}`",
+            f"- Blocked tasks: `{summary.blocked_tasks}`",
             f"- Successful tasks: `{summary.successful_tasks}`",
             f"- Failed tasks: `{summary.failed_tasks}`",
             f"- False positives: `{summary.false_positives}`",
@@ -144,8 +146,30 @@ def render_benchmark_report(report) -> str:
         lines.append("- none")
         lines.append("")
 
+    execution_blockers = [
+        item for item in report.tasks if item.metrics.get("execution_blocked")
+    ]
+    lines.extend(["## Execution Blockers", ""])
+    if execution_blockers:
+        for item in execution_blockers:
+            lines.extend(
+                [
+                    f"### {item.task_id}",
+                    f"- Cache mode: `{item.metrics.get('cache_mode_summary', '')}`",
+                    f"- Blockers: `{item.metrics.get('execution_blockers', [])}`",
+                    "",
+                ]
+            )
+    else:
+        lines.append("- none")
+        lines.append("")
+
     lines.extend(["## Worst Failures", ""])
-    failures = [item for item in report.tasks if not item.success][:5]
+    failures = [
+        item
+        for item in report.tasks
+        if not item.success and not item.metrics.get("execution_blocked")
+    ][:5]
     if failures:
         for item in failures:
             lines.extend(
@@ -199,6 +223,7 @@ def render_benchmark_report(report) -> str:
                     f"- Difficulty: `{item.difficulty}`",
                     f"- Score: `{item.score_percent:.2f}%`",
                     f"- Success: `{item.success}`",
+                    f"- Execution blocked: `{bool(item.metrics.get('execution_blocked'))}`",
                     f"- Failure category: `{item.failure_category}`",
                     f"- Failure subsystem: `{item.failure_subsystem}`",
                     f"- Verification reason: `{item.verification_summary.get('reason')}`",

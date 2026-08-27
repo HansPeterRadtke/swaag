@@ -129,6 +129,8 @@ def test_run_agent_test_category_seeds_shared_replay_cache_when_available(monkey
     monkeypatch.setenv("SWAAG_FULL_CACHED_BENCHMARK_ARTIFACT_ROOT", str(artifact_root))
     def fake_run_benchmarks(**kwargs):
         assert (kwargs["output_dir"] / "replay_cache" / "demo_task" / "seed_42.json").exists()
+        assert kwargs["replay_cache_root"] == kwargs["output_dir"] / "replay_cache"
+        assert kwargs["clean"] is False
         return _fake_benchmark_report()
 
     monkeypatch.setattr(benchmark_runner, "run_benchmarks", fake_run_benchmarks)

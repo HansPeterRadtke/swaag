@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 from swaag.benchmark.metrics import compute_benchmark_metrics
-from swaag.benchmark.result_collector import BenchmarkTaskResult
+from swaag.benchmark.result_collector import BenchmarkTaskResult, ResultCollector
 
 
 def _result(*, task_id: str, task_type: str, difficulty: str, success: bool, false_positive: bool, expected_outcome: str, failure_category: str | None = None, verification_failures: int = 0, verification_types: dict[str, int] | None = None, quality_passed: bool = True, quality_checks: dict[str, bool] | None = None) -> BenchmarkTaskResult:
@@ -61,3 +61,40 @@ def test_compute_benchmark_metrics_tracks_false_positives_and_understanding() ->
     assert metrics.secondary["benchmark_coverage_by_task_type"]["coding"] == 1
     assert metrics.coverage_by_difficulty["hard"] == 1
     assert metrics.failure_breakdown["evaluator_mistake"] == 1
+
+
+def test_result_collector_excludes_execution_blockers_from_benchmark_scores() -> None:
+    passed = _result(
+        task_id="executed",
+        task_type="coding",
+        difficulty="easy",
+        success=True,
+        false_positive=False,
+        expected_outcome="success",
+    )
+    blocked = _result(
+        task_id="blocked",
+        task_type="coding",
+        difficulty="easy",
+        success=False,
+        false_positive=False,
+        expected_outcome="success",
+        failure_category="benchmark_execution_blocked",
+    )
+    blocked.metrics["execution_blocked"] = True
+    blocked.metrics["execution_blockers"] = [
+        {"kind": "missing_exact_replay_entry"}
+    ]
+    collector = ResultCollector()
+    collector.add(passed)
+    collector.add(blocked)
+
+    report = collector.build_report()
+
+    assert report.summary.total_tasks == 2
+    assert report.summary.executed_tasks == 1
+    assert report.summary.blocked_tasks == 1
+    assert report.summary.successful_tasks == 1
+    assert report.summary.failed_tasks == 0
+    assert report.summary.full_task_success_percent == 100.0
+    assert blocked.score_percent == 0.0
