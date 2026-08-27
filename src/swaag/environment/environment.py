@@ -380,6 +380,8 @@ class AgentEnvironment:
 
     def write_file(self, path_text: str, content: str, *, create: bool = True) -> ToolExecutionResult:
         path = self.filesystem.resolve_path(path_text, cwd=self.current_cwd)
+        if not self.config.editor.allow_writes:
+            raise PermissionError("write_file writes are disabled by editor policy")
         existed_before = path.exists()
         original_text = ""
         if existed_before:

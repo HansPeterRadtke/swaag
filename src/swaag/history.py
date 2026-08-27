@@ -27,7 +27,14 @@ from swaag.types import (
     SessionState,
 )
 from swaag.fsops import append_text, ensure_dir, write_text as _fsops_write_text
-from swaag.utils import new_id, stable_json_dumps, to_jsonable, utc_now_iso
+from swaag.utils import (
+    is_storage_identifier,
+    new_id,
+    scoped_storage_path,
+    stable_json_dumps,
+    to_jsonable,
+    utc_now_iso,
+)
 
 
 class HistoryCorruptionError(RuntimeError):
@@ -299,7 +306,7 @@ class HistoryStore:
         return HistoryGuard(self, state, operation_name)
 
     def _session_dir(self, session_id: str) -> Path:
-        return self.root / session_id
+        return scoped_storage_path(self.root, session_id, label="session_id")
 
     def history_path(self, session_id: str) -> Path:
         return self._session_dir(session_id) / "complete_history.jsonl"
@@ -403,6 +410,8 @@ class HistoryStore:
         for path in sorted(self.root.iterdir()):
             if (
                 not path.is_dir()
+                or path.is_symlink()
+                or not is_storage_identifier(path.name)
                 or not self.history_path(path.name).exists()
                 or (not include_internal and path.name.startswith("operation_"))
             ):
@@ -430,7 +439,7 @@ class HistoryStore:
             return self.latest_session_id() if latest_if_none else None
         if ref == "latest":
             return self.latest_session_id()
-        if self.history_path(ref).exists():
+        if is_storage_identifier(ref) and self.history_path(ref).exists():
             return ref
         lowered = ref.casefold()
         matches = [entry for entry in self.list_session_entries() if str(entry.get("session_name", "")).casefold() == lowered]

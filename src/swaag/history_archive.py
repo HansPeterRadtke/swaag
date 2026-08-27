@@ -11,6 +11,7 @@ from typing import Iterable
 
 from swaag.sqlite_schema import apply_sqlite_migrations
 from swaag.types import HistoryEvent
+from swaag.utils import validate_storage_identifier
 
 
 _ARCHIVE_CATALOG_MIGRATIONS = (
@@ -66,6 +67,7 @@ class HistoryArchiveStore:
             )
 
     def archive_events(self, session_id: str, session_name: str, events: Iterable[HistoryEvent]) -> ArchiveEntry:
+        session_id = validate_storage_identifier(session_id, label="session_id")
         events = list(events)
         if not events:
             raise ValueError("Cannot archive a session with no events")

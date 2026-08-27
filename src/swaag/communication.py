@@ -5,6 +5,7 @@ import base64
 import binascii
 import copy
 import hashlib
+import ipaddress
 import json
 import sqlite3
 import threading
@@ -95,6 +96,23 @@ _COMMUNICATION_STORE_MIGRATIONS = (
         """,
     ),
 )
+
+
+def require_loopback_bind_host(host: str) -> str:
+    candidate = str(host).strip()
+    if candidate.casefold() == "localhost":
+        return candidate
+    try:
+        address = ipaddress.ip_address(candidate)
+    except ValueError as exc:
+        raise ValueError(
+            "The unauthenticated communication service may bind only to an explicit loopback address"
+        ) from exc
+    if not address.is_loopback:
+        raise ValueError(
+            "The unauthenticated communication service may bind only to an explicit loopback address"
+        )
+    return candidate
 
 
 @dataclass(slots=True, frozen=True)
@@ -1840,6 +1858,7 @@ class CommunicationService:
             await asyncio.sleep(interval)
 
     async def serve_tcp(self, host: str, port: int) -> None:
+        host = require_loopback_bind_host(host)
         self.workers.reconcile_orphans()
         server = await asyncio.start_server(self.handle_client, host, port)
         systemd_notify("READY=1", f"STATUS=swaag communication listening on {host}:{port}")

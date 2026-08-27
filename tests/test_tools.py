@@ -513,6 +513,26 @@ def test_edit_tool_write_blocked_by_editor_policy(make_config, tmp_path: Path) -
         )
 
 
+def test_write_file_blocked_by_editor_policy(make_config, tmp_path: Path) -> None:
+    path = tmp_path / "sample.txt"
+    path.write_text("hello", encoding="utf-8")
+    registry = ToolRegistry()
+    config = make_config(
+        tools__allow_side_effect_tools=True,
+        editor__allow_writes=False,
+    )
+
+    with pytest.raises(PermissionError, match="write_file"):
+        registry.dispatch(
+            "write_file",
+            {"path": str(path), "content": "world", "create": False},
+            config,
+            _empty_state(),
+        )
+
+    assert path.read_text(encoding="utf-8") == "hello"
+
+
 
 def test_edit_tool_replace_pattern_requires_replacement(make_config, tmp_path: Path) -> None:
     path = tmp_path / "sample.txt"

@@ -15,7 +15,7 @@ from pathlib import Path
 from typing import Any
 
 from swaag.fsops import atomic_replace, ensure_dir, ensure_parent_dir, remove_file, write_bytes, write_text
-from swaag.utils import new_id, utc_now_iso
+from swaag.utils import new_id, scoped_storage_path, utc_now_iso
 
 
 @dataclass(slots=True, frozen=True)
@@ -38,7 +38,11 @@ class TerminalStore:
     """Durable session-scoped PTY terminals backed by detached worker processes."""
 
     def __init__(self, sessions_root: Path, session_id: str):
-        self.root = Path(sessions_root).expanduser() / session_id / "terminals"
+        self.root = scoped_storage_path(
+            Path(sessions_root),
+            session_id,
+            label="session_id",
+        ) / "terminals"
         ensure_dir(self.root)
 
     def _dir(self, terminal_id: str) -> Path:

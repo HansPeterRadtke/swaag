@@ -7,7 +7,7 @@ from pathlib import Path
 import shutil
 
 from swaag.fsops import ensure_dir, write_text
-from swaag.utils import new_id, sha256_text, utc_now_iso
+from swaag.utils import new_id, scoped_storage_path, sha256_text, utc_now_iso
 
 
 @dataclass(slots=True, frozen=True)
@@ -25,9 +25,14 @@ class TextArtifactStore:
     """Durable exact text artifacts scoped to a single agent session."""
 
     def __init__(self, sessions_root: Path, session_id: str):
-        self.sessions_root = Path(sessions_root).expanduser()
-        self.session_id = str(session_id)
-        self.root = self.sessions_root / self.session_id / "artifacts"
+        self.sessions_root = Path(sessions_root).expanduser().resolve()
+        session_root = scoped_storage_path(
+            self.sessions_root,
+            session_id,
+            label="session_id",
+        )
+        self.session_id = session_root.name
+        self.root = session_root / "artifacts"
         self.archive_root = (
             self.sessions_root / "archives" / "artifacts" / self.session_id
         )

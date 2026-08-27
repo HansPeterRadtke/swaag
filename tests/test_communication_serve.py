@@ -3,8 +3,10 @@ from __future__ import annotations
 import asyncio
 import json
 
+import pytest
+
 from swaag.cli import _build_parser
-from swaag.communication import CommunicationService
+from swaag.communication import CommunicationService, require_loopback_bind_host
 from swaag.heartbeat import watchdog_interval_seconds
 from swaag.protocol_adapters import AgUiProjectionAdapter
 from swaag.runtime import AgentRuntime
@@ -33,6 +35,17 @@ def test_communication_serve_cli_accepts_config_defaults():
     assert args.communication_command == "serve"
     assert args.host is None
     assert args.port is None
+
+
+@pytest.mark.parametrize("host", ["127.0.0.1", "127.10.20.30", "::1", "localhost"])
+def test_communication_bind_accepts_only_loopback(host: str) -> None:
+    assert require_loopback_bind_host(host) == host
+
+
+@pytest.mark.parametrize("host", ["0.0.0.0", "::", "192.0.2.10", "example.test", ""])
+def test_communication_bind_rejects_unauthenticated_non_loopback(host: str) -> None:
+    with pytest.raises(ValueError, match="loopback"):
+        require_loopback_bind_host(host)
 
 
 def test_watchdog_interval_uses_half_systemd_window(monkeypatch):
