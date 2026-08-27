@@ -1218,6 +1218,34 @@ def _build_parser() -> argparse.ArgumentParser:
         "--json", action="store_true", help="Print the full JSON report."
     )
 
+    instruction_following_parser = subparsers.add_parser(
+        "instruction-following",
+        help="Measure simultaneous standing-constraint following in production calls.",
+    )
+    instruction_following_parser.add_argument(
+        "--output",
+        default="instruction_following_output",
+        help="Checkpointed artifact directory.",
+    )
+    instruction_following_parser.add_argument(
+        "--case",
+        action="append",
+        default=[],
+        help="Run only the named instruction-following case.",
+    )
+    instruction_following_parser.add_argument(
+        "--model-base-url",
+        help="Optional alternate model endpoint for model-size comparisons.",
+    )
+    instruction_following_parser.add_argument(
+        "--clean",
+        action="store_true",
+        help="Replace an existing artifact directory.",
+    )
+    instruction_following_parser.add_argument(
+        "--json", action="store_true", help="Print the full JSON report."
+    )
+
     subparsers.add_parser("list", help="List available benchmark task ids.")
     external_parser = subparsers.add_parser("external", help="Run optional official external benchmark harness integrations.")
     external_parser.add_argument("external_args", nargs=argparse.REMAINDER, help="Arguments forwarded to the external benchmark runner.")
@@ -1488,6 +1516,45 @@ def main(argv: Sequence[str] | None = None) -> int:
                 f"output={Path(args.output) / 'prompt_instruction_behavior_results.json'}"
             )
         return 0 if report["complete"] and report["passed"] == report["total"] else 1
+    if args.command == "instruction-following":
+        from swaag.benchmark.instruction_following import (
+            run_instruction_following_benchmark,
+        )
+
+        config = load_config()
+        if args.model_base_url:
+            config.model.base_url = str(args.model_base_url).rstrip("/")
+        report = run_instruction_following_benchmark(
+            output_dir=Path(args.output),
+            config=config,
+            case_ids=list(args.case),
+            clean=bool(args.clean),
+        )
+        if args.json:
+            print(stable_json_dumps(report, indent=2))
+        else:
+            print(
+                "instruction_success="
+                f"{report['instruction_success']}/{report['total']}"
+            )
+            print(
+                "constraint_success="
+                f"{report['constraint_success']}/{report['total_constraints']}"
+            )
+            for result in report["results"]:
+                print(
+                    f"{result['case_id']}="
+                    f"{'passed' if result['verification']['passed'] else 'failed'}"
+                )
+            print(
+                f"output={Path(args.output) / 'instruction_following_results.json'}"
+            )
+        return (
+            0
+            if report["complete"]
+            and report["instruction_success"] == report["total"]
+            else 1
+        )
     if args.command == "external":
         forwarded = list(args.external_args)
         if forwarded and forwarded[0] == "--":
