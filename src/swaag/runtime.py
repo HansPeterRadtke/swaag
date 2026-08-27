@@ -533,30 +533,32 @@ class AgentRuntime:
         )
 
     @contextmanager
-    def _periodic_model_heartbeat(
+    def _periodic_heartbeat(
         self,
         state: SessionState,
         *,
-        call_id: str,
-        call_kind: str,
+        phase: str,
+        detail: str,
+        active_kind: str,
+        active_id: str,
         interval_seconds: float = 5.0,
     ) -> Iterator[None]:
-        """Keep mechanical liveness current while a backend has not streamed output."""
+        """Keep mechanical liveness current during a blocking runtime operation."""
         stop = threading.Event()
 
         def pulse() -> None:
             while not stop.wait(max(0.01, float(interval_seconds))):
                 self._heartbeat(
                     state,
-                    phase="inference",
-                    detail=f"waiting for {call_kind} model stream",
-                    active_kind="model",
-                    active_id=call_id,
+                    phase=phase,
+                    detail=detail,
+                    active_kind=active_kind,
+                    active_id=active_id,
                 )
 
         thread = threading.Thread(
             target=pulse,
-            name=f"swaag-heartbeat-{call_id}",
+            name=f"swaag-heartbeat-{active_kind}-{active_id}",
             daemon=True,
         )
         thread.start()
@@ -985,15 +987,22 @@ class AgentRuntime:
                     repeated_observation_is_redundant = tool.repeated_observation_is_redundant
                     self._heartbeat(state, phase="tool_execution", detail=f"running {tool_call.tool_name}", active_kind="tool", active_id=tool_call.tool_name)
                     try:
-                        result = self._execute_tool(
+                        with self._periodic_heartbeat(
                             state,
-                            ToolDecision(
-                                action="call_tool",
-                                response=selected_action.assistant_message,
-                                tool_name=tool_call.tool_name,
-                                tool_input=tool_call.arguments,
-                            ),
-                        )
+                            phase="tool_execution",
+                            detail=f"running {tool_call.tool_name}",
+                            active_kind="tool",
+                            active_id=tool_call.tool_name,
+                        ):
+                            result = self._execute_tool(
+                                state,
+                                ToolDecision(
+                                    action="call_tool",
+                                    response=selected_action.assistant_message,
+                                    tool_name=tool_call.tool_name,
+                                    tool_input=tool_call.arguments,
+                                ),
+                            )
                     except ModelCallStateChanged:
                         self._refresh_state_from_history(state)
                         pending_during_action = (
@@ -5787,10 +5796,12 @@ class AgentRuntime:
                     0.5,
                     min(5.0, float(policy.progress_poll_seconds)),
                 )
-                with self._periodic_model_heartbeat(
+                with self._periodic_heartbeat(
                     state,
-                    call_id=call_id,
-                    call_kind=prepared.assembly.kind,
+                    phase="inference",
+                    detail=f"waiting for {prepared.assembly.kind} model stream",
+                    active_kind="model",
+                    active_id=call_id,
                     interval_seconds=heartbeat_interval,
                 ):
                     completion = send(frozen_request, **kwargs)
@@ -6297,6 +6308,13 @@ class AgentRuntime:
             if record.status == "running"
         ]
         active_run = self.history.read_active_run(state.session_id)
+        scheduled_wakeups = [
+            to_jsonable(item)
+            for item in WakeupStore(self.config.sessions.root).list(
+                session_id=state.session_id
+            )
+            if item.status in {"scheduled", "claimed"}
+        ]
         return {
             "status_kind": "mechanical",
             "session_id": state.session_id,
@@ -6308,6 +6326,12 @@ class AgentRuntime:
             "active_run": active_run,
             "waiting": state.environment.waiting,
             "waiting_reason": state.environment.waiting_reason,
+            "scheduled_wakeups": scheduled_wakeups,
+            "next_wakeup_at": (
+                str(scheduled_wakeups[0].get("wake_at", ""))
+                if scheduled_wakeups
+                else ""
+            ),
             "running_processes": running_processes,
             "pending_user_messages": len(
                 self.history.list_pending_control_messages(state.session_id)
