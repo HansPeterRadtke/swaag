@@ -23,7 +23,7 @@ Every session has append-only event history and replayable state. Prompt context
 
 Status questions use an independent constrained LLM operation over deterministic liveness state and an exact durable worker-history snapshot. Full evidence is retained whenever it fits; measured overflow triggers purpose-specific hierarchical projection with exact source references. Semantic status importance stays separate from the worker heartbeat, and status reads never append to a concurrently active worker history.
 
-Tools are registered centrally and exposed with closed JSON schemas. Built-ins cover file reading and editing, shell and test execution, calculations, notes, browsing, short waits, and durable wakeups. Durable wakeups support human-readable relative durations and timezone-aware absolute times, survive process restarts, and are delivered exactly once as session control messages.
+Tools are registered centrally and exposed with closed JSON schemas. Built-ins cover file reading and editing, shell and test execution, calculations, working notes, durable call-scoped prompt instructions, browsing, short waits, and durable wakeups. Model-authored prompt instructions carry explicit operation scopes; the central compiler injects every matching exact entry into the system role and records its IDs, hashes, and token cost. Durable wakeups support human-readable relative durations and timezone-aware absolute times, survive process restarts, and are delivered exactly once as session control messages.
 
 ## Installation
 

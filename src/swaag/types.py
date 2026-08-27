@@ -47,6 +47,17 @@ class Note:
 
 
 @dataclass(slots=True)
+class PromptInstruction:
+    instruction_id: str
+    title: str
+    content: str
+    scopes: list[str]
+    created_at: str
+    updated_at: str
+    metadata: dict[str, Any] = field(default_factory=dict)
+
+
+@dataclass(slots=True)
 class ReaderState:
     reader_id: str
     source_kind: SourceKind
@@ -275,6 +286,7 @@ class SessionState:
     session_name_source: str = "placeholder"
     messages: list[Message] = field(default_factory=list)
     notes: list[Note] = field(default_factory=list)
+    prompt_instructions: list[PromptInstruction] = field(default_factory=list)
     reader_states: dict[str, ReaderState] = field(default_factory=dict)
     file_views: dict[str, FileView] = field(default_factory=dict)
     pending_file_writes: dict[str, str] = field(default_factory=dict)

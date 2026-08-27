@@ -21,6 +21,7 @@ from swaag.types import (
     HistoryEvent,
     Message,
     Note,
+    PromptInstruction,
     ReaderState,
     SessionMetrics,
     SessionState,
@@ -58,6 +59,9 @@ _STATEFUL_REBUILD_EVENT_TYPES = frozenset(
         "note_added",
         "note_replaced",
         "notes_compacted",
+        "prompt_instruction_added",
+        "prompt_instruction_replaced",
+        "prompt_instruction_removed",
         "reader_opened",
         "reader_chunk_read",
         "environment_initialized",
@@ -1453,6 +1457,42 @@ class HistoryStore:
             state.notes = [item for item in state.notes if item.note_id not in removed]
             state.notes.append(compacted)
             return
+        if event.event_type in {
+            "prompt_instruction_added",
+            "prompt_instruction_replaced",
+        }:
+            instruction_payload = dict(payload["instruction"])
+            instruction_metadata = dict(instruction_payload.get("metadata", {}))
+            instruction_metadata.update(
+                {
+                    "source_event_sequence": event.sequence,
+                    "source_event_hash": event.hash,
+                    "source_event_type": event.event_type,
+                    "source_event_session_id": event.session_id,
+                }
+            )
+            instruction_payload["metadata"] = instruction_metadata
+            instruction = PromptInstruction(**instruction_payload)
+            state.prompt_instructions = [
+                instruction
+                if item.instruction_id == instruction.instruction_id
+                else item
+                for item in state.prompt_instructions
+            ]
+            if not any(
+                item.instruction_id == instruction.instruction_id
+                for item in state.prompt_instructions
+            ):
+                state.prompt_instructions.append(instruction)
+            return
+        if event.event_type == "prompt_instruction_removed":
+            instruction_id = str(payload["instruction_id"])
+            state.prompt_instructions = [
+                item
+                for item in state.prompt_instructions
+                if item.instruction_id != instruction_id
+            ]
+            return
         if event.event_type in {"reader_opened", "reader_chunk_read"}:
             reader = ReaderState(**payload["reader_state"])
             state.reader_states[reader.reader_id] = reader
@@ -1706,6 +1746,10 @@ def _state_from_payload(payload: dict[str, Any]) -> SessionState:
         session_name_source=str(payload.get("session_name_source", "placeholder")),
         messages=[Message(**item) for item in payload.get("messages", [])],
         notes=[Note(**item) for item in payload.get("notes", [])],
+        prompt_instructions=[
+            PromptInstruction(**item)
+            for item in payload.get("prompt_instructions", [])
+        ],
         reader_states={key: ReaderState(**value) for key, value in payload.get("reader_states", {}).items()},
         file_views={key: FileView(**value) for key, value in payload.get("file_views", {}).items()},
         pending_file_writes={str(k): str(v) for k, v in payload.get("pending_file_writes", {}).items()},

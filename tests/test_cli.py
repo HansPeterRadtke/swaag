@@ -21,6 +21,14 @@ def test_cli_budget_demo(capsys, monkeypatch) -> None:
     monkeypatch.setattr("swaag.model.LlamaCppClient.tokenize", lambda self, text: max(1, len(text) // 4))
     monkeypatch.setattr("swaag.model.LlamaCppClient.tokenize_selection", lambda self, text: max(1, len(text) // 4))
     monkeypatch.setattr(
+        "swaag.model.LlamaCppClient.render_chat_prompt",
+        lambda self, messages: {
+            "prompt": "\n".join(item["content"] for item in messages),
+            "chat_template_sha256": "a" * 64,
+            "prompt_protocol_sha256": "b" * 64,
+        },
+    )
+    monkeypatch.setattr(
         "swaag.model.LlamaCppClient.context_limit_resolution",
         lambda self: (self.config.model.context_limit, "configured:test"),
     )

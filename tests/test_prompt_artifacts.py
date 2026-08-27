@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from swaag.grammar import yes_no_contract
+from swaag.prompt_instructions import make_prompt_instruction
 from swaag.prompts import PromptBuilder
 from swaag.runtime import AgentRuntime
 from swaag.tokens import ConservativeEstimator
@@ -115,6 +116,14 @@ def test_live_prompt_materialization_accounts_exact_server_chat_template(
         token_counter=ConservativeEstimator(),
     )
     state = runtime.create_or_load_session()
+    state.prompt_instructions.append(
+        make_prompt_instruction(
+            runtime.config,
+            title="History analysis correction",
+            content="Preserve every cited source event.",
+            scopes=["history_analysis"],
+        )
+    )
     assembly = runtime.prompts.build_semantic_operation_prompt(
         kind="history_analysis",
         system_instruction="Exact system instruction.",
@@ -132,7 +141,8 @@ def test_live_prompt_materialization_accounts_exact_server_chat_template(
     assert "".join(component.text for component in assembly.components) == assembly.prompt_text
     assert not any(component.name.startswith("fallback_") for component in assembly.components)
     assert _artifact_map(assembly)["prompt_protocol:server_chat_template"] == protocol_hash
-    assert [message["content"] for message in runtime._assembly_chat_messages(assembly)] == [
-        "Exact system instruction.",
-        "Exact evidence.",
-    ]
+    messages = runtime._assembly_chat_messages(assembly)
+    assert messages[0]["content"].startswith("Exact system instruction.")
+    assert "Preserve every cited source event." in messages[0]["content"]
+    assert messages[1]["content"] == "Exact evidence."
+    assert "Preserve every cited source event." in assembly.prompt_text

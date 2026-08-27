@@ -174,6 +174,10 @@ ALLOWED_EVENT_TYPES = frozenset(
         "note_added",
         "note_replaced",
         "notes_compacted",
+        "prompt_instruction_added",
+        "prompt_instruction_replaced",
+        "prompt_instruction_removed",
+        "prompt_instructions_selected",
         "reader_opened",
         "reader_chunk_read",
         "file_read_requested",
@@ -586,6 +590,12 @@ REQUIRED_PAYLOAD_KEYS: dict[str, frozenset[str]] = {
     "note_added": frozenset({"note"}),
     "note_replaced": frozenset({"note"}),
     "notes_compacted": frozenset({"removed_note_ids", "compacted_note"}),
+    "prompt_instruction_added": frozenset({"instruction"}),
+    "prompt_instruction_replaced": frozenset({"instruction"}),
+    "prompt_instruction_removed": frozenset({"instruction_id"}),
+    "prompt_instructions_selected": frozenset(
+        {"kind", "instruction_ids", "instruction_hashes", "exact"}
+    ),
     "reader_opened": frozenset({"reader_state"}),
     "reader_chunk_read": frozenset({"reader_state", "chunk"}),
     "file_read_requested": frozenset({"path", "reason"}),

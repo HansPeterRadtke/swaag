@@ -11,6 +11,7 @@ from swaag.tools.artifacts import ARTIFACT_TOOLS
 from swaag.tools.attachments import ATTACHMENT_TOOLS
 from swaag.tools.builtin import BUILTIN_TOOLS
 from swaag.tools.history import HISTORY_TOOLS
+from swaag.tools.prompt_instructions import PROMPT_INSTRUCTION_TOOLS
 from swaag.tools.terminal import TERMINAL_TOOLS
 from swaag.tools.control import CONTROL_TOOLS
 from swaag.types import SessionState, ToolExecutionResult, ToolInvocation
@@ -81,6 +82,7 @@ class ToolRegistry:
         for tool in tools or [
             *BUILTIN_TOOLS,
             *HISTORY_TOOLS,
+            *PROMPT_INSTRUCTION_TOOLS,
             *ARTIFACT_TOOLS,
             *ATTACHMENT_TOOLS,
             *TERMINAL_TOOLS,

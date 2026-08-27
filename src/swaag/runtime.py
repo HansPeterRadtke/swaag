@@ -45,6 +45,10 @@ from swaag.preemption import (
     ModelPreemptionCoordinator,
     RunCancellationRequested,
 )
+from swaag.prompt_instructions import (
+    prompt_instructions_for_kind,
+    render_prompt_instructions,
+)
 from swaag.model_cache import build_model_client
 from swaag.notes import render_notes
 from swaag.prompts import PromptBuilder
@@ -3239,6 +3243,7 @@ class AgentRuntime:
         desired_output_tokens: int | None = None,
         context_limit_resolution: tuple[int, str] | None = None,
     ) -> ContextCompilation:
+        self._inject_prompt_instructions(state, assembly)
         self._materialize_prompt_protocol(assembly)
         context_limit, context_limit_source = (
             self._resolve_context_limit()
@@ -3260,6 +3265,93 @@ class AgentRuntime:
             report=compilation.report,
         )
         return compilation
+
+    def _inject_prompt_instructions(
+        self,
+        state: SessionState | None,
+        assembly: PromptAssembly,
+    ) -> None:
+        if state is None or any(
+            component.name == "durable_prompt_instructions"
+            for component in assembly.components
+        ):
+            return
+        selected = prompt_instructions_for_kind(
+            state.prompt_instructions,
+            assembly.kind,
+        )
+        if not selected:
+            return
+        rendered = render_prompt_instructions(selected)
+        component = PromptComponent(
+            name="durable_prompt_instructions",
+            category="system_prompt_instruction",
+            text=(
+                "\n\n[DURABLE MODEL-AUTHORED INSTRUCTIONS FOR THIS CALL KIND]\n"
+                "Apply every instruction below. Their scopes were chosen semantically by "
+                "the agent; deterministic runtime code only matches the current call kind.\n"
+                + rendered
+            ),
+        )
+        insert_at = next(
+            (
+                index
+                for index, existing in enumerate(assembly.components)
+                if existing.name == "fallback_message_separator"
+            ),
+            None,
+        )
+        if insert_at is None:
+            raise ModelClientError(
+                "Prompt assembly is missing the system/user message separator"
+            )
+        assembly.components.insert(insert_at, component)
+        ranges: list[PromptMessageRange] = []
+        for message_range in assembly.message_ranges:
+            start = message_range.component_start
+            end = message_range.component_end
+            if message_range.role == "system" and end == insert_at:
+                end += 1
+            else:
+                if start >= insert_at:
+                    start += 1
+                if end >= insert_at:
+                    end += 1
+            ranges.append(
+                PromptMessageRange(
+                    role=message_range.role,
+                    component_start=start,
+                    component_end=end,
+                )
+            )
+        assembly.message_ranges = ranges
+        assembly.prompt_text = "".join(item.text for item in assembly.components)
+        instruction_hashes = [
+            {
+                "instruction_id": item.instruction_id,
+                "sha256": sha256_text(
+                    stable_json_dumps(asdict(item), indent=None)
+                ),
+            }
+            for item in selected
+        ]
+        combined_hash = sha256_text(rendered)
+        assembly.prompt_artifacts.append(
+            PromptArtifact(
+                source=f"durable_prompt_instructions:{assembly.kind}",
+                sha256=combined_hash,
+            )
+        )
+        self.history.record_event(
+            state,
+            "prompt_instructions_selected",
+            {
+                "kind": assembly.kind,
+                "instruction_ids": [item.instruction_id for item in selected],
+                "instruction_hashes": instruction_hashes,
+                "exact": True,
+            },
+        )
 
     def _execute_tool_semantic_call(
         self, state: SessionState, request: SemanticCallRequest

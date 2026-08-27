@@ -123,6 +123,13 @@ class NotesConfig:
 
 
 @dataclass(slots=True)
+class PromptInstructionsConfig:
+    max_instructions: int
+    max_instruction_chars: int
+    max_total_chars: int
+
+
+@dataclass(slots=True)
 class ReaderConfig:
     default_chunk_chars: int
     default_overlap_chars: int
@@ -291,6 +298,7 @@ class AgentConfig:
     prompts: PromptConfig
     logging: LoggingConfig
     notes: NotesConfig
+    prompt_instructions: PromptInstructionsConfig
     reader: ReaderConfig
     editor: EditorConfig
     compression: CompressionConfig
@@ -389,6 +397,7 @@ def _coerce_config(data: dict[str, Any]) -> AgentConfig:
     notes_data = dict(data["notes"])
     notes_data.pop("compact_target_chars", None)
     notes = NotesConfig(**notes_data)
+    prompt_instructions = PromptInstructionsConfig(**data["prompt_instructions"])
     reader = ReaderConfig(**data["reader"])
     editor = EditorConfig(**data["editor"])
     compression = CompressionConfig()
@@ -549,6 +558,18 @@ def _coerce_config(data: dict[str, Any]) -> AgentConfig:
     _validate_positive("notes.max_notes", notes.max_notes)
     _validate_positive("notes.max_note_chars", notes.max_note_chars)
     _validate_positive("notes.max_total_chars", notes.max_total_chars)
+    _validate_positive(
+        "prompt_instructions.max_instructions",
+        prompt_instructions.max_instructions,
+    )
+    _validate_positive(
+        "prompt_instructions.max_instruction_chars",
+        prompt_instructions.max_instruction_chars,
+    )
+    _validate_positive(
+        "prompt_instructions.max_total_chars",
+        prompt_instructions.max_total_chars,
+    )
     _validate_positive("reader.default_chunk_chars", reader.default_chunk_chars)
     _validate_non_negative("reader.default_overlap_chars", reader.default_overlap_chars)
     _validate_positive("reader.max_chunk_chars", reader.max_chunk_chars)
@@ -685,6 +706,7 @@ def _coerce_config(data: dict[str, Any]) -> AgentConfig:
         prompts=prompts,
         logging=logging_cfg,
         notes=notes,
+        prompt_instructions=prompt_instructions,
         reader=reader,
         editor=editor,
         compression=compression,

@@ -76,7 +76,7 @@ background_poll_seconds = 0.1
 # allow_side_effect_tools: set true only if destructive writes are intended.
 # -----------------------------------------------------------
 [tools]
-enabled = ["echo", "time_now", "calculator", "list_files", "read_file", "read_text", "history_search", "history_window", "history_analyze", "read_artifact", "list_attachments", "read_attachment", "extract_attachment", "browser_search", "browser_browse", "terminal", "notes", "edit_text", "write_file", "run_tests", "shell_command", "poll_process", "kill_process", "wait_seconds", "schedule_wakeup", "list_wakeups", "cancel_wakeup"]
+enabled = ["echo", "time_now", "calculator", "list_files", "read_file", "read_text", "history_search", "history_window", "history_analyze", "read_artifact", "list_attachments", "read_attachment", "extract_attachment", "browser_search", "browser_browse", "terminal", "notes", "prompt_instructions", "edit_text", "write_file", "run_tests", "shell_command", "poll_process", "kill_process", "wait_seconds", "schedule_wakeup", "list_wakeups", "cancel_wakeup"]
 read_roots = ["."]
 allow_stateful_tools = true
 allow_side_effect_tools = false
@@ -133,6 +133,14 @@ level = "INFO"
 [notes]
 max_notes = 32
 max_note_chars = 2000
+max_total_chars = 16000
+
+# Durable model-authored instructions are scoped to explicit model-call kinds.
+# Limits are storage safeguards, not prompt-selection targets; every matching
+# instruction is included exactly and accounted by the central compiler.
+[prompt_instructions]
+max_instructions = 32
+max_instruction_chars = 2000
 max_total_chars = 16000
 
 # -----------------------------------------------------------
