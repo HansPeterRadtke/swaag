@@ -880,6 +880,66 @@ class HistoryStore:
                 return event
         return None
 
+    def latest_runtime_context_projection(
+        self,
+        session_id: str,
+        *,
+        source_name: str,
+        source_sha256: str,
+        objective_sha256: str,
+        max_projected_tokens: int,
+    ) -> HistoryEvent | None:
+        """Find a reusable objective-specific projection of unchanged raw state."""
+
+        def reusable(event: HistoryEvent) -> bool:
+            payload = event.payload
+            projected_tokens = payload.get("projected_tokens")
+            return (
+                event.event_type == "runtime_context_projected"
+                and payload.get("source_name") == source_name
+                and payload.get("source_sha256") == source_sha256
+                and payload.get("objective_sha256") == objective_sha256
+                and isinstance(projected_tokens, int)
+                and not isinstance(projected_tokens, bool)
+                and 0 < projected_tokens <= max_projected_tokens
+                and bool(str(payload.get("projection", "")).strip())
+            )
+
+        if self.history_path(session_id).exists():
+            self._ensure_session_indexed(session_id)
+            with self._sqlite_connect() as connection:
+                rows = connection.execute(
+                    """
+                    SELECT session_id, sequence, event_id, timestamp, event_type,
+                           payload_json, metadata_json, prev_hash, event_hash
+                    FROM events
+                    WHERE session_id=? AND event_type='runtime_context_projected'
+                    ORDER BY sequence DESC
+                    """,
+                    (session_id,),
+                )
+                for row in rows:
+                    event = HistoryEvent(
+                        id=str(row["event_id"]),
+                        session_id=str(row["session_id"]),
+                        sequence=int(row["sequence"]),
+                        timestamp=str(row["timestamp"]),
+                        type=str(row["event_type"]),
+                        version=1,
+                        payload=json.loads(str(row["payload_json"])),
+                        metadata=json.loads(str(row["metadata_json"])),
+                        prev_hash=row["prev_hash"],
+                        hash=str(row["event_hash"]),
+                    )
+                    if reusable(event):
+                        return event
+            return None
+
+        for event in reversed(HistoryArchiveStore(self.root).read_events(session_id)):
+            if reusable(event):
+                return event
+        return None
+
     def iter_history_chunks(
         self,
         session_id: str,

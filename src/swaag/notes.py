@@ -85,7 +85,7 @@ def select_notes_for_prompt(
     *,
     max_tokens: int | None = None,
 ) -> NotePromptSelection:
-    token_limit = config.context.note_prompt_token_cap if max_tokens is None else max(int(max_tokens), 0)
+    token_limit = None if max_tokens is None else max(int(max_tokens), 0)
     included: list[Note] = []
     omitted: list[str] = []
     rendered = ""
@@ -95,7 +95,7 @@ def select_notes_for_prompt(
         candidate_list = list(reversed([note, *included]))
         candidate_text = render_notes(candidate_list)
         counted = counter.count_text(candidate_text)
-        if counted.tokens <= token_limit:
+        if token_limit is None or counted.tokens <= token_limit:
             included.insert(0, note)
             rendered = candidate_text
             tokens = counted.tokens

@@ -23,14 +23,13 @@ class WorkspaceManager:
     def __init__(self, filesystem: FilesystemManager):
         self.filesystem = filesystem
 
-    def initialize_state(self, *, max_manifest_files: int) -> WorkspaceState:
+    def initialize_state(self) -> WorkspaceState:
         root = str(self.filesystem.workspace_root)
-        listed_files, listing_truncated = self.filesystem.bounded_file_manifest(max_entries=max_manifest_files)
         return WorkspaceState(
             root=root,
             cwd=root,
-            listed_files=listed_files,
-            listing_truncated=listing_truncated,
+            listed_files=[],
+            listing_truncated=True,
             last_snapshot_at=utc_now_iso(),
         )
 

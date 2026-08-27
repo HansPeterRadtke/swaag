@@ -45,8 +45,6 @@ class ContextConfig:
     reserved_summary_tokens: int
     safety_margin_tokens: int
     max_compaction_rounds: int
-    workspace_manifest_max_files: int
-    note_prompt_token_cap: int
     allow_estimate_fallback: bool
     compact_on_overflow: bool
 
@@ -370,6 +368,8 @@ def _coerce_config(data: dict[str, Any]) -> AgentConfig:
     model = ModelConfig(**data["model"])
     context_data = dict(data["context"])
     context_data.pop("max_recent_messages", None)
+    context_data.pop("workspace_manifest_max_files", None)
+    context_data.pop("note_prompt_token_cap", None)
     context = ContextConfig(**context_data)
     runtime = RuntimeConfig(**data["runtime"])
     sessions = SessionConfig(
@@ -532,7 +532,6 @@ def _coerce_config(data: dict[str, Any]) -> AgentConfig:
     _validate_positive("context.reserved_response_tokens", context.reserved_response_tokens)
     _validate_positive("context.reserved_summary_tokens", context.reserved_summary_tokens)
     _validate_non_negative("context.safety_margin_tokens", context.safety_margin_tokens)
-    _validate_positive("context.workspace_manifest_max_files", context.workspace_manifest_max_files)
     _validate_positive("environment.command_timeout_seconds", environment.command_timeout_seconds)
     _validate_positive("environment.max_capture_chars", environment.max_capture_chars)
     _validate_positive("environment.aubro_timeout_seconds", environment.aubro_timeout_seconds)

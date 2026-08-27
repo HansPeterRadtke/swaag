@@ -45,7 +45,7 @@ from swaag.preemption import (
     RunCancellationRequested,
 )
 from swaag.model_cache import build_model_client
-from swaag.notes import select_notes_for_prompt
+from swaag.notes import render_notes
 from swaag.prompts import PromptBuilder
 from swaag.scheduler import WakeupStore
 from swaag.schema_portability import assert_portable_json_schema
@@ -140,6 +140,12 @@ class PreparedCall:
     report: BudgetReport
     prompt_mode: str
     contract: ContractSpec
+
+
+@dataclass(slots=True, frozen=True)
+class RuntimeContextProjection:
+    source_sha256: str
+    text: str
 
 
 class AgentRuntime:
@@ -1036,10 +1042,18 @@ class AgentRuntime:
     ) -> PreparedCall:
         last_report: BudgetReport | None = None
         tool_result_projections: dict[int, str] = {}
+        runtime_context_projections: dict[str, RuntimeContextProjection] = {}
+        remaining_runtime_projection_calls = [
+            max(8, int(self.config.context.max_compaction_rounds) * 8)
+        ]
         max_rounds = max(0, int(self.config.context.max_compaction_rounds))
         for compaction_round in range(max_rounds + 1):
             counter = self._counter(state)
-            context_components = self._runtime_context_components(state, counter)
+            context_components = self._runtime_context_components(
+                state,
+                counter,
+                projections=runtime_context_projections,
+            )
             assembly = self.prompts.build_agent_action_prompt(
                 list(state.messages),
                 tool_specs,
@@ -1103,6 +1117,24 @@ class AgentRuntime:
             if projected is not None:
                 sequence, projection = projected
                 tool_result_projections[sequence] = projection
+                continue
+            projected_context = self._project_runtime_context_for_overflow(
+                state,
+                original_request=stable_json_dumps(
+                    {
+                        "original_request": original_request,
+                        "pending_messages": pending_messages,
+                        "validation_feedback": validation_feedback,
+                    },
+                    indent=None,
+                ),
+                compilation=compilation,
+                existing_projections=runtime_context_projections,
+                remaining_calls=remaining_runtime_projection_calls,
+            )
+            if projected_context is not None:
+                source_name, projection = projected_context
+                runtime_context_projections[source_name] = projection
                 continue
             if not self._compact_once(
                 state,
@@ -2373,10 +2405,213 @@ class AgentRuntime:
         )
         return projection
 
+    def _runtime_context_sources(self, state: SessionState) -> dict[str, str]:
+        filesystem = AgentEnvironment(self.config, state).filesystem
+        workspace_files = filesystem.list_files(".")
+        return {
+            "workspace_file_manifest": stable_json_dumps(
+                {
+                    "workspace_root": state.environment.workspace.root,
+                    "files": workspace_files,
+                    "count": len(workspace_files),
+                },
+                indent=2,
+            ),
+            "durable_notes": render_notes(state.notes),
+        }
+
+    def _runtime_context_source_locator(
+        self,
+        state: SessionState,
+        source_name: str,
+    ) -> dict[str, object]:
+        if source_name == "workspace_file_manifest":
+            return {
+                "authoritative_source": "live_filesystem",
+                "workspace_root": state.environment.workspace.root,
+                "recovery_tool": "list_files",
+                "recovery_arguments": {
+                    "path": state.environment.workspace.root,
+                },
+            }
+        if source_name == "durable_notes":
+            return {
+                "authoritative_source": "durable_note_events",
+                "session_id": state.session_id,
+                "recovery_tool": "notes",
+                "recovery_arguments": {"action": "list"},
+            }
+        raise ValueError(f"Unknown runtime context source: {source_name}")
+
+    def _project_runtime_context_for_overflow(
+        self,
+        state: SessionState,
+        *,
+        original_request: str,
+        compilation: ContextCompilation,
+        existing_projections: dict[str, RuntimeContextProjection],
+        remaining_calls: list[int],
+    ) -> tuple[str, RuntimeContextProjection] | None:
+        if compilation.overflow_tokens <= 0:
+            return None
+        sources = self._runtime_context_sources(state)
+        report_by_name = {
+            item.name: int(item.tokens) for item in compilation.report.breakdown
+        }
+        candidates = [
+            (report_by_name.get(name, 0), name, text)
+            for name, text in sources.items()
+            if text and report_by_name.get(name, 0) > 0
+        ]
+        if not candidates:
+            return None
+        _current_tokens, source_name, source_text = max(candidates)
+        source_hash = sha256_text(source_text)
+        objective_hash = sha256_text(original_request)
+        stored_projection = existing_projections.get(source_name)
+        previous_projection = (
+            stored_projection.text
+            if stored_projection is not None
+            and stored_projection.source_sha256 == source_hash
+            else None
+        )
+        counter = self._counter(state)
+        source_tokens = counter.count_text(source_text).tokens
+        previous_tokens = (
+            counter.count_text(previous_projection).tokens
+            if previous_projection is not None
+            else source_tokens
+        )
+        target_tokens = max(
+            64,
+            previous_tokens - max(16, compilation.overflow_tokens) - 32,
+        )
+        if target_tokens >= previous_tokens:
+            return None
+        stored = self.history.latest_runtime_context_projection(
+            state.session_id,
+            source_name=source_name,
+            source_sha256=source_hash,
+            objective_sha256=objective_hash,
+            max_projected_tokens=target_tokens,
+        )
+        if stored is not None:
+            projection = str(stored.payload["projection"]).strip()
+            projected_tokens = int(stored.payload["projected_tokens"])
+            self.history.record_event(
+                state,
+                "runtime_context_projection_reused",
+                {
+                    "source_name": source_name,
+                    "source_sha256": source_hash,
+                    "objective_sha256": objective_hash,
+                    "source_locator": self._runtime_context_source_locator(
+                        state, source_name
+                    ),
+                    "projection_event_sequence": stored.sequence,
+                    "target_tokens": target_tokens,
+                    "projected_tokens": projected_tokens,
+                },
+            )
+            return source_name, RuntimeContextProjection(source_hash, projection)
+        try:
+            projection, projection_report = self._reduce_text_hierarchically(
+                state,
+                source_text=source_text,
+                source_label=(
+                    "complete current workspace file manifest"
+                    if source_name == "workspace_file_manifest"
+                    else "all exact durable model-authored notes"
+                ),
+                target_tokens=target_tokens,
+                contract=evidence_projection_contract(),
+                output_key="projection",
+                build_assembly=lambda text, label, target: (
+                    self.prompts.build_evidence_projection_prompt(
+                        purpose=(
+                            "Preserve the parts of this recoverable runtime context that matter "
+                            "for the current user objective: "
+                            + original_request
+                        ),
+                        source_label=label,
+                        raw_evidence=text,
+                        target_tokens=target,
+                    )
+                ),
+                remaining_calls=remaining_calls,
+                context_limit_resolution=self._resolve_context_limit(),
+            )
+        except (BudgetExceededError, OutputBudgetExhaustedError) as exc:
+            self.history.record_event(
+                state,
+                "runtime_context_projection_skipped",
+                {
+                    "source_name": source_name,
+                    "source_sha256": source_hash,
+                    "objective_sha256": objective_hash,
+                    "source_locator": self._runtime_context_source_locator(
+                        state, source_name
+                    ),
+                    "previous_tokens": previous_tokens,
+                    "target_tokens": target_tokens,
+                    "overflow_tokens": compilation.overflow_tokens,
+                    "reason": f"{type(exc).__name__}: {exc}",
+                    "budget_report": (
+                        asdict(exc.report)
+                        if isinstance(exc, BudgetExceededError)
+                        and exc.report is not None
+                        else None
+                    ),
+                },
+            )
+            return None
+        projected_tokens = counter.count_text(projection).tokens
+        if projected_tokens >= previous_tokens:
+            self.history.record_event(
+                state,
+                "runtime_context_projection_skipped",
+                {
+                    "source_name": source_name,
+                    "source_sha256": source_hash,
+                    "objective_sha256": objective_hash,
+                    "source_locator": self._runtime_context_source_locator(
+                        state, source_name
+                    ),
+                    "previous_tokens": previous_tokens,
+                    "target_tokens": target_tokens,
+                    "overflow_tokens": compilation.overflow_tokens,
+                    "reason": "semantic projection did not reduce the measured source",
+                    "budget_report": asdict(projection_report),
+                },
+            )
+            return None
+        self.history.record_event(
+            state,
+            "runtime_context_projected",
+            {
+                "source_name": source_name,
+                "source_sha256": source_hash,
+                "objective_sha256": objective_hash,
+                "source_locator": self._runtime_context_source_locator(
+                    state, source_name
+                ),
+                "source_tokens": source_tokens,
+                "previous_tokens": previous_tokens,
+                "target_tokens": target_tokens,
+                "projected_tokens": projected_tokens,
+                "overflow_tokens": compilation.overflow_tokens,
+                "projection_budget_report": asdict(projection_report),
+                "projection": projection,
+            },
+        )
+        return source_name, RuntimeContextProjection(source_hash, projection)
+
     def _runtime_context_components(
         self,
         state: SessionState,
         counter: ExactTokenCounter | ConservativeEstimator | _HistoryAwareTokenCounter,
+        *,
+        projections: dict[str, RuntimeContextProjection] | None = None,
     ) -> list[PromptComponent]:
         wakeup_store = WakeupStore(self.config.sessions.root)
         latest_handles: dict[str, str] = {}
@@ -2415,8 +2650,6 @@ class AgentRuntime:
             },
             "workspace_root": state.environment.workspace.root,
             "cwd": state.environment.workspace.cwd,
-            "workspace_files": list(state.environment.workspace.listed_files),
-            "workspace_listing_truncated": state.environment.workspace.listing_truncated,
             "waiting": state.environment.waiting,
             "waiting_reason": state.environment.waiting_reason,
             "processes": {
@@ -2436,6 +2669,33 @@ class AgentRuntime:
                 text="Environment state:\n" + stable_json_dumps(environment, indent=2) + "\n\n",
             )
         ]
+        sources = self._runtime_context_sources(state)
+        projection_map = projections or {}
+        workspace_source = sources["workspace_file_manifest"]
+        workspace_projection = projection_map.get("workspace_file_manifest")
+        if (
+            workspace_projection is not None
+            and workspace_projection.source_sha256
+            == sha256_text(workspace_source)
+        ):
+            workspace_text = (
+                "[SEMANTIC PROJECTION; the live filesystem remains authoritative]\n"
+                + workspace_projection.text
+            )
+        else:
+            workspace_text = workspace_source
+        components.append(
+            PromptComponent(
+                name="workspace_file_manifest",
+                category="environment",
+                text=(
+                    "Workspace file manifest. Use list_files on workspace_root to recover the exact current listing when needed:\n"
+                    + workspace_text
+                    + "\n\n"
+                ),
+                optional=True,
+            )
+        )
         if state.attachments:
             references = []
             for attachment in state.attachments:
@@ -2454,42 +2714,40 @@ class AgentRuntime:
                     ),
                 )
             )
-        selected = select_notes_for_prompt(self.config, state.notes, counter)
+        notes_source = sources["durable_notes"]
+        notes_count = counter.count_text(notes_source)
         self.history.record_event(
             state,
             "notes_selected",
             {
-                "included_note_ids": [note.note_id for note in selected.included_notes],
-                "omitted_note_ids": selected.omitted_note_ids,
-                "tokens": selected.tokens,
-                "exact": selected.exact,
+                "included_note_ids": [note.note_id for note in state.notes],
+                "omitted_note_ids": [],
+                "tokens": notes_count.tokens,
+                "exact": notes_count.exact,
             },
         )
-        if selected.rendered_text:
+        if notes_source:
+            notes_projection = projection_map.get("durable_notes")
+            if (
+                notes_projection is not None
+                and notes_projection.source_sha256 == sha256_text(notes_source)
+            ):
+                notes_text = (
+                    "[SEMANTIC PROJECTION; exact notes remain authoritative and retrievable]\n"
+                    + notes_projection.text
+                )
+            else:
+                notes_text = notes_source
             components.append(
                 PromptComponent(
                     name="durable_notes",
                     category="notes",
                     text=(
                         "Durable model-authored notes. These are navigation aids; verbatim user messages and tool results remain authoritative:\n"
-                        + selected.rendered_text
+                        + notes_text
                         + "\n\n"
                     ),
                     optional=True,
-                )
-            )
-        if selected.omitted_note_ids:
-            components.append(
-                PromptComponent(
-                    name="omitted_durable_note_references",
-                    category="notes",
-                    text=(
-                        "Additional exact durable notes exist outside this bounded preview. "
-                        "Use the notes list action or read_text with a note_id when their "
-                        "content may matter. Omitted note IDs:\n"
-                        + stable_json_dumps(selected.omitted_note_ids, indent=None)
-                        + "\n\n"
-                    ),
                 )
             )
         return components

@@ -18,6 +18,9 @@ ALLOWED_EVENT_TYPES = frozenset(
         "notes_selected",
         "prompt_built",
         "context_compiled",
+        "runtime_context_projected",
+        "runtime_context_projection_reused",
+        "runtime_context_projection_skipped",
         "tool_result_projected",
         "tool_result_projection_reused",
         "tool_result_projection_skipped",
@@ -262,6 +265,45 @@ REQUIRED_PAYLOAD_KEYS: dict[str, frozenset[str]] = {
     "notes_selected": frozenset({"included_note_ids", "omitted_note_ids", "tokens", "exact"}),
     "prompt_built": frozenset({"kind", "prompt_mode", "contract", "prompt", "components", "budget_report"}),
     "context_compiled": frozenset({"kind", "prompt_mode", "accounting"}),
+    "runtime_context_projected": frozenset(
+        {
+            "source_name",
+            "source_sha256",
+            "objective_sha256",
+            "source_locator",
+            "source_tokens",
+            "previous_tokens",
+            "target_tokens",
+            "projected_tokens",
+            "overflow_tokens",
+            "projection_budget_report",
+            "projection",
+        }
+    ),
+    "runtime_context_projection_reused": frozenset(
+        {
+            "source_name",
+            "source_sha256",
+            "objective_sha256",
+            "source_locator",
+            "projection_event_sequence",
+            "target_tokens",
+            "projected_tokens",
+        }
+    ),
+    "runtime_context_projection_skipped": frozenset(
+        {
+            "source_name",
+            "source_sha256",
+            "objective_sha256",
+            "source_locator",
+            "previous_tokens",
+            "target_tokens",
+            "overflow_tokens",
+            "reason",
+            "budget_report",
+        }
+    ),
     "tool_result_projected": frozenset({"source_event_sequence", "source_event_hash", "tool_name", "target_tokens", "original_tokens", "projected_tokens", "overflow_tokens", "projection"}),
     "tool_result_projection_reused": frozenset(
         {

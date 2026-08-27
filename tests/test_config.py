@@ -109,6 +109,21 @@ def test_legacy_recent_message_limit_is_accepted_but_no_longer_controls_semantic
     assert not hasattr(config.context, "max_recent_messages")
 
 
+def test_legacy_runtime_context_caps_are_accepted_but_no_longer_drop_candidates(
+    tmp_path: Path,
+) -> None:
+    legacy = tmp_path / "legacy-context.toml"
+    legacy.write_text(
+        "[context]\nworkspace_manifest_max_files = 2\nnote_prompt_token_cap = 3\n",
+        encoding="utf-8",
+    )
+
+    config = load_config(config_paths=[legacy])
+
+    assert not hasattr(config.context, "workspace_manifest_max_files")
+    assert not hasattr(config.context, "note_prompt_token_cap")
+
+
 
 
 def test_environment_aubro_overrides_are_loaded(tmp_path: Path) -> None:

@@ -369,10 +369,7 @@ class NotesTool(Tool):
             minimum_output_tokens=64,
             desired_output_tokens=max(
                 64,
-                min(
-                    int(context.config.context.note_prompt_token_cap),
-                    (target_chars + 3) // 4 + 32,
-                ),
+                (target_chars + 3) // 4 + 32,
             ),
         )
         if validation_feedback:

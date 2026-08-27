@@ -50,7 +50,7 @@ class AgentEnvironment:
         env = self.session_state.environment
         if env.workspace.root:
             return []
-        state = self.workspace.initialize_state(max_manifest_files=self.config.context.workspace_manifest_max_files)
+        state = self.workspace.initialize_state()
         return [
             ToolGeneratedEvent(
                 "environment_initialized",

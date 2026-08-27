@@ -69,7 +69,12 @@ class FilesystemManager:
             raise FilesystemError(f"Path does not exist: {root}")
         items: list[str] = []
         for item in sorted(root.rglob("*")):
-            if item.is_file() and "__pycache__" not in item.parts:
+            if (
+                item.is_file()
+                and "__pycache__" not in item.parts
+                and self.is_within_workspace(item)
+                and not self._is_runtime_owned_snapshot_path(item)
+            ):
                 items.append(self.relative_path(item))
         return items
 
@@ -187,6 +192,8 @@ class FilesystemManager:
             return snapshot
         for item in sorted(self.workspace_root.rglob("*")):
             if not item.is_file() or "__pycache__" in item.parts:
+                continue
+            if not self.is_within_workspace(item):
                 continue
             if self._is_runtime_owned_snapshot_path(item):
                 continue
