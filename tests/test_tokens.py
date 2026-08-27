@@ -1,8 +1,11 @@
 from __future__ import annotations
 
+import pytest
+
 from swaag.tokens import (
     ConservativeEstimator,
     ExactTokenCounter,
+    FallbackTokenCounter,
     admission_check,
     build_budget,
     count_message_list,
@@ -26,6 +29,36 @@ def test_conservative_counter_counts_empty_text() -> None:
     result = count_text(counter, "")
     assert result.tokens == 0
     assert result.exact is False
+
+
+def test_fallback_counter_discovers_exactness_per_text() -> None:
+    def tokenize(text: str) -> int:
+        if text.startswith("opaque"):
+            raise RuntimeError("provider cannot tokenize this fragment")
+        return len(text.split())
+
+    counter = FallbackTokenCounter(tokenize)
+
+    exact = counter.count_text("one two")
+    estimated = counter.count_text("opaque fragment")
+
+    assert (exact.tokens, exact.exact, exact.strategy) == (
+        2,
+        True,
+        "provider_tokenizer",
+    )
+    assert estimated.exact is False
+    assert estimated.strategy == "chars_per_token"
+
+
+def test_fallback_counter_can_require_exact_provider_counting() -> None:
+    counter = FallbackTokenCounter(
+        lambda _text: (_ for _ in ()).throw(RuntimeError("unsupported")),
+        allow_fallback=False,
+    )
+
+    with pytest.raises(RuntimeError, match="unsupported"):
+        counter.count_text("text")
 
 
 def test_message_tool_and_schema_contract_counting(make_config) -> None:

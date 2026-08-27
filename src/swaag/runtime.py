@@ -60,7 +60,13 @@ from swaag.prompts import PromptBuilder
 from swaag.scheduler import WakeupStore
 from swaag.schema_portability import assert_portable_json_schema
 from swaag.telemetry import OperationalTelemetry, TelemetryOperation
-from swaag.tokens import ConservativeEstimator, CountResult, ExactTokenCounter, build_budget
+from swaag.tokens import (
+    ConservativeEstimator,
+    CountResult,
+    ExactTokenCounter,
+    FallbackTokenCounter,
+    build_budget,
+)
 from swaag.tools.base import (
     SemanticCallContextOverflow,
     SemanticCallRequest,
@@ -249,7 +255,7 @@ class AgentRuntime:
             capacity_resolver=self._inference_capacity,
         )
         self._token_counter = token_counter
-        self._token_count_cache: dict[str, int] = {}
+        self._token_count_cache: dict[str, CountResult] = {}
         self._sleep = time.sleep
         self._max_model_unavailable_attempts: int = max(1, int(self.config.model.max_retries) + 1)
 
@@ -3823,13 +3829,47 @@ class AgentRuntime:
         materialized: list[PromptComponent] = []
         materialized_ranges: list[PromptMessageRange] = []
         cursor = 0
+        offsets: list[dict[str, int]] | None = None
+        raw_offsets = rendering.get("message_content_offsets")
+        if isinstance(raw_offsets, str) and raw_offsets:
+            try:
+                parsed_offsets = json.loads(raw_offsets)
+            except json.JSONDecodeError as exc:
+                raise ModelClientError(
+                    "Model returned invalid chat-message accounting offsets"
+                ) from exc
+            if (
+                not isinstance(parsed_offsets, list)
+                or len(parsed_offsets) != len(messages)
+                or any(
+                    not isinstance(item, dict)
+                    or not isinstance(item.get("start"), int)
+                    or isinstance(item.get("start"), bool)
+                    or not isinstance(item.get("end"), int)
+                    or isinstance(item.get("end"), bool)
+                    for item in parsed_offsets
+                )
+            ):
+                raise ModelClientError(
+                    "Model returned invalid chat-message accounting offsets"
+                )
+            offsets = parsed_offsets
         for index, (message, message_range) in enumerate(
             zip(messages, assembly.message_ranges, strict=True),
             start=1,
         ):
             content = message["content"]
-            offset = rendered.find(content, cursor)
-            if offset < 0:
+            if offsets is None:
+                offset = rendered.find(content, cursor)
+                content_end = offset + len(content)
+            else:
+                offset = int(offsets[index - 1]["start"])
+                content_end = int(offsets[index - 1]["end"])
+            if (
+                offset < cursor
+                or content_end != offset + len(content)
+                or rendered[offset:content_end] != content
+            ):
                 raise ModelClientError(
                     "Model chat template transformed message content; exact component accounting is unavailable"
                 )
@@ -3853,7 +3893,7 @@ class AgentRuntime:
                     component_end=len(materialized),
                 )
             )
-            cursor = offset + len(content)
+            cursor = content_end
         materialized.append(
             PromptComponent(
                 name="chat_template_generation_suffix",
@@ -5980,31 +6020,44 @@ class AgentRuntime:
     def _counter(
         self,
         state: SessionState | None,
-    ) -> ExactTokenCounter | ConservativeEstimator | _HistoryAwareTokenCounter:
+    ) -> (
+        ExactTokenCounter
+        | ConservativeEstimator
+        | FallbackTokenCounter
+        | _HistoryAwareTokenCounter
+    ):
         if self._token_counter is not None:
             return self._token_counter
         if state is None:
-            try:
-                return ExactTokenCounter(self.client.tokenize)
-            except Exception:
-                return ConservativeEstimator()
+            return FallbackTokenCounter(
+                self.client.tokenize,
+                allow_fallback=self.config.context.allow_estimate_fallback,
+            )
         return _HistoryAwareTokenCounter(self, state)
 
     def _tokenize_with_history(self, state: SessionState, text: str) -> CountResult:
         text_hash = sha256_text(text)
         if text_hash in self._token_count_cache:
-            return CountResult(
-                tokens=self._token_count_cache[text_hash],
-                exact=True,
-                strategy="llama_cpp_server_cache",
-            )
+            return self._token_count_cache[text_hash]
         guard = self.history.guard(state, "tokenize")
         guard.record(
             "model_tokenize_requested",
             {"text_hash": text_hash, "text_chars": len(text)},
         )
         try:
-            tokens = int(self.client.tokenize(text))
+            provider = getattr(self.client, "count_text", None)
+            if callable(provider):
+                counted = provider(text)
+                if not isinstance(counted, CountResult):
+                    raise ModelClientError(
+                        "Model client returned an invalid token-count result"
+                    )
+            else:
+                counted = CountResult(
+                    tokens=int(self.client.tokenize(text)),
+                    exact=True,
+                    strategy="provider_tokenizer",
+                )
         except Exception as exc:
             guard.record(
                 "model_tokenize_failed",
@@ -6016,13 +6069,33 @@ class AgentRuntime:
             )
             guard.require_all("model_tokenize_requested", "model_tokenize_failed")
             raise
-        self._token_count_cache[text_hash] = tokens
-        guard.record(
-            "model_tokenize_result",
-            {"text_hash": text_hash, "tokens": tokens, "exact": True},
-        )
-        guard.require_all("model_tokenize_requested", "model_tokenize_result")
-        return CountResult(tokens=tokens, exact=True, strategy="llama_cpp_server")
+        if not counted.exact:
+            if not self.config.context.allow_estimate_fallback:
+                raise ModelClientError(
+                    "Exact provider tokenization is unavailable and estimator fallback is disabled"
+                )
+            guard.record(
+                "token_estimate_used",
+                {
+                    "text_hash": text_hash,
+                    "tokens": counted.tokens,
+                    "strategy": counted.strategy,
+                },
+            )
+            guard.require_all("model_tokenize_requested", "token_estimate_used")
+        else:
+            guard.record(
+                "model_tokenize_result",
+                {
+                    "text_hash": text_hash,
+                    "tokens": counted.tokens,
+                    "exact": True,
+                    "strategy": counted.strategy,
+                },
+            )
+            guard.require_all("model_tokenize_requested", "model_tokenize_result")
+        self._token_count_cache[text_hash] = counted
+        return counted
 
     def _is_model_server_unavailable(self, error: BaseException) -> bool:
         if isinstance(error, (requests.ConnectionError, requests.Timeout)):

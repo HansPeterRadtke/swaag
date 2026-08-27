@@ -8,6 +8,7 @@ from types import SimpleNamespace
 import pytest
 
 from swaag.model_cache import MissingReplayEntryError, RecordReplayModelClient
+from swaag.tokens import ConservativeEstimator
 from swaag.types import CompletionResult
 
 
@@ -183,6 +184,38 @@ def test_token_counts_record_and_replay_without_network(tmp_path: Path) -> None:
     )
 
     assert replay.tokenize("exact text") == 10
+    assert replay_delegate.token_calls == 0
+
+
+def test_estimated_token_counts_are_disclosed_and_not_recorded_as_exact(
+    tmp_path: Path,
+) -> None:
+    class OpaqueDelegate(Delegate):
+        def tokenize(self, text):
+            self.token_calls += 1
+            raise RuntimeError("provider serialization is opaque")
+
+        def count_text(self, text):
+            return ConservativeEstimator().count_text(text)
+
+    recorded_delegate = OpaqueDelegate()
+    recorded = client(tmp_path, recorded_delegate)
+
+    estimate = recorded.count_text("opaque provider input")
+
+    assert estimate.exact is False
+    assert estimate.strategy == "chars_per_token"
+
+    replay_delegate = OpaqueDelegate()
+    replay = RecordReplayModelClient(
+        cassette_path=tmp_path / "cassette.json",
+        mode="replay",
+        delegate=replay_delegate,
+        request_metadata={"task": "cache-exactness"},
+    )
+    replay_estimate = replay.count_text("opaque provider input")
+
+    assert replay_estimate.exact is False
     assert replay_delegate.token_calls == 0
     assert replay_delegate.identity_calls == 0
     with pytest.raises(MissingReplayEntryError, match="tokenize result"):

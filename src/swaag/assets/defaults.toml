@@ -32,6 +32,9 @@ profile_name = "small_fast"
 model_identity = ""
 # OpenTelemetry GenAI provider discriminator; custom providers are permitted by the convention.
 provider_name = "llama.cpp"
+# Optional environment-variable name containing a bearer token. The secret is
+# read only at request time and is never included in config fingerprints.
+api_key_env = ""
 structured_output_mode = "server_schema"
 # Cache-first record mode is the normal runtime default. Set cache_enabled=false for an explicitly uncached live run.
 cache_enabled = true
@@ -50,6 +53,10 @@ temperature = 0.0
 top_p = 1.0
 seed = 42
 context_limit = 2048
+# A live remote OpenAI-compatible backend may omit capacity from GET /models.
+# Keep this unset (zero) unless its deployed limit is known explicitly; the
+# packaged offline context_limit above must not silently govern a live backend.
+remote_context_limit_fallback = 0
 # Optional extra text stops. Leave empty to use the connected model's EOS behavior.
 stop = []
 

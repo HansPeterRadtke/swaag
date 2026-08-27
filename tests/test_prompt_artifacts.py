@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+import json
+
 import pytest
 
 from swaag.grammar import yes_no_contract
@@ -7,7 +9,7 @@ from swaag.model import ModelClientError
 from swaag.prompt_instructions import make_prompt_instruction
 from swaag.prompts import PromptBuilder
 from swaag.runtime import AgentRuntime
-from swaag.tokens import ConservativeEstimator
+from swaag.tokens import ConservativeEstimator, CountResult
 from swaag.types import (
     Message,
     PromptAssembly,
@@ -154,6 +156,88 @@ def test_live_prompt_materialization_accounts_exact_server_chat_template(
     assert "Preserve every cited source event." in messages[0]["content"]
     assert messages[1]["content"] == "Exact evidence."
     assert "Preserve every cited source event." in assembly.prompt_text
+
+
+def test_prompt_materialization_uses_provider_offsets_for_opaque_envelopes(
+    make_config,
+) -> None:
+    protocol_hash = sha256_text("remote-model-metadata")
+
+    class RemoteClient:
+        def render_chat_prompt(self, messages):
+            pieces = []
+            offsets = []
+            cursor = 0
+            for message in messages:
+                prefix = f"<message role={message['role']}>"
+                pieces.append(prefix)
+                cursor += len(prefix)
+                start = cursor
+                pieces.append(message["content"])
+                cursor += len(message["content"])
+                offsets.append({"start": start, "end": cursor})
+                pieces.append("</message>")
+                cursor += len("</message>")
+            pieces.append("<generate/>")
+            return {
+                "prompt": "".join(pieces),
+                "prompt_protocol_sha256": protocol_hash,
+                "message_content_offsets": json.dumps(offsets),
+            }
+
+    runtime = AgentRuntime(
+        make_config(model__context_limit=8_000),
+        model_client=RemoteClient(),
+        token_counter=ConservativeEstimator(),
+    )
+    assembly = runtime.prompts.build_semantic_operation_prompt(
+        kind="history_analysis",
+        system_instruction="system",
+        components=[PromptComponent(name="evidence", text="user")],
+    )
+
+    runtime._compile_context(
+        None,
+        assembly,
+        yes_no_contract(),
+        minimum_output_tokens=64,
+        context_limit_resolution=(8_000, "test"),
+    )
+
+    messages = runtime._assembly_chat_messages(assembly)
+    assert messages == [
+        {"role": "system", "content": "system"},
+        {"role": "user", "content": "user"},
+    ]
+    assert "<message role=system>system</message>" in assembly.prompt_text
+    assert "<message role=user>user</message>" in assembly.prompt_text
+
+
+def test_runtime_caches_disclosed_provider_estimates_without_failure_events(
+    make_config,
+) -> None:
+    class OpaqueClient:
+        def count_text(self, text):
+            return CountResult(
+                tokens=max(1, len(text) // 3),
+                exact=False,
+                strategy="opaque_provider_estimator",
+            )
+
+    runtime = AgentRuntime(
+        make_config(model__cache_enabled=False),
+        model_client=OpaqueClient(),
+    )
+    state = runtime.create_or_load_session()
+
+    first = runtime._tokenize_with_history(state, "opaque prompt fragment")
+    second = runtime._tokenize_with_history(state, "opaque prompt fragment")
+    events = runtime.history.read_history(state.session_id)
+
+    assert first == second
+    assert first.exact is False
+    assert sum(event.event_type == "token_estimate_used" for event in events) == 1
+    assert not any(event.event_type == "model_tokenize_failed" for event in events)
 
 
 @pytest.mark.parametrize(

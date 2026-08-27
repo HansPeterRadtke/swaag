@@ -39,6 +39,36 @@ class ConservativeEstimator:
         return CountResult(tokens=tokens, exact=False, strategy="chars_per_token")
 
 
+class FallbackTokenCounter:
+    """Use exact provider counting when available and disclose every fallback."""
+
+    def __init__(self, tokenize_func, *, allow_fallback: bool = True):
+        self._tokenize_func = tokenize_func
+        self._allow_fallback = allow_fallback
+        self._exact_cache: dict[str, int] = {}
+        self._estimator = ConservativeEstimator()
+
+    def count_text(self, text: str) -> CountResult:
+        if text in self._exact_cache:
+            return CountResult(
+                tokens=self._exact_cache[text],
+                exact=True,
+                strategy="provider_tokenizer",
+            )
+        try:
+            count = int(self._tokenize_func(text))
+        except Exception:
+            if not self._allow_fallback:
+                raise
+            return self._estimator.count_text(text)
+        self._exact_cache[text] = count
+        return CountResult(
+            tokens=count,
+            exact=True,
+            strategy="provider_tokenizer",
+        )
+
+
 
 def count_text(counter: TokenCounter, text: str) -> CountResult:
     return counter.count_text(text)

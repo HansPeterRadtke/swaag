@@ -20,6 +20,7 @@ class ModelConfig:
     profile_name: str
     model_identity: str
     provider_name: str
+    api_key_env: str
     structured_output_mode: str
     cache_enabled: bool
     cache_mode: str
@@ -36,6 +37,7 @@ class ModelConfig:
     top_p: float
     seed: int
     context_limit: int
+    remote_context_limit_fallback: int
     stop: list[str]
 
 
@@ -532,6 +534,10 @@ def _coerce_config(data: dict[str, Any]) -> AgentConfig:
     )
 
     _validate_positive("model.context_limit", model.context_limit)
+    _validate_non_negative(
+        "model.remote_context_limit_fallback",
+        model.remote_context_limit_fallback,
+    )
     _validate_positive("model.timeout_seconds", model.timeout_seconds)
     _validate_positive("model.connect_timeout_seconds", model.connect_timeout_seconds)
     _validate_positive("model.simple_timeout_seconds", model.simple_timeout_seconds)

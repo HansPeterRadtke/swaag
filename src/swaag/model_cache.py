@@ -17,6 +17,7 @@ except ImportError:  # pragma: no cover - non-POSIX compatibility fallback
     fcntl = None
 
 from swaag.fsops import atomic_replace, ensure_dir, remove_file
+from swaag.tokens import ConservativeEstimator, CountResult
 from swaag.types import CompletionResult, ContractSpec
 from swaag.utils import sha256_text, stable_json_dumps
 
@@ -395,6 +396,33 @@ class RecordReplayModelClient:
 
     def tokenize(self, text: str) -> int:
         return self._tokenize_record_replay(text, operation="tokenize")
+
+    def count_text(self, text: str) -> CountResult:
+        try:
+            return CountResult(
+                tokens=self.tokenize(text),
+                exact=True,
+                strategy="recorded_provider_tokenizer",
+            )
+        except MissingReplayEntryError:
+            return ConservativeEstimator().count_text(text)
+        except Exception:
+            if self.mode == "replay":
+                raise
+            provider = getattr(self.delegate, "count_text", None)
+            if not callable(provider):
+                raise
+            result = provider(text)
+            if not isinstance(result, CountResult):
+                raise RuntimeError("Model client returned an invalid token-count result")
+            if not result.exact:
+                return result
+            # Persist exact provider results through the normal cassette path.
+            return CountResult(
+                tokens=self.tokenize(text),
+                exact=True,
+                strategy=result.strategy,
+            )
 
     def tokenize_selection(self, text: str) -> int:
         return self._tokenize_record_replay(text, operation="tokenize_selection")

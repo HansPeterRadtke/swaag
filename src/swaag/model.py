@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 import json
 import os
 from urllib.parse import urlparse
@@ -14,6 +14,7 @@ import requests
 from swaag.config import AgentConfig
 from swaag.schema_portability import PortableSchemaError, assert_portable_json_schema
 from swaag.preemption import ModelCallPreempted
+from swaag.tokens import ConservativeEstimator, CountResult
 from swaag.types import CompletionResult, ContractSpec
 from swaag.utils import sha256_text, stable_json_dumps
 
@@ -70,18 +71,202 @@ def stable_llama_server_properties(props: dict[str, Any]) -> dict[str, Any]:
     }
 
 
+def stable_openai_model_metadata(model: dict[str, Any]) -> dict[str, Any]:
+    """Keep model/protocol facts while excluding prices and request-time noise."""
+    top_provider = model.get("top_provider")
+    return {
+        "id": model.get("id"),
+        "canonical_slug": model.get("canonical_slug"),
+        "owned_by": model.get("owned_by"),
+        "root": model.get("root"),
+        "parent": model.get("parent"),
+        "context_length": model.get("context_length"),
+        "context_window": model.get("context_window"),
+        "max_context_length": model.get("max_context_length"),
+        "max_model_len": model.get("max_model_len"),
+        "max_position_embeddings": model.get("max_position_embeddings"),
+        "architecture": model.get("architecture"),
+        "default_parameters": model.get("default_parameters"),
+        "supported_parameters": model.get("supported_parameters"),
+        "top_provider": (
+            {
+                "context_length": top_provider.get("context_length"),
+                "max_completion_tokens": top_provider.get("max_completion_tokens"),
+            }
+            if isinstance(top_provider, dict)
+            else None
+        ),
+        "shutdown_date": model.get("shutdown_date"),
+        "expiration_date": model.get("expiration_date"),
+    }
+
+
 @dataclass(slots=True)
 class LlamaCppClient:
     config: AgentConfig
+    _remote_prompt_tokens: dict[str, int] = field(default_factory=dict, init=False)
 
     @property
     def _base(self) -> str:
         return self.config.model.base_url.rstrip("/")
 
+    @property
+    def _uses_chat_transport(self) -> bool:
+        return uses_chat_completions_transport(
+            self.config.model.base_url,
+            self.config.model.completion_endpoint,
+        )
+
+    @property
+    def _is_openrouter(self) -> bool:
+        return "openrouter.ai" in self._base.lower()
+
+    def _authorization_headers(self) -> dict[str, str]:
+        env_name = self.config.model.api_key_env.strip()
+        if not env_name:
+            return {}
+        token = os.environ.get(env_name, "").strip()
+        if not token:
+            raise ModelClientError(
+                f"Configured model bearer-token environment variable {env_name!r} is empty"
+            )
+        return {"Authorization": f"Bearer {token}"}
+
+    def _request_headers_kwargs(self) -> dict[str, dict[str, str]]:
+        headers = self._authorization_headers()
+        return {"headers": headers} if headers else {}
+
+    def _remote_models_payload(self) -> dict[str, Any]:
+        response = requests.get(
+            f"{self._base}/models",
+            timeout=(
+                self.config.model.connect_timeout_seconds,
+                min(self.config.model.timeout_seconds, 15),
+            ),
+            **self._request_headers_kwargs(),
+        )
+        response.raise_for_status()
+        payload = response.json()
+        if not isinstance(payload, dict) or not isinstance(payload.get("data"), list):
+            raise ModelClientError(f"Unexpected OpenAI models response: {payload!r}")
+        return payload
+
+    def _remote_model(self) -> dict[str, Any]:
+        models = [
+            item
+            for item in self._remote_models_payload()["data"]
+            if isinstance(item, dict) and isinstance(item.get("id"), str)
+        ]
+        configured = self.config.model.profile_name.strip()
+        matches = [item for item in models if item.get("id") == configured]
+        if len(matches) == 1:
+            return matches[0]
+        available = sorted(str(item["id"]) for item in models)
+        raise ModelClientError(
+            "Configured model profile is not uniquely available from GET /models: "
+            f"configured={configured!r} available={available!r}"
+        )
+
+    @staticmethod
+    def _remote_context_from_model(model: dict[str, Any]) -> tuple[int, str] | None:
+        candidates: list[tuple[str, Any]] = [
+            ("context_length", model.get("context_length")),
+            ("max_model_len", model.get("max_model_len")),
+            ("max_context_length", model.get("max_context_length")),
+            ("context_window", model.get("context_window")),
+            ("max_position_embeddings", model.get("max_position_embeddings")),
+            ("n_ctx", model.get("n_ctx")),
+        ]
+        top_provider = model.get("top_provider")
+        if isinstance(top_provider, dict):
+            candidates.append(
+                ("top_provider.context_length", top_provider.get("context_length"))
+            )
+        for source, value in candidates:
+            if isinstance(value, int) and not isinstance(value, bool) and value > 0:
+                return int(value), f"openai_models:{source}"
+        return None
+
+    @staticmethod
+    def _remote_accounting_envelope(
+        messages: list[dict[str, str]],
+    ) -> tuple[str, list[dict[str, int]]]:
+        pieces: list[str] = []
+        offsets: list[dict[str, int]] = []
+        cursor = 0
+        for index, message in enumerate(messages, start=1):
+            content = message["content"]
+            prefix = (
+                f"<swaag-openai-message index={index} role={message['role']} bytes={len(content.encode('utf-8'))}>\n"
+            )
+            pieces.append(prefix)
+            cursor += len(prefix)
+            start = cursor
+            pieces.append(content)
+            cursor += len(content)
+            offsets.append({"start": start, "end": cursor})
+            suffix = "\n</swaag-openai-message>\n"
+            pieces.append(suffix)
+            cursor += len(suffix)
+        pieces.append("<swaag-openai-generation/>\n")
+        return "".join(pieces), offsets
+
+    def _remote_tokenize_url(self) -> str:
+        endpoint = self.config.model.tokenize_endpoint.strip()
+        if endpoint.startswith(("http://", "https://")):
+            return endpoint
+        parsed = urlparse(self._base)
+        if endpoint.startswith("/"):
+            return f"{parsed.scheme}://{parsed.netloc}{endpoint}"
+        return f"{self._base}/{endpoint}"
+
+    def _remote_tokenize_messages(
+        self,
+        messages: list[dict[str, str]],
+    ) -> tuple[int, int | None]:
+        response = requests.post(
+            self._remote_tokenize_url(),
+            json={
+                "model": self.config.model.profile_name,
+                "messages": messages,
+                "add_generation_prompt": True,
+            },
+            timeout=(
+                self.config.model.connect_timeout_seconds,
+                min(self.config.model.timeout_seconds, 30),
+            ),
+            **self._request_headers_kwargs(),
+        )
+        response.raise_for_status()
+        payload = response.json()
+        if not isinstance(payload, dict):
+            raise ModelClientError(f"Unexpected remote tokenize response: {payload!r}")
+        count = payload.get("count")
+        if not isinstance(count, int) or isinstance(count, bool) or count < 0:
+            tokens = payload.get("tokens")
+            if isinstance(tokens, list):
+                count = len(tokens)
+            else:
+                raise ModelClientError(
+                    f"Remote tokenize response lacks an exact count: {payload!r}"
+                )
+        capacity = payload.get("max_model_len")
+        if not isinstance(capacity, int) or isinstance(capacity, bool) or capacity <= 0:
+            capacity = None
+        return int(count), capacity
+
     def health(self) -> dict[str, Any]:
+        if self._uses_chat_transport:
+            model = self._remote_model()
+            return {
+                "status": "ok",
+                "transport": "openai_chat_completions",
+                "model": str(model.get("id", "")),
+            }
         response = requests.get(
             f"{self._base}{self.config.model.health_endpoint}",
             timeout=(self.config.model.connect_timeout_seconds, self.config.model.timeout_seconds),
+            **self._request_headers_kwargs(),
         )
         response.raise_for_status()
         payload = response.json()
@@ -139,6 +324,21 @@ class LlamaCppClient:
             "completion_endpoint": self.config.model.completion_endpoint,
             "profile_name": self.config.model.profile_name,
         }
+        if self._uses_chat_transport:
+            try:
+                model = self._remote_model()
+                stable_model = stable_openai_model_metadata(model)
+                identity["server_properties_sha256"] = sha256_text(
+                    stable_json_dumps(stable_model, indent=None)
+                )
+                identity["model_alias"] = model.get("id")
+                identity["remote_model_metadata"] = stable_model
+                identity["transport"] = "openai_chat_completions"
+                identity["status"] = "resolved"
+            except Exception as exc:
+                identity["status"] = "configured_only" if configured_identity else "unresolved"
+                identity["probe_error_type"] = exc.__class__.__name__
+            return identity
         try:
             response = requests.get(
                 f"{self._base}/props",
@@ -177,6 +377,8 @@ class LlamaCppClient:
         return identity
 
     def server_context_limit(self) -> int:
+        if self._uses_chat_transport:
+            return self.context_limit_resolution()[0]
         response = requests.get(
             f"{self._base}/props",
             timeout=(
@@ -197,6 +399,21 @@ class LlamaCppClient:
         return int(n_ctx)
 
     def _prompt_protocol_identity(self) -> dict[str, str]:
+        if self._uses_chat_transport:
+            model = self._remote_model()
+            stable_model = stable_openai_model_metadata(model)
+            return {
+                "serialization": "provider_opaque_openai_chat_v1",
+                "model_metadata_sha256": sha256_text(
+                    stable_json_dumps(stable_model, indent=None)
+                ),
+                "model_alias": str(model.get("id", "")),
+                "configured_model_identity": self.config.model.model_identity.strip(),
+                "completion_endpoint": completion_url(
+                    self.config.model.base_url,
+                    self.config.model.completion_endpoint,
+                ),
+            }
         response = requests.get(
             f"{self._base}/props",
             timeout=(
@@ -244,6 +461,42 @@ class LlamaCppClient:
             for item in messages
         ):
             raise ModelClientError("Chat-template messages are invalid")
+        if self._uses_chat_transport:
+            before = self._prompt_protocol_identity()
+            prompt, message_offsets = self._remote_accounting_envelope(messages)
+            token_count = ""
+            tokenizer_context_limit = ""
+            token_strategy = "conservative_estimator_required"
+            try:
+                exact_count, discovered_limit = self._remote_tokenize_messages(messages)
+            except Exception:
+                pass
+            else:
+                self._remote_prompt_tokens[sha256_text(prompt)] = exact_count
+                token_count = str(exact_count)
+                tokenizer_context_limit = str(discovered_limit or "")
+                token_strategy = "provider_tokenize_messages"
+            after = self._prompt_protocol_identity()
+            if before != after:
+                raise ModelClientError(
+                    "Model metadata changed while serializing the request"
+                )
+            return {
+                "prompt": prompt,
+                "prompt_protocol_sha256": sha256_text(
+                    stable_json_dumps(before, indent=None)
+                ),
+                "prompt_serialization_exact": "false",
+                "prompt_serialization_strategy": "provider_opaque_openai_chat_v1",
+                "message_content_offsets": stable_json_dumps(
+                    message_offsets,
+                    indent=None,
+                ),
+                "input_token_count": token_count,
+                "input_token_strategy": token_strategy,
+                "tokenizer_context_limit": tokenizer_context_limit,
+                **before,
+            }
         before = self._prompt_protocol_identity()
         response = requests.post(
             f"{self._base}/apply-template",
@@ -281,6 +534,8 @@ class LlamaCppClient:
             )
 
     def server_slot_count(self) -> int:
+        if self._uses_chat_transport:
+            return 1
         response = requests.get(
             f"{self._base}/props",
             timeout=(
@@ -304,9 +559,39 @@ class LlamaCppClient:
         return int(total_slots)
 
     def context_limit_resolution(self) -> tuple[int, str]:
+        if self._uses_chat_transport:
+            model = self._remote_model()
+            discovered = self._remote_context_from_model(model)
+            if discovered is not None:
+                return discovered
+            try:
+                _count, tokenizer_limit = self._remote_tokenize_messages(
+                    [
+                        {"role": "system", "content": "Capacity probe."},
+                        {"role": "user", "content": "Count this request."},
+                    ]
+                )
+            except Exception:
+                tokenizer_limit = None
+            if tokenizer_limit is not None:
+                return tokenizer_limit, "provider_tokenize:max_model_len"
+            fallback = self.config.model.remote_context_limit_fallback
+            if fallback > 0:
+                return fallback, "configured:model.remote_context_limit_fallback"
+            raise ModelClientError(
+                "Remote OpenAI-compatible backend exposed no context capacity; "
+                "set model.remote_context_limit_fallback explicitly only when the deployed limit is known"
+            )
         return self.server_context_limit(), "server_props:n_ctx"
 
     def tokenize(self, text: str) -> int:
+        if self._uses_chat_transport:
+            recorded = self._remote_prompt_tokens.get(sha256_text(text))
+            if recorded is not None:
+                return recorded
+            raise ModelClientError(
+                "Exact tokenization is unavailable for this opaque OpenAI-compatible prompt fragment"
+            )
         response = requests.post(
             f"{self._base}{self.config.model.tokenize_endpoint}",
             json={"content": text},
@@ -321,6 +606,22 @@ class LlamaCppClient:
         if isinstance(payload.get("n_tokens"), int):
             return int(payload["n_tokens"])
         raise ModelClientError(f"Unexpected tokenize response: {payload!r}")
+
+    def count_text(self, text: str) -> CountResult:
+        if self._uses_chat_transport:
+            recorded = self._remote_prompt_tokens.get(sha256_text(text))
+            if recorded is not None:
+                return CountResult(
+                    tokens=recorded,
+                    exact=True,
+                    strategy="provider_tokenize_messages",
+                )
+            return ConservativeEstimator().count_text(text)
+        return CountResult(
+            tokens=self.tokenize(text),
+            exact=True,
+            strategy="llama_cpp_server",
+        )
 
     def tokenize_selection(self, text: str) -> int:
         return self.tokenize(text)
@@ -411,8 +712,9 @@ class LlamaCppClient:
                         "schema": schema,
                     },
                 },
-                "provider": {"require_parameters": True},
             }
+            if self._is_openrouter:
+                request["provider"] = {"require_parameters": True}
             if self.config.model.stop:
                 request["stop"] = list(self.config.model.stop)
             return request
@@ -451,11 +753,18 @@ class LlamaCppClient:
         stream_payload = dict(payload)
         stream_payload["stream"] = True
         started = time.monotonic()
+        request_kwargs: dict[str, Any] = {
+            "json": stream_payload,
+            "timeout": (
+                self.config.model.connect_timeout_seconds,
+                token_timeout_seconds,
+            ),
+            "stream": True,
+        }
+        request_kwargs.update(self._request_headers_kwargs())
         response = requests.post(
             completion_url(self.config.model.base_url, self.config.model.completion_endpoint),
-            json=stream_payload,
-            timeout=(self.config.model.connect_timeout_seconds, token_timeout_seconds),
-            stream=True,
+            **request_kwargs,
         )
         cancel_observed = threading.Event()
         stop_watcher = threading.Event()
