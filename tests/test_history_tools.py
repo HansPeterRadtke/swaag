@@ -188,7 +188,7 @@ def test_sqlite_control_priority_and_processed_idempotency(make_config, tmp_path
     assert stop["control_id"] not in {item["control_id"] for item in store.list_pending_control_messages(state.session_id)}
 
 
-def test_history_analyze_is_grounded_in_exact_candidate_sequences(
+def test_history_analyze_is_grounded_in_complete_exact_history(
     make_config, tmp_path: Path
 ) -> None:
     config = make_config()
@@ -202,6 +202,7 @@ def test_history_analyze_is_grounded_in_exact_candidate_sequences(
         assert request.contract.name == "history_analysis"
         assert str(source_sequence) in prompt
         assert "artifact-marker-73" in prompt
+        assert "Deployment codename is Blue Heron" in prompt
         return {
             "goal_constraints": ["Recover the exact prior artifact marker."],
             "failure_evidence": ["The marker exists in a prior tool result."],
@@ -217,7 +218,7 @@ def test_history_analyze_is_grounded_in_exact_candidate_sequences(
     registry = ToolRegistry()
     invocation, result = registry.dispatch(
         "history_analyze",
-        {"query": "Why did we miss artifact-marker-73?", "session_ref": state.session_id, "max_events": 8},
+        {"query": "Why did we miss artifact-marker-73?", "session_ref": state.session_id, "max_events": 1},
         config,
         state,
         semantic_call=fake_semantic_call,
@@ -320,7 +321,7 @@ def test_history_search_exposes_search_backend_and_current_session_schema(make_c
     assert "never invent a session label" in HistorySearchTool.usage_guidance
 
 
-def test_history_analyze_preserves_large_candidates_before_context_compilation(
+def test_history_analyze_preserves_large_exact_history_before_context_compilation(
     make_config, tmp_path: Path
 ) -> None:
     config = make_config()
@@ -355,7 +356,7 @@ def test_history_analyze_preserves_large_candidates_before_context_compilation(
     )
     assert result.output["candidate_root_causes"] == ["cause"]
     assert huge in captured["prompt"]
-    assert "Exact durable candidate event" in captured["prompt"]
+    assert "Exact durable history event" in captured["prompt"]
 
 
 def test_history_analyze_projects_only_after_measured_overflow(make_config) -> None:
@@ -380,7 +381,7 @@ def test_history_analyze_projects_only_after_measured_overflow(make_config) -> N
             event_component = next(
                 component
                 for component in request.components
-                if component.name == f"history_candidate_event_{source_event.sequence}"
+                if component.name == "history_candidate_events"
             )
             raise SemanticCallContextOverflow(
                 BudgetReport(
@@ -429,8 +430,13 @@ def test_history_analyze_projects_only_after_measured_overflow(make_config) -> N
 
     assert analysis_calls == 2
     generated = result.generated_events[0].payload
-    assert generated["semantic_projections"][0]["source_event_sequence"] == source_event.sequence
-    assert generated["semantic_projections"][0]["source_event_hash"] == source_event.hash
+    projection = generated["semantic_projections"][0]
+    assert projection["source_event_start_sequence"] == 1
+    assert projection["source_event_end_sequence"] >= source_event.sequence
+    assert projection["source_event_count"] == len(
+        store.read_history(state.session_id)
+    )
+    assert projection["source_sha256"]
 
 
 def test_history_projection_attempts_have_a_total_bound(make_config) -> None:
@@ -467,7 +473,7 @@ def test_history_projection_attempts_have_a_total_bound(make_config) -> None:
         candidate = next(
             component
             for component in request.components
-            if component.name.startswith("history_candidate_event_")
+            if component.name == "history_candidate_events"
         )
         raise SemanticCallContextOverflow(
             BudgetReport(
@@ -492,7 +498,7 @@ def test_history_projection_attempts_have_a_total_bound(make_config) -> None:
             )
         )
 
-    with pytest.raises(ToolValidationError, match="bounded semantic projection attempts"):
+    with pytest.raises(ToolValidationError, match="bounded semantic segmentation"):
         ToolRegistry().dispatch(
             "history_analyze",
             {"query": "projection-bound-marker", "max_events": 1},
@@ -500,7 +506,7 @@ def test_history_projection_attempts_have_a_total_bound(make_config) -> None:
             state,
             semantic_call=fake_semantic_call,
         )
-    assert projection_calls == 16
+    assert projection_calls == 17
 
 
 def test_runtime_semantic_service_compiles_named_context_and_refuses_overflow(

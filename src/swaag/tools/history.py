@@ -14,7 +14,7 @@ from swaag.tools.base import (
     ToolValidationError,
 )
 from swaag.types import PromptComponent, ToolExecutionResult, ToolGeneratedEvent
-from swaag.utils import stable_json_dumps, to_jsonable
+from swaag.utils import sha256_text, stable_json_dumps, to_jsonable
 
 
 def _active_session_ref(requested: str, context: ToolContext) -> str:
@@ -127,7 +127,9 @@ def _project_history_text(
         payload = context.call_semantic(request)
     except SemanticCallContextOverflow:
         if depth >= 16 or len(source_text) < 2:
-            raise
+            raise ToolValidationError(
+                "history analysis exact source still overflows after bounded semantic segmentation"
+            )
         midpoint = len(source_text) // 2
         child_target = max(32, (target + 1) // 2)
         left = _project_history_text(
@@ -389,7 +391,7 @@ class HistoryWindowTool(Tool):
 class HistoryAnalyzeTool(Tool):
     repeated_observation_is_redundant = True
     name = "history_analyze"
-    description = "Analyze durable exact history with a model-backed read-only root-cause pass. Returns goal/constraint reconstruction, failure evidence, candidate root causes, exact source event sequences, the wrong strategy, a materially different recommended strategy, and unresolved uncertainties."
+    description = "Analyze complete durable exact history with a model-backed read-only root-cause pass. Returns goal/constraint reconstruction, failure evidence, candidate root causes, exact source event sequences, the wrong strategy, a materially different recommended strategy, and unresolved uncertainties."
     usage_guidance = "Use when repeated failures, user corrections, or ambiguous prior behavior require deeper root-cause analysis. For the active session, pass session_ref=null (or the exact active session_id/name from environment state), never a guessed label. The analyzer is read-only; use its returned source_sequences and exact session_id with history_window for surrounding evidence."
     kind = "pure"
     input_schema = {
@@ -435,12 +437,20 @@ class HistoryAnalyzeTool(Tool):
             raise ToolValidationError("history_analyze.query must be a non-empty string")
         if session_ref is not None and not isinstance(session_ref, str):
             raise ToolValidationError("history_analyze.session_ref must be a string or null")
-        if max_events is not None and (not isinstance(max_events, int) or isinstance(max_events, bool) or not 1 <= max_events <= 24):
-            raise ToolValidationError("history_analyze.max_events must be between 1 and 24 or null")
+        if max_events is not None and (
+            not isinstance(max_events, int)
+            or isinstance(max_events, bool)
+            or max_events <= 0
+        ):
+            raise ToolValidationError(
+                "history_analyze.max_events must be a positive legacy hint or null"
+            )
         return {
             "query": query.strip(),
             "session_ref": (session_ref or "").strip(),
-            "max_events": 12 if max_events is None else max_events,
+            # Retained for request compatibility; fixed event-count admission no
+            # longer controls semantic history analysis.
+            "max_events": max_events,
         }
 
     def required_generated_event_types(self, validated_input: dict[str, Any]) -> set[str]:
@@ -460,55 +470,41 @@ class HistoryAnalyzeTool(Tool):
             session_ref=session_ref,
             tool_name=self.name,
         )
-        details = store.query_history_details(
-            session_ref,
-            validated_input["query"],
-            max_results=validated_input["max_events"],
-            token_score=context.config.history_search.token_score,
-            exact_score=context.config.history_search.exact_score,
-            type_bonus=context.config.history_search.type_bonus,
-            preview_chars=context.config.history_search.preview_chars,
-            end_sequence=search_end_sequence,
-        )
-        exact_events = store.read_history(details["session_id"])
-        if search_end_sequence is not None and details["session_id"] == context.session_state.session_id:
+        session_id = store.resolve_session_ref(session_ref, latest_if_none=False)
+        if session_id is None:
+            raise ToolValidationError(f"Unknown session: {session_ref}")
+        exact_events = store.read_history(session_id)
+        if search_end_sequence is not None and session_id == context.session_state.session_id:
             exact_events = [
                 event for event in exact_events if event.sequence <= search_end_sequence
             ]
-        events_by_sequence = {event.sequence: event for event in exact_events}
-        candidate_events = [
-            events_by_sequence[int(item["sequence"])]
-            for item in details["matches"]
-            if int(item["sequence"]) in events_by_sequence
-        ]
-        if not candidate_events:
-            candidate_events = exact_events[-validated_input["max_events"] :]
-        allowed_events = {event.sequence: event for event in candidate_events}
-        event_components = {
-            event.sequence: PromptComponent(
-                name=f"history_candidate_event_{event.sequence}",
-                category="history",
-                text=(
-                    f"Exact durable candidate event sequence={event.sequence} hash={event.hash}:\n"
-                    f"{stable_json_dumps(to_jsonable(asdict(event)), indent=2)}\n\n"
-                ),
+        allowed_events = {event.sequence: event for event in exact_events}
+        exact_history_text = "".join(
+            (
+                f"Exact durable history event sequence={event.sequence} hash={event.hash}:\n"
+                f"{stable_json_dumps(to_jsonable(asdict(event)), indent=2)}\n\n"
             )
-            for event in candidate_events
-        }
-        raw_event_components = dict(event_components)
+            for event in exact_events
+        )
+        exact_history_hash = sha256_text(exact_history_text)
+        raw_history_component = PromptComponent(
+            name="history_candidate_events",
+            category="history",
+            text=exact_history_text,
+        )
         components = [
             PromptComponent(
                 name="history_analysis_question",
                 category="current_user",
                 text=f"Analysis question:\n{validated_input['query']}\n\n",
             ),
-            *event_components.values(),
+            raw_history_component,
             PromptComponent(
                 name="history_analysis_instruction",
                 category="instruction",
                 text=(
                     "Return the constrained analysis object. source_sequences must contain only "
-                    "candidate sequence numbers that directly support the analysis. Do not invent "
+                    "exact sequence numbers that directly support the analysis. Do not invent "
                     "events or treat uncertainty as evidence."
                 ),
             ),
@@ -519,23 +515,20 @@ class HistoryAnalyzeTool(Tool):
             "evidence, identify candidate root causes, explain what prior strategy was wrong "
             "or incomplete, recommend a materially different next strategy, and state "
             "unresolved uncertainties. Ground every conclusion only in the exact durable "
-            "candidate events or explicitly identified semantic projections supplied for this call."
+            "history events or explicitly identified semantic projections supplied for this call."
         )
         contract = history_analysis_contract()
         minimum_output_tokens = 384
-        projection_records: dict[int, dict[str, Any]] = {}
+        projection_records: list[dict[str, Any]] = []
         projection_call_budget = _SemanticProjectionBudget(
             remaining_calls=max(
-                16,
-                int(context.config.context.max_compaction_rounds) * 16,
+                64,
+                (len(exact_history_text) + 1023) // 1024 * 3,
             )
         )
-        max_reduction_rounds = min(
-            32,
-            max(
-                int(context.config.context.max_compaction_rounds),
-                len(event_components) * 2,
-            ),
+        max_reduction_rounds = max(
+            1,
+            int(context.config.context.max_compaction_rounds),
         )
         analysis: dict[str, Any] | None = None
         for reduction_round in range(max_reduction_rounds + 1):
@@ -555,21 +548,14 @@ class HistoryAnalyzeTool(Tool):
                     or reduction_round >= max_reduction_rounds
                 ):
                     raise
-                event_tokens = {
-                    item.name: item.tokens
-                    for item in exc.report.breakdown
-                    if item.name.startswith("history_candidate_event_")
-                }
-                candidates_by_size = sorted(
+                current_tokens = next(
                     (
-                        (event_tokens.get(component.name, 0), sequence, component)
-                        for sequence, component in event_components.items()
+                        item.tokens
+                        for item in exc.report.breakdown
+                        if item.name == raw_history_component.name
                     ),
-                    reverse=True,
+                    0,
                 )
-                if not candidates_by_size:
-                    raise
-                current_tokens, sequence, _component = candidates_by_size[0]
                 if current_tokens <= 64:
                     raise
                 overflow_tokens = max(
@@ -580,40 +566,47 @@ class HistoryAnalyzeTool(Tool):
                     raise ToolValidationError(
                         "history analysis cannot recover the measured overflow from its largest source"
                     )
-                source_event = allowed_events[sequence]
-                original_component = raw_event_components[sequence]
                 projection = _project_history_text(
                     context,
                     question=validated_input["query"],
                     source_label=(
-                        f"Exact durable history event sequence={sequence} hash={source_event.hash}"
+                        "Complete exact durable history source "
+                        f"session_id={session_id} source_sha256={exact_history_hash}"
                     ),
-                    source_text=original_component.text,
+                    source_text=raw_history_component.text,
                     target_tokens=target_tokens,
                     call_budget=projection_call_budget,
                 )
                 projected_component = PromptComponent(
-                    name=original_component.name,
-                    category=original_component.category,
+                    name=raw_history_component.name,
+                    category=raw_history_component.category,
                     text=(
                         "[SEMANTIC PROJECTION CREATED ONLY AFTER MEASURED OVERFLOW; "
                         "raw durable source remains authoritative]\n"
-                        f"source_sequence={sequence} source_hash={source_event.hash} "
+                        f"session_id={session_id} source_sha256={exact_history_hash} "
                         f"target_tokens={target_tokens}\n{projection}\n\n"
                     ),
                 )
                 components = [
-                    projected_component if item.name == original_component.name else item
+                    projected_component
+                    if item.name == raw_history_component.name
+                    else item
                     for item in components
                 ]
-                event_components[sequence] = projected_component
-                projection_records[sequence] = {
-                    "source_event_sequence": sequence,
-                    "source_event_hash": source_event.hash,
+                projection_records.append({
+                    "source_session_id": session_id,
+                    "source_event_start_sequence": (
+                        exact_events[0].sequence if exact_events else None
+                    ),
+                    "source_event_end_sequence": (
+                        exact_events[-1].sequence if exact_events else None
+                    ),
+                    "source_event_count": len(exact_events),
+                    "source_sha256": exact_history_hash,
                     "target_tokens": target_tokens,
                     "overflow_tokens": overflow_tokens,
                     "projection": projection,
-                }
+                })
         if analysis is None or not isinstance(analysis, dict):
             raise ToolValidationError("history_analyze model result must be an object")
         source_sequences = analysis.get("source_sequences")
@@ -640,7 +633,7 @@ class HistoryAnalyzeTool(Tool):
         ]
         output = {
             **analysis,
-            "session_id": details["session_id"],
+            "session_id": session_id,
             "query": validated_input["query"],
             "source_sequences": unique_source_sequences,
             "source_event_references": source_event_references,
@@ -653,10 +646,7 @@ class HistoryAnalyzeTool(Tool):
                 "query": output["query"],
                 "source_sequences": output["source_sequences"],
                 "source_event_references": source_event_references,
-                "semantic_projections": [
-                    projection_records[sequence]
-                    for sequence in sorted(projection_records)
-                ],
+                "semantic_projections": projection_records,
                 "candidate_root_cause_count": len(output["candidate_root_causes"]),
             },
         )
