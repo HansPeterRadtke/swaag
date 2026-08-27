@@ -342,6 +342,7 @@ def test_worker_response_presentations_are_opt_in_and_durable(
 
 def test_worker_cancellation_is_durable_and_stops_active_inference(make_config) -> None:
     from swaag.runtime import AgentRuntime
+    from swaag.scheduler import WakeupStore
 
     client = _CancellableClient()
     runtime = AgentRuntime(make_config(model__context_limit=32_000), model_client=client)
@@ -349,6 +350,11 @@ def test_worker_cancellation_is_durable_and_stops_active_inference(make_config) 
     worker = manager.create("long objective")
     manager.start(worker.worker_id)
     assert client.started.wait(timeout=10)
+    wakeup = WakeupStore(runtime.config.sessions.root).schedule(
+        session_id=worker.session_id,
+        reason="must not resume a canceled worker",
+        duration="1 hour",
+    )
 
     inspection = manager.inspect(worker.worker_id)
     diagnostics = inspection["execution_diagnostics"]
@@ -367,13 +373,26 @@ def test_worker_cancellation_is_durable_and_stops_active_inference(make_config) 
     assert requested.status == "cancellation_requested"
     assert finished.status == "canceled"
     assert runtime.history.read_active_run(worker.session_id) is None
+    assert WakeupStore(runtime.config.sessions.root).list(
+        session_id=worker.session_id, include_cancelled=True
+    )[0].status == "cancelled"
     history = runtime.history.read_history(worker.session_id)
     assert any(
         event.event_type == "model_call_preempted"
         and event.payload.get("reason") == "run_cancellation_requested"
         for event in history
     )
-    assert any(event.event_type == "worker_cancellation_requested" for event in manager.events(worker.worker_id))
+    assert any(
+        event
+        for event in manager.events(worker.worker_id)
+        if event.event_type == "worker_cancellation_requested"
+    )
+    wakeup_cancellation = next(
+        event
+        for event in manager.events(worker.worker_id)
+        if event.event_type == "worker_wakeups_cancelled"
+    )
+    assert wakeup_cancellation.payload["wakeup_ids"] == [wakeup.wakeup_id]
 
 
 def test_worker_message_preempts_stale_request_and_rebuilds_from_control(make_config) -> None:

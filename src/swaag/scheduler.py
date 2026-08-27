@@ -198,6 +198,34 @@ class WakeupStore:
                     return updated
         raise KeyError(f"unknown wakeup: {wakeup_id}")
 
+    def cancel_pending(
+        self, *, session_id: str, now: datetime | None = None
+    ) -> list[Wakeup]:
+        current = (now or datetime.now(timezone.utc)).astimezone(timezone.utc)
+        cancelled: list[Wakeup] = []
+        with self._locked():
+            wakeups = self._load_unlocked()
+            changed = False
+            for index, item in enumerate(wakeups):
+                if item.session_id != session_id or item.status not in {
+                    "scheduled",
+                    "claimed",
+                }:
+                    continue
+                updated = Wakeup(
+                    **{
+                        **asdict(item),
+                        "status": "cancelled",
+                        "cancelled_at": _iso(current),
+                    }
+                )
+                wakeups[index] = updated
+                cancelled.append(updated)
+                changed = True
+            if changed:
+                self._save_unlocked(wakeups)
+        return sorted(cancelled, key=lambda item: (item.wake_at, item.wakeup_id))
+
     def claim_due(
         self,
         *,

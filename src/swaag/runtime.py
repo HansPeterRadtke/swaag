@@ -362,16 +362,18 @@ class AgentRuntime:
         return reference
 
 
-    def _deliver_due_wakeups(self, state: SessionState) -> None:
+    def _deliver_due_wakeups(
+        self, state: SessionState, *, now: datetime | None = None
+    ) -> None:
         store = WakeupStore(self.config.sessions.root)
-        for wakeup in store.claim_due(session_id=state.session_id):
+        for wakeup in store.claim_due(session_id=state.session_id, now=now):
             control = self.history.enqueue_control_message(
                 state.session_id,
                 f"Scheduled wakeup is due: {wakeup.reason} (scheduled for {wakeup.wake_at})",
                 source="scheduler",
                 control_id=f"wakeup_{wakeup.wakeup_id}",
             )
-            delivered = store.mark_delivered(wakeup_id=wakeup.wakeup_id)
+            delivered = store.mark_delivered(wakeup_id=wakeup.wakeup_id, now=now)
             self.history.record_event(
                 state,
                 "wakeup_due",

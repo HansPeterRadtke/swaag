@@ -144,6 +144,134 @@ def test_dispatcher_resumes_due_session_without_duplicate_user_message(make_conf
     assert dispatch_once(config, runtime=runtime) == []
 
 
+def test_dispatcher_uses_supplied_clock_for_claim_and_delivery(
+    make_config, tmp_path: Path
+) -> None:
+    import json
+
+    from swaag.runtime import AgentRuntime
+    from swaag.wakeup_dispatcher import dispatch_once
+    from tests.test_agent_action_loop import FakeModelClient
+
+    config = make_config(model__context_limit=32000)
+    config.sessions.root = tmp_path / "sessions"
+    runtime = AgentRuntime(
+        config,
+        model_client=FakeModelClient(
+            responses=[
+                json.dumps(
+                    {
+                        "assistant_message": "initial",
+                        "tool_calls": [],
+                        "continue_loop": False,
+                    }
+                ),
+                json.dumps(
+                    {
+                        "assistant_message": "future wakeup handled",
+                        "tool_calls": [],
+                        "continue_loop": False,
+                    }
+                ),
+            ]
+        ),
+    )
+    first = runtime.run_turn("Use the supplied dispatcher clock.")
+    now = datetime(2030, 1, 1, tzinfo=timezone.utc)
+    wakeup = WakeupStore(config.sessions.root).schedule(
+        session_id=first.session_id,
+        reason="future clock",
+        duration="1 hour",
+        now=now,
+    )
+
+    assert dispatch_once(
+        config,
+        runtime=runtime,
+        now=now + timedelta(hours=2),
+    ) == [first.session_id]
+    delivered = WakeupStore(config.sessions.root).list(
+        session_id=first.session_id
+    )[0]
+    assert delivered.wakeup_id == wakeup.wakeup_id
+    assert delivered.status == "delivered"
+    assert delivered.delivered_at == "2030-01-01T02:00:00Z"
+
+
+def test_dispatcher_resumes_worker_through_durable_worker_lifecycle(
+    make_config, tmp_path: Path
+) -> None:
+    import json
+
+    from swaag.runtime import AgentRuntime
+    from swaag.wakeup_dispatcher import dispatch_once
+    from swaag.workers import WorkerManager
+    from tests.test_agent_action_loop import FakeModelClient
+
+    config = make_config(model__context_limit=32000)
+    config.sessions.root = tmp_path / "sessions"
+
+    def wake_response(payload):
+        prompt = str(payload["prompt"])
+        assert "Keep watching the worker deployment." in prompt
+        assert "Scheduled wakeup is due: inspect worker deployment" in prompt
+        return json.dumps(
+            {
+                "assistant_message": "Worker wakeup handled.",
+                "tool_calls": [],
+                "continue_loop": False,
+            }
+        )
+
+    runtime = AgentRuntime(
+        config,
+        model_client=FakeModelClient(
+            responses=[
+                json.dumps(
+                    {
+                        "assistant_message": "Worker monitoring started.",
+                        "tool_calls": [],
+                        "continue_loop": False,
+                    }
+                ),
+                wake_response,
+            ]
+        ),
+    )
+    workers = WorkerManager(runtime, max_workers=1)
+    worker = workers.create("Keep watching the worker deployment.")
+    workers.start(worker.worker_id)
+    first = workers.wait(worker.worker_id, timeout_seconds=10)
+    assert first.status == "completed"
+    assert first.run_count == 1
+
+    WakeupStore(config.sessions.root).schedule(
+        session_id=worker.session_id,
+        reason="inspect worker deployment",
+        duration="1 ms",
+    )
+    time.sleep(0.01)
+
+    assert dispatch_once(config, runtime=runtime, workers=workers) == [
+        worker.session_id
+    ]
+    resumed = workers.wait(worker.worker_id, timeout_seconds=10)
+    workers.shutdown()
+
+    assert resumed.status == "completed"
+    assert resumed.run_count == 2
+    assert resumed.result == "Worker wakeup handled."
+    assert any(
+        event.event_type == "worker_control_resumed"
+        for event in workers.events(worker.worker_id)
+    )
+    rebuilt = runtime.history.rebuild_from_history(worker.session_id)
+    assert [message.content for message in rebuilt.messages if message.role == "user"] == [
+        "Keep watching the worker deployment."
+    ]
+    assert runtime.history.list_pending_control_messages(worker.session_id) == []
+
+
 def test_processed_control_is_durable_without_becoming_user_message(make_config, tmp_path: Path) -> None:
     import json
 

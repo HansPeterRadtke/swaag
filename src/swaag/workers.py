@@ -13,6 +13,7 @@ from typing import Any, Iterable
 
 from swaag.preemption import ModelCallStateChanged, RunCancellationRequested
 from swaag.runtime import AgentRuntime
+from swaag.scheduler import WakeupStore
 from swaag.sqlite_schema import apply_sqlite_migrations
 from swaag.structured_output import (
     CallerOutputSpec,
@@ -259,6 +260,13 @@ class WorkerStore:
         if row is None:
             raise FileNotFoundError(f"Unknown worker: {worker_id}")
         return self._record(row)
+
+    def find_by_session(self, session_id: str) -> WorkerRecord | None:
+        with self._connect() as connection:
+            row = connection.execute(
+                "SELECT * FROM workers WHERE session_id=?", (session_id,)
+            ).fetchone()
+        return None if row is None else self._record(row)
 
     def snapshot_with_event_cursor(self, worker_id: str) -> tuple[WorkerRecord, int]:
         """Read task state and its event cursor from one SQLite snapshot."""
@@ -559,6 +567,9 @@ class WorkerManager:
             max_workers=max(1, int(max_workers)), thread_name_prefix="swaag-worker"
         )
         self._futures: dict[str, Future[None]] = {}
+        self._futures_lock = threading.RLock()
+        self._deferred_submissions: set[str] = set()
+        self._shutting_down = False
         self._control_transition_lock = threading.RLock()
 
     def create(
@@ -692,6 +703,18 @@ class WorkerManager:
             event_type="worker_cancellation_requested",
             event_payload={"reason": reason},
         )
+        cancelled_wakeups = WakeupStore(
+            self.runtime.config.sessions.root
+        ).cancel_pending(session_id=current.session_id)
+        if cancelled_wakeups:
+            self.store.append_event(
+                worker_id,
+                "worker_wakeups_cancelled",
+                {
+                    "wakeup_ids": [item.wakeup_id for item in cancelled_wakeups],
+                    "reason": "worker_cancellation_requested",
+                },
+            )
         active = self.runtime.history.read_active_run(current.session_id)
         if active is None:
             return self.store.transition(
@@ -871,6 +894,62 @@ class WorkerManager:
     def list(self, *, include_archived: bool = False) -> list[WorkerRecord]:
         return self.store.list(include_archived=include_archived)
 
+    def dispatch_pending_controls_for_session(
+        self, session_id: str
+    ) -> WorkerRecord | None:
+        """Resume a worker-owned session without bypassing its durable lifecycle."""
+        with self._control_transition_lock:
+            current = self.store.find_by_session(session_id)
+            if current is None:
+                return None
+            pending = self.runtime.history.list_pending_control_messages(session_id)
+            if not pending:
+                return None
+            if current.archived_at is not None or current.status in {
+                "canceled",
+                "cancellation_requested",
+            }:
+                self.store.append_event(
+                    current.worker_id,
+                    "worker_control_dispatch_skipped",
+                    {
+                        "status": current.status,
+                        "archived": current.archived_at is not None,
+                        "pending_control_ids": [
+                            str(item.get("control_id", "")) for item in pending
+                        ],
+                    },
+                )
+                return current
+            if current.status == "created":
+                queued = self.store.transition(
+                    current.worker_id,
+                    "queued",
+                    expected={"created"},
+                    event_type="worker_control_started",
+                    event_payload={
+                        "pending_control_ids": [
+                            str(item.get("control_id", "")) for item in pending
+                        ]
+                    },
+                )
+            elif current.status in WORKER_RESUMABLE_STATES:
+                queued = self.store.transition(
+                    current.worker_id,
+                    "queued",
+                    expected=WORKER_RESUMABLE_STATES,
+                    event_type="worker_control_resumed",
+                    event_payload={
+                        "pending_control_ids": [
+                            str(item.get("control_id", "")) for item in pending
+                        ]
+                    },
+                )
+            else:
+                return current
+        self._submit(current.worker_id)
+        return queued
+
     def events(self, worker_id: str, *, after_sequence: int = 0) -> list[WorkerEvent]:
         record = self.store.get(worker_id)
         self._sync_history_events(record)
@@ -1025,13 +1104,37 @@ class WorkerManager:
         return reconciled
 
     def shutdown(self, *, wait: bool = True) -> None:
+        with self._futures_lock:
+            self._shutting_down = True
         self._executor.shutdown(wait=wait, cancel_futures=not wait)
 
     def _submit(self, worker_id: str) -> None:
-        previous = self._futures.get(worker_id)
-        if previous is not None and not previous.done():
-            raise RuntimeError(f"Worker {worker_id} already has a local run")
-        self._futures[worker_id] = self._executor.submit(self._run_worker, worker_id)
+        with self._futures_lock:
+            if self._shutting_down:
+                raise RuntimeError("Worker manager is shutting down")
+            previous = self._futures.get(worker_id)
+            if previous is not None and not previous.done():
+                if worker_id not in self._deferred_submissions:
+                    self._deferred_submissions.add(worker_id)
+                    previous.add_done_callback(
+                        lambda _future, item=worker_id: self._submit_deferred(item)
+                    )
+                return
+            self._futures[worker_id] = self._executor.submit(
+                self._run_worker, worker_id
+            )
+
+    def _submit_deferred(self, worker_id: str) -> None:
+        with self._futures_lock:
+            self._deferred_submissions.discard(worker_id)
+            if self._shutting_down:
+                return
+            current = self.store.get(worker_id)
+            if current.status != "queued":
+                return
+            self._futures[worker_id] = self._executor.submit(
+                self._run_worker, worker_id
+            )
 
     def _continue_for_pending_controls(
         self,

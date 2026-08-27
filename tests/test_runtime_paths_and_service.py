@@ -13,5 +13,7 @@ def test_default_runtime_session_state_is_under_data_var() -> None:
 def test_wakeup_dispatcher_systemd_unit_matches_runtime_store() -> None:
     text = Path("deploy/systemd/swaag-wakeup-dispatcher.service").read_text(encoding="utf-8")
     assert "swaag.wakeup_dispatcher --poll-seconds 1" in text
+    assert "ExecStart=/data/var/swaag/venv/bin/python" in text
     assert "SWAAG__SESSIONS__ROOT=/data/var/swaag/sessions" in text
+    assert "Conflicts=swaag-communication.service" in text
     assert "Restart=always" in text

@@ -8,6 +8,7 @@ import hashlib
 import ipaddress
 import json
 import sqlite3
+import sys
 import threading
 from dataclasses import asdict, dataclass
 from datetime import datetime, timezone
@@ -1856,21 +1857,45 @@ class CommunicationService:
             systemd_notify("WATCHDOG=1", "STATUS=swaag communication service healthy")
             await asyncio.sleep(interval)
 
+    async def _wakeup_loop(self) -> None:
+        from swaag.wakeup_dispatcher import dispatch_once
+
+        while True:
+            try:
+                await asyncio.to_thread(
+                    dispatch_once,
+                    self.runtime.config,
+                    runtime=self.runtime,
+                    workers=self.workers,
+                )
+            except Exception as exc:
+                print(
+                    f"swaag wakeup dispatch failed: {type(exc).__name__}: {exc}",
+                    file=sys.stderr,
+                    flush=True,
+                )
+            await asyncio.sleep(1.0)
+
     async def serve_tcp(self, host: str, port: int) -> None:
         host = require_loopback_bind_host(host)
         self.workers.reconcile_orphans()
         server = await asyncio.start_server(self.handle_client, host, port)
         systemd_notify("READY=1", f"STATUS=swaag communication listening on {host}:{port}")
         watchdog_task = asyncio.create_task(self._watchdog_loop(), name="swaag-systemd-watchdog")
+        wakeup_task = asyncio.create_task(
+            self._wakeup_loop(), name="swaag-wakeup-dispatcher"
+        )
         try:
             async with server:
                 await server.serve_forever()
         finally:
-            watchdog_task.cancel()
-            try:
-                await watchdog_task
-            except asyncio.CancelledError:
-                pass
+            for task in (watchdog_task, wakeup_task):
+                task.cancel()
+            for task in (watchdog_task, wakeup_task):
+                try:
+                    await task
+                except asyncio.CancelledError:
+                    pass
             self.workers.shutdown(wait=False)
             systemd_notify("STOPPING=1", "STATUS=swaag communication stopping")
 
