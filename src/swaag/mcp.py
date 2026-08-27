@@ -2,7 +2,6 @@ from __future__ import annotations
 
 import json
 import sys
-from dataclasses import asdict
 from typing import Any, TextIO
 
 from swaag.runtime import AgentRuntime
@@ -58,6 +57,22 @@ class McpAdapter:
                 request_id,
                 -32602,
                 "params._meta.io.modelcontextprotocol/clientCapabilities must be an object",
+            )
+        client_info = metadata.get("io.modelcontextprotocol/clientInfo")
+        if client_info is not None and (
+            not isinstance(client_info, dict)
+            or not isinstance(client_info.get("name"), str)
+            or not client_info["name"]
+            or not isinstance(client_info.get("version"), str)
+            or not client_info["version"]
+        ):
+            return self._error(
+                request_id,
+                -32602,
+                (
+                    "params._meta.io.modelcontextprotocol/clientInfo, when present, "
+                    "must contain non-empty string name and version fields"
+                ),
             )
         if method == "server/discover":
             return self._result(

@@ -231,6 +231,44 @@ def test_mcp_2026_rejects_missing_per_request_metadata(make_config) -> None:
     assert "requires params._meta" in response["error"]["message"]
 
 
+def test_mcp_2026_allows_omitted_client_identity_but_rejects_malformed_identity(
+    make_config,
+) -> None:
+    adapter = McpAdapter(AgentRuntime(make_config(), model_client=object()))
+    metadata = {
+        "io.modelcontextprotocol/protocolVersion": "2026-07-28",
+        "io.modelcontextprotocol/clientCapabilities": {},
+    }
+
+    anonymous = adapter.handle(
+        {
+            "jsonrpc": "2.0",
+            "id": 1,
+            "method": "server/discover",
+            "params": {"_meta": metadata},
+        }
+    )
+    malformed = adapter.handle(
+        {
+            "jsonrpc": "2.0",
+            "id": 2,
+            "method": "server/discover",
+            "params": {
+                "_meta": {
+                    **metadata,
+                    "io.modelcontextprotocol/clientInfo": {
+                        "name": "client-without-version"
+                    },
+                }
+            },
+        }
+    )
+
+    assert anonymous["result"]["supportedVersions"] == ["2026-07-28"]
+    assert malformed["error"]["code"] == -32602
+    assert "clientInfo" in malformed["error"]["message"]
+
+
 def test_control_tools_read_status_and_queue_exact_message(make_config, tmp_path: Path) -> None:
     config = make_config(
         tools__enabled=["agent_status_lookup", "agent_control"],
