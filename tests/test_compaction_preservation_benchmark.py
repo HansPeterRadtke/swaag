@@ -156,4 +156,6 @@ def test_compaction_preservation_cli_passes_checkpoint_options(
     )
 
     assert exit_code == 0
+    config = captured.pop("config")
+    assert config.model.benchmark_timeout_seconds >= 900
     assert captured == {"cycles": 4, "output_path": output, "resume": False}

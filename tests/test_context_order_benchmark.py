@@ -3,7 +3,7 @@ from __future__ import annotations
 import json
 
 from swaag.benchmark import context_order
-from swaag.benchmark.benchmark_runner import _build_parser
+from swaag.benchmark.benchmark_runner import _build_parser, _live_experiment_config
 from swaag.benchmark.context_order import (
     BENCHMARK_VERSION,
     POSITIONS,
@@ -60,6 +60,8 @@ def test_context_benchmark_cli_accepts_bounded_subsets() -> None:
             "8192",
             "--position",
             "middle",
+            "--timeout-seconds",
+            "1800",
         ]
     )
     layout = parser.parse_args(
@@ -69,13 +71,30 @@ def test_context_benchmark_cli_accepts_bounded_subsets() -> None:
             "8192",
             "--rotation",
             "4",
+            "--timeout-seconds",
+            "1800",
         ]
     )
 
     assert order.working_context_limit == 8192
+    assert order.timeout_seconds == 1800
     assert order.position == ["middle"]
     assert layout.working_context_limit == 8192
+    assert layout.timeout_seconds == 1800
     assert layout.rotation == [4]
+
+
+def test_bespoke_live_experiments_use_documented_timeout_by_default(
+    monkeypatch,
+) -> None:
+    monkeypatch.delenv("SWAAG_LIVE_TIMEOUT_SECONDS", raising=False)
+
+    config = _live_experiment_config()
+
+    assert config.model.timeout_seconds >= 900
+    assert config.model.structured_timeout_seconds >= 900
+    assert config.model.verification_timeout_seconds >= 900
+    assert config.model.benchmark_timeout_seconds >= 900
 
 
 def test_verification_output_headroom_is_soft_under_input_pressure(make_config):

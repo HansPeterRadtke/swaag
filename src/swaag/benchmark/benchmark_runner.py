@@ -114,6 +114,44 @@ def _parse_seed_list(raw: str | None, *, default: tuple[int, int, int]) -> list[
     return seeds or list(default)
 
 
+def _live_experiment_config(
+    *,
+    model_base_url: str | None = None,
+    timeout_seconds: int | None = None,
+) -> AgentConfig:
+    """Apply the documented live timeout to every bespoke model experiment."""
+    config = load_config()
+    if model_base_url:
+        config.model.base_url = str(model_base_url).rstrip("/")
+    recommendation = get_documented_final_live_benchmark_recommendation()
+    effective_timeout = int(
+        timeout_seconds
+        if timeout_seconds is not None
+        else os.environ.get(
+            "SWAAG_LIVE_TIMEOUT_SECONDS",
+            str(recommendation.timeout_seconds),
+        )
+    )
+    if effective_timeout <= 0:
+        raise ValueError("live experiment timeout_seconds must be positive")
+    config.model.timeout_seconds = max(
+        int(config.model.timeout_seconds), effective_timeout
+    )
+    config.model.simple_timeout_seconds = max(
+        int(config.model.simple_timeout_seconds), effective_timeout
+    )
+    config.model.structured_timeout_seconds = max(
+        int(config.model.structured_timeout_seconds), effective_timeout
+    )
+    config.model.verification_timeout_seconds = max(
+        int(config.model.verification_timeout_seconds), effective_timeout
+    )
+    config.model.benchmark_timeout_seconds = max(
+        int(config.model.benchmark_timeout_seconds), effective_timeout
+    )
+    return config
+
+
 
 def _discover_server_context_limit(base_url: str, *, timeout_seconds: int) -> int | None:
     normalized = base_url.rstrip("/")
@@ -1134,6 +1172,8 @@ def _build_parser() -> argparse.ArgumentParser:
     context_order_parser.add_argument("--utilization", action="append", type=float, default=[], help="Requested input-context utilization fraction. Repeat for multiple values.")
     context_order_parser.add_argument("--position", action="append", choices=["early", "middle", "late"], default=[], help="Run only the named marker position. Repeat for multiple positions.")
     context_order_parser.add_argument("--working-context-limit", type=int, help="Explicit benchmark working window not exceeding the live server context.")
+    context_order_parser.add_argument("--model-base-url", help="Optional live model endpoint override.")
+    context_order_parser.add_argument("--timeout-seconds", type=int, help="Override the no-token timeout for this live experiment.")
     context_order_parser.add_argument("--seed", type=int, default=17, help="Deterministic retrieval-code seed.")
     context_order_parser.add_argument("--output", default="context_order_output.json", help="JSON result path.")
     context_order_parser.add_argument("--json", action="store_true", help="Print the full JSON report.")
@@ -1145,6 +1185,8 @@ def _build_parser() -> argparse.ArgumentParser:
     context_layout_parser.add_argument("--utilization", action="append", type=float, default=[], help="Requested input-context utilization fraction. Repeat for multiple values.")
     context_layout_parser.add_argument("--rotation", action="append", type=int, choices=range(6), default=[], help="Run only the named cyclic user-section rotation (0-5).")
     context_layout_parser.add_argument("--working-context-limit", type=int, help="Explicit benchmark working window not exceeding the live server context.")
+    context_layout_parser.add_argument("--model-base-url", help="Optional live model endpoint override.")
+    context_layout_parser.add_argument("--timeout-seconds", type=int, help="Override the no-token timeout for this live experiment.")
     context_layout_parser.add_argument("--seed", type=int, default=29, help="Deterministic retrieval-code seed.")
     context_layout_parser.add_argument("--output", default="context_layout_output.json", help="JSON result path.")
     context_layout_parser.add_argument("--json", action="store_true", help="Print the full JSON report.")
@@ -1156,6 +1198,8 @@ def _build_parser() -> argparse.ArgumentParser:
     tool_strategy_parser.add_argument("--output", default="tool_strategy_output", help="Artifact directory.")
     tool_strategy_parser.add_argument("--task", action="append", default=[], help="Run only the named experiment task.")
     tool_strategy_parser.add_argument("--strategy", action="append", default=[], help="Run only the named tool strategy.")
+    tool_strategy_parser.add_argument("--model-base-url", help="Optional live model endpoint override.")
+    tool_strategy_parser.add_argument("--timeout-seconds", type=int, help="Override the no-token timeout for this live experiment.")
     tool_strategy_parser.add_argument("--clean", action="store_true", help="Replace an existing artifact directory.")
     tool_strategy_parser.add_argument("--json", action="store_true", help="Print the full JSON report.")
 
@@ -1165,6 +1209,8 @@ def _build_parser() -> argparse.ArgumentParser:
     )
     attachment_context_parser.add_argument("--output", default="attachment_context_output", help="Artifact directory.")
     attachment_context_parser.add_argument("--case", action="append", default=[], help="Run only the named attachment-context case.")
+    attachment_context_parser.add_argument("--model-base-url", help="Optional live model endpoint override.")
+    attachment_context_parser.add_argument("--timeout-seconds", type=int, help="Override the no-token timeout for this live experiment.")
     attachment_context_parser.add_argument("--clean", action="store_true", help="Replace an existing artifact directory.")
     attachment_context_parser.add_argument("--json", action="store_true", help="Print the full JSON report.")
 
@@ -1173,6 +1219,8 @@ def _build_parser() -> argparse.ArgumentParser:
         help="Run repeated live history-compaction preservation experiments.",
     )
     compaction_parser.add_argument("--cycles", type=int, default=3, help="Number of semantic compaction cycles to run.")
+    compaction_parser.add_argument("--model-base-url", help="Optional live model endpoint override.")
+    compaction_parser.add_argument("--timeout-seconds", type=int, help="Override the no-token timeout for this live experiment.")
     compaction_parser.add_argument("--output", default="compaction_preservation_output.json", help="Checkpointed JSON result path.")
     compaction_parser.add_argument("--no-resume", dest="resume", action="store_false", help="Reject reuse of an existing checkpoint.")
     compaction_parser.set_defaults(resume=True)
@@ -1196,6 +1244,9 @@ def _build_parser() -> argparse.ArgumentParser:
     response_presentation_parser.add_argument(
         "--model-base-url",
         help="Optional alternate model endpoint for small-model/device experiments.",
+    )
+    response_presentation_parser.add_argument(
+        "--timeout-seconds", type=int, help="Override the no-token timeout for this live experiment."
     )
     response_presentation_parser.add_argument(
         "--clean",
@@ -1226,6 +1277,9 @@ def _build_parser() -> argparse.ArgumentParser:
         help="Optional alternate model endpoint for model-size comparisons.",
     )
     prompt_instruction_parser.add_argument(
+        "--timeout-seconds", type=int, help="Override the no-token timeout for this live experiment."
+    )
+    prompt_instruction_parser.add_argument(
         "--clean",
         action="store_true",
         help="Replace an existing artifact directory.",
@@ -1254,6 +1308,9 @@ def _build_parser() -> argparse.ArgumentParser:
         help="Optional alternate model endpoint for model-size comparisons.",
     )
     instruction_following_parser.add_argument(
+        "--timeout-seconds", type=int, help="Override the no-token timeout for this live experiment."
+    )
+    instruction_following_parser.add_argument(
         "--clean",
         action="store_true",
         help="Replace an existing artifact directory.",
@@ -1280,6 +1337,9 @@ def _build_parser() -> argparse.ArgumentParser:
     autonomy_behavior_parser.add_argument(
         "--model-base-url",
         help="Optional alternate model endpoint for model-size comparisons.",
+    )
+    autonomy_behavior_parser.add_argument(
+        "--timeout-seconds", type=int, help="Override the no-token timeout for this live experiment."
     )
     autonomy_behavior_parser.add_argument(
         "--clean",
@@ -1312,6 +1372,9 @@ def _build_parser() -> argparse.ArgumentParser:
     communication_routing_parser.add_argument(
         "--assistant-model-base-url",
         help="Optional small communication-model endpoint override.",
+    )
+    communication_routing_parser.add_argument(
+        "--timeout-seconds", type=int, help="Override the no-token timeout for this live experiment."
     )
     communication_routing_parser.add_argument(
         "--clean",
@@ -1450,6 +1513,10 @@ def main(argv: Sequence[str] | None = None) -> int:
     if args.command == "context-order":
         from swaag.benchmark.context_order import DEFAULT_UTILIZATIONS, run_context_order_benchmark
         report = run_context_order_benchmark(
+            config=_live_experiment_config(
+                model_base_url=args.model_base_url,
+                timeout_seconds=args.timeout_seconds,
+            ),
             utilizations=list(args.utilization) or DEFAULT_UTILIZATIONS,
             seed=int(args.seed),
             output_path=Path(args.output),
@@ -1471,6 +1538,10 @@ def main(argv: Sequence[str] | None = None) -> int:
         )
 
         report = run_context_layout_benchmark(
+            config=_live_experiment_config(
+                model_base_url=args.model_base_url,
+                timeout_seconds=args.timeout_seconds,
+            ),
             utilizations=list(args.utilization) or DEFAULT_UTILIZATIONS,
             seed=int(args.seed),
             output_path=Path(args.output),
@@ -1489,6 +1560,10 @@ def main(argv: Sequence[str] | None = None) -> int:
         from swaag.benchmark.tool_strategy import run_tool_strategy_benchmark
 
         report = run_tool_strategy_benchmark(
+            config=_live_experiment_config(
+                model_base_url=args.model_base_url,
+                timeout_seconds=args.timeout_seconds,
+            ),
             output_dir=Path(args.output),
             task_ids=list(args.task),
             strategy_names=list(args.strategy),
@@ -1509,6 +1584,10 @@ def main(argv: Sequence[str] | None = None) -> int:
 
         report = run_attachment_context_benchmark(
             output_dir=Path(args.output),
+            config=_live_experiment_config(
+                model_base_url=args.model_base_url,
+                timeout_seconds=args.timeout_seconds,
+            ),
             case_ids=list(args.case),
             clean=bool(args.clean),
         )
@@ -1531,6 +1610,10 @@ def main(argv: Sequence[str] | None = None) -> int:
         )
 
         report = run_compaction_preservation_benchmark(
+            config=_live_experiment_config(
+                model_base_url=args.model_base_url,
+                timeout_seconds=args.timeout_seconds,
+            ),
             cycles=int(args.cycles),
             output_path=Path(args.output),
             resume=bool(args.resume),
@@ -1547,9 +1630,10 @@ def main(argv: Sequence[str] | None = None) -> int:
             run_response_presentation_benchmark,
         )
 
-        config = load_config()
-        if args.model_base_url:
-            config.model.base_url = str(args.model_base_url).rstrip("/")
+        config = _live_experiment_config(
+            model_base_url=args.model_base_url,
+            timeout_seconds=args.timeout_seconds,
+        )
         report = run_response_presentation_benchmark(
             output_dir=Path(args.output),
             config=config,
@@ -1574,9 +1658,10 @@ def main(argv: Sequence[str] | None = None) -> int:
             run_prompt_instruction_behavior_benchmark,
         )
 
-        config = load_config()
-        if args.model_base_url:
-            config.model.base_url = str(args.model_base_url).rstrip("/")
+        config = _live_experiment_config(
+            model_base_url=args.model_base_url,
+            timeout_seconds=args.timeout_seconds,
+        )
         report = run_prompt_instruction_behavior_benchmark(
             output_dir=Path(args.output),
             config=config,
@@ -1601,9 +1686,10 @@ def main(argv: Sequence[str] | None = None) -> int:
             run_instruction_following_benchmark,
         )
 
-        config = load_config()
-        if args.model_base_url:
-            config.model.base_url = str(args.model_base_url).rstrip("/")
+        config = _live_experiment_config(
+            model_base_url=args.model_base_url,
+            timeout_seconds=args.timeout_seconds,
+        )
         report = run_instruction_following_benchmark(
             output_dir=Path(args.output),
             config=config,
@@ -1640,9 +1726,10 @@ def main(argv: Sequence[str] | None = None) -> int:
             run_autonomy_behavior_benchmark,
         )
 
-        config = load_config()
-        if args.model_base_url:
-            config.model.base_url = str(args.model_base_url).rstrip("/")
+        config = _live_experiment_config(
+            model_base_url=args.model_base_url,
+            timeout_seconds=args.timeout_seconds,
+        )
         report = run_autonomy_behavior_benchmark(
             output_dir=Path(args.output),
             config=config,
@@ -1674,9 +1761,10 @@ def main(argv: Sequence[str] | None = None) -> int:
             run_communication_routing_benchmark,
         )
 
-        config = load_config()
-        if args.model_base_url:
-            config.model.base_url = str(args.model_base_url).rstrip("/")
+        config = _live_experiment_config(
+            model_base_url=args.model_base_url,
+            timeout_seconds=args.timeout_seconds,
+        )
         report = run_communication_routing_benchmark(
             output_dir=Path(args.output),
             config=config,
