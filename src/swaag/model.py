@@ -639,10 +639,10 @@ class LlamaCppClient:
         structured_output_mode = self.config.model.structured_output_mode
         if structured_output_mode != "server_schema":
             raise ModelClientError("Every live model call must use server_schema structured output mode")
-        if kind == "verification":
-            timeout_seconds = self.config.model.verification_timeout_seconds
-        elif live_mode and (len(prompt) > 1200 or max_tokens > 192):
+        if live_mode and (len(prompt) > 1200 or max_tokens > 192):
             timeout_seconds = self.config.model.benchmark_timeout_seconds
+        elif kind == "verification":
+            timeout_seconds = self.config.model.verification_timeout_seconds
         elif mode == "json_schema":
             timeout_seconds = self.config.model.structured_timeout_seconds
         else:

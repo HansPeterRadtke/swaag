@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import json
 
+from swaag.grammar import yes_no_contract
 from swaag.model import LlamaCppClient
 
 
@@ -68,3 +69,41 @@ def test_streaming_client_preserves_output_limit_finish_reason(make_config, monk
 
     assert result.finish_reason == "length"
     assert result.raw_response["stop_type"] == "limit"
+
+
+def test_long_live_verification_uses_benchmark_timeout(make_config) -> None:
+    config = make_config(
+        model__timeout_seconds=10,
+        model__verification_timeout_seconds=150,
+        model__benchmark_timeout_seconds=360,
+    )
+    client = LlamaCppClient(config)
+
+    policy = client.select_request_policy(
+        contract=yes_no_contract(),
+        kind="verification",
+        prompt="x" * 1201,
+        max_tokens=64,
+        live_mode=True,
+    )
+
+    assert policy.effective_timeout_seconds == 360
+
+
+def test_short_live_verification_keeps_verification_timeout(make_config) -> None:
+    config = make_config(
+        model__timeout_seconds=10,
+        model__verification_timeout_seconds=150,
+        model__benchmark_timeout_seconds=360,
+    )
+    client = LlamaCppClient(config)
+
+    policy = client.select_request_policy(
+        contract=yes_no_contract(),
+        kind="verification",
+        prompt="short",
+        max_tokens=64,
+        live_mode=True,
+    )
+
+    assert policy.effective_timeout_seconds == 150
