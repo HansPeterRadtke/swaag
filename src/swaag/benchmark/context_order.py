@@ -8,10 +8,15 @@ from typing import Callable, Iterable
 from swaag.config import AgentConfig, load_config
 from swaag.model import LlamaCppClient
 from swaag.types import ContractSpec
-from swaag.utils import stable_json_dumps
+from swaag.utils import sha256_text, stable_json_dumps
 
 POSITIONS = ("early", "middle", "late")
 DEFAULT_UTILIZATIONS = (0.10, 0.25, 0.50, 0.75, 0.90)
+BENCHMARK_VERSION = "context_order_retrieval_v2_server_template"
+SYSTEM_INSTRUCTION = (
+    "Follow the user's retrieval request using only the supplied record. "
+    "Return the answer through the required JSON schema."
+)
 
 
 @dataclass(slots=True, frozen=True)
@@ -40,6 +45,8 @@ class ContextOrderResult:
     elapsed_seconds: float | None
     first_token_seconds: float | None
     finish_reason: str | None
+    serialized_prompt_sha256: str | None = None
+    prompt_protocol_sha256: str | None = None
 
 
 def answer_contract() -> ContractSpec:
@@ -53,6 +60,13 @@ def answer_contract() -> ContractSpec:
             "additionalProperties": False,
         },
     )
+
+
+def chat_messages(prompt: str) -> list[dict[str, str]]:
+    return [
+        {"role": "system", "content": SYSTEM_INSTRUCTION},
+        {"role": "user", "content": prompt},
+    ]
 
 
 def _filler_block(index: int) -> str:
@@ -222,7 +236,9 @@ def run_context_order_benchmark(
         context_limit=context_limit,
         utilizations=utilization_values,
         seed=seed,
-        token_counter=client.tokenize,
+        token_counter=lambda prompt: client.tokenize(
+            client.render_chat_prompt(chat_messages(prompt))["prompt"]
+        ),
     )
     results: list[ContextOrderResult] = []
     model_identity_history: list[object] = [identity]
@@ -236,7 +252,7 @@ def run_context_order_benchmark(
                 f"Cannot resume invalid context-order checkpoint {output_path}: {exc}"
             ) from exc
         expected_header = {
-            "benchmark": "context_order_retrieval",
+            "benchmark": BENCHMARK_VERSION,
             "context_limit": context_limit,
             "context_limit_source": context_limit_source,
             "seed": seed,
@@ -290,7 +306,7 @@ def run_context_order_benchmark(
             for position in POSITIONS
         }
         return {
-            "benchmark": "context_order_retrieval",
+            "benchmark": BENCHMARK_VERSION,
             "model_identity": identity,
             "model_identity_history": model_identity_history,
             "context_limit": context_limit,
@@ -322,7 +338,12 @@ def run_context_order_benchmark(
         case_key = (case.position, case.requested_utilization, case.expected_code)
         if case_key in completed_keys:
             continue
-        preflight_prompt_tokens = client.tokenize(case.prompt)
+        messages = chat_messages(case.prompt)
+        rendering = client.render_chat_prompt(messages)
+        serialized_prompt = rendering["prompt"]
+        prompt_protocol_sha256 = rendering["prompt_protocol_sha256"]
+        client.verify_prompt_protocol(prompt_protocol_sha256)
+        preflight_prompt_tokens = client.tokenize(serialized_prompt)
         if preflight_prompt_tokens + 96 + int(config.context.safety_margin_tokens) > context_limit:
             raise ValueError(
                 "Context-order case does not fit the authoritative server capacity: "
@@ -330,7 +351,13 @@ def run_context_order_benchmark(
                 f"limit={context_limit}"
             )
         completion = client.complete(
-            case.prompt, max_tokens=96, contract=contract, temperature=0.0, kind="verification", live_mode=True
+            serialized_prompt,
+            max_tokens=96,
+            contract=contract,
+            temperature=0.0,
+            kind="verification",
+            live_mode=True,
+            messages=messages,
         )
         try:
             payload = json.loads(completion.text)
@@ -340,8 +367,8 @@ def run_context_order_benchmark(
         prompt_tokens = completion.prompt_tokens
         actual_prompt_tokens = prompt_tokens if isinstance(prompt_tokens, int) else preflight_prompt_tokens
         actual = actual_prompt_tokens / context_limit
-        marker_start = case.prompt.index("CRITICAL RETRIEVAL RECORD.")
-        marker_token_fraction = client.tokenize(case.prompt[:marker_start]) / max(
+        marker_start = serialized_prompt.index("CRITICAL RETRIEVAL RECORD.")
+        marker_token_fraction = client.tokenize(serialized_prompt[:marker_start]) / max(
             1, preflight_prompt_tokens
         )
         results.append(ContextOrderResult(
@@ -355,6 +382,8 @@ def run_context_order_benchmark(
             marker_token_fraction=marker_token_fraction,
             elapsed_seconds=completion.elapsed_seconds, first_token_seconds=completion.first_token_seconds,
             finish_reason=completion.finish_reason,
+            serialized_prompt_sha256=sha256_text(serialized_prompt),
+            prompt_protocol_sha256=prompt_protocol_sha256,
         ))
         checkpoint(build_report(complete=len(results) == len(cases)))
     report = build_report(complete=True)

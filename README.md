@@ -50,6 +50,13 @@ The full model benchmark is:
 .venv/bin/python -m swaag.benchmark run --clean --output /data/var/swaag/benchmarks/<run>/output --json
 ```
 
+Live context-position diagnostics are resumable and use the connected server's active chat template:
+
+```text
+.venv/bin/python -m swaag.benchmark context-order --output /data/var/swaag/benchmarks/context-order.json
+.venv/bin/python -m swaag.benchmark context-layout --output /data/var/swaag/benchmarks/context-layout.json
+```
+
 Runtime state belongs under `/data/var`; source code belongs under `/data/src`.
 
 ## Documentation

@@ -1024,6 +1024,15 @@ def _build_parser() -> argparse.ArgumentParser:
     context_order_parser.add_argument("--output", default="context_order_output.json", help="JSON result path.")
     context_order_parser.add_argument("--json", action="store_true", help="Print the full JSON report.")
 
+    context_layout_parser = subparsers.add_parser(
+        "context-layout",
+        help="Run the live balanced semantic-section ordering experiment.",
+    )
+    context_layout_parser.add_argument("--utilization", action="append", type=float, default=[], help="Requested input-context utilization fraction. Repeat for multiple values.")
+    context_layout_parser.add_argument("--seed", type=int, default=29, help="Deterministic retrieval-code seed.")
+    context_layout_parser.add_argument("--output", default="context_layout_output.json", help="JSON result path.")
+    context_layout_parser.add_argument("--json", action="store_true", help="Print the full JSON report.")
+
     tool_strategy_parser = subparsers.add_parser(
         "tool-strategy",
         help="Compare generic shell use with bespoke structured tools on identical live tasks.",
@@ -1149,6 +1158,25 @@ def main(argv: Sequence[str] | None = None) -> int:
             print(f"passed={report['passed']}/{report['total']}")
             for position, values in report["by_position"].items():
                 print(f"{position}={values['passed']}/{values['completed']}")
+            print(f"output={args.output}")
+        return 0 if report["passed"] == report["total"] else 1
+    if args.command == "context-layout":
+        from swaag.benchmark.context_layout import (
+            DEFAULT_UTILIZATIONS,
+            run_context_layout_benchmark,
+        )
+
+        report = run_context_layout_benchmark(
+            utilizations=list(args.utilization) or DEFAULT_UTILIZATIONS,
+            seed=int(args.seed),
+            output_path=Path(args.output),
+        )
+        if args.json:
+            print(stable_json_dumps(report, indent=2))
+        else:
+            print(f"passed={report['passed']}/{report['total']}")
+            for field, values in report["by_field"].items():
+                print(f"{field}={values['passed']}/{values['completed']}")
             print(f"output={args.output}")
         return 0 if report["passed"] == report["total"] else 1
     if args.command == "tool-strategy":

@@ -579,6 +579,7 @@ class LlamaCppClient:
         temperature: float | None = None,
         kind: str = "answer",
         live_mode: bool = False,
+        messages: list[dict[str, str]] | None = None,
     ) -> CompletionResult:
         resolved_contract, policy = self.resolve_contract(
             contract,
@@ -592,6 +593,7 @@ class LlamaCppClient:
             max_tokens=max_tokens,
             contract=resolved_contract,
             temperature=temperature,
+            messages=messages,
         )
         return self.send_completion(request, timeout_seconds=policy.effective_timeout_seconds)
 

@@ -3,7 +3,13 @@ from __future__ import annotations
 import json
 
 from swaag.benchmark import context_order
-from swaag.benchmark.context_order import POSITIONS, answer_contract, build_case, build_matrix
+from swaag.benchmark.context_order import (
+    BENCHMARK_VERSION,
+    POSITIONS,
+    answer_contract,
+    build_case,
+    build_matrix,
+)
 from swaag.types import CompletionResult
 
 
@@ -64,7 +70,17 @@ def test_context_order_benchmark_checkpoints_each_completed_case(
         def tokenize(self, text):
             return len(text)
 
-        def complete(self, prompt, **_kwargs):
+        def render_chat_prompt(self, messages):
+            return {
+                "prompt": "<system>" + messages[0]["content"] + "<user>" + messages[1]["content"] + "<assistant>",
+                "prompt_protocol_sha256": "a" * 64,
+            }
+
+        def verify_prompt_protocol(self, prompt_protocol_sha256):
+            assert prompt_protocol_sha256 == "a" * 64
+
+        def complete(self, prompt, **kwargs):
+            assert kwargs["messages"][0]["role"] == "system"
             expected = next(code for code in ("SWAAG-0017-ORBIT",) if code in prompt)
             return CompletionResult(
                 text=json.dumps({"answer": expected}),
@@ -95,8 +111,10 @@ def test_context_order_benchmark_checkpoints_each_completed_case(
     assert [snapshot["completed"] for snapshot in snapshots] == [1, 2, 3]
     assert snapshots[0]["complete"] is False
     assert report["complete"] is True
+    assert report["benchmark"] == BENCHMARK_VERSION
     assert report["planned"] == 3
     assert all(0 <= row["marker_token_fraction"] <= 1 for row in report["results"])
+    assert all(len(row["serialized_prompt_sha256"]) == 64 for row in report["results"])
 
 
 def test_context_order_benchmark_resumes_matching_partial_checkpoint(
@@ -123,6 +141,15 @@ def test_context_order_benchmark_resumes_matching_partial_checkpoint(
 
         def tokenize(self, text):
             return len(text)
+
+        def render_chat_prompt(self, messages):
+            return {
+                "prompt": "<system>" + messages[0]["content"] + "<user>" + messages[1]["content"] + "<assistant>",
+                "prompt_protocol_sha256": "a" * 64,
+            }
+
+        def verify_prompt_protocol(self, prompt_protocol_sha256):
+            assert prompt_protocol_sha256 == "a" * 64
 
         def complete(self, prompt, **_kwargs):
             calls.append(prompt)
