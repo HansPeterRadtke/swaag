@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+import sqlite3
+
 import pytest
 
 from swaag.grammar import yes_no_contract
@@ -7,6 +9,10 @@ from swaag.prompt_instructions import (
     PromptInstructionError,
     enforce_prompt_instruction_limits,
     make_prompt_instruction,
+)
+from swaag.prompt_instruction_store import (
+    PromptInstructionStore,
+    PromptInstructionStoreError,
 )
 from swaag.runtime import AgentRuntime
 from swaag.tokens import ExactTokenCounter
@@ -18,6 +24,7 @@ from swaag.types import PromptComponent
 def _tool_input(
     action: str,
     *,
+    instruction_store: str = "session",
     instruction_id: str | None = None,
     title: str | None = None,
     content: str | None = None,
@@ -25,6 +32,7 @@ def _tool_input(
 ) -> dict:
     return {
         "action": action,
+        "instruction_store": instruction_store,
         "instruction_id": instruction_id,
         "title": title,
         "content": content,
@@ -246,3 +254,141 @@ def test_default_config_exposes_prompt_instruction_capability(make_config) -> No
     assert "prompt_instructions" in config.tools.enabled
     assert config.prompt_instructions.max_instructions > 0
     assert "prompt_instructions" in ToolRegistry().tool_names(config)
+
+
+def test_user_prompt_instructions_cross_session_boundaries_and_remain_event_sourced(
+    make_config,
+) -> None:
+    config = make_config(model__context_limit=12_000)
+    runtime = AgentRuntime(
+        config,
+        model_client=object(),
+        token_counter=ExactTokenCounter(
+            lambda text: len(text.split()) if text.strip() else 0
+        ),
+    )
+    author = runtime.create_or_load_session()
+    reader = runtime.create_or_load_session()
+    _, added = ToolRegistry().dispatch(
+        "prompt_instructions",
+        _tool_input(
+            "add",
+            instruction_store="user",
+            title="User reporting correction",
+            content="Do not expose operational identifiers unless requested.",
+            scopes=["communication_status"],
+        ),
+        config,
+        author,
+    )
+    event = added.generated_events[0]
+    runtime.history.record_event(author, event.event_type, event.payload)
+    instruction_id = added.output["instruction_id"]
+
+    rebuilt_author = runtime.history.rebuild_from_history(
+        author.session_id,
+        prefer_checkpoint=False,
+    )
+    assert rebuilt_author.prompt_instructions == []
+    shared = PromptInstructionStore(config.sessions.root, config).list()
+    assert [item.instruction_id for item in shared] == [instruction_id]
+    assert shared[0].metadata["instruction_store"] == "user"
+
+    assembly = runtime.prompts.build_semantic_operation_prompt(
+        kind="communication_status",
+        system_instruction="Explain status.",
+        components=[
+            PromptComponent(
+                name="status_request",
+                category="current_user",
+                text="What is happening?",
+            )
+        ],
+    )
+    runtime._compile_context(
+        reader,
+        assembly,
+        yes_no_contract(),
+        minimum_output_tokens=64,
+        context_limit_resolution=(12_000, "test"),
+    )
+    exact = next(
+        item
+        for item in assembly.components
+        if item.name == "durable_prompt_instructions"
+    )
+    assert "User reporting correction" in exact.text
+    assert '"instruction_store": "user"' in exact.text
+    selected = runtime.history.read_history(reader.session_id)[-1]
+    assert selected.payload["instruction_sources"] == [
+        {
+            "instruction_store": "user",
+            "instruction_id": instruction_id,
+        }
+    ]
+
+    created_at = shared[0].created_at
+    _, replaced = ToolRegistry().dispatch(
+        "prompt_instructions",
+        _tool_input(
+            "replace",
+            instruction_store="user",
+            instruction_id=instruction_id,
+            title="User reporting correction",
+            content="Report only meaningful evidence unless details are requested.",
+            scopes=["communication_status"],
+        ),
+        config,
+        reader,
+    )
+    replaced_event = replaced.generated_events[0]
+    runtime.history.record_event(
+        reader,
+        replaced_event.event_type,
+        replaced_event.payload,
+    )
+    replaced_instruction = PromptInstructionStore(
+        config.sessions.root,
+        config,
+    ).list()[0]
+    assert replaced_instruction.created_at == created_at
+    assert replaced_instruction.content.startswith("Report only")
+
+    _, removed = ToolRegistry().dispatch(
+        "prompt_instructions",
+        _tool_input(
+            "remove",
+            instruction_store="user",
+            instruction_id=instruction_id,
+        ),
+        config,
+        reader,
+    )
+    removed_event = removed.generated_events[0]
+    runtime.history.record_event(reader, removed_event.event_type, removed_event.payload)
+    assert PromptInstructionStore(config.sessions.root, config).list() == []
+    actions = [
+        item.action
+        for item in PromptInstructionStore(config.sessions.root, config).events()
+    ]
+    assert actions == ["add", "replace", "remove"]
+
+
+def test_user_prompt_instruction_store_rejects_tampered_event_chain(
+    make_config,
+) -> None:
+    config = make_config()
+    store = PromptInstructionStore(config.sessions.root, config)
+    store.add(
+        title="Exact correction",
+        content="Preserve all requested evidence.",
+        scopes=["action"],
+        origin_session_id="session_origin",
+    )
+    with sqlite3.connect(store.path) as connection:
+        connection.execute(
+            "UPDATE prompt_instruction_events SET instruction_id='tampered' WHERE sequence=1"
+        )
+        connection.commit()
+    with pytest.raises(PromptInstructionStoreError, match="hash verification failed"):
+        store.list()

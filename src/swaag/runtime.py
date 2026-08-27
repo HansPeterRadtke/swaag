@@ -50,8 +50,8 @@ from swaag.preemption import (
 )
 from swaag.prompt_instructions import (
     prompt_instructions_for_kind,
-    render_prompt_instructions,
 )
+from swaag.prompt_instruction_store import PromptInstructionStore
 from swaag.model_cache import build_model_client
 from swaag.notes import render_notes
 from swaag.prompts import PromptBuilder
@@ -211,6 +211,10 @@ class AgentRuntime:
             request_metadata={"cache_scope": "default_agent_runtime"},
         )
         self.preemption = ModelPreemptionCoordinator(config.sessions.root)
+        self.prompt_instruction_store = PromptInstructionStore(
+            config.sessions.root,
+            config,
+        )
         self.tools = tool_registry or ToolRegistry()
         self._embedding_indexer: AsyncEmbeddingIndexer | None = None
         event_observer = None
@@ -3661,13 +3665,26 @@ class AgentRuntime:
             for component in assembly.components
         ):
             return
-        selected = prompt_instructions_for_kind(
-            state.prompt_instructions,
-            assembly.kind,
-        )
-        if not selected:
+        selected_sources = [
+            ("user", item)
+            for item in prompt_instructions_for_kind(
+                self.prompt_instruction_store.list(),
+                assembly.kind,
+            )
+        ] + [
+            ("session", item)
+            for item in prompt_instructions_for_kind(
+                state.prompt_instructions,
+                assembly.kind,
+            )
+        ]
+        if not selected_sources:
             return
-        rendered = render_prompt_instructions(selected)
+        rendered_rows = [
+            {"instruction_store": instruction_store, **asdict(item)}
+            for instruction_store, item in selected_sources
+        ]
+        rendered = stable_json_dumps(rendered_rows, indent=2)
         component = PromptComponent(
             name="durable_prompt_instructions",
             category="system_prompt_instruction",
@@ -3714,11 +3731,18 @@ class AgentRuntime:
         instruction_hashes = [
             {
                 "instruction_id": item.instruction_id,
+                "instruction_store": instruction_store,
                 "sha256": sha256_text(
-                    stable_json_dumps(asdict(item), indent=None)
+                    stable_json_dumps(
+                        {
+                            "instruction_store": instruction_store,
+                            **asdict(item),
+                        },
+                        indent=None,
+                    )
                 ),
             }
-            for item in selected
+            for instruction_store, item in selected_sources
         ]
         combined_hash = sha256_text(rendered)
         assembly.prompt_artifacts.append(
@@ -3732,7 +3756,16 @@ class AgentRuntime:
             "prompt_instructions_selected",
             {
                 "kind": assembly.kind,
-                "instruction_ids": [item.instruction_id for item in selected],
+                "instruction_ids": [
+                    item.instruction_id for _, item in selected_sources
+                ],
+                "instruction_sources": [
+                    {
+                        "instruction_store": instruction_store,
+                        "instruction_id": item.instruction_id,
+                    }
+                    for instruction_store, item in selected_sources
+                ],
                 "instruction_hashes": instruction_hashes,
                 "exact": True,
             },

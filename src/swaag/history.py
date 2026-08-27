@@ -1461,6 +1461,8 @@ class HistoryStore:
             "prompt_instruction_added",
             "prompt_instruction_replaced",
         }:
+            if payload.get("instruction_store", "session") != "session":
+                return
             instruction_payload = dict(payload["instruction"])
             instruction_metadata = dict(instruction_payload.get("metadata", {}))
             instruction_metadata.update(
@@ -1486,6 +1488,8 @@ class HistoryStore:
                 state.prompt_instructions.append(instruction)
             return
         if event.event_type == "prompt_instruction_removed":
+            if payload.get("instruction_store", "session") != "session":
+                return
             instruction_id = str(payload["instruction_id"])
             state.prompt_instructions = [
                 item
