@@ -90,3 +90,12 @@ network namespace with the repo-backed Swaag communication service. The Pipe
 has no model or session state of its own; Open WebUI chat/message identifiers
 map to durable Swaag worker/message state. Do not expose the unauthenticated
 communication listener beyond localhost.
+
+## AG-UI HTTP/SSE
+
+An AG-UI `HttpAgent` can use `http://127.0.0.1:13401/ag-ui` when its secure
+proxy shares the Jetson network namespace. The endpoint accepts
+`RunAgentInput` JSON and returns `BaseEvent` SSE. It deliberately rejects
+non-empty frontend tool declarations, shared state, and forwarded properties
+until those capabilities have end-to-end implementations. Keep the service
+localhost-only; browser-direct cross-origin exposure is not enabled.

@@ -111,6 +111,12 @@ def test_task_api_event_wait_does_not_skip_a_racing_terminal_event(make_config) 
     created = api.execute("create", {"objective": "observe racing terminal event"})
     worker_id = created["worker"]["worker_id"]
     cursor = api.execute("events", {"worker_id": worker_id})["next_sequence"]
+    manager.store.transition(
+        worker_id,
+        "queued",
+        expected={"created"},
+        event_type="worker_queued",
+    )
     original_page = api._event_page
     calls = 0
 
@@ -130,6 +136,7 @@ def test_task_api_event_wait_does_not_skip_a_racing_terminal_event(make_config) 
     manager.shutdown()
 
     assert result["terminal"] is True
+    assert result["events"][0]["event_type"] == "worker_queued"
     assert result["events"][-1]["event_type"] == "worker_canceled"
 
 
@@ -476,6 +483,121 @@ def test_ag_ui_projection_uses_stable_run_message_and_terminal_event_shapes() ->
     assert historical[1]["delta"] == "prior exact result"
     assert historical[-1]["result"] == "prior exact result"
     assert historical[-1]["runId"] == "worker_1-run-2"
+
+
+def test_ag_ui_parses_full_initial_history_current_context_and_raw_media() -> None:
+    run = AgUiProjectionAdapter().user_run(
+        {
+            "threadId": "thread-1",
+            "runId": "run-2",
+            "parentRunId": "run-1",
+            "state": {},
+            "messages": [
+                {"id": "system-1", "role": "system", "content": "Exact policy."},
+                {
+                    "id": "user-1",
+                    "role": "user",
+                    "content": [
+                        {"type": "text", "text": "Inspect the first file."},
+                        {
+                            "type": "binary",
+                            "mimeType": "application/octet-stream",
+                            "data": "Zmlyc3QgYnl0ZXM=",
+                            "filename": "first.bin",
+                        },
+                    ],
+                },
+                {"id": "assistant-1", "role": "assistant", "content": "Prior reply."},
+                {
+                    "id": "user-2",
+                    "role": "user",
+                    "content": [
+                        {"type": "text", "text": "Compare the exact inputs."},
+                        {
+                            "type": "image",
+                            "source": {
+                                "type": "data",
+                                "value": "c2Vjb25kIGJ5dGVz",
+                                "mimeType": "image/png",
+                            },
+                            "metadata": {"filename": "second.png"},
+                        },
+                        {
+                            "type": "document",
+                            "source": {
+                                "type": "url",
+                                "value": "https://example.test/report.pdf",
+                                "mimeType": "application/pdf",
+                            },
+                        },
+                    ],
+                },
+            ],
+            "tools": [],
+            "context": [{"description": "Tenant", "value": "north"}],
+            "forwardedProps": {},
+        }
+    )
+
+    assert run.thread_id == "thread-1"
+    assert run.run_id == "run-2"
+    assert run.parent_run_id == "run-1"
+    assert run.message_id == "user-2"
+    assert "Compare the exact inputs." in run.text
+    assert "https://example.test/report.pdf" in run.text
+    assert '"description":"Tenant"' in run.text
+    assert run.attachments == (
+        {
+            "original_name": "second.png",
+            "media_type": "image/png",
+            "content_base64": "c2Vjb25kIGJ5dGVz",
+        },
+    )
+    assert [item["original_name"] for item in run.initial_attachments] == [
+        "first.bin",
+        "second.png",
+    ]
+    assert "Exact policy." in run.initial_text
+    assert "Prior reply." in run.initial_text
+    assert "Zmlyc3QgYnl0ZXM=" not in run.initial_text
+
+
+def test_ag_ui_rejects_unimplemented_client_state_and_tools() -> None:
+    base = {
+        "threadId": "thread-1",
+        "runId": "run-1",
+        "state": {},
+        "messages": [{"id": "user-1", "role": "user", "content": "Work."}],
+        "tools": [],
+        "context": [],
+        "forwardedProps": {},
+    }
+    unsupported = (
+        {**base, "tools": [{"name": "browser-tool"}]},
+        {**base, "state": {"hidden": "value"}},
+        {**base, "forwardedProps": {"command": "unknown"}},
+    )
+
+    for request in unsupported:
+        try:
+            AgUiProjectionAdapter().user_run(request)
+        except ValueError:
+            continue
+        raise AssertionError("unsupported AG-UI input was silently ignored")
+
+
+def test_ag_ui_projection_can_use_client_owned_thread_and_run_ids() -> None:
+    events = AgUiProjectionAdapter().events(
+        _record(),
+        [_event("worker_started", 1), _event("worker_completed", 2)],
+        thread_id="client-thread",
+        run_id="client-run",
+    )
+
+    assert events[0]["threadId"] == "client-thread"
+    assert events[0]["runId"] == "client-run"
+    assert events[-1]["threadId"] == "client-thread"
+    assert events[-1]["runId"] == "client-run"
 
 
 def test_ag_ui_projects_input_required_as_a_resumable_interrupt() -> None:

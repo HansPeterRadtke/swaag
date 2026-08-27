@@ -139,7 +139,7 @@ class TaskApi:
                     record.status in WORKER_TERMINAL_STATES
                     or record.status == "input_required"
                 )
-                if terminal and not page["events"]:
+                if terminal:
                     page = self._event_page(worker_id, after=after, limit=limit)
                 if page["events"] or terminal:
                     return {**page, "terminal": terminal, "timed_out": False}

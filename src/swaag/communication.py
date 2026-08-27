@@ -21,12 +21,13 @@ from swaag.protocol_adapters import (
     A2ATaskNotCancelableError,
     A2AUnsupportedOperationError,
     AgUiProjectionAdapter,
+    AgUiRunInput,
     OpenWebUiProjectionAdapter,
 )
 from swaag.runtime import AgentRuntime
 from swaag.sqlite_schema import apply_sqlite_migrations
 from swaag.task_api import TaskApi
-from swaag.utils import new_id, utc_now_iso
+from swaag.utils import new_id, stable_json_dumps, utc_now_iso
 from swaag.workers import WORKER_TERMINAL_STATES, WorkerManager, WorkerRecord
 
 
@@ -74,6 +75,23 @@ _COMMUNICATION_STORE_MIGRATIONS = (
         """
         CREATE INDEX protocol_messages_context
         ON protocol_messages(protocol, external_context_id, created_at)
+        """,
+    ),
+    (
+        """
+        ALTER TABLE protocol_messages
+        ADD COLUMN start_sequence INTEGER NOT NULL DEFAULT 0
+        """,
+        """
+        ALTER TABLE protocol_messages
+        ADD COLUMN end_sequence INTEGER
+        """,
+        """
+        CREATE INDEX protocol_messages_stream_bounds
+        ON protocol_messages(
+            protocol, external_context_id, worker_id,
+            start_sequence, end_sequence
+        )
         """,
     ),
 )
@@ -194,20 +212,45 @@ class CommunicationStore:
             ).fetchone()
         return None if row is None else (str(row[0]), str(row[1]))
 
+    def protocol_message_bounds(
+        self,
+        protocol: str,
+        external_message_id: str,
+    ) -> tuple[str, str, int, int | None] | None:
+        with self._connect() as connection:
+            row = connection.execute(
+                """
+                SELECT external_context_id, worker_id, start_sequence, end_sequence
+                FROM protocol_messages
+                WHERE protocol=? AND external_message_id=?
+                """,
+                (protocol, external_message_id),
+            ).fetchone()
+        if row is None:
+            return None
+        return (
+            str(row[0]),
+            str(row[1]),
+            int(row[2]),
+            None if row[3] is None else int(row[3]),
+        )
+
     def record_protocol_message(
         self,
         protocol: str,
         external_message_id: str,
         external_context_id: str,
         worker_id: str,
+        *,
+        start_sequence: int = 0,
     ) -> None:
         with self._connect() as connection:
             connection.execute(
                 """
                 INSERT OR IGNORE INTO protocol_messages(
                     protocol, external_message_id, external_context_id,
-                    worker_id, created_at
-                ) VALUES (?, ?, ?, ?, ?)
+                    worker_id, created_at, start_sequence
+                ) VALUES (?, ?, ?, ?, ?, ?)
                 """,
                 (
                     protocol,
@@ -215,7 +258,48 @@ class CommunicationStore:
                     external_context_id,
                     worker_id,
                     utc_now_iso(),
+                    start_sequence,
                 ),
+            )
+
+    def finish_protocol_message(
+        self,
+        protocol: str,
+        external_message_id: str,
+        *,
+        end_sequence: int,
+    ) -> None:
+        with self._connect() as connection:
+            connection.execute(
+                """
+                UPDATE protocol_messages SET end_sequence=?
+                WHERE protocol=? AND external_message_id=?
+                  AND (end_sequence IS NULL OR end_sequence>?)
+                """,
+                (
+                    end_sequence,
+                    protocol,
+                    external_message_id,
+                    end_sequence,
+                ),
+            )
+
+    def close_protocol_streams(
+        self,
+        protocol: str,
+        external_context_id: str,
+        worker_id: str,
+        *,
+        end_sequence: int,
+    ) -> None:
+        with self._connect() as connection:
+            connection.execute(
+                """
+                UPDATE protocol_messages SET end_sequence=?
+                WHERE protocol=? AND external_context_id=? AND worker_id=?
+                  AND end_sequence IS NULL
+                """,
+                (end_sequence, protocol, external_context_id, worker_id),
             )
 
 
@@ -518,6 +602,144 @@ class CommunicationService:
                 "duplicate": False,
             }
 
+    def _ag_ui_begin(
+        self,
+        run: AgUiRunInput,
+    ) -> tuple[WorkerRecord, int, int | None, bool]:
+        with self._protocol_send_lock:
+            duplicate = self.store.protocol_message_bounds("ag_ui", run.run_id)
+            if duplicate is not None:
+                context_id, worker_id, start_sequence, end_sequence = duplicate
+                if context_id != run.thread_id:
+                    raise ValueError(
+                        "AG-UI runId is already bound to another thread"
+                    )
+                return (
+                    self.workers.store.get(worker_id),
+                    start_sequence,
+                    end_sequence,
+                    True,
+                )
+
+            worker_id = self.store.protocol_worker("ag_ui", run.thread_id)
+            record = None
+            if worker_id is not None:
+                try:
+                    record = self.workers.store.get(worker_id)
+                except FileNotFoundError:
+                    worker_id = None
+            if record is not None and record.archived_at is not None:
+                if run.resume:
+                    raise ValueError("AG-UI cannot resume an archived thread")
+                worker_id = None
+                record = None
+
+            if worker_id is None:
+                if run.resume:
+                    raise ValueError("AG-UI cannot resume an unknown thread")
+                created = self.task_api.execute(
+                    "create",
+                    {
+                        "objective": run.initial_text,
+                        "attachments": list(run.initial_attachments),
+                        "attachment_source": "ag_ui",
+                        "start": False,
+                    },
+                )
+                worker_id = str(created["worker"]["worker_id"])
+                self.store.set_protocol_worker("ag_ui", run.thread_id, worker_id)
+                _created_record, start_sequence = self.workers.stream_snapshot(
+                    worker_id
+                )
+                record = self.workers.start(worker_id)
+            else:
+                if run.resume:
+                    _current, start_sequence = self.workers.stream_snapshot(worker_id)
+                    self.store.close_protocol_streams(
+                        "ag_ui",
+                        run.thread_id,
+                        worker_id,
+                        end_sequence=start_sequence,
+                    )
+                    record = self._ag_ui_resume(worker_id, run)
+                else:
+                    for attachment in run.attachments:
+                        self.task_api.execute(
+                            "attachment.add",
+                            {
+                                **attachment,
+                                "worker_id": worker_id,
+                                "source": "ag_ui",
+                            },
+                        )
+                    _current, start_sequence = self.workers.stream_snapshot(worker_id)
+                    self.store.close_protocol_streams(
+                        "ag_ui",
+                        run.thread_id,
+                        worker_id,
+                        end_sequence=start_sequence,
+                    )
+                    record = self.workers.message(
+                        worker_id,
+                        run.text,
+                        source=f"ag_ui:{run.run_id}",
+                    )
+
+            self.store.record_protocol_message(
+                "ag_ui",
+                run.run_id,
+                run.thread_id,
+                worker_id,
+                start_sequence=start_sequence,
+            )
+            return record, start_sequence, None, False
+
+    def _ag_ui_resume(self, worker_id: str, run: AgUiRunInput) -> WorkerRecord:
+        current = self.workers.store.get(worker_id)
+        if current.status != "input_required":
+            raise ValueError(
+                f"AG-UI thread is {current.status}, not awaiting an interrupt response"
+            )
+        if len(run.resume) != 1:
+            raise ValueError("AG-UI requires exactly one response to the open interrupt")
+        event = next(
+            (
+                item
+                for item in reversed(self.workers.store.events(worker_id))
+                if item.event_type == "worker_input_required"
+            ),
+            None,
+        )
+        if event is None:
+            raise RuntimeError("AG-UI input-required worker has no durable interrupt event")
+        expected_interrupt_id = f"{worker_id}-input-{event.sequence}"
+        response = run.resume[0]
+        interrupt_id = response.get("interruptId")
+        if interrupt_id != expected_interrupt_id:
+            raise ValueError("AG-UI resume does not address the open interrupt")
+        status = response.get("status")
+        if status == "cancelled":
+            return self.workers.cancel(
+                worker_id,
+                reason="AG-UI client canceled the open interrupt",
+            )
+        if status != "resolved":
+            raise ValueError("AG-UI resume status must be resolved or cancelled")
+        if "payload" not in response or response["payload"] is None:
+            raise ValueError("AG-UI resolved interrupt requires a payload")
+        payload = response["payload"]
+        answer = payload.strip() if isinstance(payload, str) else stable_json_dumps(
+            payload, indent=None
+        )
+        if not answer:
+            raise ValueError("AG-UI resolved interrupt payload must not be empty")
+        message = "AG-UI interrupt response:\n" + answer + run.context_text
+        return self.workers.message(
+            worker_id,
+            message,
+            source=f"ag_ui:{run.run_id}",
+        )
+
     def _a2a_subscription_response(
         self,
         initial_record: WorkerRecord,
@@ -747,9 +969,10 @@ class CommunicationService:
             terminal = record.status in WORKER_TERMINAL_STATES or (
                 input_required_is_terminal and record.status == "input_required"
             )
-            if terminal and not page["events"]:
-                # State and its transition event commit together; re-read after
-                # observing terminal state so a racing transition is not skipped.
+            if terminal:
+                # State and its transition event commit together. The first page
+                # may have observed only an earlier event immediately before that
+                # commit, so always re-read after observing terminal state.
                 page = await asyncio.to_thread(
                     self.task_api.execute,
                     "events",
@@ -991,6 +1214,219 @@ class CommunicationService:
                 writer.write(b": keepalive\n\n")
                 await writer.drain()
 
+    async def _write_ag_ui_sse(
+        self,
+        writer: asyncio.StreamWriter,
+        *,
+        run: AgUiRunInput,
+        record: WorkerRecord,
+        start_sequence: int,
+        end_sequence: int | None,
+        duplicate: bool,
+    ) -> None:
+        headers = (
+            "HTTP/1.1 200 OK\r\n"
+            "Content-Type: text/event-stream\r\n"
+            "Cache-Control: no-store\r\n"
+            "Connection: close\r\n"
+            "X-Accel-Buffering: no\r\n"
+            "X-Content-Type-Options: nosniff\r\n\r\n"
+        )
+        writer.write(headers.encode("ascii"))
+
+        async def emit(event: dict[str, Any]) -> None:
+            writer.write(
+                ("data: " + json.dumps(event, sort_keys=True) + "\n\n").encode()
+            )
+            await writer.drain()
+
+        started: dict[str, Any] = {
+            "type": "RUN_STARTED",
+            "threadId": run.thread_id,
+            "runId": run.run_id,
+            "timestamp": int(datetime.now(timezone.utc).timestamp() * 1000),
+            "metadata": {
+                "swaagWorkerId": record.worker_id,
+                "swaagDuplicateRun": duplicate,
+            },
+        }
+        if run.parent_run_id is not None:
+            started["parentRunId"] = run.parent_run_id
+        await emit(started)
+
+        adapter = AgUiProjectionAdapter()
+        cursor = start_sequence
+        terminal_emitted = False
+        while not writer.is_closing():
+            if end_sequence is None:
+                bounds = await asyncio.to_thread(
+                    self.store.protocol_message_bounds,
+                    "ag_ui",
+                    run.run_id,
+                )
+                if bounds is not None:
+                    end_sequence = bounds[3]
+            if end_sequence is not None and cursor >= end_sequence:
+                break
+            page = await self._wait_task_events(
+                {
+                    "worker_id": record.worker_id,
+                    "after_sequence": cursor,
+                    "limit": 100,
+                    "timeout_seconds": 30,
+                }
+            )
+            if end_sequence is None:
+                bounds = await asyncio.to_thread(
+                    self.store.protocol_message_bounds,
+                    "ag_ui",
+                    run.run_id,
+                )
+                if bounds is not None:
+                    end_sequence = bounds[3]
+            raw_events = page["events"]
+            if end_sequence is not None:
+                raw_events = [
+                    item
+                    for item in raw_events
+                    if int(item["sequence"]) <= end_sequence
+                ]
+            current = self.workers.store.get(record.worker_id)
+            projected = adapter.events(
+                current,
+                [self.workers.event_from_payload(item) for item in raw_events],
+                thread_id=run.thread_id,
+                run_id=run.run_id,
+            )
+            projected = [
+                item for item in projected if item.get("type") != "RUN_STARTED"
+            ]
+            for event in projected:
+                await emit(event)
+                if event.get("type") in {"RUN_FINISHED", "RUN_ERROR"}:
+                    terminal_emitted = True
+            if raw_events:
+                cursor = int(raw_events[-1]["sequence"])
+            elif end_sequence is None:
+                cursor = int(page["next_sequence"])
+
+            reached_bound = end_sequence is not None and (
+                cursor >= end_sequence
+                or int(page["next_sequence"]) >= end_sequence
+            )
+            if reached_bound:
+                cursor = end_sequence
+                break
+            if page["terminal"] and not page["has_more"]:
+                self.store.finish_protocol_message(
+                    "ag_ui",
+                    run.run_id,
+                    end_sequence=cursor,
+                )
+                if not terminal_emitted:
+                    await emit(
+                        {
+                            "type": "RUN_ERROR",
+                            "message": (
+                                "Swaag reached a durable terminal state without "
+                                "a projectable terminal event"
+                            ),
+                            "code": "SWAAG_TERMINAL_EVENT_MISSING",
+                        }
+                    )
+                return
+            if not projected:
+                writer.write(b": keepalive\n\n")
+                await writer.drain()
+
+        if end_sequence is not None and not terminal_emitted:
+            await emit(
+                {
+                    "type": "RUN_ERROR",
+                    "message": "This AG-UI run was superseded by a newer thread run",
+                    "code": "SWAAG_RUN_SUPERSEDED",
+                }
+            )
+
+    async def _handle_ag_ui_http(
+        self,
+        *,
+        request: dict[str, Any],
+        headers: dict[str, str],
+        writer: asyncio.StreamWriter,
+    ) -> None:
+        accept = headers.get("accept", "*/*")
+        if "text/event-stream" not in accept and "*/*" not in accept:
+            await self._write_http_response(
+                writer,
+                status=406,
+                reason="Not Acceptable",
+                body=b'{"error":"Accept must allow text/event-stream"}',
+            )
+            return
+        try:
+            run = AgUiProjectionAdapter().user_run(request)
+            record, start_sequence, end_sequence, duplicate = (
+                await asyncio.to_thread(self._ag_ui_begin, run)
+            )
+        except (FileNotFoundError, TypeError, ValueError) as exc:
+            await self._write_http_response(
+                writer,
+                status=400,
+                reason="Bad Request",
+                body=json.dumps({"error": str(exc)}, sort_keys=True).encode(),
+            )
+            return
+        except Exception:
+            await self._write_http_response(
+                writer,
+                status=500,
+                reason="Internal Server Error",
+                body=b'{"error":"AG-UI run initialization failed"}',
+            )
+            return
+        try:
+            await self._write_ag_ui_sse(
+                writer,
+                run=run,
+                record=record,
+                start_sequence=start_sequence,
+                end_sequence=end_sequence,
+                duplicate=duplicate,
+            )
+        except (ConnectionError, BrokenPipeError):
+            pass
+        except asyncio.CancelledError:
+            if not writer.is_closing():
+                try:
+                    writer.write(
+                        b'data: {"code":"SWAAG_SERVICE_STOPPING",'
+                        b'"message":"Swaag communication service is stopping",'
+                        b'"type":"RUN_ERROR"}\n\n'
+                    )
+                    await writer.drain()
+                except (ConnectionError, BrokenPipeError):
+                    pass
+            raise
+        except Exception as exc:
+            if not writer.is_closing():
+                payload = {
+                    "type": "RUN_ERROR",
+                    "message": f"{type(exc).__name__}: {exc}",
+                    "code": "SWAAG_AG_UI_TRANSPORT_ERROR",
+                }
+                try:
+                    writer.write(
+                        (
+                            "data: "
+                            + json.dumps(payload, sort_keys=True)
+                            + "\n\n"
+                        ).encode()
+                    )
+                    await writer.drain()
+                except (ConnectionError, BrokenPipeError):
+                    pass
+
     async def _handle_a2a_http(
         self,
         *,
@@ -1130,7 +1566,7 @@ class CommunicationService:
                         headers={"Cache-Control": "public, max-age=300", "ETag": etag},
                     )
                 return
-            if method != "POST" or path != "/a2a/v1":
+            if method != "POST" or path not in {"/a2a/v1", "/ag-ui"}:
                 await self._write_http_response(
                     writer,
                     status=404,
@@ -1148,21 +1584,36 @@ class CommunicationService:
             try:
                 request = json.loads(body)
             except json.JSONDecodeError:
-                payload = self._a2a_error(None, -32700, "Invalid JSON payload")
+                payload = (
+                    self._a2a_error(None, -32700, "Invalid JSON payload")
+                    if path == "/a2a/v1"
+                    else {"error": "Invalid JSON payload"}
+                )
                 await self._write_http_response(
                     writer,
-                    status=200,
-                    reason="OK",
+                    status=200 if path == "/a2a/v1" else 400,
+                    reason="OK" if path == "/a2a/v1" else "Bad Request",
                     body=json.dumps(payload, sort_keys=True).encode(),
                 )
                 return
             if not isinstance(request, dict):
-                payload = self._a2a_error(None, -32600, "Invalid request")
+                payload = (
+                    self._a2a_error(None, -32600, "Invalid request")
+                    if path == "/a2a/v1"
+                    else {"error": "AG-UI request must be an object"}
+                )
                 await self._write_http_response(
                     writer,
-                    status=200,
-                    reason="OK",
+                    status=200 if path == "/a2a/v1" else 400,
+                    reason="OK" if path == "/a2a/v1" else "Bad Request",
                     body=json.dumps(payload, sort_keys=True).encode(),
+                )
+                return
+            if path == "/ag-ui":
+                await self._handle_ag_ui_http(
+                    request=request,
+                    headers=headers,
+                    writer=writer,
                 )
                 return
             await self._handle_a2a_http(

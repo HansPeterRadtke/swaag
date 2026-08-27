@@ -1,8 +1,12 @@
 from __future__ import annotations
 
+import base64
+import binascii
+import mimetypes
 from dataclasses import dataclass
 from datetime import datetime
 from typing import Any, Iterable
+from urllib.parse import unquote_to_bytes
 
 from swaag.utils import stable_json_dumps
 from swaag.workers import WorkerEvent, WorkerRecord
@@ -41,6 +45,20 @@ class A2AUserMessage:
     attachments: tuple[dict[str, str], ...]
     return_immediately: bool
     history_length: int | None
+
+
+@dataclass(slots=True, frozen=True)
+class AgUiRunInput:
+    thread_id: str
+    run_id: str
+    parent_run_id: str | None
+    message_id: str | None
+    text: str
+    context_text: str
+    attachments: tuple[dict[str, str], ...]
+    initial_text: str
+    initial_attachments: tuple[dict[str, str], ...]
+    resume: tuple[dict[str, Any], ...]
 
 
 class A2AProjectionAdapter:
@@ -244,8 +262,119 @@ class A2AProjectionAdapter:
 class AgUiProjectionAdapter:
     """Maps durable worker events to current AG-UI event shapes."""
 
+    def user_run(self, request: dict[str, Any]) -> AgUiRunInput:
+        thread_id = _required_ag_ui_text(request, "threadId")
+        run_id = _required_ag_ui_text(request, "runId")
+        parent_run_id = _optional_ag_ui_text(request, "parentRunId")
+        messages = request.get("messages")
+        tools = request.get("tools")
+        context = request.get("context")
+        forwarded_props = request.get("forwardedProps")
+        if not isinstance(messages, list):
+            raise ValueError("AG-UI messages must be an array")
+        if not isinstance(tools, list):
+            raise ValueError("AG-UI tools must be an array")
+        if tools:
+            raise ValueError(
+                "AG-UI client-side tools are not enabled by this adapter"
+            )
+        if not isinstance(context, list):
+            raise ValueError("AG-UI context must be an array")
+        if forwarded_props not in (None, {}):
+            raise ValueError(
+                "AG-UI forwardedProps are not enabled by this adapter"
+            )
+        state = request.get("state")
+        if state not in (None, {}):
+            raise ValueError("AG-UI shared state is not enabled by this adapter")
+
+        context_items: list[dict[str, str]] = []
+        for item in context:
+            if not isinstance(item, dict):
+                raise ValueError("Every AG-UI context item must be an object")
+            description = item.get("description")
+            value = item.get("value")
+            if not isinstance(description, str) or not isinstance(value, str):
+                raise ValueError(
+                    "AG-UI context description and value must be strings"
+                )
+            context_items.append({"description": description, "value": value})
+
+        normalized_messages: list[dict[str, Any]] = []
+        latest_user: tuple[str, str, list[dict[str, str]]] | None = None
+        initial_attachments: list[dict[str, str]] = []
+        for message in messages:
+            if not isinstance(message, dict):
+                raise ValueError("Every AG-UI message must be an object")
+            message_id = _required_ag_ui_text(message, "id", prefix="message ")
+            role = message.get("role")
+            if role not in {
+                "developer",
+                "system",
+                "assistant",
+                "user",
+                "tool",
+                "activity",
+                "reasoning",
+            }:
+                raise ValueError("AG-UI message role is unsupported")
+            normalized = dict(message)
+            if role == "user":
+                text, attachments, references = _ag_ui_user_content(
+                    message.get("content"), message_id=message_id
+                )
+                if references:
+                    text = _with_raw_references(text, references)
+                normalized["content"] = text
+                initial_attachments.extend(attachments)
+                latest_user = (message_id, text, attachments)
+            normalized_messages.append(normalized)
+
+        resume = request.get("resume", [])
+        if not isinstance(resume, list) or any(
+            not isinstance(item, dict) for item in resume
+        ):
+            raise ValueError("AG-UI resume must be an array of objects")
+        if not resume and latest_user is None:
+            raise ValueError("AG-UI run requires a user message or resume entry")
+
+        context_text = (
+            "\n\nAG-UI caller context:\n"
+            + stable_json_dumps(context_items, indent=None)
+            if context_items
+            else ""
+        )
+        if latest_user is None:
+            message_id = None
+            text = ""
+            attachments: list[dict[str, str]] = []
+        else:
+            message_id, text, attachments = latest_user
+        initial_text = (
+            "AG-UI conversation supplied for this new durable thread:\n"
+            + stable_json_dumps(normalized_messages, indent=None)
+            + context_text
+        )
+        return AgUiRunInput(
+            thread_id=thread_id,
+            run_id=run_id,
+            parent_run_id=parent_run_id,
+            message_id=message_id,
+            text=text + context_text,
+            context_text=context_text,
+            attachments=tuple(attachments),
+            initial_text=initial_text,
+            initial_attachments=tuple(initial_attachments),
+            resume=tuple(dict(item) for item in resume),
+        )
+
     def events(
-        self, record: WorkerRecord, events: Iterable[WorkerEvent]
+        self,
+        record: WorkerRecord,
+        events: Iterable[WorkerEvent],
+        *,
+        thread_id: str | None = None,
+        run_id: str | None = None,
     ) -> list[dict[str, Any]]:
         output: list[dict[str, Any]] = []
         for event in events:
@@ -266,8 +395,8 @@ class AgUiProjectionAdapter:
                     {
                         **base,
                         "type": "RUN_STARTED",
-                        "threadId": record.session_id,
-                        "runId": self._run_id(record, event),
+                        "threadId": thread_id or record.session_id,
+                        "runId": run_id or self._run_id(record, event),
                     }
                 )
             elif event.event_type == "worker_completed":
@@ -277,8 +406,8 @@ class AgUiProjectionAdapter:
                     {
                         **base,
                         "type": "RUN_FINISHED",
-                        "threadId": record.session_id,
-                        "runId": self._run_id(record, event),
+                        "threadId": thread_id or record.session_id,
+                        "runId": run_id or self._run_id(record, event),
                         "result": event_result,
                         "outcome": {"type": "success"},
                     }
@@ -329,8 +458,8 @@ class AgUiProjectionAdapter:
                     {
                         **base,
                         "type": "RUN_FINISHED",
-                        "threadId": record.session_id,
-                        "runId": self._run_id(record, event),
+                        "threadId": thread_id or record.session_id,
+                        "runId": run_id or self._run_id(record, event),
                         "result": event_result,
                         "outcome": {
                             "type": "interrupt",
@@ -502,10 +631,182 @@ class AgUiProjectionAdapter:
             return []
         message_id = f"{record.worker_id}-result-{event.sequence}"
         return [
-            {**base, "type": "TEXT_MESSAGE_START", "messageId": message_id, "role": "assistant"},
-            {**base, "type": "TEXT_MESSAGE_CONTENT", "messageId": message_id, "delta": result},
+            {
+                **base,
+                "type": "TEXT_MESSAGE_START",
+                "messageId": message_id,
+                "role": "assistant",
+            },
+            {
+                **base,
+                "type": "TEXT_MESSAGE_CONTENT",
+                "messageId": message_id,
+                "delta": result,
+            },
             {**base, "type": "TEXT_MESSAGE_END", "messageId": message_id},
         ]
+
+
+def _required_ag_ui_text(
+    payload: dict[str, Any],
+    key: str,
+    *,
+    prefix: str = "",
+) -> str:
+    value = payload.get(key)
+    if not isinstance(value, str) or not value.strip():
+        raise ValueError(f"AG-UI {prefix}{key} must be a non-empty string")
+    return value.strip()
+
+
+def _optional_ag_ui_text(payload: dict[str, Any], key: str) -> str | None:
+    value = payload.get(key)
+    if value is None:
+        return None
+    if not isinstance(value, str) or not value.strip():
+        raise ValueError(f"AG-UI {key} must be a non-empty string when provided")
+    return value.strip()
+
+
+def _ag_ui_user_content(
+    content: Any,
+    *,
+    message_id: str,
+) -> tuple[str, list[dict[str, str]], list[str]]:
+    if isinstance(content, str):
+        if not content.strip():
+            raise ValueError("AG-UI user message content must not be empty")
+        return content, [], []
+    if not isinstance(content, list):
+        raise ValueError("AG-UI user content must be text or an input-content array")
+    text: list[str] = []
+    attachments: list[dict[str, str]] = []
+    references: list[str] = []
+    for index, item in enumerate(content, start=1):
+        if not isinstance(item, dict):
+            raise ValueError("Every AG-UI input-content item must be an object")
+        content_type = item.get("type")
+        if content_type == "text":
+            value = item.get("text")
+            if not isinstance(value, str):
+                raise ValueError("AG-UI text input must contain text")
+            text.append(value)
+            continue
+        if content_type == "binary":
+            _ag_ui_legacy_binary(
+                item,
+                message_id=message_id,
+                index=index,
+                attachments=attachments,
+                references=references,
+            )
+            continue
+        if content_type not in {"image", "audio", "video", "document"}:
+            raise ValueError("AG-UI input-content type is unsupported")
+        source = item.get("source")
+        if not isinstance(source, dict):
+            raise ValueError("AG-UI media input requires a source object")
+        source_type = source.get("type")
+        value = source.get("value")
+        if not isinstance(value, str) or not value:
+            raise ValueError("AG-UI media source value must be a non-empty string")
+        media_type = source.get("mimeType", "")
+        if not isinstance(media_type, str):
+            raise ValueError("AG-UI media source mimeType must be a string")
+        metadata = item.get("metadata")
+        name = (
+            str(metadata.get("filename"))
+            if isinstance(metadata, dict) and metadata.get("filename")
+            else _ag_ui_attachment_name(message_id, index, media_type)
+        )
+        if source_type == "data":
+            if not media_type:
+                raise ValueError("AG-UI inline media requires mimeType")
+            attachments.append(
+                {
+                    "original_name": name,
+                    "media_type": media_type,
+                    "content_base64": value,
+                }
+            )
+        elif source_type == "url" and value.startswith("data:"):
+            decoded_media_type, encoded = _ag_ui_data_url(value)
+            attachments.append(
+                {
+                    "original_name": name,
+                    "media_type": media_type or decoded_media_type,
+                    "content_base64": encoded,
+                }
+            )
+        elif source_type == "url":
+            references.append(f"{content_type}: {value}")
+        else:
+            raise ValueError("AG-UI media source type is unsupported")
+    rendered = "\n\n".join(text).strip()
+    if not rendered and attachments:
+        rendered = "Inspect the supplied raw inputs and complete the request."
+    if not rendered and not references:
+        raise ValueError("AG-UI user message content must not be empty")
+    return rendered, attachments, references
+
+
+def _ag_ui_legacy_binary(
+    item: dict[str, Any],
+    *,
+    message_id: str,
+    index: int,
+    attachments: list[dict[str, str]],
+    references: list[str],
+) -> None:
+    media_type = item.get("mimeType")
+    if not isinstance(media_type, str) or not media_type:
+        raise ValueError("AG-UI binary input requires mimeType")
+    data = item.get("data")
+    url = item.get("url")
+    reference_id = item.get("id")
+    if not any(isinstance(value, str) and value for value in (data, url, reference_id)):
+        raise ValueError("AG-UI binary input requires data, url, or id")
+    name = item.get("filename")
+    if not isinstance(name, str) or not name:
+        name = _ag_ui_attachment_name(message_id, index, media_type)
+    if isinstance(data, str) and data:
+        attachments.append(
+            {
+                "original_name": name,
+                "media_type": media_type,
+                "content_base64": data,
+            }
+        )
+    if isinstance(url, str) and url:
+        references.append(f"binary URL: {url}")
+    if isinstance(reference_id, str) and reference_id:
+        references.append(f"binary ID: {reference_id}")
+
+
+def _ag_ui_attachment_name(message_id: str, index: int, media_type: str) -> str:
+    extension = mimetypes.guess_extension(media_type) or ".bin"
+    return f"{message_id}-attachment-{index}{extension}"
+
+
+def _ag_ui_data_url(value: str) -> tuple[str, str]:
+    try:
+        header, payload = value.split(",", 1)
+        media_type = header[5:].split(";", 1)[0] or "application/octet-stream"
+        raw = (
+            base64.b64decode(payload, validate=True)
+            if ";base64" in header
+            else unquote_to_bytes(payload)
+        )
+    except (binascii.Error, ValueError, UnicodeError) as exc:
+        raise ValueError("AG-UI data URL is invalid") from exc
+    return media_type, base64.b64encode(raw).decode("ascii")
+
+
+def _with_raw_references(text: str, references: list[str]) -> str:
+    prefix = text.strip() or "Inspect the supplied raw inputs and complete the request."
+    return prefix + "\n\nRaw attachment references:\n" + "\n".join(
+        f"- {item}" for item in references
+    )
 
 
 class OpenWebUiProjectionAdapter:

@@ -6,7 +6,25 @@ import json
 from swaag.cli import _build_parser
 from swaag.communication import CommunicationService
 from swaag.heartbeat import watchdog_interval_seconds
+from swaag.protocol_adapters import AgUiProjectionAdapter
 from swaag.runtime import AgentRuntime
+
+
+def _ag_ui_input(*, run_id: str = "run-1", resume=None) -> dict:
+    payload = {
+        "threadId": "thread-1",
+        "runId": run_id,
+        "state": {},
+        "messages": [
+            {"id": "user-1", "role": "user", "content": "Complete the run."}
+        ],
+        "tools": [],
+        "context": [],
+        "forwardedProps": {},
+    }
+    if resume is not None:
+        payload["resume"] = resume
+    return payload
 
 
 def test_communication_serve_cli_accepts_config_defaults():
@@ -275,5 +293,290 @@ def test_communication_transport_serves_a2a_agent_card_and_jsonrpc(make_config):
         server.close()
         await server.wait_closed()
         service.workers.shutdown()
+
+    asyncio.run(exercise())
+
+
+def test_communication_transport_serves_durable_ag_ui_sse(
+    make_config, monkeypatch
+):
+    async def exercise() -> None:
+        config = make_config()
+        service = CommunicationService(AgentRuntime(config, model_client=object()))
+
+        def complete_without_model(worker_id: str):
+            service.workers.store.transition(
+                worker_id,
+                "queued",
+                expected={"created"},
+                event_type="worker_queued",
+            )
+            service.workers.store.transition(
+                worker_id,
+                "working",
+                expected={"queued"},
+                event_type="worker_started",
+            )
+            return service.workers.store.transition(
+                worker_id,
+                "completed",
+                expected={"working"},
+                result="exact AG-UI result",
+                event_type="worker_completed",
+            )
+
+        monkeypatch.setattr(service.workers, "start", complete_without_model)
+        server = await asyncio.start_server(service.handle_client, "127.0.0.1", 0)
+        port = server.sockets[0].getsockname()[1]
+
+        async def run_request(payload: dict) -> tuple[dict[str, str], list[dict]]:
+            body = json.dumps(payload).encode()
+            reader, writer = await asyncio.open_connection("127.0.0.1", port)
+            writer.write(
+                b"POST /ag-ui HTTP/1.1\r\n"
+                b"Host: localhost\r\n"
+                b"Accept: text/event-stream\r\n"
+                b"Content-Type: application/json\r\n"
+                + f"Content-Length: {len(body)}\r\n\r\n".encode()
+                + body
+            )
+            await writer.drain()
+            response = await reader.read()
+            writer.close()
+            await writer.wait_closed()
+            head, stream = response.split(b"\r\n\r\n", 1)
+            lines = head.decode().split("\r\n")
+            headers = {
+                name.casefold(): value.strip()
+                for name, value in (line.split(":", 1) for line in lines[1:])
+            }
+            events = [
+                json.loads(block.removeprefix(b"data: "))
+                for block in stream.split(b"\n\n")
+                if block.startswith(b"data: ")
+            ]
+            return headers, events
+
+        request = _ag_ui_input()
+        request["messages"][0]["content"] = [
+            {"type": "text", "text": "Complete the run."},
+            {
+                "type": "document",
+                "source": {
+                    "type": "data",
+                    "value": "ZXhhY3QgYnl0ZXM=",
+                    "mimeType": "application/pdf",
+                },
+                "metadata": {"filename": "facts.pdf"},
+            },
+        ]
+        headers, events = await run_request(request)
+        _duplicate_headers, duplicate_events = await run_request(request)
+        workers = service.workers.list()
+        attachments = service.workers.attachments(workers[0].worker_id)
+        bounds = service.store.protocol_message_bounds("ag_ui", "run-1")
+        server.close()
+        await server.wait_closed()
+        service.workers.shutdown()
+
+        assert headers["content-type"] == "text/event-stream"
+        assert headers["cache-control"] == "no-store"
+        assert headers["x-accel-buffering"] == "no"
+        assert [event["type"] for event in events].count("RUN_STARTED") == 1
+        assert events[0]["threadId"] == "thread-1"
+        assert events[0]["runId"] == "run-1"
+        assert events[0]["metadata"]["swaagDuplicateRun"] is False
+        assert events[-1]["type"] == "RUN_FINISHED"
+        assert events[-1]["threadId"] == "thread-1"
+        assert events[-1]["runId"] == "run-1"
+        assert events[-1]["result"] == "exact AG-UI result"
+        assert duplicate_events[0]["metadata"]["swaagDuplicateRun"] is True
+        assert duplicate_events[-1]["result"] == "exact AG-UI result"
+        assert len(workers) == 1
+        assert attachments[0].original_name == "facts.pdf"
+        assert attachments[0].source == "ag_ui"
+        assert attachments[0].size_bytes == len(b"exact bytes")
+        assert bounds is not None and bounds[3] is not None
+
+    asyncio.run(exercise())
+
+
+def test_ag_ui_resume_validates_and_resolves_the_durable_interrupt(
+    make_config, monkeypatch
+) -> None:
+    service = CommunicationService(AgentRuntime(make_config(), model_client=object()))
+
+    def require_input(worker_id: str):
+        service.workers.store.transition(
+            worker_id,
+            "queued",
+            expected={"created"},
+            event_type="worker_queued",
+        )
+        service.workers.store.transition(
+            worker_id,
+            "working",
+            expected={"queued"},
+            event_type="worker_started",
+        )
+        return service.workers.store.transition(
+            worker_id,
+            "input_required",
+            expected={"working"},
+            result="Provide the exact approval.",
+            event_type="worker_input_required",
+        )
+
+    monkeypatch.setattr(service.workers, "start", require_input)
+    first_record, _first_start, _first_end, _first_duplicate = service._ag_ui_begin(
+        AgUiProjectionAdapter().user_run(_ag_ui_input())
+    )
+    interrupt_event = next(
+        item
+        for item in reversed(service.workers.store.events(first_record.worker_id))
+        if item.event_type == "worker_input_required"
+    )
+    interrupt_id = f"{first_record.worker_id}-input-{interrupt_event.sequence}"
+    observed: dict[str, str] = {}
+
+    def resolve_without_model(worker_id: str, message: str, *, source: str, **_):
+        observed["message"] = message
+        observed["source"] = source
+        service.workers.store.transition(
+            worker_id,
+            "queued",
+            expected={"input_required"},
+            event_type="worker_resumed",
+        )
+        service.workers.store.transition(
+            worker_id,
+            "working",
+            expected={"queued"},
+            event_type="worker_started",
+        )
+        return service.workers.store.transition(
+            worker_id,
+            "completed",
+            expected={"working"},
+            result="completed after exact approval",
+            event_type="worker_completed",
+        )
+
+    monkeypatch.setattr(service.workers, "message", resolve_without_model)
+    resolved, second_start, _second_end, duplicate = service._ag_ui_begin(
+        AgUiProjectionAdapter().user_run(
+            _ag_ui_input(
+                run_id="run-2",
+                resume=[
+                    {
+                        "interruptId": interrupt_id,
+                        "status": "resolved",
+                        "payload": {"approved": True, "reason": "exact evidence"},
+                    }
+                ],
+            )
+        )
+    )
+    first_bounds = service.store.protocol_message_bounds("ag_ui", "run-1")
+    service.workers.shutdown()
+
+    assert resolved.status == "completed"
+    assert duplicate is False
+    assert observed["source"] == "ag_ui:run-2"
+    assert observed["message"] == (
+        'AG-UI interrupt response:\n{"approved":true,"reason":"exact evidence"}'
+    )
+    assert first_bounds is not None and first_bounds[3] == second_start
+
+
+def test_ag_ui_new_run_supersedes_old_stream_without_misattributing_events(
+    make_config, monkeypatch
+) -> None:
+    async def exercise() -> None:
+        service = CommunicationService(
+            AgentRuntime(make_config(), model_client=object())
+        )
+
+        def queue_without_model(worker_id: str):
+            return service.workers.store.transition(
+                worker_id,
+                "queued",
+                expected={"created"},
+                event_type="worker_queued",
+            )
+
+        def complete_redirect(worker_id: str, _message: str, **_):
+            service.workers.store.transition(
+                worker_id,
+                "working",
+                expected={"queued"},
+                event_type="worker_started",
+            )
+            return service.workers.store.transition(
+                worker_id,
+                "completed",
+                expected={"working"},
+                result="new run result",
+                event_type="worker_completed",
+            )
+
+        monkeypatch.setattr(service.workers, "start", queue_without_model)
+        monkeypatch.setattr(service.workers, "message", complete_redirect)
+        server = await asyncio.start_server(service.handle_client, "127.0.0.1", 0)
+        port = server.sockets[0].getsockname()[1]
+
+        async def connect(payload: dict):
+            body = json.dumps(payload).encode()
+            reader, writer = await asyncio.open_connection("127.0.0.1", port)
+            writer.write(
+                b"POST /ag-ui HTTP/1.1\r\n"
+                b"Host: localhost\r\n"
+                b"Accept: text/event-stream\r\n"
+                b"Content-Type: application/json\r\n"
+                + f"Content-Length: {len(body)}\r\n\r\n".encode()
+                + body
+            )
+            await writer.drain()
+            await reader.readuntil(b"\r\n\r\n")
+            first = json.loads(
+                (await reader.readuntil(b"\n\n")).removeprefix(b"data: ")
+            )
+            return reader, writer, first
+
+        old_reader, old_writer, old_started = await connect(_ag_ui_input())
+        new_reader, new_writer, new_started = await connect(
+            _ag_ui_input(run_id="run-2")
+        )
+        old_tail = await asyncio.wait_for(old_reader.read(), timeout=2)
+        new_tail = await asyncio.wait_for(new_reader.read(), timeout=2)
+        old_events = [
+            json.loads(block.removeprefix(b"data: "))
+            for block in old_tail.split(b"\n\n")
+            if block.startswith(b"data: ")
+        ]
+        new_events = [
+            json.loads(block.removeprefix(b"data: "))
+            for block in new_tail.split(b"\n\n")
+            if block.startswith(b"data: ")
+        ]
+        old_writer.close()
+        new_writer.close()
+        await old_writer.wait_closed()
+        await new_writer.wait_closed()
+        server.close()
+        await server.wait_closed()
+        first_bounds = service.store.protocol_message_bounds("ag_ui", "run-1")
+        second_bounds = service.store.protocol_message_bounds("ag_ui", "run-2")
+        service.workers.shutdown()
+
+        assert old_started["runId"] == "run-1"
+        assert old_events[-1]["type"] == "RUN_ERROR"
+        assert old_events[-1]["code"] == "SWAAG_RUN_SUPERSEDED"
+        assert new_started["runId"] == "run-2"
+        assert new_events[-1]["type"] == "RUN_FINISHED"
+        assert new_events[-1]["runId"] == "run-2"
+        assert new_events[-1]["result"] == "new run result"
+        assert first_bounds is not None and second_bounds is not None
+        assert first_bounds[3] == second_bounds[2]
 
     asyncio.run(exercise())

@@ -4,7 +4,7 @@ import sqlite3
 
 import pytest
 
-from swaag.communication import CommunicationStore
+from swaag.communication import CommunicationStore, _COMMUNICATION_STORE_MIGRATIONS
 from swaag.embedding_index import DerivedEmbeddingIndex
 from swaag.history import HistoryStore
 from swaag.history_archive import HistoryArchiveStore
@@ -95,13 +95,45 @@ def test_all_runtime_sqlite_stores_record_explicit_schema_versions(tmp_path) -> 
     preemption = ModelPreemptionCoordinator(sessions)
     embeddings = DerivedEmbeddingIndex(sessions, _Embeddings())
 
-    assert _version(communication.path) == 2
+    assert _version(communication.path) == 3
     assert _version(workers.path) == 3
     assert _version(history.sqlite_history_path()) == 1
     assert _version(archives.catalog_path) == 1
     assert _version(inference.path) == 1
     assert _version(preemption.path) == 1
     assert _version(embeddings.path) == 1
+
+
+def test_communication_stream_bounds_migration_preserves_protocol_mappings(
+    tmp_path,
+) -> None:
+    sessions = tmp_path / "sessions"
+    sessions.mkdir()
+    path = sessions / "communication.sqlite3"
+    with sqlite3.connect(path) as connection:
+        apply_sqlite_migrations(
+            connection,
+            store_name="communication store",
+            migrations=_COMMUNICATION_STORE_MIGRATIONS[:2],
+        )
+        connection.execute(
+            """
+            INSERT INTO protocol_messages(
+                protocol, external_message_id, external_context_id,
+                worker_id, created_at
+            ) VALUES ('open_webui', 'message-1', 'chat-1', 'worker-1', 'now')
+            """
+        )
+
+    store = CommunicationStore(sessions)
+
+    assert _version(path) == 3
+    assert store.protocol_message_bounds("open_webui", "message-1") == (
+        "chat-1",
+        "worker-1",
+        0,
+        None,
+    )
 
 
 def test_worker_completion_mode_migration_preserves_existing_rows(tmp_path) -> None:
