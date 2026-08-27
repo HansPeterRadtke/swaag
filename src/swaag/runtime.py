@@ -5816,6 +5816,75 @@ class AgentRuntime:
             raise HistoryInvariantError(
                 f"Tool {decision.tool_name} completed without required generated events: {', '.join(sorted(missing))}"
             )
+        effect_verification = None
+        if tool.effective_kind(invocation.validated_input) == "side_effect":
+            try:
+                effect_verification = tool.verify_effect(result, context.environment)
+            except Exception as exc:  # noqa: BLE001 - verification failure must remain durable evidence.
+                effect_verification = (
+                    False,
+                    {
+                        "reason": "effect_verifier_error",
+                        "error": str(exc),
+                        "error_type": type(exc).__name__,
+                    },
+                )
+        if effect_verification is not None:
+            effect_passed, raw_evidence = effect_verification
+            evidence = to_jsonable(raw_evidence)
+            if not isinstance(evidence, dict):
+                evidence = {"value": evidence}
+            effect_event_type = (
+                "tool_effect_verified"
+                if effect_passed
+                else "tool_effect_verification_failed"
+            )
+            guard.record(
+                effect_event_type,
+                {
+                    "call_id": call_id,
+                    "tool_name": tool.name,
+                    "evidence": evidence,
+                },
+            )
+            if not effect_passed:
+                error_payload = {
+                    "call_id": call_id,
+                    "tool_name": decision.tool_name,
+                    "tool_input": decision.tool_input,
+                    "error": (
+                        "Persisted tool effect failed post-execution verification: "
+                        + stable_json_dumps(evidence, indent=None)
+                    ),
+                    "error_type": "ToolEffectVerificationError",
+                }
+                tool_error_event = guard.record("tool_error", error_payload)
+                guard.require_any(
+                    "tool_called",
+                    "tool_effect_verification_failed",
+                    "tool_error",
+                )
+                guard.ensure_progress()
+                self._record_message(
+                    state,
+                    Message(
+                        role="tool",
+                        name=decision.tool_name,
+                        content=(
+                            "tool_error: "
+                            + stable_json_dumps(error_payload, indent=2)
+                        ),
+                        created_at=utc_now_iso(),
+                        metadata={
+                            **error_payload,
+                            "source_event_sequence": tool_error_event.sequence,
+                            "source_event_hash": tool_error_event.hash,
+                            "source_event_type": tool_error_event.event_type,
+                            "source_event_session_id": tool_error_event.session_id,
+                        },
+                    ),
+                )
+                return None, error_payload
         nested_source_references = result.output.get("source_event_references", [])
         if not isinstance(nested_source_references, list):
             nested_source_references = []

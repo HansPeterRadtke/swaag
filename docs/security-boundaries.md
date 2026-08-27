@@ -13,6 +13,7 @@ Runtime state belongs under the configured sessions root. Session-scoped filesys
 - `tools.enabled` is the capability allowlist. Discovery never grants a capability that dispatch would reject.
 - `allow_stateful_tools` and `allow_side_effect_tools` are independent mechanical gates, rechecked against the validated operation's effective kind.
 - `edit_text` and `write_file` additionally require `editor.allow_writes`; both stay inside the workspace and honor an exact resolved-path allowlist when configured.
+- Side-effect tools with a deterministic effect verifier are checked after their history-backed writes are committed and before a successful tool result is exposed. Failed verification is durable failure evidence and the action loop cannot treat the call as successful.
 - Read and write path checks resolve symlinks before comparing roots. Runtime-owned session/cache snapshots are excluded from ordinary workspace discovery.
 - Raw attachments are stored without automatic parsing. Selected extraction runs the configured all2text subprocess on a private copied source and accepts only a manifest output path below the extraction root. Parser and provider safety still depends on the configured extractor and operating-system isolation.
 - MCP, A2A, AG-UI, Open WebUI, and direct task calls are adapters. They do not bypass registry, worker, attachment, or history checks.

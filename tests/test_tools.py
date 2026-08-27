@@ -8,6 +8,7 @@ import pytest
 
 from swaag.environment.environment import AgentEnvironment
 from swaag.notes import make_note
+from swaag.runtime import AgentRuntime
 from swaag.tools.base import (
     SemanticCallContextOverflow,
     Tool,
@@ -487,6 +488,73 @@ def test_write_file_reports_and_verifies_persisted_hash(make_config, tmp_path: P
     assert passed is True
     assert evidence["persisted"] is True
     assert evidence["real_change"] is True
+
+
+def test_runtime_records_successful_persisted_effect_verification(make_config, tmp_path: Path) -> None:
+    target = tmp_path / "runtime-write.txt"
+    target.write_text("before\n", encoding="utf-8")
+    config = make_config(
+        tools__enabled=["write_file"],
+        tools__allow_side_effect_tools=True,
+        editor__allow_writes=True,
+        editor__allowed_write_paths=[str(target)],
+    )
+    runtime = AgentRuntime(config, model_client=object())
+
+    run = runtime.execute_tool_once(
+        "write_file",
+        {"path": str(target), "content": "after\n", "create": False},
+    )
+
+    assert run.error is None
+    assert run.tool_result is not None
+    events = runtime.history.read_history(run.session_id)
+    verification = [
+        event for event in events if event.event_type == "tool_effect_verified"
+    ]
+    assert len(verification) == 1
+    assert verification[0].payload["tool_name"] == "write_file"
+    assert verification[0].payload["evidence"]["persisted"] is True
+    assert target.read_text(encoding="utf-8") == "after\n"
+
+
+def test_runtime_fails_closed_when_persisted_effect_verification_fails(
+    make_config,
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    target = tmp_path / "runtime-write-failure.txt"
+    target.write_text("before\n", encoding="utf-8")
+    config = make_config(
+        tools__enabled=["write_file"],
+        tools__allow_side_effect_tools=True,
+        editor__allow_writes=True,
+        editor__allowed_write_paths=[str(target)],
+    )
+    runtime = AgentRuntime(config, model_client=object())
+    write_tool = runtime.tools.get("write_file")
+    monkeypatch.setattr(
+        write_tool,
+        "verify_effect",
+        lambda _result, _environment: (
+            False,
+            {"reason": "simulated_persistence_mismatch"},
+        ),
+    )
+
+    run = runtime.execute_tool_once(
+        "write_file",
+        {"path": str(target), "content": "after\n", "create": False},
+    )
+
+    assert run.tool_result is None
+    assert run.error is not None
+    assert run.error["error_type"] == "ToolEffectVerificationError"
+    events = runtime.history.read_history(run.session_id)
+    event_types = [event.event_type for event in events]
+    assert "tool_effect_verification_failed" in event_types
+    assert "tool_error" in event_types
+    assert "tool_result" not in event_types
 
 
 def test_write_file_effect_rejects_noop_write(make_config, tmp_path: Path) -> None:
