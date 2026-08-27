@@ -752,6 +752,37 @@ class AgentRuntime:
                 )
                 continue
 
+            latest_pending_payloads = self.history.list_pending_control_messages(
+                state.session_id
+            )
+            compiled_control_ids = [
+                str(item.get("control_id", "")) for item in pending_payloads
+            ]
+            latest_control_ids = [
+                str(item.get("control_id", ""))
+                for item in latest_pending_payloads
+            ]
+            if latest_control_ids != compiled_control_ids:
+                recovery_feedback = (
+                    "New user control arrived after this action's context snapshot. "
+                    "The stale action was not executed. Reconcile every pending control "
+                    "semantically with the original objective and current evidence before "
+                    "choosing the next action."
+                )
+                self.history.record_event(
+                    state,
+                    "agent_action_rejected",
+                    {
+                        "action_index": action_index,
+                        "validation_attempt": 0,
+                        "reason": recovery_feedback,
+                        "compiled_control_ids": compiled_control_ids,
+                        "current_control_ids": latest_control_ids,
+                        "stale_action": asdict(selected_action),
+                    },
+                )
+                continue
+
             # Output starvation applies to the call that exhibited it. A
             # successful complete action restores full-fidelity-first admission
             # for the next independently compiled action.
@@ -934,20 +965,53 @@ class AgentRuntime:
                         },
                     )
 
+                interrupted_by_control = False
                 for tool_call_index, tool_call in enumerate(selected_action.tool_calls, start=1):
+                    pending_during_action = self.history.list_pending_control_messages(
+                        state.session_id
+                    )
+                    if pending_during_action:
+                        interrupted_by_control = True
+                        self._record_tool_action_interruption(
+                            state,
+                            action_index=action_index,
+                            completed_tool_calls=tool_call_index - 1,
+                            total_tool_calls=len(selected_action.tool_calls),
+                            pending_payloads=pending_during_action,
+                        )
+                        break
                     tool = self.tools.get(tool_call.tool_name)
                     effective_kind = tool.effective_kind(tool_call.arguments)
                     repeated_observation_is_redundant = tool.repeated_observation_is_redundant
                     self._heartbeat(state, phase="tool_execution", detail=f"running {tool_call.tool_name}", active_kind="tool", active_id=tool_call.tool_name)
-                    result = self._execute_tool(
-                        state,
-                        ToolDecision(
-                            action="call_tool",
-                            response=selected_action.assistant_message,
-                            tool_name=tool_call.tool_name,
-                            tool_input=tool_call.arguments,
-                        ),
-                    )
+                    try:
+                        result = self._execute_tool(
+                            state,
+                            ToolDecision(
+                                action="call_tool",
+                                response=selected_action.assistant_message,
+                                tool_name=tool_call.tool_name,
+                                tool_input=tool_call.arguments,
+                            ),
+                        )
+                    except ModelCallStateChanged:
+                        self._refresh_state_from_history(state)
+                        pending_during_action = (
+                            self.history.list_pending_control_messages(
+                                state.session_id
+                            )
+                        )
+                        if not pending_during_action:
+                            raise
+                        interrupted_by_control = True
+                        self._record_tool_action_interruption(
+                            state,
+                            action_index=action_index,
+                            completed_tool_calls=tool_call_index - 1,
+                            total_tool_calls=len(selected_action.tool_calls),
+                            pending_payloads=pending_during_action,
+                        )
+                        break
                     tool_calls_used += 1
                     if repeated_observation_is_redundant:
                         observation_signatures_since_state_change.add(
@@ -991,18 +1055,74 @@ class AgentRuntime:
                             "success": result is not None,
                         },
                     )
+                    pending_during_action = self.history.list_pending_control_messages(
+                        state.session_id
+                    )
+                    if pending_during_action:
+                        interrupted_by_control = True
+                        self._record_tool_action_interruption(
+                            state,
+                            action_index=action_index,
+                            completed_tool_calls=tool_call_index,
+                            total_tool_calls=len(selected_action.tool_calls),
+                            pending_payloads=pending_during_action,
+                        )
+                        break
+                if interrupted_by_control:
+                    recovery_feedback = (
+                        "A user control arrived while the accepted action was executing. "
+                        "Completed tool evidence remains authoritative, but unstarted tool calls "
+                        "were abandoned. Reconcile every pending control semantically before "
+                        "choosing another action."
+                    )
+                continue
+
+            if self.history.list_pending_control_messages(state.session_id):
+                recovery_feedback = (
+                    "A new user control arrived after the action execution boundary. "
+                    "Do not finalize the previous candidate; reconcile the complete pending "
+                    "control set and continue from current authoritative state."
+                )
+                self.history.record_event(
+                    state,
+                    "agent_action_rejected",
+                    {
+                        "action_index": action_index,
+                        "validation_attempt": 0,
+                        "reason": recovery_feedback,
+                    },
+                )
                 continue
 
             has_blocking_question = any(question.criticality == "blocking" for question in selected_action.questions)
             if has_blocking_question:
                 self._heartbeat(state, phase="waiting_for_user", detail="blocking user question", active_kind="question", active_id=str(action_index))
-            completion = (
-                {"complete": True, "reason": "blocking user input requested", "remaining_work": []}
-                if has_blocking_question
-                else self._evaluate_completion(state, original_request=original_request, selected_action=selected_action, tool_results=tool_results)
-                if self.config.runtime.completion_evaluation_enabled
-                else {"complete": True, "reason": "completion evaluation disabled", "remaining_work": []}
-            )
+            try:
+                completion = (
+                    {"complete": True, "reason": "blocking user input requested", "remaining_work": []}
+                    if has_blocking_question
+                    else self._evaluate_completion(state, original_request=original_request, selected_action=selected_action, tool_results=tool_results)
+                    if self.config.runtime.completion_evaluation_enabled
+                    else {"complete": True, "reason": "completion evaluation disabled", "remaining_work": []}
+                )
+            except ModelCallStateChanged:
+                self._refresh_state_from_history(state)
+                recovery_feedback = (
+                    "Completion evaluation was superseded by a user control. Reconcile the "
+                    "updated authoritative history and continue before deciding completion."
+                )
+                self.history.record_event(
+                    state,
+                    "completion_rejected",
+                    {
+                        "action_index": action_index,
+                        "reason": recovery_feedback,
+                        "remaining_work": [
+                            "Process every pending user control before completion."
+                        ],
+                    },
+                )
+                continue
             if not completion["complete"]:
                 remaining = [str(item).strip() for item in completion.get("remaining_work", []) if str(item).strip()]
                 recovery_feedback = (
@@ -1012,6 +1132,24 @@ class AgentRuntime:
                     + "Continue with a materially useful next action; do not merely restate the candidate final answer."
                 )
                 self.history.record_event(state, "completion_rejected", {"action_index": action_index, "reason": str(completion.get("reason", "")), "remaining_work": remaining})
+                continue
+
+            if self.history.list_pending_control_messages(state.session_id):
+                recovery_feedback = (
+                    "A user control arrived after completion evaluation. The candidate result "
+                    "is provisional; reconcile the pending control before committing a terminal result."
+                )
+                self.history.record_event(
+                    state,
+                    "completion_rejected",
+                    {
+                        "action_index": action_index,
+                        "reason": recovery_feedback,
+                        "remaining_work": [
+                            "Process every pending user control before completion."
+                        ],
+                    },
+                )
                 continue
 
             self.history.record_event(
@@ -1054,6 +1192,36 @@ class AgentRuntime:
                 )
             )
         return visible
+
+    def _record_tool_action_interruption(
+        self,
+        state: SessionState,
+        *,
+        action_index: int,
+        completed_tool_calls: int,
+        total_tool_calls: int,
+        pending_payloads: list[dict[str, Any]],
+    ) -> None:
+        self.history.record_event(
+            state,
+            "agent_action_interrupted",
+            {
+                "action_index": action_index,
+                "phase": "tool_execution",
+                "completed_tool_calls": completed_tool_calls,
+                "abandoned_tool_calls": max(
+                    0, total_tool_calls - completed_tool_calls
+                ),
+                "pending_control_ids": [
+                    str(item.get("control_id", ""))
+                    for item in pending_payloads
+                ],
+                "reason": (
+                    "User control arrived during action execution; completed evidence was "
+                    "retained and unstarted calls were invalidated."
+                ),
+            },
+        )
 
     def _consume_pending_control_messages(
         self,
@@ -2207,6 +2375,8 @@ class AgentRuntime:
                 detail=str(exc),
             )
             raise
+        except ModelCallStateChanged:
+            raise
         except Exception as exc:
             self._heartbeat(
                 state,
@@ -2484,6 +2654,8 @@ class AgentRuntime:
                 phase="cancelled",
                 detail=str(exc),
             )
+            raise
+        except ModelCallStateChanged:
             raise
         except Exception as exc:
             self._heartbeat(
@@ -5814,6 +5986,8 @@ class AgentRuntime:
             for event in tool.pre_execute_events(invocation.validated_input, context):
                 guard.record(event.event_type, event.payload, metadata=event.metadata)
             result = self.tools.execute_prepared(tool, context, invocation)
+        except (ModelCallStateChanged, RunCancellationRequested):
+            raise
         except Exception as exc:
             error_payload = {
                 "call_id": call_id,

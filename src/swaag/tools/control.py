@@ -62,7 +62,7 @@ class AgentStatusLookupTool(Tool):
 
 class AgentControlTool(Tool):
     name = "agent_control"
-    description = "Queue a durable control/instruction for another SWAAG session. Stop/pause controls receive higher mechanical priority than ordinary messages."
+    description = "Queue an exact, ordered, durable control/instruction for another SWAAG session."
     usage_guidance = "Use only when the user asks to redirect, pause, stop, or send an instruction to the target agent. The control is durable and correlated by control_id."
     kind = "side_effect"
     input_schema = {

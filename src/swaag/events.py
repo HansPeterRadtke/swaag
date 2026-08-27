@@ -76,6 +76,7 @@ ALLOWED_EVENT_TYPES = frozenset(
         "action_selected",
         "action_selection_resolved",
         "agent_action_rejected",
+        "agent_action_interrupted",
         "agent_action_selected",
         "agent_status",
         "agent_question",
@@ -506,6 +507,16 @@ REQUIRED_PAYLOAD_KEYS: dict[str, frozenset[str]] = {
     "action_selected": frozenset({"selected_action", "ready_step_ids", "scores", "strategy", "stop_reason"}),
     "action_selection_resolved": frozenset({"selected_action", "candidates", "source"}),
     "agent_action_rejected": frozenset({"action_index", "validation_attempt", "reason"}),
+    "agent_action_interrupted": frozenset(
+        {
+            "action_index",
+            "phase",
+            "completed_tool_calls",
+            "abandoned_tool_calls",
+            "pending_control_ids",
+            "reason",
+        }
+    ),
     "agent_action_selected": frozenset({"action_index", "action", "occurrence"}),
     "agent_status": frozenset({"action_index", "situation", "action", "reason", "importance", "importance_rank"}),
     "agent_question": frozenset({"action_index", "question", "criticality", "reason", "assumption_if_unanswered"}),

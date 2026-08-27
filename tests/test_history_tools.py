@@ -173,7 +173,7 @@ def test_sqlite_wal_fts_is_durable_index_for_exact_history(make_config, tmp_path
     assert any("Blue Heron" in item["preview"] for item in details["matches"])
 
 
-def test_sqlite_control_priority_and_processed_idempotency(make_config, tmp_path: Path) -> None:
+def test_sqlite_controls_preserve_delivery_order_and_processed_idempotency(make_config, tmp_path: Path) -> None:
     config = make_config()
     config.sessions.root = tmp_path / "sessions"
     store = HistoryStore(config.sessions.root)
@@ -182,7 +182,8 @@ def test_sqlite_control_priority_and_processed_idempotency(make_config, tmp_path
     pause = store.enqueue_control_message(state.session_id, "pause", control_id="control_pause")
     stop = store.enqueue_control_message(state.session_id, "stop now", control_id="control_stop")
     pending = store.list_pending_control_messages(state.session_id)
-    assert [item["control_id"] for item in pending] == [stop["control_id"], pause["control_id"], ordinary["control_id"]]
+    assert [item["control_id"] for item in pending] == [ordinary["control_id"], pause["control_id"], stop["control_id"]]
+    assert {item["priority"] for item in pending} == {0}
     store.mark_control_message_processed(state.session_id, stop["control_id"])
     store.enqueue_control_message(state.session_id, "stop now", control_id=stop["control_id"])
     assert stop["control_id"] not in {item["control_id"] for item in store.list_pending_control_messages(state.session_id)}

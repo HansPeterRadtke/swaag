@@ -447,11 +447,18 @@ def test_pending_user_intervention_is_verbatim_on_next_model_call(make_config) -
 
     observed: dict[str, str] = {}
 
-    def finish(payload: dict[str, Any]) -> str:
+    def reconciled(payload: dict[str, Any]) -> str:
         observed["prompt"] = str(payload["prompt"])
+        return _action(
+            tool_calls=[("calculator", {"expression": "6 * 7"})],
+            continue_loop=True,
+        )
+
+    def finish(payload: dict[str, Any]) -> str:
+        observed["final_prompt"] = str(payload["prompt"])
         return _action(message="42. The additional instruction arrived while I was working.")
 
-    runtime, client = _runtime(make_config, [first, finish])
+    runtime, client = _runtime(make_config, [first, reconciled, finish])
     state = runtime.create_or_load_session()
     holder.update(runtime=runtime, state=state)
 
@@ -459,12 +466,108 @@ def test_pending_user_intervention_is_verbatim_on_next_model_call(make_config) -
 
     assert result.assistant_text.startswith("42")
     assert intervention in observed["prompt"]
-    assert '"result": 42' in observed["prompt"]
+    assert '"result": 42' in observed["final_prompt"]
     assert runtime.history.list_pending_control_messages(state.session_id) == []
     events = runtime.history.read_history(state.session_id)
     processed = [event for event in events if event.event_type == "control_message_processed"]
     assert [event.payload["message"] for event in processed] == [intervention]
-    assert [item["contract"] for item in client.requests] == ["agent_action", "agent_action"]
+    assert [item["contract"] for item in client.requests] == [
+        "agent_action",
+        "agent_action",
+        "agent_action",
+    ]
+    rejected = [
+        event
+        for event in events
+        if event.event_type == "agent_action_rejected"
+        and "New user control arrived" in str(event.payload.get("reason", ""))
+    ]
+    assert len(rejected) == 1
+
+
+def test_multiple_controls_reach_semantic_reconciliation_in_delivery_order(
+    make_config,
+) -> None:
+    first = "Prefer the concise option if it remains accurate."
+    second = "Do not omit any caveat needed for correctness."
+    observed: dict[str, str] = {}
+
+    def reconcile(payload: dict[str, Any]) -> str:
+        observed["prompt"] = str(payload["prompt"])
+        return _action(message="A concise answer with the required caveat.")
+
+    runtime, _client = _runtime(make_config, [reconcile])
+    state = runtime.create_or_load_session()
+    runtime.history.enqueue_control_message(state.session_id, first, source="test")
+    runtime.history.enqueue_control_message(state.session_id, second, source="test")
+
+    result = runtime.run_turn_in_session(state, "Return the best supported answer.")
+
+    assert result.assistant_text.startswith("A concise answer")
+    assert observed["prompt"].index(first) < observed["prompt"].index(second)
+    processed = [
+        event.payload["message"]
+        for event in runtime.history.read_history(state.session_id)
+        if event.event_type == "control_message_processed"
+    ]
+    assert processed == [first, second]
+
+
+def test_control_during_tool_action_preserves_completed_evidence_and_abandons_rest(
+    make_config,
+) -> None:
+    intervention = "Stop the remaining planned calls and report the evidence already obtained."
+    observed: dict[str, str] = {}
+
+    def finish(payload: dict[str, Any]) -> str:
+        observed["prompt"] = str(payload["prompt"])
+        return _action(message="The completed calculation returned 2; the remaining call was abandoned.")
+
+    runtime, _client = _runtime(
+        make_config,
+        [
+            _action(
+                tool_calls=[
+                    ("calculator", {"expression": "1 + 1"}),
+                    ("calculator", {"expression": "20 + 22"}),
+                ],
+                continue_loop=True,
+            ),
+            finish,
+        ],
+    )
+    state = runtime.create_or_load_session()
+    execute_tool = runtime._execute_tool
+    calls = 0
+
+    def execute_and_intervene(*args, **kwargs):
+        nonlocal calls
+        calls += 1
+        result = execute_tool(*args, **kwargs)
+        if calls == 1:
+            runtime.history.enqueue_control_message(
+                state.session_id,
+                intervention,
+                source="test",
+            )
+        return result
+
+    runtime._execute_tool = execute_and_intervene  # type: ignore[method-assign]
+    result = runtime.run_turn_in_session(state, "Run both calculations unless redirected.")
+
+    assert result.assistant_text.startswith("The completed calculation returned 2")
+    assert calls == 1
+    assert [item.output["result"] for item in result.tool_results] == [2]
+    assert intervention in observed["prompt"]
+    assert '"result": 2' in observed["prompt"]
+    interrupted = [
+        event
+        for event in runtime.history.read_history(state.session_id)
+        if event.event_type == "agent_action_interrupted"
+    ]
+    assert len(interrupted) == 1
+    assert interrupted[0].payload["completed_tool_calls"] == 1
+    assert interrupted[0].payload["abandoned_tool_calls"] == 1
 
 
 def test_identical_model_tool_response_is_rejected_for_recovery(make_config) -> None:

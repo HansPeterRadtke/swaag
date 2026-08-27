@@ -3,6 +3,7 @@ from __future__ import annotations
 import json
 import os
 import sqlite3
+import threading
 import time
 from concurrent.futures import Future, ThreadPoolExecutor
 from dataclasses import asdict, dataclass
@@ -10,7 +11,7 @@ from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any, Iterable
 
-from swaag.preemption import RunCancellationRequested
+from swaag.preemption import ModelCallStateChanged, RunCancellationRequested
 from swaag.runtime import AgentRuntime
 from swaag.sqlite_schema import apply_sqlite_migrations
 from swaag.structured_output import (
@@ -558,6 +559,7 @@ class WorkerManager:
             max_workers=max(1, int(max_workers)), thread_name_prefix="swaag-worker"
         )
         self._futures: dict[str, Future[None]] = {}
+        self._control_transition_lock = threading.RLock()
 
     def create(
         self,
@@ -614,19 +616,20 @@ class WorkerManager:
         return queued
 
     def resume(self, worker_id: str, *, message: str | None = None) -> WorkerRecord:
-        current = self.store.get(worker_id)
-        if current.archived_at is not None:
-            raise ValueError(f"Worker {worker_id} is archived")
-        if current.status not in WORKER_RESUMABLE_STATES:
-            raise ValueError(f"Worker {worker_id} cannot resume from {current.status}")
-        if message is not None and message.strip():
-            self._queue_message(current, message.strip(), source="worker_resume")
-        queued = self.store.transition(
-            worker_id,
-            "queued",
-            expected=WORKER_RESUMABLE_STATES,
-            event_type="worker_resumed",
-        )
+        with self._control_transition_lock:
+            current = self.store.get(worker_id)
+            if current.archived_at is not None:
+                raise ValueError(f"Worker {worker_id} is archived")
+            if current.status not in WORKER_RESUMABLE_STATES:
+                raise ValueError(f"Worker {worker_id} cannot resume from {current.status}")
+            if message is not None and message.strip():
+                self._queue_message(current, message.strip(), source="worker_resume")
+            queued = self.store.transition(
+                worker_id,
+                "queued",
+                expected=WORKER_RESUMABLE_STATES,
+                event_type="worker_resumed",
+            )
         self._submit(worker_id)
         return queued
 
@@ -638,13 +641,15 @@ class WorkerManager:
         source: str = "worker_control",
         resume_if_idle: bool = True,
     ) -> WorkerRecord:
-        current = self.store.get(worker_id)
-        if current.archived_at is not None:
-            raise ValueError(f"Worker {worker_id} is archived")
-        if current.status == "cancellation_requested":
-            raise ValueError(f"Worker {worker_id} is being canceled")
-        self._queue_message(current, message, source=source)
-        if current.status == "working":
+        with self._control_transition_lock:
+            current = self.store.get(worker_id)
+            if current.archived_at is not None:
+                raise ValueError(f"Worker {worker_id} is archived")
+            if current.status == "cancellation_requested":
+                raise ValueError(f"Worker {worker_id} is being canceled")
+            self._queue_message(current, message, source=source)
+            status_at_delivery = current.status
+        if status_at_delivery == "working":
             preemption = self.runtime.preemption.request_preemption(
                 current.session_id, message, source=source
             )
@@ -666,9 +671,12 @@ class WorkerManager:
                     target_changed=True,
                     reply="worker control queued",
                 )
-        elif resume_if_idle and current.status in WORKER_RESUMABLE_STATES:
+        elif resume_if_idle and status_at_delivery in WORKER_RESUMABLE_STATES:
             return self.resume(worker_id)
-        return self.store.get(worker_id)
+        latest = self.store.get(worker_id)
+        if resume_if_idle and latest.status in WORKER_RESUMABLE_STATES:
+            return self.resume(worker_id)
+        return latest
 
     def cancel(self, worker_id: str, *, reason: str = "user requested cancellation") -> WorkerRecord:
         current = self.store.get(worker_id)
@@ -1025,6 +1033,38 @@ class WorkerManager:
             raise RuntimeError(f"Worker {worker_id} already has a local run")
         self._futures[worker_id] = self._executor.submit(self._run_worker, worker_id)
 
+    def _continue_for_pending_controls(
+        self,
+        worker_id: str,
+        working: WorkerRecord,
+        *,
+        phase: str,
+        provisional_result: str,
+    ) -> WorkerRecord | None:
+        """Atomically keep a local worker active when a delivered control is pending."""
+        with self._control_transition_lock:
+            pending = self.runtime.history.list_pending_control_messages(
+                working.session_id
+            )
+            if not pending:
+                return None
+            self._sync_history_events(working)
+            return self.store.transition(
+                worker_id,
+                "working",
+                expected={"working"},
+                result=provisional_result,
+                increment_run_count=True,
+                event_type="worker_control_continuation_started",
+                event_payload={
+                    "phase": phase,
+                    "provisional": True,
+                    "pending_control_ids": [
+                        str(item.get("control_id", "")) for item in pending
+                    ],
+                },
+            )
+
     def _run_worker(self, worker_id: str) -> None:
         queued = self.store.get(worker_id)
         if queued.status == "cancellation_requested":
@@ -1085,6 +1125,15 @@ class WorkerManager:
                     return
                 if latest.status != "working":
                     return
+                continued = self._continue_for_pending_controls(
+                    worker_id,
+                    working,
+                    phase="worker_result",
+                    provisional_result=result.assistant_text,
+                )
+                if continued is not None:
+                    working = continued
+                    continue
                 blocking = any(
                     event.event_type == "agent_question"
                     and event.payload.get("criticality") == "blocking"
@@ -1137,12 +1186,24 @@ class WorkerManager:
 
                 presentations = None
                 if working.presentation_modes:
-                    presentations = self.runtime.generate_response_presentations(
-                        state,
-                        original_request=working.objective,
-                        assistant_message=result.assistant_text,
-                        modes=working.presentation_modes,
-                    )
+                    try:
+                        presentations = self.runtime.generate_response_presentations(
+                            state,
+                            original_request=working.objective,
+                            assistant_message=result.assistant_text,
+                            modes=working.presentation_modes,
+                        )
+                    except ModelCallStateChanged:
+                        continued = self._continue_for_pending_controls(
+                            worker_id,
+                            working,
+                            phase="response_presentation",
+                            provisional_result=result.assistant_text,
+                        )
+                        if continued is None:
+                            raise
+                        working = continued
+                        continue
                     latest = self.store.get(worker_id)
                     if latest.status == "cancellation_requested":
                         self._sync_history_events(working)
@@ -1157,16 +1218,37 @@ class WorkerManager:
                             },
                         )
                         return
+                    continued = self._continue_for_pending_controls(
+                        worker_id,
+                        working,
+                        phase="response_presentation",
+                        provisional_result=result.assistant_text,
+                    )
+                    if continued is not None:
+                        working = continued
+                        continue
 
                 structured_output = None
                 if output_spec is not None:
-                    semantic_output = self.runtime.generate_caller_structured_output(
-                        state,
-                        original_request=working.objective,
-                        assistant_message=result.assistant_text,
-                        tool_results=result.tool_results,
-                        semantic_schema=output_spec.semantic_schema,
-                    )
+                    try:
+                        semantic_output = self.runtime.generate_caller_structured_output(
+                            state,
+                            original_request=working.objective,
+                            assistant_message=result.assistant_text,
+                            tool_results=result.tool_results,
+                            semantic_schema=output_spec.semantic_schema,
+                        )
+                    except ModelCallStateChanged:
+                        continued = self._continue_for_pending_controls(
+                            worker_id,
+                            working,
+                            phase="caller_structured_output",
+                            provisional_result=result.assistant_text,
+                        )
+                        if continued is None:
+                            raise
+                        working = continued
+                        continue
                     structured_output = merge_caller_output(
                         output_spec,
                         semantic_output,
@@ -1194,21 +1276,40 @@ class WorkerManager:
                             },
                         )
                         return
-                self._sync_history_events(working)
-                terminal_payload = {}
-                if structured_output is not None:
-                    terminal_payload["structured_output"] = structured_output
-                if presentations is not None:
-                    terminal_payload["presentations"] = presentations
-                self.store.transition(
-                    worker_id,
-                    "completed",
-                    expected={"working"},
-                    result=result.assistant_text,
-                    event_type="worker_completed",
-                    event_payload=terminal_payload or None,
-                )
-                return
+                    continued = self._continue_for_pending_controls(
+                        worker_id,
+                        working,
+                        phase="caller_structured_output",
+                        provisional_result=result.assistant_text,
+                    )
+                    if continued is not None:
+                        working = continued
+                        continue
+                with self._control_transition_lock:
+                    continued = self._continue_for_pending_controls(
+                        worker_id,
+                        working,
+                        phase="terminal_commit",
+                        provisional_result=result.assistant_text,
+                    )
+                    if continued is None:
+                        self._sync_history_events(working)
+                        terminal_payload = {}
+                        if structured_output is not None:
+                            terminal_payload["structured_output"] = structured_output
+                        if presentations is not None:
+                            terminal_payload["presentations"] = presentations
+                        self.store.transition(
+                            worker_id,
+                            "completed",
+                            expected={"working"},
+                            result=result.assistant_text,
+                            event_type="worker_completed",
+                            event_payload=terminal_payload or None,
+                        )
+                        return
+                working = continued
+                continue
         except RunCancellationRequested as exc:
             error = str(exc)
             try:

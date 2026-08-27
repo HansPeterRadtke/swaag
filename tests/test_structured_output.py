@@ -25,6 +25,24 @@ def _closed(properties: dict[str, dict[str, Any]]) -> dict[str, Any]:
     }
 
 
+def _worker_action(message: str) -> str:
+    return json.dumps(
+        {
+            "assistant_message": message,
+            "tool_calls": [],
+            "continue_loop": False,
+            "silent_completion": False,
+            "questions": [],
+            "status": {
+                "situation": "The current result is ready.",
+                "action": "Return the current result.",
+                "reason": "The available evidence supports the response.",
+                "importance": "normal",
+            },
+        }
+    )
+
+
 class _StructuredOutputClient:
     is_deterministic_test_client = True
 
@@ -107,6 +125,51 @@ class _CancellableStructuredOutputClient(_StructuredOutputClient):
                 raise ModelCallPreempted("structured output cancellation observed")
             time.sleep(0.005)
         raise AssertionError("structured output cancellation was not observed")
+
+
+class _RedirectableStructuredOutputClient(_StructuredOutputClient):
+    def __init__(self) -> None:
+        super().__init__()
+        self.action_calls = 0
+        self.structured_calls = 0
+        self.structured_started = threading.Event()
+
+    def send_completion(self, payload: dict[str, Any], *, cancel_check=None, **kwargs):
+        self.requests.append(payload)
+        if payload["contract"] == "agent_action":
+            self.action_calls += 1
+            if self.action_calls == 1:
+                text = _worker_action("stale candidate")
+            else:
+                assert "new exact direction" in str(payload["prompt"])
+                text = _worker_action("revised complete")
+            return CompletionResult(
+                text=text,
+                raw_request=payload,
+                raw_response={"content": text},
+                prompt_tokens=None,
+                completion_tokens=None,
+                finish_reason="stop",
+            )
+        assert payload["contract"] == "caller_structured_output"
+        self.structured_calls += 1
+        if self.structured_calls == 1:
+            self.structured_started.set()
+            deadline = time.monotonic() + 5
+            while time.monotonic() < deadline:
+                if cancel_check is not None and cancel_check():
+                    raise ModelCallPreempted("structured output redirect observed")
+                time.sleep(0.005)
+            raise AssertionError("structured output redirect was not observed")
+        text = json.dumps({"finding": "revised complete"})
+        return CompletionResult(
+            text=text,
+            raw_request=payload,
+            raw_response={"content": text},
+            prompt_tokens=None,
+            completion_tokens=None,
+            finish_reason="stop",
+        )
 
 
 class _OutputLimitedStructuredOutputClient(_StructuredOutputClient):
@@ -272,3 +335,36 @@ def test_caller_output_generation_is_cancellable_worker_inference(make_config) -
     assert requested.status == "cancellation_requested"
     assert finished.status == "canceled"
     assert runtime.history.read_active_run(worker.session_id) is None
+
+
+def test_worker_message_rebuilds_preempted_caller_structured_output(make_config) -> None:
+    client = _RedirectableStructuredOutputClient()
+    runtime = AgentRuntime(
+        make_config(model__context_limit=32_000), model_client=client
+    )
+    manager = WorkerManager(runtime)
+    worker = manager.create(
+        "Return the current finding.",
+        output_schema=_closed({"finding": {"type": "string"}}),
+    )
+    manager.start(worker.worker_id)
+    assert client.structured_started.wait(timeout=10)
+
+    manager.message(worker.worker_id, "new exact direction")
+    finished = manager.wait(worker.worker_id, timeout_seconds=10)
+    structured_output = manager.structured_output(worker.worker_id)
+    events = manager.events(worker.worker_id)
+    manager.shutdown()
+
+    assert finished.status == "completed"
+    assert finished.result == "revised complete"
+    assert finished.run_count == 2
+    assert client.action_calls == 2
+    assert client.structured_calls == 2
+    assert structured_output == {"finding": "revised complete"}
+    continuation = next(
+        event
+        for event in events
+        if event.event_type == "worker_control_continuation_started"
+    )
+    assert continuation.payload["phase"] == "caller_structured_output"

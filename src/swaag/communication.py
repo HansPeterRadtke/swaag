@@ -150,8 +150,7 @@ class CommunicationStore:
         text = message.strip()
         if not text:
             raise ValueError("communication message must not be empty")
-        lowered = text.casefold()
-        priority = 100 if lowered == "stop" or lowered.startswith("stop ") else 80 if lowered == "pause" or lowered.startswith("pause ") else 0
+        priority = 0
         request = CommunicationRequest(new_id("correlation"), session_id, text, source, priority, "queued", utc_now_iso())
         with self._connect() as connection:
             connection.execute(
@@ -171,7 +170,7 @@ class CommunicationStore:
         if session_id is not None:
             sql += " AND session_id=?"
             params = (session_id,)
-        sql += " ORDER BY priority DESC, created_at, correlation_id LIMIT 1"
+        sql += " ORDER BY created_at, correlation_id LIMIT 1"
         with self._connect() as connection:
             row = connection.execute(sql, params).fetchone()
         return CommunicationRequest(**dict(row)) if row else None

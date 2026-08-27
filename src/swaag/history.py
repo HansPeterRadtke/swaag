@@ -628,8 +628,7 @@ class HistoryStore:
     def enqueue_control_message(self, session_id: str, text: str, *, source: str = "cli", control_id: str | None = None) -> dict[str, Any]:
         control_id = control_id or new_id("control")
         message = text.strip()
-        lowered = message.casefold()
-        priority = 100 if lowered == "stop" or lowered.startswith("stop ") else 80 if lowered == "pause" or lowered.startswith("pause ") else 0
+        priority = 0
         payload = {
             "control_id": control_id,
             "session_id": session_id,
@@ -664,7 +663,7 @@ class HistoryStore:
                 SELECT control_id, session_id, message, source, created_at, priority
                 FROM control_messages
                 WHERE session_id=? AND status='pending'
-                ORDER BY priority DESC, created_at, control_id
+                ORDER BY created_at, control_id
                 """,
                 (session_id,),
             ).fetchall()

@@ -140,6 +140,57 @@ class _RedirectClient(_WorkerClient):
         return self.result(payload, _action("redirect complete"))
 
 
+class _CompletionRedirectClient(_WorkerClient):
+    def __init__(self) -> None:
+        self.completion_started = threading.Event()
+        self.action_calls = 0
+        self.completion_calls = 0
+
+    def send_completion(self, payload: dict[str, Any], *, cancel_check=None, **_kwargs):
+        contract = str(payload["contract"])
+        if contract == "agent_action":
+            self.action_calls += 1
+            prompt = str(payload["prompt"])
+            if self.action_calls == 1:
+                return self.result(payload, _action("stale candidate"))
+            assert "new exact direction" in prompt
+            return self.result(payload, _action("revised complete"))
+        assert contract == "completion_evaluation"
+        self.completion_calls += 1
+        if self.completion_calls == 1:
+            self.completion_started.set()
+            deadline = time.monotonic() + 5
+            while time.monotonic() < deadline:
+                if cancel_check is not None and cancel_check():
+                    raise ModelCallPreempted("completion redirect observed")
+                time.sleep(0.005)
+            raise AssertionError("completion redirect was not observed")
+        return self.result(
+            payload,
+            json.dumps(
+                {
+                    "complete": True,
+                    "reason": "The revised direction is reflected in the candidate.",
+                    "remaining_work": [],
+                    "evidence_requests": [],
+                }
+            ),
+        )
+
+
+class _PresentationRedirectClient(_WorkerClient):
+    def __init__(self) -> None:
+        self.calls = 0
+
+    def send_completion(self, payload: dict[str, Any], **_kwargs):
+        self.calls += 1
+        prompt = str(payload["prompt"])
+        if self.calls == 1:
+            return self.result(payload, _action("stale candidate"))
+        assert "new exact direction" in prompt
+        return self.result(payload, _action("revised complete"))
+
+
 class _InputClient(_WorkerClient):
     def __init__(self) -> None:
         self.calls = 0
@@ -344,6 +395,95 @@ def test_worker_message_preempts_stale_request_and_rebuilds_from_control(make_co
     assert client.calls == 2
     history = runtime.history.read_history(worker.session_id)
     assert any(event.event_type == "model_call_replay_invalidated" for event in history)
+
+
+def test_worker_message_preempts_provisional_completion_evaluation(make_config) -> None:
+    from swaag.runtime import AgentRuntime
+
+    client = _CompletionRedirectClient()
+    runtime = AgentRuntime(
+        make_config(
+            model__context_limit=32_000,
+            runtime__completion_evaluation_enabled=True,
+        ),
+        model_client=client,
+    )
+    manager = WorkerManager(runtime)
+    worker = manager.create("original direction")
+    manager.start(worker.worker_id)
+    assert client.completion_started.wait(timeout=10)
+
+    manager.message(worker.worker_id, "new exact direction")
+    finished = manager.wait(worker.worker_id, timeout_seconds=10)
+    manager.shutdown()
+
+    assert finished.status == "completed"
+    assert finished.result == "revised complete"
+    assert finished.error is None
+    assert client.action_calls == 2
+    assert client.completion_calls == 2
+    assert runtime.history.list_pending_control_messages(worker.session_id) == []
+    history = runtime.history.read_history(worker.session_id)
+    assert any(
+        event.event_type == "completion_rejected"
+        and "superseded by a user control" in str(event.payload.get("reason", ""))
+        for event in history
+    )
+
+
+def test_worker_message_during_presentation_rebuilds_terminal_result(
+    make_config,
+    monkeypatch,
+) -> None:
+    from swaag.runtime import AgentRuntime
+
+    client = _PresentationRedirectClient()
+    runtime = AgentRuntime(
+        make_config(model__context_limit=32_000), model_client=client
+    )
+    presentation_started = threading.Event()
+    presentation_release = threading.Event()
+    presentation_inputs: list[str] = []
+
+    def generate(_state, **kwargs):
+        assistant_message = str(kwargs["assistant_message"])
+        presentation_inputs.append(assistant_message)
+        if len(presentation_inputs) == 1:
+            presentation_started.set()
+            assert presentation_release.wait(timeout=5)
+        return {
+            "raw": assistant_message,
+            "audio": assistant_message,
+            "requested_modes": ["audio"],
+            "completed_modes": ["audio"],
+        }
+
+    monkeypatch.setattr(runtime, "generate_response_presentations", generate)
+    manager = WorkerManager(runtime)
+    worker = manager.create("original direction", presentation_modes=["audio"])
+    manager.start(worker.worker_id)
+    assert presentation_started.wait(timeout=10)
+
+    manager.message(worker.worker_id, "new exact direction")
+    presentation_release.set()
+    finished = manager.wait(worker.worker_id, timeout_seconds=10)
+    presentations = manager.presentations(worker.worker_id)
+    events = manager.events(worker.worker_id)
+    manager.shutdown()
+
+    assert finished.status == "completed"
+    assert finished.result == "revised complete"
+    assert finished.run_count == 2
+    assert presentation_inputs == ["stale candidate", "revised complete"]
+    assert presentations is not None
+    assert presentations["audio"] == "revised complete"
+    continuation = next(
+        event
+        for event in events
+        if event.event_type == "worker_control_continuation_started"
+    )
+    assert continuation.payload["phase"] == "response_presentation"
+    assert continuation.payload["provisional"] is True
 
 
 def test_input_required_worker_resumes_without_duplicate_original_request(make_config) -> None:

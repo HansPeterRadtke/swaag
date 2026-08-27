@@ -101,7 +101,7 @@ def test_runtime_can_enable_background_derived_embedding_index(
     assert matches[0].field == "situation"
 
 
-def test_communication_store_prioritizes_stop_and_preserves_correlation(make_config, tmp_path: Path) -> None:
+def test_communication_store_preserves_delivery_order_and_correlation(make_config, tmp_path: Path) -> None:
     config = make_config()
     config.sessions.root = tmp_path / "sessions"
     runtime = AgentRuntime(config)
@@ -111,7 +111,8 @@ def test_communication_store_prioritizes_stop_and_preserves_correlation(make_con
     pause = service.submit(state.session_id, "pause")
     stop = service.submit(state.session_id, "stop now")
     assert ordinary.correlation_id != pause.correlation_id != stop.correlation_id
-    assert service.store.next_pending(state.session_id).correlation_id == stop.correlation_id
+    assert service.store.next_pending(state.session_id).correlation_id == ordinary.correlation_id
+    assert {ordinary.priority, pause.priority, stop.priority} == {0}
     runtime.generate_communication_status = lambda **kwargs: {  # type: ignore[method-assign]
         "answer": "The session is idle.",
         "source_event_references": [],
@@ -230,7 +231,7 @@ def test_mcp_2026_rejects_missing_per_request_metadata(make_config) -> None:
     assert "requires params._meta" in response["error"]["message"]
 
 
-def test_control_tools_read_status_and_queue_priority(make_config, tmp_path: Path) -> None:
+def test_control_tools_read_status_and_queue_exact_message(make_config, tmp_path: Path) -> None:
     config = make_config(
         tools__enabled=["agent_status_lookup", "agent_control"],
         tools__allow_side_effect_tools=True,
@@ -265,7 +266,7 @@ def test_control_tools_read_status_and_queue_priority(make_config, tmp_path: Pat
     assert control_run.tool_result.output["queued"] is True
     pending = runtime.history.list_pending_control_messages(target.session_id)
     assert pending[0]["message"] == "pause"
-    assert pending[0]["priority"] == 80
+    assert pending[0]["priority"] == 0
 
 
 def test_direct_runtime_tool_call_cannot_bypass_configured_enablement(
