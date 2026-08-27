@@ -15,7 +15,7 @@ from swaag.types import ContractSpec
 from swaag.utils import sha256_text, stable_json_dumps
 
 
-BENCHMARK_VERSION = "context_semantic_layout_v2_dynamic_output"
+BENCHMARK_VERSION = "context_semantic_layout_v3_working_window"
 SYSTEM_FIELD = "system_instruction"
 USER_FIELDS = (
     "task_instruction",
@@ -51,6 +51,8 @@ class ContextLayoutResult:
     prompt_tokens: int | None
     completion_tokens: int | None
     context_limit: int
+    server_context_limit: int
+    server_input_utilization: float
     actual_input_utilization: float
     section_token_fractions: dict[str, float]
     elapsed_seconds: float | None
@@ -145,8 +147,22 @@ def build_cases(
     utilizations: Iterable[float] = DEFAULT_UTILIZATIONS,
     seed: int = 29,
     token_counter: Callable[[list[dict[str, str]]], int] | None = None,
+    rotations: Iterable[int] | None = None,
 ) -> list[ContextLayoutCase]:
     cases: list[ContextLayoutCase] = []
+    rotation_values = (
+        tuple(range(len(USER_FIELDS)))
+        if rotations is None
+        else tuple(int(rotation) for rotation in rotations)
+    )
+    if not rotation_values:
+        raise ValueError("rotations must contain at least one rotation")
+    if any(not 0 <= rotation < len(USER_FIELDS) for rotation in rotation_values):
+        raise ValueError(
+            f"rotations must be between 0 and {len(USER_FIELDS) - 1}"
+        )
+    if len(set(rotation_values)) != len(rotation_values):
+        raise ValueError("rotations must not contain duplicates")
     for raw_utilization in utilizations:
         utilization = float(raw_utilization)
         if not 0.05 <= utilization <= 0.90:
@@ -178,7 +194,7 @@ def build_cases(
             else:
                 high = middle
         filler_blocks = min((low, high), key=lambda value: abs(count(value) - target))
-        for rotation in range(len(USER_FIELDS)):
+        for rotation in rotation_values:
             order = USER_FIELDS[rotation:] + USER_FIELDS[:rotation]
             cases.append(
                 _render_case(
@@ -199,12 +215,32 @@ def run_context_layout_benchmark(
     output_path: Path | None = None,
     resume: bool = True,
     client_factory: Callable[[AgentConfig], object] = LlamaCppClient,
+    working_context_limit: int | None = None,
+    rotations: Iterable[int] | None = None,
 ) -> dict:
     config = config or load_config()
     client = client_factory(config)
     identity = client.cache_identity()
-    context_limit, context_limit_source = client.context_limit_resolution()
+    server_context_limit, server_context_limit_source = client.context_limit_resolution()
+    if working_context_limit is None:
+        context_limit = int(server_context_limit)
+        context_limit_source = server_context_limit_source
+    else:
+        context_limit = int(working_context_limit)
+        if context_limit <= 0:
+            raise ValueError("working_context_limit must be positive")
+        if context_limit > int(server_context_limit):
+            raise ValueError(
+                "working_context_limit cannot exceed the live server context: "
+                f"requested={context_limit} server={server_context_limit}"
+            )
+        context_limit_source = "explicit_benchmark_working_window"
     utilization_values = tuple(float(value) for value in utilizations)
+    rotation_values = (
+        tuple(range(len(USER_FIELDS)))
+        if rotations is None
+        else tuple(int(rotation) for rotation in rotations)
+    )
 
     def exact_count(messages: list[dict[str, str]]) -> int:
         rendering = client.render_chat_prompt(messages)
@@ -215,14 +251,18 @@ def run_context_layout_benchmark(
         utilizations=utilization_values,
         seed=seed,
         token_counter=exact_count,
+        rotations=rotation_values,
     )
     results: list[ContextLayoutResult] = []
     expected_header = {
         "benchmark": BENCHMARK_VERSION,
         "context_limit": context_limit,
         "context_limit_source": context_limit_source,
+        "server_context_limit": server_context_limit,
+        "server_context_limit_source": server_context_limit_source,
         "seed": seed,
         "requested_utilizations": list(utilization_values),
+        "requested_rotations": list(rotation_values),
         "planned": len(cases),
     }
     if resume and output_path is not None and output_path.exists():
@@ -358,6 +398,9 @@ def run_context_layout_benchmark(
                 prompt_tokens=completion.prompt_tokens,
                 completion_tokens=completion.completion_tokens,
                 context_limit=context_limit,
+                server_context_limit=int(server_context_limit),
+                server_input_utilization=actual_prompt_tokens
+                / int(server_context_limit),
                 actual_input_utilization=actual_prompt_tokens / context_limit,
                 section_token_fractions=token_fractions,
                 elapsed_seconds=completion.elapsed_seconds,

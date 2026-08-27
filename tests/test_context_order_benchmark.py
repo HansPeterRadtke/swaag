@@ -3,6 +3,7 @@ from __future__ import annotations
 import json
 
 from swaag.benchmark import context_order
+from swaag.benchmark.benchmark_runner import _build_parser
 from swaag.benchmark.context_order import (
     BENCHMARK_VERSION,
     POSITIONS,
@@ -27,6 +28,16 @@ def test_context_order_matrix_varies_only_position_for_each_utilization():
         assert fractions["late"] > 0.85
 
 
+def test_context_order_matrix_can_select_positions() -> None:
+    cases = build_matrix(
+        context_limit=8_000,
+        utilizations=[0.10],
+        positions=["early", "late"],
+    )
+
+    assert [case.position for case in cases] == ["early", "late"]
+
+
 def test_context_order_case_contains_same_exact_fact_and_query():
     case = build_case(position="middle", requested_utilization=0.25, context_limit=16000, seed=44)
     assert case.expected_code in case.prompt
@@ -38,6 +49,33 @@ def test_context_order_contract_is_closed():
     schema = answer_contract().json_schema
     assert schema["additionalProperties"] is False
     assert schema["required"] == ["answer"]
+
+
+def test_context_benchmark_cli_accepts_bounded_subsets() -> None:
+    parser = _build_parser()
+    order = parser.parse_args(
+        [
+            "context-order",
+            "--working-context-limit",
+            "8192",
+            "--position",
+            "middle",
+        ]
+    )
+    layout = parser.parse_args(
+        [
+            "context-layout",
+            "--working-context-limit",
+            "8192",
+            "--rotation",
+            "4",
+        ]
+    )
+
+    assert order.working_context_limit == 8192
+    assert order.position == ["middle"]
+    assert layout.working_context_limit == 8192
+    assert layout.rotation == [4]
 
 
 def test_verification_output_headroom_is_soft_under_input_pressure(make_config):
@@ -132,6 +170,64 @@ def test_context_order_benchmark_checkpoints_each_completed_case(
     assert {row["reserved_output_tokens"] for row in report["results"]} == {1_200}
     assert all(0 <= row["marker_token_fraction"] <= 1 for row in report["results"])
     assert all(len(row["serialized_prompt_sha256"]) == 64 for row in report["results"])
+
+
+def test_context_order_benchmark_records_explicit_working_window(
+    monkeypatch,
+    make_config,
+    tmp_path,
+) -> None:
+    class FakeClient:
+        def __init__(self, _config):
+            pass
+
+        def cache_identity(self):
+            return "working-window-model"
+
+        def context_limit_resolution(self):
+            return 10_000, "server_props:n_ctx"
+
+        def tokenize(self, text):
+            return len(text)
+
+        def render_chat_prompt(self, messages):
+            return {
+                "prompt": messages[0]["content"] + messages[1]["content"],
+                "prompt_protocol_sha256": "c" * 64,
+            }
+
+        def verify_prompt_protocol(self, _prompt_protocol_sha256):
+            return None
+
+        def complete(self, prompt, **_kwargs):
+            return CompletionResult(
+                text=json.dumps({"answer": "SWAAG-0017-ORBIT"}),
+                raw_request={},
+                raw_response={},
+                prompt_tokens=len(prompt),
+                completion_tokens=4,
+                finish_reason="stop",
+            )
+
+    monkeypatch.setattr(context_order, "LlamaCppClient", FakeClient)
+    report = context_order.run_context_order_benchmark(
+        config=make_config(model__context_limit=10_000),
+        utilizations=[0.10],
+        positions=["middle"],
+        working_context_limit=5_000,
+        output_path=tmp_path / "working-window.json",
+    )
+
+    assert report["context_limit"] == 5_000
+    assert report["context_limit_source"] == "explicit_benchmark_working_window"
+    assert report["server_context_limit"] == 10_000
+    assert report["server_context_limit_source"] == "server_props:n_ctx"
+    assert report["requested_positions"] == ["middle"]
+    assert report["planned"] == 1
+    row = report["results"][0]
+    assert row["context_limit"] == 5_000
+    assert row["server_context_limit"] == 10_000
+    assert row["server_input_utilization"] < row["actual_input_utilization"]
 
 
 def test_context_order_benchmark_resumes_matching_partial_checkpoint(

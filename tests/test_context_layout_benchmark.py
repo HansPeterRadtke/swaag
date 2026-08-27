@@ -23,6 +23,21 @@ def test_layout_matrix_balances_each_user_section_across_every_position() -> Non
     assert all(set(case.expected) == set(ALL_FIELDS) for case in cases)
 
 
+def test_layout_matrix_can_select_rotations() -> None:
+    cases = build_cases(
+        context_limit=10_000,
+        utilizations=[0.25],
+        seed=31,
+        rotations=[1, 4],
+    )
+
+    assert len(cases) == 2
+    assert [case.user_section_order[0] for case in cases] == [
+        USER_FIELDS[1],
+        USER_FIELDS[4],
+    ]
+
+
 def test_layout_contract_requires_every_semantic_section() -> None:
     schema = answer_contract().json_schema
 
@@ -108,3 +123,26 @@ def test_layout_runner_checkpoints_server_serialized_balanced_cases(
     )
     assert resumed["total"] == len(USER_FIELDS)
     assert len(client.completed_prompts) == len(USER_FIELDS)
+
+
+def test_layout_runner_records_explicit_working_window(make_config, tmp_path) -> None:
+    client = FakeClient(None)
+
+    report = run_context_layout_benchmark(
+        config=make_config(model__context_limit=10_000),
+        utilizations=[0.10],
+        working_context_limit=5_000,
+        rotations=[2],
+        output_path=tmp_path / "layout-working-window.json",
+        client_factory=lambda _config: client,
+    )
+
+    assert report["context_limit"] == 5_000
+    assert report["context_limit_source"] == "explicit_benchmark_working_window"
+    assert report["server_context_limit"] == 10_000
+    assert report["server_context_limit_source"] == "test"
+    assert report["requested_rotations"] == [2]
+    assert report["planned"] == 1
+    row = report["results"][0]
+    assert row["server_context_limit"] == 10_000
+    assert row["server_input_utilization"] < row["actual_input_utilization"]

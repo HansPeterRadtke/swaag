@@ -13,7 +13,7 @@ from swaag.utils import sha256_text, stable_json_dumps
 
 POSITIONS = ("early", "middle", "late")
 DEFAULT_UTILIZATIONS = (0.10, 0.25, 0.50, 0.75, 0.90)
-BENCHMARK_VERSION = "context_order_retrieval_v3_dynamic_output"
+BENCHMARK_VERSION = "context_order_retrieval_v4_working_window"
 SYSTEM_INSTRUCTION = (
     "Follow the user's retrieval request using only the supplied record. "
     "Return the answer through the required JSON schema."
@@ -40,6 +40,8 @@ class ContextOrderResult:
     prompt_tokens: int | None
     completion_tokens: int | None
     context_limit: int
+    server_context_limit: int
+    server_input_utilization: float | None
     actual_input_utilization: float | None
     marker_char_fraction: float
     marker_token_fraction: float
@@ -183,8 +185,17 @@ def build_matrix(
     utilizations: Iterable[float] = DEFAULT_UTILIZATIONS,
     seed: int = 17,
     token_counter: Callable[[str], int] | None = None,
+    positions: Iterable[str] = POSITIONS,
 ) -> list[ContextOrderCase]:
     cases: list[ContextOrderCase] = []
+    position_values = tuple(str(position) for position in positions)
+    if not position_values:
+        raise ValueError("positions must contain at least one position")
+    unknown_positions = sorted(set(position_values) - set(POSITIONS))
+    if unknown_positions:
+        raise ValueError("Unknown context-order positions: " + ", ".join(unknown_positions))
+    if len(set(position_values)) != len(position_values):
+        raise ValueError("positions must not contain duplicates")
     for raw_utilization in utilizations:
         utilization = float(raw_utilization)
         if not 0.02 <= utilization <= 0.95:
@@ -202,7 +213,7 @@ def build_matrix(
                 filler=filler,
                 seed=seed,
             )
-            for position in POSITIONS
+            for position in position_values
         )
     return cases
 
@@ -251,12 +262,28 @@ def _verification_output_reserve(
 def run_context_order_benchmark(
     *, config: AgentConfig | None = None, utilizations: Iterable[float] = DEFAULT_UTILIZATIONS, seed: int = 17,
     output_path: Path | None = None, resume: bool = True,
+    working_context_limit: int | None = None,
+    positions: Iterable[str] = POSITIONS,
 ) -> dict:
     config = config or load_config()
     client = LlamaCppClient(config)
     identity = client.cache_identity()
-    context_limit, context_limit_source = client.context_limit_resolution()
+    server_context_limit, server_context_limit_source = client.context_limit_resolution()
+    if working_context_limit is None:
+        context_limit = int(server_context_limit)
+        working_context_limit_source = server_context_limit_source
+    else:
+        context_limit = int(working_context_limit)
+        if context_limit <= 0:
+            raise ValueError("working_context_limit must be positive")
+        if context_limit > int(server_context_limit):
+            raise ValueError(
+                "working_context_limit cannot exceed the live server context: "
+                f"requested={context_limit} server={server_context_limit}"
+            )
+        working_context_limit_source = "explicit_benchmark_working_window"
     utilization_values = tuple(float(value) for value in utilizations)
+    position_values = tuple(str(position) for position in positions)
     cases = build_matrix(
         context_limit=context_limit,
         utilizations=utilization_values,
@@ -264,6 +291,7 @@ def run_context_order_benchmark(
         token_counter=lambda prompt: client.tokenize(
             client.render_chat_prompt(chat_messages(prompt))["prompt"]
         ),
+        positions=position_values,
     )
     results: list[ContextOrderResult] = []
     model_identity_history: list[object] = [identity]
@@ -279,9 +307,12 @@ def run_context_order_benchmark(
         expected_header = {
             "benchmark": BENCHMARK_VERSION,
             "context_limit": context_limit,
-            "context_limit_source": context_limit_source,
+            "context_limit_source": working_context_limit_source,
+            "server_context_limit": server_context_limit,
+            "server_context_limit_source": server_context_limit_source,
             "seed": seed,
             "requested_utilizations": list(utilization_values),
+            "requested_positions": list(position_values),
             "planned": len(cases),
         }
         previous_identity = previous.get("model_identity")
@@ -328,16 +359,19 @@ def run_context_order_benchmark(
                 "completed": sum(1 for row in rows if row["position"] == position),
                 "planned": sum(1 for case in cases if case.position == position),
             }
-            for position in POSITIONS
+            for position in position_values
         }
         return {
             "benchmark": BENCHMARK_VERSION,
             "model_identity": identity,
             "model_identity_history": model_identity_history,
             "context_limit": context_limit,
-            "context_limit_source": context_limit_source,
+            "context_limit_source": working_context_limit_source,
+            "server_context_limit": server_context_limit,
+            "server_context_limit_source": server_context_limit_source,
             "seed": seed,
             "requested_utilizations": list(utilization_values),
+            "requested_positions": list(position_values),
             "results": rows,
             "by_position": by_position,
             "passed": sum(1 for row in rows if row["passed"]),
@@ -402,6 +436,8 @@ def run_context_order_benchmark(
             preflight_prompt_tokens=preflight_prompt_tokens,
             prompt_tokens=prompt_tokens,
             completion_tokens=completion.completion_tokens, context_limit=context_limit,
+            server_context_limit=int(server_context_limit),
+            server_input_utilization=actual_prompt_tokens / int(server_context_limit),
             actual_input_utilization=actual, marker_char_fraction=case.marker_char_fraction,
             marker_token_fraction=marker_token_fraction,
             elapsed_seconds=completion.elapsed_seconds, first_token_seconds=completion.first_token_seconds,

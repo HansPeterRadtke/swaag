@@ -1132,6 +1132,8 @@ def _build_parser() -> argparse.ArgumentParser:
 
     context_order_parser = subparsers.add_parser("context-order", help="Run the live context-position retrieval experiment from the agent design recordings.")
     context_order_parser.add_argument("--utilization", action="append", type=float, default=[], help="Requested input-context utilization fraction. Repeat for multiple values.")
+    context_order_parser.add_argument("--position", action="append", choices=["early", "middle", "late"], default=[], help="Run only the named marker position. Repeat for multiple positions.")
+    context_order_parser.add_argument("--working-context-limit", type=int, help="Explicit benchmark working window not exceeding the live server context.")
     context_order_parser.add_argument("--seed", type=int, default=17, help="Deterministic retrieval-code seed.")
     context_order_parser.add_argument("--output", default="context_order_output.json", help="JSON result path.")
     context_order_parser.add_argument("--json", action="store_true", help="Print the full JSON report.")
@@ -1141,6 +1143,8 @@ def _build_parser() -> argparse.ArgumentParser:
         help="Run the live balanced semantic-section ordering experiment.",
     )
     context_layout_parser.add_argument("--utilization", action="append", type=float, default=[], help="Requested input-context utilization fraction. Repeat for multiple values.")
+    context_layout_parser.add_argument("--rotation", action="append", type=int, choices=range(6), default=[], help="Run only the named cyclic user-section rotation (0-5).")
+    context_layout_parser.add_argument("--working-context-limit", type=int, help="Explicit benchmark working window not exceeding the live server context.")
     context_layout_parser.add_argument("--seed", type=int, default=29, help="Deterministic retrieval-code seed.")
     context_layout_parser.add_argument("--output", default="context_layout_output.json", help="JSON result path.")
     context_layout_parser.add_argument("--json", action="store_true", help="Print the full JSON report.")
@@ -1449,6 +1453,8 @@ def main(argv: Sequence[str] | None = None) -> int:
             utilizations=list(args.utilization) or DEFAULT_UTILIZATIONS,
             seed=int(args.seed),
             output_path=Path(args.output),
+            working_context_limit=args.working_context_limit,
+            positions=list(args.position) or ("early", "middle", "late"),
         )
         if args.json:
             print(stable_json_dumps(report, indent=2))
@@ -1468,6 +1474,8 @@ def main(argv: Sequence[str] | None = None) -> int:
             utilizations=list(args.utilization) or DEFAULT_UTILIZATIONS,
             seed=int(args.seed),
             output_path=Path(args.output),
+            working_context_limit=args.working_context_limit,
+            rotations=list(args.rotation) or None,
         )
         if args.json:
             print(stable_json_dumps(report, indent=2))
