@@ -5,14 +5,17 @@ import json
 from pathlib import Path
 from typing import Callable, Iterable
 
-from swaag.benchmark.context_order import _stable_model_identity
+from swaag.benchmark.context_order import (
+    _stable_model_identity,
+    _verification_output_reserve,
+)
 from swaag.config import AgentConfig, load_config
 from swaag.model import LlamaCppClient
 from swaag.types import ContractSpec
 from swaag.utils import sha256_text, stable_json_dumps
 
 
-BENCHMARK_VERSION = "context_semantic_layout_v1_server_template"
+BENCHMARK_VERSION = "context_semantic_layout_v2_dynamic_output"
 SYSTEM_FIELD = "system_instruction"
 USER_FIELDS = (
     "task_instruction",
@@ -53,6 +56,7 @@ class ContextLayoutResult:
     elapsed_seconds: float | None
     first_token_seconds: float | None
     finish_reason: str | None
+    reserved_output_tokens: int
     serialized_prompt_sha256: str
     prompt_protocol_sha256: str
 
@@ -305,15 +309,14 @@ def run_context_layout_benchmark(
         protocol_hash = rendering["prompt_protocol_sha256"]
         client.verify_prompt_protocol(protocol_hash)
         preflight_tokens = int(client.tokenize(serialized_prompt))
-        if preflight_tokens + 192 + int(config.context.safety_margin_tokens) > context_limit:
-            raise ValueError(
-                "Context-layout case does not fit authoritative capacity: "
-                f"input={preflight_tokens} output=192 safety={config.context.safety_margin_tokens} "
-                f"limit={context_limit}"
-            )
+        output_reserve = _verification_output_reserve(
+            config,
+            context_limit=context_limit,
+            input_tokens=preflight_tokens,
+        )
         completion = client.complete(
             serialized_prompt,
-            max_tokens=192,
+            max_tokens=output_reserve,
             contract=contract,
             temperature=0.0,
             kind="verification",
@@ -360,6 +363,7 @@ def run_context_layout_benchmark(
                 elapsed_seconds=completion.elapsed_seconds,
                 first_token_seconds=completion.first_token_seconds,
                 finish_reason=completion.finish_reason,
+                reserved_output_tokens=output_reserve,
                 serialized_prompt_sha256=sha256_text(serialized_prompt),
                 prompt_protocol_sha256=protocol_hash,
             )

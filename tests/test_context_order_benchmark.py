@@ -6,6 +6,7 @@ from swaag.benchmark import context_order
 from swaag.benchmark.context_order import (
     BENCHMARK_VERSION,
     POSITIONS,
+    _verification_output_reserve,
     answer_contract,
     build_case,
     build_matrix,
@@ -37,6 +38,21 @@ def test_context_order_contract_is_closed():
     schema = answer_contract().json_schema
     assert schema["additionalProperties"] is False
     assert schema["required"] == ["answer"]
+
+
+def test_verification_output_headroom_is_soft_under_input_pressure(make_config):
+    config = make_config(model__context_limit=10_000)
+
+    assert _verification_output_reserve(
+        config,
+        context_limit=10_000,
+        input_tokens=1_000,
+    ) == 1_200
+    assert _verification_output_reserve(
+        config,
+        context_limit=10_000,
+        input_tokens=9_500,
+    ) == 436
 
 
 def test_context_order_matrix_uses_exact_counter_for_requested_utilization():
@@ -113,6 +129,7 @@ def test_context_order_benchmark_checkpoints_each_completed_case(
     assert report["complete"] is True
     assert report["benchmark"] == BENCHMARK_VERSION
     assert report["planned"] == 3
+    assert {row["reserved_output_tokens"] for row in report["results"]} == {1_200}
     assert all(0 <= row["marker_token_fraction"] <= 1 for row in report["results"])
     assert all(len(row["serialized_prompt_sha256"]) == 64 for row in report["results"])
 

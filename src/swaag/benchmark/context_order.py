@@ -5,6 +5,7 @@ import json
 from pathlib import Path
 from typing import Callable, Iterable
 
+from swaag.budgeting import compute_call_budget
 from swaag.config import AgentConfig, load_config
 from swaag.model import LlamaCppClient
 from swaag.types import ContractSpec
@@ -12,7 +13,7 @@ from swaag.utils import sha256_text, stable_json_dumps
 
 POSITIONS = ("early", "middle", "late")
 DEFAULT_UTILIZATIONS = (0.10, 0.25, 0.50, 0.75, 0.90)
-BENCHMARK_VERSION = "context_order_retrieval_v2_server_template"
+BENCHMARK_VERSION = "context_order_retrieval_v3_dynamic_output"
 SYSTEM_INSTRUCTION = (
     "Follow the user's retrieval request using only the supplied record. "
     "Return the answer through the required JSON schema."
@@ -45,6 +46,7 @@ class ContextOrderResult:
     elapsed_seconds: float | None
     first_token_seconds: float | None
     finish_reason: str | None
+    reserved_output_tokens: int
     serialized_prompt_sha256: str | None = None
     prompt_protocol_sha256: str | None = None
 
@@ -223,6 +225,29 @@ def _stable_model_identity(identity: object) -> object:
     return {key: identity.get(key) for key in stable_keys}
 
 
+def _verification_output_reserve(
+    config: AgentConfig,
+    *,
+    context_limit: int,
+    input_tokens: int,
+) -> int:
+    minimum = max(1, int(config.context.reserved_response_tokens))
+    safety = max(0, int(config.context.safety_margin_tokens))
+    available = max(0, int(context_limit) - int(input_tokens) - safety)
+    if available < minimum:
+        raise ValueError(
+            "Benchmark case does not fit its minimum output requirement: "
+            f"input={input_tokens} minimum_output={minimum} safety={safety} "
+            f"limit={context_limit}"
+        )
+    desired = compute_call_budget(
+        config,
+        call_kind="benchmark_quality_judge",
+        context_limit=context_limit,
+    ).output_tokens
+    return min(max(minimum, int(desired)), available)
+
+
 def run_context_order_benchmark(
     *, config: AgentConfig | None = None, utilizations: Iterable[float] = DEFAULT_UTILIZATIONS, seed: int = 17,
     output_path: Path | None = None, resume: bool = True,
@@ -344,15 +369,14 @@ def run_context_order_benchmark(
         prompt_protocol_sha256 = rendering["prompt_protocol_sha256"]
         client.verify_prompt_protocol(prompt_protocol_sha256)
         preflight_prompt_tokens = client.tokenize(serialized_prompt)
-        if preflight_prompt_tokens + 96 + int(config.context.safety_margin_tokens) > context_limit:
-            raise ValueError(
-                "Context-order case does not fit the authoritative server capacity: "
-                f"input={preflight_prompt_tokens} output=96 safety={config.context.safety_margin_tokens} "
-                f"limit={context_limit}"
-            )
+        output_reserve = _verification_output_reserve(
+            config,
+            context_limit=context_limit,
+            input_tokens=preflight_prompt_tokens,
+        )
         completion = client.complete(
             serialized_prompt,
-            max_tokens=96,
+            max_tokens=output_reserve,
             contract=contract,
             temperature=0.0,
             kind="verification",
@@ -382,6 +406,7 @@ def run_context_order_benchmark(
             marker_token_fraction=marker_token_fraction,
             elapsed_seconds=completion.elapsed_seconds, first_token_seconds=completion.first_token_seconds,
             finish_reason=completion.finish_reason,
+            reserved_output_tokens=output_reserve,
             serialized_prompt_sha256=sha256_text(serialized_prompt),
             prompt_protocol_sha256=prompt_protocol_sha256,
         ))

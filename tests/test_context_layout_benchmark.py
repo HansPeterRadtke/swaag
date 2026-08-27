@@ -95,6 +95,7 @@ def test_layout_runner_checkpoints_server_serialized_balanced_cases(
     assert report["benchmark"] == BENCHMARK_VERSION
     assert report["complete"] is True
     assert report["passed"] == report["total"] == len(USER_FIELDS)
+    assert {row["reserved_output_tokens"] for row in report["results"]} == {1_200}
     assert all(values["passed"] == len(USER_FIELDS) for values in report["by_field"].values())
     assert all(len(row["serialized_prompt_sha256"]) == 64 for row in report["results"])
     assert json.loads(output.read_text())["complete"] is True
