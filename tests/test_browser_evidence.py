@@ -4,11 +4,16 @@ import json
 
 from swaag.environment import browser as browser_module
 from swaag.environment.artifacts import TextArtifactStore
-from swaag.environment.browser import AubroCommandResult, AubroInvocation
+from swaag.environment.browser import (
+    AubroCommandResult,
+    AubroInvocation,
+    BrowserAutomationError,
+)
 from swaag.environment.environment import AgentEnvironment
 from swaag.environment.process import ProcessResult
 from swaag.environment.state import ProcessRecord
 from swaag.history import HistoryStore
+from swaag.runtime import AgentRuntime
 from swaag.tools.registry import ToolRegistry
 from swaag.utils import sha256_text
 
@@ -178,6 +183,54 @@ def test_browser_browse_preserves_full_text_and_links_for_reexpansion(
     assert source["url"] == "https://example.test/page"
     assert source["document"] == "complete a"
     assert source["document_truncated"] is True
+
+
+def test_browser_failure_commits_complete_raw_process_evidence(
+    make_config, tmp_path, monkeypatch
+) -> None:
+    config = make_config()
+    config.sessions.root = tmp_path / "sessions"
+    config.tools.enabled = ["browser_search", "read_artifact"]
+    config.environment.max_capture_chars = 32
+    raw_stdout = "not-json-" + ("complete-provider-output-" * 300)
+    raw_stderr = "provider diagnostic\n" * 200
+    process_result = _aubro_result({}, stderr=raw_stderr).process_result
+    process_result.stdout = raw_stdout
+    process_result.record.stdout = raw_stdout
+
+    def fail(**_kwargs):
+        raise BrowserAutomationError(
+            f"aubro returned invalid JSON: {raw_stdout[:32]!r}",
+            process_result=process_result,
+        )
+
+    monkeypatch.setattr("swaag.environment.environment.run_aubro_command", fail)
+    monkeypatch.setattr("swaag.tools.builtin.aubro_available", lambda _config: True)
+    runtime = AgentRuntime(config, model_client=object())
+    state = runtime.create_or_load_session()
+
+    run = runtime.execute_tool_once(
+        "browser_search",
+        {"query": "durable errors", "engine": "auto", "limit": 2},
+        session_id=state.session_id,
+    )
+
+    assert run.tool_result is None
+    assert run.error is not None
+    assert run.error["error_type"] == "BrowserAutomationError"
+    evidence = run.error["evidence"]
+    stdout = TextArtifactStore(config.sessions.root, state.session_id).read(
+        evidence["artifact_id"], max_chars=len(raw_stdout) + 1
+    )
+    stderr = TextArtifactStore(config.sessions.root, state.session_id).read(
+        evidence["stderr_artifact_id"], max_chars=len(raw_stderr) + 1
+    )
+    assert stdout["text"] == raw_stdout
+    assert stderr["text"] == raw_stderr
+    history = runtime.history.read_history(state.session_id)
+    event_types = [event.event_type for event in history]
+    assert event_types.index("artifact_created") < event_types.index("tool_error")
+    assert "process_completed" in event_types
 
 
 def test_browser_capabilities_are_exposed_only_when_backend_is_available(

@@ -10,9 +10,9 @@ import subprocess
 from swaag.attachments import AttachmentStore, find_attachment
 from swaag.environment.artifacts import TextArtifactStore
 from swaag.fsops import ensure_dir
-from swaag.tools.base import Tool, ToolContext, ToolValidationError
+from swaag.tools.base import Tool, ToolContext, ToolExecutionError, ToolValidationError
 from swaag.types import AttachmentReference, ToolExecutionResult, ToolGeneratedEvent
-from swaag.utils import new_id, stable_json_dumps
+from swaag.utils import new_id, sha256_text, stable_json_dumps
 
 
 def _store(context: ToolContext) -> AttachmentStore:
@@ -40,6 +40,60 @@ def _source_references(reference: AttachmentReference) -> list[dict]:
             "event_type": str(metadata.get("source_event_type", "attachment_added")),
         }
     ]
+
+
+def _completed_output(value: str | bytes | None) -> str:
+    if value is None:
+        return ""
+    if isinstance(value, bytes):
+        return value.decode("utf-8", errors="replace")
+    return str(value)
+
+
+def _attachment_failure(
+    context: ToolContext,
+    message: str,
+    *,
+    error_type: str,
+    stdout: str = "",
+    stderr: str = "",
+    evidence: dict | None = None,
+    generated_events: list[ToolGeneratedEvent] | None = None,
+) -> ToolExecutionError:
+    artifact_store = TextArtifactStore(
+        context.config.sessions.root,
+        context.session_state.session_id,
+    )
+    exact_evidence = dict(evidence or {})
+    events = list(generated_events or [])
+    for stream_name, text in (("stdout", stdout), ("stderr", stderr)):
+        exact_evidence[f"{stream_name}_chars"] = len(text)
+        exact_evidence[f"{stream_name}_sha256"] = sha256_text(text)
+        exact_evidence[f"{stream_name}_artifact_id"] = ""
+        if not text:
+            continue
+        artifact = artifact_store.create(
+            text,
+            kind=f"attachment_extraction_{stream_name}",
+        )
+        exact_evidence[f"{stream_name}_artifact_id"] = artifact.artifact_id
+        events.append(
+            ToolGeneratedEvent(
+                "artifact_created",
+                {
+                    "artifact_id": artifact.artifact_id,
+                    "kind": artifact.kind,
+                    "size_chars": artifact.size_chars,
+                    "sha256": artifact.sha256,
+                },
+            )
+        )
+    return ToolExecutionError(
+        message,
+        error_type=error_type,
+        evidence=exact_evidence,
+        generated_events=events,
+    )
 
 
 class ListAttachmentsTool(Tool):
@@ -204,40 +258,113 @@ class ExtractAttachmentTool(Tool):
         if safe_name in {".", ".."} or "\x00" in safe_name:
             safe_name = "attachment.bin"
         shutil.copyfile(_store(context).path_for(reference), source_root / safe_name)
-        completed = subprocess.run(
-            [resolved_executable, *command[1:], "--profile", validated_input["profile"], str(source_root), str(output_root)],
-            cwd=extraction_root,
-            text=True,
-            capture_output=True,
-            timeout=context.config.attachments.extraction_timeout_seconds,
-            check=False,
-        )
-        if completed.returncode != 0:
-            detail = (completed.stderr or completed.stdout)[-4000:]
-            raise RuntimeError(f"all2text failed with exit code {completed.returncode}: {detail}")
-        manifest_path = output_root / "_conversion_manifest.json"
-        manifest = json.loads(manifest_path.read_text(encoding="utf-8"))
-        entries = [
-            item for item in manifest.get("entries", [])
-            if isinstance(item, dict) and item.get("relative_path") == safe_name
-        ]
-        if len(entries) != 1:
-            raise RuntimeError(f"all2text manifest did not contain exactly one source entry for {safe_name}")
-        entry = entries[0]
-        output_path = Path(str(entry.get("output_path", ""))).resolve()
         try:
-            output_path.relative_to(output_root.resolve())
-        except ValueError as exc:
-            raise RuntimeError("all2text returned an output path outside its extraction root") from exc
-        full_text = output_path.read_text(encoding="utf-8")
+            completed = subprocess.run(
+                [resolved_executable, *command[1:], "--profile", validated_input["profile"], str(source_root), str(output_root)],
+                cwd=extraction_root,
+                text=True,
+                capture_output=True,
+                timeout=context.config.attachments.extraction_timeout_seconds,
+                check=False,
+            )
+        except subprocess.TimeoutExpired as exc:
+            raise _attachment_failure(
+                context,
+                f"all2text exceeded the {context.config.attachments.extraction_timeout_seconds}-second timeout",
+                error_type=type(exc).__name__,
+                stdout=_completed_output(exc.stdout),
+                stderr=_completed_output(exc.stderr),
+                evidence={
+                    "attachment_id": reference.attachment_id,
+                    "attachment_sha256": reference.sha256,
+                    "profile": validated_input["profile"],
+                },
+            ) from exc
+        if completed.returncode != 0:
+            exact_detail = completed.stderr or completed.stdout
+            detail = exact_detail[-1000:]
+            suffix = "" if len(detail) == len(exact_detail) else " [bounded tail; read the evidence artifact for complete output]"
+            raise _attachment_failure(
+                context,
+                f"all2text failed with exit code {completed.returncode}: {detail}{suffix}",
+                error_type="All2TextProcessError",
+                stdout=completed.stdout,
+                stderr=completed.stderr,
+                evidence={
+                    "attachment_id": reference.attachment_id,
+                    "attachment_sha256": reference.sha256,
+                    "profile": validated_input["profile"],
+                    "return_code": completed.returncode,
+                },
+            )
+        manifest_path = output_root / "_conversion_manifest.json"
         artifact_store = TextArtifactStore(
             context.config.sessions.root, context.session_state.session_id
         )
-        artifact = artifact_store.create(full_text, kind="attachment_extraction")
+        try:
+            manifest_text = manifest_path.read_text(encoding="utf-8")
+        except OSError as exc:
+            raise _attachment_failure(
+                context,
+                f"all2text manifest could not be read: {exc}",
+                error_type=type(exc).__name__,
+                stdout=completed.stdout,
+                stderr=completed.stderr,
+                evidence={
+                    "attachment_id": reference.attachment_id,
+                    "attachment_sha256": reference.sha256,
+                    "profile": validated_input["profile"],
+                    "return_code": completed.returncode,
+                },
+            ) from exc
         manifest_artifact = artifact_store.create(
-            stable_json_dumps(manifest, indent=2) + "\n",
+            manifest_text,
             kind="attachment_extraction_manifest",
         )
+        manifest_event = ToolGeneratedEvent(
+            "artifact_created",
+            {
+                "artifact_id": manifest_artifact.artifact_id,
+                "kind": manifest_artifact.kind,
+                "size_chars": manifest_artifact.size_chars,
+                "sha256": manifest_artifact.sha256,
+            },
+        )
+        try:
+            manifest = json.loads(manifest_text)
+            if not isinstance(manifest, dict):
+                raise ValueError("all2text manifest must be a JSON object")
+            entries = [
+                item for item in manifest.get("entries", [])
+                if isinstance(item, dict) and item.get("relative_path") == safe_name
+            ]
+            if len(entries) != 1:
+                raise ValueError(
+                    f"all2text manifest did not contain exactly one source entry for {safe_name}"
+                )
+            entry = entries[0]
+            output_path = Path(str(entry.get("output_path", ""))).resolve()
+            output_path.relative_to(output_root.resolve())
+            full_text = output_path.read_text(encoding="utf-8")
+        except (AttributeError, json.JSONDecodeError, OSError, TypeError, ValueError) as exc:
+            raise _attachment_failure(
+                context,
+                f"all2text output validation failed: {exc}",
+                error_type=type(exc).__name__,
+                stdout=completed.stdout,
+                stderr=completed.stderr,
+                evidence={
+                    "attachment_id": reference.attachment_id,
+                    "attachment_sha256": reference.sha256,
+                    "profile": validated_input["profile"],
+                    "return_code": completed.returncode,
+                    "manifest_artifact_id": manifest_artifact.artifact_id,
+                    "manifest_sha256": manifest_artifact.sha256,
+                    "manifest_chars": manifest_artifact.size_chars,
+                },
+                generated_events=[manifest_event],
+            ) from exc
+        artifact = artifact_store.create(full_text, kind="attachment_extraction")
         preview = full_text[: context.config.attachments.preview_chars]
         manifest_summary = {
             "schema": manifest.get("schema"),
@@ -283,15 +410,7 @@ class ExtractAttachmentTool(Tool):
                     "sha256": artifact.sha256,
                 },
             ),
-            ToolGeneratedEvent(
-                "artifact_created",
-                {
-                    "artifact_id": manifest_artifact.artifact_id,
-                    "kind": manifest_artifact.kind,
-                    "size_chars": manifest_artifact.size_chars,
-                    "sha256": manifest_artifact.sha256,
-                },
-            ),
+            manifest_event,
             ToolGeneratedEvent(
                 "attachment_extracted",
                 {

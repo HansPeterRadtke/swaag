@@ -14,7 +14,14 @@ from swaag.environment.process import ProcessManager, ProcessResult
 
 
 class BrowserAutomationError(RuntimeError):
-    pass
+    def __init__(
+        self,
+        message: str,
+        *,
+        process_result: ProcessResult | None = None,
+    ):
+        super().__init__(message)
+        self.process_result = process_result
 
 
 @dataclass(slots=True)
@@ -105,12 +112,6 @@ def resolve_aubro_invocation(config: AgentConfig) -> AubroInvocation:
     return AubroInvocation(command_prefix=command_prefix, env_overrides=env_overrides, source_path=str(source_path))
 
 
-def _trim_text(text: str, limit: int) -> str:
-    if len(text) <= limit:
-        return text
-    return text[:limit]
-
-
 def run_aubro_command(
     *,
     config: AgentConfig,
@@ -131,16 +132,28 @@ def run_aubro_command(
     )
     raw_stdout = process_result.stdout
     raw_stderr = process_result.stderr
-    stdout = _trim_text(raw_stdout, config.environment.max_capture_chars)
-    stderr = _trim_text(raw_stderr, config.environment.max_capture_chars)
     if process_result.record.return_code != 0:
+        exact_detail = raw_stderr or raw_stdout
+        detail = exact_detail[:400]
+        suffix = (
+            ""
+            if len(detail) == len(exact_detail)
+            else " [bounded preview; read the evidence artifact for complete output]"
+        )
         raise BrowserAutomationError(
-            f"aubro command failed with exit code {process_result.record.return_code}: {stderr or stdout}"
+            f"aubro command failed with exit code {process_result.record.return_code}: {detail}{suffix}",
+            process_result=process_result,
         )
     try:
         payload = json.loads(raw_stdout or "{}")
     except json.JSONDecodeError as exc:
-        raise BrowserAutomationError(f"aubro returned invalid JSON: {stdout[:400]!r}") from exc
+        raise BrowserAutomationError(
+            f"aubro returned invalid JSON: {raw_stdout[:400]!r}",
+            process_result=process_result,
+        ) from exc
     if not isinstance(payload, dict):
-        raise BrowserAutomationError("aubro returned a non-object JSON payload")
+        raise BrowserAutomationError(
+            "aubro returned a non-object JSON payload",
+            process_result=process_result,
+        )
     return AubroCommandResult(payload=payload, process_result=process_result, invocation=invocation)

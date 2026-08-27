@@ -27,6 +27,23 @@ class ToolValidationError(ValueError):
     pass
 
 
+class ToolExecutionError(RuntimeError):
+    """Tool failure whose exact evidence must be committed before the error."""
+
+    def __init__(
+        self,
+        message: str,
+        *,
+        error_type: str | None = None,
+        evidence: dict[str, Any] | None = None,
+        generated_events: list[ToolGeneratedEvent] | None = None,
+    ):
+        super().__init__(message)
+        self.error_type = error_type or self.__class__.__name__
+        self.evidence = dict(evidence or {})
+        self.generated_events = list(generated_events or [])
+
+
 class SemanticCallContextOverflow(RuntimeError):
     def __init__(self, report: BudgetReport | None):
         super().__init__(

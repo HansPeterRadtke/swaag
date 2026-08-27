@@ -34,7 +34,7 @@ The complete execution history is external durable state, not the current contex
 
 Each call receives a semantic projection sized for its current budget. Summaries are lossy derived views, never ground truth. Their target size follows from context calculation and can change from call to call. Summary prompts must be benchmarked because summaries can silently lose dates, identifiers, constraints, causality, or other later-relevant information.
 
-Keep raw tool results recoverable. Include small relevant results verbatim; semantically select or summarize large ones against an explicit target. Give reduction calls enough task context to know what matters and retain references to raw results.
+Keep raw tool results recoverable, including failed external-process output and provider error bodies. A bounded error or preview must cite an integrity-checked exact artifact committed before the failure event. Include small relevant results verbatim; semantically select or summarize large ones against an explicit target. Give reduction calls enough task context to know what matters and retain references to raw results.
 
 ## Tools and research
 

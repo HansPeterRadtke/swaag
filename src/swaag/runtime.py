@@ -70,6 +70,7 @@ from swaag.tokens import (
 from swaag.tools.base import (
     SemanticCallContextOverflow,
     SemanticCallRequest,
+    ToolExecutionError,
     _validate_schema_value,
 )
 from swaag.tools.registry import ToolRegistry
@@ -5831,6 +5832,11 @@ class AgentRuntime:
                 )
                 continue
             except Exception as exc:
+                failure_evidence = self._record_model_failure_evidence(
+                    state,
+                    guard,
+                    exc,
+                )
                 if self._is_model_server_unavailable(exc):
                     transient_attempts += 1
                     telemetry_operation.record_retry()
@@ -5842,9 +5848,23 @@ class AgentRuntime:
                             "reason": str(exc),
                             "attempt": transient_attempts,
                             "next_attempt": transient_attempts + 1,
+                            "evidence": failure_evidence,
                         },
                     )
                     if transient_attempts > self._max_model_unavailable_attempts:
+                        guard.record(
+                            "model_call_failed",
+                            {
+                                "call_id": call_id,
+                                "kind": prepared.assembly.kind,
+                                "prompt_mode": prepared.prompt_mode,
+                                "attempt": total_attempt,
+                                "error": "model_unavailable",
+                                "error_type": type(exc).__name__,
+                                "evidence": failure_evidence,
+                            },
+                        )
+                        guard.require_all("model_request_sent", "model_call_failed")
                         self._finish_inference(
                             state,
                             inference_request.request_id,
@@ -5868,6 +5888,7 @@ class AgentRuntime:
                         "attempt": total_attempt,
                         "error": str(exc),
                         "error_type": exc.__class__.__name__,
+                        "evidence": failure_evidence,
                     },
                 )
                 guard.require_all("model_request_sent", "model_call_failed")
@@ -5931,6 +5952,36 @@ class AgentRuntime:
                 flush=True,
             )
             return completion
+
+    def _record_model_failure_evidence(
+        self,
+        state: SessionState,
+        guard: Any,
+        error: BaseException,
+    ) -> dict[str, Any]:
+        response_body = getattr(error, "response_body", None)
+        if not isinstance(response_body, str):
+            return {}
+        artifact = TextArtifactStore(
+            self.config.sessions.root,
+            state.session_id,
+        ).create(response_body, kind="model_http_error_response")
+        guard.record(
+            "artifact_created",
+            {
+                "artifact_id": artifact.artifact_id,
+                "kind": artifact.kind,
+                "size_chars": artifact.size_chars,
+                "sha256": artifact.sha256,
+            },
+        )
+        response = getattr(error, "response", None)
+        return {
+            "artifact_id": artifact.artifact_id,
+            "sha256": artifact.sha256,
+            "chars": artifact.size_chars,
+            "http_status": getattr(response, "status_code", None),
+        }
 
     def _active_run_id(self, state: SessionState) -> str:
         active = self.history.read_active_run(state.session_id)
@@ -6011,12 +6062,25 @@ class AgentRuntime:
         except (ModelCallStateChanged, RunCancellationRequested):
             raise
         except Exception as exc:
+            failure_evidence: dict[str, Any] = {}
+            reported_error_type = exc.__class__.__name__
+            if isinstance(exc, ToolExecutionError):
+                reported_error_type = exc.error_type
+                failure_evidence = to_jsonable(exc.evidence)
+                for event in exc.generated_events:
+                    guard.record(
+                        event.event_type,
+                        event.payload,
+                        metadata=event.metadata,
+                        derived_writes=event.derived_writes,
+                    )
             error_payload = {
                 "call_id": call_id,
                 "tool_name": decision.tool_name,
                 "tool_input": decision.tool_input,
                 "error": str(exc),
-                "error_type": exc.__class__.__name__,
+                "error_type": reported_error_type,
+                "evidence": failure_evidence,
             }
             tool_error_event = guard.record("tool_error", error_payload)
             guard.require_any("tool_called", "tool_error")

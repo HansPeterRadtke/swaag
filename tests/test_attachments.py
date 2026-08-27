@@ -134,6 +134,21 @@ manifest = {
     path.chmod(0o755)
 
 
+def _write_failing_all2text(path: Path) -> tuple[str, str]:
+    stdout = "complete stdout evidence\n" * 300
+    stderr = "complete stderr evidence\n" * 300
+    path.write_text(
+        "#!/usr/bin/env python3\n"
+        "import sys\n"
+        f"sys.stdout.write({stdout!r})\n"
+        f"sys.stderr.write({stderr!r})\n"
+        "raise SystemExit(7)\n",
+        encoding="utf-8",
+    )
+    path.chmod(0o755)
+    return stdout, stderr
+
+
 def test_extract_attachment_retains_complete_derived_artifact(make_config, tmp_path: Path) -> None:
     command = tmp_path / "fake-all2text"
     _write_fake_all2text(command)
@@ -176,6 +191,48 @@ def test_extract_attachment_retains_complete_derived_artifact(make_config, tmp_p
     assert archived_text["text"] == "derived text from report.txt\n"
     assert json.loads(archived_manifest["text"])["schema"] == "all2text.conversion_manifest.v1"
     assert not (config.sessions.root / state.session_id).exists()
+
+
+def test_extract_attachment_failure_retains_complete_stdout_and_stderr(
+    make_config, tmp_path: Path
+) -> None:
+    command = tmp_path / "failing-all2text"
+    expected_stdout, expected_stderr = _write_failing_all2text(command)
+    config = make_config()
+    config.sessions.root = tmp_path / "sessions"
+    config.attachments.all2text_command = str(command)
+    runtime = AgentRuntime(config, model_client=object())
+    state = runtime.create_or_load_session()
+    reference = runtime.add_attachment(
+        b"source",
+        original_name="report.txt",
+        session_id=state.session_id,
+    )
+
+    run = runtime.execute_tool_once(
+        "extract_attachment",
+        {"attachment_id": reference.attachment_id, "profile": "core"},
+        session_id=state.session_id,
+    )
+
+    assert run.tool_result is None
+    assert run.error is not None
+    assert run.error["error_type"] == "All2TextProcessError"
+    assert len(run.error["error"]) < 1200
+    evidence = run.error["evidence"]
+    store = TextArtifactStore(config.sessions.root, state.session_id)
+    stdout = store.read(
+        evidence["stdout_artifact_id"], max_chars=len(expected_stdout) + 1
+    )
+    stderr = store.read(
+        evidence["stderr_artifact_id"], max_chars=len(expected_stderr) + 1
+    )
+    assert stdout["text"] == expected_stdout
+    assert stderr["text"] == expected_stderr
+    events = runtime.history.read_history(state.session_id)
+    event_types = [event.event_type for event in events]
+    assert event_types.count("artifact_created") == 2
+    assert event_types.index("artifact_created") < event_types.index("tool_error")
 
 
 def test_task_api_accepts_attachments_before_worker_start(make_config, tmp_path: Path) -> None:

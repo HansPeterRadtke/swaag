@@ -23,6 +23,21 @@ class ModelClientError(RuntimeError):
     pass
 
 
+class ModelHTTPError(requests.HTTPError):
+    """HTTP completion failure retaining the provider's exact response body."""
+
+    def __init__(
+        self,
+        message: str,
+        *,
+        response_body: str,
+        request: Any = None,
+        response: Any = None,
+    ):
+        super().__init__(message, request=request, response=response)
+        self.response_body = response_body
+
+
 @dataclass(slots=True)
 class CompletionRequestPolicy:
     profile_name: str
@@ -790,14 +805,20 @@ class LlamaCppClient:
             stop_watcher.set()
             if watcher is not None:
                 watcher.join(timeout=1.0)
+            response_body = response.text
+            detail = _http_error_detail(response, text=response_body)
             close = getattr(response, "close", None)
             if callable(close):
                 close()
-            detail = _http_error_detail(response)
-            raise requests.HTTPError(
+            raise ModelHTTPError(
                 f"{exc} :: {detail}",
-                request=exc.request,
-                response=exc.response,
+                response_body=response_body,
+                request=(
+                    exc.request
+                    if exc.request is not None
+                    else getattr(response, "request", None)
+                ),
+                response=(exc.response if exc.response is not None else response),
             ) from exc
         content_parts: list[str] = []
         last_body: dict[str, Any] = {}
@@ -933,12 +954,17 @@ class LlamaCppClient:
         return self.send_completion(request, timeout_seconds=policy.effective_timeout_seconds)
 
 
-def _http_error_detail(response: requests.Response) -> str:
-    text = response.text.strip()
-    if not text:
+def _http_error_detail(
+    response: requests.Response,
+    *,
+    text: str | None = None,
+) -> str:
+    raw_text = response.text if text is None else text
+    stripped = raw_text.strip()
+    if not stripped:
         return f"http_status={response.status_code}"
     try:
-        payload = response.json()
+        payload = json.loads(raw_text)
     except ValueError:
         payload = None
     if isinstance(payload, dict):
@@ -947,9 +973,18 @@ def _http_error_detail(response: requests.Response) -> str:
             error_type = str(error.get("type", "")).strip()
             message = str(error.get("message", "")).strip()
             parts = [part for part in (f"http_status={response.status_code}", error_type, message) if part]
-            return " | ".join(parts)
-    trimmed = text[:400].replace("\n", " ").strip()
-    return f"http_status={response.status_code} | body={trimmed}"
+            detail = " | ".join(parts)
+        else:
+            detail = f"http_status={response.status_code} | body={stripped}"
+    else:
+        detail = f"http_status={response.status_code} | body={stripped}"
+    single_line = " ".join(detail.splitlines()).strip()
+    if len(single_line) <= 400:
+        return single_line
+    return (
+        single_line[:400]
+        + f" [bounded preview; exact_body_chars={len(raw_text)}]"
+    )
 
 
 def _completion_piece(item: dict[str, Any]) -> str:

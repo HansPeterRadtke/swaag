@@ -29,7 +29,8 @@ why they stay mechanical.
   boundaries, and projection locators are append-only provenance.
 - Storage, upload, and read-chunk limits protect resources. Oversized writes fail
   closed; bounded reads return offsets and completion flags; bounded tool/browser
-  previews retain integrity-linked raw artifacts.
+  previews and external-process/provider errors retain integrity-linked raw
+  artifacts before their reduced display text is recorded.
 - History compaction starts with the smallest oldest prefix that can mechanically
   recover the measured deficit while leaving at least one exact message outside
   the candidate. This chooses a replaceable storage region, not which facts to
