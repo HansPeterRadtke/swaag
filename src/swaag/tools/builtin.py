@@ -279,8 +279,17 @@ class ReadTextTool(Tool):
 
 class NotesTool(Tool):
     name = "notes"
-    description = "List, add, replace, and semantically compact durable working notes without silently truncating their content."
-    usage_guidance = "Add and replace fail closed when exact content exceeds storage limits. Use compact as a separate action when capacity is exhausted; an LLM semantically consolidates every current note through the central context compiler while raw note events remain authoritative."
+    description = "List, add, replace, remove, and semantically compact categorized durable working notes without silently truncating their content."
+    usage_guidance = (
+        "Use concise free-form categories to describe where a note may matter; an LLM "
+        "selects relevant exact notes from the specific upcoming action rather than using "
+        "category labels as deterministic routing keys. Replace or remove obsolete notes and "
+        "consolidate redundant notes instead of accumulating a universal prompt. Add and "
+        "replace fail closed when exact content exceeds storage limits. Use compact as a "
+        "separate action when semantic consolidation is useful or capacity is exhausted; "
+        "every current note goes through the central context compiler and raw note events "
+        "remain authoritative."
+    )
     kind = "stateful"
     output_schema = {
         "type": "object",
@@ -288,38 +297,73 @@ class NotesTool(Tool):
             "note_id": {"type": "string"},
             "title": {"type": "string"},
             "content": {"type": "string"},
+            "categories": {"type": "array", "items": {"type": "string"}},
             "notes": {"type": "array", "items": {"type": "object"}},
             "removed_note_ids": {"type": "array", "items": {"type": "string"}},
             "compacted_note": {"type": "object"},
             "compacted": {"type": "boolean"},
+            "removed": {"type": "boolean"},
         },
         "additionalProperties": False,
     }
     input_schema = _closed_input(
         {
-            "action": {"type": "string", "enum": ["list", "add", "replace", "compact"]},
+            "action": {
+                "type": "string",
+                "enum": ["list", "add", "replace", "remove", "compact"],
+            },
             "note_id": _string_or_null(),
             "title": _string_or_null(),
             "content": _string_or_null(),
+            "categories": _string_array_or_null(),
         }
     )
 
     def validate(self, raw_input: dict[str, Any]) -> dict[str, Any]:
         action = raw_input.get("action")
-        if action not in {"list", "add", "replace", "compact"}:
-            raise ToolValidationError("notes.action must be one of list, add, replace, compact")
+        if action not in {"list", "add", "replace", "remove", "compact"}:
+            raise ToolValidationError(
+                "notes.action must be one of list, add, replace, remove, compact"
+            )
         note_id = raw_input.get("note_id")
         title = raw_input.get("title")
         content = raw_input.get("content")
+        categories = raw_input.get("categories")
         if action == "add" and (not isinstance(title, str) or not isinstance(content, str)):
             raise ToolValidationError("notes add requires string title and content")
         if action == "replace" and (not isinstance(note_id, str) or not isinstance(title, str) or not isinstance(content, str)):
             raise ToolValidationError("notes replace requires note_id, title, and content")
-        if action == "compact" and any(raw_input.get(name) is not None for name in ["note_id", "title", "content"]):
+        if action in {"add", "replace"}:
+            if categories is None:
+                categories = []
+            if not isinstance(categories, list) or not all(
+                isinstance(item, str) for item in categories
+            ):
+                raise ToolValidationError(
+                    f"notes {action} requires a categories array"
+                )
+        if action == "add" and note_id is not None:
+            raise ToolValidationError("notes add does not accept note_id")
+        if action == "remove" and not isinstance(note_id, str):
+            raise ToolValidationError("notes remove requires note_id")
+        if action == "remove" and any(
+            raw_input.get(name) is not None
+            for name in ["title", "content", "categories"]
+        ):
+            raise ToolValidationError(
+                "notes remove accepts only action and note_id"
+            )
+        if action == "compact" and any(raw_input.get(name) is not None for name in ["note_id", "title", "content", "categories"]):
             raise ToolValidationError("notes compact takes only action")
-        if action == "list" and any(raw_input.get(name) is not None for name in ["note_id", "title", "content"]):
+        if action == "list" and any(raw_input.get(name) is not None for name in ["note_id", "title", "content", "categories"]):
             raise ToolValidationError("notes list takes only action")
-        return {"action": action, "note_id": note_id, "title": title, "content": content}
+        return {
+            "action": action,
+            "note_id": note_id,
+            "title": title,
+            "content": content,
+            "categories": categories,
+        }
 
     def execution_timeout_seconds(self, context: ToolContext) -> float | None:
         return None
@@ -355,7 +399,9 @@ class NotesTool(Tool):
                     category="instruction",
                     text=(
                         "Return one concise title of at most 200 characters and consolidated "
-                        "content. The content must fit the mechanical storage limit of "
+                        "content plus concise free-form semantic categories describing where "
+                        "the consolidated note may matter. Categories are relevance hints, "
+                        "not a fixed taxonomy. The content must fit the mechanical storage limit of "
                         f"{target_chars} characters, and title plus content must not exceed "
                         f"{max_total_chars} characters.\n\n"
                     ),
@@ -457,8 +503,37 @@ class NotesTool(Tool):
         generated: list[ToolGeneratedEvent] = []
 
         if action == "list":
-            output = {"notes": [{"note_id": note.note_id, "title": note.title, "content": note.content} for note in state.notes]}
+            output = {
+                "notes": [asdict(note) for note in state.notes]
+            }
             return ToolExecutionResult(tool_name=self.name, output=output, display_text=tool_result_display(self.name, output))
+
+        existing = next(
+            (
+                note
+                for note in state.notes
+                if note.note_id == validated_input["note_id"]
+            ),
+            None,
+        )
+        if action in {"replace", "remove"} and existing is None:
+            raise ToolValidationError(
+                f"Unknown note_id: {validated_input['note_id']}"
+            )
+        if action == "remove":
+            assert existing is not None
+            output = {"note_id": existing.note_id, "removed": True}
+            return ToolExecutionResult(
+                tool_name=self.name,
+                output=output,
+                display_text=tool_result_display(self.name, output),
+                generated_events=[
+                    ToolGeneratedEvent(
+                        "note_removed",
+                        {"note_id": existing.note_id},
+                    )
+                ],
+            )
 
         if action == "add":
             try:
@@ -466,6 +541,7 @@ class NotesTool(Tool):
                     context.config,
                     title=validated_input["title"],
                     content=validated_input["content"],
+                    categories=validated_input["categories"],
                 )
                 enforce_limits(context.config, [*state.notes, note])
             except NoteError as exc:
@@ -474,18 +550,22 @@ class NotesTool(Tool):
                     "Semantically compact existing notes first when capacity is exhausted."
                 ) from exc
             generated.append(ToolGeneratedEvent("note_added", {"note": asdict(note)}))
-            output = {"note_id": note.note_id, "title": note.title, "content": note.content}
+            output = {
+                "note_id": note.note_id,
+                "title": note.title,
+                "content": note.content,
+                "categories": note.categories,
+            }
             return ToolExecutionResult(tool_name=self.name, output=output, display_text=tool_result_display(self.name, output), generated_events=generated)
 
         if action == "replace":
-            existing = next((note for note in state.notes if note.note_id == validated_input["note_id"]), None)
-            if existing is None:
-                raise ToolValidationError(f"Unknown note_id: {validated_input['note_id']}")
+            assert existing is not None
             try:
                 replacement = make_note(
                     context.config,
                     title=validated_input["title"],
                     content=validated_input["content"],
+                    categories=validated_input["categories"],
                     note_id=existing.note_id,
                 )
                 enforce_limits(
@@ -501,11 +581,16 @@ class NotesTool(Tool):
                 ) from exc
             replacement.created_at = existing.created_at
             generated.append(ToolGeneratedEvent("note_replaced", {"note": asdict(replacement)}))
-            output = {"note_id": replacement.note_id, "title": replacement.title, "content": replacement.content}
+            output = {
+                "note_id": replacement.note_id,
+                "title": replacement.title,
+                "content": replacement.content,
+                "categories": replacement.categories,
+            }
             return ToolExecutionResult(tool_name=self.name, output=output, display_text=tool_result_display(self.name, output), generated_events=generated)
 
         if len(state.notes) < 2:
-            output = {"notes": [{"note_id": note.note_id, "title": note.title, "content": note.content} for note in state.notes], "compacted": False}
+            output = {"notes": [asdict(note) for note in state.notes], "compacted": False}
             return ToolExecutionResult(tool_name=self.name, output=output, display_text=tool_result_display(self.name, output))
         source_notes = [asdict(note) for note in state.notes]
         target_chars = min(
@@ -531,13 +616,22 @@ class NotesTool(Tool):
             try:
                 title = payload["title"]
                 content = payload["content"]
-                if not isinstance(title, str) or not isinstance(content, str):
-                    raise NoteError("title and content must both be strings")
+                categories = payload["categories"]
+                if (
+                    not isinstance(title, str)
+                    or not isinstance(content, str)
+                    or not isinstance(categories, list)
+                    or not all(isinstance(item, str) for item in categories)
+                ):
+                    raise NoteError(
+                        "title and content must be strings and categories must be a string array"
+                    )
                 compaction = compact_notes(
                     context.config,
                     state.notes,
                     title=title,
                     content=content,
+                    categories=categories,
                 )
                 break
             except (KeyError, NoteError) as exc:

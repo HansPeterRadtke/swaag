@@ -102,10 +102,34 @@ def prompt_instruction_selection_contract(
     )
 
 
+def note_selection_contract(note_ids: Iterable[str]) -> ContractSpec:
+    identifiers = list(note_ids)
+    if not identifiers:
+        raise ValueError("note selection requires at least one candidate")
+    return _contract(
+        "note_selection",
+        _closed_object(
+            {
+                "operation_categories": _array(_string()),
+                "selected_note_ids": _array(
+                    {"type": "string", "enum": identifiers}
+                ),
+                "reason": _string(),
+            }
+        ),
+    )
+
+
 def notes_compaction_contract() -> ContractSpec:
     return _contract(
         "notes_compaction",
-        _closed_object({"title": _string(), "content": _string()}),
+        _closed_object(
+            {
+                "title": _string(),
+                "content": _string(),
+                "categories": _array(_string()),
+            }
+        ),
     )
 
 

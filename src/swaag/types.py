@@ -21,6 +21,7 @@ ModelCallKind = Literal[
     "presentation_evaluation",
     "history_analysis",
     "notes_compaction",
+    "note_selection",
     "prompt_instruction_selection",
     "prompt_instruction_projection",
     "doctor",
@@ -48,6 +49,7 @@ class Note:
     content: str
     created_at: str
     updated_at: str
+    categories: list[str] = field(default_factory=list)
     metadata: dict[str, Any] = field(default_factory=dict)
 
 

@@ -11,7 +11,17 @@ class NoteError(ValueError):
     pass
 
 
-def validate_note_fields(config: AgentConfig, *, title: str, content: str) -> tuple[str, str]:
+MAX_NOTE_CATEGORIES = 16
+MAX_NOTE_CATEGORY_CHARS = 120
+
+
+def validate_note_fields(
+    config: AgentConfig,
+    *,
+    title: str,
+    content: str,
+    categories: list[str] | None = None,
+) -> tuple[str, str, list[str]]:
     title = title.strip()
     content = content.strip()
     if not title:
@@ -25,17 +35,60 @@ def validate_note_fields(config: AgentConfig, *, title: str, content: str) -> tu
             "note content exceeds the configured max_note_chars storage limit: "
             f"{config.notes.max_note_chars}"
         )
-    return title, content
+    normalized_categories: list[str] = []
+    for raw_category in categories or []:
+        if not isinstance(raw_category, str):
+            raise NoteError("note categories must contain only strings")
+        category = raw_category.strip()
+        if not category:
+            raise NoteError("note categories must not contain empty values")
+        if len(category) > MAX_NOTE_CATEGORY_CHARS:
+            raise NoteError(
+                "note category exceeds the "
+                f"{MAX_NOTE_CATEGORY_CHARS}-character storage limit"
+            )
+        if category not in normalized_categories:
+            normalized_categories.append(category)
+    if len(normalized_categories) > MAX_NOTE_CATEGORIES:
+        raise NoteError(
+            "note category count exceeds the "
+            f"{MAX_NOTE_CATEGORIES}-category storage limit"
+        )
+    return title, content, normalized_categories
 
 
-def make_note(config: AgentConfig, *, title: str, content: str, note_id: str | None = None) -> Note:
-    title, content = validate_note_fields(config, title=title, content=content)
+def make_note(
+    config: AgentConfig,
+    *,
+    title: str,
+    content: str,
+    categories: list[str] | None = None,
+    note_id: str | None = None,
+) -> Note:
+    title, content, categories = validate_note_fields(
+        config,
+        title=title,
+        content=content,
+        categories=categories,
+    )
     now = utc_now_iso()
-    return Note(note_id=note_id or new_id("note"), title=title, content=content, created_at=now, updated_at=now)
+    return Note(
+        note_id=note_id or new_id("note"),
+        title=title,
+        content=content,
+        created_at=now,
+        updated_at=now,
+        categories=categories,
+    )
 
 
 def note_total_chars(notes: list[Note]) -> int:
-    return sum(len(note.title) + len(note.content) for note in notes)
+    return sum(
+        len(note.title)
+        + len(note.content)
+        + sum(len(category) for category in note.categories)
+        for note in notes
+    )
 
 
 def enforce_limits(config: AgentConfig, notes: list[Note]) -> list[Note]:
@@ -60,6 +113,7 @@ def compact_notes(
     *,
     title: str,
     content: str,
+    categories: list[str] | None = None,
 ) -> tuple[list[str], Note] | None:
     if len(notes) < 2:
         return None
@@ -67,6 +121,7 @@ def compact_notes(
         config,
         title=title,
         content=content,
+        categories=categories,
     )
     enforce_limits(config, [compacted])
     return [note.note_id for note in notes], compacted
@@ -75,7 +130,12 @@ def compact_notes(
 def render_notes(notes: list[Note]) -> str:
     if not notes:
         return ""
-    return "\n\n".join(f"[{note.note_id}] {note.title}\n{note.content}" for note in notes)
+    return "\n\n".join(
+        f"[{note.note_id}] {note.title}\n"
+        f"Categories: {note.categories!r}\n"
+        f"{note.content}"
+        for note in notes
+    )
 
 
 def select_notes_for_prompt(

@@ -114,9 +114,45 @@ def test_side_effect_tool_blocked_by_policy(make_config, tmp_path: Path) -> None
 def test_notes_tool_add_returns_generated_events(make_config) -> None:
     registry = ToolRegistry()
     config = make_config()
-    _, result = registry.dispatch("notes", {"action": "add", "title": "Todo", "content": "Check file"}, config, _empty_state())
+    _, result = registry.dispatch(
+        "notes",
+        {
+            "action": "add",
+            "note_id": None,
+            "title": "Todo",
+            "content": "Check file",
+            "categories": ["software investigation"],
+        },
+        config,
+        _empty_state(),
+    )
     assert result.generated_events
     assert result.generated_events[0].event_type == "note_added"
+    assert result.output["categories"] == ["software investigation"]
+
+
+def test_notes_tool_remove_is_durable(make_config) -> None:
+    registry = ToolRegistry()
+    config = make_config()
+    state = _empty_state()
+    note = make_note(config, title="Obsolete", content="retired workaround")
+    state.notes.append(note)
+
+    _, result = registry.dispatch(
+        "notes",
+        {
+            "action": "remove",
+            "note_id": note.note_id,
+            "title": None,
+            "content": None,
+            "categories": None,
+        },
+        config,
+        state,
+    )
+
+    assert result.output == {"note_id": note.note_id, "removed": True}
+    assert result.generated_events[0].event_type == "note_removed"
 
 
 def test_notes_tool_add_fails_closed_at_capacity_without_generated_mutation(
@@ -130,7 +166,13 @@ def test_notes_tool_add_fails_closed_at_capacity_without_generated_mutation(
     with pytest.raises(ToolValidationError, match="compact existing notes"):
         registry.dispatch(
             "notes",
-            {"action": "add", "title": "New", "content": "new exact fact"},
+            {
+                "action": "add",
+                "note_id": None,
+                "title": "New",
+                "content": "new exact fact",
+                "categories": [],
+            },
             config,
             state,
         )
@@ -161,11 +203,18 @@ def test_notes_tool_compaction_is_central_semantic_call_with_exact_sources(
         return {
             "title": "Exact durable state",
             "content": "Never remove marker-17. Tool check passed at 12:30.",
+            "categories": ["constraints", "verified evidence"],
         }
 
     _, result = registry.dispatch(
         "notes",
-        {"action": "compact"},
+        {
+            "action": "compact",
+            "note_id": None,
+            "title": None,
+            "content": None,
+            "categories": None,
+        },
         config,
         state,
         semantic_call=semantic_call,
@@ -176,6 +225,10 @@ def test_notes_tool_compaction_is_central_semantic_call_with_exact_sources(
     assert request.contract.name == "notes_compaction"
     assert result.output["compacted"] is True
     assert result.output["compacted_note"]["content"].endswith("12:30.")
+    assert result.output["compacted_note"]["categories"] == [
+        "constraints",
+        "verified evidence",
+    ]
     event = next(
         item for item in result.generated_events if item.event_type == "notes_compacted"
     )
@@ -208,14 +261,29 @@ def test_notes_tool_compaction_recovers_from_measured_context_overflow(
             return {
                 "title": "Recovered",
                 "content": "left-marker and right-marker are both preserved",
+                "categories": ["recovered state"],
             }
         if "left-marker" in source:
-            return {"title": "Left", "content": "left-fragment"}
-        return {"title": "Right", "content": "right-fragment"}
+            return {
+                "title": "Left",
+                "content": "left-fragment",
+                "categories": ["left"],
+            }
+        return {
+            "title": "Right",
+            "content": "right-fragment",
+            "categories": ["right"],
+        }
 
     _, result = registry.dispatch(
         "notes",
-        {"action": "compact"},
+        {
+            "action": "compact",
+            "note_id": None,
+            "title": None,
+            "content": None,
+            "categories": None,
+        },
         config,
         state,
         semantic_call=semantic_call,
@@ -244,7 +312,11 @@ def test_notes_tool_compaction_repairs_mechanical_storage_failure(
     def semantic_call(request):
         requests.append(request)
         if len(requests) == 1:
-            return {"title": "Too large", "content": "x" * 41}
+            return {
+                "title": "Too large",
+                "content": "x" * 41,
+                "categories": ["state"],
+            }
         feedback = next(
             component
             for component in request.components
@@ -258,11 +330,21 @@ def test_notes_tool_compaction_repairs_mechanical_storage_failure(
         )
         assert "left-marker" in exact_sources.text
         assert "right-marker" in exact_sources.text
-        return {"title": "Repaired", "content": "left-marker; right-marker"}
+        return {
+            "title": "Repaired",
+            "content": "left-marker; right-marker",
+            "categories": ["state"],
+        }
 
     _, result = registry.dispatch(
         "notes",
-        {"action": "compact"},
+        {
+            "action": "compact",
+            "note_id": None,
+            "title": None,
+            "content": None,
+            "categories": None,
+        },
         config,
         state,
         semantic_call=semantic_call,

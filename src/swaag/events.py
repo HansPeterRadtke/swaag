@@ -182,7 +182,9 @@ ALLOWED_EVENT_TYPES = frozenset(
         "code_checkpoint_restored",
         "note_added",
         "note_replaced",
+        "note_removed",
         "notes_compacted",
+        "note_selection_failed",
         "prompt_instruction_added",
         "prompt_instruction_replaced",
         "prompt_instruction_removed",
@@ -679,7 +681,17 @@ REQUIRED_PAYLOAD_KEYS: dict[str, frozenset[str]] = {
     "code_checkpoint_restored": frozenset({"checkpoint_id", "restored_to", "workspace_root"}),
     "note_added": frozenset({"note"}),
     "note_replaced": frozenset({"note"}),
+    "note_removed": frozenset({"note_id"}),
     "notes_compacted": frozenset({"removed_note_ids", "compacted_note"}),
+    "note_selection_failed": frozenset(
+        {
+            "target_context_sha256",
+            "candidate_note_references",
+            "error",
+            "error_type",
+            "fallback",
+        }
+    ),
     "prompt_instruction_added": frozenset({"instruction"}),
     "prompt_instruction_replaced": frozenset({"instruction"}),
     "prompt_instruction_removed": frozenset({"instruction_id"}),

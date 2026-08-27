@@ -1,0 +1,9 @@
+Exact upcoming action-context SHA-256: {target_context_sha256}
+
+Exact semantically meaningful components of the upcoming action, excluding the separately supplied note candidates:
+{target_context}
+
+Exact durable note candidates:
+{candidate_notes}
+
+Identify the actual operation categories and select every note relevant to this specific upcoming action.

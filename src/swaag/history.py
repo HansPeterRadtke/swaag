@@ -65,6 +65,7 @@ _STATEFUL_REBUILD_EVENT_TYPES = frozenset(
         "attachment_added",
         "note_added",
         "note_replaced",
+        "note_removed",
         "notes_compacted",
         "prompt_instruction_added",
         "prompt_instruction_replaced",
@@ -1510,19 +1511,59 @@ class HistoryStore:
             state.attachments.append(reference)
             return
         if event.event_type == "note_added":
-            note = Note(**payload["note"])
+            note_payload = dict(payload["note"])
+            note_metadata = dict(note_payload.get("metadata", {}))
+            note_metadata.update(
+                {
+                    "source_event_sequence": event.sequence,
+                    "source_event_hash": event.hash,
+                    "source_event_type": event.event_type,
+                    "source_event_session_id": event.session_id,
+                }
+            )
+            note_payload["metadata"] = note_metadata
+            note = Note(**note_payload)
             state.notes = [item for item in state.notes if item.note_id != note.note_id]
             state.notes.append(note)
             return
         if event.event_type == "note_replaced":
-            note = Note(**payload["note"])
+            note_payload = dict(payload["note"])
+            note_metadata = dict(note_payload.get("metadata", {}))
+            note_metadata.update(
+                {
+                    "source_event_sequence": event.sequence,
+                    "source_event_hash": event.hash,
+                    "source_event_type": event.event_type,
+                    "source_event_session_id": event.session_id,
+                }
+            )
+            note_payload["metadata"] = note_metadata
+            note = Note(**note_payload)
             state.notes = [note if item.note_id == note.note_id else item for item in state.notes]
             if not any(item.note_id == note.note_id for item in state.notes):
                 state.notes.append(note)
             return
+        if event.event_type == "note_removed":
+            note_id = str(payload["note_id"])
+            state.notes = [
+                item for item in state.notes if item.note_id != note_id
+            ]
+            return
         if event.event_type == "notes_compacted":
             removed = {str(item) for item in payload["removed_note_ids"]}
-            compacted = Note(**payload["compacted_note"])
+            compacted_payload = dict(payload["compacted_note"])
+            compacted_metadata = dict(compacted_payload.get("metadata", {}))
+            compacted_metadata.update(
+                {
+                    "source_event_sequence": event.sequence,
+                    "source_event_hash": event.hash,
+                    "source_event_type": event.event_type,
+                    "source_event_session_id": event.session_id,
+                    "source_note_ids": list(payload["removed_note_ids"]),
+                }
+            )
+            compacted_payload["metadata"] = compacted_metadata
+            compacted = Note(**compacted_payload)
             state.notes = [item for item in state.notes if item.note_id not in removed]
             state.notes.append(compacted)
             return

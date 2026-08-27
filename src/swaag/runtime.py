@@ -33,6 +33,7 @@ from swaag.grammar import (
     communication_status_contract,
     completion_evaluation_contract,
     evidence_projection_contract,
+    note_selection_contract,
     prompt_instruction_selection_contract,
     prompt_instruction_projection_contract,
     presentation_evaluation_contract,
@@ -58,7 +59,11 @@ from swaag.prompt_instructions import (
 )
 from swaag.prompt_instruction_store import PromptInstructionStore
 from swaag.model_cache import build_model_client
-from swaag.notes import render_notes
+from swaag.notes import (
+    MAX_NOTE_CATEGORIES,
+    MAX_NOTE_CATEGORY_CHARS,
+    render_notes,
+)
 from swaag.prompts import PromptBuilder
 from swaag.scheduler import WakeupStore
 from swaag.schema_portability import assert_portable_json_schema
@@ -86,6 +91,7 @@ from swaag.types import (
     HistoryEvent,
     Message,
     ModelCallKind,
+    Note,
     PromptAssembly,
     PromptArtifact,
     PromptComponent,
@@ -1284,6 +1290,24 @@ class AgentRuntime:
         remaining_runtime_projection_calls = [
             max(8, int(self.config.context.max_compaction_rounds) * 8)
         ]
+        selection_counter = self._counter(state)
+        selection_components = self._runtime_context_components(
+            state,
+            selection_counter,
+            selected_notes=list(state.notes),
+        )
+        selection_assembly = self.prompts.build_agent_action_prompt(
+            list(state.messages),
+            tool_specs,
+            original_request=original_request,
+            pending_user_messages=pending_messages,
+            prompt_mode="standard",
+            context_components=selection_components,
+            capability_index=capability_index,
+            tool_result_projections=tool_result_projections,
+            validation_feedback=validation_feedback,
+        )
+        selected_notes = self._select_action_notes(state, selection_assembly)
         max_rounds = max(0, int(self.config.context.max_compaction_rounds))
         for compaction_round in range(max_rounds + 1):
             counter = self._counter(state)
@@ -1291,6 +1315,7 @@ class AgentRuntime:
                 state,
                 counter,
                 projections=runtime_context_projections,
+                selected_notes=selected_notes,
             )
             assembly = self.prompts.build_agent_action_prompt(
                 list(state.messages),
@@ -1369,6 +1394,7 @@ class AgentRuntime:
                 compilation=compilation,
                 existing_projections=runtime_context_projections,
                 remaining_calls=remaining_runtime_projection_calls,
+                selected_notes=selected_notes,
             )
             if projected_context is not None:
                 source_name, projection = projected_context
@@ -3605,7 +3631,155 @@ class AgentRuntime:
         )
         return projection
 
-    def _runtime_context_sources(self, state: SessionState) -> dict[str, str]:
+    def _select_action_notes(
+        self,
+        state: SessionState,
+        assembly: PromptAssembly,
+    ) -> list[Note]:
+        candidates = list(state.notes)
+        if not candidates:
+            self.history.record_event(
+                state,
+                "notes_selected",
+                {
+                    "included_note_ids": [],
+                    "omitted_note_ids": [],
+                    "tokens": 0,
+                    "exact": True,
+                    "semantic_selection": False,
+                    "selection_fallback": False,
+                    "operation_categories": [],
+                    "selection_reason": "No durable note candidates exist.",
+                    "candidate_note_references": [],
+                },
+            )
+            return []
+
+        target_rows = [
+            asdict(component)
+            for component in assembly.components
+            if component.category != "wrapper"
+            and component.include_in_context
+            and component.name != "durable_notes"
+        ]
+        target_context = stable_json_dumps(
+            {"call_kind": "action", "components": target_rows},
+            indent=2,
+        )
+        target_context_sha256 = sha256_text(target_context)
+        candidate_rows = [asdict(note) for note in candidates]
+        candidate_references = [
+            {
+                "note_id": note.note_id,
+                "sha256": sha256_text(
+                    stable_json_dumps(asdict(note), indent=None)
+                ),
+            }
+            for note in candidates
+        ]
+        system_template = self.config.prompts.note_selection_system_template
+        user_template = self.config.prompts.note_selection_template
+        request = SemanticCallRequest(
+            kind="note_selection",
+            system_instruction=self.prompts.template_text(system_template),
+            components=[
+                PromptComponent(
+                    name="note_selection_task",
+                    category="system_prompt_instruction",
+                    text=self.prompts.template_text(user_template).format(
+                        target_context_sha256=target_context_sha256,
+                        target_context=target_context,
+                        candidate_notes=stable_json_dumps(
+                            candidate_rows,
+                            indent=2,
+                        ),
+                    ),
+                )
+            ],
+            contract=note_selection_contract(
+                note.note_id for note in candidates
+            ),
+            minimum_output_tokens=128,
+            desired_output_tokens=384,
+            prompt_template_names=(system_template, user_template),
+        )
+        semantic_selection = True
+        selection_fallback = False
+        operation_categories: list[str] = []
+        selection_reason = ""
+        try:
+            payload = self._execute_tool_semantic_call(state, request)
+            for raw_category in payload["operation_categories"]:
+                category = str(raw_category).strip()
+                if not category or len(category) > MAX_NOTE_CATEGORY_CHARS:
+                    raise ValueError(
+                        "note selector returned an invalid operation category"
+                    )
+                if category not in operation_categories:
+                    operation_categories.append(category)
+            if len(operation_categories) > MAX_NOTE_CATEGORIES:
+                raise ValueError(
+                    "note selector returned too many operation categories"
+                )
+            selected_ids = {
+                str(note_id) for note_id in payload["selected_note_ids"]
+            }
+            selected = [
+                note for note in candidates if note.note_id in selected_ids
+            ]
+            selection_reason = str(payload["reason"])
+        except (ModelCallStateChanged, RunCancellationRequested):
+            raise
+        except Exception as exc:
+            semantic_selection = False
+            selection_fallback = True
+            selected = candidates
+            selection_reason = (
+                "Semantic selector failed; every exact note candidate was included."
+            )
+            self.history.record_event(
+                state,
+                "note_selection_failed",
+                {
+                    "target_context_sha256": target_context_sha256,
+                    "candidate_note_references": candidate_references,
+                    "error": str(exc),
+                    "error_type": type(exc).__name__,
+                    "fallback": "include_all_notes",
+                },
+            )
+
+        selected_text = render_notes(selected)
+        counted = self._counter(state).count_text(selected_text)
+        selected_ids = {note.note_id for note in selected}
+        self.history.record_event(
+            state,
+            "notes_selected",
+            {
+                "included_note_ids": [note.note_id for note in selected],
+                "omitted_note_ids": [
+                    note.note_id
+                    for note in candidates
+                    if note.note_id not in selected_ids
+                ],
+                "tokens": counted.tokens,
+                "exact": counted.exact,
+                "semantic_selection": semantic_selection,
+                "selection_fallback": selection_fallback,
+                "operation_categories": operation_categories,
+                "selection_reason": selection_reason,
+                "selection_target_context_sha256": target_context_sha256,
+                "candidate_note_references": candidate_references,
+            },
+        )
+        return selected
+
+    def _runtime_context_sources(
+        self,
+        state: SessionState,
+        *,
+        selected_notes: list[Note] | None = None,
+    ) -> dict[str, str]:
         filesystem = AgentEnvironment(self.config, state).filesystem
         workspace_files = filesystem.list_files(".")
         return {
@@ -3617,7 +3791,9 @@ class AgentRuntime:
                 },
                 indent=2,
             ),
-            "durable_notes": render_notes(state.notes),
+            "durable_notes": render_notes(
+                state.notes if selected_notes is None else selected_notes
+            ),
         }
 
     def _runtime_context_source_locator(
@@ -3651,10 +3827,14 @@ class AgentRuntime:
         compilation: ContextCompilation,
         existing_projections: dict[str, RuntimeContextProjection],
         remaining_calls: list[int],
+        selected_notes: list[Note] | None = None,
     ) -> tuple[str, RuntimeContextProjection] | None:
         if compilation.overflow_tokens <= 0:
             return None
-        sources = self._runtime_context_sources(state)
+        sources = self._runtime_context_sources(
+            state,
+            selected_notes=selected_notes,
+        )
         report_by_name = {
             item.name: int(item.tokens) for item in compilation.report.breakdown
         }
@@ -3812,6 +3992,7 @@ class AgentRuntime:
         counter: ExactTokenCounter | ConservativeEstimator | _HistoryAwareTokenCounter,
         *,
         projections: dict[str, RuntimeContextProjection] | None = None,
+        selected_notes: list[Note] | None = None,
     ) -> list[PromptComponent]:
         wakeup_store = WakeupStore(self.config.sessions.root)
         latest_handles: dict[str, str] = {}
@@ -3869,7 +4050,10 @@ class AgentRuntime:
                 text="Environment state:\n" + stable_json_dumps(environment, indent=2) + "\n\n",
             )
         ]
-        sources = self._runtime_context_sources(state)
+        sources = self._runtime_context_sources(
+            state,
+            selected_notes=selected_notes,
+        )
         projection_map = projections or {}
         workspace_source = sources["workspace_file_manifest"]
         workspace_projection = projection_map.get("workspace_file_manifest")
@@ -3915,17 +4099,6 @@ class AgentRuntime:
                 )
             )
         notes_source = sources["durable_notes"]
-        notes_count = counter.count_text(notes_source)
-        self.history.record_event(
-            state,
-            "notes_selected",
-            {
-                "included_note_ids": [note.note_id for note in state.notes],
-                "omitted_note_ids": [],
-                "tokens": notes_count.tokens,
-                "exact": notes_count.exact,
-            },
-        )
         if notes_source:
             notes_projection = projection_map.get("durable_notes")
             if (
