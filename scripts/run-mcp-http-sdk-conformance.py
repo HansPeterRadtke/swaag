@@ -55,12 +55,14 @@ async def _run(args: argparse.Namespace) -> dict[str, Any]:
     server = await asyncio.start_server(service.handle_client, "127.0.0.1", 0)
     port = int(server.sockets[0].getsockname()[1])
     probe = Path(__file__).with_name("mcp-http-sdk-conformance.mjs")
+    subscription_ready = output_dir / "subscription-ready"
     command = [
         "node",
         str(probe),
         str(Path(args.sdk_root).expanduser().resolve()),
         f"http://127.0.0.1:{port}/mcp",
         str(workspace_root),
+        str(subscription_ready),
     ]
     process: asyncio.subprocess.Process | None = None
     try:
@@ -69,6 +71,21 @@ async def _run(args: argparse.Namespace) -> dict[str, Any]:
             stdout=asyncio.subprocess.PIPE,
             stderr=asyncio.subprocess.PIPE,
         )
+        loop = asyncio.get_running_loop()
+        deadline = loop.time() + min(float(args.timeout_seconds), 15.0)
+        while not subscription_ready.exists():
+            if process.returncode is not None:
+                stdout_bytes, stderr_bytes = await process.communicate()
+                raise RuntimeError(
+                    "official MCP SDK probe exited before subscription acknowledgement: "
+                    + stderr_bytes.decode("utf-8").strip()
+                )
+            if loop.time() >= deadline:
+                raise TimeoutError(
+                    "official MCP SDK probe did not acknowledge subscriptions/listen"
+                )
+            await asyncio.sleep(0.05)
+        calculator.description = calculator.description + " [conformance-catalog-revision]"
         stdout_bytes, stderr_bytes = await asyncio.wait_for(
             process.communicate(), timeout=float(args.timeout_seconds)
         )
@@ -84,6 +101,13 @@ async def _run(args: argparse.Namespace) -> dict[str, Any]:
             raise RuntimeError("official MCP SDK probe omitted the verified tool result")
         if calculator_result.get("mirroredParameterHeader") != "Expression":
             raise RuntimeError("official MCP SDK probe omitted mirrored-header evidence")
+        subscription_result = sdk_result.get("subscription", {})
+        if subscription_result.get("honoredFilter") != {"toolsListChanged": True}:
+            raise RuntimeError("official MCP SDK probe omitted honored subscription evidence")
+        if subscription_result.get("notificationMethod") != "notifications/tools/list_changed":
+            raise RuntimeError("official MCP SDK probe omitted tools/list_changed evidence")
+        if subscription_result.get("closeCause") != "local":
+            raise RuntimeError("official MCP SDK probe did not close its subscription locally")
         if no_inference.accesses:
             raise RuntimeError(
                 "model client was accessed: " + ", ".join(no_inference.accesses)

@@ -89,8 +89,16 @@ def test_mcp_sdk_conformance_assets_are_pinned_and_parse() -> None:
     assert "client.callTool" in probe_source
     assert "new StreamableHTTPClientTransport" in http_probe_source
     assert '"x-mcp-header"' in http_probe_source
+    assert 'client.setNotificationHandler(' in http_probe_source
+    assert '"notifications/tools/list_changed"' in http_probe_source
+    assert "await client.listen(" in http_probe_source
+    assert "subscription.honoredFilter" in http_probe_source
+    assert "await subscription.close()" in http_probe_source
+    assert "subscriptionReadyPath" in http_probe_source
     assert "_NoInferenceClient" in http_runner_source
     assert "model_client=no_inference" in http_runner_source
+    assert "subscription_ready.exists()" in http_runner_source
+    assert "conformance-catalog-revision" in http_runner_source
 
 
 def test_a2a_sdk_conformance_assets_are_pinned_and_parse() -> None:
