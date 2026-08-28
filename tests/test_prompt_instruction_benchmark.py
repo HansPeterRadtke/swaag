@@ -158,6 +158,14 @@ def test_prompt_instruction_behavior_benchmark_uses_production_agent_loop(
     ]
     assert result["verification"]["passed"] is True
     assert result["context_compilations"]
+    workspace_components = [
+        component
+        for compilation in result["context_compilations"]
+        for component in compilation.get("accounting", {}).get("components", [])
+        if component.get("name") == "workspace_file_manifest"
+    ]
+    assert workspace_components
+    assert max(int(item["tokens"]) for item in workspace_components) < 100
     assert result["source_event_references"]
     assert len(result["source_prompt_sha256"]) == 64
     assert (
