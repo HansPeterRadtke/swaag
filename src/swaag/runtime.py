@@ -1296,8 +1296,13 @@ class AgentRuntime:
             selection_counter,
             selected_notes=list(state.notes),
         )
+        authoritative_messages = self.history.read_authoritative_messages(
+            state.session_id
+        )
+        projected_messages = list(state.messages)
+        has_derived_history = authoritative_messages != projected_messages
         selection_assembly = self.prompts.build_agent_action_prompt(
-            list(state.messages),
+            authoritative_messages if has_derived_history else projected_messages,
             tool_specs,
             original_request=original_request,
             pending_user_messages=pending_messages,
@@ -1309,37 +1314,35 @@ class AgentRuntime:
         )
         selected_notes = self._select_action_notes(state, selection_assembly)
         max_rounds = max(0, int(self.config.context.max_compaction_rounds))
-        for compaction_round in range(max_rounds + 1):
-            counter = self._counter(state)
-            context_components = self._runtime_context_components(
-                state,
-                counter,
-                projections=runtime_context_projections,
-                selected_notes=selected_notes,
-            )
-            assembly = self.prompts.build_agent_action_prompt(
-                list(state.messages),
+        effective_minimum = (
+            self.config.context.reserved_response_tokens
+            if minimum_output_tokens is None
+            else minimum_output_tokens
+        )
+
+        def build_action_assembly(
+            messages: list[Message],
+            components: list[PromptComponent],
+        ) -> PromptAssembly:
+            return self.prompts.build_agent_action_prompt(
+                messages,
                 tool_specs,
                 original_request=original_request,
                 pending_user_messages=pending_messages,
                 prompt_mode="standard",
-                context_components=context_components,
+                context_components=components,
                 capability_index=capability_index,
                 tool_result_projections=tool_result_projections,
                 validation_feedback=validation_feedback,
             )
-            compilation = self._compile_context(
-                state,
-                assembly,
-                contract,
-                minimum_output_tokens=(
-                    self.config.context.reserved_response_tokens
-                    if minimum_output_tokens is None
-                    else minimum_output_tokens
-                ),
-            )
+
+        def record_action_compilation(
+            compilation: ContextCompilation,
+            *,
+            history_source: str,
+            candidate_only: bool,
+        ) -> None:
             report = compilation.report
-            last_report = report
             self.history.record_event(
                 state,
                 "context_compiled",
@@ -1348,6 +1351,10 @@ class AgentRuntime:
                     "prompt_mode": "standard",
                     "accounting": compilation.accounting(),
                     "cap_error": "" if report.fits else "context_limit_exceeded",
+                    "history_source": history_source,
+                    "candidate_only": candidate_only,
+                    "authoritative_message_count": len(authoritative_messages),
+                    "projected_message_count": len(state.messages),
                 },
             )
             self.history.record_event(
@@ -1358,7 +1365,66 @@ class AgentRuntime:
                     "prompt_mode": "standard",
                     "budget_report": asdict(report),
                     "cap_error": "" if report.fits else "context_limit_exceeded",
+                    "history_source": history_source,
+                    "candidate_only": candidate_only,
                 },
+            )
+
+        for compaction_round in range(max_rounds + 1):
+            counter = self._counter(state)
+            context_components = self._runtime_context_components(
+                state,
+                counter,
+                projections=runtime_context_projections,
+                selected_notes=selected_notes,
+            )
+            if has_derived_history:
+                authoritative_assembly = build_action_assembly(
+                    authoritative_messages,
+                    context_components,
+                )
+                authoritative_compilation = self._compile_context(
+                    state,
+                    authoritative_assembly,
+                    contract,
+                    minimum_output_tokens=effective_minimum,
+                )
+                record_action_compilation(
+                    authoritative_compilation,
+                    history_source="authoritative_message_events",
+                    candidate_only=not authoritative_compilation.report.fits,
+                )
+                if authoritative_compilation.report.fits:
+                    self._record_prompt_built(
+                        state,
+                        authoritative_assembly,
+                        contract,
+                        authoritative_compilation.report,
+                    )
+                    return PreparedCall(
+                        assembly=authoritative_assembly,
+                        report=authoritative_compilation.report,
+                        prompt_mode="standard",
+                        contract=contract,
+                    )
+
+            assembly = build_action_assembly(list(state.messages), context_components)
+            compilation = self._compile_context(
+                state,
+                assembly,
+                contract,
+                minimum_output_tokens=effective_minimum,
+            )
+            report = compilation.report
+            last_report = report
+            record_action_compilation(
+                compilation,
+                history_source=(
+                    "derived_history_projection"
+                    if has_derived_history
+                    else "authoritative_message_events"
+                ),
+                candidate_only=False,
             )
             if report.fits:
                 self._record_prompt_built(state, assembly, contract, report)
@@ -1406,11 +1472,6 @@ class AgentRuntime:
             ):
                 break
 
-        effective_minimum = (
-            self.config.context.reserved_response_tokens
-            if minimum_output_tokens is None
-            else minimum_output_tokens
-        )
         recovered = self._recover_prompt_instruction_overflow(
             state,
             assembly,
@@ -1428,6 +1489,14 @@ class AgentRuntime:
                     "accounting": recovered.accounting(),
                     "cap_error": "",
                     "prompt_instruction_projection": True,
+                    "history_source": (
+                        "derived_history_projection"
+                        if has_derived_history
+                        else "authoritative_message_events"
+                    ),
+                    "candidate_only": False,
+                    "authoritative_message_count": len(authoritative_messages),
+                    "projected_message_count": len(state.messages),
                 },
             )
             self.history.record_event(
@@ -1439,6 +1508,12 @@ class AgentRuntime:
                     "budget_report": asdict(recovered.report),
                     "cap_error": "",
                     "prompt_instruction_projection": True,
+                    "history_source": (
+                        "derived_history_projection"
+                        if has_derived_history
+                        else "authoritative_message_events"
+                    ),
+                    "candidate_only": False,
                 },
             )
             self._record_prompt_built(

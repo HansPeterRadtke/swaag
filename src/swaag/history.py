@@ -784,6 +784,29 @@ class HistoryStore:
     def read_history(self, session_id: str) -> list[HistoryEvent]:
         return list(self.iter_history(session_id))
 
+    @staticmethod
+    def _message_from_source_event(event: HistoryEvent) -> Message:
+        message = Message(**event.payload["message"])
+        message.metadata.setdefault("source_message_event_sequence", event.sequence)
+        message.metadata.setdefault("source_message_event_hash", event.hash)
+        message.metadata.setdefault("source_message_event_type", event.event_type)
+        message.metadata.setdefault("source_message_session_id", event.session_id)
+        return message
+
+    def read_authoritative_messages(self, session_id: str) -> list[Message]:
+        """Rebuild exact conversational source messages without derived summaries."""
+
+        source_events = list(
+            self.iter_history_reverse(
+                session_id,
+                event_types=("message_added",),
+            )
+        )
+        return [
+            self._message_from_source_event(event)
+            for event in reversed(source_events)
+        ]
+
     def iter_history_reverse(
         self,
         session_id: str,
@@ -1471,12 +1494,7 @@ class HistoryStore:
             state.session_name_source = str(payload.get("reason") or "explicit")
             return
         if event.event_type == "message_added":
-            message = Message(**payload["message"])
-            message.metadata.setdefault("source_message_event_sequence", event.sequence)
-            message.metadata.setdefault("source_message_event_hash", event.hash)
-            message.metadata.setdefault("source_message_event_type", event.event_type)
-            message.metadata.setdefault("source_message_session_id", event.session_id)
-            state.messages.append(message)
+            state.messages.append(self._message_from_source_event(event))
             return
         if event.event_type in {"history_compacted", "history_compressed"}:
             source_count = int(payload["source_message_count"])

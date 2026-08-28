@@ -301,6 +301,108 @@ def test_history_compaction_creates_replayable_summary_with_exact_sources(
     assert rebuilt.messages == state.messages
 
 
+def test_action_reexpands_authoritative_history_when_exact_messages_fit(
+    make_config,
+) -> None:
+    marker = "authoritative-history-marker-413"
+    client = FakeModelClient(
+        [json.dumps({"summary": "Derived summary only.", "preserve_recent_messages": 0})]
+    )
+    runtime = AgentRuntime(
+        make_config(model__context_limit=32_000),
+        model_client=client,
+    )
+    state = runtime.create_or_load_session()
+    for role, content in (
+        ("user", f"Exact earlier fact: {marker}. " + ("supporting detail " * 300)),
+        ("assistant", "I observed the earlier fact."),
+        ("user", "Continue using the complete source history."),
+        ("assistant", "Continuing."),
+    ):
+        runtime._record_message(
+            state,
+            Message(role=role, content=content, created_at="t"),
+        )
+
+    assert runtime._compact_once(state) is True
+    assert marker not in "\n".join(message.content for message in state.messages)
+    authoritative = runtime.history.read_authoritative_messages(state.session_id)
+    assert marker in "\n".join(message.content for message in authoritative)
+
+    prepared = runtime._prepare_action_call(
+        state,
+        original_request="Continue using the complete source history.",
+        pending_messages=[],
+        tool_specs=[],
+        capability_index=[],
+        contract=agent_action_contract([]),
+        validation_feedback="",
+    )
+
+    assert marker in prepared.assembly.prompt_text
+    action_compilations = [
+        event
+        for event in runtime.history.read_history(state.session_id)
+        if event.event_type == "context_compiled"
+        and event.payload.get("kind") == "action"
+    ]
+    assert action_compilations[-1].payload["history_source"] == (
+        "authoritative_message_events"
+    )
+    assert action_compilations[-1].payload["candidate_only"] is False
+
+
+def test_action_uses_derived_history_only_after_measured_raw_overflow(
+    make_config,
+) -> None:
+    marker = "oversized-authoritative-marker-739"
+    client = FakeModelClient(
+        [json.dumps({"summary": "Compact derived view.", "preserve_recent_messages": 0})]
+    )
+    config = make_config(model__context_limit=32_000)
+    runtime = AgentRuntime(config, model_client=client)
+    state = runtime.create_or_load_session()
+    for role, content in (
+        ("user", ("large exact source " * 4_000) + marker),
+        ("assistant", "Earlier evidence acknowledged."),
+        ("user", "Continue from the available evidence."),
+        ("assistant", "Continuing."),
+    ):
+        runtime._record_message(
+            state,
+            Message(role=role, content=content, created_at="t"),
+        )
+
+    assert runtime._compact_once(state) is True
+    config.model.context_limit = 2_000
+    prepared = runtime._prepare_action_call(
+        state,
+        original_request="Continue from the available evidence.",
+        pending_messages=[],
+        tool_specs=[],
+        capability_index=[],
+        contract=agent_action_contract([]),
+        validation_feedback="",
+    )
+
+    assert marker not in prepared.assembly.prompt_text
+    action_compilations = [
+        event
+        for event in runtime.history.read_history(state.session_id)
+        if event.event_type == "context_compiled"
+        and event.payload.get("kind") == "action"
+    ]
+    assert action_compilations[-2].payload["history_source"] == (
+        "authoritative_message_events"
+    )
+    assert action_compilations[-2].payload["candidate_only"] is True
+    assert action_compilations[-2].payload["accounting"]["overflow_tokens"] > 0
+    assert action_compilations[-1].payload["history_source"] == (
+        "derived_history_projection"
+    )
+    assert action_compilations[-1].payload["candidate_only"] is False
+
+
 def test_history_summary_recompiles_after_output_starvation(make_config) -> None:
     config = make_config(
         model__context_limit=32_000,
