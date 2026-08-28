@@ -40,3 +40,10 @@ Neither bounded matrix showed an accuracy reason to impose a new universal produ
 - Repair found by the live trace: the first probe proved that llama.cpp released the slot, but urllib3 surfaced an `AttributeError` when the cancellation watcher closed the response body. The client had translated only selected public transport exception classes, so the runtime would misreport successful preemption as a transport failure. `LlamaCppClient.send_completion` now translates any close-induced ordinary exception after the cancellation flag is observed, while preserving unrelated exceptions. A deterministic regression reproduces that transport-close race.
 
 This validates cancellation and fresh admission for the deployed server/client pair. It does not claim transformer-state suspension, token accounting for discarded prefill, parallel-slot behavior, or vLLM equivalence.
+
+## Attachment capability discovery - 2026-08-28
+
+- Artifact: `/data/var/swaag/manual-tests/attachment-capabilities-20260828T023257`.
+- Method: invoke the production `inspect_attachment_capabilities` tool against the existing `/data/venv/bin/all2text` environment without supplying or reading an attachment, then re-read the tool's exact artifact through Swaag's durable store.
+- Result: 14 provider statuses, 53 provider-family statuses, 40 optional Python libraries, and 9 external tools were represented in the compact result. The exact 176,306-character JSON response was retained as artifact `artifact_54de7023a923` with SHA-256 `dd88a304e77a054d51dcbcc4a6e30373ceefd69a711a8e5815e28fc61a48f7cf`.
+- Interpretation: the model can now inspect actual host capability evidence before choosing an extraction profile, while deterministic code neither reads the raw attachment nor chooses a provider. The probe does not validate extraction quality or imply that every reported contract-only specialist is executable.

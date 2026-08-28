@@ -149,6 +149,217 @@ def _write_failing_all2text(path: Path) -> tuple[str, str]:
     return stdout, stderr
 
 
+def _write_fake_capabilities(path: Path) -> tuple[str, str, dict]:
+    payload = {
+        "profile": {"name": "auto", "allow_external_tools": True},
+        "summary": {"available_external_tools": ["tesseract"]},
+        "optional_python_libraries": [
+            {
+                "name": "docling",
+                "module": "docling",
+                "extra": "documents",
+                "enabled_by_profile": True,
+                "available": False,
+                "implemented_in_core": False,
+                "error": "missing",
+            }
+        ],
+        "external_tools": [
+            {
+                "name": "tesseract",
+                "enabled": True,
+                "available": True,
+                "source": "/usr/bin/tesseract",
+                "used_by_core": True,
+                "error": None,
+            }
+        ],
+        "provider_statuses": [
+            {
+                "name": "ocr",
+                "kind": "ocr",
+                "enabled": True,
+                "available": True,
+                "source": "/usr/bin/tesseract",
+                "error": None,
+                "details": {"execution_status": "implemented"},
+                "lifecycle": {"configured": True, "used": False},
+            }
+        ],
+        "provider_family_statuses": [
+            {
+                "name": "docling",
+                "kind": "document_parser",
+                "enabled": True,
+                "available": False,
+                "source": None,
+                "error": "dependency missing",
+                "details": {
+                    "candidate": {
+                        "family": "document_ocr_layout",
+                        "execution_status": "contract_only",
+                        "notes": "Document parser",
+                    },
+                    "exact_unprojected_detail": "x" * 5000,
+                },
+                "lifecycle": {"configured": True, "missing": True},
+            },
+            {
+                "name": "faster_whisper",
+                "kind": "speech_to_text",
+                "enabled": True,
+                "available": True,
+                "source": "/data/models/whisper",
+                "error": None,
+                "details": {
+                    "candidate": {
+                        "family": "speech_transcription",
+                        "execution_status": "implemented",
+                        "notes": "Local speech model",
+                    }
+                },
+                "lifecycle": {"configured": True, "dependency_found": True},
+            },
+        ],
+    }
+    stdout = json.dumps(payload, sort_keys=True)
+    stderr = "capability probe note\n"
+    path.write_text(
+        "#!/usr/bin/env python3\n"
+        "import sys\n"
+        f"sys.stdout.write({stdout!r})\n"
+        f"sys.stderr.write({stderr!r})\n",
+        encoding="utf-8",
+    )
+    path.chmod(0o755)
+    return stdout, stderr, payload
+
+
+def test_inspect_attachment_capabilities_indexes_every_family_and_retains_raw_response(
+    make_config, tmp_path: Path
+) -> None:
+    command = tmp_path / "fake-capabilities"
+    expected_stdout, expected_stderr, payload = _write_fake_capabilities(command)
+    config = make_config()
+    config.sessions.root = tmp_path / "sessions"
+    config.attachments.all2text_command = str(command)
+    runtime = AgentRuntime(config, model_client=object())
+    state = runtime.create_or_load_session()
+
+    run = runtime.execute_tool_once(
+        "inspect_attachment_capabilities", {}, session_id=state.session_id
+    )
+
+    assert run.error is None
+    result = run.tool_result
+    assert result is not None
+    assert result.output["detected_profile"] == payload["profile"]
+    assert result.output["extraction_profiles"] == [
+        "core",
+        "pip",
+        "tools",
+        "local-models",
+        "full",
+    ]
+    assert [item["name"] for item in result.output["provider_families"]] == [
+        "docling",
+        "faster_whisper",
+    ]
+    assert result.output["provider_families"][0]["family"] == "document_ocr_layout"
+    assert result.output["provider_families"][0]["lifecycle"] == [
+        "configured",
+        "missing",
+    ]
+    assert result.output["providers"][0]["execution_status"] == "implemented"
+    assert "exact_unprojected_detail" not in result.display_text
+
+    store = TextArtifactStore(config.sessions.root, state.session_id)
+    capabilities = store.read(
+        result.output["capabilities_artifact_id"],
+        max_chars=len(expected_stdout) + 1,
+    )
+    stderr = store.read(
+        result.output["stderr_artifact_id"], max_chars=len(expected_stderr) + 1
+    )
+    assert capabilities["text"] == expected_stdout
+    assert stderr["text"] == expected_stderr
+    events = runtime.history.read_history(state.session_id)
+    event_types = [event.event_type for event in events]
+    assert event_types.count("artifact_created") == 2
+    assert event_types.index("artifact_created") < event_types.index("tool_result")
+
+
+def test_inspect_attachment_capabilities_failure_retains_exact_streams(
+    make_config, tmp_path: Path
+) -> None:
+    command = tmp_path / "failing-capabilities"
+    expected_stdout, expected_stderr = _write_failing_all2text(command)
+    config = make_config()
+    config.sessions.root = tmp_path / "sessions"
+    config.attachments.all2text_command = str(command)
+    runtime = AgentRuntime(config, model_client=object())
+    state = runtime.create_or_load_session()
+
+    run = runtime.execute_tool_once(
+        "inspect_attachment_capabilities", {}, session_id=state.session_id
+    )
+
+    assert run.tool_result is None
+    assert run.error is not None
+    assert run.error["error_type"] == "All2TextCapabilityError"
+    evidence = run.error["evidence"]
+    store = TextArtifactStore(config.sessions.root, state.session_id)
+    stdout = store.read(
+        evidence["stdout_artifact_id"], max_chars=len(expected_stdout) + 1
+    )
+    stderr = store.read(
+        evidence["stderr_artifact_id"], max_chars=len(expected_stderr) + 1
+    )
+    assert stdout["text"] == expected_stdout
+    assert stderr["text"] == expected_stderr
+
+
+def test_inspect_attachment_capabilities_rejects_malformed_success_as_evidence(
+    make_config, tmp_path: Path
+) -> None:
+    command = tmp_path / "malformed-capabilities"
+    expected_stdout = '{"provider_statuses": "not-a-list"}'
+    expected_stderr = "probe diagnostic\n"
+    command.write_text(
+        "#!/usr/bin/env python3\n"
+        "import sys\n"
+        f"sys.stdout.write({expected_stdout!r})\n"
+        f"sys.stderr.write({expected_stderr!r})\n",
+        encoding="utf-8",
+    )
+    command.chmod(0o755)
+    config = make_config()
+    config.sessions.root = tmp_path / "sessions"
+    config.attachments.all2text_command = str(command)
+    runtime = AgentRuntime(config, model_client=object())
+    state = runtime.create_or_load_session()
+
+    run = runtime.execute_tool_once(
+        "inspect_attachment_capabilities", {}, session_id=state.session_id
+    )
+
+    assert run.tool_result is None
+    assert run.error is not None
+    assert run.error["error_type"] == "ValueError"
+    assert "must be a list of objects" in run.error["error"]
+    store = TextArtifactStore(config.sessions.root, state.session_id)
+    stdout = store.read(
+        run.error["evidence"]["stdout_artifact_id"],
+        max_chars=len(expected_stdout) + 1,
+    )
+    stderr = store.read(
+        run.error["evidence"]["stderr_artifact_id"],
+        max_chars=len(expected_stderr) + 1,
+    )
+    assert stdout["text"] == expected_stdout
+    assert stderr["text"] == expected_stderr
+
+
 def test_extract_attachment_retains_complete_derived_artifact(make_config, tmp_path: Path) -> None:
     command = tmp_path / "fake-all2text"
     _write_fake_all2text(command)

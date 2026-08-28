@@ -50,6 +50,52 @@ def _completed_output(value: str | bytes | None) -> str:
     return str(value)
 
 
+def _all2text_command(command_text: str) -> list[str]:
+    command = shlex.split(command_text)
+    if not command:
+        raise ToolValidationError("attachments.all2text_command is empty")
+    executable = command[0]
+    resolved = shutil.which(executable) if "/" not in executable else executable
+    if not resolved or not Path(resolved).is_file():
+        raise FileNotFoundError(
+            f"configured all2text command is unavailable: {command_text}"
+        )
+    return [str(resolved), *command[1:]]
+
+
+def _capability_row(value: object) -> dict:
+    item = value if isinstance(value, dict) else {}
+    details = item.get("details")
+    details = details if isinstance(details, dict) else {}
+    candidate = details.get("candidate")
+    candidate = candidate if isinstance(candidate, dict) else {}
+    lifecycle = item.get("lifecycle")
+    lifecycle = lifecycle if isinstance(lifecycle, dict) else {}
+    return {
+        "name": str(item.get("name", "")),
+        "kind": str(item.get("kind", "")),
+        "family": str(candidate.get("family", "")),
+        "enabled": bool(item.get("enabled", False)),
+        "available": bool(item.get("available", False)),
+        "source": item.get("source"),
+        "error": item.get("error"),
+        "execution_status": str(
+            candidate.get("execution_status", details.get("execution_status", ""))
+        ),
+        "notes": str(candidate.get("notes", "")),
+        "lifecycle": sorted(
+            str(name) for name, active in lifecycle.items() if active is True
+        ),
+    }
+
+
+def _capability_items(payload: dict, key: str) -> list[dict]:
+    value = payload.get(key, [])
+    if not isinstance(value, list) or any(not isinstance(item, dict) for item in value):
+        raise ValueError(f"all2text capabilities field {key!r} must be a list of objects")
+    return value
+
+
 def _attachment_failure(
     context: ToolContext,
     message: str,
@@ -201,6 +247,194 @@ class ReadAttachmentTool(Tool):
         return ToolExecutionResult(self.name, output, stable_json_dumps(output, indent=2))
 
 
+class InspectAttachmentCapabilitiesTool(Tool):
+    name = "inspect_attachment_capabilities"
+    description = (
+        "Inspect the configured all2text extractor's actual document, image, OCR, "
+        "speech, media, scientific, and other specialist availability without "
+        "reading an attachment."
+    )
+    usage_guidance = (
+        "Use when choosing an extraction profile or specialist requires current "
+        "host evidence. The compact index includes every reported provider family; "
+        "capabilities_artifact_id retains the exact complete discovery response. "
+        "Availability does not imply that extraction is useful for the current task."
+    )
+    kind = "stateful"
+    input_schema = {
+        "type": "object",
+        "properties": {},
+        "required": [],
+        "additionalProperties": False,
+    }
+
+    def validate(self, raw_input: dict) -> dict:
+        if raw_input:
+            raise ToolValidationError(
+                "inspect_attachment_capabilities takes no arguments"
+            )
+        return {}
+
+    def required_generated_event_types(self, validated_input: dict) -> set[str]:
+        return {"artifact_created"}
+
+    def execute(
+        self, validated_input: dict, context: ToolContext
+    ) -> ToolExecutionResult:
+        del validated_input
+        command = _all2text_command(context.config.attachments.all2text_command)
+        try:
+            completed = subprocess.run(
+                [*command, "--capabilities"],
+                cwd=context.environment.current_cwd,
+                text=True,
+                capture_output=True,
+                timeout=context.config.attachments.extraction_timeout_seconds,
+                check=False,
+            )
+        except subprocess.TimeoutExpired as exc:
+            raise _attachment_failure(
+                context,
+                "all2text capability discovery exceeded the configured timeout",
+                error_type=type(exc).__name__,
+                stdout=_completed_output(exc.stdout),
+                stderr=_completed_output(exc.stderr),
+            ) from exc
+        if completed.returncode != 0:
+            exact_detail = completed.stderr or completed.stdout
+            detail = exact_detail[-1000:]
+            suffix = (
+                ""
+                if len(detail) == len(exact_detail)
+                else " [bounded tail; read the evidence artifact for complete output]"
+            )
+            raise _attachment_failure(
+                context,
+                "all2text capability discovery failed with exit code "
+                f"{completed.returncode}: {detail}{suffix}",
+                error_type="All2TextCapabilityError",
+                stdout=completed.stdout,
+                stderr=completed.stderr,
+                evidence={"return_code": completed.returncode},
+            )
+        try:
+            payload = json.loads(completed.stdout)
+            if not isinstance(payload, dict):
+                raise ValueError("all2text capabilities must be a JSON object")
+            detected_profile = payload.get("profile", {})
+            summary = payload.get("summary", {})
+            if not isinstance(detected_profile, dict):
+                raise ValueError("all2text capabilities field 'profile' must be an object")
+            if not isinstance(summary, dict):
+                raise ValueError("all2text capabilities field 'summary' must be an object")
+            optional_python = _capability_items(payload, "optional_python_libraries")
+            external_tools = _capability_items(payload, "external_tools")
+            provider_statuses = _capability_items(payload, "provider_statuses")
+            provider_families = _capability_items(
+                payload, "provider_family_statuses"
+            )
+        except (json.JSONDecodeError, ValueError) as exc:
+            raise _attachment_failure(
+                context,
+                f"all2text capability discovery returned invalid JSON: {exc}",
+                error_type=type(exc).__name__,
+                stdout=completed.stdout,
+                stderr=completed.stderr,
+            ) from exc
+
+        artifact_store = TextArtifactStore(
+            context.config.sessions.root,
+            context.session_state.session_id,
+        )
+        artifact = artifact_store.create(
+            completed.stdout,
+            kind="attachment_extraction_capabilities",
+        )
+        events = [
+            ToolGeneratedEvent(
+                "artifact_created",
+                {
+                    "artifact_id": artifact.artifact_id,
+                    "kind": artifact.kind,
+                    "size_chars": artifact.size_chars,
+                    "sha256": artifact.sha256,
+                },
+            )
+        ]
+        stderr_artifact_id = ""
+        stderr_sha256 = sha256_text(completed.stderr)
+        if completed.stderr:
+            stderr_artifact = artifact_store.create(
+                completed.stderr,
+                kind="attachment_extraction_capabilities_stderr",
+            )
+            stderr_artifact_id = stderr_artifact.artifact_id
+            stderr_sha256 = stderr_artifact.sha256
+            events.append(
+                ToolGeneratedEvent(
+                    "artifact_created",
+                    {
+                        "artifact_id": stderr_artifact.artifact_id,
+                        "kind": stderr_artifact.kind,
+                        "size_chars": stderr_artifact.size_chars,
+                        "sha256": stderr_artifact.sha256,
+                    },
+                )
+            )
+
+        output = {
+            "extractor": "all2text",
+            "extraction_profiles": ["core", "pip", "tools", "local-models", "full"],
+            "detected_profile": detected_profile,
+            "summary": summary,
+            "optional_python_libraries": [
+                {
+                    key: item.get(key)
+                    for key in (
+                        "name",
+                        "module",
+                        "extra",
+                        "enabled_by_profile",
+                        "available",
+                        "implemented_in_core",
+                        "error",
+                    )
+                }
+                for item in optional_python
+            ],
+            "external_tools": [
+                {
+                    key: item.get(key)
+                    for key in (
+                        "name",
+                        "enabled",
+                        "available",
+                        "source",
+                        "used_by_core",
+                        "error",
+                    )
+                }
+                for item in external_tools
+            ],
+            "providers": [_capability_row(item) for item in provider_statuses],
+            "provider_families": [
+                _capability_row(item) for item in provider_families
+            ],
+            "capabilities_artifact_id": artifact.artifact_id,
+            "capabilities_sha256": artifact.sha256,
+            "capabilities_chars": artifact.size_chars,
+            "stderr_artifact_id": stderr_artifact_id,
+            "stderr_sha256": stderr_sha256,
+            "stderr_chars": len(completed.stderr),
+        }
+        return ToolExecutionResult(
+            self.name,
+            output,
+            stable_json_dumps(output, indent=2),
+            events,
+        )
+
+
 class ExtractAttachmentTool(Tool):
     name = "extract_attachment"
     description = "Run the configured all2text capability on one raw attachment and retain its complete auditable text output as a durable artifact."
@@ -234,15 +468,7 @@ class ExtractAttachmentTool(Tool):
 
     def execute(self, validated_input: dict, context: ToolContext) -> ToolExecutionResult:
         reference = _reference(context, validated_input["attachment_id"])
-        command = shlex.split(context.config.attachments.all2text_command)
-        if not command:
-            raise ToolValidationError("attachments.all2text_command is empty")
-        executable = command[0]
-        resolved_executable = shutil.which(executable) if "/" not in executable else executable
-        if not resolved_executable or not Path(resolved_executable).is_file():
-            raise FileNotFoundError(
-                f"configured all2text command is unavailable: {context.config.attachments.all2text_command}"
-            )
+        command = _all2text_command(context.config.attachments.all2text_command)
 
         extraction_id = new_id("extraction")
         extraction_root = (
@@ -260,7 +486,7 @@ class ExtractAttachmentTool(Tool):
         shutil.copyfile(_store(context).path_for(reference), source_root / safe_name)
         try:
             completed = subprocess.run(
-                [resolved_executable, *command[1:], "--profile", validated_input["profile"], str(source_root), str(output_root)],
+                [*command, "--profile", validated_input["profile"], str(source_root), str(output_root)],
                 cwd=extraction_root,
                 text=True,
                 capture_output=True,
@@ -428,4 +654,9 @@ class ExtractAttachmentTool(Tool):
         return ToolExecutionResult(self.name, output, stable_json_dumps(output, indent=2), events)
 
 
-ATTACHMENT_TOOLS = [ListAttachmentsTool(), ReadAttachmentTool(), ExtractAttachmentTool()]
+ATTACHMENT_TOOLS = [
+    ListAttachmentsTool(),
+    ReadAttachmentTool(),
+    InspectAttachmentCapabilitiesTool(),
+    ExtractAttachmentTool(),
+]
