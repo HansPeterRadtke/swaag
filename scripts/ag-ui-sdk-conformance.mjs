@@ -3,6 +3,7 @@
 import fs from "node:fs";
 import path from "node:path";
 import { pathToFileURL } from "node:url";
+import { isDeepStrictEqual } from "node:util";
 
 const [sdkRoot, baseUrl, threadId, runId, expectedResult] = process.argv.slice(2);
 if (!sdkRoot || !baseUrl || !threadId || !runId || !expectedResult) {
@@ -38,10 +39,22 @@ if (capabilities.transport?.websocket !== false) {
 if (capabilities.tools?.clientProvided !== false) {
   throw new Error("AG-UI capability discovery overclaimed client-provided tools");
 }
+if (
+  capabilities.state?.snapshots !== true ||
+  capabilities.state?.persistentState !== true ||
+  capabilities.state?.deltas !== false
+) {
+  throw new Error("AG-UI capability discovery did not describe shared-state support");
+}
 
+const sharedState = {
+  selectedRecord: { id: "official-state-record", revision: 4 },
+  filters: ["active", "reviewed"],
+};
 const agent = new HttpAgent({
   url: `${normalizedBaseUrl}/ag-ui`,
   threadId,
+  initialState: sharedState,
   initialMessages: [
     {
       id: "official-sdk-request",
@@ -55,6 +68,9 @@ const run = await agent.runAgent(
   { runId },
   {
     onRunStartedEvent({ event }) {
+      eventTypes.push(event.type);
+    },
+    onStateSnapshotEvent({ event }) {
       eventTypes.push(event.type);
     },
     onTextMessageStartEvent({ event }) {
@@ -74,6 +90,7 @@ const run = await agent.runAgent(
 
 const requiredEvents = [
   "RUN_STARTED",
+  "STATE_SNAPSHOT",
   "TEXT_MESSAGE_START",
   "TEXT_MESSAGE_CONTENT",
   "TEXT_MESSAGE_END",
@@ -84,6 +101,9 @@ if (requiredEvents.some((eventType) => !eventTypes.includes(eventType))) {
 }
 if (run.result !== expectedResult) {
   throw new Error("official client did not decode the exact RUN_FINISHED result");
+}
+if (!isDeepStrictEqual(agent.state, sharedState)) {
+  throw new Error("official client did not preserve the exact shared-state snapshot");
 }
 const assistant = run.newMessages.find(
   (message) => message.role === "assistant" && message.content === expectedResult,
@@ -102,6 +122,7 @@ console.log(
       threadId: agent.threadId,
       eventTypes,
       result: run.result,
+      state: agent.state,
       newMessageRoles: run.newMessages.map((message) => message.role),
       assistantMessageId: assistant.id,
     },

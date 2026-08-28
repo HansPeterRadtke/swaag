@@ -874,11 +874,18 @@ def test_communication_transport_serves_durable_ag_ui_sse(
                 "metadata": {"filename": "facts.pdf"},
             },
         ]
+        request["state"] = {
+            "selectedRecord": {"id": "record-7", "revision": 3},
+            "filters": ["active", "reviewed"],
+        }
         headers, events = await run_request(request)
-        _duplicate_headers, duplicate_events = await run_request(request)
+        duplicate_request = json.loads(json.dumps(request))
+        duplicate_request["state"] = {"mustNotReplaceBoundState": True}
+        _duplicate_headers, duplicate_events = await run_request(duplicate_request)
         workers = service.workers.list()
         attachments = service.workers.attachments(workers[0].worker_id)
         bounds = service.store.protocol_message_bounds("ag_ui", "run-1")
+        snapshot = service.store.protocol_state_for_message("ag_ui", "run-1")
         server.close()
         await server.wait_closed()
         service.workers.shutdown()
@@ -890,16 +897,26 @@ def test_communication_transport_serves_durable_ag_ui_sse(
         assert events[0]["threadId"] == "thread-1"
         assert events[0]["runId"] == "run-1"
         assert events[0]["metadata"]["swaagDuplicateRun"] is False
+        assert events[1]["type"] == "STATE_SNAPSHOT"
+        assert events[1]["snapshot"] == request["state"]
+        assert events[1]["metadata"]["swaagStateRevision"] == 1
         assert events[-1]["type"] == "RUN_FINISHED"
         assert events[-1]["threadId"] == "thread-1"
         assert events[-1]["runId"] == "run-1"
         assert events[-1]["result"] == "exact AG-UI result"
         assert duplicate_events[0]["metadata"]["swaagDuplicateRun"] is True
+        assert duplicate_events[1]["snapshot"] == request["state"]
         assert duplicate_events[-1]["result"] == "exact AG-UI result"
         assert len(workers) == 1
         assert attachments[0].original_name == "facts.pdf"
         assert attachments[0].source == "ag_ui"
         assert attachments[0].size_bytes == len(b"exact bytes")
+        assert snapshot is not None
+        assert snapshot.state == request["state"]
+        assert snapshot.client_supplied is True
+        assert '"selectedRecord":{"id":"record-7","revision":3}' in workers[
+            0
+        ].objective
         assert bounds is not None and bounds[3] is not None
 
     asyncio.run(exercise())
@@ -996,9 +1013,13 @@ def test_ag_ui_resume_validates_and_resolves_the_durable_interrupt(
         )
 
     monkeypatch.setattr(service.workers, "start", require_input)
-    first_record, _first_start, _first_end, _first_duplicate = service._ag_ui_begin(
-        AgUiProjectionAdapter().user_run(_ag_ui_input())
-    )
+    (
+        first_record,
+        _first_start,
+        _first_end,
+        _first_duplicate,
+        _first_state,
+    ) = service._ag_ui_begin(AgUiProjectionAdapter().user_run(_ag_ui_input()))
     interrupt_event = next(
         item
         for item in reversed(service.workers.store.events(first_record.worker_id))
@@ -1031,17 +1052,22 @@ def test_ag_ui_resume_validates_and_resolves_the_durable_interrupt(
         )
 
     monkeypatch.setattr(service.workers, "message", resolve_without_model)
-    resolved, second_start, _second_end, duplicate = service._ag_ui_begin(
-        AgUiProjectionAdapter().user_run(
-            _ag_ui_input(
-                run_id="run-2",
-                resume=[
-                    {
-                        "interruptId": interrupt_id,
-                        "status": "resolved",
-                        "payload": {"approved": True, "reason": "exact evidence"},
-                    }
-                ],
+    resolved, second_start, _second_end, duplicate, _second_state = (
+        service._ag_ui_begin(
+            AgUiProjectionAdapter().user_run(
+                _ag_ui_input(
+                    run_id="run-2",
+                    resume=[
+                        {
+                            "interruptId": interrupt_id,
+                            "status": "resolved",
+                            "payload": {
+                                "approved": True,
+                                "reason": "exact evidence",
+                            },
+                        }
+                    ],
+                )
             )
         )
     )
@@ -1051,9 +1077,10 @@ def test_ag_ui_resume_validates_and_resolves_the_durable_interrupt(
     assert resolved.status == "completed"
     assert duplicate is False
     assert observed["source"] == "ag_ui:run-2"
-    assert observed["message"] == (
+    assert observed["message"].startswith(
         'AG-UI interrupt response:\n{"approved":true,"reason":"exact evidence"}'
     )
+    assert '"state":{}' in observed["message"]
     assert first_bounds is not None and first_bounds[3] == second_start
 
 

@@ -180,6 +180,8 @@ def test_ag_ui_sdk_conformance_assets_are_pinned_and_parse() -> None:
     assert "new HttpAgent" in probe_source
     assert "AgentCapabilitiesSchema.parse" in probe_source
     assert 'fetch(`${normalizedBaseUrl}/ag-ui/capabilities`)' in probe_source
+    assert "onStateSnapshotEvent" in probe_source
+    assert "isDeepStrictEqual(agent.state, sharedState)" in probe_source
     assert "agent.runAgent" in probe_source
     assert "onRunFinishedEvent" in probe_source
     assert "model_client=no_inference" in runner_source

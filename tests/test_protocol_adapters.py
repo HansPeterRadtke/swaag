@@ -572,7 +572,7 @@ def test_ag_ui_parses_full_initial_history_current_context_and_raw_media() -> No
     assert "Zmlyc3QgYnl0ZXM=" not in run.initial_text
 
 
-def test_ag_ui_rejects_unimplemented_client_state_and_tools() -> None:
+def test_ag_ui_preserves_shared_state_and_rejects_unimplemented_tools() -> None:
     base = {
         "threadId": "thread-1",
         "runId": "run-1",
@@ -582,9 +582,13 @@ def test_ag_ui_rejects_unimplemented_client_state_and_tools() -> None:
         "context": [],
         "forwardedProps": {},
     }
+    state = {"selected": {"id": 7}, "filters": ["active"]}
+    parsed = AgUiProjectionAdapter().user_run({**base, "state": state})
+    assert parsed.state == state
+    assert parsed.state_supplied is True
+
     unsupported = (
         {**base, "tools": [{"name": "browser-tool"}]},
-        {**base, "state": {"hidden": "value"}},
         {**base, "forwardedProps": {"command": "unknown"}},
     )
 

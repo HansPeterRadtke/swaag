@@ -63,6 +63,8 @@ class AgUiRunInput:
     initial_text: str
     initial_attachments: tuple[dict[str, str], ...]
     resume: tuple[dict[str, Any], ...]
+    state: Any
+    state_supplied: bool
 
 
 class A2AProjectionAdapter:
@@ -288,9 +290,8 @@ class AgUiProjectionAdapter:
             raise ValueError(
                 "AG-UI forwardedProps are not enabled by this adapter"
             )
-        state = request.get("state")
-        if state not in (None, {}):
-            raise ValueError("AG-UI shared state is not enabled by this adapter")
+        state_supplied = "state" in request and request.get("state") is not None
+        state = request.get("state") if state_supplied else None
 
         context_items: list[dict[str, str]] = []
         for item in context:
@@ -370,6 +371,8 @@ class AgUiProjectionAdapter:
             initial_text=initial_text,
             initial_attachments=tuple(initial_attachments),
             resume=tuple(dict(item) for item in resume),
+            state=state,
+            state_supplied=state_supplied,
         )
 
     def events(

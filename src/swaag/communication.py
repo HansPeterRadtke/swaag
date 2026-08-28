@@ -102,6 +102,26 @@ _COMMUNICATION_STORE_MIGRATIONS = (
         )
         """,
     ),
+    (
+        """
+        CREATE TABLE protocol_state_snapshots (
+            protocol TEXT NOT NULL,
+            external_context_id TEXT NOT NULL,
+            revision INTEGER NOT NULL,
+            external_message_id TEXT NOT NULL,
+            state_json TEXT NOT NULL,
+            state_sha256 TEXT NOT NULL,
+            client_supplied INTEGER NOT NULL,
+            created_at TEXT NOT NULL,
+            PRIMARY KEY (protocol, external_context_id, revision),
+            UNIQUE (protocol, external_message_id)
+        )
+        """,
+        """
+        CREATE INDEX protocol_state_snapshots_latest
+        ON protocol_state_snapshots(protocol, external_context_id, revision DESC)
+        """,
+    ),
 )
 
 
@@ -133,6 +153,18 @@ class CommunicationRequest:
     created_at: str
     completed_at: str | None = None
     reply: str | None = None
+
+
+@dataclass(slots=True, frozen=True)
+class ProtocolStateSnapshot:
+    protocol: str
+    external_context_id: str
+    revision: int
+    external_message_id: str
+    state: Any
+    state_sha256: str
+    client_supplied: bool
+    created_at: str
 
 
 class CommunicationStore:
@@ -220,6 +252,108 @@ class CommunicationStore:
                 """,
                 (protocol, external_context_id, worker_id, now, now),
             )
+
+    @staticmethod
+    def _protocol_state(row: sqlite3.Row) -> ProtocolStateSnapshot:
+        return ProtocolStateSnapshot(
+            protocol=str(row["protocol"]),
+            external_context_id=str(row["external_context_id"]),
+            revision=int(row["revision"]),
+            external_message_id=str(row["external_message_id"]),
+            state=json.loads(str(row["state_json"])),
+            state_sha256=str(row["state_sha256"]),
+            client_supplied=bool(row["client_supplied"]),
+            created_at=str(row["created_at"]),
+        )
+
+    def bind_protocol_state(
+        self,
+        protocol: str,
+        external_context_id: str,
+        external_message_id: str,
+        *,
+        state: Any,
+        client_supplied: bool,
+    ) -> ProtocolStateSnapshot:
+        with self._connect() as connection:
+            connection.execute("BEGIN IMMEDIATE")
+            existing = connection.execute(
+                """
+                SELECT * FROM protocol_state_snapshots
+                WHERE protocol=? AND external_message_id=?
+                """,
+                (protocol, external_message_id),
+            ).fetchone()
+            if existing is not None:
+                if str(existing["external_context_id"]) != external_context_id:
+                    raise ValueError(
+                        "protocol message is already bound to another context"
+                    )
+                return self._protocol_state(existing)
+            latest = connection.execute(
+                """
+                SELECT snapshots.*
+                FROM protocol_state_snapshots AS snapshots
+                JOIN protocol_messages AS messages
+                  ON messages.protocol=snapshots.protocol
+                 AND messages.external_message_id=snapshots.external_message_id
+                WHERE snapshots.protocol=? AND snapshots.external_context_id=?
+                ORDER BY snapshots.revision DESC LIMIT 1
+                """,
+                (protocol, external_context_id),
+            ).fetchone()
+            effective_state = (
+                state
+                if client_supplied
+                else json.loads(str(latest["state_json"]))
+                if latest is not None
+                else {}
+            )
+            state_json = stable_json_dumps(effective_state, indent=None)
+            revision = 1 if latest is None else int(latest["revision"]) + 1
+            created_at = utc_now_iso()
+            state_sha256 = hashlib.sha256(state_json.encode("utf-8")).hexdigest()
+            connection.execute(
+                """
+                INSERT INTO protocol_state_snapshots(
+                    protocol, external_context_id, revision, external_message_id,
+                    state_json, state_sha256, client_supplied, created_at
+                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+                """,
+                (
+                    protocol,
+                    external_context_id,
+                    revision,
+                    external_message_id,
+                    state_json,
+                    state_sha256,
+                    int(client_supplied),
+                    created_at,
+                ),
+            )
+            row = connection.execute(
+                """
+                SELECT * FROM protocol_state_snapshots
+                WHERE protocol=? AND external_message_id=?
+                """,
+                (protocol, external_message_id),
+            ).fetchone()
+        if row is None:
+            raise RuntimeError("protocol state snapshot was not stored")
+        return self._protocol_state(row)
+
+    def protocol_state_for_message(
+        self, protocol: str, external_message_id: str
+    ) -> ProtocolStateSnapshot | None:
+        with self._connect() as connection:
+            row = connection.execute(
+                """
+                SELECT * FROM protocol_state_snapshots
+                WHERE protocol=? AND external_message_id=?
+                """,
+                (protocol, external_message_id),
+            ).fetchone()
+        return None if row is None else self._protocol_state(row)
 
     def protocol_message(
         self,
@@ -789,7 +923,7 @@ class CommunicationService:
     def _ag_ui_begin(
         self,
         run: AgUiRunInput,
-    ) -> tuple[WorkerRecord, int, int | None, bool]:
+    ) -> tuple[WorkerRecord, int, int | None, bool, ProtocolStateSnapshot]:
         record_protocol_correlation(
             protocol="ag_ui",
             request_id=run.run_id,
@@ -804,6 +938,17 @@ class CommunicationService:
                         "AG-UI runId is already bound to another thread"
                     )
                 record = self.workers.store.get(worker_id)
+                state_snapshot = self.store.protocol_state_for_message(
+                    "ag_ui", run.run_id
+                )
+                if state_snapshot is None:
+                    state_snapshot = self.store.bind_protocol_state(
+                        "ag_ui",
+                        run.thread_id,
+                        run.run_id,
+                        state={},
+                        client_supplied=False,
+                    )
                 record_protocol_correlation(
                     protocol="ag_ui",
                     request_id=run.run_id,
@@ -816,7 +961,17 @@ class CommunicationService:
                     start_sequence,
                     end_sequence,
                     True,
+                    state_snapshot,
                 )
+
+            state_snapshot = self.store.bind_protocol_state(
+                "ag_ui",
+                run.thread_id,
+                run.run_id,
+                state=run.state,
+                client_supplied=run.state_supplied,
+            )
+            state_context = self._ag_ui_state_context(state_snapshot)
 
             worker_id = self.store.protocol_worker("ag_ui", run.thread_id)
             record = None
@@ -837,7 +992,7 @@ class CommunicationService:
                 created = self.task_api.execute(
                     "create",
                     {
-                        "objective": run.initial_text,
+                        "objective": run.initial_text + state_context,
                         "attachments": list(run.initial_attachments),
                         "attachment_source": "ag_ui",
                         "start": False,
@@ -858,7 +1013,9 @@ class CommunicationService:
                         worker_id,
                         end_sequence=start_sequence,
                     )
-                    record = self._ag_ui_resume(worker_id, run)
+                    record = self._ag_ui_resume(
+                        worker_id, run, state_context=state_context
+                    )
                 else:
                     for attachment in run.attachments:
                         self.task_api.execute(
@@ -878,7 +1035,7 @@ class CommunicationService:
                     )
                     record = self.workers.message(
                         worker_id,
-                        run.text,
+                        run.text + state_context,
                         source=f"ag_ui:{run.run_id}",
                     )
 
@@ -896,9 +1053,30 @@ class CommunicationService:
                 worker_id=record.worker_id,
                 session_id=record.session_id,
             )
-            return record, start_sequence, None, False
+            return record, start_sequence, None, False, state_snapshot
 
-    def _ag_ui_resume(self, worker_id: str, run: AgUiRunInput) -> WorkerRecord:
+    @staticmethod
+    def _ag_ui_state_context(snapshot: ProtocolStateSnapshot) -> str:
+        return (
+            "\n\nCurrent AG-UI shared state (exact JSON; this snapshot supersedes "
+            "earlier state for the thread):\n"
+            + stable_json_dumps(
+                {
+                    "revision": snapshot.revision,
+                    "sha256": snapshot.state_sha256,
+                    "state": snapshot.state,
+                },
+                indent=None,
+            )
+        )
+
+    def _ag_ui_resume(
+        self,
+        worker_id: str,
+        run: AgUiRunInput,
+        *,
+        state_context: str = "",
+    ) -> WorkerRecord:
         current = self.workers.store.get(worker_id)
         if current.status != "input_required":
             raise ValueError(
@@ -937,7 +1115,12 @@ class CommunicationService:
         )
         if not answer:
             raise ValueError("AG-UI resolved interrupt payload must not be empty")
-        message = "AG-UI interrupt response:\n" + answer + run.context_text
+        message = (
+            "AG-UI interrupt response:\n"
+            + answer
+            + run.context_text
+            + state_context
+        )
         return self.workers.message(
             worker_id,
             message,
@@ -1352,6 +1535,12 @@ class CommunicationService:
                 "structuredOutput": False,
                 "supportedMimeTypes": ["text/plain"],
             },
+            "state": {
+                "snapshots": True,
+                "deltas": False,
+                "memory": False,
+                "persistentState": True,
+            },
             "multimodal": {
                 "input": {
                     "image": True,
@@ -1716,6 +1905,7 @@ class CommunicationService:
         start_sequence: int,
         end_sequence: int | None,
         duplicate: bool,
+        state_snapshot: ProtocolStateSnapshot,
     ) -> None:
         record_http_response_status(200)
         headers = (
@@ -1747,6 +1937,20 @@ class CommunicationService:
         if run.parent_run_id is not None:
             started["parentRunId"] = run.parent_run_id
         await emit(started)
+        await emit(
+            {
+                "type": "STATE_SNAPSHOT",
+                "snapshot": state_snapshot.state,
+                "timestamp": int(
+                    datetime.fromisoformat(state_snapshot.created_at).timestamp() * 1000
+                ),
+                "metadata": {
+                    "swaagStateRevision": state_snapshot.revision,
+                    "swaagStateSha256": state_snapshot.state_sha256,
+                    "swaagClientSupplied": state_snapshot.client_supplied,
+                },
+            }
+        )
 
         adapter = AgUiProjectionAdapter()
         cursor = start_sequence
@@ -1860,7 +2064,7 @@ class CommunicationService:
             return
         try:
             run = AgUiProjectionAdapter().user_run(request)
-            record, start_sequence, end_sequence, duplicate = (
+            record, start_sequence, end_sequence, duplicate, state_snapshot = (
                 await asyncio.to_thread(self._ag_ui_begin, run)
             )
         except (FileNotFoundError, TypeError, ValueError) as exc:
@@ -1887,6 +2091,7 @@ class CommunicationService:
                 start_sequence=start_sequence,
                 end_sequence=end_sequence,
                 duplicate=duplicate,
+                state_snapshot=state_snapshot,
             )
         except (ConnectionError, BrokenPipeError):
             pass

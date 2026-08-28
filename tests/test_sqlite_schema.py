@@ -95,7 +95,7 @@ def test_all_runtime_sqlite_stores_record_explicit_schema_versions(tmp_path) -> 
     preemption = ModelPreemptionCoordinator(sessions)
     embeddings = DerivedEmbeddingIndex(sessions, _Embeddings())
 
-    assert _version(communication.path) == 3
+    assert _version(communication.path) == 4
     assert _version(workers.path) == 4
     assert _version(history.sqlite_history_path()) == 1
     assert _version(archives.catalog_path) == 1
@@ -127,13 +127,47 @@ def test_communication_stream_bounds_migration_preserves_protocol_mappings(
 
     store = CommunicationStore(sessions)
 
-    assert _version(path) == 3
+    assert _version(path) == 4
     assert store.protocol_message_bounds("open_webui", "message-1") == (
         "chat-1",
         "worker-1",
         0,
         None,
     )
+
+
+def test_protocol_state_snapshots_are_exact_idempotent_and_inherited(tmp_path) -> None:
+    store = CommunicationStore(tmp_path / "sessions")
+    first = store.bind_protocol_state(
+        "ag_ui",
+        "thread-1",
+        "run-1",
+        state={"nested": {"value": 3}, "items": [1, 2]},
+        client_supplied=True,
+    )
+    store.record_protocol_message(
+        "ag_ui", "run-1", "thread-1", "worker-1"
+    )
+    duplicate = store.bind_protocol_state(
+        "ag_ui",
+        "thread-1",
+        "run-1",
+        state={"ignored": True},
+        client_supplied=True,
+    )
+    inherited = store.bind_protocol_state(
+        "ag_ui",
+        "thread-1",
+        "run-2",
+        state=None,
+        client_supplied=False,
+    )
+
+    assert duplicate == first
+    assert inherited.revision == 2
+    assert inherited.state == first.state
+    assert inherited.state_sha256 == first.state_sha256
+    assert inherited.client_supplied is False
 
 
 def test_worker_lifecycle_option_migrations_preserve_existing_rows(tmp_path) -> None:
