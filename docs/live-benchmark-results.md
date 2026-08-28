@@ -2,6 +2,13 @@
 
 These measurements are retained as model/server-specific evidence, not universal policy. Machine-readable artifacts remain under `/data/var/swaag/benchmarks` because they contain full runtime traces and host-specific identities.
 
+## AG-UI official SDK conformance - 2026-08-28
+
+- Artifact: `/data/var/swaag/manual-tests/ag-ui-sdk-conformance-repo-20260828T035857/result.json`.
+- Method: install exact official `@ag-ui/client`, `@ag-ui/core`, and `@ag-ui/encoder` 0.0.59 packages outside the repository; prepare a completed durable worker and stable external thread/run mapping; launch the source communication service on temporary loopback port 13402; and replay that run through the official `HttpAgent` rather than a custom SSE parser.
+- Result: the SDK accepted the real POST shape, decoded `RUN_STARTED`, the complete text-message lifecycle, and successful `RUN_FINISHED`, assembled both the activity and assistant messages, and returned the exact durable result. Swaag exited zero on `SIGTERM` with empty stdout/stderr.
+- Scope: this isolates protocol serialization, ordering, replay, and official-client state assembly without requiring model inference. It does not claim official live new-run, interrupt-resume, client-tool/shared-state, binary transport, capability discovery, or WebSocket conformance.
+
 ## A2A official SDK conformance - 2026-08-28
 
 - Artifact: `/data/var/swaag/manual-tests/a2a-sdk-conformance-repo-20260828T033843/result.json`.

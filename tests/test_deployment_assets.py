@@ -101,3 +101,41 @@ def test_a2a_sdk_conformance_assets_are_pinned_and_parse() -> None:
     assert "client.getTask" in probe_source
     assert ".resubscribeTask" in probe_source
     assert "client.cancelTask" in probe_source
+
+
+def test_ag_ui_sdk_conformance_assets_are_pinned_and_parse() -> None:
+    installer = ROOT / "scripts" / "install-ag-ui-conformance-env.sh"
+    probe = ROOT / "scripts" / "ag-ui-sdk-conformance.mjs"
+    preparer = ROOT / "scripts" / "prepare-ag-ui-conformance.py"
+    installer_source = installer.read_text(encoding="utf-8")
+    probe_source = probe.read_text(encoding="utf-8")
+
+    shell_check = subprocess.run(
+        ["bash", "-n", str(installer)],
+        text=True,
+        capture_output=True,
+        check=False,
+    )
+    node_check = subprocess.run(
+        ["node", "--check", str(probe)],
+        text=True,
+        capture_output=True,
+        check=False,
+    )
+    python_check = subprocess.run(
+        ["python", "-m", "py_compile", str(preparer)],
+        text=True,
+        capture_output=True,
+        check=False,
+    )
+
+    assert shell_check.returncode == 0, shell_check.stderr
+    assert node_check.returncode == 0, node_check.stderr
+    assert python_check.returncode == 0, python_check.stderr
+    assert 'VERSION="0.0.59"' in installer_source
+    assert "@ag-ui/client@${VERSION}" in installer_source
+    assert "@ag-ui/core@${VERSION}" in installer_source
+    assert "@ag-ui/encoder@${VERSION}" in installer_source
+    assert "new HttpAgent" in probe_source
+    assert "agent.runAgent" in probe_source
+    assert "onRunFinishedEvent" in probe_source
