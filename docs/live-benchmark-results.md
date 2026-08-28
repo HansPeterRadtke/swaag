@@ -2,6 +2,13 @@
 
 These measurements are retained as model/server-specific evidence, not universal policy. Machine-readable artifacts remain under `/data/var/swaag/benchmarks` because they contain full runtime traces and host-specific identities.
 
+## MCP official SDK conformance - 2026-08-28
+
+- Artifact: `/data/var/swaag/manual-tests/mcp-sdk-conformance-repo-20260828T051124/result.json`.
+- Method: install exact `@modelcontextprotocol/client` and `@modelcontextprotocol/core` 2.0.0 packages outside the repository, pin the official client to protocol `2026-07-28`, spawn the installed Swaag stdio adapter, and let the SDK validate/decode discovery, complete tool listing, and a real `list_files` tool call.
+- Result: the SDK negotiated its modern era and exact protocol version, decoded Swaag server identity, all 28 enabled tools, text plus structured call output, and no tool or process error; Swaag stderr was empty. The reusable installer/probe live in `scripts/install-mcp-conformance-env.sh` and `scripts/mcp-sdk-conformance.mjs`.
+- Scope: this establishes current official TypeScript client interoperability for the implemented stateless stdio surface. It does not claim Streamable HTTP header routing, multi-round-trip input, subscriptions, or task lifecycle through MCP; Swaag keeps those concerns outside its core task architecture.
+
 ## Communication routing - 2026-08-27
 
 - Artifact: `/data/var/swaag/benchmarks/communication-routing-2026-08-27-qwen38-27b/communication_routing_results.json`

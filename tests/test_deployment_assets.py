@@ -40,3 +40,32 @@ def test_collector_installer_is_valid_and_checksum_pinned() -> None:
     assert 'ARCHIVE_SHA256="abb8665cc963e886c2d1286c50b38bcb2e53d968b192c3d8fe4d1ed6b91c3901"' in source
     assert "sha256sum -c -" in source
     assert "/releases/download/v${VERSION}/" in source
+
+
+def test_mcp_sdk_conformance_assets_are_pinned_and_parse() -> None:
+    installer = ROOT / "scripts" / "install-mcp-conformance-env.sh"
+    probe = ROOT / "scripts" / "mcp-sdk-conformance.mjs"
+    installer_source = installer.read_text(encoding="utf-8")
+    probe_source = probe.read_text(encoding="utf-8")
+
+    shell_check = subprocess.run(
+        ["bash", "-n", str(installer)],
+        text=True,
+        capture_output=True,
+        check=False,
+    )
+    node_check = subprocess.run(
+        ["node", "--check", str(probe)],
+        text=True,
+        capture_output=True,
+        check=False,
+    )
+
+    assert shell_check.returncode == 0, shell_check.stderr
+    assert node_check.returncode == 0, node_check.stderr
+    assert 'VERSION="2.0.0"' in installer_source
+    assert "@modelcontextprotocol/client@${VERSION}" in installer_source
+    assert "@modelcontextprotocol/core@${VERSION}" in installer_source
+    assert "mode: { pin: \"2026-07-28\" }" in probe_source
+    assert "client.listTools" in probe_source
+    assert "client.callTool" in probe_source
