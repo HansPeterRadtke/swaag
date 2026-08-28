@@ -74,8 +74,10 @@ def test_mcp_sdk_conformance_assets_are_pinned_and_parse() -> None:
 def test_a2a_sdk_conformance_assets_are_pinned_and_parse() -> None:
     installer = ROOT / "scripts" / "install-a2a-conformance-env.sh"
     probe = ROOT / "scripts" / "a2a-sdk-conformance.mjs"
+    runner = ROOT / "scripts" / "run-a2a-sdk-conformance.py"
     installer_source = installer.read_text(encoding="utf-8")
     probe_source = probe.read_text(encoding="utf-8")
+    runner_source = runner.read_text(encoding="utf-8")
 
     shell_check = subprocess.run(
         ["bash", "-n", str(installer)],
@@ -89,9 +91,16 @@ def test_a2a_sdk_conformance_assets_are_pinned_and_parse() -> None:
         capture_output=True,
         check=False,
     )
+    python_check = subprocess.run(
+        ["python", "-m", "py_compile", str(runner)],
+        text=True,
+        capture_output=True,
+        check=False,
+    )
 
     assert shell_check.returncode == 0, shell_check.stderr
     assert node_check.returncode == 0, node_check.stderr
+    assert python_check.returncode == 0, python_check.stderr
     assert 'VERSION="1.1.0"' in installer_source
     assert "@a2a-js/sdk@${VERSION}" in installer_source
     assert "new JsonRpcTransportFactory()" in probe_source
@@ -101,6 +110,10 @@ def test_a2a_sdk_conformance_assets_are_pinned_and_parse() -> None:
     assert "client.getTask" in probe_source
     assert ".resubscribeTask" in probe_source
     assert "client.cancelTask" in probe_source
+    assert "client.sendMessage(" in probe_source
+    assert ".sendMessageStream(" in probe_source
+    assert "model_client=no_inference" in runner_source
+    assert "queue_without_executor" in runner_source
 
 
 def test_ag_ui_sdk_conformance_assets_are_pinned_and_parse() -> None:

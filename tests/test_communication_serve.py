@@ -382,6 +382,103 @@ def test_communication_transport_serves_a2a_agent_card_and_jsonrpc(make_config):
     asyncio.run(exercise())
 
 
+def test_a2a_http_creates_unary_and_streaming_tasks_without_client_ids(
+    make_config, monkeypatch
+):
+    async def exercise() -> None:
+        service = CommunicationService(
+            AgentRuntime(make_config(), model_client=object())
+        )
+
+        def queue_without_executor(worker_id: str):
+            return service.workers.store.transition(
+                worker_id,
+                "queued",
+                expected={"created"},
+                event_type="worker_queued",
+            )
+
+        monkeypatch.setattr(service.workers, "start", queue_without_executor)
+        server = await asyncio.start_server(
+            service.handle_client, "127.0.0.1", 0
+        )
+        port = server.sockets[0].getsockname()[1]
+
+        def request(method: str, request_id: str) -> bytes:
+            body = json.dumps(
+                {
+                    "jsonrpc": "2.0",
+                    "id": request_id,
+                    "method": method,
+                    "params": {
+                        "message": {
+                            "messageId": request_id + "-message",
+                            "role": "ROLE_USER",
+                            "parts": [{"text": "Create a server-owned task."}],
+                        },
+                        "configuration": {"returnImmediately": True},
+                    },
+                }
+            ).encode()
+            return (
+                b"POST /a2a/v1 HTTP/1.1\r\n"
+                b"Host: localhost\r\n"
+                b"A2A-Version: 1.0\r\n"
+                b"Content-Type: application/json\r\n"
+                + f"Content-Length: {len(body)}\r\n\r\n".encode()
+                + body
+            )
+
+        try:
+            unary_reader, unary_writer = await asyncio.open_connection(
+                "127.0.0.1", port
+            )
+            unary_writer.write(request("SendMessage", "unary-new"))
+            await unary_writer.drain()
+            unary_response = await asyncio.wait_for(unary_reader.read(), timeout=2)
+            unary_writer.close()
+            await unary_writer.wait_closed()
+            unary_payload = json.loads(unary_response.split(b"\r\n\r\n", 1)[1])
+            unary_task = unary_payload["result"]["task"]
+            assert unary_task["id"]
+            assert unary_task["contextId"]
+            assert unary_task["status"]["state"] == "TASK_STATE_SUBMITTED"
+            service.workers.cancel(unary_task["id"], reason="finish unary task")
+
+            stream_reader, stream_writer = await asyncio.open_connection(
+                "127.0.0.1", port
+            )
+            stream_writer.write(request("SendStreamingMessage", "stream-new"))
+            await stream_writer.drain()
+            stream_head = await stream_reader.readuntil(b"\r\n\r\n")
+            initial_event = await stream_reader.readuntil(b"\n\n")
+            initial_payload = json.loads(initial_event.removeprefix(b"data: "))
+            stream_task = initial_payload["result"]["task"]
+            service.workers.cancel(stream_task["id"], reason="finish streamed task")
+            remaining = await asyncio.wait_for(stream_reader.read(), timeout=2)
+            stream_writer.close()
+            await stream_writer.wait_closed()
+
+            updates = [
+                json.loads(block.removeprefix(b"data: "))
+                for block in remaining.split(b"\n\n")
+                if block.startswith(b"data: ")
+            ]
+            assert b"Content-Type: text/event-stream" in stream_head
+            assert stream_task["id"]
+            assert stream_task["contextId"]
+            assert stream_task["status"]["state"] == "TASK_STATE_SUBMITTED"
+            assert updates[-1]["result"]["statusUpdate"]["status"]["state"] == (
+                "TASK_STATE_CANCELED"
+            )
+        finally:
+            server.close()
+            await server.wait_closed()
+            service.workers.shutdown()
+
+    asyncio.run(exercise())
+
+
 def test_serve_tcp_agent_card_advertises_the_effective_bound_endpoint(make_config):
     async def exercise() -> None:
         config = make_config()

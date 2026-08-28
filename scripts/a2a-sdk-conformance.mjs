@@ -4,9 +4,17 @@ import fs from "node:fs";
 import path from "node:path";
 import { pathToFileURL } from "node:url";
 
-const [sdkRoot, baseUrl, expectedTaskId] = process.argv.slice(2);
+const [sdkRoot, baseUrl, ...options] = process.argv.slice(2);
+const exerciseNewTasks = options.includes("--exercise-new-tasks");
+const taskIds = options.filter((item) => item !== "--exercise-new-tasks");
+if (taskIds.length > 1) {
+  throw new Error("at most one EXPECTED_TASK_ID may be provided");
+}
+const [expectedTaskId] = taskIds;
 if (!sdkRoot || !baseUrl) {
-  throw new Error("usage: a2a-sdk-conformance.mjs SDK_ROOT BASE_URL [EXPECTED_TASK_ID]");
+  throw new Error(
+    "usage: a2a-sdk-conformance.mjs SDK_ROOT BASE_URL [EXPECTED_TASK_ID] [--exercise-new-tasks]",
+  );
 }
 
 const packageRoot = path.join(sdkRoot, "node_modules", "@a2a-js", "sdk");
@@ -16,7 +24,7 @@ const packageVersion = JSON.parse(
 const { ClientFactory, JsonRpcTransportFactory } = await import(
   pathToFileURL(path.join(packageRoot, "dist", "client", "index.js")).href
 );
-const { TaskState } = await import(
+const { Role, TaskState } = await import(
   pathToFileURL(path.join(packageRoot, "dist", "index.js")).href
 );
 
@@ -105,6 +113,58 @@ if (expectedTaskId) {
   };
 }
 
+let newTasks;
+if (exerciseNewTasks) {
+  const unary = await client.sendMessage(
+    newTaskRequest("official-unary-message", "Exercise official unary task creation."),
+  );
+  requireSubmittedTask(unary, "unary SendMessage");
+  const unaryCanceled = await client.cancelTask({ tenant: "", id: unary.id });
+  requireCanceledTask(unaryCanceled, unary.id, "unary task cancellation");
+
+  const streamingIterator = client
+    .sendMessageStream(
+      newTaskRequest("official-stream-message", "Exercise official streaming task creation."),
+    )
+    [Symbol.asyncIterator]();
+  const streamingInitial = await withTimeout(
+    streamingIterator.next(),
+    "new streaming task event",
+  );
+  if (streamingInitial.done || streamingInitial.value?.payload?.$case !== "task") {
+    throw new Error("official client did not decode the newly streamed task");
+  }
+  const streamingTask = streamingInitial.value.payload.value;
+  requireSubmittedTask(streamingTask, "streaming SendMessage");
+  const streamingCanceled = await client.cancelTask({
+    tenant: "",
+    id: streamingTask.id,
+  });
+  requireCanceledTask(
+    streamingCanceled,
+    streamingTask.id,
+    "streaming task cancellation",
+  );
+  const streamingTerminal = await consumeCanceledStream(streamingIterator);
+
+  newTasks = {
+    unary: {
+      id: unary.id,
+      contextId: unary.contextId,
+      initialState: TaskState[unary.status.state],
+      canceledState: TaskState[unaryCanceled.status.state],
+    },
+    streaming: {
+      id: streamingTask.id,
+      contextId: streamingTask.contextId,
+      initialCase: streamingInitial.value.payload.$case,
+      initialState: TaskState[streamingTask.status.state],
+      canceledState: TaskState[streamingCanceled.status.state],
+      ...streamingTerminal,
+    },
+  };
+}
+
 console.log(
   JSON.stringify(
     {
@@ -133,11 +193,88 @@ console.log(
           }
         : null,
       stream: stream ?? null,
+      newTasks: newTasks ?? null,
     },
     null,
     2,
   ),
 );
+
+function newTaskRequest(messageId, textValue) {
+  return {
+    tenant: "",
+    message: {
+      messageId,
+      contextId: "",
+      taskId: "",
+      role: Role.ROLE_USER,
+      parts: [
+        {
+          content: { $case: "text", value: textValue },
+          metadata: undefined,
+          filename: "",
+          mediaType: "text/plain",
+        },
+      ],
+      metadata: undefined,
+      extensions: [],
+      referenceTaskIds: [],
+    },
+    configuration: {
+      acceptedOutputModes: ["text/plain"],
+      taskPushNotificationConfig: undefined,
+      historyLength: 0,
+      returnImmediately: true,
+    },
+    metadata: undefined,
+  };
+}
+
+function requireSubmittedTask(taskValue, label) {
+  if (
+    !taskValue?.id ||
+    !taskValue.contextId ||
+    taskValue.status?.state !== TaskState.TASK_STATE_SUBMITTED
+  ) {
+    throw new Error(`official client did not decode ${label} as a submitted task`);
+  }
+}
+
+function requireCanceledTask(taskValue, expectedId, label) {
+  if (
+    taskValue?.id !== expectedId ||
+    taskValue.status?.state !== TaskState.TASK_STATE_CANCELED
+  ) {
+    throw new Error(`official client did not decode ${label}`);
+  }
+}
+
+async function consumeCanceledStream(iterator) {
+  const updateCases = [];
+  let sawCanceledUpdate = false;
+  let closed = false;
+  for (let index = 0; index < 12; index += 1) {
+    const next = await withTimeout(iterator.next(), "new task terminal stream event");
+    if (next.done) {
+      closed = true;
+      break;
+    }
+    const payload = next.value?.payload;
+    updateCases.push(payload?.$case ?? "unknown");
+    if (
+      payload?.$case === "statusUpdate" &&
+      payload.value?.status?.state === TaskState.TASK_STATE_CANCELED
+    ) {
+      sawCanceledUpdate = true;
+    }
+  }
+  if (!sawCanceledUpdate || !closed) {
+    throw new Error(
+      "official client new-task stream did not deliver and close after cancellation",
+    );
+  }
+  return { updateCases, sawCanceledUpdate, closed };
+}
 
 async function withTimeout(promise, label) {
   let timer;
