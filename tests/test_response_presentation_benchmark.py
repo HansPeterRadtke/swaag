@@ -85,7 +85,10 @@ def test_response_presentation_benchmark_compares_all_strategies(
     make_config,
     tmp_path,
 ) -> None:
+    runtime_configs = []
+
     def runtime_factory(config):
+        runtime_configs.append(config)
         return AgentRuntime(config, model_client=_BenchmarkPresentationClient())
 
     output = tmp_path / "presentation-benchmark"
@@ -118,6 +121,13 @@ def test_response_presentation_benchmark_compares_all_strategies(
         "audio_rendering",
         "presentation_evaluation",
     ]
+    assert runtime_configs
+    assert all(
+        config.tools.read_roots[0].name == "workspace"
+        and config.tools.read_roots[0].is_dir()
+        and not any(config.tools.read_roots[0].iterdir())
+        for config in runtime_configs
+    )
     assert (
         output / "response_presentation_results.json"
     ).exists()

@@ -71,9 +71,15 @@ def select_cases(case_ids: Iterable[str] = ()) -> list[NoteBehaviorCase]:
     return [by_id[case_id] for case_id in requested] if requested else list(CASES)
 
 
-def _case_config(base: AgentConfig, *, sessions_root: Path) -> AgentConfig:
+def _case_config(
+    base: AgentConfig,
+    *,
+    sessions_root: Path,
+    workspace: Path,
+) -> AgentConfig:
     config = copy.deepcopy(base)
     config.sessions.root = sessions_root
+    config.tools.read_roots = [workspace]
     config.model.cache_enabled = False
     config.tools.enabled = ["notes"]
     config.tools.allow_stateful_tools = True
@@ -284,9 +290,12 @@ def run_note_behavior_benchmark(
         if model_identity is not None and model_identity != checkpoint_identity:
             raise ValueError("Note checkpoint model identity does not match this run")
         if model_identity is None and len(results) == len(selected):
+            probe_workspace = output_dir / "identity-probe" / "workspace"
+            probe_workspace.mkdir(parents=True, exist_ok=True)
             probe_config = _case_config(
                 base,
                 sessions_root=output_dir / "identity-probe" / "sessions",
+                workspace=probe_workspace,
             )
             model_identity = _model_identity(runtime_factory(probe_config))
             if model_identity != checkpoint_identity:
@@ -298,7 +307,13 @@ def run_note_behavior_benchmark(
         if any(item.get("case_id") == case.case_id for item in results):
             continue
         case_root = output_dir / "runs" / f"{index:02d}-{case.case_id}"
-        case_config = _case_config(base, sessions_root=case_root / "sessions")
+        workspace = case_root / "workspace"
+        workspace.mkdir(parents=True, exist_ok=False)
+        case_config = _case_config(
+            base,
+            sessions_root=case_root / "sessions",
+            workspace=workspace,
+        )
         runtime = runtime_factory(case_config)
         current_identity = _model_identity(runtime)
         if model_identity is None:
@@ -385,6 +400,11 @@ def run_note_behavior_benchmark(
                 "tool_actions": tool_actions,
                 "note_mutations": note_mutations,
                 "note_selections": selection_payloads,
+                "context_compilations": [
+                    {"sequence": event.sequence, **dict(event.payload)}
+                    for event in events
+                    if event.event_type == "context_compiled"
+                ],
                 "verification": verification,
             }
         )

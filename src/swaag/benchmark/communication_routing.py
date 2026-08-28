@@ -112,10 +112,12 @@ def _case_config(
     base: AgentConfig,
     *,
     sessions_root: Path,
+    workspace: Path,
     model_base_url: str,
 ) -> AgentConfig:
     config = copy.deepcopy(base)
     config.sessions.root = sessions_root
+    config.tools.read_roots = [workspace]
     config.model.base_url = model_base_url.rstrip("/")
     config.model.cache_enabled = False
     config.tools.enabled = []
@@ -341,10 +343,13 @@ def run_communication_routing_benchmark(
             raise ValueError("Communication-routing checkpoint model identity changed")
         if model_identities is None and len(results) == len(selected):
             probe_root = output_dir / "identity-probe" / "sessions"
+            probe_workspace = output_dir / "identity-probe" / "workspace"
+            probe_workspace.mkdir(parents=True, exist_ok=True)
             probe_main = runtime_factory(
                 _case_config(
                     base,
                     sessions_root=probe_root,
+                    workspace=probe_workspace,
                     model_base_url=strong_url,
                 )
             )
@@ -352,6 +357,7 @@ def run_communication_routing_benchmark(
                 _case_config(
                     base,
                     sessions_root=probe_root,
+                    workspace=probe_workspace,
                     model_base_url=assistant_url,
                 )
             )
@@ -374,11 +380,23 @@ def run_communication_routing_benchmark(
             continue
         case_root = output_dir / "runs" / f"{index:02d}-{case.case_id}"
         sessions_root = case_root / "sessions"
+        workspace = case_root / "workspace"
+        workspace.mkdir(parents=True, exist_ok=False)
         main = runtime_factory(
-            _case_config(base, sessions_root=sessions_root, model_base_url=strong_url)
+            _case_config(
+                base,
+                sessions_root=sessions_root,
+                workspace=workspace,
+                model_base_url=strong_url,
+            )
         )
         assistant = runtime_factory(
-            _case_config(base, sessions_root=sessions_root, model_base_url=assistant_url)
+            _case_config(
+                base,
+                sessions_root=sessions_root,
+                workspace=workspace,
+                model_base_url=assistant_url,
+            )
         )
         current_identities = {
             "strong": _model_identity(main),
@@ -479,6 +497,11 @@ def run_communication_routing_benchmark(
                     if isinstance(item, dict)
                 ),
                 "model_call_count": len(completions),
+                "context_compilations": [
+                    {"sequence": event.sequence, **dict(event.payload)}
+                    for event in events
+                    if event.event_type == "context_compiled"
+                ],
                 "verification": verification,
                 "error": error,
             }

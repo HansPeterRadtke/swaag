@@ -110,7 +110,10 @@ def test_communication_routing_benchmark_uses_production_escalation_and_resumes(
     make_config,
     tmp_path,
 ) -> None:
+    runtime_configs = []
+
     def runtime_factory(config):
+        runtime_configs.append(config)
         label = "assistant" if config.model.base_url.endswith(":14830") else "strong"
         return AgentRuntime(config, model_client=_RoutingBenchmarkClient(label))
 
@@ -135,6 +138,13 @@ def test_communication_routing_benchmark_uses_production_escalation_and_resumes(
     assert report["prompt_tokens"] == 600
     assert report["completion_tokens"] == 120
     assert report["model_identities"]["distinct_endpoints"] is True
+    assert runtime_configs
+    assert all(
+        config.tools.read_roots[0].name == "workspace"
+        and config.tools.read_roots[0].is_dir()
+        and not any(config.tools.read_roots[0].iterdir())
+        for config in runtime_configs
+    )
     assert (output / "communication_routing_results.json").exists()
 
     def forbidden_runtime(_config):

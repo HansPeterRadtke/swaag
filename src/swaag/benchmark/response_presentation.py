@@ -87,9 +87,15 @@ def _write_report(path: Path, report: dict[str, Any]) -> None:
     temporary.replace(path)
 
 
-def _case_config(base: AgentConfig, *, sessions_root: Path) -> AgentConfig:
+def _case_config(
+    base: AgentConfig,
+    *,
+    sessions_root: Path,
+    workspace: Path,
+) -> AgentConfig:
     config = copy.deepcopy(base)
     config.sessions.root = sessions_root
+    config.tools.read_roots = [workspace]
     config.model.cache_enabled = False
     config.tools.enabled = []
     config.tools.allow_stateful_tools = False
@@ -188,9 +194,12 @@ def run_response_presentation_benchmark(
                 "Response-presentation checkpoint model identity does not match this run"
             )
         if model_identity is None and len(results) == len(selected):
+            probe_workspace = output_dir / "identity-probe" / "workspace"
+            probe_workspace.mkdir(parents=True, exist_ok=True)
             probe_config = _case_config(
                 base,
                 sessions_root=output_dir / "identity-probe" / "sessions",
+                workspace=probe_workspace,
             )
             model_identity = _model_identity(runtime_factory(probe_config))
             if model_identity != checkpoint_identity:
@@ -204,9 +213,12 @@ def run_response_presentation_benchmark(
         if any(item.get("strategy") == strategy for item in results):
             continue
         case_root = output_dir / "runs" / f"{index:02d}-{strategy}"
+        workspace = case_root / "workspace"
+        workspace.mkdir(parents=True, exist_ok=False)
         config_for_case = _case_config(
             base,
             sessions_root=case_root / "sessions",
+            workspace=workspace,
         )
         runtime = runtime_factory(config_for_case)
         current_identity = _model_identity(runtime)

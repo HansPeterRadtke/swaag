@@ -115,6 +115,14 @@ def test_instruction_following_benchmark_uses_production_context_and_resumes(
     assert clients[0].prompts
     result = report["results"][0]
     assert result["context_compilations"]
+    workspace_components = [
+        component
+        for compilation in result["context_compilations"]
+        for component in compilation.get("accounting", {}).get("components", [])
+        if component.get("name") == "workspace_file_manifest"
+    ]
+    assert workspace_components
+    assert max(int(item["tokens"]) for item in workspace_components) < 100
     assert result["instruction_event_hashes"]
     report_path = output / "instruction_following_results.json"
     assert report_path.exists()
