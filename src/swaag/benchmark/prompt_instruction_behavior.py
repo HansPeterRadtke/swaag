@@ -75,7 +75,11 @@ CASES = (
             "The first governs substantial software implementation and testing steps: "
             "understand the purpose, interfaces, constraints, and high-consequence risks; "
             "reproduce claimed defects; simulate critical external failures in isolated tests; "
-            "and exercise integration behavior without forcing that ceremony onto trivial work. "
+            "exercise integration behavior without forcing that ceremony onto trivial work; "
+            "factor genuinely repeated behavior into reusable testable units; choose functions, "
+            "objects, and hierarchies from actual state and invariants rather than fashion; use "
+            "semantic names that are revised when roles change; and prefer the simplest adequate "
+            "design while retaining credible change paths. "
             "The second governs research and source-verification steps: inspect exact installed "
             "versions, prefer primary sources, and reproduce material documentation claims in "
             "a safe experiment. Give each rule concise free-form semantic categories "
@@ -403,6 +407,23 @@ def _verify_case(
             and any(
                 word in implementation[0].content.casefold()
                 for word in ("integration", "system", "end-to-end")
+            ),
+            "implementation_structure_preserved": len(implementation) == 1
+            and any(
+                word in implementation[0].content.casefold()
+                for word in ("repeat", "reus", "duplicat")
+            )
+            and any(
+                word in implementation[0].content.casefold()
+                for word in ("function", "class", "object", "invariant")
+            )
+            and any(
+                word in implementation[0].content.casefold()
+                for word in ("name", "rename", "semantic role")
+            )
+            and any(
+                word in implementation[0].content.casefold()
+                for word in ("simple", "adequate", "change", "future")
             ),
             "research_reproduction_preserved": len(research) == 1
             and "version" in research[0].content.casefold()

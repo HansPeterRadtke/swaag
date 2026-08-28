@@ -54,6 +54,12 @@ def test_engineering_contract_preserves_recording_driven_risk_workflow() -> None
         "integration or whole-system simulators",
         "Parameterize ranges and hold out variants",
         "higher-fidelity acceptance",
+        "Choose structure by responsibility and likely change",
+        "repeated behavior into one named, reusable unit",
+        "Bundle data and behavior in an object when instances own meaningful",
+        "state, identity, lifecycle, or an invariant",
+        "Rename a stale `counter` instead of adding",
+        "simplest adequate design",
         "does not substitute for behavior",
     )
     for contract in required_contracts:
@@ -66,6 +72,9 @@ def test_engineering_contract_preserves_recording_driven_risk_workflow() -> None
         "https://developer.android.com/training/monitoring-device-state/doze-standby",
         "https://man7.org/linux/man-pages/man8/tc-netem.8.html",
         "https://docs.pytest.org/en/stable/how-to/monkeypatch.html",
+        "https://docs.python.org/3/tutorial/classes.html",
+        "https://peps.python.org/pep-0008/",
+        "https://isocpp.github.io/CppCoreGuidelines/CppCoreGuidelines",
     )
     for url in primary_sources:
         assert url in source

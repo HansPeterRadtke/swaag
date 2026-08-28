@@ -240,7 +240,10 @@ def test_fine_grained_category_case_accepts_distinct_semantic_labels() -> None:
             title="Implementation discipline",
             content=(
                 "Identify high-consequence risks, reproduce claimed defects, simulate "
-                "critical failures, and exercise integration behavior before completion."
+                "critical failures, and exercise integration behavior before completion. "
+                "Factor repeated behavior into reusable functions or invariant-owning "
+                "objects, keep names aligned with semantic roles, and choose the simplest "
+                "adequate structure that leaves credible changes possible."
             ),
             scopes=["action"],
             created_at=now,

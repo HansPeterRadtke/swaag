@@ -1,7 +1,7 @@
 # Evidence-driven engineering workflow
 
 This is an implementation-neutral engineering contract derived from the
-programming recordings through 2026-08-27. It governs substantial software
+programming recordings through 2026-08-28. It governs substantial software
 work without turning every trivial edit into a heavyweight process or a fixed
 deterministic workflow.
 
@@ -21,6 +21,35 @@ count or apparent algorithmic complexity. Identify the failures that could
 lose state, violate security or safety, corrupt data, strand a user, create an
 irreversible effect, or fail only in a production environment. Turn each
 material risk into observable evidence before implementation where practical.
+
+## Choose structure by responsibility and likely change
+
+Factor genuinely repeated behavior into one named, reusable unit so its
+contract and failure cases can be tested once rather than trusting many nearly
+identical copies. Do not create an abstraction merely because two short blocks
+look alike: first establish that they represent the same responsibility and
+should change together.
+
+Use a function for a stateless operation when that expresses the contract
+clearly. Bundle data and behavior in an object when instances own meaningful
+state, identity, lifecycle, or an invariant. A class used only as a static
+namespace can improve local organization, but it is not automatically better
+than a module and functions. Likewise, do not force a deep object hierarchy
+onto a task whose required representation is a small value, enum, record, or
+flat collection. Model only the detail the current behavior needs while
+retaining a credible path for changes the task actually signals.
+
+Names describe the present semantic role, unit, and scope rather than creation
+order or incidental implementation. Rename a stale `counter` instead of adding
+`counter2`; use the repository's prevailing grouping and naming conventions
+rather than imposing one universal word order. Public interfaces deserve extra
+care because names and structure become compatibility commitments.
+
+There is no fixed line-count or field-count threshold for functions, classes,
+or hierarchies. The LLM weighs clarity, test isolation, runtime cost, current
+requirements, local conventions, and plausible changeability. Prefer the
+simplest adequate design, not the smallest design at any future cost and not a
+speculative architecture for detail no requirement uses.
 
 ## Question and evidence loop
 
@@ -89,6 +118,15 @@ commands, environment, and raw evidence needed to reproduce each result.
   their availability and exact version still need to be checked in the target
   environment: <https://docs.pytest.org/en/stable/how-to/monkeypatch.html> and
   <https://docs.pytest.org/en/stable/how-to/tmp_path.html>.
+- Python's class tutorial defines classes as a way to bundle data and behavior
+  and points to data classes for record-like values; PEP 8 makes usage and local
+  consistency the overriding naming principles. The C++ Core Guidelines
+  independently recommend single-operation functions for testing/reuse and
+  classes when related data has an invariant. These corroborate the recording's
+  context-sensitive boundary rather than establishing a language-independent
+  class threshold: <https://docs.python.org/3/tutorial/classes.html>,
+  <https://peps.python.org/pep-0008/>, and
+  <https://isocpp.github.io/CppCoreGuidelines/CppCoreGuidelines>.
 
 These sources corroborate techniques, not a mandatory stack. The selected LLM
 instruction/notes mechanism keeps programming, research, reporting, and other
