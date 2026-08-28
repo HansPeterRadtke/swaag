@@ -24,10 +24,17 @@ _PIPE_TERMINAL_STATES = {"completed", "failed", "canceled", "input_required"}
 
 
 class _JsonLineClient:
-    def __init__(self, host: str, port: int, timeout_seconds: float):
+    def __init__(
+        self,
+        host: str,
+        port: int,
+        timeout_seconds: float,
+        trace_context: dict[str, str] | None = None,
+    ):
         self.host = host
         self.port = port
         self.timeout_seconds = timeout_seconds
+        self.trace_context = dict(trace_context or {})
 
     async def request(self, operation: str, params: dict[str, Any]) -> dict[str, Any]:
         reader: asyncio.StreamReader
@@ -37,7 +44,10 @@ class _JsonLineClient:
             timeout=self.timeout_seconds,
         )
         try:
-            payload = json.dumps({"op": operation, "params": params}) + "\n"
+            request = {"op": operation, "params": params}
+            if self.trace_context:
+                request["trace_context"] = self.trace_context
+            payload = json.dumps(request) + "\n"
             writer.write(payload.encode("utf-8"))
             await asyncio.wait_for(writer.drain(), timeout=self.timeout_seconds)
             line = await asyncio.wait_for(
@@ -90,6 +100,7 @@ class Pipe:
         __metadata__: dict[str, Any] | None = None,
         __files__: list[dict[str, Any]] | None = None,
         __event_emitter__: EventEmitter | None = None,
+        __request__: Any = None,
         **_: Any,
     ) -> str:
         try:
@@ -123,6 +134,7 @@ class Pipe:
                 self.valves.SWAAG_HOST,
                 self.valves.SWAAG_PORT,
                 self.valves.REQUEST_TIMEOUT_SECONDS,
+                _request_trace_context(__request__),
             )
             current = await client.request(
                 "open_webui.send",
@@ -224,6 +236,21 @@ def _first_text(*values: Any) -> str:
         if isinstance(value, str) and value.strip():
             return value.strip()
     return ""
+
+
+def _request_trace_context(request: Any) -> dict[str, str]:
+    headers = getattr(request, "headers", None)
+    if headers is None:
+        return {}
+    carrier: dict[str, str] = {}
+    for name in ("traceparent", "tracestate"):
+        try:
+            value = headers.get(name)
+        except (AttributeError, TypeError):
+            return {}
+        if isinstance(value, str) and value.strip() and len(value.strip()) <= 512:
+            carrier[name] = value.strip()
+    return carrier
 
 
 def _latest_user_payload(

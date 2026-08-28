@@ -29,6 +29,7 @@ from swaag.protocol_adapters import (
 from swaag.runtime import AgentRuntime
 from swaag.sqlite_schema import apply_sqlite_migrations
 from swaag.task_api import TaskApi
+from swaag.telemetry import record_http_response_status, record_protocol_correlation
 from swaag.utils import new_id, stable_json_dumps, utc_now_iso
 from swaag.workers import WORKER_TERMINAL_STATES, WorkerManager, WorkerRecord
 
@@ -675,6 +676,11 @@ class CommunicationService:
         request_id = _required_protocol_text(
             params, "request_id", protocol="Open WebUI"
         )
+        record_protocol_correlation(
+            protocol="open_webui",
+            request_id=request_id,
+            context_id=conversation_id,
+        )
         message = _required_protocol_text(params, "message", protocol="Open WebUI")
         attachments = params.get("attachments", [])
         if not isinstance(attachments, list) or any(
@@ -691,6 +697,13 @@ class CommunicationService:
                         "Open WebUI request_id is already bound to another conversation"
                     )
                 record = self.workers.store.get(worker_id)
+                record_protocol_correlation(
+                    protocol="open_webui",
+                    request_id=request_id,
+                    context_id=conversation_id,
+                    worker_id=record.worker_id,
+                    session_id=record.session_id,
+                )
                 return {
                     **OpenWebUiProjectionAdapter().response(record),
                     "conversation_id": conversation_id,
@@ -751,6 +764,13 @@ class CommunicationService:
             )
             if record is None:
                 raise RuntimeError("Open WebUI worker did not start")
+            record_protocol_correlation(
+                protocol="open_webui",
+                request_id=request_id,
+                context_id=conversation_id,
+                worker_id=record.worker_id,
+                session_id=record.session_id,
+            )
             return {
                 **OpenWebUiProjectionAdapter().response(record),
                 "conversation_id": conversation_id,
@@ -762,6 +782,11 @@ class CommunicationService:
         self,
         run: AgUiRunInput,
     ) -> tuple[WorkerRecord, int, int | None, bool]:
+        record_protocol_correlation(
+            protocol="ag_ui",
+            request_id=run.run_id,
+            context_id=run.thread_id,
+        )
         with self._protocol_send_lock:
             duplicate = self.store.protocol_message_bounds("ag_ui", run.run_id)
             if duplicate is not None:
@@ -770,8 +795,16 @@ class CommunicationService:
                     raise ValueError(
                         "AG-UI runId is already bound to another thread"
                     )
+                record = self.workers.store.get(worker_id)
+                record_protocol_correlation(
+                    protocol="ag_ui",
+                    request_id=run.run_id,
+                    context_id=run.thread_id,
+                    worker_id=record.worker_id,
+                    session_id=record.session_id,
+                )
                 return (
-                    self.workers.store.get(worker_id),
+                    record,
                     start_sequence,
                     end_sequence,
                     True,
@@ -847,6 +880,13 @@ class CommunicationService:
                 run.thread_id,
                 worker_id,
                 start_sequence=start_sequence,
+            )
+            record_protocol_correlation(
+                protocol="ag_ui",
+                request_id=run.run_id,
+                context_id=run.thread_id,
+                worker_id=record.worker_id,
+                session_id=record.session_id,
             )
             return record, start_sequence, None, False
 
@@ -1010,6 +1050,12 @@ class CommunicationService:
     ) -> dict[str, Any]:
         adapter = A2AProjectionAdapter()
         message = adapter.user_message(params)
+        record_protocol_correlation(
+            protocol="a2a",
+            request_id=message.message_id,
+            context_id=message.context_id or "",
+            worker_id=message.task_id or "",
+        )
         if message.task_id is None:
             if message.context_id is not None:
                 raise ValueError(
@@ -1050,6 +1096,13 @@ class CommunicationService:
             )
         if wait_for_completion and not message.return_immediately:
             record = self.workers.wait(worker_id, timeout_seconds=None)
+        record_protocol_correlation(
+            protocol="a2a",
+            request_id=message.message_id,
+            context_id=record.session_id,
+            worker_id=record.worker_id,
+            session_id=record.session_id,
+        )
         return {
             "protocol": adapter.protocol_version,
             "task": self._a2a_task(
@@ -1253,6 +1306,7 @@ class CommunicationService:
         content_type: str = "application/json",
         headers: dict[str, str] | None = None,
     ) -> None:
+        record_http_response_status(status)
         response_headers = {
             "Content-Length": str(len(body)),
             "Content-Type": content_type,
@@ -1319,6 +1373,7 @@ class CommunicationService:
         after_sequence: int,
         history_length: int | None = 0,
     ) -> None:
+        record_http_response_status(200)
         headers = (
             "HTTP/1.1 200 OK\r\n"
             "Content-Type: text/event-stream\r\n"
@@ -1380,6 +1435,7 @@ class CommunicationService:
         end_sequence: int | None,
         duplicate: bool,
     ) -> None:
+        record_http_response_status(200)
         headers = (
             "HTTP/1.1 200 OK\r\n"
             "Content-Type: text/event-stream\r\n"
@@ -1591,6 +1647,10 @@ class CommunicationService:
         writer: asyncio.StreamWriter,
     ) -> None:
         request_id = request.get("id")
+        record_protocol_correlation(
+            protocol="a2a",
+            request_id=str(request_id) if request_id is not None else "",
+        )
         if headers.get("a2a-version") != A2AProjectionAdapter.protocol_version:
             payload = self._a2a_error(
                 request_id,
@@ -1703,80 +1763,6 @@ class CommunicationService:
                 raise ValueError("malformed HTTP request line")
             method, path, _version = parts
             headers = await self._read_http_headers(reader)
-            if method == "GET" and path == "/.well-known/agent-card.json":
-                body = json.dumps(self._a2a_agent_card(), sort_keys=True).encode()
-                etag = '"' + hashlib.sha256(body).hexdigest() + '"'
-                if headers.get("if-none-match") == etag:
-                    await self._write_http_response(
-                        writer,
-                        status=304,
-                        reason="Not Modified",
-                        headers={"Cache-Control": "public, max-age=300", "ETag": etag},
-                    )
-                else:
-                    await self._write_http_response(
-                        writer,
-                        status=200,
-                        reason="OK",
-                        body=body,
-                        headers={"Cache-Control": "public, max-age=300", "ETag": etag},
-                    )
-                return
-            if method != "POST" or path not in {"/a2a/v1", "/ag-ui"}:
-                await self._write_http_response(
-                    writer,
-                    status=404,
-                    reason="Not Found",
-                    body=b'{"error":"not found"}',
-                )
-                return
-            content_type = headers.get("content-type", "").split(";", 1)[0].strip()
-            if content_type != "application/json":
-                raise ValueError("Content-Type must be application/json")
-            raw_length = headers.get("content-length", "")
-            if not raw_length.isdigit() or not 0 < int(raw_length) <= 1_048_576:
-                raise ValueError("Content-Length must be between 1 and 1048576")
-            body = await reader.readexactly(int(raw_length))
-            try:
-                request = json.loads(body)
-            except json.JSONDecodeError:
-                payload = (
-                    self._a2a_error(None, -32700, "Invalid JSON payload")
-                    if path == "/a2a/v1"
-                    else {"error": "Invalid JSON payload"}
-                )
-                await self._write_http_response(
-                    writer,
-                    status=200 if path == "/a2a/v1" else 400,
-                    reason="OK" if path == "/a2a/v1" else "Bad Request",
-                    body=json.dumps(payload, sort_keys=True).encode(),
-                )
-                return
-            if not isinstance(request, dict):
-                payload = (
-                    self._a2a_error(None, -32600, "Invalid request")
-                    if path == "/a2a/v1"
-                    else {"error": "AG-UI request must be an object"}
-                )
-                await self._write_http_response(
-                    writer,
-                    status=200 if path == "/a2a/v1" else 400,
-                    reason="OK" if path == "/a2a/v1" else "Bad Request",
-                    body=json.dumps(payload, sort_keys=True).encode(),
-                )
-                return
-            if path == "/ag-ui":
-                await self._handle_ag_ui_http(
-                    request=request,
-                    headers=headers,
-                    writer=writer,
-                )
-                return
-            await self._handle_a2a_http(
-                request=request,
-                headers=headers,
-                writer=writer,
-            )
         except (asyncio.IncompleteReadError, ValueError) as exc:
             await self._write_http_response(
                 writer,
@@ -1784,6 +1770,155 @@ class CommunicationService:
                 reason="Bad Request",
                 body=json.dumps({"error": str(exc)}, sort_keys=True).encode(),
             )
+            return
+
+        with self.runtime.telemetry.http_server_request(
+            method=method,
+            path=path,
+            headers=headers,
+        ):
+            try:
+                if method == "GET" and path == "/.well-known/agent-card.json":
+                    body = json.dumps(self._a2a_agent_card(), sort_keys=True).encode()
+                    etag = '"' + hashlib.sha256(body).hexdigest() + '"'
+                    if headers.get("if-none-match") == etag:
+                        await self._write_http_response(
+                            writer,
+                            status=304,
+                            reason="Not Modified",
+                            headers={"Cache-Control": "public, max-age=300", "ETag": etag},
+                        )
+                    else:
+                        await self._write_http_response(
+                            writer,
+                            status=200,
+                            reason="OK",
+                            body=body,
+                            headers={"Cache-Control": "public, max-age=300", "ETag": etag},
+                        )
+                    return
+                if method != "POST" or path not in {"/a2a/v1", "/ag-ui"}:
+                    await self._write_http_response(
+                        writer,
+                        status=404,
+                        reason="Not Found",
+                        body=b'{"error":"not found"}',
+                    )
+                    return
+                content_type = headers.get("content-type", "").split(";", 1)[0].strip()
+                if content_type != "application/json":
+                    raise ValueError("Content-Type must be application/json")
+                raw_length = headers.get("content-length", "")
+                if not raw_length.isdigit() or not 0 < int(raw_length) <= 1_048_576:
+                    raise ValueError("Content-Length must be between 1 and 1048576")
+                body = await reader.readexactly(int(raw_length))
+                try:
+                    request = json.loads(body)
+                except json.JSONDecodeError:
+                    payload = (
+                        self._a2a_error(None, -32700, "Invalid JSON payload")
+                        if path == "/a2a/v1"
+                        else {"error": "Invalid JSON payload"}
+                    )
+                    await self._write_http_response(
+                        writer,
+                        status=200 if path == "/a2a/v1" else 400,
+                        reason="OK" if path == "/a2a/v1" else "Bad Request",
+                        body=json.dumps(payload, sort_keys=True).encode(),
+                    )
+                    return
+                if not isinstance(request, dict):
+                    payload = (
+                        self._a2a_error(None, -32600, "Invalid request")
+                        if path == "/a2a/v1"
+                        else {"error": "AG-UI request must be an object"}
+                    )
+                    await self._write_http_response(
+                        writer,
+                        status=200 if path == "/a2a/v1" else 400,
+                        reason="OK" if path == "/a2a/v1" else "Bad Request",
+                        body=json.dumps(payload, sort_keys=True).encode(),
+                    )
+                    return
+                if path == "/ag-ui":
+                    await self._handle_ag_ui_http(
+                        request=request,
+                        headers=headers,
+                        writer=writer,
+                    )
+                    return
+                await self._handle_a2a_http(
+                    request=request,
+                    headers=headers,
+                    writer=writer,
+                )
+            except (asyncio.IncompleteReadError, ValueError) as exc:
+                await self._write_http_response(
+                    writer,
+                    status=400,
+                    reason="Bad Request",
+                    body=json.dumps({"error": str(exc)}, sort_keys=True).encode(),
+                )
+
+    async def _dispatch_json_line_request(self, request: dict[str, Any]) -> Any:
+        op = str(request.get("op", ""))
+        with self.runtime.telemetry.protocol_server_request(
+            protocol="swaag.jsonl",
+            operation=op,
+            carrier=request.get("trace_context"),
+        ):
+            if op == "submit":
+                item = self.submit(
+                    request.get("session"),
+                    str(request.get("message", "")),
+                    source=str(request.get("source", "communication")),
+                )
+                return asdict(item)
+            if op == "status":
+                return asdict(
+                    self.status(str(request.get("correlation_id", "")))
+                )
+            if op == "process":
+                item = await self.process_once_async(
+                    session_id=request.get("session_id")
+                )
+                return None if item is None else asdict(item)
+            if op == "ask_status":
+                async with self._semaphore:
+                    answer = await asyncio.to_thread(
+                        self.answer_status_question,
+                        request.get("session"),
+                        str(
+                            request.get(
+                                "question", "What is the current status?"
+                            )
+                        ),
+                    )
+                return {"answer": answer}
+            if op.startswith("task."):
+                params = request.get("params") or {}
+                if not isinstance(params, dict):
+                    raise ValueError("task operation params must be an object")
+                task_operation = op.removeprefix("task.")
+                if task_operation == "events.wait":
+                    return await self._wait_task_events(params)
+                async with self._semaphore:
+                    return await asyncio.to_thread(
+                        self.task_api.execute,
+                        task_operation,
+                        params,
+                    )
+            if op.startswith(("ag_ui.", "a2a.", "open_webui.")):
+                params = request.get("params") or {}
+                if not isinstance(params, dict):
+                    raise ValueError("protocol operation params must be an object")
+                protocol, operation = op.split(".", 1)
+                return await self._protocol_projection_async(
+                    protocol,
+                    operation,
+                    params,
+                )
+            raise ValueError(f"unknown communication op: {op}")
 
     async def handle_client(self, reader: asyncio.StreamReader, writer: asyncio.StreamWriter) -> None:
         try:
@@ -1798,49 +1933,7 @@ class CommunicationService:
                     request = json.loads(line.decode("utf-8"))
                     if not isinstance(request, dict):
                         raise ValueError("request must be an object")
-                    op = str(request.get("op", ""))
-                    if op == "submit":
-                        item = self.submit(request.get("session"), str(request.get("message", "")), source=str(request.get("source", "communication")))
-                        response = asdict(item)
-                    elif op == "status":
-                        response = asdict(self.status(str(request.get("correlation_id", ""))))
-                    elif op == "process":
-                        item = await self.process_once_async(session_id=request.get("session_id"))
-                        response = None if item is None else asdict(item)
-                    elif op == "ask_status":
-                        async with self._semaphore:
-                            answer = await asyncio.to_thread(
-                                self.answer_status_question,
-                                request.get("session"),
-                                str(request.get("question", "What is the current status?")),
-                            )
-                        response = {"answer": answer}
-                    elif op.startswith("task."):
-                        params = request.get("params") or {}
-                        if not isinstance(params, dict):
-                            raise ValueError("task operation params must be an object")
-                        task_operation = op.removeprefix("task.")
-                        if task_operation == "events.wait":
-                            response = await self._wait_task_events(params)
-                        else:
-                            async with self._semaphore:
-                                response = await asyncio.to_thread(
-                                    self.task_api.execute,
-                                    task_operation,
-                                    params,
-                                )
-                    elif op.startswith(("ag_ui.", "a2a.", "open_webui.")):
-                        params = request.get("params") or {}
-                        if not isinstance(params, dict):
-                            raise ValueError("protocol operation params must be an object")
-                        protocol, operation = op.split(".", 1)
-                        response = await self._protocol_projection_async(
-                            protocol,
-                            operation,
-                            params,
-                        )
-                    else:
-                        raise ValueError(f"unknown communication op: {op}")
+                    response = await self._dispatch_json_line_request(request)
                     payload = {"ok": True, "result": response}
                 except Exception as exc:
                     payload = {"ok": False, "error": f"{type(exc).__name__}: {exc}"}

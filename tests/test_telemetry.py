@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+import threading
+
 import pytest
 from opentelemetry.sdk.metrics import MeterProvider
 from opentelemetry.sdk.metrics.export import InMemoryMetricReader
@@ -10,12 +12,15 @@ from opentelemetry.sdk.trace.export.in_memory_span_exporter import (
 )
 from opentelemetry.trace import StatusCode
 
-from swaag.telemetry import OperationalTelemetry
+from swaag.model import LlamaCppClient
+from swaag.runtime import AgentRuntime
+from swaag.telemetry import OperationalTelemetry, trace_context_carrier
 from swaag.types import (
     BudgetComponentReport,
     BudgetReport,
     CompletionResult,
 )
+from swaag.workers import WorkerManager
 
 
 def _collect_metrics(reader: InMemoryMetricReader) -> dict[str, object]:
@@ -238,3 +243,90 @@ def test_operation_errors_set_span_status_and_low_cardinality_error_type() -> No
 
     meter_provider.shutdown()
     tracer_provider.shutdown()
+
+
+def test_remote_trace_crosses_protocol_worker_and_model_boundaries(make_config) -> None:
+    telemetry, exporter, _reader, tracer_provider, meter_provider = (
+        _telemetry_fixture()
+    )
+    runtime = AgentRuntime(
+        make_config(),
+        model_client=object(),
+        telemetry=telemetry,
+    )
+    workers = WorkerManager(runtime)
+    finished = threading.Event()
+    captured_headers: dict[str, str] = {}
+    remote_trace_id = "1234567890abcdef1234567890abcdef"
+    remote_parent_id = "1234567890abcdef"
+    carrier = {
+        "traceparent": f"00-{remote_trace_id}-{remote_parent_id}-01",
+        "tracestate": "vendor=value",
+    }
+
+    def run_worker(_worker_id: str) -> None:
+        with telemetry.agent_invocation(
+            session_id="session-remote",
+            run_id="run-remote",
+            model_name="local-model",
+        ):
+            with telemetry.model_call(
+                session_id="session-remote",
+                run_id="run-remote",
+                call_id="call-remote",
+                call_kind="agent_action",
+                operation_name="text_completion",
+                provider_name="llama.cpp",
+                model_name="local-model",
+                base_url="http://127.0.0.1:14829",
+                max_tokens=128,
+                cache_mode="disabled",
+            ):
+                captured_headers.update(
+                    LlamaCppClient(runtime.config)._request_headers_kwargs()[
+                        "headers"
+                    ]
+                )
+        finished.set()
+
+    workers._run_worker = run_worker  # type: ignore[method-assign]
+    with telemetry.protocol_server_request(
+        protocol="swaag.jsonl",
+        operation="task.create",
+        carrier=carrier,
+    ):
+        workers._submit("worker-remote")
+        assert finished.wait(timeout=5)
+    workers.shutdown()
+    tracer_provider.force_flush()
+
+    spans = {span.name: span for span in exporter.get_finished_spans()}
+    protocol = spans["swaag.jsonl task.create"]
+    agent = spans["invoke_agent swaag"]
+    model = spans["text_completion local-model"]
+    assert f"{protocol.context.trace_id:032x}" == remote_trace_id
+    assert protocol.parent is not None
+    assert f"{protocol.parent.span_id:016x}" == remote_parent_id
+    assert agent.parent is not None and agent.parent.span_id == protocol.context.span_id
+    assert model.parent is not None and model.parent.span_id == agent.context.span_id
+    assert agent.attributes["swaag.worker.id"] == "worker-remote"
+    assert model.attributes["swaag.worker.id"] == "worker-remote"
+    propagated = captured_headers["traceparent"].split("-")
+    assert propagated[1] == remote_trace_id
+    assert propagated[2] == f"{model.context.span_id:016x}"
+    assert captured_headers["tracestate"] == "vendor=value"
+
+    meter_provider.shutdown()
+    tracer_provider.shutdown()
+
+
+def test_trace_carrier_rejects_unbounded_and_non_trace_fields() -> None:
+    assert trace_context_carrier(
+        {
+            "TraceParent": "00-1234567890abcdef1234567890abcdef-1234567890abcdef-01",
+            "tracestate": "x" * 513,
+            "authorization": "private",
+        }
+    ) == {
+        "traceparent": "00-1234567890abcdef1234567890abcdef-1234567890abcdef-01"
+    }

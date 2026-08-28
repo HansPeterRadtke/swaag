@@ -4,12 +4,19 @@ import asyncio
 import json
 
 import pytest
+from opentelemetry.sdk.metrics import MeterProvider
+from opentelemetry.sdk.trace import TracerProvider
+from opentelemetry.sdk.trace.export import SimpleSpanProcessor
+from opentelemetry.sdk.trace.export.in_memory_span_exporter import (
+    InMemorySpanExporter,
+)
 
 from swaag.cli import _build_parser
 from swaag.communication import CommunicationService, require_loopback_bind_host
 from swaag.heartbeat import watchdog_interval_seconds
 from swaag.protocol_adapters import AgUiProjectionAdapter
 from swaag.runtime import AgentRuntime
+from swaag.telemetry import OperationalTelemetry
 
 
 def _ag_ui_input(*, run_id: str = "run-1", resume=None) -> dict:
@@ -306,6 +313,60 @@ def test_communication_transport_serves_a2a_agent_card_and_jsonrpc(make_config):
         server.close()
         await server.wait_closed()
         service.workers.shutdown()
+
+    asyncio.run(exercise())
+
+
+def test_http_adapter_extracts_w3c_trace_context(make_config) -> None:
+    async def exercise() -> None:
+        exporter = InMemorySpanExporter()
+        tracer_provider = TracerProvider()
+        tracer_provider.add_span_processor(SimpleSpanProcessor(exporter))
+        meter_provider = MeterProvider()
+        telemetry = OperationalTelemetry(
+            tracer=tracer_provider.get_tracer("swaag-http-test"),
+            meter=meter_provider.get_meter("swaag-http-test"),
+        )
+        service = CommunicationService(
+            AgentRuntime(
+                make_config(),
+                model_client=object(),
+                telemetry=telemetry,
+            )
+        )
+        server = await asyncio.start_server(
+            service.handle_client, "127.0.0.1", 0
+        )
+        port = server.sockets[0].getsockname()[1]
+        reader, writer = await asyncio.open_connection("127.0.0.1", port)
+        writer.write(
+            b"GET /.well-known/agent-card.json HTTP/1.1\r\n"
+            b"Host: localhost\r\n"
+            b"TraceParent: 00-1234567890abcdef1234567890abcdef-1234567890abcdef-01\r\n"
+            b"\r\n"
+        )
+        await writer.drain()
+        response = await reader.read()
+        writer.close()
+        await writer.wait_closed()
+        server.close()
+        await server.wait_closed()
+        service.workers.shutdown()
+        tracer_provider.force_flush()
+
+        assert response.startswith(b"HTTP/1.1 200 OK")
+        span = exporter.get_finished_spans()[0]
+        assert span.name == "GET /.well-known/agent-card.json"
+        assert span.kind.name == "SERVER"
+        assert f"{span.context.trace_id:032x}" == (
+            "1234567890abcdef1234567890abcdef"
+        )
+        assert span.parent is not None
+        assert f"{span.parent.span_id:016x}" == "1234567890abcdef"
+        assert span.attributes["http.response.status_code"] == 200
+
+        meter_provider.shutdown()
+        tracer_provider.shutdown()
 
     asyncio.run(exercise())
 

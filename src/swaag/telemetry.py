@@ -1,18 +1,127 @@
 from __future__ import annotations
 
+import hashlib
 import time
+from contextlib import contextmanager
+from contextvars import ContextVar
 from types import TracebackType
-from typing import Any
+from typing import Any, Iterator, Mapping
 from urllib.parse import urlsplit
 
 from opentelemetry import context, metrics, trace
 from opentelemetry.trace import SpanKind, Status, StatusCode
+from opentelemetry.trace.propagation.tracecontext import (
+    TraceContextTextMapPropagator,
+)
 
 from swaag.types import BudgetReport, CompletionResult
 
 
 _INSTRUMENTATION_NAME = "swaag.runtime"
 _INSTRUMENTATION_VERSION = "0.1.0"
+_TRACE_CONTEXT_FIELDS = frozenset({"traceparent", "tracestate"})
+_TRACE_CONTEXT_MAX_FIELD_LENGTH = 512
+_TRACE_CONTEXT_PROPAGATOR = TraceContextTextMapPropagator()
+_ACTIVE_WORKER_ID: ContextVar[str] = ContextVar(
+    "swaag_active_worker_id", default=""
+)
+
+
+def trace_context_carrier(values: Mapping[str, Any] | None) -> dict[str, str]:
+    """Return only bounded W3C trace fields from an untrusted carrier."""
+    if not isinstance(values, Mapping):
+        return {}
+    carrier: dict[str, str] = {}
+    for raw_name, raw_value in values.items():
+        name = str(raw_name).strip().casefold()
+        if name not in _TRACE_CONTEXT_FIELDS or not isinstance(raw_value, str):
+            continue
+        value = raw_value.strip()
+        if value and len(value) <= _TRACE_CONTEXT_MAX_FIELD_LENGTH:
+            carrier[name] = value
+    return carrier
+
+
+def inject_trace_context(headers: Mapping[str, str] | None = None) -> dict[str, str]:
+    """Inject the active W3C context while preserving unrelated headers."""
+    carrier = dict(headers or {})
+    _TRACE_CONTEXT_PROPAGATOR.inject(carrier=carrier)
+    return carrier
+
+
+def extract_trace_context(values: Mapping[str, Any] | None) -> context.Context:
+    """Extract a valid remote context; malformed fields leave current context intact."""
+    return _TRACE_CONTEXT_PROPAGATOR.extract(
+        carrier=trace_context_carrier(values),
+        context=context.get_current(),
+    )
+
+
+@contextmanager
+def attached_trace_context(
+    values: Mapping[str, Any] | None,
+) -> Iterator[None]:
+    token = context.attach(extract_trace_context(values))
+    try:
+        yield
+    finally:
+        context.detach(token)
+
+
+def record_http_response_status(status_code: int) -> None:
+    """Annotate the active server span at the response-writing boundary."""
+    span = trace.get_current_span()
+    if not span.is_recording():
+        return
+    status = int(status_code)
+    span.set_attribute("http.response.status_code", status)
+    if status >= 500:
+        span.set_attribute("error.type", str(status))
+        span.set_status(Status(StatusCode.ERROR))
+
+
+def record_protocol_correlation(
+    *,
+    protocol: str,
+    request_id: str = "",
+    context_id: str = "",
+    worker_id: str = "",
+    session_id: str = "",
+) -> None:
+    """Add bounded mechanical adapter identifiers to the active protocol span."""
+    span = trace.get_current_span()
+    if not span.is_recording():
+        return
+    values = {
+        "swaag.protocol.name": protocol,
+        "swaag.protocol.request.id": request_id,
+        "swaag.protocol.context.id": context_id,
+        "swaag.worker.id": worker_id,
+        "gen_ai.conversation.id": session_id,
+    }
+    for name, value in values.items():
+        text = str(value).strip()
+        if not text:
+            continue
+        if len(text) <= 256:
+            span.set_attribute(name, text)
+            continue
+        span.set_attribute(name + ".sha256", hashlib.sha256(text.encode()).hexdigest())
+        span.set_attribute(name + ".length", len(text))
+
+
+@contextmanager
+def worker_telemetry_context(worker_id: str) -> Iterator[None]:
+    token = _ACTIVE_WORKER_ID.set(str(worker_id))
+    try:
+        yield
+    finally:
+        _ACTIVE_WORKER_ID.reset(token)
+
+
+def _active_worker_attributes() -> dict[str, str]:
+    worker_id = _ACTIVE_WORKER_ID.get().strip()
+    return {"swaag.worker.id": worker_id} if worker_id else {}
 
 
 def _error_type(exc: BaseException) -> str:
@@ -215,6 +324,90 @@ class OperationalTelemetry:
             unit="s",
             description="Time from a cancellation request to terminal acknowledgement.",
         )
+        self._http_server_duration = self.meter.create_histogram(
+            "http.server.request.duration",
+            unit="s",
+            description="Duration of an inbound HTTP request.",
+        )
+        self._protocol_server_duration = self.meter.create_histogram(
+            "swaag.protocol.server.duration",
+            unit="s",
+            description="Duration of an inbound non-HTTP protocol request.",
+        )
+
+    def http_server_request(
+        self,
+        *,
+        method: str,
+        path: str,
+        headers: Mapping[str, Any] | None = None,
+    ) -> TelemetryOperation:
+        normalized_method = str(method).upper()
+        known_method = (
+            normalized_method if normalized_method in {"GET", "POST"} else "_OTHER"
+        )
+        target_path = urlsplit(str(path)).path
+        route = (
+            target_path
+            if target_path
+            in {"/.well-known/agent-card.json", "/a2a/v1", "/ag-ui"}
+            else ""
+        )
+        attributes: dict[str, Any] = {
+            "http.request.method": known_method,
+            "url.path": target_path,
+            "url.scheme": "http",
+            "swaag.protocol.name": (
+                "ag_ui"
+                if target_path == "/ag-ui"
+                else "a2a"
+                if target_path == "/a2a/v1"
+                else "discovery"
+            ),
+        }
+        if normalized_method != known_method:
+            attributes["http.request.method_original"] = normalized_method
+        if route:
+            attributes["http.route"] = route
+        parent = extract_trace_context(headers)
+        return TelemetryOperation(
+            span=self.tracer.start_span(
+                f"{known_method if known_method != '_OTHER' else 'HTTP'}"
+                + (f" {route}" if route else ""),
+                context=parent,
+                kind=SpanKind.SERVER,
+                attributes=attributes,
+            ),
+            duration_histogram=self._http_server_duration,
+            metric_attributes={
+                "http.request.method": known_method,
+                **({"http.route": route} if route else {}),
+            },
+        )
+
+    def protocol_server_request(
+        self,
+        *,
+        protocol: str,
+        operation: str,
+        carrier: Mapping[str, Any] | None = None,
+    ) -> TelemetryOperation:
+        protocol_name = str(protocol)
+        operation_name = str(operation) or "unknown"
+        attributes = {
+            "swaag.protocol.name": protocol_name,
+            "swaag.protocol.operation": operation_name,
+        }
+        return TelemetryOperation(
+            span=self.tracer.start_span(
+                f"{protocol_name} {operation_name}",
+                context=extract_trace_context(carrier),
+                kind=SpanKind.SERVER,
+                attributes=attributes,
+            ),
+            duration_histogram=self._protocol_server_duration,
+            metric_attributes=attributes,
+        )
 
     def agent_invocation(
         self,
@@ -229,6 +422,7 @@ class OperationalTelemetry:
             "gen_ai.conversation.id": session_id,
             "gen_ai.output.type": "text",
             "swaag.run.id": run_id,
+            **_active_worker_attributes(),
         }
         if model_name:
             span_attributes["gen_ai.request.model"] = model_name
@@ -271,6 +465,7 @@ class OperationalTelemetry:
             "swaag.model.call.id": call_id,
             "swaag.model.call_kind": call_kind,
             "swaag.model.cache_mode": cache_mode,
+            **_active_worker_attributes(),
         }
         if model_name:
             span_attributes["gen_ai.request.model"] = model_name
@@ -313,6 +508,7 @@ class OperationalTelemetry:
             "gen_ai.agent.name": "swaag",
             "gen_ai.conversation.id": session_id,
             "swaag.run.id": run_id,
+            **_active_worker_attributes(),
         }
         metric_attributes = {
             "gen_ai.operation.name": "execute_tool",

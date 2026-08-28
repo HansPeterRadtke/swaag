@@ -14,6 +14,7 @@ import requests
 from swaag.config import AgentConfig
 from swaag.schema_portability import PortableSchemaError, assert_portable_json_schema
 from swaag.preemption import ModelCallPreempted
+from swaag.telemetry import inject_trace_context
 from swaag.tokens import ConservativeEstimator, CountResult
 from swaag.types import CompletionResult, ContractSpec
 from swaag.utils import sha256_text, stable_json_dumps
@@ -148,7 +149,7 @@ class LlamaCppClient:
         return {"Authorization": f"Bearer {token}"}
 
     def _request_headers_kwargs(self) -> dict[str, dict[str, str]]:
-        headers = self._authorization_headers()
+        headers = inject_trace_context(self._authorization_headers())
         return {"headers": headers} if headers else {}
 
     def _remote_models_payload(self) -> dict[str, Any]:
@@ -358,6 +359,7 @@ class LlamaCppClient:
             response = requests.get(
                 f"{self._base}/props",
                 timeout=(self.config.model.connect_timeout_seconds, min(self.config.model.timeout_seconds, 15)),
+                **self._request_headers_kwargs(),
             )
             response.raise_for_status()
             props = response.json()
@@ -400,6 +402,7 @@ class LlamaCppClient:
                 self.config.model.connect_timeout_seconds,
                 min(self.config.model.timeout_seconds, 15),
             ),
+            **self._request_headers_kwargs(),
         )
         response.raise_for_status()
         props = response.json()
@@ -435,6 +438,7 @@ class LlamaCppClient:
                 self.config.model.connect_timeout_seconds,
                 min(self.config.model.timeout_seconds, 15),
             ),
+            **self._request_headers_kwargs(),
         )
         response.raise_for_status()
         props = response.json()
@@ -520,6 +524,7 @@ class LlamaCppClient:
                 self.config.model.connect_timeout_seconds,
                 min(self.config.model.timeout_seconds, 30),
             ),
+            **self._request_headers_kwargs(),
         )
         response.raise_for_status()
         payload = response.json()
@@ -557,6 +562,7 @@ class LlamaCppClient:
                 self.config.model.connect_timeout_seconds,
                 min(self.config.model.timeout_seconds, 15),
             ),
+            **self._request_headers_kwargs(),
         )
         response.raise_for_status()
         props = response.json()
@@ -611,6 +617,7 @@ class LlamaCppClient:
             f"{self._base}{self.config.model.tokenize_endpoint}",
             json={"content": text},
             timeout=(self.config.model.connect_timeout_seconds, self.config.model.timeout_seconds),
+            **self._request_headers_kwargs(),
         )
         response.raise_for_status()
         payload = response.json()

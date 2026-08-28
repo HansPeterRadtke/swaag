@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import contextvars
 import json
 import os
 import sqlite3
@@ -20,6 +21,7 @@ from swaag.structured_output import (
     merge_caller_output,
     prepare_caller_output_spec,
 )
+from swaag.telemetry import worker_telemetry_context
 from swaag.types import AttachmentReference, HistoryEvent
 from swaag.utils import new_id, stable_json_dumps, utc_now_iso
 
@@ -569,6 +571,7 @@ class WorkerManager:
         self._futures: dict[str, Future[None]] = {}
         self._futures_lock = threading.RLock()
         self._deferred_submissions: set[str] = set()
+        self._deferred_contexts: dict[str, contextvars.Context] = {}
         self._shutting_down = False
         self._control_transition_lock = threading.RLock()
 
@@ -1107,11 +1110,13 @@ class WorkerManager:
         self._executor.shutdown(wait=wait, cancel_futures=not wait)
 
     def _submit(self, worker_id: str) -> None:
+        submission_context = contextvars.copy_context()
         with self._futures_lock:
             if self._shutting_down:
                 raise RuntimeError("Worker manager is shutting down")
             previous = self._futures.get(worker_id)
             if previous is not None and not previous.done():
+                self._deferred_contexts[worker_id] = submission_context
                 if worker_id not in self._deferred_submissions:
                     self._deferred_submissions.add(worker_id)
                     previous.add_done_callback(
@@ -1119,20 +1124,27 @@ class WorkerManager:
                     )
                 return
             self._futures[worker_id] = self._executor.submit(
-                self._run_worker, worker_id
+                submission_context.run, self._run_worker_with_context, worker_id
             )
 
     def _submit_deferred(self, worker_id: str) -> None:
         with self._futures_lock:
             self._deferred_submissions.discard(worker_id)
+            submission_context = self._deferred_contexts.pop(
+                worker_id, contextvars.copy_context()
+            )
             if self._shutting_down:
                 return
             current = self.store.get(worker_id)
             if current.status != "queued":
                 return
             self._futures[worker_id] = self._executor.submit(
-                self._run_worker, worker_id
+                submission_context.run, self._run_worker_with_context, worker_id
             )
+
+    def _run_worker_with_context(self, worker_id: str) -> None:
+        with worker_telemetry_context(worker_id):
+            self._run_worker(worker_id)
 
     def _continue_for_pending_controls(
         self,

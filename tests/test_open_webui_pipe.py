@@ -5,6 +5,7 @@ import importlib.util
 import sys
 import types
 from pathlib import Path
+from types import SimpleNamespace
 
 
 def _load_pipe_module(monkeypatch):
@@ -34,10 +35,11 @@ def test_open_webui_pipe_returns_durable_result_and_emits_status(
 ) -> None:
     module = _load_pipe_module(monkeypatch)
     calls: list[tuple[str, dict]] = []
+    forwarded_trace: dict[str, str] = {}
 
     class FakeClient:
         def __init__(self, *_args):
-            pass
+            forwarded_trace.update(_args[3])
 
         async def request(self, operation, params):
             calls.append((operation, params))
@@ -82,6 +84,13 @@ def test_open_webui_pipe_returns_durable_result_and_emits_status(
             {"messages": [{"role": "user", "content": "Do the whole task."}]},
             __metadata__={"chat_id": "chat-1", "message_id": "request-1"},
             __event_emitter__=emit,
+            __request__=SimpleNamespace(
+                headers={
+                    "traceparent": "00-1234567890abcdef1234567890abcdef-1234567890abcdef-01",
+                    "tracestate": "vendor=value",
+                    "authorization": "private",
+                }
+            ),
         )
     )
 
@@ -94,6 +103,10 @@ def test_open_webui_pipe_returns_durable_result_and_emits_status(
     assert calls[1][1]["after_sequence"] == 4
     assert calls[2][1]["after_sequence"] == 4
     assert [item["data"]["done"] for item in emitted] == [False, True]
+    assert forwarded_trace == {
+        "traceparent": "00-1234567890abcdef1234567890abcdef-1234567890abcdef-01",
+        "tracestate": "vendor=value",
+    }
 
 
 def test_open_webui_pipe_emits_sources_when_status_events_are_disabled(
