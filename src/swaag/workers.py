@@ -857,9 +857,26 @@ class WorkerManager:
             active_operation = {
                 "run_id": str(active_run.get("run_id", "")),
                 "phase": str(active_run.get("phase", "unknown")),
+                "substate": str(active_run.get("substate", "unknown")),
                 "detail": str(active_run.get("detail", "")),
                 "active_kind": str(active_run.get("active_kind", "")),
                 "active_id": str(active_run.get("active_id", "")),
+                "operation_kind": str(active_run.get("operation_kind", "")),
+                "activity_sequence": int(
+                    active_run.get("activity_sequence", 0)
+                ),
+                "activity_transition_at": str(
+                    active_run.get("activity_transition_at", "")
+                ),
+                "phase_started_at": str(
+                    active_run.get("phase_started_at", "")
+                ),
+                "substate_started_at": str(
+                    active_run.get("substate_started_at", "")
+                ),
+                "operation_started_at": str(
+                    active_run.get("operation_started_at", "")
+                ),
                 "started_at": str(active_run.get("started_at", "")),
                 "updated_at": str(active_run.get("updated_at", "")),
                 "heartbeat_at": str(active_run.get("heartbeat_at", "")),

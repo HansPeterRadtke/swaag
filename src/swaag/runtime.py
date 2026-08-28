@@ -435,7 +435,14 @@ class AgentRuntime:
     ) -> TurnResult:
         run_id = f"{state.session_id}:{new_id('run')}"
         self.history.set_active_run(state.session_id, run_id=run_id, user_text=user_text)
-        self._heartbeat(state, run_id=run_id, phase="starting", detail="turn starting")
+        self._heartbeat(
+            state,
+            run_id=run_id,
+            phase="starting",
+            substate="initializing",
+            detail="turn starting",
+            operation_kind="worker_turn",
+        )
         with self.telemetry.agent_invocation(
             session_id=state.session_id,
             run_id=run_id,
@@ -467,7 +474,14 @@ class AgentRuntime:
             raise ValueError("original_request must not be empty")
         run_id = f"{state.session_id}:{new_id('run')}"
         self.history.set_active_run(state.session_id, run_id=run_id, user_text=objective)
-        self._heartbeat(state, run_id=run_id, phase="starting", detail="resuming turn")
+        self._heartbeat(
+            state,
+            run_id=run_id,
+            phase="starting",
+            substate="resuming",
+            detail="resuming turn",
+            operation_kind="worker_turn",
+        )
         with self.telemetry.agent_invocation(
             session_id=state.session_id,
             run_id=run_id,
@@ -500,7 +514,14 @@ class AgentRuntime:
             return None
         run_id = f"{state.session_id}:{new_id('run')}"
         self.history.set_active_run(state.session_id, run_id=run_id, user_text=original_request)
-        self._heartbeat(state, run_id=run_id, phase="starting", detail="processing pending controls")
+        self._heartbeat(
+            state,
+            run_id=run_id,
+            phase="starting",
+            substate="processing_controls",
+            detail="processing pending controls",
+            operation_kind="worker_turn",
+        )
         with self.telemetry.agent_invocation(
             session_id=state.session_id,
             run_id=run_id,
@@ -526,22 +547,34 @@ class AgentRuntime:
         *,
         run_id: str | None = None,
         phase: str,
+        substate: str = "",
         detail: str = "",
         active_kind: str = "",
         active_id: str = "",
+        operation_kind: str = "",
     ) -> None:
-        payload = heartbeat_payload(phase=phase, detail=detail, active_kind=active_kind, active_id=active_id)
+        payload = heartbeat_payload(
+            phase=phase,
+            substate=substate,
+            detail=detail,
+            active_kind=active_kind,
+            active_id=active_id,
+            operation_kind=operation_kind,
+        )
         self.history.update_active_run(
             state.session_id,
             run_id=run_id,
             phase=payload["phase"],
+            substate=payload["substate"],
             detail=payload["detail"],
             active_kind=payload["active_kind"],
             active_id=payload["active_id"],
+            operation_kind=payload["operation_kind"],
         )
         systemd_notify(
             "WATCHDOG=1",
-            f"STATUS=swaag session={state.session_id} phase={payload['phase']} detail={payload['detail'][:180]}",
+            f"STATUS=swaag session={state.session_id} phase={payload['phase']} "
+            f"substate={payload['substate']} detail={payload['detail'][:180]}",
         )
 
     @contextmanager
@@ -550,9 +583,11 @@ class AgentRuntime:
         state: SessionState,
         *,
         phase: str,
+        substate: str = "",
         detail: str,
         active_kind: str,
         active_id: str,
+        operation_kind: str = "",
         interval_seconds: float = 5.0,
     ) -> Iterator[None]:
         """Keep mechanical liveness current during a blocking runtime operation."""
@@ -563,9 +598,11 @@ class AgentRuntime:
                 self._heartbeat(
                     state,
                     phase=phase,
+                    substate=substate,
                     detail=detail,
                     active_kind=active_kind,
                     active_id=active_id,
+                    operation_kind=operation_kind,
                 )
 
         thread = threading.Thread(
@@ -664,7 +701,15 @@ class AgentRuntime:
                     tool_specs,
                     allow_silent_completion=allow_silent_completion,
                 )
-                self._heartbeat(state, phase="context_compilation", detail=f"preparing action {action_index}", active_kind="action", active_id=str(action_index))
+                self._heartbeat(
+                    state,
+                    phase="context_compilation",
+                    substate="collecting_inputs",
+                    detail=f"preparing action {action_index}",
+                    active_kind="action",
+                    active_id=str(action_index),
+                    operation_kind="agent_action",
+                )
                 prepared = self._prepare_action_call(
                     state,
                     original_request=original_request,
@@ -997,14 +1042,24 @@ class AgentRuntime:
                     tool = self.tools.get(tool_call.tool_name)
                     effective_kind = tool.effective_kind(tool_call.arguments)
                     repeated_observation_is_redundant = tool.repeated_observation_is_redundant
-                    self._heartbeat(state, phase="tool_execution", detail=f"running {tool_call.tool_name}", active_kind="tool", active_id=tool_call.tool_name)
+                    self._heartbeat(
+                        state,
+                        phase="tool_execution",
+                        substate="preparing",
+                        detail=f"preparing {tool_call.tool_name}",
+                        active_kind="tool",
+                        active_id=tool_call.tool_name,
+                        operation_kind=tool_call.tool_name,
+                    )
                     try:
                         with self._periodic_heartbeat(
                             state,
                             phase="tool_execution",
+                            substate="running",
                             detail=f"running {tool_call.tool_name}",
                             active_kind="tool",
                             active_id=tool_call.tool_name,
+                            operation_kind=tool_call.tool_name,
                         ):
                             result = self._execute_tool(
                                 state,
@@ -1518,8 +1573,10 @@ class AgentRuntime:
         self._heartbeat(
             state,
             phase="completion_evaluation",
-            detail="evaluating task completion",
+            substate="collecting_evidence",
+            detail="collecting task-completion evidence",
             active_kind="completion_evaluation",
+            operation_kind="completion_evaluation",
         )
         evidence_rows = self._completion_evidence_rows(state, tool_results)
         history_snapshot = self.history.read_history(state.session_id)
@@ -1714,6 +1771,14 @@ class AgentRuntime:
                 else:
                     requested_sources = payload.get("evidence_requests", [])
                     if requested_sources:
+                        self._heartbeat(
+                            state,
+                            phase="completion_evaluation",
+                            substate="requesting_evidence",
+                            detail="re-expanding requested completion evidence",
+                            active_kind="completion_evaluation",
+                            operation_kind="completion_evaluation",
+                        )
                         inventory_by_key = {
                             self._completion_evidence_source_key(item): item
                             for item in available_sources
@@ -1799,6 +1864,16 @@ class AgentRuntime:
                 or reduction_round >= max_rounds
             ):
                 break
+            self._heartbeat(
+                state,
+                phase="completion_evaluation",
+                substate="reducing_evidence",
+                detail=(
+                    "reducing completion evidence after measured context overflow"
+                ),
+                active_kind="completion_evaluation",
+                operation_kind="completion_evaluation",
+            )
             report_by_name = {
                 item.name: item.tokens for item in compilation.report.breakdown
             }
@@ -2045,7 +2120,9 @@ class AgentRuntime:
             operation_state,
             run_id=run_id,
             phase="semantic_status",
+            substate="collecting_evidence",
             detail=f"interpreting status for {target_session_id}",
+            operation_kind="communication_status",
         )
         with self.telemetry.agent_invocation(
             session_id=operation_state.session_id,
@@ -2439,7 +2516,9 @@ class AgentRuntime:
                 state,
                 run_id=run_id,
                 phase="structured_output",
+                substate="preparing",
                 detail="generating caller-defined semantic fields",
+                operation_kind="caller_structured_output",
             )
             output = self._generate_caller_structured_output(
                 state,
@@ -2677,7 +2756,9 @@ class AgentRuntime:
                 state,
                 run_id=run_id,
                 phase="response_presentation",
+                substate="selecting",
                 detail="selecting user-facing information",
+                operation_kind="response_relevance",
             )
             visual = self._generate_validated_response_presentation(
                 state,
@@ -2697,7 +2778,9 @@ class AgentRuntime:
                     state,
                     run_id=run_id,
                     phase="response_presentation",
+                    substate="rendering",
                     detail="rendering verified information for audio",
+                    operation_kind="audio_rendering",
                 )
                 audio = self._generate_validated_response_presentation(
                     state,
@@ -4344,10 +4427,29 @@ class AgentRuntime:
         context_limit_resolution: tuple[int, str] | None = None,
         include_prompt_instructions: bool = True,
     ) -> ContextCompilation:
+        def activity(substate: str, detail: str) -> None:
+            if state is None:
+                return
+            self._heartbeat(
+                state,
+                phase="context_compilation",
+                substate=substate,
+                detail=detail,
+                active_kind="context",
+                active_id=assembly.kind,
+                operation_kind=assembly.kind,
+            )
+
+        activity(
+            "resolving_instructions",
+            f"resolving instructions for {assembly.kind}",
+        )
         if include_prompt_instructions:
             self._inject_prompt_instructions(state, assembly)
+        activity("serializing_prompt", f"serializing {assembly.kind} prompt")
         self._require_system_prompt(assembly)
         self._materialize_prompt_protocol(assembly)
+        activity("measuring_context", f"measuring {assembly.kind} context")
         context_limit, context_limit_source = (
             self._resolve_context_limit()
             if context_limit_resolution is None
@@ -4361,6 +4463,17 @@ class AgentRuntime:
             desired_output_tokens=desired_output_tokens,
             context_limit=context_limit,
             context_limit_source=context_limit_source,
+        )
+        activity(
+            "context_fit" if compilation.report.fits else "context_overflow",
+            (
+                f"{assembly.kind} context fits"
+                if compilation.report.fits
+                else (
+                    f"{assembly.kind} context exceeds capacity by "
+                    f"{compilation.overflow_tokens} tokens"
+                )
+            ),
         )
         self.telemetry.record_context_compilation(
             call_kind=assembly.kind,
@@ -5585,6 +5698,15 @@ class AgentRuntime:
         seed_offset: int = 0,
     ) -> Any:
         completion = self._execute_model_call(state, prepared, seed_offset=seed_offset)
+        self._heartbeat(
+            state,
+            phase="verification",
+            substate="validating_model_output",
+            detail=f"validating {prepared.contract.name} output",
+            active_kind="model_output",
+            active_id=prepared.contract.name,
+            operation_kind=prepared.assembly.kind,
+        )
         if completion.finish_reason in {"length", "context_overflow"}:
             self.history.record_event(
                 state,
@@ -6106,7 +6228,15 @@ class AgentRuntime:
         # deterministically even after validation feedback changed.
         request["seed"] = int(self.config.model.seed) + int(seed_offset)
         context_provenance = self._context_provenance_for_request(state, prepared)
-        self._heartbeat(state, phase="queued_inference", detail=f"queued {prepared.assembly.kind}", active_kind="model", active_id=call_id)
+        self._heartbeat(
+            state,
+            phase="queued_inference",
+            substate="awaiting_capacity",
+            detail=f"queued {prepared.assembly.kind}",
+            active_kind="model",
+            active_id=call_id,
+            operation_kind=prepared.assembly.kind,
+        )
         active_call = self.preemption.register_active(
             state.session_id,
             call_id,
@@ -6151,9 +6281,11 @@ class AgentRuntime:
             self._heartbeat(
                 state,
                 phase="queued_inference",
+                substate=("retrying" if total_attempt > 1 else "awaiting_capacity"),
                 detail=f"queued {prepared.assembly.kind}",
                 active_kind="model",
                 active_id=call_id,
+                operation_kind=prepared.assembly.kind,
             )
             try:
                 acquired = self.inference.acquire(
@@ -6198,7 +6330,15 @@ class AgentRuntime:
                     "context_provenance": context_provenance,
                 },
             )
-            self._heartbeat(state, phase="inference", detail=f"running {prepared.assembly.kind}", active_kind="model", active_id=call_id)
+            self._heartbeat(
+                state,
+                phase="inference",
+                substate="dispatching",
+                detail=f"running {prepared.assembly.kind}",
+                active_kind="model",
+                active_id=call_id,
+                operation_kind=prepared.assembly.kind,
+            )
             started = time.monotonic()
             last_progress_log = started
             last_progress_tokens = 0
@@ -6214,7 +6354,17 @@ class AgentRuntime:
                     return
                 last_progress_log = now
                 last_progress_tokens = tokens
-                self._heartbeat(state, phase="inference", detail=f"{prepared.assembly.kind}: {tokens} completion tokens", active_kind="model", active_id=call_id)
+                self._heartbeat(
+                    state,
+                    phase="inference",
+                    substate="streaming",
+                    detail=(
+                        f"{prepared.assembly.kind}: {tokens} completion tokens"
+                    ),
+                    active_kind="model",
+                    active_id=call_id,
+                    operation_kind=prepared.assembly.kind,
+                )
                 guard.record(
                     "model_token_progress",
                     {
@@ -6261,9 +6411,11 @@ class AgentRuntime:
                 with self._periodic_heartbeat(
                     state,
                     phase="inference",
+                    substate="awaiting_result",
                     detail=f"waiting for {prepared.assembly.kind} model stream",
                     active_kind="model",
                     active_id=call_id,
+                    operation_kind=prepared.assembly.kind,
                     interval_seconds=heartbeat_interval,
                 ):
                     completion = send(frozen_request, **kwargs)
@@ -6568,6 +6720,15 @@ class AgentRuntime:
             )
         effect_verification = None
         if tool.effective_kind(invocation.validated_input) == "side_effect":
+            self._heartbeat(
+                state,
+                phase="verification",
+                substate="validating_tool_effect",
+                detail=f"verifying {tool.name} effect",
+                active_kind="tool",
+                active_id=call_id,
+                operation_kind=tool.name,
+            )
             try:
                 effect_verification = tool.verify_effect(result, context.environment)
             except Exception as exc:  # noqa: BLE001 - verification failure must remain durable evidence.
@@ -6847,6 +7008,16 @@ class AgentRuntime:
             "active_goal": latest_user,
             "active_step": "" if active_run is None else str(active_run.get("detail", "")),
             "mechanical_phase": "idle" if active_run is None else str(active_run.get("phase", "unknown")),
+            "mechanical_substate": (
+                "idle"
+                if active_run is None
+                else str(active_run.get("substate", "unknown"))
+            ),
+            "operation_kind": (
+                ""
+                if active_run is None
+                else str(active_run.get("operation_kind", ""))
+            ),
             "heartbeat_at": "" if active_run is None else str(active_run.get("heartbeat_at", "")),
             "active_run": active_run,
             "waiting": state.environment.waiting,

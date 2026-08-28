@@ -70,7 +70,7 @@ User controls remain ordered durable source data at every worker stage. Determin
 
 Mechanical observability and semantic explanation are different. Runtime code can know that inference has run for a measured duration, a tool process is active, a worker is waiting, or a process stopped reporting. An LLM can explain what that means relative to the user's goal and its importance.
 
-Liveness must not depend on the worker explaining its own health. Expose deterministic heartbeat/state and use an external supervisor in production; systemd watchdog supervision is appropriate on Linux.
+Liveness must not depend on the worker explaining its own health. Active runs therefore expose a closed mechanical phase/substate contract, semantic operation kind, monotonic transition sequence, stage-entry timestamps, and a separately refreshed heartbeat. Context instruction resolution, serialization, token measurement, fit/overflow, inference admission/dispatch/streaming, contract validation, tool execution/effect verification, evidence reduction, waiting, and terminal stages remain distinguishable even when no model-authored status is available. Use an external supervisor in production; systemd watchdog supervision is appropriate on Linux.
 
 Semantic status should receive enough context to be meaningful, potentially the overarching goal, current step, recent events, and deterministic state without the entire worker context. Prompt and context variants should be benchmarked. Critical questions and failures need a durable fallback every client can represent. Silent inactivity is not error reporting.
 

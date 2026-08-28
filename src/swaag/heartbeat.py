@@ -12,6 +12,52 @@ WORKER_PHASES = frozenset({
     "semantic_status",
 })
 
+WORKER_SUBSTATES = {
+    "starting": frozenset({"initializing", "resuming", "processing_controls"}),
+    "context_compilation": frozenset({
+        "collecting_inputs",
+        "resolving_instructions",
+        "serializing_prompt",
+        "measuring_context",
+        "context_fit",
+        "context_overflow",
+    }),
+    "queued_inference": frozenset({"awaiting_capacity", "retrying"}),
+    "inference": frozenset({"dispatching", "awaiting_result", "streaming", "retrying"}),
+    "tool_execution": frozenset({"preparing", "running", "verifying"}),
+    "completion_evaluation": frozenset({
+        "collecting_evidence",
+        "requesting_evidence",
+        "reducing_evidence",
+        "evaluating",
+    }),
+    "structured_output": frozenset({"preparing", "generating", "validating", "repairing"}),
+    "response_presentation": frozenset({"selecting", "rendering", "evaluating", "repairing"}),
+    "semantic_status": frozenset({"collecting_evidence", "evaluating", "repairing"}),
+    "waiting_for_user": frozenset({"blocked"}),
+    "verification": frozenset({"validating_model_output", "validating_tool_effect"}),
+    "completed": frozenset({"terminal"}),
+    "cancelled": frozenset({"terminal"}),
+    "failed": frozenset({"terminal"}),
+}
+
+DEFAULT_WORKER_SUBSTATES = {
+    "starting": "initializing",
+    "context_compilation": "collecting_inputs",
+    "queued_inference": "awaiting_capacity",
+    "inference": "awaiting_result",
+    "tool_execution": "running",
+    "completion_evaluation": "evaluating",
+    "structured_output": "generating",
+    "response_presentation": "rendering",
+    "semantic_status": "evaluating",
+    "waiting_for_user": "blocked",
+    "verification": "validating_model_output",
+    "completed": "terminal",
+    "cancelled": "terminal",
+    "failed": "terminal",
+}
+
 
 def validate_worker_phase(phase: str) -> str:
     value = str(phase).strip()
@@ -20,12 +66,33 @@ def validate_worker_phase(phase: str) -> str:
     return value
 
 
-def heartbeat_payload(*, phase: str, detail: str = "", active_kind: str = "", active_id: str = "") -> dict[str, Any]:
+def validate_worker_substate(phase: str, substate: str = "") -> str:
+    validated_phase = validate_worker_phase(phase)
+    value = str(substate).strip() or DEFAULT_WORKER_SUBSTATES[validated_phase]
+    if value not in WORKER_SUBSTATES[validated_phase]:
+        raise ValueError(
+            f"unknown worker substate for {validated_phase}: {value}"
+        )
+    return value
+
+
+def heartbeat_payload(
+    *,
+    phase: str,
+    substate: str = "",
+    detail: str = "",
+    active_kind: str = "",
+    active_id: str = "",
+    operation_kind: str = "",
+) -> dict[str, Any]:
+    validated_phase = validate_worker_phase(phase)
     return {
-        "phase": validate_worker_phase(phase),
+        "phase": validated_phase,
+        "substate": validate_worker_substate(validated_phase, substate),
         "detail": str(detail),
         "active_kind": str(active_kind),
         "active_id": str(active_id),
+        "operation_kind": str(operation_kind),
         "heartbeat_at": utc_now_iso(),
     }
 

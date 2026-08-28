@@ -9,6 +9,7 @@ from pathlib import Path
 from typing import Any, Callable, Iterable, Iterator
 
 from swaag.environment.state import EnvironmentState, ProcessRecord, ShellSessionState, WorkspaceState
+from swaag.heartbeat import validate_worker_phase, validate_worker_substate
 from swaag.history_archive import HistoryArchiveStore
 from swaag.sqlite_schema import apply_sqlite_migrations
 from swaag.events import ALLOWED_EVENT_TYPES, READABLE_EVENT_TYPES, EventSchemaError, create_event, verify_event_integrity
@@ -562,9 +563,16 @@ class HistoryStore:
             "updated_at": now,
             "heartbeat_at": now,
             "phase": "starting",
+            "substate": "initializing",
             "detail": "",
             "active_kind": "",
             "active_id": "",
+            "operation_kind": "worker_turn",
+            "activity_sequence": 0,
+            "activity_transition_at": now,
+            "phase_started_at": now,
+            "substate_started_at": now,
+            "operation_started_at": now,
             "pid": os.getpid(),
         }
         self._write_projection(self.active_run_path(session_id), payload)
@@ -575,9 +583,11 @@ class HistoryStore:
         *,
         run_id: str | None = None,
         phase: str | None = None,
+        substate: str | None = None,
         detail: str | None = None,
         active_kind: str | None = None,
         active_id: str | None = None,
+        operation_kind: str | None = None,
     ) -> dict[str, Any] | None:
         path = self.active_run_path(session_id)
         if not path.exists():
@@ -591,16 +601,51 @@ class HistoryStore:
         if run_id is not None and payload.get("run_id") not in {None, run_id}:
             return None
         now = utc_now_iso()
+        previous_phase = str(payload.get("phase", ""))
+        previous_substate = str(payload.get("substate", ""))
+        previous_operation_kind = str(payload.get("operation_kind", ""))
+        current_phase = validate_worker_phase(
+            previous_phase if phase is None else str(phase)
+        )
+        if substate is None and current_phase == previous_phase:
+            current_substate = validate_worker_substate(
+                current_phase, previous_substate
+            )
+        else:
+            current_substate = validate_worker_substate(
+                current_phase, "" if substate is None else str(substate)
+            )
         payload["updated_at"] = now
         payload["heartbeat_at"] = now
-        if phase is not None:
-            payload["phase"] = str(phase)
+        payload["phase"] = current_phase
+        payload["substate"] = current_substate
         if detail is not None:
             payload["detail"] = str(detail)
         if active_kind is not None:
             payload["active_kind"] = str(active_kind)
         if active_id is not None:
             payload["active_id"] = str(active_id)
+        if operation_kind is not None:
+            payload["operation_kind"] = str(operation_kind)
+        current_operation_kind = str(payload.get("operation_kind", ""))
+        if current_phase != previous_phase:
+            payload["phase_started_at"] = now
+        if (
+            current_phase != previous_phase
+            or current_substate != previous_substate
+        ):
+            payload["substate_started_at"] = now
+        if current_operation_kind != previous_operation_kind:
+            payload["operation_started_at"] = now
+        if (
+            current_phase != previous_phase
+            or current_substate != previous_substate
+            or current_operation_kind != previous_operation_kind
+        ):
+            payload["activity_sequence"] = int(
+                payload.get("activity_sequence", 0)
+            ) + 1
+            payload["activity_transition_at"] = now
         self._write_projection(path, payload)
         return payload
 

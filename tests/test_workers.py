@@ -385,6 +385,16 @@ def test_worker_cancellation_is_durable_and_stops_active_inference(make_config) 
     assert diagnostics["last_transition"]["to_status"] == "working"
     assert diagnostics["active_operation"]["active_kind"] == "model"
     assert diagnostics["active_operation"]["active_id"].startswith("model_call_")
+    assert diagnostics["active_operation"]["phase"] == "inference"
+    assert diagnostics["active_operation"]["substate"] in {
+        "dispatching",
+        "awaiting_result",
+        "streaming",
+    }
+    assert diagnostics["active_operation"]["operation_kind"] == "action"
+    assert diagnostics["active_operation"]["activity_sequence"] > 0
+    assert diagnostics["active_operation"]["phase_started_at"]
+    assert diagnostics["active_operation"]["substate_started_at"]
     assert diagnostics["active_operation"]["pid_alive"] is True
     assert diagnostics["active_operation"]["heartbeat_age_seconds"] >= 0
     assert diagnostics["local_supervisor"]["manager_process_alive"] is True
