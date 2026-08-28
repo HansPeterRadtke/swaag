@@ -16,6 +16,8 @@ classifiers = [
 ]
 dependencies = [
   "opentelemetry-api>=1.44,<2",
+  "opentelemetry-exporter-otlp-proto-http>=1.44,<2",
+  "opentelemetry-sdk>=1.44,<2",
   "requests>=2.31,<3",
   "websocket-client>=1.8,<2",
 ]
@@ -27,7 +29,6 @@ Issues = "https://github.com/HansPeterRadtke/swaag/issues"
 
 [project.optional-dependencies]
 test = [
-  "opentelemetry-sdk>=1.44,<2",
   "pytest>=8,<9",
   "pytest-testmon>=2.1,<3",
 ]

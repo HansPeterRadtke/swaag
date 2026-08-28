@@ -445,6 +445,14 @@ def main(argv: Sequence[str] | None = None) -> int:
     parser = _build_parser()
     args = parser.parse_args(argv)
 
+    if (
+        args.command == "communication"
+        and args.communication_command == "serve"
+    ):
+        from swaag.telemetry_export import configure_otlp_export_from_environment
+
+        configure_otlp_export_from_environment()
+
     config = load_config(args.config)
     runtime = AgentRuntime(config)
 
