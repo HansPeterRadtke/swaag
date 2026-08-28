@@ -1541,7 +1541,7 @@ class BrowserBrowseTool(Tool):
 
 class PollProcessTool(Tool):
     name = "poll_process"
-    description = "Poll one background process and return its exact current status and captured output."
+    description = "Poll one background process and return its exact current status plus bounded captured output with complete artifact locators."
     kind = "stateful"
     usage_guidance = "Use the process_id returned by a background run_tests or shell_command call."
     input_schema = _closed_input({"process_id": {"type": "string"}})
@@ -1565,6 +1565,7 @@ class PollProcessTool(Tool):
             "return_code": update.record.return_code,
             "stdout": update.record.stdout,
             "stderr": update.record.stderr,
+            **update.output_metadata,
             "record": record,
             "completed_tool_result": (
                 {
@@ -1586,7 +1587,7 @@ class PollProcessTool(Tool):
 
 class KillProcessTool(Tool):
     name = "kill_process"
-    description = "Terminate one tracked background process by process_id and return the exact resulting state."
+    description = "Terminate one tracked background process by process_id and return the exact resulting state plus bounded output with complete artifact locators."
     kind = "side_effect"
     usage_guidance = "Use only when stopping the tracked process is required by the user or current task."
     input_schema = _closed_input({"process_id": {"type": "string"}})
@@ -1609,6 +1610,7 @@ class KillProcessTool(Tool):
             "return_code": update.record.return_code,
             "stdout": update.record.stdout,
             "stderr": update.record.stderr,
+            **update.output_metadata,
             "record": asdict(update.record),
         }
         return ToolExecutionResult(

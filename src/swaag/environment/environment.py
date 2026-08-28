@@ -37,6 +37,7 @@ class BackgroundProcessUpdate:
     tool_result: ToolExecutionResult | None
     generated_events: list[ToolGeneratedEvent]
     completed: bool
+    output_metadata: dict[str, Any]
 
 
 class AgentEnvironment:
@@ -707,7 +708,11 @@ class AgentEnvironment:
             completed=False,
         )
 
-    def _finalize_background_shell_command(self, record: ProcessRecord) -> tuple[ToolExecutionResult, list[ToolGeneratedEvent]]:
+    def _finalize_background_shell_command(
+        self,
+        record: ProcessRecord,
+        output_metadata: dict[str, Any],
+    ) -> tuple[ToolExecutionResult, list[ToolGeneratedEvent]]:
         before_snapshot_path = record.metadata.get("before_snapshot_path", "")
         before = {}
         if before_snapshot_path:
@@ -733,6 +738,7 @@ class AgentEnvironment:
                     "stdout": record.stdout,
                     "stderr": record.stderr,
                     "background": True,
+                    **output_metadata,
                 },
             ),
             ToolGeneratedEvent(
@@ -756,6 +762,7 @@ class AgentEnvironment:
             "exit_code": record.return_code,
             "stdout": record.stdout,
             "stderr": record.stderr,
+            **output_metadata,
             "created_files": snapshot.created_files,
             "modified_files": snapshot.modified_files,
             "deleted_files": snapshot.deleted_files,
@@ -777,20 +784,30 @@ class AgentEnvironment:
         except KeyError as exc:
             raise ToolValidationError(f"Unknown process_id: {process_id}") from exc
         poll = self.process.poll(existing)
+        bounded, artifact_events = self._bounded_output(
+            poll.stdout,
+            poll.stderr,
+            kind=poll.record.metadata.get("kind", "process"),
+        )
+        poll.record.stdout = str(bounded["stdout"])
+        poll.record.stderr = str(bounded["stderr"])
+        output_metadata = {
+            key: value for key, value in bounded.items() if key not in {"stdout", "stderr"}
+        }
         record_payload = asdict(poll.record)
         generated = [
+            *artifact_events,
             ToolGeneratedEvent(
                 "process_polled",
-                record_payload | {"completed": poll.completed},
+                record_payload
+                | {
+                    "completed": poll.completed,
+                    "output_artifacts": output_metadata,
+                },
             )
         ]
         tool_result: ToolExecutionResult | None = None
         if poll.completed and poll.status_changed:
-            bounded, artifact_events = self._bounded_output(poll.stdout, poll.stderr, kind=poll.record.metadata.get("kind", "process"))
-            generated.extend(artifact_events)
-            poll.record.stdout = str(bounded["stdout"])
-            poll.record.stderr = str(bounded["stderr"])
-            record_payload = asdict(poll.record)
             if poll.record.status == "timed_out":
                 generated.append(
                     ToolGeneratedEvent(
@@ -825,13 +842,17 @@ class AgentEnvironment:
                     display_text=f"run_tests result: {stable_json_dumps({'command': poll.record.command, 'exit_code': poll.record.return_code, 'passed': poll.record.return_code == 0, 'background': True}, indent=2)}",
                 )
             elif kind == "shell_command":
-                tool_result, shell_events = self._finalize_background_shell_command(poll.record)
+                tool_result, shell_events = self._finalize_background_shell_command(
+                    poll.record,
+                    output_metadata,
+                )
                 generated.extend(shell_events)
         return BackgroundProcessUpdate(
             record=poll.record,
             tool_result=tool_result,
             generated_events=generated,
             completed=poll.completed,
+            output_metadata=output_metadata,
         )
 
     def kill_background_process(self, process_id: str) -> BackgroundProcessUpdate:
@@ -840,9 +861,31 @@ class AgentEnvironment:
         except KeyError as exc:
             raise ToolValidationError(f"Unknown process_id: {process_id}") from exc
         killed = self.process.kill(existing)
+        bounded, artifact_events = self._bounded_output(
+            killed.stdout,
+            killed.stderr,
+            kind=killed.metadata.get("kind", "process"),
+        )
+        killed.stdout = str(bounded["stdout"])
+        killed.stderr = str(bounded["stderr"])
+        output_metadata = {
+            key: value for key, value in bounded.items() if key not in {"stdout", "stderr"}
+        }
         record_payload = asdict(killed)
-        generated = [ToolGeneratedEvent("process_killed", record_payload)]
-        return BackgroundProcessUpdate(record=killed, tool_result=None, generated_events=generated, completed=True)
+        generated = [
+            *artifact_events,
+            ToolGeneratedEvent(
+                "process_killed",
+                record_payload | {"output_artifacts": output_metadata},
+            ),
+        ]
+        return BackgroundProcessUpdate(
+            record=killed,
+            tool_result=None,
+            generated_events=generated,
+            completed=True,
+            output_metadata=output_metadata,
+        )
 
     def _browser_raw_evidence(
         self,
