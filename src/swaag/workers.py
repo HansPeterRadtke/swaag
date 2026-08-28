@@ -44,6 +44,7 @@ WORKER_STREAM_EVENT_TYPES = frozenset(
         "agent_question",
         "agent_status",
         "assistant_progress",
+        "shared_state_updated",
         "tool_called",
         "tool_error",
         "tool_result",

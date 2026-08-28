@@ -244,6 +244,8 @@ class AgentRuntime:
             config,
         )
         self.tools = tool_registry or ToolRegistry()
+        self._runtime_capability_lock = threading.RLock()
+        self._runtime_capabilities: dict[str, dict[str, object]] = {}
         self._embedding_indexer: AsyncEmbeddingIndexer | None = None
         event_observer = None
         if config.embedding_index.enabled:
@@ -330,6 +332,25 @@ class AgentRuntime:
         if isinstance(value, tuple) and len(value) == 2:
             return int(value[0]), str(value[1])
         return 0, "worker"
+
+    def bind_tool_runtime_capability(
+        self,
+        session_id: str,
+        name: str,
+        capability: object,
+    ) -> None:
+        resolved_session = str(session_id).strip()
+        resolved_name = str(name).strip()
+        if not resolved_session or not resolved_name:
+            raise ValueError("runtime capability session and name must be non-empty")
+        with self._runtime_capability_lock:
+            self._runtime_capabilities.setdefault(resolved_session, {})[
+                resolved_name
+            ] = capability
+
+    def tool_runtime_capabilities(self, session_id: str) -> dict[str, object]:
+        with self._runtime_capability_lock:
+            return dict(self._runtime_capabilities.get(session_id, {}))
 
     def create_or_load_session(self, session_id: str | None = None) -> SessionState:
         state = self.history.create_or_load(
@@ -692,7 +713,11 @@ class AgentRuntime:
             },
         )
 
-        base_capability_index = self.tools.capability_index(self.config)
+        runtime_capabilities = self.tool_runtime_capabilities(state.session_id)
+        base_capability_index = self.tools.capability_index(
+            self.config,
+            runtime_capabilities=runtime_capabilities,
+        )
         base_capability_names = {name for name, _description, _guidance in base_capability_index}
         delegated_catalog: DelegatedToolCatalog | None = None
         delegated_specs: tuple[DelegatedToolSpec, ...] = ()
@@ -725,6 +750,7 @@ class AgentRuntime:
             if accepted_actions >= self.config.runtime.max_total_actions:
                 break
             delegated_catalog = self.delegated_tools.latest_catalog(state.session_id)
+            runtime_capabilities = self.tool_runtime_capabilities(state.session_id)
             delegated_specs = (
                 () if delegated_catalog is None else delegated_catalog.tools
             )
@@ -736,7 +762,9 @@ class AgentRuntime:
                     + ", ".join(sorted(collisions))
                 )
             capability_index = self.tools.capability_index(
-                self.config, delegated_specs
+                self.config,
+                delegated_specs,
+                runtime_capabilities=runtime_capabilities,
             )
             available_capability_names = {
                 name for name, _description, _guidance in capability_index
@@ -766,6 +794,7 @@ class AgentRuntime:
                         self.config,
                         loaded_tool_names,
                         delegated_specs,
+                        runtime_capabilities=runtime_capabilities,
                     )
                     if remaining_tool_calls > 0
                     else []
@@ -7125,6 +7154,10 @@ class AgentRuntime:
                     state, request
                 ),
                 delegated_tools=() if catalog is None else catalog.tools,
+                runtime_capabilities=self.tool_runtime_capabilities(
+                    state.session_id
+                ),
+                tool_call_id=call_id,
             )
             guard.record(
                 "tool_execution_context",
@@ -7188,12 +7221,13 @@ class AgentRuntime:
         emitted_types: set[str] = set()
         for event in result.generated_events:
             emitted_types.add(event.event_type)
-            guard.record(
+            recorded = guard.record(
                 event.event_type,
                 event.payload,
                 metadata=event.metadata,
                 derived_writes=event.derived_writes,
             )
+            tool.generated_event_recorded(event, recorded, context)
         missing = tool.required_generated_event_types(invocation.validated_input) - emitted_types
         if missing:
             raise HistoryInvariantError(

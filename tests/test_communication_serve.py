@@ -930,7 +930,7 @@ def test_communication_transport_serves_durable_ag_ui_sse(
 def test_communication_transport_serves_dynamic_ag_ui_capabilities(make_config):
     async def exercise() -> None:
         config = make_config()
-        config.tools.enabled = ["calculator"]
+        config.tools.enabled = ["calculator", "shared_state"]
         config.runtime.max_total_actions = 7
         service = CommunicationService(AgentRuntime(config, model_client=object()))
         server = await asyncio.start_server(service.handle_client, "127.0.0.1", 0)
@@ -979,6 +979,12 @@ def test_communication_transport_serves_dynamic_ag_ui_capabilities(make_config):
             "calculator"
         ]
         assert capabilities["tools"]["items"][0]["parameters"]["type"] == "object"
+        assert capabilities["state"] == {
+            "snapshots": True,
+            "deltas": True,
+            "memory": False,
+            "persistentState": True,
+        }
         assert capabilities["execution"]["maxIterations"] == 7
         assert capabilities["humanInTheLoop"]["interrupts"] is True
         assert get_headers["content-length"] == str(

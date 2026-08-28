@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import hashlib
 import sqlite3
 
 import pytest
@@ -12,6 +13,7 @@ from swaag.history_archive import HistoryArchiveStore
 from swaag.inference import InferenceRequestCoordinator
 from swaag.preemption import ModelPreemptionCoordinator
 from swaag.prompt_instruction_store import PromptInstructionStore
+from swaag.shared_state import SharedStateConflictError
 from swaag.sqlite_schema import (
     UnsupportedSchemaVersionError,
     apply_sqlite_migrations,
@@ -101,7 +103,7 @@ def test_all_runtime_sqlite_stores_record_explicit_schema_versions(
     prompt_instructions = PromptInstructionStore(sessions, make_config())
     delegated_tools = DelegatedToolStore(sessions)
 
-    assert _version(communication.path) == 4
+    assert _version(communication.path) == 5
     assert _version(workers.path) == 4
     assert _version(history.sqlite_history_path()) == 1
     assert _version(archives.catalog_path) == 1
@@ -135,7 +137,7 @@ def test_communication_stream_bounds_migration_preserves_protocol_mappings(
 
     store = CommunicationStore(sessions)
 
-    assert _version(path) == 4
+    assert _version(path) == 5
     assert store.protocol_message_bounds("open_webui", "message-1") == (
         "chat-1",
         "worker-1",
@@ -163,6 +165,45 @@ def test_protocol_state_snapshots_are_exact_idempotent_and_inherited(tmp_path) -
         state={"ignored": True},
         client_supplied=True,
     )
+    updated = store.apply_protocol_state_patch(
+        "ag_ui",
+        "thread-1",
+        source_session_id="session-1",
+        source_call_id="call-1",
+        base_revision=first.revision,
+        base_state_sha256=first.state_sha256,
+        patch=[
+            {"op": "test", "path": "/nested/value", "value": 3},
+            {"op": "replace", "path": "/nested/value", "value": 4},
+            {"op": "add", "path": "/items/-", "value": 5},
+            {"op": "copy", "from": "/nested/value", "path": "/copied"},
+            {"op": "move", "from": "/copied", "path": "/moved"},
+            {"op": "remove", "path": "/items/0"},
+        ],
+    )
+    repeated_update = store.apply_protocol_state_patch(
+        "ag_ui",
+        "thread-1",
+        source_session_id="session-1",
+        source_call_id="call-1",
+        base_revision=first.revision,
+        base_state_sha256=first.state_sha256,
+        patch=[
+            {"op": "test", "path": "/nested/value", "value": 3},
+            {"op": "replace", "path": "/nested/value", "value": 4},
+            {"op": "add", "path": "/items/-", "value": 5},
+            {"op": "copy", "from": "/nested/value", "path": "/copied"},
+            {"op": "move", "from": "/copied", "path": "/moved"},
+            {"op": "remove", "path": "/items/0"},
+        ],
+    )
+    linked = store.link_protocol_state_history(
+        "ag_ui",
+        "call-1",
+        source_session_id="session-1",
+        sequence=17,
+        event_hash="a" * 64,
+    )
     inherited = store.bind_protocol_state(
         "ag_ui",
         "thread-1",
@@ -172,10 +213,123 @@ def test_protocol_state_snapshots_are_exact_idempotent_and_inherited(tmp_path) -
     )
 
     assert duplicate == first
-    assert inherited.revision == 2
-    assert inherited.state == first.state
-    assert inherited.state_sha256 == first.state_sha256
+    assert repeated_update == updated
+    assert updated.revision == 2
+    assert updated.source_kind == "agent_patch"
+    assert updated.state == {"nested": {"value": 4}, "items": [2, 5], "moved": 4}
+    assert updated.base_revision == first.revision
+    assert updated.base_state_sha256 == first.state_sha256
+    assert updated.patch_sha256 is not None
+    assert linked.history_event_sequence == 17
+    assert linked.history_event_hash == "a" * 64
+    assert inherited.revision == 3
+    assert inherited.state == updated.state
+    assert inherited.state_sha256 == updated.state_sha256
     assert inherited.client_supplied is False
+    assert inherited.base_revision == updated.revision
+    assert inherited.base_state_sha256 == updated.state_sha256
+
+    with pytest.raises(SharedStateConflictError) as stale:
+        store.apply_protocol_state_patch(
+            "ag_ui",
+            "thread-1",
+            source_session_id="session-1",
+            source_call_id="call-stale",
+            base_revision=first.revision,
+            base_state_sha256=first.state_sha256,
+            patch=[{"op": "add", "path": "/late", "value": True}],
+        )
+    assert stale.value.current == linked
+
+
+def test_protocol_state_integrity_rejects_tampered_state_and_patch(tmp_path) -> None:
+    store = CommunicationStore(tmp_path / "sessions")
+    first = store.bind_protocol_state(
+        "ag_ui",
+        "thread-1",
+        "run-1",
+        state={"value": 1},
+        client_supplied=True,
+    )
+    store.record_protocol_message("ag_ui", "run-1", "thread-1", "worker-1")
+    updated = store.apply_protocol_state_patch(
+        "ag_ui",
+        "thread-1",
+        source_session_id="session-1",
+        source_call_id="call-1",
+        base_revision=first.revision,
+        base_state_sha256=first.state_sha256,
+        patch=[{"op": "replace", "path": "/value", "value": 2}],
+    )
+
+    with sqlite3.connect(store.path) as connection:
+        connection.execute(
+            """
+            UPDATE protocol_state_snapshots SET patch_json='[]'
+            WHERE protocol='ag_ui' AND source_call_id='call-1'
+            """
+        )
+    with pytest.raises(RuntimeError, match="patch hash"):
+        store.latest_protocol_state("ag_ui", "thread-1")
+
+    with sqlite3.connect(store.path) as connection:
+        connection.execute(
+            """
+            UPDATE protocol_state_snapshots
+            SET patch_json=?, state_json='{"value":3}'
+            WHERE protocol='ag_ui' AND source_call_id='call-1'
+            """,
+            (CommunicationStore._canonical_state_json(list(updated.patch or ())),),
+        )
+    with pytest.raises(RuntimeError, match="snapshot hash"):
+        store.latest_protocol_state("ag_ui", "thread-1")
+
+
+def test_shared_state_migration_preserves_existing_client_snapshot(tmp_path) -> None:
+    sessions = tmp_path / "sessions"
+    sessions.mkdir()
+    path = sessions / "communication.sqlite3"
+    state_json = '{"nested":{"value":7}}'
+    state_sha256 = hashlib.sha256(state_json.encode()).hexdigest()
+    with sqlite3.connect(path) as connection:
+        apply_sqlite_migrations(
+            connection,
+            store_name="communication store",
+            migrations=_COMMUNICATION_STORE_MIGRATIONS[:4],
+        )
+        connection.execute(
+            """
+            INSERT INTO protocol_contexts(
+                protocol, external_context_id, worker_id, created_at, updated_at
+            ) VALUES ('ag_ui', 'thread-1', 'worker-1', 'now', 'now')
+            """
+        )
+        connection.execute(
+            """
+            INSERT INTO protocol_messages(
+                protocol, external_message_id, external_context_id,
+                worker_id, created_at
+            ) VALUES ('ag_ui', 'run-1', 'thread-1', 'worker-1', 'now')
+            """
+        )
+        connection.execute(
+            """
+            INSERT INTO protocol_state_snapshots(
+                protocol, external_context_id, revision, external_message_id,
+                state_json, state_sha256, client_supplied, created_at
+            ) VALUES ('ag_ui', 'thread-1', 1, 'run-1', ?, ?, 1, 'now')
+            """,
+            (state_json, state_sha256),
+        )
+
+    store = CommunicationStore(sessions)
+    snapshot = store.latest_protocol_state("ag_ui", "thread-1")
+
+    assert _version(path) == 5
+    assert snapshot is not None
+    assert snapshot.source_kind == "client_snapshot"
+    assert snapshot.source_id == "run-1"
+    assert snapshot.state == {"nested": {"value": 7}}
 
 
 def test_worker_lifecycle_option_migrations_preserve_existing_rows(tmp_path) -> None:

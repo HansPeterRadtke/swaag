@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 import abc
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any, Callable
 from typing import TYPE_CHECKING
@@ -98,6 +98,8 @@ class ToolContext:
     environment: "AgentEnvironment"
     semantic_call: Callable[[SemanticCallRequest], dict[str, Any]] | None = None
     delegated_tools: tuple["DelegatedToolSpec", ...] = ()
+    runtime_capabilities: dict[str, object] = field(default_factory=dict)
+    tool_call_id: str | None = None
 
     @property
     def read_roots(self) -> list[Path]:
@@ -119,6 +121,7 @@ class Tool(abc.ABC):
     usage_guidance: str = ""
     kind: ToolKind = "pure"
     repeated_observation_is_redundant: bool = False
+    required_runtime_capability: str | None = None
 
     def prompt_tuple(self) -> tuple[str, str, dict[str, Any], str]:
         return self.name, self.description, self.input_schema, self.usage_guidance
@@ -137,6 +140,15 @@ class Tool(abc.ABC):
 
     def required_generated_event_types(self, validated_input: dict[str, Any]) -> set[str]:
         return set()
+
+    def generated_event_recorded(
+        self,
+        generated: ToolGeneratedEvent,
+        recorded: Any,
+        context: ToolContext,
+    ) -> None:
+        """Link an already-durable generated event to an external durable effect."""
+        return None
 
     def validate_output(self, output: dict[str, Any]) -> None:
         if self.output_schema is None:

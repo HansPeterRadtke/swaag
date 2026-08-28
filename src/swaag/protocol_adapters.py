@@ -416,6 +416,7 @@ class AgUiProjectionAdapter:
         *,
         thread_id: str | None = None,
         run_id: str | None = None,
+        state_baseline_revision: int | None = None,
     ) -> list[dict[str, Any]]:
         output: list[dict[str, Any]] = []
         for event in events:
@@ -430,7 +431,14 @@ class AgUiProjectionAdapter:
                 "metadata": {"swaagWorkerId": record.worker_id},
             }
             if event.event_type == "worker_history_event":
-                output.extend(self._history_event(record, event, base))
+                output.extend(
+                    self._history_event(
+                        record,
+                        event,
+                        base,
+                        state_baseline_revision=state_baseline_revision,
+                    )
+                )
             elif event.event_type == "worker_started":
                 output.append(
                     {
@@ -555,6 +563,8 @@ class AgUiProjectionAdapter:
         record: WorkerRecord,
         event: WorkerEvent,
         base: dict[str, Any],
+        *,
+        state_baseline_revision: int | None = None,
     ) -> list[dict[str, Any]]:
         source = event.payload.get("canonical_event")
         if not isinstance(source, dict):
@@ -579,6 +589,42 @@ class AgUiProjectionAdapter:
         }
         history_base = {**base, "metadata": history_metadata}
         call_id = str(source_payload.get("call_id") or source.get("id") or event.event_id)
+        if source_type == "shared_state_updated":
+            delta = source_payload.get("delta")
+            revision = source_payload.get("revision")
+            if (
+                not isinstance(delta, list)
+                or not isinstance(revision, int)
+                or (
+                    state_baseline_revision is not None
+                    and revision <= state_baseline_revision
+                )
+            ):
+                return []
+            return [
+                {
+                    **history_base,
+                    "type": "STATE_DELTA",
+                    "delta": delta,
+                    "metadata": {
+                        **history_metadata,
+                        "swaagStateSourceCallId": source_payload.get(
+                            "source_call_id"
+                        ),
+                        "swaagStateBaseRevision": source_payload.get(
+                            "base_revision"
+                        ),
+                        "swaagStateBaseSha256": source_payload.get(
+                            "base_state_sha256"
+                        ),
+                        "swaagStateRevision": revision,
+                        "swaagStateSha256": source_payload.get("state_sha256"),
+                        "swaagStatePatchSha256": source_payload.get(
+                            "patch_sha256"
+                        ),
+                    },
+                }
+            ]
         if source_type == "tool_called":
             tool_name = str(source_payload.get("tool_name", ""))
             arguments = source_payload.get("tool_input", {})

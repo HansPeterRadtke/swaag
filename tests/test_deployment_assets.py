@@ -199,11 +199,12 @@ def test_ag_ui_sdk_conformance_assets_are_pinned_and_parse() -> None:
     assert "AgentCapabilitiesSchema.parse" in probe_source
     assert 'fetch(`${normalizedBaseUrl}/ag-ui/capabilities`)' in probe_source
     assert "onStateSnapshotEvent" in probe_source
-    assert "isDeepStrictEqual(agent.state, sharedState)" in probe_source
+    assert "onStateDeltaEvent" in probe_source
+    assert "isDeepStrictEqual(agent.state, expectedState)" in probe_source
     assert "agent.runAgent" in probe_source
     assert "onRunFinishedEvent" in probe_source
     assert "model_client=no_inference" in runner_source
-    assert "complete_without_executor" in runner_source
+    assert "complete_without_inference" in runner_source
     assert "clientProvided !== true" in client_tool_probe_source
     assert 'role: "tool"' in client_tool_probe_source
     assert "TOOL_CALL_START" in client_tool_probe_source

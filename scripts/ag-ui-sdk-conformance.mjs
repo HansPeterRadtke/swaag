@@ -42,7 +42,7 @@ if (capabilities.tools?.clientProvided !== true) {
 if (
   capabilities.state?.snapshots !== true ||
   capabilities.state?.persistentState !== true ||
-  capabilities.state?.deltas !== false
+  capabilities.state?.deltas !== true
 ) {
   throw new Error("AG-UI capability discovery did not describe shared-state support");
 }
@@ -64,6 +64,7 @@ const agent = new HttpAgent({
   ],
 });
 const eventTypes = [];
+const stateDeltas = [];
 const run = await agent.runAgent(
   { runId },
   {
@@ -72,6 +73,10 @@ const run = await agent.runAgent(
     },
     onStateSnapshotEvent({ event }) {
       eventTypes.push(event.type);
+    },
+    onStateDeltaEvent({ event }) {
+      eventTypes.push(event.type);
+      stateDeltas.push(event.delta);
     },
     onTextMessageStartEvent({ event }) {
       eventTypes.push(event.type);
@@ -91,6 +96,7 @@ const run = await agent.runAgent(
 const requiredEvents = [
   "RUN_STARTED",
   "STATE_SNAPSHOT",
+  "STATE_DELTA",
   "TEXT_MESSAGE_START",
   "TEXT_MESSAGE_CONTENT",
   "TEXT_MESSAGE_END",
@@ -102,8 +108,24 @@ if (requiredEvents.some((eventType) => !eventTypes.includes(eventType))) {
 if (run.result !== expectedResult) {
   throw new Error("official client did not decode the exact RUN_FINISHED result");
 }
-if (!isDeepStrictEqual(agent.state, sharedState)) {
-  throw new Error("official client did not preserve the exact shared-state snapshot");
+const expectedState = {
+  ...sharedState,
+  agentProgress: { source: "swaag", status: "verified" },
+};
+if (!isDeepStrictEqual(agent.state, expectedState)) {
+  throw new Error("official client did not apply the exact shared-state delta");
+}
+if (
+  stateDeltas.length !== 1 ||
+  !isDeepStrictEqual(stateDeltas[0], [
+    {
+      op: "add",
+      path: "/agentProgress",
+      value: { source: "swaag", status: "verified" },
+    },
+  ])
+) {
+  throw new Error("official client did not receive the exact RFC 6902 delta");
 }
 const assistant = run.newMessages.find(
   (message) => message.role === "assistant" && message.content === expectedResult,
@@ -123,6 +145,7 @@ console.log(
       eventTypes,
       result: run.result,
       state: agent.state,
+      stateDeltas,
       newMessageRoles: run.newMessages.map((message) => message.role),
       assistantMessageId: assistant.id,
     },

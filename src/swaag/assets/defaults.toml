@@ -83,7 +83,7 @@ background_poll_seconds = 0.1
 # allow_side_effect_tools: set true only if destructive writes are intended.
 # -----------------------------------------------------------
 [tools]
-enabled = ["echo", "time_now", "calculator", "list_files", "read_file", "read_text", "search_in_file", "search_repo", "history_search", "history_window", "history_analyze", "read_artifact", "list_attachments", "read_attachment", "inspect_attachment_capabilities", "extract_attachment", "browser_search", "browser_browse", "terminal", "notes", "prompt_instructions", "edit_text", "write_file", "run_tests", "shell_command", "poll_process", "kill_process", "wait_seconds", "schedule_wakeup", "list_wakeups", "cancel_wakeup"]
+enabled = ["echo", "time_now", "calculator", "list_files", "read_file", "read_text", "search_in_file", "search_repo", "history_search", "history_window", "history_analyze", "read_artifact", "list_attachments", "read_attachment", "inspect_attachment_capabilities", "extract_attachment", "browser_search", "browser_browse", "terminal", "notes", "prompt_instructions", "shared_state", "edit_text", "write_file", "run_tests", "shell_command", "poll_process", "kill_process", "wait_seconds", "schedule_wakeup", "list_wakeups", "cancel_wakeup"]
 read_roots = ["."]
 allow_stateful_tools = true
 allow_side_effect_tools = false

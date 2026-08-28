@@ -86,6 +86,7 @@ ALLOWED_EVENT_TYPES = frozenset(
         "tool_capabilities_loaded",
         "delegated_tool_catalog_observed",
         "delegated_tool_requested",
+        "shared_state_updated",
         "assistant_progress",
         "tool_result_missing",
         "failure_classification_resolved",
@@ -538,6 +539,19 @@ REQUIRED_PAYLOAD_KEYS: dict[str, frozenset[str]] = {
     "agent_action_terminal": frozenset({"action_index", "continue_loop", "silent_completion"}),
     "agent_tool_call_completed": frozenset({"action_index", "tool_call_index", "tool_name", "success"}),
     "tool_capabilities_loaded": frozenset({"action_index", "requested_tool_names", "loaded_tool_names"}),
+    "shared_state_updated": frozenset(
+        {
+            "source_call_id",
+            "protocol",
+            "external_context_id",
+            "base_revision",
+            "base_state_sha256",
+            "revision",
+            "state_sha256",
+            "delta",
+            "patch_sha256",
+        }
+    ),
     "assistant_progress": frozenset({"action_index", "assistant_text"}),
     "tool_result_missing": frozenset({"tool_name", "action_index"}),
     "model_output_budget_exhausted": frozenset(
