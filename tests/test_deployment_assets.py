@@ -13,7 +13,12 @@ def test_collector_config_is_loopback_only_and_bounded() -> None:
     assert "endpoint: 127.0.0.1:13501" in config
     assert "endpoint: 127.0.0.1:13502" in config
     assert "0.0.0.0" not in config
-    assert "path: /data/var/swaag/telemetry/otlp.json" in config
+    assert "file/traces:" in config
+    assert "path: /data/var/swaag/telemetry/traces.json" in config
+    assert "file/metrics:" in config
+    assert "path: /data/var/swaag/telemetry/metrics.json" in config
+    assert "exporters: [file/traces]" in config
+    assert "exporters: [file/metrics]" in config
     assert "max_megabytes:" in config
     assert "max_days:" in config
     assert "max_backups:" in config

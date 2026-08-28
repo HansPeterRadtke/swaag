@@ -445,13 +445,14 @@ def main(argv: Sequence[str] | None = None) -> int:
     parser = _build_parser()
     args = parser.parse_args(argv)
 
+    otlp_export_runtime = None
     if (
         args.command == "communication"
         and args.communication_command == "serve"
     ):
         from swaag.telemetry_export import configure_otlp_export_from_environment
 
-        configure_otlp_export_from_environment()
+        otlp_export_runtime = configure_otlp_export_from_environment()
 
     config = load_config(args.config)
     runtime = AgentRuntime(config)
@@ -494,7 +495,11 @@ def main(argv: Sequence[str] | None = None) -> int:
             McpAdapter(runtime).serve_stdio()
             return 0
         if args.command == "communication":
-            return _run_communication(runtime, args)
+            try:
+                return _run_communication(runtime, args)
+            finally:
+                if otlp_export_runtime is not None:
+                    otlp_export_runtime.shutdown()
     except BudgetExceededError as exc:
         print(str(exc), file=sys.stderr)
         if exc.report is not None:

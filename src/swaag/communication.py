@@ -7,6 +7,7 @@ import copy
 import hashlib
 import ipaddress
 import json
+import signal
 import sqlite3
 import sys
 import threading
@@ -1973,6 +1974,23 @@ class CommunicationService:
         host = require_loopback_bind_host(host)
         self.workers.reconcile_orphans()
         server = await asyncio.start_server(self.handle_client, host, port)
+        loop = asyncio.get_running_loop()
+        serving_task = asyncio.current_task()
+        stop_requested = False
+        registered_signals: list[signal.Signals] = []
+
+        def request_stop() -> None:
+            nonlocal stop_requested
+            stop_requested = True
+            if serving_task is not None:
+                serving_task.cancel()
+
+        for signum in (signal.SIGTERM, signal.SIGINT):
+            try:
+                loop.add_signal_handler(signum, request_stop)
+            except (NotImplementedError, RuntimeError):
+                continue
+            registered_signals.append(signum)
         systemd_notify("READY=1", f"STATUS=swaag communication listening on {host}:{port}")
         watchdog_task = asyncio.create_task(self._watchdog_loop(), name="swaag-systemd-watchdog")
         wakeup_task = asyncio.create_task(
@@ -1980,8 +1998,14 @@ class CommunicationService:
         )
         try:
             async with server:
-                await server.serve_forever()
+                try:
+                    await server.serve_forever()
+                except asyncio.CancelledError:
+                    if not stop_requested:
+                        raise
         finally:
+            for signum in registered_signals:
+                loop.remove_signal_handler(signum)
             for task in (watchdog_task, wakeup_task):
                 task.cancel()
             for task in (watchdog_task, wakeup_task):

@@ -18,8 +18,17 @@ processors:
     send_batch_size: 512
 
 exporters:
-  file:
-    path: /data/var/swaag/telemetry/otlp.json
+  file/traces:
+    path: /data/var/swaag/telemetry/traces.json
+    create_directory: true
+    flush_interval: 1s
+    rotation:
+      max_megabytes: 64
+      max_days: 14
+      max_backups: 8
+      localtime: true
+  file/metrics:
+    path: /data/var/swaag/telemetry/metrics.json
     create_directory: true
     flush_interval: 1s
     rotation:
@@ -41,8 +50,8 @@ service:
     traces:
       receivers: [otlp]
       processors: [memory_limiter, batch]
-      exporters: [file]
+      exporters: [file/traces]
     metrics:
       receivers: [otlp]
       processors: [memory_limiter, batch]
-      exporters: [file]
+      exporters: [file/metrics]

@@ -2,6 +2,12 @@ from __future__ import annotations
 
 import asyncio
 import json
+import os
+from pathlib import Path
+import socket
+import subprocess
+import sys
+import time
 
 import pytest
 from opentelemetry.sdk.metrics import MeterProvider
@@ -63,6 +69,65 @@ def test_watchdog_interval_uses_half_systemd_window(monkeypatch):
 def test_watchdog_interval_has_safe_default(monkeypatch):
     monkeypatch.delenv("WATCHDOG_USEC", raising=False)
     assert watchdog_interval_seconds(default_seconds=7.0) == 7.0
+
+
+@pytest.mark.skipif(os.name != "posix", reason="system service signal contract is POSIX-only")
+def test_communication_serve_exits_cleanly_on_sigterm(tmp_path: Path) -> None:
+    with socket.socket() as probe:
+        probe.bind(("127.0.0.1", 0))
+        port = int(probe.getsockname()[1])
+    env = os.environ.copy()
+    env.update(
+        {
+            "SWAAG__SESSIONS__ROOT": str(tmp_path / "sessions"),
+            "SWAAG__COMMUNICATION__ENABLED": "true",
+            "SWAAG__COMMUNICATION__HOST": "127.0.0.1",
+            "SWAAG__COMMUNICATION__PORT": str(port),
+            "SWAAG__MODEL__BASE_URL": "http://127.0.0.1:1",
+            "OTEL_SDK_DISABLED": "true",
+        }
+    )
+    process = subprocess.Popen(
+        [
+            sys.executable,
+            "-m",
+            "swaag",
+            "communication",
+            "serve",
+            "--host",
+            "127.0.0.1",
+            "--port",
+            str(port),
+        ],
+        text=True,
+        stdout=subprocess.PIPE,
+        stderr=subprocess.PIPE,
+        env=env,
+    )
+    try:
+        deadline = time.monotonic() + 10
+        while True:
+            if process.poll() is not None:
+                stdout, stderr = process.communicate()
+                raise AssertionError(
+                    f"communication service exited before listening: {stdout} {stderr}"
+                )
+            try:
+                with socket.create_connection(("127.0.0.1", port), timeout=0.2):
+                    break
+            except OSError:
+                if time.monotonic() >= deadline:
+                    raise AssertionError("communication service did not start")
+                time.sleep(0.05)
+        process.terminate()
+        stdout, stderr = process.communicate(timeout=10)
+    finally:
+        if process.poll() is None:
+            process.kill()
+            process.wait(timeout=5)
+
+    assert process.returncode == 0, (stdout, stderr)
+    assert stderr == ""
 
 
 def test_communication_transport_exposes_task_api(make_config):
