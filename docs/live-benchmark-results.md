@@ -54,3 +54,11 @@ This validates cancellation and fresh admission for the deployed server/client p
 - Method: create a raw PNG containing `SWAAG OCR MARKER 48291`, add it through the production attachment store, and invoke the normal `extract_attachment` tool with the all2text `tools` profile. The tool itself received only the model-selectable attachment ID and profile; no Swaag file-type route selected OCR.
 - Result: all2text selected its image-analysis route and the configured Tesseract provider, reported `ocr_used=true`, and recovered the exact marker at 94% reported confidence. Swaag retained the complete 24,001-character derived result as `artifact_3ae6ad0784cb` with SHA-256 `bb6a6e42b362127b9515f163701985d7a6abbe5f4dde253fbb0dac73ce2cf4cc`, plus the exact manifest and successful-process diagnostics.
 - Interpretation: the existing manifest-backed all2text adapter already exposes a working selectable OCR specialist on this host, so a duplicate direct Tesseract adapter would add a specialized branch without new behavior. This verifies the mechanical extraction path, not the live model's semantic decision to inspect or its ability to choose among multiple specialists; those remain benchmark work.
+
+## OpenTelemetry Collector path - 2026-08-28
+
+- Artifact: `/data/var/swaag/manual-tests/otelcol-20260828T041837`.
+- Collector: official `otelcol-contrib` 0.159.0 Linux ARM64 archive, verified against release SHA-256 `abb8665cc963e886c2d1286c50b38bcb2e53d968b192c3d8fe4d1ed6b91c3901`.
+- Method: validate the repo candidate configuration with the real Collector, launch it as the service user, poll its loopback health endpoint, emit a real Swaag agent span and metrics through the installed OTLP/HTTP protobuf exporters, shut down cleanly, and parse every emitted file record as JSON.
+- Result: health on `127.0.0.1:13502` reported available; the receiver on `127.0.0.1:13501` accepted both signals; the 3,600-byte sink contained two valid records with `resourceSpans` and `resourceMetrics`; Collector stderr was empty.
+- Scope: this proves the binary, configuration, receiver, exporter, and Swaag SDK path as the unprivileged service user. Installing/enabling the repo-backed system units and verifying emissions from the already-running communication daemon still require the root-owned infra sync.
