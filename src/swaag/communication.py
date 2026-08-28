@@ -1979,19 +1979,12 @@ class CommunicationService:
 
     async def serve_tcp(self, host: str, port: int) -> None:
         host = require_loopback_bind_host(host)
-        self.workers.reconcile_orphans()
-        server = await asyncio.start_server(self.handle_client, host, port)
-        bound_port = (
-            int(server.sockets[0].getsockname()[1])
-            if server.sockets
-            else int(port)
-        )
-        self._advertised_host = host
-        self._advertised_port = bound_port
         loop = asyncio.get_running_loop()
         serving_task = asyncio.current_task()
         stop_requested = False
         registered_signals: list[signal.Signals] = []
+        server: asyncio.Server | None = None
+        background_tasks: list[asyncio.Task[None]] = []
 
         def request_stop() -> None:
             nonlocal stop_requested
@@ -2005,27 +1998,42 @@ class CommunicationService:
             except (NotImplementedError, RuntimeError):
                 continue
             registered_signals.append(signum)
-        systemd_notify(
-            "READY=1",
-            f"STATUS=swaag communication listening on {host}:{bound_port}",
-        )
-        watchdog_task = asyncio.create_task(self._watchdog_loop(), name="swaag-systemd-watchdog")
-        wakeup_task = asyncio.create_task(
-            self._wakeup_loop(), name="swaag-wakeup-dispatcher"
-        )
         try:
+            self.workers.reconcile_orphans()
+            server = await asyncio.start_server(self.handle_client, host, port)
+            bound_port = (
+                int(server.sockets[0].getsockname()[1])
+                if server.sockets
+                else int(port)
+            )
+            self._advertised_host = host
+            self._advertised_port = bound_port
+            systemd_notify(
+                "READY=1",
+                f"STATUS=swaag communication listening on {host}:{bound_port}",
+            )
+            background_tasks = [
+                asyncio.create_task(
+                    self._watchdog_loop(), name="swaag-systemd-watchdog"
+                ),
+                asyncio.create_task(
+                    self._wakeup_loop(), name="swaag-wakeup-dispatcher"
+                ),
+            ]
             async with server:
-                try:
-                    await server.serve_forever()
-                except asyncio.CancelledError:
-                    if not stop_requested:
-                        raise
+                await server.serve_forever()
+        except asyncio.CancelledError:
+            if not stop_requested:
+                raise
         finally:
             for signum in registered_signals:
                 loop.remove_signal_handler(signum)
-            for task in (watchdog_task, wakeup_task):
+            if server is not None:
+                server.close()
+                await server.wait_closed()
+            for task in background_tasks:
                 task.cancel()
-            for task in (watchdog_task, wakeup_task):
+            for task in background_tasks:
                 try:
                     await task
                 except asyncio.CancelledError:
