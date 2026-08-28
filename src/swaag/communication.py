@@ -11,6 +11,7 @@ import signal
 import sqlite3
 import sys
 import threading
+import time
 from dataclasses import asdict, dataclass
 from datetime import datetime, timezone
 from http import HTTPStatus
@@ -23,7 +24,7 @@ import jsonpatch
 from swaag.config import AgentConfig
 from swaag.delegated_tools import DelegatedToolCall, DelegatedToolResultInput
 from swaag.heartbeat import systemd_notify, watchdog_interval_seconds
-from swaag.mcp import McpAdapter, McpHttpResponse
+from swaag.mcp import McpAdapter, McpHttpResponse, McpHttpSubscription
 from swaag.protocol_adapters import (
     A2AContentTypeNotSupportedError,
     A2AProtocolError,
@@ -2485,6 +2486,13 @@ class CommunicationService:
                 else ""
             ),
         )
+        if request.get("method") == "subscriptions/listen":
+            prepared = self.mcp.prepare_http_subscription(request, headers)
+            if isinstance(prepared, McpHttpResponse):
+                await self._write_mcp_http_response(writer, prepared)
+                return
+            await self._write_mcp_subscription(writer, prepared)
+            return
         try:
             async with self._semaphore:
                 response = await asyncio.to_thread(
@@ -2502,6 +2510,95 @@ class CommunicationService:
                 },
             )
         await self._write_mcp_http_response(writer, response)
+
+    async def _write_mcp_subscription(
+        self,
+        writer: asyncio.StreamWriter,
+        subscription: McpHttpSubscription,
+    ) -> None:
+        record_http_response_status(200)
+        writer.write(
+            b"HTTP/1.1 200 OK\r\n"
+            b"Content-Type: text/event-stream\r\n"
+            b"Cache-Control: no-cache\r\n"
+            b"Connection: close\r\n"
+            b"X-Accel-Buffering: no\r\n"
+            b"X-Content-Type-Options: nosniff\r\n\r\n"
+        )
+
+        async def emit(message: dict[str, Any]) -> None:
+            writer.write(
+                ("data: " + json.dumps(message, sort_keys=True) + "\n\n").encode()
+            )
+            await writer.drain()
+
+        subscription_meta = {
+            "io.modelcontextprotocol/subscriptionId": subscription.request_id
+        }
+        await emit(
+            {
+                "jsonrpc": "2.0",
+                "method": "notifications/subscriptions/acknowledged",
+                "params": {
+                    "notifications": subscription.honored_filter,
+                    "_meta": subscription_meta,
+                },
+            }
+        )
+        catalog_sha256 = subscription.initial_tool_catalog_sha256
+        keepalive_at = time.monotonic() + 15.0
+        server_stopping = False
+        try:
+            while not writer.is_closing() and not subscription.cancelled.is_set():
+                await asyncio.sleep(0.25)
+                current_sha256 = await asyncio.to_thread(
+                    self.mcp.tool_catalog_sha256
+                )
+                if (
+                    subscription.honored_filter.get("toolsListChanged") is True
+                    and current_sha256 != catalog_sha256
+                ):
+                    catalog_sha256 = current_sha256
+                    await emit(
+                        {
+                            "jsonrpc": "2.0",
+                            "method": "notifications/tools/list_changed",
+                            "params": {"_meta": subscription_meta},
+                        }
+                    )
+                if time.monotonic() >= keepalive_at:
+                    writer.write(b": keepalive\n\n")
+                    await writer.drain()
+                    keepalive_at = time.monotonic() + 15.0
+        except asyncio.CancelledError:
+            server_stopping = True
+            raise
+        finally:
+            self.mcp.finish_http_subscription(subscription.request_id)
+            if (
+                server_stopping
+                and not writer.is_closing()
+                and not subscription.cancelled.is_set()
+            ):
+                try:
+                    await emit(
+                        {
+                            "jsonrpc": "2.0",
+                            "id": subscription.request_id,
+                            "result": {
+                                "resultType": "complete",
+                                "_meta": {
+                                    **subscription_meta,
+                                    "io.modelcontextprotocol/serverInfo": {
+                                        "name": "swaag",
+                                        "version": "0.1",
+                                    },
+                                },
+                            },
+                        }
+                    )
+                except (ConnectionError, BrokenPipeError):
+                    pass
 
     @staticmethod
     def _a2a_error(request_id: Any, code: int, message: str) -> dict[str, Any]:

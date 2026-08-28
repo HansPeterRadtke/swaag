@@ -4,10 +4,12 @@ import base64
 import binascii
 from dataclasses import dataclass
 from decimal import Decimal, InvalidOperation
+import hashlib
 import ipaddress
 import json
 import re
 import sys
+import threading
 from typing import Any, Mapping, TextIO
 from urllib.parse import urlsplit
 
@@ -35,6 +37,14 @@ class McpHttpResponse:
 
 
 @dataclass(slots=True, frozen=True)
+class McpHttpSubscription:
+    request_id: str | int
+    honored_filter: dict[str, Any]
+    cancelled: threading.Event
+    initial_tool_catalog_sha256: str
+
+
+@dataclass(slots=True, frozen=True)
 class _MirroredParameter:
     header_name: str
     path: tuple[str, ...]
@@ -48,6 +58,8 @@ class McpAdapter:
 
     def __init__(self, runtime: AgentRuntime):
         self.runtime = runtime
+        self._subscription_lock = threading.Lock()
+        self._subscriptions: dict[str | int, threading.Event] = {}
 
     def _result(self, request_id: Any, result: Any) -> dict[str, Any]:
         if isinstance(result, dict):
@@ -90,7 +102,9 @@ class McpAdapter:
             },
         )
 
-    def handle(self, request: dict[str, Any]) -> dict[str, Any] | None:
+    def _request_validation_error(
+        self, request: dict[str, Any]
+    ) -> dict[str, Any] | None:
         request_id = request.get("id")
         if request.get("jsonrpc") != "2.0":
             return self._error(request_id, -32600, "jsonrpc must be '2.0'")
@@ -145,16 +159,40 @@ class McpAdapter:
                     "must contain non-empty string name and version fields"
                 ),
             )
+        return None
+
+    def handle(
+        self,
+        request: dict[str, Any],
+        *,
+        transport: str = "stdio",
+    ) -> dict[str, Any] | None:
+        validation_error = self._request_validation_error(request)
+        if validation_error is not None:
+            return validation_error
+        request_id = request.get("id")
+        method = str(request["method"])
+        params = request.get("params", {})
+        metadata = params["_meta"]
         if "id" not in request:
-            # Modern HTTP currently defines no client notifications. Stdio may
-            # still deliver cancellation, whose response is intentionally absent.
+            if method == "notifications/cancelled":
+                cancelled_id = params.get("requestId")
+                if (
+                    cancelled_id is not None
+                    and not isinstance(cancelled_id, bool)
+                    and isinstance(cancelled_id, (str, int))
+                ):
+                    self.cancel_http_subscription(cancelled_id)
             return None
         if method == "server/discover":
+            tool_capabilities: dict[str, Any] = {}
+            if transport == "streamable_http":
+                tool_capabilities["listChanged"] = True
             return self._result(
                 request_id,
                 {
                     "supportedVersions": [self.protocol_version],
-                    "capabilities": {"tools": {}},
+                    "capabilities": {"tools": tool_capabilities},
                     "instructions": (
                         "SWAAG exposes model-controlled capabilities. Worker/task lifecycle "
                         "uses the separate transport-neutral task API. Stateful capability "
@@ -264,7 +302,164 @@ class McpAdapter:
                     "_meta": {"com.swaag/sessionId": run.session_id},
                 },
             )
+        if method == "subscriptions/listen":
+            return self._error(
+                request_id,
+                -32601,
+                "subscriptions/listen requires the Streamable HTTP transport",
+            )
         return self._error(request_id, -32601, f"Method not found: {method}")
+
+    def tool_catalog_sha256(self) -> str:
+        tools = [
+            {
+                "name": tool.name,
+                "description": tool.description
+                + (f" {tool.usage_guidance}" if tool.usage_guidance else ""),
+                "inputSchema": tool.input_schema,
+            }
+            for tool in sorted(
+                self.runtime.tools.enabled_tools(self.runtime.config),
+                key=lambda item: item.name,
+            )
+        ]
+        payload = json.dumps(
+            tools,
+            sort_keys=True,
+            ensure_ascii=True,
+            separators=(",", ":"),
+            allow_nan=False,
+        )
+        return hashlib.sha256(payload.encode("utf-8")).hexdigest()
+
+    def prepare_http_subscription(
+        self,
+        request: dict[str, Any],
+        headers: Mapping[str, str],
+    ) -> McpHttpSubscription | McpHttpResponse:
+        request_id = request.get("id")
+        validation_error = self._request_validation_error(request)
+        if validation_error is not None:
+            return McpHttpResponse(400, validation_error)
+        if request.get("method") != "subscriptions/listen":
+            return McpHttpResponse(
+                400,
+                self._error(request_id, -32600, "Expected subscriptions/listen"),
+            )
+        if "id" not in request:
+            return McpHttpResponse(
+                400,
+                self._error(None, -32600, "subscriptions/listen requires an id"),
+            )
+        mismatch = self._validate_request_headers(request, headers)
+        if mismatch is not None:
+            return McpHttpResponse(
+                400, self._error(request_id, _HEADER_MISMATCH, mismatch)
+            )
+        params = request["params"]
+        extra_params = set(params) - {"_meta", "notifications"}
+        if extra_params:
+            return McpHttpResponse(
+                200,
+                self._error(
+                    request_id,
+                    -32602,
+                    "subscriptions/listen has unsupported parameters: "
+                    + ", ".join(sorted(extra_params)),
+                ),
+            )
+        notifications = params.get("notifications")
+        if not isinstance(notifications, dict):
+            return McpHttpResponse(
+                200,
+                self._error(
+                    request_id,
+                    -32602,
+                    "subscriptions/listen notifications must be an object",
+                ),
+            )
+        allowed = {
+            "toolsListChanged",
+            "promptsListChanged",
+            "resourcesListChanged",
+            "resourceSubscriptions",
+        }
+        unknown = set(notifications) - allowed
+        if unknown:
+            return McpHttpResponse(
+                200,
+                self._error(
+                    request_id,
+                    -32602,
+                    "subscriptions/listen has unknown notification filters: "
+                    + ", ".join(sorted(unknown)),
+                ),
+            )
+        for name in (
+            "toolsListChanged",
+            "promptsListChanged",
+            "resourcesListChanged",
+        ):
+            value = notifications.get(name)
+            if value is not None and not isinstance(value, bool):
+                return McpHttpResponse(
+                    200,
+                    self._error(
+                        request_id,
+                        -32602,
+                        f"subscriptions/listen {name} must be a boolean",
+                    ),
+                )
+        resource_subscriptions = notifications.get("resourceSubscriptions")
+        if resource_subscriptions is not None and (
+            not isinstance(resource_subscriptions, list)
+            or any(not isinstance(item, str) for item in resource_subscriptions)
+        ):
+            return McpHttpResponse(
+                200,
+                self._error(
+                    request_id,
+                    -32602,
+                    "subscriptions/listen resourceSubscriptions must be a string array",
+                ),
+            )
+
+        honored_filter = (
+            {"toolsListChanged": True}
+            if notifications.get("toolsListChanged") is True
+            else {}
+        )
+        cancelled = threading.Event()
+        catalog_sha256 = self.tool_catalog_sha256()
+        with self._subscription_lock:
+            if request_id in self._subscriptions:
+                return McpHttpResponse(
+                    200,
+                    self._error(
+                        request_id,
+                        -32603,
+                        "A subscriptions/listen request with this id is already active",
+                    ),
+                )
+            self._subscriptions[request_id] = cancelled
+        return McpHttpSubscription(
+            request_id=request_id,
+            honored_filter=honored_filter,
+            cancelled=cancelled,
+            initial_tool_catalog_sha256=catalog_sha256,
+        )
+
+    def cancel_http_subscription(self, request_id: str | int) -> bool:
+        with self._subscription_lock:
+            event = self._subscriptions.get(request_id)
+        if event is None:
+            return False
+        event.set()
+        return True
+
+    def finish_http_subscription(self, request_id: str | int) -> None:
+        with self._subscription_lock:
+            self._subscriptions.pop(request_id, None)
 
     def http_preflight(
         self, headers: Mapping[str, str]
@@ -333,7 +528,7 @@ class McpAdapter:
             return McpHttpResponse(
                 400, self._error(request_id, _HEADER_MISMATCH, mismatch)
             )
-        response = self.handle(request)
+        response = self.handle(request, transport="streamable_http")
         if response is None:
             return McpHttpResponse(202, None)
         error = response.get("error")

@@ -410,6 +410,135 @@ def test_mcp_streamable_http_listener_is_gated_and_never_uses_inference(
     asyncio.run(exercise())
 
 
+def test_mcp_subscription_acknowledges_changes_and_cancels_without_inference(
+    make_config, tmp_path: Path
+) -> None:
+    async def exercise() -> None:
+        config = make_config()
+        config.sessions.root = tmp_path / "sessions"
+        config.mcp.enabled = True
+        config.mcp.transport = "streamable_http"
+        no_inference = _NoInferenceClient()
+        runtime = AgentRuntime(config, model_client=no_inference)
+        runtime.create_or_load_session()
+        service = CommunicationService(runtime)
+        server = await asyncio.start_server(service.handle_client, "127.0.0.1", 0)
+        port = int(server.sockets[0].getsockname()[1])
+
+        async def post(payload: dict[str, Any], headers: dict[str, str]):
+            body = json.dumps(payload).encode()
+            reader, writer = await asyncio.open_connection("127.0.0.1", port)
+            request = b"POST /mcp HTTP/1.1\r\nHost: localhost\r\n"
+            request += b"".join(
+                f"{name}: {value}\r\n".encode()
+                for name, value in {
+                    **headers,
+                    "Content-Length": str(len(body)),
+                }.items()
+            )
+            writer.write(request + b"\r\n" + body)
+            await writer.drain()
+            return reader, writer
+
+        subscription = {
+            "jsonrpc": "2.0",
+            "id": "listen-test",
+            "method": "subscriptions/listen",
+            "params": {
+                **_metadata(),
+                "notifications": {"toolsListChanged": True},
+            },
+        }
+        reader, writer = await post(
+            subscription,
+            _headers("subscriptions/listen"),
+        )
+        response_head = await asyncio.wait_for(
+            reader.readuntil(b"\r\n\r\n"), timeout=2
+        )
+        ack_frame = await asyncio.wait_for(reader.readuntil(b"\n\n"), timeout=2)
+        ack = json.loads(ack_frame.removeprefix(b"data: ").strip())
+
+        assert response_head.startswith(b"HTTP/1.1 200 OK")
+        assert b"Content-Type: text/event-stream" in response_head
+        assert ack == {
+            "jsonrpc": "2.0",
+            "method": "notifications/subscriptions/acknowledged",
+            "params": {
+                "notifications": {"toolsListChanged": True},
+                "_meta": {
+                    "io.modelcontextprotocol/subscriptionId": "listen-test"
+                },
+            },
+        }
+
+        config.tools.enabled = ["calculator"]
+        changed_frame = await asyncio.wait_for(
+            reader.readuntil(b"\n\n"), timeout=2
+        )
+        changed = json.loads(changed_frame.removeprefix(b"data: ").strip())
+        assert changed == {
+            "jsonrpc": "2.0",
+            "method": "notifications/tools/list_changed",
+            "params": {
+                "_meta": {
+                    "io.modelcontextprotocol/subscriptionId": "listen-test"
+                }
+            },
+        }
+
+        cancel = {
+            "jsonrpc": "2.0",
+            "method": "notifications/cancelled",
+            "params": {**_metadata(), "requestId": "listen-test"},
+        }
+        cancel_reader, cancel_writer = await post(
+            cancel,
+            _headers("notifications/cancelled"),
+        )
+        cancel_response = await asyncio.wait_for(cancel_reader.read(), timeout=2)
+        cancel_writer.close()
+        await cancel_writer.wait_closed()
+        assert cancel_response.startswith(b"HTTP/1.1 202 Accepted")
+        assert await asyncio.wait_for(reader.read(), timeout=2) == b""
+
+        writer.close()
+        await writer.wait_closed()
+        server.close()
+        await server.wait_closed()
+        service.workers.shutdown()
+        assert no_inference.accesses == []
+
+    asyncio.run(exercise())
+
+
+def test_mcp_subscription_rejects_unimplemented_filters_without_claiming_them(
+    make_config,
+) -> None:
+    adapter = McpAdapter(AgentRuntime(make_config(), model_client=object()))
+    request = {
+        "jsonrpc": "2.0",
+        "id": "listen-filter",
+        "method": "subscriptions/listen",
+        "params": {
+            **_metadata(),
+            "notifications": {
+                "toolsListChanged": True,
+                "promptsListChanged": True,
+                "resourcesListChanged": True,
+                "resourceSubscriptions": ["file:///example"],
+            },
+        },
+    }
+
+    prepared = adapter.prepare_http_subscription(
+        request, _headers("subscriptions/listen")
+    )
+
+    assert prepared.honored_filter == {"toolsListChanged": True}
+    adapter.finish_http_subscription(prepared.request_id)
+
+
 @pytest.mark.parametrize("transport", ["stdio", "streamable_http", "both"])
 def test_mcp_transport_configuration_accepts_explicit_bindings(
     tmp_path: Path, transport: str
