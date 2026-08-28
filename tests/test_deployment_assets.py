@@ -120,8 +120,10 @@ def test_ag_ui_sdk_conformance_assets_are_pinned_and_parse() -> None:
     installer = ROOT / "scripts" / "install-ag-ui-conformance-env.sh"
     probe = ROOT / "scripts" / "ag-ui-sdk-conformance.mjs"
     preparer = ROOT / "scripts" / "prepare-ag-ui-conformance.py"
+    runner = ROOT / "scripts" / "run-ag-ui-sdk-conformance.py"
     installer_source = installer.read_text(encoding="utf-8")
     probe_source = probe.read_text(encoding="utf-8")
+    runner_source = runner.read_text(encoding="utf-8")
 
     shell_check = subprocess.run(
         ["bash", "-n", str(installer)],
@@ -136,7 +138,7 @@ def test_ag_ui_sdk_conformance_assets_are_pinned_and_parse() -> None:
         check=False,
     )
     python_check = subprocess.run(
-        ["python", "-m", "py_compile", str(preparer)],
+        ["python", "-m", "py_compile", str(preparer), str(runner)],
         text=True,
         capture_output=True,
         check=False,
@@ -152,3 +154,5 @@ def test_ag_ui_sdk_conformance_assets_are_pinned_and_parse() -> None:
     assert "new HttpAgent" in probe_source
     assert "agent.runAgent" in probe_source
     assert "onRunFinishedEvent" in probe_source
+    assert "model_client=no_inference" in runner_source
+    assert "complete_without_executor" in runner_source
