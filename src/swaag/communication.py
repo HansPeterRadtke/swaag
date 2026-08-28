@@ -1314,6 +1314,64 @@ class CommunicationService:
             ],
         }
 
+    def _ag_ui_capabilities(self) -> dict[str, Any]:
+        tools = [
+            {
+                "name": tool.name,
+                "description": tool.description,
+                "parameters": tool.input_schema,
+            }
+            for tool in self.runtime.tools.enabled_domain_tools(self.runtime.config)
+        ]
+        return {
+            "identity": {
+                "name": "Swaag",
+                "type": "swaag",
+                "description": (
+                    "Durable autonomous workers with resumable tasks, exact history, "
+                    "attachments, semantic completion evaluation, and cancellation."
+                ),
+                "version": "0.1.0",
+                "provider": "Swaag",
+                "documentationUrl": "https://github.com/HansPeterRadtke/swaag",
+            },
+            "transport": {
+                "streaming": True,
+                "websocket": False,
+                "httpBinary": False,
+                "pushNotifications": False,
+                "resumable": False,
+            },
+            "tools": {
+                "supported": bool(tools),
+                "items": tools,
+                "parallelCalls": False,
+                "clientProvided": False,
+            },
+            "output": {
+                "structuredOutput": False,
+                "supportedMimeTypes": ["text/plain"],
+            },
+            "multimodal": {
+                "input": {
+                    "image": True,
+                    "audio": True,
+                    "video": True,
+                    "pdf": True,
+                    "file": True,
+                }
+            },
+            "execution": {
+                "maxIterations": int(self.runtime.config.runtime.max_total_actions)
+            },
+            "humanInTheLoop": {
+                "supported": True,
+                "interventions": True,
+                "feedback": True,
+                "interrupts": True,
+            },
+        }
+
     @staticmethod
     async def _write_http_response(
         writer: asyncio.StreamWriter,
@@ -2227,6 +2285,26 @@ class CommunicationService:
                             reason="OK",
                             body=body,
                             headers={"Cache-Control": "public, max-age=300", "ETag": etag},
+                        )
+                    return
+                if path == "/ag-ui/capabilities":
+                    if method != "GET":
+                        await self._write_http_response(
+                            writer,
+                            status=405,
+                            reason="Method Not Allowed",
+                            body=b'{"error":"AG-UI capability discovery accepts GET only"}',
+                            headers={"Allow": "GET"},
+                        )
+                    else:
+                        await self._write_http_response(
+                            writer,
+                            status=200,
+                            reason="OK",
+                            body=json.dumps(
+                                self._ag_ui_capabilities(), sort_keys=True
+                            ).encode(),
+                            headers={"Cache-Control": "no-store"},
                         )
                     return
                 is_jsonrpc = method == "POST" and path == "/a2a/v1"

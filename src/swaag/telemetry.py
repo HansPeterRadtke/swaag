@@ -129,6 +129,7 @@ def _http_route(path: str) -> str:
         "/.well-known/agent-card.json",
         "/a2a/v1",
         "/ag-ui",
+        "/ag-ui/capabilities",
         "/mcp",
         "/a2a/rest/message:send",
         "/a2a/rest/message:stream",
@@ -387,7 +388,7 @@ class OperationalTelemetry:
         route = _http_route(target_path)
         protocol_name = (
             "ag_ui"
-            if target_path == "/ag-ui"
+            if target_path in {"/ag-ui", "/ag-ui/capabilities"}
             else "mcp"
             if target_path == "/mcp"
             else "a2a"

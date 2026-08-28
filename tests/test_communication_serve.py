@@ -905,6 +905,70 @@ def test_communication_transport_serves_durable_ag_ui_sse(
     asyncio.run(exercise())
 
 
+def test_communication_transport_serves_dynamic_ag_ui_capabilities(make_config):
+    async def exercise() -> None:
+        config = make_config()
+        config.tools.enabled = ["calculator"]
+        config.runtime.max_total_actions = 7
+        service = CommunicationService(AgentRuntime(config, model_client=object()))
+        server = await asyncio.start_server(service.handle_client, "127.0.0.1", 0)
+        port = server.sockets[0].getsockname()[1]
+
+        async def request(method: str) -> tuple[str, dict[str, str], dict]:
+            reader, writer = await asyncio.open_connection("127.0.0.1", port)
+            writer.write(
+                (
+                    f"{method} /ag-ui/capabilities HTTP/1.1\r\n"
+                    "Host: localhost\r\n"
+                    "Content-Length: 0\r\n\r\n"
+                ).encode()
+            )
+            await writer.drain()
+            response = await reader.read()
+            writer.close()
+            await writer.wait_closed()
+            head, body = response.split(b"\r\n\r\n", 1)
+            lines = head.decode().split("\r\n")
+            headers = {
+                name.casefold(): value.strip()
+                for name, value in (line.split(":", 1) for line in lines[1:])
+            }
+            return lines[0], headers, json.loads(body)
+
+        get_status, get_headers, capabilities = await request("GET")
+        post_status, post_headers, post_error = await request("POST")
+        server.close()
+        await server.wait_closed()
+        service.workers.shutdown()
+
+        assert get_status == "HTTP/1.1 200 OK"
+        assert get_headers["content-type"] == "application/json"
+        assert get_headers["cache-control"] == "no-store"
+        assert capabilities["transport"] == {
+            "streaming": True,
+            "websocket": False,
+            "httpBinary": False,
+            "pushNotifications": False,
+            "resumable": False,
+        }
+        assert capabilities["tools"]["supported"] is True
+        assert capabilities["tools"]["clientProvided"] is False
+        assert [item["name"] for item in capabilities["tools"]["items"]] == [
+            "calculator"
+        ]
+        assert capabilities["tools"]["items"][0]["parameters"]["type"] == "object"
+        assert capabilities["execution"]["maxIterations"] == 7
+        assert capabilities["humanInTheLoop"]["interrupts"] is True
+        assert get_headers["content-length"] == str(
+            len(json.dumps(capabilities, sort_keys=True).encode())
+        )
+        assert post_status == "HTTP/1.1 405 Method Not Allowed"
+        assert post_headers["allow"] == "GET"
+        assert "GET only" in post_error["error"]
+
+    asyncio.run(exercise())
+
+
 def test_ag_ui_resume_validates_and_resolves_the_durable_interrupt(
     make_config, monkeypatch
 ) -> None:

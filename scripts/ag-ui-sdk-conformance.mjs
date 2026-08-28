@@ -12,15 +12,35 @@ if (!sdkRoot || !baseUrl || !threadId || !runId || !expectedResult) {
 }
 
 const packageRoot = path.join(sdkRoot, "node_modules", "@ag-ui", "client");
+const corePackageRoot = path.join(sdkRoot, "node_modules", "@ag-ui", "core");
 const packageVersion = JSON.parse(
   fs.readFileSync(path.join(packageRoot, "package.json"), "utf8"),
 ).version;
 const { HttpAgent } = await import(
   pathToFileURL(path.join(packageRoot, "dist", "index.mjs")).href
 );
+const { AgentCapabilitiesSchema } = await import(
+  pathToFileURL(path.join(corePackageRoot, "dist", "index.mjs")).href
+);
+
+const normalizedBaseUrl = baseUrl.replace(/\/$/, "");
+const capabilityResponse = await fetch(`${normalizedBaseUrl}/ag-ui/capabilities`);
+if (!capabilityResponse.ok) {
+  throw new Error(`AG-UI capability discovery returned ${capabilityResponse.status}`);
+}
+const capabilities = AgentCapabilitiesSchema.parse(await capabilityResponse.json());
+if (capabilities.transport?.streaming !== true) {
+  throw new Error("AG-UI capability discovery did not advertise SSE streaming");
+}
+if (capabilities.transport?.websocket !== false) {
+  throw new Error("AG-UI capability discovery overclaimed WebSocket support");
+}
+if (capabilities.tools?.clientProvided !== false) {
+  throw new Error("AG-UI capability discovery overclaimed client-provided tools");
+}
 
 const agent = new HttpAgent({
-  url: `${baseUrl.replace(/\/$/, "")}/ag-ui`,
+  url: `${normalizedBaseUrl}/ag-ui`,
   threadId,
   initialMessages: [
     {
@@ -77,6 +97,8 @@ console.log(
     {
       sdk: `@ag-ui/client@${packageVersion}`,
       endpoint: agent.url,
+      capabilityEndpoint: `${normalizedBaseUrl}/ag-ui/capabilities`,
+      capabilities,
       threadId: agent.threadId,
       eventTypes,
       result: run.result,

@@ -319,6 +319,28 @@ def test_mcp_http_telemetry_uses_protocol_route_and_standard_methods() -> None:
     tracer_provider.shutdown()
 
 
+def test_ag_ui_capability_telemetry_uses_protocol_route() -> None:
+    telemetry, exporter, metric_reader, tracer_provider, meter_provider = (
+        _telemetry_fixture()
+    )
+
+    with telemetry.http_server_request(method="GET", path="/ag-ui/capabilities"):
+        pass
+
+    tracer_provider.force_flush()
+    span = exporter.get_finished_spans()[0]
+    assert span.name == "GET /ag-ui/capabilities"
+    assert span.attributes["http.route"] == "/ag-ui/capabilities"
+    assert span.attributes["swaag.protocol.name"] == "ag_ui"
+    point = _collect_metrics(metric_reader)[
+        "http.server.request.duration"
+    ].data.data_points[0]
+    assert point.attributes["http.route"] == "/ag-ui/capabilities"
+
+    meter_provider.shutdown()
+    tracer_provider.shutdown()
+
+
 def test_remote_trace_crosses_protocol_worker_and_model_boundaries(make_config) -> None:
     telemetry, exporter, _reader, tracer_provider, meter_provider = (
         _telemetry_fixture()
