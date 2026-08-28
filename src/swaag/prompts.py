@@ -156,7 +156,8 @@ class PromptBuilder:
                 provenance = f"[SOURCE EVENT sequence={event_sequence} hash={event_hash or 'unknown'}]\n"
                 if tool_result_projections and event_sequence in tool_result_projections:
                     body = (
-                        "[SEMANTIC PROJECTION; raw source remains authoritative and retrievable]\n"
+                        "[SEMANTIC PROJECTION; raw source remains authoritative and retrievable "
+                        f"with history_window from active-session sequence {event_sequence}]\n"
                         + tool_result_projections[event_sequence].strip()
                     )
             elif message.role == "summary":
@@ -679,7 +680,8 @@ class PromptBuilder:
                 provenance = f"[SOURCE EVENT sequence={sequence} hash={source_hash or 'unknown'}]\n"
                 if sequence in projections:
                     body = (
-                        "[SEMANTIC PROJECTION; raw source remains authoritative and retrievable]\n"
+                        "[SEMANTIC PROJECTION; raw source remains authoritative and retrievable "
+                        f"with history_window from active-session sequence {sequence}]\n"
                         + projections[sequence].strip()
                     )
             components.append(

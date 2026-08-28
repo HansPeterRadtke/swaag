@@ -90,6 +90,7 @@ def test_prompt_builder_substitutes_projection_but_keeps_source_reference(make_c
     )
     assert "SOURCE EVENT sequence=77 hash=deadbeef" in assembly.prompt_text
     assert "SEMANTIC PROJECTION" in assembly.prompt_text
+    assert "history_window from active-session sequence 77" in assembly.prompt_text
     assert "only the semantically relevant fact" in assembly.prompt_text
     assert "RAW BULK RAW BULK" not in assembly.prompt_text
 

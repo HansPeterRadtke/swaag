@@ -3,7 +3,7 @@ from __future__ import annotations
 from dataclasses import asdict
 
 from swaag.config import AgentConfig
-from swaag.types import Note, NotePromptSelection, SessionState
+from swaag.types import Note, SessionState
 from swaag.utils import new_id, utc_now_iso
 
 
@@ -135,39 +135,6 @@ def render_notes(notes: list[Note]) -> str:
         f"Categories: {note.categories!r}\n"
         f"{note.content}"
         for note in notes
-    )
-
-
-def select_notes_for_prompt(
-    config: AgentConfig,
-    notes: list[Note],
-    counter,
-    *,
-    max_tokens: int | None = None,
-) -> NotePromptSelection:
-    token_limit = None if max_tokens is None else max(int(max_tokens), 0)
-    included: list[Note] = []
-    omitted: list[str] = []
-    rendered = ""
-    tokens = 0
-    exact = True
-    for note in reversed(notes):
-        candidate_list = list(reversed([note, *included]))
-        candidate_text = render_notes(candidate_list)
-        counted = counter.count_text(candidate_text)
-        if token_limit is None or counted.tokens <= token_limit:
-            included.insert(0, note)
-            rendered = candidate_text
-            tokens = counted.tokens
-            exact = exact and counted.exact
-        else:
-            omitted.append(note.note_id)
-    return NotePromptSelection(
-        included_notes=included,
-        omitted_note_ids=sorted(omitted),
-        rendered_text=rendered,
-        tokens=tokens,
-        exact=exact,
     )
 
 

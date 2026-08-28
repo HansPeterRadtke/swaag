@@ -139,6 +139,7 @@ def test_external_benchmark_full_run_reports_failed_status_for_missing_input(tmp
     config = load_config()
     target = config.external_benchmarks.targets["swebench_verified"]
     target.workdir = str(tmp_path)
+    target.preflight_commands = []
 
     report = external_benchmarks.run_external_benchmarks(
         benchmark_ids=["swebench-verified"],
@@ -178,6 +179,7 @@ def test_external_benchmark_accepts_gold_literal_without_existing_path(tmp_path:
     config = load_config()
     target = config.external_benchmarks.targets["swebench_verified"]
     target.workdir = str(tmp_path)
+    target.preflight_commands = []
     target.full_command = ["python3", "-c", "print('gold-ok')"]
 
     report = external_benchmarks.run_external_benchmarks(
@@ -196,6 +198,7 @@ def test_external_benchmark_expands_optional_argument_placeholders(tmp_path: Pat
     config = load_config()
     target = config.external_benchmarks.targets["swebench_lite"]
     target.workdir = str(tmp_path)
+    target.preflight_commands = []
     script = tmp_path / "args_probe.py"
     script.write_text(
         "\n".join(

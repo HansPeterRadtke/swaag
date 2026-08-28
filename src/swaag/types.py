@@ -312,15 +312,6 @@ class SessionState:
 
 
 @dataclass(slots=True)
-class NotePromptSelection:
-    included_notes: list[Note]
-    omitted_note_ids: list[str]
-    rendered_text: str
-    tokens: int
-    exact: bool
-
-
-@dataclass(slots=True)
 class ReaderChunk:
     reader_id: str
     source_kind: SourceKind

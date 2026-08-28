@@ -1226,6 +1226,39 @@ def _build_parser() -> argparse.ArgumentParser:
     compaction_parser.set_defaults(resume=True)
     compaction_parser.add_argument("--json", action="store_true", help="Print the full JSON report.")
 
+    context_engineering_parser = subparsers.add_parser(
+        "context-engineering",
+        help="Measure full-fidelity admission, overflow projection, and exact recovery.",
+    )
+    context_engineering_parser.add_argument(
+        "--output",
+        default="context_engineering_output",
+        help="Checkpointed artifact directory.",
+    )
+    context_engineering_parser.add_argument(
+        "--case",
+        action="append",
+        default=[],
+        help="Run only the named context-engineering case.",
+    )
+    context_engineering_parser.add_argument(
+        "--model-base-url",
+        help="Optional model endpoint override for an explicitly authorized live run.",
+    )
+    context_engineering_parser.add_argument(
+        "--timeout-seconds",
+        type=int,
+        help="Override the no-token timeout for an explicitly authorized live run.",
+    )
+    context_engineering_parser.add_argument(
+        "--clean",
+        action="store_true",
+        help="Replace an existing artifact directory.",
+    )
+    context_engineering_parser.add_argument(
+        "--json", action="store_true", help="Print the full JSON report."
+    )
+
     response_presentation_parser = subparsers.add_parser(
         "response-presentation",
         help="Compare user-relevance and audio-presentation strategies on the live model.",
@@ -1657,6 +1690,33 @@ def main(argv: Sequence[str] | None = None) -> int:
             print(f"passed={report['passed']}/{report['total']}")
             print(f"cycles_completed={report['cycles_completed']}")
             print(f"output={args.output}")
+        return 0 if report["complete"] and report["passed"] == report["total"] else 1
+    if args.command == "context-engineering":
+        from swaag.benchmark.context_engineering import (
+            run_context_engineering_benchmark,
+        )
+
+        report = run_context_engineering_benchmark(
+            output_dir=Path(args.output),
+            config=_live_experiment_config(
+                model_base_url=args.model_base_url,
+                timeout_seconds=args.timeout_seconds,
+            ),
+            case_ids=list(args.case),
+            clean=bool(args.clean),
+        )
+        if args.json:
+            print(stable_json_dumps(report, indent=2))
+        else:
+            print(f"passed={report['passed']}/{report['total']}")
+            for result in report["results"]:
+                print(
+                    f"{result['case_id']}="
+                    f"{'passed' if result['verification']['passed'] else 'failed'}"
+                )
+            print(
+                f"output={Path(args.output) / 'context_engineering_results.json'}"
+            )
         return 0 if report["complete"] and report["passed"] == report["total"] else 1
     if args.command == "response-presentation":
         from swaag.benchmark.response_presentation import (

@@ -13,7 +13,6 @@ from swaag.notes import (
     compact_notes,
     enforce_limits,
     make_note,
-    select_notes_for_prompt,
 )
 from swaag.runtime import AgentRuntime
 from swaag.tokens import ExactTokenCounter
@@ -118,20 +117,6 @@ def test_compact_notes_uses_complete_semantic_result_without_clipping(make_confi
     assert removed_ids == [note.note_id for note in notes]
     assert compacted_note.content == "A remains 111; B remains 222."
     assert compacted_note.categories == ["cross-cutting constraints"]
-
-
-def test_select_notes_for_prompt_respects_budget(make_config) -> None:
-    config = make_config()
-    notes = [make_note(config, title="A", content="one two three"), make_note(config, title="B", content="four five six")]
-    selection = select_notes_for_prompt(
-        config,
-        notes,
-        ExactTokenCounter(lambda text: len(text.split()) if text.strip() else 0),
-        max_tokens=10,
-    )
-    assert selection.tokens <= 10
-    assert selection.included_notes
-    assert set(selection.omitted_note_ids).issubset({note.note_id for note in notes})
 
 
 def test_runtime_context_includes_all_notes_before_measured_overflow(make_config) -> None:
