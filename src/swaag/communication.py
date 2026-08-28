@@ -20,6 +20,7 @@ from urllib.parse import parse_qs, unquote, urlsplit
 
 from swaag.config import AgentConfig
 from swaag.heartbeat import systemd_notify, watchdog_interval_seconds
+from swaag.mcp import McpAdapter, McpHttpResponse
 from swaag.protocol_adapters import (
     A2AContentTypeNotSupportedError,
     A2AProtocolError,
@@ -337,6 +338,7 @@ class CommunicationService:
         self._semaphore = asyncio.Semaphore(max(1, int(max_concurrency)))
         self.workers = WorkerManager(runtime, max_workers=max_concurrency)
         self.task_api = TaskApi(self.workers)
+        self.mcp = McpAdapter(runtime)
         self._advertised_host = str(runtime.config.communication.host).strip()
         self._advertised_port = int(runtime.config.communication.port)
 
@@ -1335,6 +1337,132 @@ class CommunicationService:
         writer.write(("\r\n".join(head) + "\r\n\r\n").encode("ascii") + body)
         await writer.drain()
 
+    @classmethod
+    async def _write_mcp_http_response(
+        cls,
+        writer: asyncio.StreamWriter,
+        response: McpHttpResponse,
+    ) -> None:
+        body = (
+            b""
+            if response.payload is None
+            else json.dumps(response.payload, sort_keys=True).encode()
+        )
+        await cls._write_http_response(
+            writer,
+            status=response.status,
+            reason=HTTPStatus(response.status).phrase,
+            body=body,
+            headers=dict(response.headers or {}),
+        )
+
+    async def _handle_mcp_http(
+        self,
+        *,
+        headers: dict[str, str],
+        reader: asyncio.StreamReader,
+        writer: asyncio.StreamWriter,
+    ) -> None:
+        preflight = self.mcp.http_preflight(headers)
+        if preflight is not None:
+            await self._write_mcp_http_response(writer, preflight)
+            return
+        raw_length = headers.get("content-length", "")
+        if not raw_length.isdigit() or not 0 < int(raw_length) <= 1_048_576:
+            await self._write_mcp_http_response(
+                writer,
+                McpHttpResponse(
+                    400,
+                    {
+                        "jsonrpc": "2.0",
+                        "id": None,
+                        "error": {
+                            "code": -32600,
+                            "message": (
+                                "Content-Length must be between 1 and 1048576"
+                            ),
+                        },
+                    },
+                ),
+            )
+            return
+        try:
+            body = await reader.readexactly(int(raw_length))
+        except asyncio.IncompleteReadError:
+            await self._write_mcp_http_response(
+                writer,
+                McpHttpResponse(
+                    400,
+                    {
+                        "jsonrpc": "2.0",
+                        "id": None,
+                        "error": {
+                            "code": -32700,
+                            "message": "Incomplete JSON request body",
+                        },
+                    },
+                ),
+            )
+            return
+        try:
+            request = json.loads(body)
+        except (UnicodeDecodeError, json.JSONDecodeError):
+            await self._write_mcp_http_response(
+                writer,
+                McpHttpResponse(
+                    400,
+                    {
+                        "jsonrpc": "2.0",
+                        "id": None,
+                        "error": {"code": -32700, "message": "Invalid JSON payload"},
+                    },
+                ),
+            )
+            return
+        if not isinstance(request, dict):
+            await self._write_mcp_http_response(
+                writer,
+                McpHttpResponse(
+                    400,
+                    {
+                        "jsonrpc": "2.0",
+                        "id": None,
+                        "error": {
+                            "code": -32600,
+                            "message": "MCP request must be one JSON object",
+                        },
+                    },
+                ),
+            )
+            return
+        request_id = request.get("id")
+        record_protocol_correlation(
+            protocol="mcp",
+            request_id=(
+                str(request_id)
+                if isinstance(request_id, (str, int))
+                and not isinstance(request_id, bool)
+                else ""
+            ),
+        )
+        try:
+            async with self._semaphore:
+                response = await asyncio.to_thread(
+                    self.mcp.handle_http,
+                    request,
+                    headers,
+                )
+        except Exception:
+            response = McpHttpResponse(
+                500,
+                {
+                    "jsonrpc": "2.0",
+                    "id": request_id,
+                    "error": {"code": -32603, "message": "Internal error"},
+                },
+            )
+        await self._write_mcp_http_response(writer, response)
+
     @staticmethod
     def _a2a_error(request_id: Any, code: int, message: str) -> dict[str, Any]:
         return {
@@ -2048,6 +2176,40 @@ class CommunicationService:
         ):
             is_a2a_rest = path == "/a2a/rest" or path.startswith("/a2a/rest/")
             try:
+                if path == "/mcp":
+                    http_enabled = self.runtime.config.mcp.enabled and (
+                        self.runtime.config.mcp.transport
+                        in {"streamable_http", "both"}
+                    )
+                    if not http_enabled:
+                        await self._write_http_response(
+                            writer,
+                            status=404,
+                            reason="Not Found",
+                            body=b'{"error":"not found"}',
+                        )
+                    else:
+                        origin_response = self.mcp.http_origin_preflight(headers)
+                        if origin_response is not None:
+                            await self._write_mcp_http_response(
+                                writer, origin_response
+                            )
+                            return
+                    if http_enabled and method != "POST":
+                        await self._write_http_response(
+                            writer,
+                            status=405,
+                            reason="Method Not Allowed",
+                            body=b'{"error":"MCP Streamable HTTP accepts POST only"}',
+                            headers={"Allow": "POST"},
+                        )
+                    elif http_enabled:
+                        await self._handle_mcp_http(
+                            headers=headers,
+                            reader=reader,
+                            writer=writer,
+                        )
+                    return
                 if method == "GET" and path == "/.well-known/agent-card.json":
                     body = json.dumps(self._a2a_agent_card(), sort_keys=True).encode()
                     etag = '"' + hashlib.sha256(body).hexdigest() + '"'
@@ -2282,7 +2444,11 @@ class CommunicationService:
     async def handle_client(self, reader: asyncio.StreamReader, writer: asyncio.StreamWriter) -> None:
         try:
             line = await reader.readline()
-            if line.startswith((b"GET ", b"POST ")):
+            request_parts = line.rstrip(b"\r\n").split(b" ")
+            if (
+                len(request_parts) == 3
+                and request_parts[2] in {b"HTTP/1.0", b"HTTP/1.1"}
+            ):
                 await self._handle_http_client(line, reader, writer)
                 return
             while line and not reader.at_eof():

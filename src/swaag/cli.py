@@ -492,6 +492,8 @@ def main(argv: Sequence[str] | None = None) -> int:
         if args.command == "mcp-stdio":
             if not runtime.config.mcp.enabled:
                 raise ValueError("MCP is disabled in configuration")
+            if runtime.config.mcp.transport not in {"stdio", "both"}:
+                raise ValueError("MCP stdio transport is disabled in configuration")
             McpAdapter(runtime).serve_stdio()
             return 0
         if args.command == "communication":

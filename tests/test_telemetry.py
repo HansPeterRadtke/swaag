@@ -291,6 +291,34 @@ def test_a2a_rest_http_telemetry_uses_low_cardinality_routes() -> None:
     tracer_provider.shutdown()
 
 
+def test_mcp_http_telemetry_uses_protocol_route_and_standard_methods() -> None:
+    telemetry, exporter, metric_reader, tracer_provider, meter_provider = (
+        _telemetry_fixture()
+    )
+
+    with telemetry.http_server_request(method="POST", path="/mcp"):
+        pass
+    with telemetry.http_server_request(method="DELETE", path="/mcp"):
+        pass
+
+    tracer_provider.force_flush()
+    spans = exporter.get_finished_spans()
+    assert [span.name for span in spans] == ["POST /mcp", "DELETE /mcp"]
+    assert all(span.attributes["http.route"] == "/mcp" for span in spans)
+    assert all(span.attributes["swaag.protocol.name"] == "mcp" for span in spans)
+    assert [span.attributes["http.request.method"] for span in spans] == [
+        "POST",
+        "DELETE",
+    ]
+    points = _collect_metrics(metric_reader)[
+        "http.server.request.duration"
+    ].data.data_points
+    assert {point.attributes["http.route"] for point in points} == {"/mcp"}
+
+    meter_provider.shutdown()
+    tracer_provider.shutdown()
+
+
 def test_remote_trace_crosses_protocol_worker_and_model_boundaries(make_config) -> None:
     telemetry, exporter, _reader, tracer_provider, meter_provider = (
         _telemetry_fixture()

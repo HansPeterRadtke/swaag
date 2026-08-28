@@ -351,6 +351,7 @@ all2text_command = "all2text"
 # -----------------------------------------------------------
 [mcp]
 enabled = false
+# "stdio", "streamable_http" on the loopback communication service, or "both".
 transport = "stdio"
 
 # -----------------------------------------------------------

@@ -663,8 +663,10 @@ def _coerce_config(data: dict[str, Any]) -> AgentConfig:
         raise ValueError("communication.port must be between 1 and 65535")
     if communication.poll_seconds <= 0:
         raise ValueError("communication.poll_seconds must be positive")
-    if mcp.transport not in {"stdio"}:
-        raise ValueError("mcp.transport must be stdio")
+    if mcp.transport not in {"stdio", "streamable_http", "both"}:
+        raise ValueError(
+            "mcp.transport must be stdio, streamable_http, or both"
+        )
 
     return AgentConfig(
         model=model,

@@ -6,6 +6,8 @@ Swaag treats model output, user-provided attachments, retrieved pages, and tool 
 
 The communication service has no network authentication. It therefore fails closed unless its bind host is an explicit IPv4/IPv6 loopback address or `localhost`; wildcard, LAN, VPN, DNS, and public binds are rejected. The deployed systemd unit remains localhost-only. A reverse proxy must not expose this listener until a separately designed authenticated authorization boundary exists.
 
+MCP Streamable HTTP is separately disabled unless `mcp.enabled` selects `streamable_http` or `both`. Its single `/mcp` endpoint accepts POST only, rejects non-loopback browser origins before reading the body, requires both response media types, bounds the body, and verifies protocol version, method, name, and declared primitive routing headers against the parsed request before dispatch. It does not mint protocol sessions. These checks reduce local DNS-rebinding and confused-deputy risk but do not authenticate another same-host process.
+
 Runtime state belongs under the configured sessions root. Session-scoped filesystem identifiers accept only bounded ASCII storage IDs, and their resolved paths must remain below that root. This check covers active history, archived shards, exact artifacts, and persistent terminals. User-facing session names remain data and are never interpreted as paths. Attachment and artifact locators are integrity-checked before reads.
 
 ## Capability boundary

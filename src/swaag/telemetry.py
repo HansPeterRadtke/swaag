@@ -129,6 +129,7 @@ def _http_route(path: str) -> str:
         "/.well-known/agent-card.json",
         "/a2a/v1",
         "/ag-ui",
+        "/mcp",
         "/a2a/rest/message:send",
         "/a2a/rest/message:stream",
         "/a2a/rest/tasks",
@@ -367,13 +368,28 @@ class OperationalTelemetry:
     ) -> TelemetryOperation:
         normalized_method = str(method).upper()
         known_method = (
-            normalized_method if normalized_method in {"GET", "POST"} else "_OTHER"
+            normalized_method
+            if normalized_method
+            in {
+                "CONNECT",
+                "DELETE",
+                "GET",
+                "HEAD",
+                "OPTIONS",
+                "PATCH",
+                "POST",
+                "PUT",
+                "TRACE",
+            }
+            else "_OTHER"
         )
         target_path = urlsplit(str(path)).path
         route = _http_route(target_path)
         protocol_name = (
             "ag_ui"
             if target_path == "/ag-ui"
+            else "mcp"
+            if target_path == "/mcp"
             else "a2a"
             if target_path == "/a2a/v1" or target_path.startswith("/a2a/rest/")
             else "discovery"

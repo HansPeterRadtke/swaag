@@ -45,8 +45,12 @@ def test_collector_installer_is_valid_and_checksum_pinned() -> None:
 def test_mcp_sdk_conformance_assets_are_pinned_and_parse() -> None:
     installer = ROOT / "scripts" / "install-mcp-conformance-env.sh"
     probe = ROOT / "scripts" / "mcp-sdk-conformance.mjs"
+    http_probe = ROOT / "scripts" / "mcp-http-sdk-conformance.mjs"
+    http_runner = ROOT / "scripts" / "run-mcp-http-sdk-conformance.py"
     installer_source = installer.read_text(encoding="utf-8")
     probe_source = probe.read_text(encoding="utf-8")
+    http_probe_source = http_probe.read_text(encoding="utf-8")
+    http_runner_source = http_runner.read_text(encoding="utf-8")
 
     shell_check = subprocess.run(
         ["bash", "-n", str(installer)],
@@ -60,15 +64,33 @@ def test_mcp_sdk_conformance_assets_are_pinned_and_parse() -> None:
         capture_output=True,
         check=False,
     )
+    http_node_check = subprocess.run(
+        ["node", "--check", str(http_probe)],
+        text=True,
+        capture_output=True,
+        check=False,
+    )
+    http_python_check = subprocess.run(
+        ["python", "-m", "py_compile", str(http_runner)],
+        text=True,
+        capture_output=True,
+        check=False,
+    )
 
     assert shell_check.returncode == 0, shell_check.stderr
     assert node_check.returncode == 0, node_check.stderr
+    assert http_node_check.returncode == 0, http_node_check.stderr
+    assert http_python_check.returncode == 0, http_python_check.stderr
     assert 'VERSION="2.0.0"' in installer_source
     assert "@modelcontextprotocol/client@${VERSION}" in installer_source
     assert "@modelcontextprotocol/core@${VERSION}" in installer_source
-    assert "mode: { pin: \"2026-07-28\" }" in probe_source
+    assert 'mode: { pin: "2026-07-28" }' in probe_source
     assert "client.listTools" in probe_source
     assert "client.callTool" in probe_source
+    assert "new StreamableHTTPClientTransport" in http_probe_source
+    assert '"x-mcp-header"' in http_probe_source
+    assert "_NoInferenceClient" in http_runner_source
+    assert "model_client=no_inference" in http_runner_source
 
 
 def test_a2a_sdk_conformance_assets_are_pinned_and_parse() -> None:
