@@ -1287,9 +1287,14 @@ class HistoryStore:
         archived_entry = archive_store.resolve(session_id) if not self.history_path(session_id).exists() else None
         if archived_entry is not None:
             query = " ".join(part for part in [query_text.strip(), topic_hint.strip()] if part.strip())
-            hits = archive_store.search(session_id, query, limit=max(max_results * 4, 16))
+            candidate_limit = max(max_results * 4, 16)
+            hits = archive_store.search(session_id, query, limit=candidate_limit + 1)
+            candidate_limit_reached = len(hits) > candidate_limit
+            hits = hits[:candidate_limit]
             if end_sequence is not None:
                 hits = [item for item in hits if int(item["sequence"]) <= end_sequence]
+            ranking_candidate_count = len(hits)
+            result_limit_reached = candidate_limit_reached or len(hits) > max_results
             hits = hits[:max_results]
             sequences = {int(item["sequence"]) for item in hits}
             events = {event.sequence: event for event in archive_store.read_events(session_id) if event.sequence in sequences}
@@ -1315,6 +1320,11 @@ class HistoryStore:
                 "match_count": len(matches),
                 "matches": matches,
                 "search_backend": "archive_fts5",
+                "result_limit": max_results,
+                "result_limit_reached": result_limit_reached,
+                "ranking_candidate_count": ranking_candidate_count,
+                "ranking_candidate_limit": candidate_limit,
+                "ranking_candidate_limit_reached": candidate_limit_reached,
             }
         self._ensure_session_indexed(session_id)
         query = " ".join(part for part in [query_text.strip(), topic_hint.strip()] if part.strip())
@@ -1340,6 +1350,8 @@ class HistoryStore:
             "agent_status",
         }
         candidates: list[HistoryEvent] = []
+        candidate_limit = max(max_results * 8, 32)
+        candidate_limit_reached = False
         if tokens:
             fts_query = " OR ".join(f'"{token.replace(chr(34), chr(34) * 2)}"' for token in dict.fromkeys(tokens))
             try:
@@ -1356,8 +1368,10 @@ class HistoryStore:
                         sql += " AND e.sequence<=?"
                         params.append(end_sequence)
                     sql += " ORDER BY bm25(events_fts), e.sequence DESC LIMIT ?"
-                    params.append(max(max_results * 8, 32))
+                    params.append(candidate_limit + 1)
                     rows = connection.execute(sql, params).fetchall()
+                candidate_limit_reached = len(rows) > candidate_limit
+                rows = rows[:candidate_limit]
                 candidates = [
                     HistoryEvent(
                         id=str(row["event_id"]),
@@ -1394,6 +1408,7 @@ class HistoryStore:
             preview = stable_json_dumps(event.payload)
             ranked.append((score, event, preview[:preview_chars]))
         ranked.sort(key=lambda item: (item[0], item[1].sequence), reverse=True)
+        result_limit_reached = candidate_limit_reached or len(ranked) > max_results
         matches = [
             {
                 "sequence": event.sequence,
@@ -1413,6 +1428,11 @@ class HistoryStore:
             "match_count": len(matches),
             "matches": matches,
             "search_backend": "sqlite_fts5" if tokens else "exact_replay",
+            "result_limit": max_results,
+            "result_limit_reached": result_limit_reached,
+            "ranking_candidate_count": len(candidates),
+            "ranking_candidate_limit": candidate_limit if tokens else None,
+            "ranking_candidate_limit_reached": candidate_limit_reached,
         }
 
     def _state_payload(self, state: SessionState) -> dict[str, Any]:

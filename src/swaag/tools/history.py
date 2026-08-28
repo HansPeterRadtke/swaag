@@ -193,8 +193,8 @@ def _project_history_text(
 class HistorySearchTool(Tool):
     repeated_observation_is_redundant = True
     name = "history_search"
-    description = "Search durable exact agent history for earlier user messages, tool calls/results, decisions, and events. Returns ranked previews and sequence numbers; use history_window for exact surrounding events."
-    usage_guidance = "Use when current context or summaries may omit an older exact detail. For the active session, pass session_ref=null (or use the exact active session_id/name from environment state); never invent a session label. Search first, then use the exact session_id and sequence returned by history_search with history_window. Optional semantic_matches are only candidate references from a derived embedding index; retrieve the exact event before relying on them."
+    description = "Search durable exact agent history for earlier user messages, tool calls/results, decisions, and events. Returns explicitly bounded ranked previews and sequence numbers; use history_window for exact surrounding events."
+    usage_guidance = "Use when current context or summaries may omit an older exact detail. For the active session, pass session_ref=null (or use the exact active session_id/name from environment state); never invent a session label. Search first, then use the exact session_id and sequence returned by history_search with history_window. Ranked search is not exhaustive when result_limit_reached or ranking_candidate_limit_reached is true. Optional semantic_matches are only bounded candidate references from a derived embedding index; retrieve the exact event before relying on them."
     kind = "pure"
     input_schema = {
         "type": "object",
@@ -265,8 +265,10 @@ class HistorySearchTool(Tool):
             for item in result["matches"]
         ]
         semantic_matches: list[dict[str, Any]] = []
-        semantic_index_error = ""
         embedding_cfg = context.config.embedding_index
+        semantic_result_limit = int(embedding_cfg.max_results)
+        semantic_result_limit_reached = False
+        semantic_index_error = ""
         if embedding_cfg.enabled and result["search_backend"] != "archive_fts5":
             try:
                 provider = OpenAICompatibleEmbeddingProvider(
@@ -288,13 +290,15 @@ class HistorySearchTool(Tool):
                             index.upsert(result["session_id"], event.sequence, field, value)
                 if highest > indexed_through:
                     index.mark_complete_through(result["session_id"], highest)
+                indexed_matches = index.search(
+                    " ".join(part for part in [validated_input["query"], validated_input["topic_hint"]] if part),
+                    session_id=result["session_id"],
+                    limit=semantic_result_limit + 1,
+                )
+                semantic_result_limit_reached = len(indexed_matches) > semantic_result_limit
                 semantic_matches = [
                     {"sequence": item.sequence, "field": item.field, "score": item.score}
-                    for item in index.search(
-                        " ".join(part for part in [validated_input["query"], validated_input["topic_hint"]] if part),
-                        session_id=result["session_id"],
-                        limit=embedding_cfg.max_results,
-                    )
+                    for item in indexed_matches[:semantic_result_limit]
                 ]
             except Exception as exc:
                 semantic_index_error = f"{type(exc).__name__}: {exc}"
@@ -306,7 +310,14 @@ class HistorySearchTool(Tool):
             "topic_hint": result["topic_hint"],
             "match_count": len(matches),
             "matches": matches,
+            "result_limit": result["result_limit"],
+            "result_limit_reached": result["result_limit_reached"],
+            "ranking_candidate_count": result["ranking_candidate_count"],
+            "ranking_candidate_limit": result["ranking_candidate_limit"],
+            "ranking_candidate_limit_reached": result["ranking_candidate_limit_reached"],
             "semantic_matches": semantic_matches,
+            "semantic_result_limit": semantic_result_limit,
+            "semantic_result_limit_reached": semantic_result_limit_reached,
             "semantic_index_error": semantic_index_error,
             "source_event_references": [
                 {
@@ -339,8 +350,8 @@ class HistorySearchTool(Tool):
 class HistoryWindowTool(Tool):
     repeated_observation_is_redundant = True
     name = "history_window"
-    description = "Read an exact bounded window of durable history events by sequence number. This is the authoritative retrieval path after history_search identifies relevant events."
-    usage_guidance = "Use small windows around relevant sequence numbers. For the active session, pass session_ref=null; after history_search, prefer the exact session_id it returned. Returned payloads are exact durable event data, not summaries."
+    description = "Read an exactly resumable bounded window of durable history events by sequence number. This is the authoritative retrieval path after history_search identifies relevant events."
+    usage_guidance = "Use small windows around relevant sequence numbers. For the active session, pass session_ref=null; after history_search, prefer the exact session_id it returned. Returned payloads are exact durable event data, not summaries. Continue at next_sequence until finished is true when complete traversal is required."
     kind = "pure"
     input_schema = {
         "type": "object",
@@ -375,16 +386,20 @@ class HistoryWindowTool(Tool):
         session_id = store.resolve_session_ref(session_ref, latest_if_none=False)
         if session_id is None:
             raise ToolValidationError(f"Unknown session: {session_ref}")
-        events = store.read_history_window(
+        fetched = store.read_history_window(
             session_id,
             start_sequence=validated_input["start_sequence"],
-            limit=validated_input["limit"],
+            limit=validated_input["limit"] + 1,
         )
+        has_more = len(fetched) > validated_input["limit"]
+        events = fetched[: validated_input["limit"]]
         output = {
             "session_id": session_id,
             "start_sequence": validated_input["start_sequence"],
             "event_count": len(events),
             "events": [to_jsonable(asdict(event)) for event in events],
+            "next_sequence": events[-1].sequence + 1 if has_more and events else None,
+            "finished": not has_more,
             "source_event_references": [
                 {
                     "session_id": event.session_id,

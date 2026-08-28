@@ -62,6 +62,8 @@ def test_history_search_tool_finds_ranked_exact_history(make_config, tmp_path: P
     assert invocation.validated_input["query"] == '"Blue Heron"'
     assert result.output["session_id"] == state.session_id
     assert result.output["match_count"] >= 1
+    assert result.output["result_limit"] == 5
+    assert result.output["result_limit_reached"] is False
     assert any("Blue Heron" in item["preview"] for item in result.output["matches"])
     assert all("payload" not in item for item in result.output["matches"])
     assert all(item["hash"] for item in result.output["matches"])
@@ -93,6 +95,9 @@ def test_history_search_tool_caps_results_to_config(make_config, tmp_path: Path)
     _, result = ToolRegistry().dispatch("history_search", {"query": "needle", "max_results": 99}, config, state)
 
     assert result.output["match_count"] == 2
+    assert result.output["result_limit"] == 2
+    assert result.output["result_limit_reached"] is True
+    assert result.output["ranking_candidate_limit_reached"] is False
 
 
 def test_history_search_validation_rejects_empty_query(make_config) -> None:
@@ -117,8 +122,61 @@ def test_history_window_returns_exact_events(make_config, tmp_path: Path) -> Non
     assert [event["sequence"] for event in events] == [2, 3]
     assert events[0]["payload"]["message"]["content"] == "Deployment codename is Blue Heron."
     assert events[1]["payload"]["output"]["text"] == "artifact-marker-73"
+    assert result.output["finished"] is False
+    assert result.output["next_sequence"] == 4
     assert all(item["hash"] for item in result.output["source_event_references"])
     assert [event.event_type for event in result.generated_events] == ["history_window_read"]
+
+
+def test_history_window_reports_complete_final_page(make_config, tmp_path: Path) -> None:
+    config = make_config()
+    config.sessions.root = tmp_path / "sessions"
+    _store, state = _state_with_history(config)
+
+    _, result = ToolRegistry().dispatch(
+        "history_window",
+        {"start_sequence": 3, "limit": 20},
+        config,
+        state,
+    )
+
+    assert result.output["event_count"] == 2
+    assert result.output["finished"] is True
+    assert result.output["next_sequence"] is None
+
+
+def test_history_search_discloses_candidate_pool_limit(make_config, tmp_path: Path) -> None:
+    config = make_config()
+    config.sessions.root = tmp_path / "sessions"
+    config.history_search.max_results = 1
+    store, state = _state_with_history(config)
+    for index in range(40):
+        store.record_event(
+            state,
+            "message_added",
+            {
+                "message": {
+                    "role": "user",
+                    "content": f"common-history-term {index}",
+                    "created_at": utc_now_iso(),
+                    "name": None,
+                    "metadata": {},
+                }
+            },
+        )
+
+    _, result = ToolRegistry().dispatch(
+        "history_search",
+        {"query": "common-history-term", "max_results": 1},
+        config,
+        state,
+    )
+
+    assert result.output["match_count"] == 1
+    assert result.output["result_limit_reached"] is True
+    assert result.output["ranking_candidate_count"] == 32
+    assert result.output["ranking_candidate_limit"] == 32
+    assert result.output["ranking_candidate_limit_reached"] is True
 
 
 def test_history_window_can_read_named_other_session(make_config, tmp_path: Path) -> None:

@@ -316,8 +316,15 @@ def _run_history(
             topic_hint=topic,
         )
         if max_results > 0:
-            result["matches"] = result.get("matches", [])[:max_results]
+            matches = result.get("matches", [])
+            if len(matches) > max_results:
+                result["result_limit_reached"] = True
+            result["matches"] = matches[:max_results]
             result["match_count"] = len(result["matches"])
+            result["result_limit"] = min(
+                int(result.get("result_limit", max_results)),
+                max_results,
+            )
         print(stable_json_dumps(result, indent=2))
         return 0
     raise SystemExit(f"Unhandled history mode: {mode}")
