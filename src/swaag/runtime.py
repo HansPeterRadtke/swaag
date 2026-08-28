@@ -1301,8 +1301,12 @@ class AgentRuntime:
         )
         projected_messages = list(state.messages)
         has_derived_history = authoritative_messages != projected_messages
+        history_messages = (
+            authoritative_messages if has_derived_history else projected_messages
+        )
+        history_source = "authoritative_message_events"
         selection_assembly = self.prompts.build_agent_action_prompt(
-            authoritative_messages if has_derived_history else projected_messages,
+            history_messages,
             tool_specs,
             original_request=original_request,
             pending_user_messages=pending_messages,
@@ -1354,7 +1358,7 @@ class AgentRuntime:
                     "history_source": history_source,
                     "candidate_only": candidate_only,
                     "authoritative_message_count": len(authoritative_messages),
-                    "projected_message_count": len(state.messages),
+                    "projected_message_count": len(history_messages),
                 },
             )
             self.history.record_event(
@@ -1378,37 +1382,7 @@ class AgentRuntime:
                 projections=runtime_context_projections,
                 selected_notes=selected_notes,
             )
-            if has_derived_history:
-                authoritative_assembly = build_action_assembly(
-                    authoritative_messages,
-                    context_components,
-                )
-                authoritative_compilation = self._compile_context(
-                    state,
-                    authoritative_assembly,
-                    contract,
-                    minimum_output_tokens=effective_minimum,
-                )
-                record_action_compilation(
-                    authoritative_compilation,
-                    history_source="authoritative_message_events",
-                    candidate_only=not authoritative_compilation.report.fits,
-                )
-                if authoritative_compilation.report.fits:
-                    self._record_prompt_built(
-                        state,
-                        authoritative_assembly,
-                        contract,
-                        authoritative_compilation.report,
-                    )
-                    return PreparedCall(
-                        assembly=authoritative_assembly,
-                        report=authoritative_compilation.report,
-                        prompt_mode="standard",
-                        contract=contract,
-                    )
-
-            assembly = build_action_assembly(list(state.messages), context_components)
+            assembly = build_action_assembly(history_messages, context_components)
             compilation = self._compile_context(
                 state,
                 assembly,
@@ -1419,12 +1393,8 @@ class AgentRuntime:
             last_report = report
             record_action_compilation(
                 compilation,
-                history_source=(
-                    "derived_history_projection"
-                    if has_derived_history
-                    else "authoritative_message_events"
-                ),
-                candidate_only=False,
+                history_source=history_source,
+                candidate_only=not report.fits,
             )
             if report.fits:
                 self._record_prompt_built(state, assembly, contract, report)
@@ -1442,6 +1412,7 @@ class AgentRuntime:
                 assembly=assembly,
                 compilation=compilation,
                 existing_projections=tool_result_projections,
+                messages=history_messages,
             )
             if projected is not None:
                 sequence, projection = projected
@@ -1466,11 +1437,21 @@ class AgentRuntime:
                 source_name, projection = projected_context
                 runtime_context_projections[source_name] = projection
                 continue
-            if not self._compact_once(
-                state,
-                required_recovery_tokens=compilation.overflow_tokens,
-            ):
+            if history_source == "authoritative_message_events" and has_derived_history:
+                compacted = self._compact_once(
+                    state,
+                    required_recovery_tokens=compilation.overflow_tokens,
+                    authoritative_messages=authoritative_messages,
+                )
+            else:
+                compacted = self._compact_once(
+                    state,
+                    required_recovery_tokens=compilation.overflow_tokens,
+                )
+            if not compacted:
                 break
+            history_messages = list(state.messages)
+            history_source = "dynamic_history_projection"
 
         recovered = self._recover_prompt_instruction_overflow(
             state,
@@ -1489,14 +1470,10 @@ class AgentRuntime:
                     "accounting": recovered.accounting(),
                     "cap_error": "",
                     "prompt_instruction_projection": True,
-                    "history_source": (
-                        "derived_history_projection"
-                        if has_derived_history
-                        else "authoritative_message_events"
-                    ),
+                    "history_source": history_source,
                     "candidate_only": False,
                     "authoritative_message_count": len(authoritative_messages),
-                    "projected_message_count": len(state.messages),
+                    "projected_message_count": len(history_messages),
                 },
             )
             self.history.record_event(
@@ -1508,11 +1485,7 @@ class AgentRuntime:
                     "budget_report": asdict(recovered.report),
                     "cap_error": "",
                     "prompt_instruction_projection": True,
-                    "history_source": (
-                        "derived_history_projection"
-                        if has_derived_history
-                        else "authoritative_message_events"
-                    ),
+                    "history_source": history_source,
                     "candidate_only": False,
                 },
             )
@@ -3349,13 +3322,15 @@ class AgentRuntime:
         assembly: PromptAssembly,
         compilation: ContextCompilation,
         existing_projections: dict[int, str],
+        messages: list[Message] | None = None,
     ) -> tuple[int, str] | None:
         overflow = compilation.overflow_tokens
         if overflow <= 0:
             return None
         report_by_name = {item.name: item for item in compilation.report.breakdown}
         candidates: list[tuple[int, int, Message]] = []
-        for message in state.messages:
+        source_messages = state.messages if messages is None else messages
+        for message in source_messages:
             if message.role != "tool":
                 continue
             sequence = message.metadata.get("source_event_sequence")
@@ -5359,18 +5334,59 @@ class AgentRuntime:
             int(replacement_tokens),
         )
 
+    def _record_history_reduction(
+        self,
+        state: SessionState,
+        *,
+        event_payload: dict[str, Any],
+        complete_source_messages: list[Message],
+        reproject_authoritative: bool,
+        hierarchical: bool,
+    ) -> None:
+        self.history.record_event(state, "summary_created", event_payload)
+        if reproject_authoritative:
+            source_count = int(event_payload["source_message_count"])
+            projected_messages = [
+                Message(**dict(event_payload["summary_message"])),
+                *complete_source_messages[source_count:],
+            ]
+            self.history.record_event(
+                state,
+                "history_reprojected",
+                {
+                    **event_payload,
+                    "projection_source": "authoritative_message_events",
+                    "projected_messages": [
+                        asdict(message) for message in projected_messages
+                    ],
+                },
+            )
+        else:
+            self.history.record_event(state, "history_compressed", event_payload)
+        self.telemetry.record_history_compaction(
+            source_message_count=int(event_payload["source_message_count"]),
+            hierarchical=hierarchical,
+        )
+
     def _compact_once(
         self,
         state: SessionState,
         *,
         required_recovery_tokens: int = 1,
+        authoritative_messages: list[Message] | None = None,
     ) -> bool:
-        if len(state.messages) <= 2:
+        complete_source_messages = list(
+            state.messages
+            if authoritative_messages is None
+            else authoritative_messages
+        )
+        reproject_authoritative = authoritative_messages is not None
+        if len(complete_source_messages) <= 2:
             return False
         # Keep one message outside the candidate and require at least one exact
         # source to be replaced. Semantic retention within the candidate belongs
         # to the summary model, not a configured age cutoff.
-        maximum_source = len(state.messages) - 1
+        maximum_source = len(complete_source_messages) - 1
         if maximum_source <= 0:
             return False
 
@@ -5380,7 +5396,7 @@ class AgentRuntime:
         required_recovery = max(1, int(required_recovery_tokens))
         hierarchical_target: tuple[int, int] | None = None
         for source_count in range(1, maximum_source + 1):
-            source_messages = state.messages[:source_count]
+            source_messages = complete_source_messages[:source_count]
             target = self._history_compaction_target(
                 state,
                 source_messages,
@@ -5479,14 +5495,15 @@ class AgentRuntime:
                 "actual_replacement_tokens": replacement_tokens,
                 "actual_recovered_tokens": recovered_tokens,
             }
-            self.history.record_event(state, "summary_created", event_payload)
-            self.history.record_event(state, "history_compressed", event_payload)
-            self.telemetry.record_history_compaction(
-                source_message_count=effective_source_count,
+            self._record_history_reduction(
+                state,
+                event_payload=event_payload,
+                complete_source_messages=complete_source_messages,
+                reproject_authoritative=reproject_authoritative,
                 hierarchical=False,
             )
             return True
-        source_messages = state.messages[:1]
+        source_messages = complete_source_messages[:1]
         if source_messages and hierarchical_target is not None:
             target_summary_tokens, estimated_source_tokens = hierarchical_target
             summary_text, report = self._summarize_oversized_message(
@@ -5526,10 +5543,11 @@ class AgentRuntime:
                 "actual_replacement_tokens": replacement_tokens,
                 "actual_recovered_tokens": recovered_tokens,
             }
-            self.history.record_event(state, "summary_created", event_payload)
-            self.history.record_event(state, "history_compressed", event_payload)
-            self.telemetry.record_history_compaction(
-                source_message_count=1,
+            self._record_history_reduction(
+                state,
+                event_payload=event_payload,
+                complete_source_messages=complete_source_messages,
+                reproject_authoritative=reproject_authoritative,
                 hierarchical=True,
             )
             return True

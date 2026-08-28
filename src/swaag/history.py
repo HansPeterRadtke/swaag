@@ -57,6 +57,7 @@ _STATEFUL_REBUILD_EVENT_TYPES = frozenset(
         "message_added",
         "history_compacted",
         "history_compressed",
+        "history_reprojected",
         "turn_finished",
         "deferred_task_queued",
         "deferred_task_consumed",
@@ -1512,6 +1513,27 @@ class HistoryStore:
             summary_message.metadata.setdefault("projection_event_type", event.event_type)
             summary_message.metadata.setdefault("projection_session_id", event.session_id)
             state.messages = [summary_message, *state.messages[source_count:]]
+            state.compaction_count += 1
+            return
+        if event.event_type == "history_reprojected":
+            projected_messages: list[Message] = []
+            for index, raw_message in enumerate(payload["projected_messages"]):
+                message_payload = dict(raw_message)
+                message_metadata = dict(message_payload.get("metadata", {}))
+                if index == 0 and message_payload.get("role") == "summary":
+                    message_metadata.setdefault(
+                        "projection_event_sequence", event.sequence
+                    )
+                    message_metadata.setdefault("projection_event_hash", event.hash)
+                    message_metadata.setdefault(
+                        "projection_event_type", event.event_type
+                    )
+                    message_metadata.setdefault(
+                        "projection_session_id", event.session_id
+                    )
+                message_payload["metadata"] = message_metadata
+                projected_messages.append(Message(**message_payload))
+            state.messages = projected_messages
             state.compaction_count += 1
             return
         if event.event_type == "turn_finished":

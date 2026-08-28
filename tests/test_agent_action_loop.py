@@ -357,7 +357,20 @@ def test_action_uses_derived_history_only_after_measured_raw_overflow(
 ) -> None:
     marker = "oversized-authoritative-marker-739"
     client = FakeModelClient(
-        [json.dumps({"summary": "Compact derived view.", "preserve_recent_messages": 0})]
+        [
+            json.dumps(
+                {"summary": "Compact derived view.", "preserve_recent_messages": 0}
+            ),
+            *[
+                json.dumps(
+                    {
+                        "summary": "Fresh projection for this action.",
+                        "preserve_recent_messages": 0,
+                    }
+                )
+                for _ in range(32)
+            ],
+        ]
     )
     config = make_config(model__context_limit=32_000)
     runtime = AgentRuntime(config, model_client=client)
@@ -386,6 +399,8 @@ def test_action_uses_derived_history_only_after_measured_raw_overflow(
     )
 
     assert marker not in prepared.assembly.prompt_text
+    assert "Fresh projection for this action." in prepared.assembly.prompt_text
+    assert "Compact derived view." not in prepared.assembly.prompt_text
     action_compilations = [
         event
         for event in runtime.history.read_history(state.session_id)
@@ -398,9 +413,26 @@ def test_action_uses_derived_history_only_after_measured_raw_overflow(
     assert action_compilations[-2].payload["candidate_only"] is True
     assert action_compilations[-2].payload["accounting"]["overflow_tokens"] > 0
     assert action_compilations[-1].payload["history_source"] == (
-        "derived_history_projection"
+        "dynamic_history_projection"
     )
     assert action_compilations[-1].payload["candidate_only"] is False
+    reprojected = [
+        event
+        for event in runtime.history.read_history(state.session_id)
+        if event.event_type == "history_reprojected"
+    ]
+    assert len(reprojected) == 1
+    assert reprojected[0].payload["projection_source"] == (
+        "authoritative_message_events"
+    )
+    assert reprojected[0].payload["required_recovery_tokens"] == (
+        action_compilations[-2].payload["accounting"]["overflow_tokens"]
+    )
+    rebuilt = runtime.history.rebuild_from_history(
+        state.session_id,
+        prefer_checkpoint=False,
+    )
+    assert rebuilt.messages == state.messages
 
 
 def test_history_summary_recompiles_after_output_starvation(make_config) -> None:

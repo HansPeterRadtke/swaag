@@ -46,6 +46,7 @@ ALLOWED_EVENT_TYPES = frozenset(
         "summary_created",
         "history_compacted",
         "history_compressed",
+        "history_reprojected",
         "history_retrieved",
         "history_window_read",
         "history_analyzed",
@@ -469,6 +470,15 @@ REQUIRED_PAYLOAD_KEYS: dict[str, frozenset[str]] = {
     "summary_created": frozenset({"source_message_count", "summary_message", "summary_budget_report"}),
     "history_compacted": frozenset({"source_message_count", "summary_message", "summary_budget_report"}),
     "history_compressed": frozenset({"source_message_count", "summary_message", "summary_budget_report"}),
+    "history_reprojected": frozenset(
+        {
+            "source_message_count",
+            "summary_message",
+            "summary_budget_report",
+            "projected_messages",
+            "projection_source",
+        }
+    ),
     "history_retrieved": frozenset({"session_id", "query", "match_count", "sequences"}),
     "history_analyzed": frozenset({"session_id", "query", "source_sequences", "candidate_root_cause_count"}),
     "history_window_read": frozenset({"session_id", "start_sequence", "event_count", "sequences"}),
