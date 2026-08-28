@@ -108,13 +108,14 @@ class AgentEnvironment:
             ],
         )
 
-    def search_in_file(self, *, path_text: str, pattern: str, regex: bool = False, ignore_case: bool = False, max_matches: int = 50) -> ToolExecutionResult:
-        path, matches = self.filesystem.search_in_file(
+    def search_in_file(self, *, path_text: str, pattern: str, regex: bool = False, ignore_case: bool = False, start_index: int = 0, max_matches: int = 50) -> ToolExecutionResult:
+        path, matches, finished = self.filesystem.search_in_file(
             path_text,
             cwd=self.current_cwd,
             pattern=pattern,
             regex=regex,
             ignore_case=ignore_case,
+            start_index=start_index,
             max_matches=max_matches,
         )
         rel = self.filesystem.relative_path(path)
@@ -126,6 +127,10 @@ class AgentEnvironment:
             "ignore_case": ignore_case,
             "matches": matches,
             "match_count": len(matches),
+            "start_index": start_index,
+            "next_index": start_index + len(matches),
+            "finished": finished,
+            "truncated": not finished,
         }
         return ToolExecutionResult(
             tool_name="search_in_file",
@@ -137,13 +142,14 @@ class AgentEnvironment:
             ],
         )
 
-    def search_repo(self, *, pattern: str, path_text: str = ".", regex: bool = False, ignore_case: bool = False, max_matches: int = 100) -> ToolExecutionResult:
-        matches = self.filesystem.search_repo(
+    def search_repo(self, *, pattern: str, path_text: str = ".", regex: bool = False, ignore_case: bool = False, start_index: int = 0, max_matches: int = 100) -> ToolExecutionResult:
+        matches, finished = self.filesystem.search_repo(
             pattern=pattern,
             path_text=path_text,
             cwd=self.current_cwd,
             regex=regex,
             ignore_case=ignore_case,
+            start_index=start_index,
             max_matches=max_matches,
         )
         output = {
@@ -154,6 +160,10 @@ class AgentEnvironment:
             "matches": matches,
             "match_count": len(matches),
             "matched_files": sorted({str(item["relative_path"]) for item in matches}),
+            "start_index": start_index,
+            "next_index": start_index + len(matches),
+            "finished": finished,
+            "truncated": not finished,
         }
         return ToolExecutionResult(
             tool_name="search_repo",

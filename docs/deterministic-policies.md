@@ -39,6 +39,8 @@ why they stay mechanical.
 - Search result counts and protocol cursors are caller-visible retrieval bounds,
   not context-selection policy. Raw events remain addressable through exact
   windows, archive retrieval, artifacts, or another model-selected search.
+  Workspace search pages likewise expose stable start/next indexes and completion
+  rather than making a bounded first page look exhaustive.
 
 ## Tools, permissions, and verification
 

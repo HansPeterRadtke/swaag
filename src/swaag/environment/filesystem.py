@@ -3,6 +3,7 @@ from __future__ import annotations
 import os
 import re
 from pathlib import Path
+from typing import Iterator
 
 from swaag.config import AgentConfig
 from swaag.utils import sha256_text
@@ -117,26 +118,50 @@ class FilesystemManager:
         cwd: str | None = None,
         regex: bool = False,
         ignore_case: bool = False,
+        start_index: int = 0,
         max_matches: int = 50,
-    ) -> tuple[Path, list[dict[str, object]]]:
+    ) -> tuple[Path, list[dict[str, object]], bool]:
         path, text = self.read_text(path_text, cwd=cwd)
-        flags = re.IGNORECASE if ignore_case else 0
+        if start_index < 0:
+            raise ValueError("start_index must be non-negative")
+        if max_matches <= 0:
+            raise ValueError("max_matches must be positive")
         matches: list[dict[str, object]] = []
+        for index, match in enumerate(
+            self._iter_text_matches(
+                text,
+                pattern=pattern,
+                regex=regex,
+                ignore_case=ignore_case,
+            )
+        ):
+            if index < start_index:
+                continue
+            if len(matches) >= max_matches:
+                return path, matches, False
+            matches.append(match)
+        return path, matches, True
+
+    @staticmethod
+    def _iter_text_matches(
+        text: str,
+        *,
+        pattern: str,
+        regex: bool,
+        ignore_case: bool,
+    ) -> Iterator[dict[str, object]]:
+        flags = re.IGNORECASE if ignore_case else 0
         if regex:
             compiled = re.compile(pattern, flags)
             for line_number, line in enumerate(text.splitlines(), start=1):
                 for match in compiled.finditer(line):
-                    matches.append(
-                        {
-                            "line_number": line_number,
-                            "line_text": line,
-                            "match_text": match.group(0),
-                            "start_column": match.start() + 1,
-                            "end_column": match.end(),
-                        }
-                    )
-                    if len(matches) >= max_matches:
-                        return path, matches
+                    yield {
+                        "line_number": line_number,
+                        "line_text": line,
+                        "match_text": match.group(0),
+                        "start_column": match.start() + 1,
+                        "end_column": match.end(),
+                    }
         else:
             haystack_pattern = pattern.lower() if ignore_case else pattern
             for line_number, line in enumerate(text.splitlines(), start=1):
@@ -146,19 +171,14 @@ class FilesystemManager:
                     index = haystack.find(haystack_pattern, cursor)
                     if index < 0:
                         break
-                    matches.append(
-                        {
-                            "line_number": line_number,
-                            "line_text": line,
-                            "match_text": line[index:index + len(pattern)],
-                            "start_column": index + 1,
-                            "end_column": index + len(pattern),
-                        }
-                    )
-                    if len(matches) >= max_matches:
-                        return path, matches
+                    yield {
+                        "line_number": line_number,
+                        "line_text": line,
+                        "match_text": line[index:index + len(pattern)],
+                        "start_column": index + 1,
+                        "end_column": index + len(pattern),
+                    }
                     cursor = index + max(len(pattern), 1)
-        return path, matches
 
     def search_repo(
         self,
@@ -168,23 +188,31 @@ class FilesystemManager:
         cwd: str | None = None,
         regex: bool = False,
         ignore_case: bool = False,
+        start_index: int = 0,
         max_matches: int = 100,
-    ) -> list[dict[str, object]]:
+    ) -> tuple[list[dict[str, object]], bool]:
+        if start_index < 0:
+            raise ValueError("start_index must be non-negative")
+        if max_matches <= 0:
+            raise ValueError("max_matches must be positive")
         results: list[dict[str, object]] = []
+        match_index = 0
         for relative_path in self.list_files(path_text, cwd=cwd):
-            path, matches = self.search_in_file(
-                relative_path,
-                cwd=str(self.workspace_root),
+            path, text = self.read_text(relative_path, cwd=str(self.workspace_root))
+            for match in self._iter_text_matches(
+                text,
                 pattern=pattern,
                 regex=regex,
                 ignore_case=ignore_case,
-                max_matches=max_matches - len(results),
-            )
-            for match in matches:
-                results.append({"path": str(path), "relative_path": relative_path, **match})
+            ):
+                if match_index < start_index:
+                    match_index += 1
+                    continue
                 if len(results) >= max_matches:
-                    return results
-        return results
+                    return results, False
+                results.append({"path": str(path), "relative_path": relative_path, **match})
+                match_index += 1
+        return results, True
 
     def snapshot(self) -> dict[str, str]:
         snapshot: dict[str, str] = {}

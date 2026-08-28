@@ -91,6 +91,12 @@ def test_attachment_defaults_preserve_raw_bytes_without_automatic_extraction() -
     }.issubset(config.tools.enabled)
 
 
+def test_safe_resumable_search_tools_are_enabled_by_default() -> None:
+    config = load_config()
+
+    assert {"search_in_file", "search_repo"}.issubset(config.tools.enabled)
+
+
 def test_legacy_note_compaction_target_is_accepted_but_no_longer_controls_semantics(
     tmp_path: Path,
 ) -> None:

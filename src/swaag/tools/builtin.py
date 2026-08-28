@@ -885,7 +885,11 @@ class ReadFileTool(Tool):
 class SearchInFileTool(Tool):
     repeated_observation_is_redundant = True
     name = "search_in_file"
-    description = "Search one workspace file for a literal string or regex and return exact match locations."
+    description = "Search one workspace file for a literal string or regex and return an exact resumable page of match locations."
+    usage_guidance = (
+        "Use start_index=0 initially. If finished=false, continue with "
+        "start_index=next_index until the evidence needed by the task is complete."
+    )
     kind = "stateful"
     output_schema = {
         "type": "object",
@@ -897,8 +901,12 @@ class SearchInFileTool(Tool):
             "ignore_case": {"type": "boolean"},
             "matches": {"type": "array", "items": {"type": "object"}},
             "match_count": {"type": "integer"},
+            "start_index": {"type": "integer"},
+            "next_index": {"type": "integer"},
+            "finished": {"type": "boolean"},
+            "truncated": {"type": "boolean"},
         },
-        "required": ["path", "relative_path", "pattern", "regex", "ignore_case", "matches", "match_count"],
+        "required": ["path", "relative_path", "pattern", "regex", "ignore_case", "matches", "match_count", "start_index", "next_index", "finished", "truncated"],
         "additionalProperties": False,
     }
     input_schema = _closed_input(
@@ -907,6 +915,7 @@ class SearchInFileTool(Tool):
             "pattern": {"type": "string"},
             "regex": {"type": "boolean"},
             "ignore_case": {"type": "boolean"},
+            "start_index": _integer_or_null(),
             "max_matches": _integer_or_null(),
         }
     )
@@ -923,11 +932,22 @@ class SearchInFileTool(Tool):
             max_matches = 50
         if not isinstance(max_matches, int) or max_matches <= 0:
             raise ToolValidationError("search_in_file.max_matches must be a positive integer")
+        start_index = raw_input.get("start_index")
+        start_index = 0 if start_index is None else start_index
+        if (
+            not isinstance(start_index, int)
+            or isinstance(start_index, bool)
+            or start_index < 0
+        ):
+            raise ToolValidationError(
+                "search_in_file.start_index must be a non-negative integer or null"
+            )
         return {
             "path": path.strip(),
             "pattern": pattern,
             "regex": bool(raw_input.get("regex", False)),
             "ignore_case": bool(raw_input.get("ignore_case", False)),
+            "start_index": start_index,
             "max_matches": max_matches,
         }
 
@@ -940,6 +960,7 @@ class SearchInFileTool(Tool):
             pattern=validated_input["pattern"],
             regex=validated_input["regex"],
             ignore_case=validated_input["ignore_case"],
+            start_index=validated_input["start_index"],
             max_matches=validated_input["max_matches"],
         )
 
@@ -947,7 +968,11 @@ class SearchInFileTool(Tool):
 class SearchRepoTool(Tool):
     repeated_observation_is_redundant = True
     name = "search_repo"
-    description = "Search across workspace files for a literal string or regex and return exact matches."
+    description = "Search across workspace files for a literal string or regex and return an exact resumable page of matches."
+    usage_guidance = (
+        "Use start_index=0 initially. Results have deterministic path/match order; "
+        "if finished=false, continue with start_index=next_index."
+    )
     kind = "stateful"
     output_schema = {
         "type": "object",
@@ -959,8 +984,12 @@ class SearchRepoTool(Tool):
             "matches": {"type": "array", "items": {"type": "object"}},
             "match_count": {"type": "integer"},
             "matched_files": {"type": "array", "items": {"type": "string"}},
+            "start_index": {"type": "integer"},
+            "next_index": {"type": "integer"},
+            "finished": {"type": "boolean"},
+            "truncated": {"type": "boolean"},
         },
-        "required": ["path", "pattern", "regex", "ignore_case", "matches", "match_count", "matched_files"],
+        "required": ["path", "pattern", "regex", "ignore_case", "matches", "match_count", "matched_files", "start_index", "next_index", "finished", "truncated"],
         "additionalProperties": False,
     }
     input_schema = _closed_input(
@@ -969,6 +998,7 @@ class SearchRepoTool(Tool):
             "pattern": {"type": "string"},
             "regex": {"type": "boolean"},
             "ignore_case": {"type": "boolean"},
+            "start_index": _integer_or_null(),
             "max_matches": _integer_or_null(),
         }
     )
@@ -987,11 +1017,22 @@ class SearchRepoTool(Tool):
             max_matches = 100
         if not isinstance(max_matches, int) or max_matches <= 0:
             raise ToolValidationError("search_repo.max_matches must be a positive integer")
+        start_index = raw_input.get("start_index")
+        start_index = 0 if start_index is None else start_index
+        if (
+            not isinstance(start_index, int)
+            or isinstance(start_index, bool)
+            or start_index < 0
+        ):
+            raise ToolValidationError(
+                "search_repo.start_index must be a non-negative integer or null"
+            )
         return {
             "path": path.strip(),
             "pattern": pattern,
             "regex": bool(raw_input.get("regex", False)),
             "ignore_case": bool(raw_input.get("ignore_case", False)),
+            "start_index": start_index,
             "max_matches": max_matches,
         }
 
@@ -1004,6 +1045,7 @@ class SearchRepoTool(Tool):
             path_text=validated_input["path"],
             regex=validated_input["regex"],
             ignore_case=validated_input["ignore_case"],
+            start_index=validated_input["start_index"],
             max_matches=validated_input["max_matches"],
         )
 
