@@ -24,6 +24,7 @@ class CommunicationRoutingCase:
     evidence: tuple[str, ...]
     expected_escalation: bool
     required_answer_markers: tuple[tuple[str, ...], ...]
+    mechanical_setup: str = "idle"
 
 
 CASES = (
@@ -95,6 +96,41 @@ CASES = (
             ("backup", "archive"),
             ("restore", "verification", "verify"),
         ),
+    ),
+    CommunicationRoutingCase(
+        case_id="active_verification_not_complete",
+        split="held_out",
+        question=(
+            "What is the worker doing now, and may its task be reported complete? "
+            "Use the current mechanical state and durable evidence."
+        ),
+        evidence=(
+            "The verifier was launched, but no completion event or exit status has been recorded.",
+        ),
+        expected_escalation=False,
+        required_answer_markers=(
+            ("running", "in progress", "active"),
+            ("not complete", "cannot claim", "not yet complete"),
+            ("verifier", "verification"),
+        ),
+        mechanical_setup="active_verifier",
+    ),
+    CommunicationRoutingCase(
+        case_id="verified_terminal_completion",
+        split="held_out",
+        question=(
+            "Does the durable worker evidence establish completion, and what verifies it?"
+        ),
+        evidence=(
+            "The requested implementation was completed before final verification.",
+        ),
+        expected_escalation=False,
+        required_answer_markers=(
+            ("complete", "finished", "verified"),
+            ("exit code 0", "exited 0", "verifier passed"),
+            ("accepted", "completion evaluation"),
+        ),
+        mechanical_setup="verified_terminal",
     ),
 )
 
@@ -173,6 +209,74 @@ def _seed_evidence(
     return events
 
 
+def _seed_mechanical_setup(
+    case: CommunicationRoutingCase,
+    runtime: AgentRuntime,
+    state,
+) -> list[HistoryEvent]:
+    if case.mechanical_setup == "idle":
+        return []
+    if case.mechanical_setup == "active_verifier":
+        runtime.history.set_active_run(
+            state.session_id,
+            run_id="benchmark-active-verifier",
+            user_text="Verify the implementation before reporting completion.",
+        )
+        runtime.history.update_active_run(
+            state.session_id,
+            run_id="benchmark-active-verifier",
+            phase="tool_execution",
+            detail="running the independent verifier",
+            active_kind="tool",
+            active_id="run_tests",
+        )
+        return [
+            runtime.history.record_event(
+                state,
+                "process_started",
+                {
+                    "process_id": "benchmark-verifier",
+                    "command": "run independent verifier",
+                    "cwd": state.environment.workspace.root,
+                    "status": "running",
+                    "started_at": utc_now_iso(),
+                },
+            )
+        ]
+    if case.mechanical_setup == "verified_terminal":
+        started_at = utc_now_iso()
+        process = runtime.history.record_event(
+            state,
+            "process_completed",
+            {
+                "process_id": "benchmark-verifier",
+                "command": "run independent verifier",
+                "cwd": state.environment.workspace.root,
+                "status": "completed",
+                "stdout": "verification passed",
+                "stderr": "",
+                "return_code": 0,
+                "started_at": started_at,
+                "ended_at": utc_now_iso(),
+            },
+        )
+        completion = runtime.history.record_event(
+            state,
+            "completion_evaluated",
+            {
+                "complete": True,
+                "reason": "The independent verifier exited with code 0.",
+                "remaining_work": [],
+                "verifier_event_sequence": process.sequence,
+                "verifier_event_hash": process.hash,
+            },
+        )
+        return [process, completion]
+    raise ValueError(
+        f"Unknown communication-routing mechanical setup: {case.mechanical_setup}"
+    )
+
+
 def _all_history_events(runtime: AgentRuntime) -> list[HistoryEvent]:
     events = [
         event
@@ -203,6 +307,7 @@ def _verify_case(
     escalated: bool,
     final_status: dict[str, Any],
     seeded_sequences: list[int],
+    mechanical_status: dict[str, Any],
 ) -> dict[str, Any]:
     lowered = answer.casefold()
     cited = {
@@ -224,6 +329,16 @@ def _verify_case(
         "evidence_citation_is_valid": bool(cited & seeded)
         and cited.issubset(available),
     }
+    if case.mechanical_setup == "active_verifier":
+        checks["active_mechanical_phase_preserved"] = (
+            mechanical_status.get("mechanical_phase") == "tool_execution"
+            and mechanical_status.get("active_step")
+            == "running the independent verifier"
+        )
+    elif case.mechanical_setup == "verified_terminal":
+        checks["terminal_mechanical_phase_preserved"] = (
+            mechanical_status.get("mechanical_phase") == "idle"
+        )
     answer_quality_passed = all(
         value for name, value in checks.items() if name != "route_matches_oracle"
     )
@@ -410,7 +525,11 @@ def run_communication_routing_benchmark(
         ):
             raise ValueError("Communication-routing runtime model identity changed")
         state = main.create_or_load_session()
-        seeded_events = _seed_evidence(main, state, case.evidence)
+        seeded_events = [
+            *_seed_evidence(main, state, case.evidence),
+            *_seed_mechanical_setup(case, main, state),
+        ]
+        mechanical_status = main.session_status_payload(state)
         service = CommunicationService(main, assistant_runtime=assistant)
         started = time.monotonic()
         answer = ""
@@ -469,6 +588,7 @@ def run_communication_routing_benchmark(
             escalated=requested is not None,
             final_status=final_status,
             seeded_sequences=[event.sequence for event in seeded_events],
+            mechanical_status=mechanical_status,
         )
         if error is not None:
             verification["passed"] = False
@@ -484,6 +604,7 @@ def run_communication_routing_benchmark(
                 "final_operation_session_id": final_operation_id,
                 "elapsed_seconds": elapsed_seconds,
                 "answer": answer,
+                "mechanical_status": mechanical_status,
                 "assistant_status": assistant_status,
                 "final_status": final_status,
                 "prompt_tokens": sum(

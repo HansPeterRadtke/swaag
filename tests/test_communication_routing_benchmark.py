@@ -73,13 +73,25 @@ class _RoutingBenchmarkClient:
                 "unit differs from its source."
             )
             escalate = self.label == "assistant"
-        else:
-            assert "deleting the old production backup" in prompt
+        elif "deleting the old production backup" in prompt:
             answer = (
                 "Do not delete the backup; restore verification of the replacement archive "
                 "is still needed."
             )
             escalate = self.label == "assistant"
+        elif "What is the worker doing now" in prompt:
+            answer = (
+                "The verifier is running, so the task is not yet complete and completion "
+                "cannot be claimed."
+            )
+            escalate = False
+        else:
+            assert "Does the durable worker evidence establish completion" in prompt
+            answer = (
+                "The task is complete: the verifier exited with exit code 0 and the "
+                "independent completion evaluation accepted it."
+            )
+            escalate = False
         body = {
             "answer": answer,
             "situation": "The supplied durable evidence was interpreted.",
@@ -128,15 +140,22 @@ def test_communication_routing_benchmark_uses_production_escalation_and_resumes(
     )
 
     assert report["complete"] is True
-    assert report["passed"] == report["routing_correct"] == report["total"] == 4
+    assert report["passed"] == report["routing_correct"] == report["total"] == 6
     assert report["answer_quality_passed"] == report["total"]
     assert report["escalation_recall"] == 1.0
     assert report["non_escalation_specificity"] == 1.0
     assert report["routing_pair_is_distinct"] is True
     assert report["routing_policy_selection_supported"] is True
-    assert [item["model_call_count"] for item in report["results"]] == [1, 1, 2, 2]
-    assert report["prompt_tokens"] == 600
-    assert report["completion_tokens"] == 120
+    assert [item["model_call_count"] for item in report["results"]] == [1, 1, 2, 2, 1, 1]
+    assert report["prompt_tokens"] == 800
+    assert report["completion_tokens"] == 160
+    by_case = {item["case_id"]: item for item in report["results"]}
+    active = by_case["active_verification_not_complete"]
+    terminal = by_case["verified_terminal_completion"]
+    assert active["mechanical_status"]["mechanical_phase"] == "tool_execution"
+    assert active["verification"]["checks"]["active_mechanical_phase_preserved"] is True
+    assert terminal["mechanical_status"]["mechanical_phase"] == "idle"
+    assert terminal["verification"]["checks"]["terminal_mechanical_phase_preserved"] is True
     assert report["model_identities"]["distinct_endpoints"] is True
     assert runtime_configs
     assert all(
