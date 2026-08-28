@@ -127,6 +127,50 @@ def test_projection_case_requires_projection_with_exact_source_identity() -> Non
     assert projected["passed"] is True
 
 
+def test_specialist_case_requires_grounded_ocr_extraction() -> None:
+    case = _case("specialist_ocr_inspection")
+    source_references = _read_output(text="", finished=True)[
+        "source_event_references"
+    ]
+    base_output = {
+        "text": "SWAAG OCR MARKER 48291",
+        "source_event_references": source_references,
+        "artifact_id": "artifact_exact",
+        "artifact_sha256": "sha256",
+    }
+    missing_specialist = verify_attachment_case(
+        case,
+        assistant_text="SWAAG OCR MARKER 48291",
+        read_outputs=[],
+        projection_events=[],
+        extraction_outputs=[
+            {**base_output, "manifest": {"entry": {"ocr_used": False}}}
+        ],
+    )
+    grounded = verify_attachment_case(
+        case,
+        assistant_text="SWAAG OCR MARKER 48291",
+        read_outputs=[],
+        projection_events=[],
+        extraction_outputs=[
+            {**base_output, "manifest": {"entry": {"ocr_used": True}}}
+        ],
+    )
+    unnecessary_raw_read = verify_attachment_case(
+        case,
+        assistant_text="SWAAG OCR MARKER 48291",
+        read_outputs=[_read_output(text="", finished=True)],
+        projection_events=[],
+        extraction_outputs=[
+            {**base_output, "manifest": {"entry": {"ocr_used": True}}}
+        ],
+    )
+
+    assert missing_specialist["passed"] is False
+    assert grounded["passed"] is True
+    assert unnecessary_raw_read["passed"] is False
+
+
 def test_attachment_context_cli_accepts_case_filter() -> None:
     args = _build_parser().parse_args(
         ["attachment-context", "--case", "sequential_raw_reexpansion"]

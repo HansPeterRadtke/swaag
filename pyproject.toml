@@ -65,7 +65,7 @@ where = ["src"]
 "swaag" = [
   "assets/*.toml",
   "assets/prompts/*.txt",
-  "benchmark/fixtures/**/*.json",
+  "benchmark/fixtures/**/*",
   "benchmark/terminal_tasks/**/*"
 ]
 
