@@ -6,14 +6,31 @@ import { pathToFileURL } from "node:url";
 
 const [sdkRoot, baseUrl, ...options] = process.argv.slice(2);
 const exerciseNewTasks = options.includes("--exercise-new-tasks");
-const taskIds = options.filter((item) => item !== "--exercise-new-tasks");
+const transportOptions = options.filter((item) => item.startsWith("--transport="));
+if (transportOptions.length > 1) {
+  throw new Error("at most one --transport option may be provided");
+}
+const transport = transportOptions[0]?.slice("--transport=".length) ?? "jsonrpc";
+if (!new Set(["jsonrpc", "http-json"]).has(transport)) {
+  throw new Error("--transport must be jsonrpc or http-json");
+}
+const unknownOptions = options.filter(
+  (item) => item.startsWith("--") &&
+    item !== "--exercise-new-tasks" &&
+    !item.startsWith("--transport="),
+);
+if (unknownOptions.length) {
+  throw new Error(`unknown options: ${unknownOptions.join(", ")}`);
+}
+const taskIds = options.filter((item) => !item.startsWith("--"));
 if (taskIds.length > 1) {
   throw new Error("at most one EXPECTED_TASK_ID may be provided");
 }
 const [expectedTaskId] = taskIds;
 if (!sdkRoot || !baseUrl) {
   throw new Error(
-    "usage: a2a-sdk-conformance.mjs SDK_ROOT BASE_URL [EXPECTED_TASK_ID] [--exercise-new-tasks]",
+    "usage: a2a-sdk-conformance.mjs SDK_ROOT BASE_URL [EXPECTED_TASK_ID] " +
+      "[--exercise-new-tasks] [--transport=jsonrpc|http-json]",
   );
 }
 
@@ -21,26 +38,32 @@ const packageRoot = path.join(sdkRoot, "node_modules", "@a2a-js", "sdk");
 const packageVersion = JSON.parse(
   fs.readFileSync(path.join(packageRoot, "package.json"), "utf8"),
 ).version;
-const { ClientFactory, JsonRpcTransportFactory } = await import(
-  pathToFileURL(path.join(packageRoot, "dist", "client", "index.js")).href
-);
+const { ClientFactory, JsonRpcTransportFactory, RestTransportFactory } =
+  await import(
+    pathToFileURL(path.join(packageRoot, "dist", "client", "index.js")).href
+  );
 const { Role, TaskState } = await import(
   pathToFileURL(path.join(packageRoot, "dist", "index.js")).href
 );
 
+const binding = transport === "http-json" ? "HTTP+JSON" : "JSONRPC";
 const factory = new ClientFactory({
-  transports: [new JsonRpcTransportFactory()],
+  transports: [
+    transport === "http-json"
+      ? new RestTransportFactory()
+      : new JsonRpcTransportFactory(),
+  ],
 });
 const client = await factory.createFromUrl(baseUrl);
 const card = await client.getAgentCard();
 if (client.protocolVersion !== "1.0" || card.name !== "Swaag") {
   throw new Error("official client decoded an unexpected Swaag Agent Card");
 }
-const jsonRpc = card.supportedInterfaces?.find(
-  (item) => item.protocolBinding === "JSONRPC" && item.protocolVersion === "1.0",
+const selectedInterface = card.supportedInterfaces?.find(
+  (item) => item.protocolBinding === binding && item.protocolVersion === "1.0",
 );
-if (!jsonRpc?.url) {
-  throw new Error("official client did not decode the A2A 1.0 JSON-RPC interface");
+if (!selectedInterface?.url) {
+  throw new Error(`official client did not decode the A2A 1.0 ${binding} interface`);
 }
 
 const listed = await client.listTasks({
@@ -169,12 +192,13 @@ console.log(
   JSON.stringify(
     {
       sdk: `@a2a-js/sdk@${packageVersion}`,
+      transport,
       protocolVersion: client.protocolVersion,
       card: {
         name: card.name,
         version: card.version,
         streaming: card.capabilities?.streaming ?? false,
-        interface: jsonRpc,
+        interface: selectedInterface,
         skillCount: card.skills?.length ?? 0,
       },
       list: {

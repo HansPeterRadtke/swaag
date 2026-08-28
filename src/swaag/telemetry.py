@@ -124,6 +124,29 @@ def _active_worker_attributes() -> dict[str, str]:
     return {"swaag.worker.id": worker_id} if worker_id else {}
 
 
+def _http_route(path: str) -> str:
+    if path in {
+        "/.well-known/agent-card.json",
+        "/a2a/v1",
+        "/ag-ui",
+        "/a2a/rest/message:send",
+        "/a2a/rest/message:stream",
+        "/a2a/rest/tasks",
+    }:
+        return path
+    prefix = "/a2a/rest/tasks/"
+    if not path.startswith(prefix):
+        return ""
+    task_segment = path.removeprefix(prefix)
+    if not task_segment or "/" in task_segment:
+        return ""
+    if task_segment.endswith(":cancel"):
+        return prefix + "{id}:cancel"
+    if task_segment.endswith(":subscribe"):
+        return prefix + "{id}:subscribe"
+    return prefix + "{id}"
+
+
 def _error_type(exc: BaseException) -> str:
     if exc.__class__.__name__ in {
         "ModelCallPreempted",
@@ -347,23 +370,21 @@ class OperationalTelemetry:
             normalized_method if normalized_method in {"GET", "POST"} else "_OTHER"
         )
         target_path = urlsplit(str(path)).path
-        route = (
-            target_path
-            if target_path
-            in {"/.well-known/agent-card.json", "/a2a/v1", "/ag-ui"}
-            else ""
+        route = _http_route(target_path)
+        protocol_name = (
+            "ag_ui"
+            if target_path == "/ag-ui"
+            else "a2a"
+            if target_path == "/a2a/v1" or target_path.startswith("/a2a/rest/")
+            else "discovery"
+            if target_path == "/.well-known/agent-card.json"
+            else "http"
         )
         attributes: dict[str, Any] = {
             "http.request.method": known_method,
             "url.path": target_path,
             "url.scheme": "http",
-            "swaag.protocol.name": (
-                "ag_ui"
-                if target_path == "/ag-ui"
-                else "a2a"
-                if target_path == "/a2a/v1"
-                else "discovery"
-            ),
+            "swaag.protocol.name": protocol_name,
         }
         if normalized_method != known_method:
             attributes["http.request.method_original"] = normalized_method

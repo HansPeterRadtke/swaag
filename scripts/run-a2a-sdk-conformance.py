@@ -48,6 +48,16 @@ async def _run(args: argparse.Namespace) -> dict[str, Any]:
 
     # The protocol is under test; model execution is intentionally outside scope.
     service.workers.start = queue_without_executor  # type: ignore[method-assign]
+    expected_task_id: str | None = None
+    if args.exercise_existing_task:
+        seeded = service.task_api.execute(
+            "create",
+            {
+                "objective": "Exercise official existing-task operations.",
+                "start": True,
+            },
+        )
+        expected_task_id = str(seeded["worker"]["worker_id"])
     server = await asyncio.start_server(service.handle_client, "127.0.0.1", 0)
     socket = server.sockets[0]
     port = int(socket.getsockname()[1])
@@ -59,8 +69,12 @@ async def _run(args: argparse.Namespace) -> dict[str, Any]:
         str(probe),
         str(Path(args.sdk_root).expanduser().resolve()),
         f"http://127.0.0.1:{port}",
-        "--exercise-new-tasks",
     ]
+    if expected_task_id is not None:
+        command.append(expected_task_id)
+    command.extend(
+        ["--exercise-new-tasks", f"--transport={args.transport}"]
+    )
     process: asyncio.subprocess.Process | None = None
     try:
         process = await asyncio.create_subprocess_exec(
@@ -86,7 +100,10 @@ async def _run(args: argparse.Namespace) -> dict[str, Any]:
             )
         result = {
             "completed_at": utc_now_iso(),
-            "scope": "official A2A SDK new-task send/stream protocol conformance",
+            "scope": (
+                "official A2A SDK new-task send/stream protocol conformance "
+                f"over {args.transport}"
+            ),
             "inference_allowed": False,
             "model_client_accesses": list(no_inference.accesses),
             "service": {
@@ -94,6 +111,7 @@ async def _run(args: argparse.Namespace) -> dict[str, Any]:
                 "port": port,
                 "state_root": str(config.sessions.root),
                 "worker_execution": "queue-only",
+                "seeded_task_id": expected_task_id,
             },
             "process": {
                 "command": command,
@@ -125,6 +143,10 @@ def main() -> int:
     )
     parser.add_argument("sdk_root")
     parser.add_argument("output_dir")
+    parser.add_argument(
+        "--transport", choices=("jsonrpc", "http-json"), default="jsonrpc"
+    )
+    parser.add_argument("--exercise-existing-task", action="store_true")
     parser.add_argument("--timeout-seconds", type=float, default=30.0)
     args = parser.parse_args()
     if args.timeout_seconds <= 0:

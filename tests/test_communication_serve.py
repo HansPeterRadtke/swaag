@@ -254,6 +254,9 @@ def test_communication_transport_serves_a2a_agent_card_and_jsonrpc(make_config):
         assert status == "HTTP/1.1 200 OK"
         assert headers["cache-control"] == "public, max-age=300"
         assert card["supportedInterfaces"][0]["protocolVersion"] == "1.0"
+        assert [
+            item["protocolBinding"] for item in card["supportedInterfaces"]
+        ] == ["JSONRPC", "HTTP+JSON"]
         assert card["capabilities"]["streaming"] is True
         cached_status, cached_headers, cached_body = await http(
             b"GET /.well-known/agent-card.json HTTP/1.1\r\n"
@@ -472,6 +475,232 @@ def test_a2a_http_creates_unary_and_streaming_tasks_without_client_ids(
                 "TASK_STATE_CANCELED"
             )
         finally:
+            server.close()
+            await server.wait_closed()
+            service.workers.shutdown()
+
+    asyncio.run(exercise())
+
+
+def test_a2a_http_json_binding_uses_rest_shapes_queries_and_errors(
+    make_config, monkeypatch
+):
+    async def exercise() -> None:
+        service = CommunicationService(
+            AgentRuntime(make_config(), model_client=object())
+        )
+
+        def queue_without_executor(worker_id: str):
+            return service.workers.store.transition(
+                worker_id,
+                "queued",
+                expected={"created"},
+                event_type="worker_queued",
+            )
+
+        monkeypatch.setattr(service.workers, "start", queue_without_executor)
+        server = await asyncio.start_server(
+            service.handle_client, "127.0.0.1", 0
+        )
+        port = server.sockets[0].getsockname()[1]
+
+        async def http(
+            method: str,
+            target: str,
+            body: dict | None = None,
+            *,
+            version: str = "1.0",
+            content_type: str = "application/a2a+json",
+        ) -> tuple[str, dict[str, str], bytes]:
+            reader, writer = await asyncio.open_connection("127.0.0.1", port)
+            encoded = b"" if body is None else json.dumps(body).encode()
+            headers = (
+                f"{method} {target} HTTP/1.1\r\n"
+                "Host: localhost\r\n"
+                f"A2A-Version: {version}\r\n"
+                "Accept: application/a2a+json\r\n"
+            ).encode()
+            if body is not None:
+                headers += (
+                    f"Content-Type: {content_type}\r\n".encode()
+                    + f"Content-Length: {len(encoded)}\r\n".encode()
+                )
+            writer.write(headers + b"\r\n" + encoded)
+            await writer.drain()
+            response = await asyncio.wait_for(reader.read(), timeout=2)
+            writer.close()
+            await writer.wait_closed()
+            head, response_body = response.split(b"\r\n\r\n", 1)
+            lines = head.decode().split("\r\n")
+            response_headers = {
+                name.casefold(): value.strip()
+                for name, value in (line.split(":", 1) for line in lines[1:])
+            }
+            return lines[0], response_headers, response_body
+
+        message = {
+            "message": {
+                "messageId": "rest-unary-message",
+                "role": "ROLE_USER",
+                "parts": [{"text": "Exercise HTTP plus JSON."}],
+            },
+            "configuration": {"returnImmediately": True},
+        }
+        worker_id: str | None = None
+        try:
+            status, headers, body = await http(
+                "POST", "/a2a/rest/message:send", message
+            )
+            created = json.loads(body)["task"]
+            worker_id = created["id"]
+            assert status == "HTTP/1.1 200 OK"
+            assert headers["content-type"] == "application/a2a+json"
+            assert created["status"]["state"] == "TASK_STATE_SUBMITTED"
+
+            status, headers, body = await http(
+                "GET",
+                "/a2a/rest/tasks?status=TASK_STATE_SUBMITTED&"
+                "pageSize=10&historyLength=0&includeArtifacts=true",
+            )
+            listed = json.loads(body)
+            assert status == "HTTP/1.1 200 OK"
+            assert headers["content-type"] == "application/a2a+json"
+            assert listed["tasks"][0]["id"] == worker_id
+            assert listed["totalSize"] == 1
+
+            status, _headers, body = await http(
+                "GET", f"/a2a/rest/tasks/{worker_id}?historyLength=0"
+            )
+            assert status == "HTTP/1.1 200 OK"
+            assert json.loads(body)["id"] == worker_id
+
+            async def subscribe(method: str):
+                reader, writer = await asyncio.open_connection(
+                    "127.0.0.1", port
+                )
+                writer.write(
+                    (
+                        f"{method} /a2a/rest/tasks/{worker_id}:subscribe "
+                        "HTTP/1.1\r\n"
+                        "Host: localhost\r\n"
+                        "A2A-Version: 1.0\r\n"
+                        "Accept: text/event-stream\r\n\r\n"
+                    ).encode()
+                )
+                await writer.drain()
+                head = await reader.readuntil(b"\r\n\r\n")
+                initial = json.loads(
+                    (await reader.readuntil(b"\n\n")).removeprefix(b"data: ")
+                )
+                return reader, writer, head, initial
+
+            get_subscriber = await subscribe("GET")
+            post_subscriber = await subscribe("POST")
+            for _reader, _writer, head, initial in (
+                get_subscriber,
+                post_subscriber,
+            ):
+                assert b"Content-Type: text/event-stream" in head
+                assert initial["task"]["id"] == worker_id
+                assert "jsonrpc" not in initial
+
+            status, _headers, body = await http(
+                "POST", f"/a2a/rest/tasks/{worker_id}:cancel"
+            )
+            assert status == "HTTP/1.1 200 OK"
+            assert json.loads(body)["status"]["state"] == "TASK_STATE_CANCELED"
+            for reader, writer, _head, _initial in (
+                get_subscriber,
+                post_subscriber,
+            ):
+                terminal = await asyncio.wait_for(reader.read(), timeout=2)
+                writer.close()
+                await writer.wait_closed()
+                assert b"TASK_STATE_CANCELED" in terminal
+
+            stream_reader, stream_writer = await asyncio.open_connection(
+                "127.0.0.1", port
+            )
+            stream_body = json.dumps(
+                {
+                    **message,
+                    "message": {
+                        **message["message"],
+                        "messageId": "rest-stream-message",
+                    },
+                }
+            ).encode()
+            stream_writer.write(
+                b"POST /a2a/rest/message:stream HTTP/1.1\r\n"
+                b"Host: localhost\r\n"
+                b"A2A-Version: 1.0\r\n"
+                b"Content-Type: application/a2a+json\r\n"
+                b"Accept: text/event-stream\r\n"
+                + f"Content-Length: {len(stream_body)}\r\n\r\n".encode()
+                + stream_body
+            )
+            await stream_writer.drain()
+            stream_head = await stream_reader.readuntil(b"\r\n\r\n")
+            initial = json.loads(
+                (await stream_reader.readuntil(b"\n\n")).removeprefix(b"data: ")
+            )
+            streamed_id = initial["task"]["id"]
+            cancel_status, cancel_headers, cancel_body = await http(
+                "POST", f"/a2a/rest/tasks/{streamed_id}:cancel"
+            )
+            remaining = await asyncio.wait_for(stream_reader.read(), timeout=2)
+            stream_writer.close()
+            await stream_writer.wait_closed()
+            updates = [
+                json.loads(block.removeprefix(b"data: "))
+                for block in remaining.split(b"\n\n")
+                if block.startswith(b"data: ")
+            ]
+            assert b"Content-Type: text/event-stream" in stream_head
+            assert "jsonrpc" not in initial
+            assert cancel_status == "HTTP/1.1 200 OK"
+            assert cancel_headers["content-type"] == "application/a2a+json"
+            assert json.loads(cancel_body)["status"]["state"] == (
+                "TASK_STATE_CANCELED"
+            )
+            assert updates[-1]["statusUpdate"]["status"]["state"] == (
+                "TASK_STATE_CANCELED"
+            )
+
+            status, headers, body = await http(
+                "GET", "/a2a/rest/tasks/missing-task"
+            )
+            missing = json.loads(body)["error"]
+            assert status == "HTTP/1.1 404 Not Found"
+            assert headers["content-type"] == "application/a2a+json"
+            assert missing["status"] == "NOT_FOUND"
+            assert missing["details"][0]["reason"] == "TASK_NOT_FOUND"
+
+            status, _headers, body = await http(
+                "GET", "/a2a/rest/tasks?pageSize=one"
+            )
+            invalid = json.loads(body)["error"]
+            assert status == "HTTP/1.1 400 Bad Request"
+            assert invalid["status"] == "INVALID_ARGUMENT"
+            assert invalid["details"][0]["@type"].endswith("BadRequest")
+
+            status, _headers, body = await http(
+                "POST",
+                "/a2a/rest/message:send",
+                message,
+                content_type="text/plain",
+            )
+            unsupported = json.loads(body)["error"]
+            assert status == "HTTP/1.1 400 Bad Request"
+            assert unsupported["details"][0]["reason"] == (
+                "CONTENT_TYPE_NOT_SUPPORTED"
+            )
+        finally:
+            if (
+                worker_id is not None
+                and service.workers.store.get(worker_id).status == "queued"
+            ):
+                service.workers.cancel(worker_id, reason="finish REST test")
             server.close()
             await server.wait_closed()
             service.workers.shutdown()

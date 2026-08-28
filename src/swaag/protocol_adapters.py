@@ -36,6 +36,10 @@ class A2ATaskNotCancelableError(A2AProtocolError):
     jsonrpc_code = -32002
 
 
+class A2AContentTypeNotSupportedError(A2AProtocolError):
+    jsonrpc_code = -32005
+
+
 @dataclass(slots=True, frozen=True)
 class A2AUserMessage:
     text: str

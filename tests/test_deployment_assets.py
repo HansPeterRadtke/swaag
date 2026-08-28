@@ -104,6 +104,8 @@ def test_a2a_sdk_conformance_assets_are_pinned_and_parse() -> None:
     assert 'VERSION="1.1.0"' in installer_source
     assert "@a2a-js/sdk@${VERSION}" in installer_source
     assert "new JsonRpcTransportFactory()" in probe_source
+    assert "new RestTransportFactory()" in probe_source
+    assert 'transport === "http-json"' in probe_source
     assert "TaskState.TASK_STATE_UNSPECIFIED" in probe_source
     assert "factory.createFromUrl" in probe_source
     assert "client.listTasks" in probe_source
@@ -114,6 +116,8 @@ def test_a2a_sdk_conformance_assets_are_pinned_and_parse() -> None:
     assert ".sendMessageStream(" in probe_source
     assert "model_client=no_inference" in runner_source
     assert "queue_without_executor" in runner_source
+    assert 'choices=("jsonrpc", "http-json")' in runner_source
+    assert '"--exercise-existing-task"' in runner_source
 
 
 def test_ag_ui_sdk_conformance_assets_are_pinned_and_parse() -> None:

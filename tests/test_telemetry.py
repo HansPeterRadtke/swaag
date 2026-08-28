@@ -245,6 +245,52 @@ def test_operation_errors_set_span_status_and_low_cardinality_error_type() -> No
     tracer_provider.shutdown()
 
 
+def test_a2a_rest_http_telemetry_uses_low_cardinality_routes() -> None:
+    telemetry, exporter, metric_reader, tracer_provider, meter_provider = (
+        _telemetry_fixture()
+    )
+    cases = [
+        ("POST", "/a2a/rest/message:send", "/a2a/rest/message:send"),
+        ("GET", "/a2a/rest/tasks?pageSize=10", "/a2a/rest/tasks"),
+        ("GET", "/a2a/rest/tasks/worker-one", "/a2a/rest/tasks/{id}"),
+        (
+            "POST",
+            "/a2a/rest/tasks/worker-two:cancel",
+            "/a2a/rest/tasks/{id}:cancel",
+        ),
+        (
+            "POST",
+            "/a2a/rest/tasks/worker-three:subscribe",
+            "/a2a/rest/tasks/{id}:subscribe",
+        ),
+    ]
+
+    for method, path, _route in cases:
+        with telemetry.http_server_request(method=method, path=path):
+            pass
+
+    tracer_provider.force_flush()
+    spans = exporter.get_finished_spans()
+    assert [span.name for span in spans] == [
+        f"{method} {route}" for method, _path, route in cases
+    ]
+    assert [span.attributes["http.route"] for span in spans] == [
+        route for _method, _path, route in cases
+    ]
+    assert all(span.attributes["swaag.protocol.name"] == "a2a" for span in spans)
+    assert spans[1].attributes["url.path"] == "/a2a/rest/tasks"
+
+    points = _collect_metrics(metric_reader)[
+        "http.server.request.duration"
+    ].data.data_points
+    metric_routes = {point.attributes["http.route"] for point in points}
+    assert metric_routes == {route for _method, _path, route in cases}
+    assert all("worker-" not in route for route in metric_routes)
+
+    meter_provider.shutdown()
+    tracer_provider.shutdown()
+
+
 def test_remote_trace_crosses_protocol_worker_and_model_boundaries(make_config) -> None:
     telemetry, exporter, _reader, tracer_provider, meter_provider = (
         _telemetry_fixture()

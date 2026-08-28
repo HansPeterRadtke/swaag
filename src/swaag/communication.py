@@ -13,12 +13,15 @@ import sys
 import threading
 from dataclasses import asdict, dataclass
 from datetime import datetime, timezone
+from http import HTTPStatus
 from pathlib import Path
 from typing import Any
+from urllib.parse import parse_qs, unquote, urlsplit
 
 from swaag.config import AgentConfig
 from swaag.heartbeat import systemd_notify, watchdog_interval_seconds
 from swaag.protocol_adapters import (
+    A2AContentTypeNotSupportedError,
     A2AProtocolError,
     A2AProjectionAdapter,
     A2ATaskNotCancelableError,
@@ -1282,7 +1285,12 @@ class CommunicationService:
                     "url": f"http://{host}:{port}/a2a/v1",
                     "protocolBinding": "JSONRPC",
                     "protocolVersion": A2AProjectionAdapter.protocol_version,
-                }
+                },
+                {
+                    "url": f"http://{host}:{port}/a2a/rest",
+                    "protocolBinding": "HTTP+JSON",
+                    "protocolVersion": A2AProjectionAdapter.protocol_version,
+                },
             ],
             "version": "0.1.0",
             "capabilities": {
@@ -1349,6 +1357,81 @@ class CommunicationService:
             return cls._a2a_error(request_id, -32602, str(exc))
         return cls._a2a_error(request_id, -32603, "Internal error")
 
+    @staticmethod
+    def _a2a_rest_error(
+        *,
+        status: int,
+        status_name: str,
+        message: str,
+        reason: str | None = None,
+    ) -> dict[str, Any]:
+        details: list[dict[str, Any]] = []
+        if reason is not None:
+            details.append(
+                {
+                    "@type": "type.googleapis.com/google.rpc.ErrorInfo",
+                    "reason": reason,
+                    "domain": "a2a-protocol.org",
+                }
+            )
+        elif status == 400:
+            details.append(
+                {
+                    "@type": "type.googleapis.com/google.rpc.BadRequest",
+                    "fieldViolations": [
+                        {"field": "request", "description": message}
+                    ],
+                }
+            )
+        return {
+            "error": {
+                "code": status,
+                "status": status_name,
+                "message": message,
+                "details": details,
+            }
+        }
+
+    @classmethod
+    def _a2a_rest_exception(
+        cls, exc: Exception
+    ) -> tuple[int, str, dict[str, Any]]:
+        if isinstance(exc, FileNotFoundError):
+            status, status_name, reason = 404, "NOT_FOUND", "TASK_NOT_FOUND"
+        elif isinstance(exc, A2ATaskNotCancelableError):
+            status, status_name, reason = (
+                400,
+                "FAILED_PRECONDITION",
+                "TASK_NOT_CANCELABLE",
+            )
+        elif isinstance(exc, A2AUnsupportedOperationError):
+            status, status_name, reason = (
+                400,
+                "FAILED_PRECONDITION",
+                "UNSUPPORTED_OPERATION",
+            )
+        elif isinstance(exc, A2AContentTypeNotSupportedError):
+            status, status_name, reason = (
+                400,
+                "INVALID_ARGUMENT",
+                "CONTENT_TYPE_NOT_SUPPORTED",
+            )
+        elif isinstance(exc, (TypeError, ValueError)):
+            status, status_name, reason = 400, "INVALID_ARGUMENT", None
+        else:
+            status, status_name, reason = 500, "INTERNAL", None
+        message = str(exc) if status < 500 else "Internal error"
+        return (
+            status,
+            HTTPStatus(status).phrase,
+            cls._a2a_rest_error(
+                status=status,
+                status_name=status_name,
+                message=message,
+                reason=reason,
+            ),
+        )
+
     async def _read_http_headers(
         self,
         reader: asyncio.StreamReader,
@@ -1380,6 +1463,7 @@ class CommunicationService:
         initial: WorkerRecord,
         after_sequence: int,
         history_length: int | None = 0,
+        jsonrpc_envelope: bool = True,
     ) -> None:
         record_http_response_status(200)
         headers = (
@@ -1392,7 +1476,11 @@ class CommunicationService:
         writer.write(headers.encode("ascii"))
 
         async def emit(result: dict[str, Any]) -> None:
-            payload = {"jsonrpc": "2.0", "id": request_id, "result": result}
+            payload = (
+                {"jsonrpc": "2.0", "id": request_id, "result": result}
+                if jsonrpc_envelope
+                else result
+            )
             writer.write(("data: " + json.dumps(payload, sort_keys=True) + "\n\n").encode())
             await writer.drain()
 
@@ -1759,6 +1847,169 @@ class CommunicationService:
             body=json.dumps(payload, sort_keys=True).encode(),
         )
 
+    async def _handle_a2a_rest_http(
+        self,
+        *,
+        method: str,
+        path: str,
+        query: str,
+        request: dict[str, Any] | None,
+        headers: dict[str, str],
+        writer: asyncio.StreamWriter,
+    ) -> None:
+        record_protocol_correlation(protocol="a2a", request_id="")
+        if headers.get("a2a-version") != A2AProjectionAdapter.protocol_version:
+            payload = self._a2a_rest_error(
+                status=400,
+                status_name="FAILED_PRECONDITION",
+                message="Version not supported; send A2A-Version: 1.0",
+                reason="VERSION_NOT_SUPPORTED",
+            )
+            await self._write_http_response(
+                writer,
+                status=400,
+                reason="Bad Request",
+                body=json.dumps(payload, sort_keys=True).encode(),
+                content_type="application/a2a+json",
+            )
+            return
+
+        stream: tuple[WorkerRecord, int, int | None] | None = None
+        response_body: dict[str, Any] | None = None
+        try:
+            if method == "POST" and path == "/message:send":
+                if request is None:
+                    raise ValueError("A2A SendMessage requires a JSON request object")
+                response = await self._protocol_projection_async(
+                    "a2a", "send", request
+                )
+                response_body = {"task": response["task"]}
+            elif method == "POST" and path == "/message:stream":
+                if request is None:
+                    raise ValueError(
+                        "A2A SendStreamingMessage requires a JSON request object"
+                    )
+                parsed_message = A2AProjectionAdapter().user_message(request)
+                response = await asyncio.to_thread(
+                    self._a2a_send,
+                    request,
+                    wait_for_completion=False,
+                )
+                initial, cursor = self.workers.stream_snapshot(
+                    str(response["task"]["id"])
+                )
+                stream = (initial, cursor, parsed_message.history_length)
+            elif method == "GET" and path == "/tasks":
+                params = _a2a_rest_query_params(
+                    query,
+                    allowed={
+                        "contextId",
+                        "status",
+                        "pageSize",
+                        "pageToken",
+                        "historyLength",
+                        "statusTimestampAfter",
+                        "includeArtifacts",
+                    },
+                )
+                response = await self._protocol_projection_async(
+                    "a2a", "list", params
+                )
+                response_body = {
+                    key: value
+                    for key, value in response.items()
+                    if key != "protocol"
+                }
+            elif method == "GET" and path.startswith("/tasks/"):
+                task_id, operation = _a2a_rest_task_path(path)
+                if operation == "subscribe":
+                    if query:
+                        _a2a_rest_query_params(query, allowed=set())
+                    initial, cursor = self.workers.stream_snapshot(task_id)
+                    if initial.status in WORKER_TERMINAL_STATES:
+                        raise A2AUnsupportedOperationError(
+                            "A2A cannot subscribe to a terminal task"
+                        )
+                    stream = (initial, cursor, 0)
+                elif operation is None:
+                    params = _a2a_rest_query_params(
+                        query, allowed={"historyLength"}
+                    )
+                    response = await self._protocol_projection_async(
+                        "a2a", "get", {**params, "id": task_id}
+                    )
+                    response_body = response["task"]
+                else:
+                    raise ValueError("A2A REST task path does not support this method")
+            elif method == "POST" and path.startswith("/tasks/"):
+                task_id, operation = _a2a_rest_task_path(path)
+                if operation == "subscribe":
+                    if query:
+                        _a2a_rest_query_params(query, allowed=set())
+                    initial, cursor = self.workers.stream_snapshot(task_id)
+                    if initial.status in WORKER_TERMINAL_STATES:
+                        raise A2AUnsupportedOperationError(
+                            "A2A cannot subscribe to a terminal task"
+                        )
+                    stream = (initial, cursor, 0)
+                elif operation == "cancel":
+                    if query:
+                        _a2a_rest_query_params(query, allowed=set())
+                    response = await self._protocol_projection_async(
+                        "a2a", "cancel", {"id": task_id}
+                    )
+                    response_body = response["task"]
+                else:
+                    raise ValueError("A2A REST task path does not support this method")
+            else:
+                payload = self._a2a_rest_error(
+                    status=404,
+                    status_name="NOT_FOUND",
+                    message="A2A HTTP+JSON route not found",
+                )
+                await self._write_http_response(
+                    writer,
+                    status=404,
+                    reason="Not Found",
+                    body=json.dumps(payload, sort_keys=True).encode(),
+                    content_type="application/a2a+json",
+                )
+                return
+        except Exception as exc:
+            status, reason, payload = self._a2a_rest_exception(exc)
+            await self._write_http_response(
+                writer,
+                status=status,
+                reason=reason,
+                body=json.dumps(payload, sort_keys=True).encode(),
+                content_type="application/a2a+json",
+            )
+            return
+
+        if stream is not None:
+            initial, cursor, history_length = stream
+            try:
+                await self._write_a2a_sse(
+                    writer,
+                    request_id=None,
+                    initial=initial,
+                    after_sequence=cursor,
+                    history_length=history_length,
+                    jsonrpc_envelope=False,
+                )
+            except (ConnectionError, BrokenPipeError):
+                pass
+            return
+        if response_body is None:
+            raise RuntimeError("A2A HTTP+JSON route produced no response")
+        await self._write_http_response(
+            writer,
+            status=200,
+            reason="OK",
+            body=json.dumps(response_body, sort_keys=True).encode(),
+            content_type="application/a2a+json",
+        )
+
     async def _handle_http_client(
         self,
         first_line: bytes,
@@ -1769,7 +2020,17 @@ class CommunicationService:
             parts = first_line.decode("ascii").strip().split()
             if len(parts) != 3 or parts[2] not in {"HTTP/1.0", "HTTP/1.1"}:
                 raise ValueError("malformed HTTP request line")
-            method, path, _version = parts
+            method, request_target, _version = parts
+            target = urlsplit(request_target)
+            if (
+                target.scheme
+                or target.netloc
+                or target.fragment
+                or not target.path.startswith("/")
+            ):
+                raise ValueError("HTTP request target must be an origin-form path")
+            path = target.path
+            query = target.query
             headers = await self._read_http_headers(reader)
         except (asyncio.IncompleteReadError, ValueError) as exc:
             await self._write_http_response(
@@ -1782,9 +2043,10 @@ class CommunicationService:
 
         with self.runtime.telemetry.http_server_request(
             method=method,
-            path=path,
+            path=request_target,
             headers=headers,
         ):
+            is_a2a_rest = path == "/a2a/rest" or path.startswith("/a2a/rest/")
             try:
                 if method == "GET" and path == "/.well-known/agent-card.json":
                     body = json.dumps(self._a2a_agent_card(), sort_keys=True).encode()
@@ -1805,7 +2067,9 @@ class CommunicationService:
                             headers={"Cache-Control": "public, max-age=300", "ETag": etag},
                         )
                     return
-                if method != "POST" or path not in {"/a2a/v1", "/ag-ui"}:
+                is_jsonrpc = method == "POST" and path == "/a2a/v1"
+                is_ag_ui = method == "POST" and path == "/ag-ui"
+                if not (is_jsonrpc or is_ag_ui or is_a2a_rest):
                     await self._write_http_response(
                         writer,
                         status=404,
@@ -1813,54 +2077,141 @@ class CommunicationService:
                         body=b'{"error":"not found"}',
                     )
                     return
-                content_type = headers.get("content-type", "").split(";", 1)[0].strip()
-                if content_type != "application/json":
-                    raise ValueError("Content-Type must be application/json")
+                rest_path = path.removeprefix("/a2a/rest") if is_a2a_rest else ""
+                requires_body = is_jsonrpc or is_ag_ui or (
+                    method == "POST"
+                    and rest_path in {"/message:send", "/message:stream"}
+                )
+                request: dict[str, Any] | None = None
                 raw_length = headers.get("content-length", "")
-                if not raw_length.isdigit() or not 0 < int(raw_length) <= 1_048_576:
-                    raise ValueError("Content-Length must be between 1 and 1048576")
-                body = await reader.readexactly(int(raw_length))
-                try:
-                    request = json.loads(body)
-                except json.JSONDecodeError:
-                    payload = (
-                        self._a2a_error(None, -32700, "Invalid JSON payload")
-                        if path == "/a2a/v1"
-                        else {"error": "Invalid JSON payload"}
+                if requires_body:
+                    allowed_content_types = (
+                        {"application/json", "application/a2a+json"}
+                        if is_a2a_rest
+                        else {"application/json"}
                     )
-                    await self._write_http_response(
-                        writer,
-                        status=200 if path == "/a2a/v1" else 400,
-                        reason="OK" if path == "/a2a/v1" else "Bad Request",
-                        body=json.dumps(payload, sort_keys=True).encode(),
+                    content_type = (
+                        headers.get("content-type", "").split(";", 1)[0].strip()
                     )
-                    return
-                if not isinstance(request, dict):
-                    payload = (
-                        self._a2a_error(None, -32600, "Invalid request")
-                        if path == "/a2a/v1"
-                        else {"error": "AG-UI request must be an object"}
-                    )
-                    await self._write_http_response(
-                        writer,
-                        status=200 if path == "/a2a/v1" else 400,
-                        reason="OK" if path == "/a2a/v1" else "Bad Request",
-                        body=json.dumps(payload, sort_keys=True).encode(),
-                    )
-                    return
-                if path == "/ag-ui":
+                    if content_type not in allowed_content_types:
+                        expected = " or ".join(sorted(allowed_content_types))
+                        error = f"Content-Type must be {expected}"
+                        if is_a2a_rest:
+                            raise A2AContentTypeNotSupportedError(error)
+                        raise ValueError(error)
+                    if (
+                        not raw_length.isdigit()
+                        or not 0 < int(raw_length) <= 1_048_576
+                    ):
+                        raise ValueError(
+                            "Content-Length must be between 1 and 1048576"
+                        )
+                    body = await reader.readexactly(int(raw_length))
+                    try:
+                        decoded = json.loads(body)
+                    except json.JSONDecodeError:
+                        if is_jsonrpc:
+                            payload = self._a2a_error(
+                                None, -32700, "Invalid JSON payload"
+                            )
+                            status, reason, response_type = 200, "OK", "application/json"
+                        elif is_a2a_rest:
+                            payload = self._a2a_rest_error(
+                                status=400,
+                                status_name="INVALID_ARGUMENT",
+                                message="Invalid JSON payload",
+                            )
+                            status, reason, response_type = (
+                                400,
+                                "Bad Request",
+                                "application/a2a+json",
+                            )
+                        else:
+                            payload = {"error": "Invalid JSON payload"}
+                            status, reason, response_type = (
+                                400,
+                                "Bad Request",
+                                "application/json",
+                            )
+                        await self._write_http_response(
+                            writer,
+                            status=status,
+                            reason=reason,
+                            body=json.dumps(payload, sort_keys=True).encode(),
+                            content_type=response_type,
+                        )
+                        return
+                    if not isinstance(decoded, dict):
+                        if is_jsonrpc:
+                            payload = self._a2a_error(None, -32600, "Invalid request")
+                            status, reason, response_type = 200, "OK", "application/json"
+                        elif is_a2a_rest:
+                            payload = self._a2a_rest_error(
+                                status=400,
+                                status_name="INVALID_ARGUMENT",
+                                message="A2A request must be an object",
+                            )
+                            status, reason, response_type = (
+                                400,
+                                "Bad Request",
+                                "application/a2a+json",
+                            )
+                        else:
+                            payload = {"error": "AG-UI request must be an object"}
+                            status, reason, response_type = (
+                                400,
+                                "Bad Request",
+                                "application/json",
+                            )
+                        await self._write_http_response(
+                            writer,
+                            status=status,
+                            reason=reason,
+                            body=json.dumps(payload, sort_keys=True).encode(),
+                            content_type=response_type,
+                        )
+                        return
+                    request = decoded
+                elif raw_length not in {"", "0"}:
+                    raise ValueError("This A2A HTTP+JSON operation does not accept a body")
+
+                if is_ag_ui:
+                    if request is None:
+                        raise RuntimeError("AG-UI request body was not decoded")
                     await self._handle_ag_ui_http(
                         request=request,
                         headers=headers,
                         writer=writer,
                     )
                     return
-                await self._handle_a2a_http(
+                if is_jsonrpc:
+                    if request is None:
+                        raise RuntimeError("A2A JSON-RPC request body was not decoded")
+                    await self._handle_a2a_http(
+                        request=request,
+                        headers=headers,
+                        writer=writer,
+                    )
+                    return
+                await self._handle_a2a_rest_http(
+                    method=method,
+                    path=rest_path,
+                    query=query,
                     request=request,
                     headers=headers,
                     writer=writer,
                 )
             except (asyncio.IncompleteReadError, ValueError) as exc:
+                if is_a2a_rest:
+                    status, reason, payload = self._a2a_rest_exception(exc)
+                    await self._write_http_response(
+                        writer,
+                        status=status,
+                        reason=reason,
+                        body=json.dumps(payload, sort_keys=True).encode(),
+                        content_type="application/a2a+json",
+                    )
+                    return
                 await self._write_http_response(
                     writer,
                     status=400,
@@ -2061,6 +2412,62 @@ def _a2a_history_length(
     ):
         raise ValueError("A2A historyLength must be a non-negative integer")
     return value
+
+
+def _a2a_rest_query_params(
+    query: str,
+    *,
+    allowed: set[str],
+) -> dict[str, Any]:
+    parsed = parse_qs(
+        query,
+        keep_blank_values=True,
+        strict_parsing=True,
+        max_num_fields=32,
+    )
+    unknown = sorted(set(parsed) - allowed)
+    if unknown:
+        raise ValueError(
+            "A2A HTTP+JSON query contains unsupported fields: "
+            + ", ".join(unknown)
+        )
+    duplicated = sorted(name for name, values in parsed.items() if len(values) != 1)
+    if duplicated:
+        raise ValueError(
+            "A2A HTTP+JSON query fields must be singular: "
+            + ", ".join(duplicated)
+        )
+    result: dict[str, Any] = {}
+    for name, values in parsed.items():
+        value = values[0]
+        if name in {"pageSize", "historyLength"}:
+            if not value.isdigit():
+                raise ValueError(f"A2A {name} must be a non-negative integer")
+            result[name] = int(value)
+        elif name == "includeArtifacts":
+            if value not in {"true", "false"}:
+                raise ValueError("A2A includeArtifacts must be true or false")
+            result[name] = value == "true"
+        else:
+            result[name] = value
+    return result
+
+
+def _a2a_rest_task_path(path: str) -> tuple[str, str | None]:
+    encoded = path.removeprefix("/tasks/")
+    operation: str | None = None
+    for suffix, candidate in ((":cancel", "cancel"), (":subscribe", "subscribe")):
+        if encoded.endswith(suffix):
+            encoded = encoded[: -len(suffix)]
+            operation = candidate
+            break
+    try:
+        task_id = unquote(encoded, errors="strict")
+    except UnicodeDecodeError as exc:
+        raise ValueError("A2A task id is not valid UTF-8") from exc
+    if not task_id or any(character in task_id for character in {"/", "\\", "\x00"}):
+        raise ValueError("A2A task id must be one non-empty path segment")
+    return task_id, operation
 
 
 def _required_protocol_text(
