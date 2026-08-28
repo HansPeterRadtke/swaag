@@ -8,8 +8,6 @@ import shutil
 import subprocess
 import sys
 import time
-import urllib.error
-import urllib.request
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Any, Sequence
@@ -203,14 +201,7 @@ def _prepare_workspace(
     return workspace
 
 
-def _truncate_chars(text: str, *, limit: int) -> str:
-    value = text.strip()
-    if limit <= 0 or len(value) <= limit:
-        return value
-    return value[: max(0, limit - 16)].rstrip() + "\n...[truncated]"
-
-
-def _render_prompt(instance: dict[str, Any], template: str, *, config: AgentConfig) -> str:
+def _render_prompt(instance: dict[str, Any], template: str) -> str:
     fail_to_pass = instance.get("FAIL_TO_PASS", "")
     if isinstance(fail_to_pass, str):
         with contextlib.suppress(json.JSONDecodeError):
@@ -219,15 +210,8 @@ def _render_prompt(instance: dict[str, Any], template: str, *, config: AgentConf
         fail_to_pass_text = "\n".join(f"- {item}" for item in fail_to_pass)
     else:
         fail_to_pass_text = str(fail_to_pass or "").strip()
-    benchmark_policy = config.external_benchmarks.agent_generation
-    combined_limit = max(0, benchmark_policy.issue_prompt_char_limit)
     problem_statement = str(instance.get("problem_statement", "") or "").strip()
     hints_text = str(instance.get("hints_text", "") or "").strip()
-    if combined_limit > 0 and len(problem_statement) + len(hints_text) > combined_limit:
-        problem_limit = max(200, int(combined_limit * 0.7))
-        hint_limit = max(0, combined_limit - problem_limit)
-        problem_statement = _truncate_chars(problem_statement, limit=problem_limit)
-        hints_text = _truncate_chars(hints_text, limit=hint_limit)
     rendered = template
     replacements = {
         "{repo}": str(instance.get("repo", "")),
@@ -242,48 +226,12 @@ def _render_prompt(instance: dict[str, Any], template: str, *, config: AgentConf
     return rendered.strip()
 
 
-def _render_empty_patch_retry_prompt(instance: dict[str, Any], template: str, *, config: AgentConfig) -> str:
-    return _render_prompt(instance, template, config=config)
+def _render_empty_patch_retry_prompt(instance: dict[str, Any], template: str) -> str:
+    return _render_prompt(instance, template)
 
 
 def _repo_src_root() -> Path:
     return Path(__file__).resolve().parents[3]
-
-
-def _discover_server_context_limit(config: AgentConfig) -> int | None:
-    base_url = config.model.base_url.rstrip("/")
-    probe_url = f"{base_url}/props"
-    timeout_seconds = config.external_benchmarks.model_server.healthcheck_timeout_seconds
-    request = urllib.request.Request(probe_url, headers={"Accept": "application/json"})
-    try:
-        with urllib.request.urlopen(request, timeout=timeout_seconds) as response:
-            payload = json.loads(response.read().decode("utf-8"))
-    except (OSError, TimeoutError, ValueError, urllib.error.HTTPError, urllib.error.URLError):
-        return None
-    if not isinstance(payload, dict):
-        return None
-    settings = payload.get("default_generation_settings")
-    if not isinstance(settings, dict):
-        return None
-    params = settings.get("params")
-    if not isinstance(params, dict):
-        return None
-    n_ctx = params.get("n_ctx")
-    if isinstance(n_ctx, int) and n_ctx > 0:
-        return n_ctx
-    return None
-
-
-def _resolved_agent_context_limit(
-    config: AgentConfig,
-    *,
-    discovered_context_limit: int | None = None,
-) -> int:
-    generation = config.external_benchmarks.agent_generation
-    requested_limit = min(config.model.context_limit, generation.agent_context_limit)
-    if isinstance(discovered_context_limit, int) and discovered_context_limit > 0:
-        return min(requested_limit, discovered_context_limit)
-    return requested_limit
 
 
 def _real_agent_env(
@@ -291,7 +239,6 @@ def _real_agent_env(
     workspace: Path,
     session_root: Path,
     config: AgentConfig,
-    discovered_context_limit: int | None = None,
 ) -> dict[str, str]:
     generation = config.external_benchmarks.agent_generation
     env = dict(os.environ)
@@ -299,9 +246,6 @@ def _real_agent_env(
     existing_pythonpath = env.get("PYTHONPATH", "")
     env["PYTHONPATH"] = repo_src if not existing_pythonpath else f"{repo_src}{os.pathsep}{existing_pythonpath}"
     env["SWAAG__SESSIONS__ROOT"] = str(session_root)
-    env["SWAAG__MODEL__CONTEXT_LIMIT"] = str(
-        _resolved_agent_context_limit(config, discovered_context_limit=discovered_context_limit)
-    )
     env["SWAAG__MODEL__TIMEOUT_SECONDS"] = str(generation.model_timeout_seconds)
     env["SWAAG__MODEL__STRUCTURED_TIMEOUT_SECONDS"] = str(generation.model_structured_timeout_seconds)
     env["SWAAG__TOOLS__READ_ROOTS"] = stable_json_dumps([str(workspace)])
@@ -344,13 +288,11 @@ def _run_agent_turn(
     prompt_path: Path,
     timeout_seconds: int,
     config: AgentConfig,
-    discovered_context_limit: int | None = None,
 ) -> tuple[str, str, str]:
     env = _real_agent_env(
         workspace=workspace,
         session_root=session_root,
         config=config,
-        discovered_context_limit=discovered_context_limit,
     )
     max_attempts = max(1, config.external_benchmarks.agent_generation.solver_max_attempts)
     prompt_attempts: list[str] = []
@@ -411,7 +353,6 @@ def generate_agent_predictions(
     prompt_template = config.external_benchmarks.agent_generation.prompt_template
     retry_prompt_template = config.external_benchmarks.agent_generation.empty_patch_retry_prompt
     timeout_seconds = config.external_benchmarks.agent_generation.agent_timeout_seconds
-    discovered_context_limit = _discover_server_context_limit(config)
     records: list[dict[str, Any]] = []
     stdout_paths: list[str] = []
     stderr_paths: list[str] = []
@@ -419,7 +360,7 @@ def generate_agent_predictions(
     for instance in subset.instances:
         instance_id = str(instance["instance_id"])
         workspace = _prepare_workspace(instance=instance, workspace_root=workspaces_root, config=config)
-        prompt = _render_prompt(instance, prompt_template, config=config)
+        prompt = _render_prompt(instance, prompt_template)
         prompt_path = logs_root / f"{instance_id}.prompt.txt"
         stdout_text, stderr_text, prompt_text = _run_agent_turn(
             workspace=workspace,
@@ -429,7 +370,6 @@ def generate_agent_predictions(
             prompt_path=prompt_path,
             timeout_seconds=timeout_seconds,
             config=config,
-            discovered_context_limit=discovered_context_limit,
         )
         diff = subprocess.run(
             ["git", "diff", "--binary", "HEAD"],
@@ -443,7 +383,7 @@ def generate_agent_predictions(
             detail = diff.stderr.strip() or diff.stdout.strip() or f"exit code {diff.returncode}"
             raise LocalSwebenchFailure(f"git diff failed for {instance_id}: {detail}")
         if not diff.stdout.strip():
-            retry_prompt = _render_empty_patch_retry_prompt(instance, retry_prompt_template, config=config)
+            retry_prompt = _render_empty_patch_retry_prompt(instance, retry_prompt_template)
             retry_prompt_path = logs_root / f"{instance_id}.retry_prompt.txt"
             retry_stdout, retry_stderr, retry_prompt_text = _run_agent_turn(
                 workspace=workspace,
@@ -453,7 +393,6 @@ def generate_agent_predictions(
                 prompt_path=retry_prompt_path,
                 timeout_seconds=timeout_seconds,
                 config=config,
-                discovered_context_limit=discovered_context_limit,
             )
             stdout_text = "\n".join(part for part in (stdout_text, retry_stdout) if part)
             stderr_text = "\n".join(part for part in (stderr_text, retry_stderr) if part)

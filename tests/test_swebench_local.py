@@ -68,7 +68,6 @@ def test_render_prompt_includes_fail_to_pass_test_names() -> None:
             "hints_text": "",
         },
         config.external_benchmarks.agent_generation.prompt_template,
-        config=config,
     )
 
     assert "tests/test_demo.py::test_fix" in prompt
@@ -76,8 +75,7 @@ def test_render_prompt_includes_fail_to_pass_test_names() -> None:
     assert "{{" not in prompt
 
 
-def test_render_prompt_truncates_problem_and_hints_to_policy_budget() -> None:
-    config = load_config()
+def test_render_prompt_preserves_complete_problem_and_hints() -> None:
     prompt = swebench_local._render_prompt(
         {
             "repo": "demo/repo",
@@ -87,11 +85,11 @@ def test_render_prompt_truncates_problem_and_hints_to_policy_budget() -> None:
             "hints_text": "H" * 1000,
         },
         "Task details:\n{problem_statement}\nAdditional verification context:\n{fail_to_pass_tests}\nHints:\n{hints_text}\n",
-        config=config,
     )
 
-    assert "...[truncated]" in prompt
-    assert len(prompt) < 1800
+    assert "P" * 1000 in prompt
+    assert "H" * 1000 in prompt
+    assert "...[truncated]" not in prompt
 
 
 def test_empty_patch_retry_prompt_preserves_task_data_without_contract_injection() -> None:
@@ -105,7 +103,6 @@ def test_empty_patch_retry_prompt_preserves_task_data_without_contract_injection
             "hints_text": "Check parser.py",
         },
         config.external_benchmarks.agent_generation.empty_patch_retry_prompt,
-        config=config,
     )
 
     assert "\"task_kind\":\"local_repo_code_fix\"" not in prompt
@@ -214,9 +211,7 @@ def test_run_agent_turn_uses_real_agent_cli_with_workspace_scoped_env(
     assert kwargs["timeout"] == 42
     env = kwargs["env"]
     assert env["SWAAG__SESSIONS__ROOT"] == str(session_root)
-    assert env["SWAAG__MODEL__CONTEXT_LIMIT"] == str(
-        min(config.model.context_limit, config.external_benchmarks.agent_generation.agent_context_limit)
-    )
+    assert "SWAAG__MODEL__CONTEXT_LIMIT" not in env
     assert env["SWAAG__MODEL__TIMEOUT_SECONDS"] == str(
         config.external_benchmarks.agent_generation.model_timeout_seconds
     )
@@ -271,13 +266,12 @@ def test_run_agent_turn_retries_retryable_structured_failure(
     assert "Retry from scratch." in prompt_text
 
 
-def test_real_agent_env_clamps_context_limit_to_server_truth(tmp_path: Path) -> None:
+def test_real_agent_env_leaves_context_capacity_to_production_discovery(tmp_path: Path) -> None:
     config = load_config()
     env = swebench_local._real_agent_env(
         workspace=tmp_path / "workspace",
         session_root=tmp_path / "sessions",
         config=config,
-        discovered_context_limit=1024,
     )
 
-    assert env["SWAAG__MODEL__CONTEXT_LIMIT"] == "1024"
+    assert "SWAAG__MODEL__CONTEXT_LIMIT" not in env

@@ -254,21 +254,13 @@ class ExternalBenchmarkAgentGenerationConfig:
     default_max_instances: int
     clone_timeout_seconds: int
     agent_timeout_seconds: int
-    agent_context_limit: int
     model_timeout_seconds: int
     model_structured_timeout_seconds: int
     allow_stateful_tools: bool
     allow_side_effect_tools: bool
     runtime_max_total_actions: int
     runtime_tool_call_budget: int
-    candidate_file_limit: int
-    file_excerpt_char_limit: int
-    issue_prompt_char_limit: int
-    completion_max_tokens: int
     solver_max_attempts: int
-    summary_max_chars: int
-    find_max_chars: int
-    replace_max_chars: int
     git_remote_base_url: str
     model_name_or_path: str
     prompt_template: str
@@ -491,7 +483,6 @@ def _coerce_config(data: dict[str, Any]) -> AgentConfig:
             default_max_instances=int(data["external_benchmarks"]["agent_generation"]["default_max_instances"]),
             clone_timeout_seconds=int(data["external_benchmarks"]["agent_generation"]["clone_timeout_seconds"]),
             agent_timeout_seconds=int(data["external_benchmarks"]["agent_generation"]["agent_timeout_seconds"]),
-            agent_context_limit=int(data["external_benchmarks"]["agent_generation"]["agent_context_limit"]),
             model_timeout_seconds=int(data["external_benchmarks"]["agent_generation"]["model_timeout_seconds"]),
             model_structured_timeout_seconds=int(
                 data["external_benchmarks"]["agent_generation"]["model_structured_timeout_seconds"]
@@ -500,14 +491,7 @@ def _coerce_config(data: dict[str, Any]) -> AgentConfig:
             allow_side_effect_tools=bool(data["external_benchmarks"]["agent_generation"]["allow_side_effect_tools"]),
             runtime_max_total_actions=int(data["external_benchmarks"]["agent_generation"]["runtime_max_total_actions"]),
             runtime_tool_call_budget=int(data["external_benchmarks"]["agent_generation"]["runtime_tool_call_budget"]),
-            candidate_file_limit=int(data["external_benchmarks"]["agent_generation"]["candidate_file_limit"]),
-            file_excerpt_char_limit=int(data["external_benchmarks"]["agent_generation"]["file_excerpt_char_limit"]),
-            issue_prompt_char_limit=int(data["external_benchmarks"]["agent_generation"]["issue_prompt_char_limit"]),
-            completion_max_tokens=int(data["external_benchmarks"]["agent_generation"]["completion_max_tokens"]),
             solver_max_attempts=int(data["external_benchmarks"]["agent_generation"]["solver_max_attempts"]),
-            summary_max_chars=int(data["external_benchmarks"]["agent_generation"]["summary_max_chars"]),
-            find_max_chars=int(data["external_benchmarks"]["agent_generation"]["find_max_chars"]),
-            replace_max_chars=int(data["external_benchmarks"]["agent_generation"]["replace_max_chars"]),
             git_remote_base_url=str(data["external_benchmarks"]["agent_generation"]["git_remote_base_url"]),
             model_name_or_path=str(data["external_benchmarks"]["agent_generation"]["model_name_or_path"]),
             prompt_template=str(data["external_benchmarks"]["agent_generation"]["prompt_template"]),
@@ -632,10 +616,6 @@ def _coerce_config(data: dict[str, Any]) -> AgentConfig:
         external_benchmarks.agent_generation.agent_timeout_seconds,
     )
     _validate_positive(
-        "external_benchmarks.agent_generation.agent_context_limit",
-        external_benchmarks.agent_generation.agent_context_limit,
-    )
-    _validate_positive(
         "external_benchmarks.agent_generation.model_timeout_seconds",
         external_benchmarks.agent_generation.model_timeout_seconds,
     )
@@ -652,36 +632,8 @@ def _coerce_config(data: dict[str, Any]) -> AgentConfig:
         external_benchmarks.agent_generation.runtime_tool_call_budget,
     )
     _validate_positive(
-        "external_benchmarks.agent_generation.candidate_file_limit",
-        external_benchmarks.agent_generation.candidate_file_limit,
-    )
-    _validate_positive(
-        "external_benchmarks.agent_generation.file_excerpt_char_limit",
-        external_benchmarks.agent_generation.file_excerpt_char_limit,
-    )
-    _validate_positive(
-        "external_benchmarks.agent_generation.issue_prompt_char_limit",
-        external_benchmarks.agent_generation.issue_prompt_char_limit,
-    )
-    _validate_positive(
-        "external_benchmarks.agent_generation.completion_max_tokens",
-        external_benchmarks.agent_generation.completion_max_tokens,
-    )
-    _validate_positive(
         "external_benchmarks.agent_generation.solver_max_attempts",
         external_benchmarks.agent_generation.solver_max_attempts,
-    )
-    _validate_positive(
-        "external_benchmarks.agent_generation.summary_max_chars",
-        external_benchmarks.agent_generation.summary_max_chars,
-    )
-    _validate_positive(
-        "external_benchmarks.agent_generation.find_max_chars",
-        external_benchmarks.agent_generation.find_max_chars,
-    )
-    _validate_positive(
-        "external_benchmarks.agent_generation.replace_max_chars",
-        external_benchmarks.agent_generation.replace_max_chars,
     )
     if not external_benchmarks.agent_generation.git_remote_base_url:
         raise ValueError("external_benchmarks.agent_generation.git_remote_base_url must not be empty")

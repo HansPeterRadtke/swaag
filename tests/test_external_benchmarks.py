@@ -60,14 +60,7 @@ def test_external_benchmark_defaults_cover_all_required_integrations() -> None:
     assert config.external_benchmarks.agent_generation.model_structured_timeout_seconds == 240
     assert config.external_benchmarks.agent_generation.runtime_max_total_actions == 40
     assert config.external_benchmarks.agent_generation.runtime_tool_call_budget == 24
-    assert config.external_benchmarks.agent_generation.candidate_file_limit == 2
-    assert config.external_benchmarks.agent_generation.file_excerpt_char_limit == 900
-    assert config.external_benchmarks.agent_generation.issue_prompt_char_limit == 1200
-    assert config.external_benchmarks.agent_generation.completion_max_tokens == 192
     assert config.external_benchmarks.agent_generation.solver_max_attempts == 2
-    assert config.external_benchmarks.agent_generation.summary_max_chars == 120
-    assert config.external_benchmarks.agent_generation.find_max_chars == 800
-    assert config.external_benchmarks.agent_generation.replace_max_chars == 1600
     assert config.external_benchmarks.agent_generation.git_remote_base_url == "https://github.com"
     assert "Task details:" in config.external_benchmarks.agent_generation.prompt_template
     assert "read -> edit -> verify -> respond" not in config.external_benchmarks.agent_generation.prompt_template
