@@ -592,6 +592,35 @@ class ExtractAttachmentTool(Tool):
             ) from exc
         artifact = artifact_store.create(full_text, kind="attachment_extraction")
         preview = full_text[: context.config.attachments.preview_chars]
+        stream_evidence: dict[str, object] = {}
+        stream_events: list[ToolGeneratedEvent] = []
+        for stream_name, text in (
+            ("stdout", completed.stdout),
+            ("stderr", completed.stderr),
+        ):
+            stream_evidence[f"{stream_name}_chars"] = len(text)
+            stream_evidence[f"{stream_name}_sha256"] = sha256_text(text)
+            stream_evidence[f"{stream_name}_artifact_id"] = ""
+            if not text:
+                continue
+            stream_artifact = artifact_store.create(
+                text,
+                kind=f"attachment_extraction_{stream_name}",
+            )
+            stream_evidence[f"{stream_name}_artifact_id"] = (
+                stream_artifact.artifact_id
+            )
+            stream_events.append(
+                ToolGeneratedEvent(
+                    "artifact_created",
+                    {
+                        "artifact_id": stream_artifact.artifact_id,
+                        "kind": stream_artifact.kind,
+                        "size_chars": stream_artifact.size_chars,
+                        "sha256": stream_artifact.sha256,
+                    },
+                )
+            )
         manifest_summary = {
             "schema": manifest.get("schema"),
             "summary": manifest.get("summary", {}),
@@ -624,6 +653,7 @@ class ExtractAttachmentTool(Tool):
             "text": preview,
             "truncated": len(preview) < len(full_text),
             "manifest": manifest_summary,
+            **stream_evidence,
             "source_event_references": source_references,
         }
         events = [
@@ -637,6 +667,7 @@ class ExtractAttachmentTool(Tool):
                 },
             ),
             manifest_event,
+            *stream_events,
             ToolGeneratedEvent(
                 "attachment_extracted",
                 {
@@ -647,6 +678,7 @@ class ExtractAttachmentTool(Tool):
                     "extractor": "all2text",
                     "profile": validated_input["profile"],
                     "manifest": manifest_summary,
+                    **stream_evidence,
                     "source_event_references": source_references,
                 },
             ),

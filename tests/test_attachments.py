@@ -11,6 +11,7 @@ from swaag.environment.artifacts import TextArtifactStore
 from swaag.runtime import AgentRuntime
 from swaag.task_api import TaskApi
 from swaag.tokens import ConservativeEstimator
+from swaag.utils import sha256_text
 from swaag.workers import WorkerManager
 
 
@@ -128,6 +129,8 @@ manifest = {
     }],
 }
 (target / '_conversion_manifest.json').write_text(json.dumps(manifest), encoding='utf-8')
+print('conversion completed for ' + name)
+print('specialist warning for ' + name, file=sys.stderr)
 """,
         encoding="utf-8",
     )
@@ -397,10 +400,20 @@ def test_extract_attachment_retains_complete_derived_artifact(make_config, tmp_p
     archived_manifest = archived_store.read(
         result.output["manifest_artifact_id"], start_offset=0, max_chars=10_000
     )
+    archived_stdout = archived_store.read(
+        result.output["stdout_artifact_id"], start_offset=0, max_chars=1000
+    )
+    archived_stderr = archived_store.read(
+        result.output["stderr_artifact_id"], start_offset=0, max_chars=1000
+    )
 
-    assert archived["artifact_count"] == 2
+    assert archived["artifact_count"] == 4
     assert archived_text["text"] == "derived text from report.txt\n"
     assert json.loads(archived_manifest["text"])["schema"] == "all2text.conversion_manifest.v1"
+    assert archived_stdout["text"] == "conversion completed for report.txt\n"
+    assert archived_stderr["text"] == "specialist warning for report.txt\n"
+    assert result.output["stdout_sha256"] == sha256_text(archived_stdout["text"])
+    assert result.output["stderr_sha256"] == sha256_text(archived_stderr["text"])
     assert not (config.sessions.root / state.session_id).exists()
 
 
