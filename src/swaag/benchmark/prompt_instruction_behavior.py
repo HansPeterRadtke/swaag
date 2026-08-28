@@ -72,12 +72,37 @@ CASES = (
         prompt=(
             "Use the prompt_instructions capability to inspect the local-user store, "
             "then add two different durable rules under the broad action call scope. "
-            "The first governs software implementation and testing steps: reproduce a "
-            "claimed defect before changing code and test each change. The second governs "
-            "research and source-verification steps: prefer primary sources and verify "
-            "version-specific claims. Give each rule concise free-form semantic categories "
+            "The first governs substantial software implementation and testing steps: "
+            "understand the purpose, interfaces, constraints, and high-consequence risks; "
+            "reproduce claimed defects; simulate critical external failures in isolated tests; "
+            "and exercise integration behavior without forcing that ceremony onto trivial work. "
+            "The second governs research and source-verification steps: inspect exact installed "
+            "versions, prefer primary sources, and reproduce material documentation claims in "
+            "a safe experiment. Give each rule concise free-form semantic categories "
             "so neither becomes an unconditional instruction on every action call. Do not "
             "copy either rule into the session store."
+        ),
+    ),
+    PromptInstructionBehaviorCase(
+        case_id="apply_programming_category",
+        split="held_out",
+        setup="categorized_user_rules",
+        prompt=(
+            "Without changing files, propose a focused test strategy for a mobile client's "
+            "reconnect change. Cover the dangerous lifecycle and intermittent-network states "
+            "that should be simulated before any real-device acceptance run. This is an "
+            "implementation/testing step, not a request for source research."
+        ),
+    ),
+    PromptInstructionBehaviorCase(
+        case_id="apply_research_category",
+        split="held_out",
+        setup="categorized_user_rules",
+        prompt=(
+            "Without implementing anything, explain how you would verify whether an installed "
+            "dependency actually supports a claimed API. Include exact-version inspection, an "
+            "authoritative source, and an isolated reproduction. This is a research and "
+            "source-verification step, not a software modification."
         ),
     ),
     PromptInstructionBehaviorCase(
@@ -190,6 +215,37 @@ def _seed_case(
         )
         assert mutation.instruction is not None
         return [mutation.instruction.instruction_id]
+    if case.setup == "categorized_user_rules":
+        seeded: list[str] = []
+        for title, content, categories in (
+            (
+                "Risk-driven implementation testing",
+                (
+                    "For substantial software work, identify high-consequence risks, "
+                    "reproduce defects, simulate critical external failures in isolated "
+                    "tests, and exercise integration behavior. Keep trivial work direct."
+                ),
+                ["software implementation", "risk-driven testing"],
+            ),
+            (
+                "Version-grounded source research",
+                (
+                    "For research, inspect exact installed versions, prefer primary sources, "
+                    "and reproduce material documentation claims in a safe experiment."
+                ),
+                ["research", "source verification"],
+            ),
+        ):
+            mutation = store.add(
+                title=title,
+                content=content,
+                scopes=["action"],
+                categories=categories,
+                origin_session_id=state.session_id,
+            )
+            assert mutation.instruction is not None
+            seeded.append(mutation.instruction.instruction_id)
+        return seeded
     raise ValueError(f"Unknown prompt-instruction setup: {case.setup}")
 
 
@@ -214,6 +270,8 @@ def _verify_case(
     session_instructions: list[PromptInstruction],
     store_actions: list[str],
     tool_actions: list[str],
+    assistant_text: str = "",
+    selection_events: list[dict[str, Any]] | None = None,
 ) -> dict[str, Any]:
     user_text = "\n".join(
         f"{item.title}\n{item.content}" for item in user_instructions
@@ -221,6 +279,13 @@ def _verify_case(
     session_text = "\n".join(
         f"{item.title}\n{item.content}" for item in session_instructions
     ).casefold()
+    action_selections = [
+        item
+        for item in (selection_events or [])
+        if item.get("kind") == "action"
+        and item.get("semantic_selection") is True
+        and item.get("selection_fallback") is False
+    ]
     if case.case_id == "cross_session_scope":
         checks = {
             "one_user_instruction": len(user_instructions) == 1,
@@ -319,6 +384,77 @@ def _verify_case(
             "category_sets_differ": len(implementation) == 1
             and len(research) == 1
             and set(implementation[0].categories) != set(research[0].categories),
+            "implementation_risk_preserved": len(implementation) == 1
+            and any(
+                word in implementation[0].content.casefold()
+                for word in ("risk", "danger", "consequence")
+            ),
+            "implementation_simulation_preserved": len(implementation) == 1
+            and any(
+                word in implementation[0].content.casefold()
+                for word in ("simulat", "fake", "emulat")
+            )
+            and any(
+                word in implementation[0].content.casefold()
+                for word in ("integration", "system", "end-to-end")
+            ),
+            "research_reproduction_preserved": len(research) == 1
+            and "version" in research[0].content.casefold()
+            and any(
+                word in research[0].content.casefold()
+                for word in ("reproduc", "experiment", "verify")
+            ),
+            "session_store_unchanged": not session_instructions,
+        }
+    elif case.case_id in {
+        "apply_programming_category",
+        "apply_research_category",
+    }:
+        expected_index = 0 if case.case_id == "apply_programming_category" else 1
+        excluded_index = 1 - expected_index
+        expected_id = seeded_ids[expected_index] if len(seeded_ids) == 2 else ""
+        excluded_id = seeded_ids[excluded_index] if len(seeded_ids) == 2 else ""
+        isolated = [
+            item
+            for item in action_selections
+            if expected_id in item.get("instruction_ids", [])
+            and excluded_id not in item.get("instruction_ids", [])
+        ]
+        lowered_answer = assistant_text.casefold()
+        if case.case_id == "apply_programming_category":
+            behavior_preserved = (
+                any(
+                    word in lowered_answer
+                    for word in ("disconnect", "network", "offline")
+                )
+                and any(
+                    word in lowered_answer
+                    for word in ("background", "lifecycle", "restart", "recreat")
+                )
+                and any(
+                    word in lowered_answer
+                    for word in ("simulat", "fake", "emulat", "inject")
+                )
+            )
+        else:
+            behavior_preserved = (
+                "version" in lowered_answer
+                and any(
+                    word in lowered_answer
+                    for word in ("primary", "official", "authoritative")
+                )
+                and any(
+                    word in lowered_answer
+                    for word in ("reproduc", "experiment", "minimal")
+                )
+            )
+        checks = {
+            "two_seeded_instructions_remain": len(user_instructions) == 2
+            and len(seeded_ids) == 2,
+            "no_store_mutation": store_actions == ["add", "add"],
+            "category_selected_semantically": bool(isolated),
+            "unrelated_category_excluded": bool(isolated),
+            "selected_behavior_applied": behavior_preserved,
             "session_store_unchanged": not session_instructions,
         }
     elif case.case_id == "revise_stale_rule":
@@ -427,6 +563,12 @@ def run_prompt_instruction_behavior_benchmark(
         )
         user_instructions = store.list()
         store_events = store.events()
+        history_events = runtime.history.read_history(state.session_id)
+        selection_events = [
+            {"sequence": event.sequence, **dict(event.payload)}
+            for event in history_events
+            if event.event_type == "prompt_instructions_selected"
+        ]
         verification = _verify_case(
             case,
             seeded_ids=seeded_ids,
@@ -435,10 +577,12 @@ def run_prompt_instruction_behavior_benchmark(
             store_actions=[event.action for event in store_events],
             tool_actions=[
                 str(event.payload.get("tool_input", {}).get("action", ""))
-                for event in runtime.history.read_history(state.session_id)
+                for event in history_events
                 if event.event_type == "tool_called"
                 and event.payload.get("tool_name") == "prompt_instructions"
             ],
+            assistant_text=assistant_text,
+            selection_events=selection_events,
         )
         if error is not None:
             verification = {
@@ -446,7 +590,6 @@ def run_prompt_instruction_behavior_benchmark(
                 "checks": verification["checks"],
                 "execution_error": error,
             }
-        history_events = runtime.history.read_history(state.session_id)
         source_events = [
             event
             for event in history_events
@@ -496,6 +639,7 @@ def run_prompt_instruction_behavior_benchmark(
                     for event in history_events
                     if event.event_type == "tool_called"
                 ],
+                "prompt_instruction_selections": selection_events,
                 "context_compilations": [
                     {"sequence": event.sequence, **dict(event.payload)}
                     for event in history_events

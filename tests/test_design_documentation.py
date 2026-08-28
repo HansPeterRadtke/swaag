@@ -37,3 +37,35 @@ def test_hmi_contract_preserves_research_backed_requirements() -> None:
     )
     for url in primary_sources:
         assert url in source
+
+
+def test_engineering_contract_preserves_recording_driven_risk_workflow() -> None:
+    source = (ROOT / "docs" / "engineering-workflow.md").read_text(
+        encoding="utf-8"
+    )
+
+    required_contracts = (
+        "Scale the work semantically",
+        "purpose, inputs, outputs, interfaces, invariants",
+        "Risk priority follows consequences",
+        "exact installed versions",
+        "Treat documentation as a hypothesis",
+        "Simulate critical conditions",
+        "integration or whole-system simulators",
+        "Parameterize ranges and hold out variants",
+        "higher-fidelity acceptance",
+        "does not substitute for behavior",
+    )
+    for contract in required_contracts:
+        assert contract in source
+
+    primary_sources = (
+        "https://csrc.nist.gov/pubs/sp/800/218/final",
+        "https://developer.android.com/training/testing/fundamentals/strategies",
+        "https://developer.android.com/guide/components/activities/testing",
+        "https://developer.android.com/training/monitoring-device-state/doze-standby",
+        "https://man7.org/linux/man-pages/man8/tc-netem.8.html",
+        "https://docs.pytest.org/en/stable/how-to/monkeypatch.html",
+    )
+    for url in primary_sources:
+        assert url in source

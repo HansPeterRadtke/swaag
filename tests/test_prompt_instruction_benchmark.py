@@ -230,7 +230,10 @@ def test_fine_grained_category_case_accepts_distinct_semantic_labels() -> None:
         PromptInstruction(
             instruction_id="instruction_implementation",
             title="Implementation discipline",
-            content="Reproduce claimed defects before changing code and test every change.",
+            content=(
+                "Identify high-consequence risks, reproduce claimed defects, simulate "
+                "critical failures, and exercise integration behavior before completion."
+            ),
             scopes=["action"],
             created_at=now,
             updated_at=now,
@@ -239,7 +242,10 @@ def test_fine_grained_category_case_accepts_distinct_semantic_labels() -> None:
         PromptInstruction(
             instruction_id="instruction_research",
             title="Source verification",
-            content="Prefer primary sources and verify version-specific research claims.",
+            content=(
+                "Inspect exact versions, prefer primary sources, and reproduce material "
+                "research claims in an isolated experiment."
+            ),
             scopes=["action"],
             created_at=now,
             updated_at=now,
@@ -257,3 +263,71 @@ def test_fine_grained_category_case_accepts_distinct_semantic_labels() -> None:
     )
 
     assert result["passed"] is True
+
+
+def test_category_application_cases_require_semantic_isolation() -> None:
+    cases = {item.case_id: item for item in select_cases()}
+    now = "2026-08-27T00:00:00+00:00"
+    instructions = [
+        PromptInstruction(
+            instruction_id="programming",
+            title="Risk-driven implementation testing",
+            content="Simulate critical failures and exercise integration behavior.",
+            scopes=["action"],
+            created_at=now,
+            updated_at=now,
+            categories=["software implementation", "risk-driven testing"],
+        ),
+        PromptInstruction(
+            instruction_id="research",
+            title="Version-grounded source research",
+            content="Inspect exact versions and verify primary sources.",
+            scopes=["action"],
+            created_at=now,
+            updated_at=now,
+            categories=["research", "source verification"],
+        ),
+    ]
+    common = {
+        "seeded_ids": ["programming", "research"],
+        "user_instructions": instructions,
+        "session_instructions": [],
+        "store_actions": ["add", "add"],
+        "tool_actions": [],
+    }
+
+    programming = _verify_case(
+        cases["apply_programming_category"],
+        **common,
+        assistant_text=(
+            "Inject offline and intermittent network failures, then background, recreate, "
+            "and restart the client in an integration simulator before device acceptance."
+        ),
+        selection_events=[
+            {
+                "kind": "action",
+                "semantic_selection": True,
+                "selection_fallback": False,
+                "instruction_ids": ["programming"],
+            }
+        ],
+    )
+    assert programming["passed"] is True
+
+    research = _verify_case(
+        cases["apply_research_category"],
+        **common,
+        assistant_text=(
+            "Inspect the installed version, compare its official primary documentation, "
+            "and run a minimal reproduction experiment against that exact environment."
+        ),
+        selection_events=[
+            {
+                "kind": "action",
+                "semantic_selection": True,
+                "selection_fallback": False,
+                "instruction_ids": ["research"],
+            }
+        ],
+    )
+    assert research["passed"] is True
