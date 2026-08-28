@@ -69,3 +69,35 @@ def test_mcp_sdk_conformance_assets_are_pinned_and_parse() -> None:
     assert "mode: { pin: \"2026-07-28\" }" in probe_source
     assert "client.listTools" in probe_source
     assert "client.callTool" in probe_source
+
+
+def test_a2a_sdk_conformance_assets_are_pinned_and_parse() -> None:
+    installer = ROOT / "scripts" / "install-a2a-conformance-env.sh"
+    probe = ROOT / "scripts" / "a2a-sdk-conformance.mjs"
+    installer_source = installer.read_text(encoding="utf-8")
+    probe_source = probe.read_text(encoding="utf-8")
+
+    shell_check = subprocess.run(
+        ["bash", "-n", str(installer)],
+        text=True,
+        capture_output=True,
+        check=False,
+    )
+    node_check = subprocess.run(
+        ["node", "--check", str(probe)],
+        text=True,
+        capture_output=True,
+        check=False,
+    )
+
+    assert shell_check.returncode == 0, shell_check.stderr
+    assert node_check.returncode == 0, node_check.stderr
+    assert 'VERSION="1.1.0"' in installer_source
+    assert "@a2a-js/sdk@${VERSION}" in installer_source
+    assert "new JsonRpcTransportFactory()" in probe_source
+    assert "TaskState.TASK_STATE_UNSPECIFIED" in probe_source
+    assert "factory.createFromUrl" in probe_source
+    assert "client.listTasks" in probe_source
+    assert "client.getTask" in probe_source
+    assert ".resubscribeTask" in probe_source
+    assert "client.cancelTask" in probe_source

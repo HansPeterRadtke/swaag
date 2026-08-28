@@ -2,6 +2,13 @@
 
 These measurements are retained as model/server-specific evidence, not universal policy. Machine-readable artifacts remain under `/data/var/swaag/benchmarks` because they contain full runtime traces and host-specific identities.
 
+## A2A official SDK conformance - 2026-08-28
+
+- Artifact: `/data/var/swaag/manual-tests/a2a-sdk-conformance-repo-20260828T033843/result.json`.
+- Method: install exact official `@a2a-js/sdk` 1.1.0 outside the repository, seed one non-running durable task through Swaag's transport-neutral API, launch the source communication service on temporary loopback port 13402, and let `ClientFactory` resolve the Agent Card and use its advertised A2A 1.0 JSON-RPC interface for list, get, subscribe, and cancel.
+- Result: the SDK decoded the Swaag identity, streaming capability, one skill, one submitted task, exact task/context IDs, empty canonical history/artifacts, and correct pagination. Its stream decoded the initial Task, intermediate and canceled status updates, and a clean terminal close; `CancelTask` independently decoded the canceled Task. Swaag exited zero on `SIGTERM` with empty stdout/stderr. The initial probe also exposed and the implementation now fixes a real CLI override defect: the card advertises the effective bound host and port rather than stale configured defaults.
+- Scope: this establishes official JavaScript client interoperability for Agent Card discovery plus list/get/subscribe/cancel on the implemented JSON-RPC/SSE binding. It does not claim official new-task send/stream coverage, HTTP+JSON, gRPC, extended-card signatures, or non-local authentication.
+
 ## MCP official SDK conformance - 2026-08-28
 
 - Artifact: `/data/var/swaag/manual-tests/mcp-sdk-conformance-repo-20260828T051124/result.json`.

@@ -382,6 +382,45 @@ def test_communication_transport_serves_a2a_agent_card_and_jsonrpc(make_config):
     asyncio.run(exercise())
 
 
+def test_serve_tcp_agent_card_advertises_the_effective_bound_endpoint(make_config):
+    async def exercise() -> None:
+        config = make_config()
+        service = CommunicationService(AgentRuntime(config, model_client=object()))
+        serve_task = asyncio.create_task(service.serve_tcp("127.0.0.1", 0))
+        for _ in range(100):
+            if service._advertised_port != config.communication.port:
+                break
+            await asyncio.sleep(0.01)
+        else:
+            serve_task.cancel()
+            with pytest.raises(asyncio.CancelledError):
+                await serve_task
+            pytest.fail("communication listener did not bind")
+
+        reader, writer = await asyncio.open_connection(
+            "127.0.0.1", service._advertised_port
+        )
+        writer.write(
+            b"GET /.well-known/agent-card.json HTTP/1.1\r\n"
+            b"Host: localhost\r\n\r\n"
+        )
+        await writer.drain()
+        response = await reader.read()
+        writer.close()
+        await writer.wait_closed()
+        card = json.loads(response.split(b"\r\n\r\n", 1)[1])
+
+        serve_task.cancel()
+        with pytest.raises(asyncio.CancelledError):
+            await serve_task
+
+        assert card["supportedInterfaces"][0]["url"] == (
+            f"http://127.0.0.1:{service._advertised_port}/a2a/v1"
+        )
+
+    asyncio.run(exercise())
+
+
 def test_http_adapter_extracts_w3c_trace_context(make_config) -> None:
     async def exercise() -> None:
         exporter = InMemorySpanExporter()

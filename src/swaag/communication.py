@@ -334,6 +334,8 @@ class CommunicationService:
         self._semaphore = asyncio.Semaphore(max(1, int(max_concurrency)))
         self.workers = WorkerManager(runtime, max_workers=max_concurrency)
         self.task_api = TaskApi(self.workers)
+        self._advertised_host = str(runtime.config.communication.host).strip()
+        self._advertised_port = int(runtime.config.communication.port)
 
     @classmethod
     def from_config(cls, config: AgentConfig) -> "CommunicationService":
@@ -1260,10 +1262,15 @@ class CommunicationService:
             )
 
     def _a2a_agent_card(self) -> dict[str, Any]:
-        host = str(self.runtime.config.communication.host).strip()
+        host = self._advertised_host
         if host in {"", "0.0.0.0", "::"}:
             host = "127.0.0.1"
-        port = int(self.runtime.config.communication.port)
+        try:
+            if ipaddress.ip_address(host).version == 6:
+                host = f"[{host}]"
+        except ValueError:
+            pass
+        port = self._advertised_port
         return {
             "name": "Swaag",
             "description": (
@@ -1974,6 +1981,13 @@ class CommunicationService:
         host = require_loopback_bind_host(host)
         self.workers.reconcile_orphans()
         server = await asyncio.start_server(self.handle_client, host, port)
+        bound_port = (
+            int(server.sockets[0].getsockname()[1])
+            if server.sockets
+            else int(port)
+        )
+        self._advertised_host = host
+        self._advertised_port = bound_port
         loop = asyncio.get_running_loop()
         serving_task = asyncio.current_task()
         stop_requested = False
@@ -1991,7 +2005,10 @@ class CommunicationService:
             except (NotImplementedError, RuntimeError):
                 continue
             registered_signals.append(signum)
-        systemd_notify("READY=1", f"STATUS=swaag communication listening on {host}:{port}")
+        systemd_notify(
+            "READY=1",
+            f"STATUS=swaag communication listening on {host}:{bound_port}",
+        )
         watchdog_task = asyncio.create_task(self._watchdog_loop(), name="swaag-systemd-watchdog")
         wakeup_task = asyncio.create_task(
             self._wakeup_loop(), name="swaag-wakeup-dispatcher"
