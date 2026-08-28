@@ -12,6 +12,7 @@ from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any, Iterable
 
+from swaag.delegated_tools import DelegatedToolInputRequired
 from swaag.preemption import ModelCallStateChanged, RunCancellationRequested
 from swaag.runtime import AgentRuntime
 from swaag.scheduler import WakeupStore
@@ -636,6 +637,14 @@ class WorkerManager:
                 raise ValueError(f"Worker {worker_id} is archived")
             if current.status not in WORKER_RESUMABLE_STATES:
                 raise ValueError(f"Worker {worker_id} cannot resume from {current.status}")
+            pending_tool = self.runtime.delegated_tools.pending_call(
+                current.session_id
+            )
+            if pending_tool is not None:
+                raise ValueError(
+                    f"Worker {worker_id} awaits delegated tool result "
+                    f"{pending_tool.call_id}"
+                )
             if message is not None and message.strip():
                 self._queue_message(current, message.strip(), source="worker_resume")
             queued = self.store.transition(
@@ -661,6 +670,14 @@ class WorkerManager:
                 raise ValueError(f"Worker {worker_id} is archived")
             if current.status == "cancellation_requested":
                 raise ValueError(f"Worker {worker_id} is being canceled")
+            pending_tool = self.runtime.delegated_tools.pending_call(
+                current.session_id
+            )
+            if pending_tool is not None:
+                raise ValueError(
+                    f"Worker {worker_id} awaits delegated tool result "
+                    f"{pending_tool.call_id}"
+                )
             self._queue_message(current, message, source=source)
             status_at_delivery = current.status
         if status_at_delivery == "working":
@@ -706,6 +723,19 @@ class WorkerManager:
             event_type="worker_cancellation_requested",
             event_payload={"reason": reason},
         )
+        canceled_tool = self.runtime.delegated_tools.cancel_pending(
+            current.session_id, reason=reason
+        )
+        if canceled_tool is not None:
+            self.store.append_event(
+                worker_id,
+                "worker_delegated_tool_canceled",
+                {
+                    "call_id": canceled_tool.call_id,
+                    "tool_name": canceled_tool.tool_name,
+                    "reason": reason,
+                },
+            )
         cancelled_wakeups = WakeupStore(
             self.runtime.config.sessions.root
         ).cancel_pending(session_id=current.session_id)
@@ -739,6 +769,14 @@ class WorkerManager:
             raise ValueError(f"Worker {worker_id} cannot be archived while {current.status}")
         if current.archived_at is not None:
             return current
+        pending_tool = self.runtime.delegated_tools.pending_call(
+            current.session_id
+        )
+        if pending_tool is not None:
+            raise ValueError(
+                f"Worker {worker_id} cannot be archived while awaiting delegated "
+                f"tool result {pending_tool.call_id}"
+            )
         archived = self.runtime.history.archive_session(current.session_id, remove_active=True)
         return self.store.mark_archived(worker_id, archive=archived)
 
@@ -1105,10 +1143,54 @@ class WorkerManager:
             if active is not None and _pid_is_alive(active.get("pid")):
                 continue
             if item.status == "cancellation_requested":
+                self.runtime.delegated_tools.cancel_pending(
+                    item.session_id,
+                    reason="worker cancellation recovered after supervisor restart",
+                )
                 status, event_type, error = "canceled", "worker_canceled", None
             else:
-                status, event_type = "failed", "worker_orphaned"
-                error = "Worker process ended before its durable run reached a terminal state"
+                pending_tool = self.runtime.delegated_tools.pending_call(
+                    item.session_id
+                )
+                if pending_tool is not None:
+                    try:
+                        self.runtime.ensure_delegated_tool_request_history(
+                            pending_tool
+                        )
+                        self._sync_history_events(item)
+                    except Exception as exc:
+                        status, event_type = "failed", "worker_orphaned"
+                        error = (
+                            "Delegated tool wait recovery failed: "
+                            f"{type(exc).__name__}: {exc}"
+                        )
+                    else:
+                        self.runtime.history.clear_active_run(item.session_id)
+                        reconciled.append(
+                            self.store.transition(
+                                item.worker_id,
+                                "input_required",
+                                expected={item.status},
+                                result=item.result,
+                                event_type="worker_delegated_tool_input_required",
+                                event_payload={
+                                    "call_id": pending_tool.call_id,
+                                    "tool_name": pending_tool.tool_name,
+                                    "arguments": pending_tool.arguments,
+                                    "arguments_sha256": pending_tool.arguments_sha256,
+                                    "catalog_revision": pending_tool.catalog_revision,
+                                    "recovered_orphan": True,
+                                },
+                            )
+                        )
+                        continue
+                else:
+                    status, event_type = "failed", "worker_orphaned"
+                    error = (
+                        "Worker process ended before its durable run reached a "
+                        "terminal state"
+                    )
+            self.runtime.history.clear_active_run(item.session_id)
             reconciled.append(
                 self.store.transition(
                     item.worker_id,
@@ -1440,6 +1522,53 @@ class WorkerManager:
                         return
                 working = continued
                 continue
+        except DelegatedToolInputRequired as exc:
+            try:
+                self._sync_history_events(working)
+            except Exception as sync_exc:
+                error = (
+                    "delegated tool history event sync failed: "
+                    f"{type(sync_exc).__name__}: {sync_exc}"
+                )
+                self.store.transition(
+                    worker_id,
+                    "failed",
+                    expected={"working"},
+                    error=error,
+                    event_type="worker_failed",
+                )
+                return
+            latest = self.store.get(worker_id)
+            if latest.status == "cancellation_requested":
+                self.runtime.delegated_tools.cancel_pending(
+                    latest.session_id,
+                    reason="worker cancellation raced delegated tool request",
+                )
+                self.store.transition(
+                    worker_id,
+                    "canceled",
+                    expected={"cancellation_requested"},
+                    result=latest.result,
+                    event_type="worker_canceled",
+                    event_payload={"delegated_tool_request_raced_cancellation": True},
+                )
+                return
+            if latest.status != "working":
+                return
+            self.store.transition(
+                worker_id,
+                "input_required",
+                expected={"working"},
+                result=latest.result,
+                event_type="worker_delegated_tool_input_required",
+                event_payload={
+                    "call_id": exc.call.call_id,
+                    "tool_name": exc.call.tool_name,
+                    "arguments": exc.call.arguments,
+                    "arguments_sha256": exc.call.arguments_sha256,
+                    "catalog_revision": exc.call.catalog_revision,
+                },
+            )
         except RunCancellationRequested as exc:
             error = str(exc)
             try:

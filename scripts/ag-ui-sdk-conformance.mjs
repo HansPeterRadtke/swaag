@@ -36,8 +36,8 @@ if (capabilities.transport?.streaming !== true) {
 if (capabilities.transport?.websocket !== false) {
   throw new Error("AG-UI capability discovery overclaimed WebSocket support");
 }
-if (capabilities.tools?.clientProvided !== false) {
-  throw new Error("AG-UI capability discovery overclaimed client-provided tools");
+if (capabilities.tools?.clientProvided !== true) {
+  throw new Error("AG-UI capability discovery did not advertise client-provided tools");
 }
 if (
   capabilities.state?.snapshots !== true ||

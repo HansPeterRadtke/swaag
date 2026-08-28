@@ -20,6 +20,7 @@ from swaag.types import (
 )
 
 if TYPE_CHECKING:
+    from swaag.delegated_tools import DelegatedToolSpec
     from swaag.environment.environment import AgentEnvironment
 
 
@@ -96,6 +97,7 @@ class ToolContext:
     session_state: SessionState
     environment: "AgentEnvironment"
     semantic_call: Callable[[SemanticCallRequest], dict[str, Any]] | None = None
+    delegated_tools: tuple["DelegatedToolSpec", ...] = ()
 
     @property
     def read_roots(self) -> list[Path]:
@@ -159,6 +161,24 @@ class Tool(abc.ABC):
 
 
 def _validate_schema_value(value: Any, schema: dict[str, Any], *, path: str) -> None:
+    any_of = schema.get("anyOf")
+    if any_of is not None:
+        if not isinstance(any_of, list) or not any_of:
+            raise ToolValidationError(f"{path}.anyOf must be a non-empty list")
+        errors: list[str] = []
+        for variant in any_of:
+            if not isinstance(variant, dict):
+                errors.append(f"{path}.anyOf variant must be a schema object")
+                continue
+            try:
+                _validate_schema_value(value, variant, path=path)
+            except ToolValidationError as exc:
+                errors.append(str(exc))
+                continue
+            return
+        raise ToolValidationError(
+            f"{path} must match at least one anyOf schema: {'; '.join(errors)}"
+        )
     expected_type = schema.get("type")
     if isinstance(expected_type, list):
         errors: list[str] = []

@@ -19,6 +19,7 @@ from typing import Any
 from urllib.parse import parse_qs, unquote, urlsplit
 
 from swaag.config import AgentConfig
+from swaag.delegated_tools import DelegatedToolCall, DelegatedToolResultInput
 from swaag.heartbeat import systemd_notify, watchdog_interval_seconds
 from swaag.mcp import McpAdapter, McpHttpResponse
 from swaag.protocol_adapters import (
@@ -964,14 +965,15 @@ class CommunicationService:
                     state_snapshot,
                 )
 
-            state_snapshot = self.store.bind_protocol_state(
-                "ag_ui",
-                run.thread_id,
-                run.run_id,
-                state=run.state,
-                client_supplied=run.state_supplied,
+            collisions = sorted(
+                {tool.name for tool in run.client_tools}
+                & self.runtime.tools.registered_names()
             )
-            state_context = self._ag_ui_state_context(state_snapshot)
+            if collisions:
+                raise ValueError(
+                    "AG-UI client tool names collide with server capabilities: "
+                    + ", ".join(collisions)
+                )
 
             worker_id = self.store.protocol_worker("ag_ui", run.thread_id)
             record = None
@@ -986,9 +988,72 @@ class CommunicationService:
                 worker_id = None
                 record = None
 
+            delegated_call: DelegatedToolCall | None = None
+            delegated_result: DelegatedToolResultInput | None = None
             if worker_id is None:
                 if run.resume:
                     raise ValueError("AG-UI cannot resume an unknown thread")
+                if run.client_tool_results:
+                    raise ValueError(
+                        "AG-UI tool messages cannot address an unknown thread"
+                    )
+            else:
+                if record is None:
+                    raise RuntimeError("AG-UI worker lookup did not return a record")
+                delegated_call = self._ag_ui_delegated_call(record)
+                if delegated_call is not None:
+                    if run.resume:
+                        raise ValueError(
+                            "AG-UI delegated tool results use tool messages, not resume entries"
+                        )
+                    matches = [
+                        result
+                        for result in run.client_tool_results
+                        if result.call_id == delegated_call.call_id
+                    ]
+                    if len(matches) != 1:
+                        raise ValueError(
+                            "AG-UI run must provide exactly one tool message for "
+                            f"delegated call {delegated_call.call_id}"
+                        )
+                    delegated_result = matches[0]
+                    self._verify_ag_ui_historical_tool_results(
+                        record,
+                        run.client_tool_results,
+                        exclude_call_id=delegated_call.call_id,
+                    )
+                    if delegated_call.status in {"resolved", "failed"}:
+                        verified = (
+                            self.runtime.delegated_tools.verify_result_message(
+                                record.session_id, delegated_result
+                            )
+                        )
+                        if (
+                            verified.result_source,
+                            verified.result_external_request_id,
+                        ) != ("ag_ui", run.run_id):
+                            raise ValueError(
+                                "delegated tool call already has a different exact result"
+                            )
+                else:
+                    self._verify_ag_ui_historical_tool_results(
+                        record, run.client_tool_results
+                    )
+                    if record.status == "input_required" and not run.resume:
+                        raise ValueError(
+                            "AG-UI human input must resolve the open interrupt"
+                        )
+
+            state_snapshot = self.store.bind_protocol_state(
+                "ag_ui",
+                run.thread_id,
+                run.run_id,
+                state=run.state,
+                client_supplied=run.state_supplied,
+            )
+            state_context = self._ag_ui_state_context(state_snapshot)
+
+            if worker_id is None:
                 created = self.task_api.execute(
                     "create",
                     {
@@ -1000,12 +1065,65 @@ class CommunicationService:
                 )
                 worker_id = str(created["worker"]["worker_id"])
                 self.store.set_protocol_worker("ag_ui", run.thread_id, worker_id)
+                created_record = self.workers.store.get(worker_id)
+                self.runtime.delegated_tools.bind_catalog(
+                    created_record.session_id,
+                    source="ag_ui",
+                    external_context_id=run.thread_id,
+                    external_request_id=run.run_id,
+                    tools=run.client_tools,
+                )
                 _created_record, start_sequence = self.workers.stream_snapshot(
                     worker_id
                 )
                 record = self.workers.start(worker_id)
             else:
-                if run.resume:
+                if delegated_call is not None:
+                    if delegated_result is None:
+                        raise RuntimeError(
+                            "validated AG-UI delegated result is unavailable"
+                        )
+                    self.runtime.accept_delegated_tool_result(
+                        record.session_id,
+                        delegated_call.call_id,
+                        source="ag_ui",
+                        external_request_id=run.run_id,
+                        result=delegated_result,
+                    )
+                    self.runtime.delegated_tools.bind_catalog(
+                        record.session_id,
+                        source="ag_ui",
+                        external_context_id=run.thread_id,
+                        external_request_id=run.run_id,
+                        tools=run.client_tools,
+                    )
+                    _current, start_sequence = self.workers.stream_snapshot(
+                        worker_id
+                    )
+                    self.store.close_protocol_streams(
+                        "ag_ui",
+                        run.thread_id,
+                        worker_id,
+                        end_sequence=start_sequence,
+                    )
+                    record = self.workers.message(
+                        worker_id,
+                        (
+                            "The connected client returned the exact result for "
+                            f"delegated tool call {delegated_call.call_id}."
+                            + run.context_text
+                            + state_context
+                        ),
+                        source=f"ag_ui:{run.run_id}",
+                    )
+                elif run.resume:
+                    self.runtime.delegated_tools.bind_catalog(
+                        record.session_id,
+                        source="ag_ui",
+                        external_context_id=run.thread_id,
+                        external_request_id=run.run_id,
+                        tools=run.client_tools,
+                    )
                     _current, start_sequence = self.workers.stream_snapshot(worker_id)
                     self.store.close_protocol_streams(
                         "ag_ui",
@@ -1026,6 +1144,13 @@ class CommunicationService:
                                 "source": "ag_ui",
                             },
                         )
+                    self.runtime.delegated_tools.bind_catalog(
+                        record.session_id,
+                        source="ag_ui",
+                        external_context_id=run.thread_id,
+                        external_request_id=run.run_id,
+                        tools=run.client_tools,
+                    )
                     _current, start_sequence = self.workers.stream_snapshot(worker_id)
                     self.store.close_protocol_streams(
                         "ag_ui",
@@ -1054,6 +1179,54 @@ class CommunicationService:
                 session_id=record.session_id,
             )
             return record, start_sequence, None, False, state_snapshot
+
+    def _verify_ag_ui_historical_tool_results(
+        self,
+        record: WorkerRecord,
+        results: tuple[DelegatedToolResultInput, ...],
+        *,
+        exclude_call_id: str | None = None,
+    ) -> None:
+        for result in results:
+            if result.call_id == exclude_call_id:
+                continue
+            self.runtime.delegated_tools.verify_result_message(
+                record.session_id, result
+            )
+
+    def _ag_ui_delegated_call(
+        self, record: WorkerRecord
+    ) -> DelegatedToolCall | None:
+        if record.status != "input_required":
+            return None
+        input_event = next(
+            (
+                event
+                for event in reversed(self.workers.store.events(record.worker_id))
+                if event.event_type
+                in {
+                    "worker_delegated_tool_input_required",
+                    "worker_input_required",
+                }
+            ),
+            None,
+        )
+        if (
+            input_event is None
+            or input_event.event_type != "worker_delegated_tool_input_required"
+        ):
+            return None
+        call_id = input_event.payload.get("call_id")
+        if not isinstance(call_id, str) or not call_id:
+            raise RuntimeError("delegated tool wait event has no call id")
+        call = self.runtime.delegated_tools.call(call_id)
+        if call is None or call.session_id != record.session_id:
+            raise RuntimeError("delegated tool wait event references an unknown call")
+        if call.status not in {"pending", "resolved", "failed"}:
+            raise ValueError(
+                f"delegated tool call cannot resume from {call.status}"
+            )
+        return call
 
     @staticmethod
     def _ag_ui_state_context(snapshot: ProtocolStateSnapshot) -> str:
@@ -1529,7 +1702,7 @@ class CommunicationService:
                 "supported": bool(tools),
                 "items": tools,
                 "parallelCalls": False,
-                "clientProvided": False,
+                "clientProvided": True,
             },
             "output": {
                 "structuredOutput": False,

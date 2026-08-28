@@ -37,6 +37,15 @@ def test_schema_validator_accepts_union_types_and_null() -> None:
         _validate_schema_value([], schema, path="value")
 
 
+def test_schema_validator_enforces_any_of_variants() -> None:
+    schema = {"anyOf": [{"type": "string"}, {"type": "null"}]}
+
+    _validate_schema_value("ready", schema, path="value")
+    _validate_schema_value(None, schema, path="value")
+    with pytest.raises(ToolValidationError, match="anyOf"):
+        _validate_schema_value(7, schema, path="value")
+
+
 
 def test_read_file_guidance_requires_exact_file_discovery() -> None:
     assert "Read one exact file per call" in ReadFileTool.usage_guidance

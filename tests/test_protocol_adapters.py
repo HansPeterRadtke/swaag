@@ -572,7 +572,7 @@ def test_ag_ui_parses_full_initial_history_current_context_and_raw_media() -> No
     assert "Zmlyc3QgYnl0ZXM=" not in run.initial_text
 
 
-def test_ag_ui_preserves_shared_state_and_rejects_unimplemented_tools() -> None:
+def test_ag_ui_preserves_shared_state_and_parses_portable_client_tools() -> None:
     base = {
         "threadId": "thread-1",
         "runId": "run-1",
@@ -587,8 +587,55 @@ def test_ag_ui_preserves_shared_state_and_rejects_unimplemented_tools() -> None:
     assert parsed.state == state
     assert parsed.state_supplied is True
 
+    request = {
+        **base,
+        "tools": [
+            {
+                "name": "select_record",
+                "description": "Select one record in the client.",
+                "parameters": {
+                    "type": "object",
+                    "properties": {"record_id": {"type": "string"}},
+                    "required": ["record_id"],
+                    "additionalProperties": False,
+                },
+                "metadata": {"owner": "client"},
+            }
+        ],
+        "messages": [
+            {"id": "user-1", "role": "user", "content": "Work."},
+            {
+                "id": "tool-result-1",
+                "role": "tool",
+                "toolCallId": "delegated-call-1",
+                "content": '{"selected":true}',
+                "metadata": {"durationMs": 7},
+            },
+        ],
+    }
+    parsed = AgUiProjectionAdapter().user_run(request)
+
+    assert len(parsed.client_tools) == 1
+    assert parsed.client_tools[0].name == "select_record"
+    assert parsed.client_tools[0].metadata == {"owner": "client"}
+    assert parsed.client_tool_results[0].call_id == "delegated-call-1"
+    assert parsed.client_tool_results[0].content == '{"selected":true}'
+
     unsupported = (
-        {**base, "tools": [{"name": "browser-tool"}]},
+        {
+            **base,
+            "tools": [
+                {
+                    "name": "open_schema",
+                    "description": "Accept arbitrary input.",
+                    "parameters": {
+                        "type": "object",
+                        "properties": {},
+                        "required": [],
+                    },
+                }
+            ],
+        },
         {**base, "forwardedProps": {"command": "unknown"}},
     )
 
@@ -640,6 +687,29 @@ def test_ag_ui_projects_input_required_as_a_resumable_interrupt() -> None:
             },
         }
     ]
+
+
+def test_ag_ui_finishes_a_run_while_client_tool_execution_is_pending() -> None:
+    waiting = AgUiProjectionAdapter().events(
+        _record(status="input_required"),
+        [
+            _event(
+                "worker_delegated_tool_input_required",
+                7,
+                {"call_id": "delegated-call-7", "tool_name": "select_record"},
+            )
+        ],
+        thread_id="client-thread",
+        run_id="client-run",
+    )
+
+    assert len(waiting) == 1
+    assert waiting[0]["type"] == "RUN_FINISHED"
+    assert waiting[0]["threadId"] == "client-thread"
+    assert waiting[0]["runId"] == "client-run"
+    assert waiting[0]["outcome"] == {"type": "success"}
+    assert waiting[0]["metadata"]["swaagDelegatedToolPending"] is True
+    assert waiting[0]["metadata"]["swaagToolCallId"] == "delegated-call-7"
 
 
 def test_ag_ui_projects_canonical_tool_and_status_history_events() -> None:

@@ -8,6 +8,11 @@ from datetime import datetime
 from typing import Any, Iterable
 from urllib.parse import unquote_to_bytes
 
+from swaag.delegated_tools import (
+    DelegatedToolResultInput,
+    DelegatedToolSpec,
+    prepare_delegated_tool_spec,
+)
 from swaag.utils import stable_json_dumps
 from swaag.workers import WorkerEvent, WorkerRecord
 
@@ -63,6 +68,8 @@ class AgUiRunInput:
     initial_text: str
     initial_attachments: tuple[dict[str, str], ...]
     resume: tuple[dict[str, Any], ...]
+    client_tools: tuple[DelegatedToolSpec, ...]
+    client_tool_results: tuple[DelegatedToolResultInput, ...]
     state: Any
     state_supplied: bool
 
@@ -280,10 +287,10 @@ class AgUiProjectionAdapter:
             raise ValueError("AG-UI messages must be an array")
         if not isinstance(tools, list):
             raise ValueError("AG-UI tools must be an array")
-        if tools:
-            raise ValueError(
-                "AG-UI client-side tools are not enabled by this adapter"
-            )
+        client_tools = tuple(prepare_delegated_tool_spec(item) for item in tools)
+        client_tool_names = [tool.name for tool in client_tools]
+        if len(client_tool_names) != len(set(client_tool_names)):
+            raise ValueError("AG-UI client-side tool names must be unique")
         if not isinstance(context, list):
             raise ValueError("AG-UI context must be an array")
         if forwarded_props not in (None, {}):
@@ -308,6 +315,7 @@ class AgUiProjectionAdapter:
         normalized_messages: list[dict[str, Any]] = []
         latest_user: tuple[str, str, list[dict[str, str]]] | None = None
         initial_attachments: list[dict[str, str]] = []
+        client_tool_results: list[DelegatedToolResultInput] = []
         for message in messages:
             if not isinstance(message, dict):
                 raise ValueError("Every AG-UI message must be an object")
@@ -333,6 +341,28 @@ class AgUiProjectionAdapter:
                 normalized["content"] = text
                 initial_attachments.extend(attachments)
                 latest_user = (message_id, text, attachments)
+            elif role == "tool":
+                content = message.get("content")
+                if not isinstance(content, str):
+                    raise ValueError("AG-UI tool message content must be a string")
+                call_id = _required_ag_ui_text(
+                    message, "toolCallId", prefix="tool message "
+                )
+                error = message.get("error")
+                if error is not None and not isinstance(error, str):
+                    raise ValueError("AG-UI tool message error must be a string")
+                metadata = message.get("metadata", {})
+                if not isinstance(metadata, dict):
+                    raise ValueError("AG-UI tool message metadata must be an object")
+                client_tool_results.append(
+                    DelegatedToolResultInput(
+                        message_id=message_id,
+                        call_id=call_id,
+                        content=content,
+                        error=error,
+                        metadata=dict(metadata),
+                    )
+                )
             normalized_messages.append(normalized)
 
         resume = request.get("resume", [])
@@ -340,8 +370,10 @@ class AgUiProjectionAdapter:
             not isinstance(item, dict) for item in resume
         ):
             raise ValueError("AG-UI resume must be an array of objects")
-        if not resume and latest_user is None:
-            raise ValueError("AG-UI run requires a user message or resume entry")
+        if not resume and latest_user is None and not client_tool_results:
+            raise ValueError(
+                "AG-UI run requires a user message, tool result, or resume entry"
+            )
 
         context_text = (
             "\n\nAG-UI caller context:\n"
@@ -371,6 +403,8 @@ class AgUiProjectionAdapter:
             initial_text=initial_text,
             initial_attachments=tuple(initial_attachments),
             resume=tuple(dict(item) for item in resume),
+            client_tools=client_tools,
+            client_tool_results=tuple(client_tool_results),
             state=state,
             state_supplied=state_supplied,
         )
@@ -445,6 +479,21 @@ class AgUiProjectionAdapter:
                         "type": "RUN_ERROR",
                         "message": event_error or "Worker canceled",
                         "code": "SWAAG_WORKER_CANCELED",
+                    }
+                )
+            elif event.event_type == "worker_delegated_tool_input_required":
+                output.append(
+                    {
+                        **base,
+                        "type": "RUN_FINISHED",
+                        "threadId": thread_id or record.session_id,
+                        "runId": run_id or self._run_id(record, event),
+                        "outcome": {"type": "success"},
+                        "metadata": {
+                            **dict(base["metadata"]),
+                            "swaagDelegatedToolPending": True,
+                            "swaagToolCallId": event.payload.get("call_id"),
+                        },
                     }
                 )
             elif event.event_type == "worker_input_required":

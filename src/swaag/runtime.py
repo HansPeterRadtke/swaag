@@ -19,6 +19,14 @@ from swaag.attachments import AttachmentStore, find_attachment
 from swaag.compression import message_source_event_references, summary_message_payload
 from swaag.context_compiler import ContextCompilation, ContextCompiler
 from swaag.config import AgentConfig, load_config
+from swaag.delegated_tools import (
+    DelegatedToolCall,
+    DelegatedToolCatalog,
+    DelegatedToolInputRequired,
+    DelegatedToolResultInput,
+    DelegatedToolSpec,
+    DelegatedToolStore,
+)
 from swaag.embedding_index import (
     AsyncEmbeddingIndexer,
     DerivedEmbeddingIndex,
@@ -230,6 +238,7 @@ class AgentRuntime:
             request_metadata={"cache_scope": "default_agent_runtime"},
         )
         self.preemption = ModelPreemptionCoordinator(config.sessions.root)
+        self.delegated_tools = DelegatedToolStore(config.sessions.root)
         self.prompt_instruction_store = PromptInstructionStore(
             config.sessions.root,
             config,
@@ -457,6 +466,17 @@ class AgentRuntime:
                 )
                 self._heartbeat(state, run_id=run_id, phase="completed", detail="turn completed")
                 return result
+            except DelegatedToolInputRequired as exc:
+                self._heartbeat(
+                    state,
+                    run_id=run_id,
+                    phase="waiting_for_tool",
+                    detail=str(exc),
+                    active_kind="delegated_tool",
+                    active_id=exc.call.call_id,
+                    operation_kind=exc.call.tool_name,
+                )
+                raise
             except RunCancellationRequested as exc:
                 self.preemption.complete_run_cancellation(state.session_id, run_id)
                 self._heartbeat(state, run_id=run_id, phase="cancelled", detail=str(exc))
@@ -495,6 +515,17 @@ class AgentRuntime:
                 )
                 self._heartbeat(state, run_id=run_id, phase="completed", detail="resumed turn completed")
                 return result
+            except DelegatedToolInputRequired as exc:
+                self._heartbeat(
+                    state,
+                    run_id=run_id,
+                    phase="waiting_for_tool",
+                    detail=str(exc),
+                    active_kind="delegated_tool",
+                    active_id=exc.call.call_id,
+                    operation_kind=exc.call.tool_name,
+                )
+                raise
             except RunCancellationRequested as exc:
                 self.preemption.complete_run_cancellation(state.session_id, run_id)
                 self._heartbeat(state, run_id=run_id, phase="cancelled", detail=str(exc))
@@ -531,6 +562,17 @@ class AgentRuntime:
                 result = self._run_model_tool_loop(state, original_request, record_user_message=False)
                 self._heartbeat(state, run_id=run_id, phase="completed", detail="pending controls completed")
                 return result
+            except DelegatedToolInputRequired as exc:
+                self._heartbeat(
+                    state,
+                    run_id=run_id,
+                    phase="waiting_for_tool",
+                    detail=str(exc),
+                    active_kind="delegated_tool",
+                    active_id=exc.call.call_id,
+                    operation_kind=exc.call.tool_name,
+                )
+                raise
             except RunCancellationRequested as exc:
                 self.preemption.complete_run_cancellation(state.session_id, run_id)
                 self._heartbeat(state, run_id=run_id, phase="cancelled", detail=str(exc))
@@ -650,11 +692,16 @@ class AgentRuntime:
             },
         )
 
-        capability_index = self.tools.capability_index(self.config)
+        base_capability_index = self.tools.capability_index(self.config)
+        base_capability_names = {name for name, _description, _guidance in base_capability_index}
+        delegated_catalog: DelegatedToolCatalog | None = None
+        delegated_specs: tuple[DelegatedToolSpec, ...] = ()
+        delegated_by_name: dict[str, DelegatedToolSpec] = {}
+        capability_index = list(base_capability_index)
         loaded_tool_names: set[str] = (
             set()
             if self.config.tools.staged_discovery
-            else {name for name, _, _ in capability_index}
+            else set(base_capability_names)
         )
         tool_results: list[ToolExecutionResult] = []
         budget_reports: list[BudgetReport] = []
@@ -677,6 +724,29 @@ class AgentRuntime:
             self._raise_if_run_cancelled(state)
             if accepted_actions >= self.config.runtime.max_total_actions:
                 break
+            delegated_catalog = self.delegated_tools.latest_catalog(state.session_id)
+            delegated_specs = (
+                () if delegated_catalog is None else delegated_catalog.tools
+            )
+            delegated_by_name = {tool.name: tool for tool in delegated_specs}
+            collisions = set(delegated_by_name) & self.tools.registered_names()
+            if collisions:
+                raise HistoryInvariantError(
+                    "delegated tool names collide with server capabilities: "
+                    + ", ".join(sorted(collisions))
+                )
+            capability_index = self.tools.capability_index(
+                self.config, delegated_specs
+            )
+            available_capability_names = {
+                name for name, _description, _guidance in capability_index
+            }
+            if self.config.tools.staged_discovery:
+                loaded_tool_names.intersection_update(available_capability_names)
+            else:
+                loaded_tool_names = set(available_capability_names)
+            if delegated_catalog is not None:
+                self._ensure_delegated_catalog_observed(state, delegated_catalog)
             action_index = accepted_actions + 1
             pending_payloads = self.history.list_pending_control_messages(state.session_id)
             pending_messages = [
@@ -692,7 +762,11 @@ class AgentRuntime:
             for validation_attempt in range(1, 4):
                 remaining_tool_calls = self.config.runtime.tool_call_budget - tool_calls_used
                 tool_specs = (
-                    self.tools.staged_prompt_tuples(self.config, loaded_tool_names)
+                    self.tools.staged_prompt_tuples(
+                        self.config,
+                        loaded_tool_names,
+                        delegated_specs,
+                    )
                     if remaining_tool_calls > 0
                     else []
                 )
@@ -732,9 +806,31 @@ class AgentRuntime:
                         raise ActionValidationError(
                             f"tool_calls contains {len(action.tool_calls)} calls but only {remaining_tool_calls} remain in the mechanical budget"
                         )
+                    delegated_calls = [
+                        tool_call
+                        for tool_call in action.tool_calls
+                        if tool_call.tool_name in delegated_by_name
+                    ]
+                    if delegated_calls and len(action.tool_calls) != 1:
+                        raise ActionValidationError(
+                            "A client-executed tool must be the only tool call in its "
+                            "action because the run pauses for the client result"
+                        )
                     for tool_call in action.tool_calls:
                         try:
-                            self.tools.get(tool_call.tool_name).validate(tool_call.arguments)
+                            delegated_spec = delegated_by_name.get(
+                                tool_call.tool_name
+                            )
+                            if delegated_spec is not None:
+                                _validate_schema_value(
+                                    tool_call.arguments,
+                                    delegated_spec.parameters,
+                                    path=f"delegated tool {tool_call.tool_name}",
+                                )
+                            else:
+                                self.tools.get(tool_call.tool_name).validate(
+                                    tool_call.arguments
+                                )
                         except (ValueError, TypeError) as exc:
                             raise ActionValidationError(
                                 f"Invalid input for tool {tool_call.tool_name}: {exc}"
@@ -945,6 +1041,8 @@ class AgentRuntime:
             visible_observation_signatures = self._visible_observation_signatures(state)
             repeated_observation_calls: list[dict[str, Any]] = []
             for tool_call in selected_action.tool_calls:
+                if tool_call.tool_name in delegated_by_name:
+                    continue
                 tool = self.tools.get(tool_call.tool_name)
                 if not tool.repeated_observation_is_redundant:
                     continue
@@ -1039,6 +1137,18 @@ class AgentRuntime:
                             pending_payloads=pending_during_action,
                         )
                         break
+                    delegated_spec = delegated_by_name.get(tool_call.tool_name)
+                    if delegated_spec is not None:
+                        if delegated_catalog is None:
+                            raise RuntimeError(
+                                "delegated tool action has no durable catalog"
+                            )
+                        self._request_delegated_tool(
+                            state,
+                            catalog=delegated_catalog,
+                            spec=delegated_spec,
+                            arguments=tool_call.arguments,
+                        )
                     tool = self.tools.get(tool_call.tool_name)
                     effective_kind = tool.effective_kind(tool_call.arguments)
                     repeated_observation_is_redundant = tool.repeated_observation_is_redundant
@@ -6597,6 +6707,375 @@ class AgentRuntime:
         if self._run_cancellation_requested(state):
             raise RunCancellationRequested("worker run cancellation requested")
 
+    @staticmethod
+    def _delegated_catalog_history_payload(
+        catalog: DelegatedToolCatalog,
+    ) -> dict[str, Any]:
+        return {
+            "revision": catalog.revision,
+            "catalog_sha256": catalog.catalog_sha256,
+            "source": catalog.source,
+            "external_context_id": catalog.external_context_id,
+            "external_request_id": catalog.external_request_id,
+            "tools": [
+                {
+                    "name": tool.name,
+                    "description": tool.description,
+                    "parameters": tool.parameters,
+                    "metadata": tool.metadata,
+                }
+                for tool in catalog.tools
+            ],
+        }
+
+    def _ensure_delegated_catalog_observed(
+        self,
+        state: SessionState,
+        catalog: DelegatedToolCatalog,
+    ) -> None:
+        payload = self._delegated_catalog_history_payload(catalog)
+        existing = next(
+            (
+                event
+                for event in self.history.iter_history_reverse(
+                    state.session_id,
+                    event_types=("delegated_tool_catalog_observed",),
+                )
+                if event.payload.get("revision") == catalog.revision
+            ),
+            None,
+        )
+        if existing is not None:
+            if existing.payload != payload:
+                raise HistoryInvariantError(
+                    "delegated tool catalog history differs from durable catalog"
+                )
+            return
+        self.history.record_event(state, "delegated_tool_catalog_observed", payload)
+
+    def ensure_delegated_tool_request_history(
+        self,
+        call: DelegatedToolCall,
+        *,
+        state: SessionState | None = None,
+    ) -> None:
+        """Recover every canonical request event from the durable call record."""
+        catalog = self.delegated_tools.catalog(
+            call.session_id, call.catalog_revision
+        )
+        if catalog is None:
+            raise HistoryInvariantError(
+                "delegated tool call references an unavailable catalog"
+            )
+        spec = next(
+            (tool for tool in catalog.tools if tool.name == call.tool_name), None
+        )
+        if spec is None:
+            raise HistoryInvariantError(
+                "delegated tool call references a tool absent from its catalog"
+            )
+        arguments_json = stable_json_dumps(call.arguments, indent=None)
+        if sha256_text(arguments_json) != call.arguments_sha256:
+            raise HistoryInvariantError(
+                "delegated tool call argument hash failed integrity validation"
+            )
+        _validate_schema_value(
+            call.arguments,
+            spec.parameters,
+            path=f"delegated tool {call.tool_name}",
+        )
+        current = state or self.history.rebuild_from_history(
+            call.session_id, write_projections=False
+        )
+        self._ensure_delegated_catalog_observed(current, catalog)
+        expected = (
+            (
+                "tool_called",
+                {
+                    "call_id": call.call_id,
+                    "tool_name": call.tool_name,
+                    "tool_input": call.arguments,
+                    "delegated": True,
+                    "catalog_revision": catalog.revision,
+                    "catalog_sha256": catalog.catalog_sha256,
+                },
+            ),
+            (
+                "tool_execution_context",
+                {
+                    "call_id": call.call_id,
+                    "tool_name": call.tool_name,
+                    "tool_kind": "delegated",
+                    "isolated": False,
+                    "policy": {
+                        "executor": "connected_client",
+                        "parallel_calls": False,
+                        "result_required_before_resume": True,
+                    },
+                },
+            ),
+            (
+                "delegated_tool_requested",
+                {
+                    "call_id": call.call_id,
+                    "tool_name": call.tool_name,
+                    "arguments": call.arguments,
+                    "arguments_sha256": call.arguments_sha256,
+                    "catalog_revision": catalog.revision,
+                    "catalog_sha256": catalog.catalog_sha256,
+                    "catalog_source": catalog.source,
+                    "catalog_external_context_id": catalog.external_context_id,
+                    "catalog_external_request_id": catalog.external_request_id,
+                },
+            ),
+        )
+        for event_type, payload in expected:
+            existing = next(
+                (
+                    event
+                    for event in self.history.iter_history_reverse(
+                        call.session_id, event_types=(event_type,)
+                    )
+                    if event.payload.get("call_id") == call.call_id
+                ),
+                None,
+            )
+            if existing is not None:
+                if existing.payload != payload:
+                    raise HistoryInvariantError(
+                        f"delegated tool {event_type} history differs from durable call"
+                    )
+                continue
+            self.history.record_event(current, event_type, payload)
+
+    def _request_delegated_tool(
+        self,
+        state: SessionState,
+        *,
+        catalog: DelegatedToolCatalog,
+        spec: DelegatedToolSpec,
+        arguments: dict[str, Any],
+    ) -> None:
+        pending = self.delegated_tools.pending_call(state.session_id)
+        if pending is None:
+            call = self.delegated_tools.request_call(
+                state.session_id,
+                catalog_revision=catalog.revision,
+                tool_name=spec.name,
+                arguments=arguments,
+            )
+        else:
+            arguments_json = stable_json_dumps(arguments, indent=None)
+            if (
+                pending.catalog_revision,
+                pending.tool_name,
+                pending.arguments_sha256,
+            ) != (
+                catalog.revision,
+                spec.name,
+                sha256_text(arguments_json),
+            ) or pending.arguments != arguments:
+                raise HistoryInvariantError(
+                    "session already awaits a different delegated tool call"
+                )
+            call = pending
+        self.ensure_delegated_tool_request_history(call, state=state)
+        raise DelegatedToolInputRequired(call)
+
+    def accept_delegated_tool_result(
+        self,
+        session_id: str,
+        call_id: str,
+        *,
+        source: str,
+        external_request_id: str,
+        result: DelegatedToolResultInput,
+    ) -> DelegatedToolCall:
+        call = self.delegated_tools.resolve_call(
+            session_id,
+            call_id,
+            source=source,
+            external_request_id=external_request_id,
+            result=result,
+        )
+        self.ensure_delegated_tool_request_history(call)
+        catalog = self.delegated_tools.catalog(
+            session_id, call.catalog_revision
+        )
+        if catalog is None:
+            raise HistoryInvariantError(
+                "delegated tool result references an unavailable catalog"
+            )
+        lineage = {
+            "delegated": True,
+            "catalog_revision": catalog.revision,
+            "catalog_sha256": catalog.catalog_sha256,
+            "result_source": call.result_source,
+            "result_external_request_id": call.result_external_request_id,
+            "result_message_id": call.result_message_id,
+            "result_metadata": call.result_metadata or {},
+        }
+        if call.status == "failed":
+            payload = {
+                "call_id": call.call_id,
+                "tool_name": call.tool_name,
+                "tool_input": call.arguments,
+                "error": (
+                    call.result_error
+                    if call.result_error is not None
+                    else "Client tool execution failed"
+                ),
+                "error_type": "ClientToolExecutionError",
+                "evidence": {
+                    "content": call.result_content or "",
+                    **lineage,
+                },
+                **lineage,
+            }
+            event_type = "tool_error"
+            message_prefix = "delegated_tool_error"
+        else:
+            output = {
+                "content": call.result_content or "",
+                "client_metadata": call.result_metadata or {},
+            }
+            payload = {
+                "call_id": call.call_id,
+                "tool_name": call.tool_name,
+                "raw_input": call.arguments,
+                "validated_input": call.arguments,
+                "output": output,
+                **lineage,
+            }
+            event_type = "tool_result"
+            message_prefix = "delegated_tool_result"
+
+        result_event: HistoryEvent | None = None
+        if call.history_event_sequence is not None:
+            result_event = next(
+                self.history.iter_history(
+                    session_id,
+                    start_sequence=call.history_event_sequence,
+                    end_sequence=call.history_event_sequence,
+                ),
+                None,
+            )
+            if result_event is None or (
+                result_event.event_type,
+                result_event.hash,
+                result_event.payload,
+            ) != (
+                call.history_event_type,
+                call.history_event_hash,
+                payload,
+            ):
+                raise HistoryInvariantError(
+                    "delegated tool result history link failed exact integrity validation"
+                )
+        else:
+            existing = next(
+                (
+                    event
+                    for event in self.history.iter_history_reverse(
+                        session_id, event_types=("tool_result", "tool_error")
+                    )
+                    if event.payload.get("call_id") == call.call_id
+                ),
+                None,
+            )
+            if existing is not None:
+                if existing.event_type != event_type or existing.payload != payload:
+                    raise HistoryInvariantError(
+                        "delegated tool result history differs from durable exact result"
+                    )
+                result_event = existing
+
+        state: SessionState | None = None
+        if result_event is None:
+            state = self.history.rebuild_from_history(
+                session_id, write_projections=False
+            )
+            guard = self.history.guard(
+                state, f"delegated_tool_result:{call.tool_name}"
+            )
+            result_event = guard.record(event_type, payload)
+            guard.require_all(event_type)
+            guard.ensure_progress()
+
+        message_content = (
+            f"{message_prefix}: "
+            + stable_json_dumps(
+                {
+                    "call_id": call.call_id,
+                    "content": call.result_content or "",
+                    "error": call.result_error,
+                    "metadata": call.result_metadata or {},
+                },
+                indent=2,
+            )
+        )
+        message_metadata = {
+            **payload,
+            "source_event_sequence": result_event.sequence,
+            "source_event_hash": result_event.hash,
+            "source_event_type": result_event.event_type,
+            "source_event_session_id": result_event.session_id,
+        }
+        existing_message = next(
+            (
+                event
+                for event in self.history.iter_history_reverse(
+                    session_id, event_types=("message_added",)
+                )
+                if isinstance(event.payload.get("message"), dict)
+                and event.payload["message"].get("metadata", {}).get(
+                    "source_event_sequence"
+                )
+                == result_event.sequence
+            ),
+            None,
+        )
+        if existing_message is not None:
+            message = existing_message.payload["message"]
+            if (
+                message.get("role"),
+                message.get("name"),
+                message.get("content"),
+                message.get("metadata"),
+            ) != (
+                "tool",
+                call.tool_name,
+                message_content,
+                message_metadata,
+            ):
+                raise HistoryInvariantError(
+                    "delegated tool result message differs from durable exact result"
+                )
+        else:
+            if state is None:
+                state = self.history.rebuild_from_history(
+                    session_id, write_projections=False
+                )
+            self._record_message(
+                state,
+                Message(
+                    role="tool",
+                    name=call.tool_name,
+                    content=message_content,
+                    created_at=utc_now_iso(),
+                    metadata=message_metadata,
+                ),
+            )
+
+        if call.history_event_sequence is None:
+            call = self.delegated_tools.link_history(
+                call.call_id,
+                event_type=result_event.event_type,
+                sequence=result_event.sequence,
+                event_hash=result_event.hash,
+            )
+        return call
+
     def _execute_tool_with_error(
         self, state: SessionState, decision: ToolDecision
     ) -> tuple[ToolExecutionResult | None, dict[str, Any] | None]:
@@ -6636,6 +7115,7 @@ class AgentRuntime:
             },
         )
         try:
+            catalog = self.delegated_tools.latest_catalog(state.session_id)
             tool, context, invocation = self.tools.prepare(
                 decision.tool_name,
                 decision.tool_input,
@@ -6644,6 +7124,7 @@ class AgentRuntime:
                 semantic_call=lambda request: self._execute_tool_semantic_call(
                     state, request
                 ),
+                delegated_tools=() if catalog is None else catalog.tools,
             )
             guard.record(
                 "tool_execution_context",

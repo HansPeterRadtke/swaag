@@ -5,11 +5,13 @@ import sqlite3
 import pytest
 
 from swaag.communication import CommunicationStore, _COMMUNICATION_STORE_MIGRATIONS
+from swaag.delegated_tools import DelegatedToolStore
 from swaag.embedding_index import DerivedEmbeddingIndex
 from swaag.history import HistoryStore
 from swaag.history_archive import HistoryArchiveStore
 from swaag.inference import InferenceRequestCoordinator
 from swaag.preemption import ModelPreemptionCoordinator
+from swaag.prompt_instruction_store import PromptInstructionStore
 from swaag.sqlite_schema import (
     UnsupportedSchemaVersionError,
     apply_sqlite_migrations,
@@ -81,7 +83,9 @@ def test_newer_durable_schema_is_rejected_without_mutation(tmp_path) -> None:
         ).fetchall() == []
 
 
-def test_all_runtime_sqlite_stores_record_explicit_schema_versions(tmp_path) -> None:
+def test_all_runtime_sqlite_stores_record_explicit_schema_versions(
+    tmp_path, make_config
+) -> None:
     sessions = tmp_path / "sessions"
     communication = CommunicationStore(sessions)
     workers = WorkerStore(sessions)
@@ -94,6 +98,8 @@ def test_all_runtime_sqlite_stores_record_explicit_schema_versions(tmp_path) -> 
     )
     preemption = ModelPreemptionCoordinator(sessions)
     embeddings = DerivedEmbeddingIndex(sessions, _Embeddings())
+    prompt_instructions = PromptInstructionStore(sessions, make_config())
+    delegated_tools = DelegatedToolStore(sessions)
 
     assert _version(communication.path) == 4
     assert _version(workers.path) == 4
@@ -102,6 +108,8 @@ def test_all_runtime_sqlite_stores_record_explicit_schema_versions(tmp_path) -> 
     assert _version(inference.path) == 1
     assert _version(preemption.path) == 1
     assert _version(embeddings.path) == 1
+    assert _version(prompt_instructions.path) == 1
+    assert _version(delegated_tools.path) == 1
 
 
 def test_communication_stream_bounds_migration_preserves_protocol_mappings(

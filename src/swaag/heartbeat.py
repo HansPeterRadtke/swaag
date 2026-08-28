@@ -8,7 +8,7 @@ from swaag.utils import utc_now_iso
 
 WORKER_PHASES = frozenset({
     "starting", "context_compilation", "queued_inference", "inference", "tool_execution",
-    "completion_evaluation", "structured_output", "response_presentation", "waiting_for_user", "verification", "completed", "cancelled", "failed",
+    "completion_evaluation", "structured_output", "response_presentation", "waiting_for_user", "waiting_for_tool", "verification", "completed", "cancelled", "failed",
     "semantic_status",
 })
 
@@ -35,6 +35,7 @@ WORKER_SUBSTATES = {
     "response_presentation": frozenset({"selecting", "rendering", "evaluating", "repairing"}),
     "semantic_status": frozenset({"collecting_evidence", "evaluating", "repairing"}),
     "waiting_for_user": frozenset({"blocked"}),
+    "waiting_for_tool": frozenset({"client_execution"}),
     "verification": frozenset({"validating_model_output", "validating_tool_effect"}),
     "completed": frozenset({"terminal"}),
     "cancelled": frozenset({"terminal"}),
@@ -52,6 +53,7 @@ DEFAULT_WORKER_SUBSTATES = {
     "response_presentation": "rendering",
     "semantic_status": "evaluating",
     "waiting_for_user": "blocked",
+    "waiting_for_tool": "client_execution",
     "verification": "validating_model_output",
     "completed": "terminal",
     "cancelled": "terminal",

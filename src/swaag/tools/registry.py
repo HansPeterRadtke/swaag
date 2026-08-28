@@ -5,6 +5,7 @@ from concurrent.futures import ThreadPoolExecutor, TimeoutError as FuturesTimeou
 from typing import Callable, Iterable
 
 from swaag.config import AgentConfig
+from swaag.delegated_tools import DelegatedToolSpec
 from swaag.environment.environment import AgentEnvironment
 from swaag.tools.base import SemanticCallRequest, Tool, ToolContext, ToolValidationError
 from swaag.tools.artifacts import ARTIFACT_TOOLS
@@ -60,9 +61,12 @@ class LoadToolsTool(Tool):
 
     def execute(self, validated_input: dict, context: ToolContext) -> ToolExecutionResult:
         enabled = {tool.name: tool for tool in self._registry.enabled_domain_tools(context.config)}
+        delegated = {tool.name: tool for tool in context.delegated_tools}
         requested = list(validated_input["tool_names"])
-        selected = [name for name in requested if name in enabled]
-        unavailable = [name for name in requested if name not in enabled]
+        selected = [name for name in requested if name in enabled or name in delegated]
+        unavailable = [
+            name for name in requested if name not in enabled and name not in delegated
+        ]
         output = {
             "selected_tool_names": selected,
             "unavailable_tool_names": unavailable,
@@ -103,6 +107,9 @@ class ToolRegistry:
         except KeyError as exc:
             raise KeyError(f"Unknown tool: {name}") from exc
 
+    def registered_names(self) -> frozenset[str]:
+        return frozenset(self._tools)
+
     def enabled_domain_tools(self, config: AgentConfig) -> list[Tool]:
         tools = [self.get(name) for name in config.tools.enabled if name != "load_tools"]
         result: list[Tool] = []
@@ -123,15 +130,36 @@ class ToolRegistry:
         """Compatibility/full-registry view. Production action loops use staged schemas."""
         return [tool.prompt_tuple() for tool in self.enabled_tools(config)]
 
-    def staged_prompt_tuples(self, config: AgentConfig, selected_names: Iterable[str]) -> list[tuple[str, str, dict, str]]:
+    def staged_prompt_tuples(
+        self,
+        config: AgentConfig,
+        selected_names: Iterable[str],
+        delegated_tools: Iterable[DelegatedToolSpec] = (),
+    ) -> list[tuple[str, str, dict, str]]:
         selected = set(selected_names)
         return [
             self.get("load_tools").prompt_tuple(),
             *[tool.prompt_tuple() for tool in self.enabled_domain_tools(config) if tool.name in selected],
+            *[tool.prompt_tuple() for tool in delegated_tools if tool.name in selected],
         ]
 
-    def capability_index(self, config: AgentConfig) -> list[tuple[str, str, str]]:
-        return [(tool.name, tool.description, tool.usage_guidance) for tool in self.enabled_domain_tools(config)]
+    def capability_index(
+        self,
+        config: AgentConfig,
+        delegated_tools: Iterable[DelegatedToolSpec] = (),
+    ) -> list[tuple[str, str, str]]:
+        return [
+            *[
+                (tool.name, tool.description, tool.usage_guidance)
+                for tool in self.enabled_domain_tools(config)
+            ],
+            *[
+                (name, description, guidance)
+                for name, description, _schema, guidance in (
+                    tool.prompt_tuple() for tool in delegated_tools
+                )
+            ],
+        ]
 
     def tool_names(self, config: AgentConfig) -> list[str]:
         return [tool.name for tool in self.enabled_tools(config)]
@@ -144,6 +172,7 @@ class ToolRegistry:
         session_state: SessionState,
         *,
         semantic_call: Callable[[SemanticCallRequest], dict] | None = None,
+        delegated_tools: Iterable[DelegatedToolSpec] = (),
     ) -> tuple[Tool, ToolContext, ToolInvocation]:
         tool = self.get(name)
         configured_names = set(config.tools.enabled)
@@ -157,6 +186,7 @@ class ToolRegistry:
             session_state=session_copy,
             environment=AgentEnvironment(config, session_copy),
             semantic_call=semantic_call,
+            delegated_tools=tuple(delegated_tools),
         )
         validated = tool.validate(raw_input)
         effective_kind = tool.effective_kind(validated)
@@ -206,6 +236,7 @@ class ToolRegistry:
         session_state: SessionState,
         *,
         semantic_call: Callable[[SemanticCallRequest], dict] | None = None,
+        delegated_tools: Iterable[DelegatedToolSpec] = (),
     ) -> tuple[ToolInvocation, ToolExecutionResult]:
         tool, context, invocation = self.prepare(
             name,
@@ -213,6 +244,7 @@ class ToolRegistry:
             config,
             session_state,
             semantic_call=semantic_call,
+            delegated_tools=delegated_tools,
         )
         result = self.execute_prepared(tool, context, invocation)
         return invocation, result

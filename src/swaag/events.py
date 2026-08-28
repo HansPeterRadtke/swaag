@@ -84,6 +84,8 @@ ALLOWED_EVENT_TYPES = frozenset(
         "agent_action_terminal",
         "agent_tool_call_completed",
         "tool_capabilities_loaded",
+        "delegated_tool_catalog_observed",
+        "delegated_tool_requested",
         "assistant_progress",
         "tool_result_missing",
         "failure_classification_resolved",
@@ -658,6 +660,19 @@ REQUIRED_PAYLOAD_KEYS: dict[str, frozenset[str]] = {
     "clarification_generated": frozenset({"source", "text"}),
     "tool_input_parsed": frozenset({"tool_name", "tool_input", "prompt_mode"}),
     "tool_called": frozenset({"tool_name", "tool_input"}),
+    "delegated_tool_catalog_observed": frozenset(
+        {"revision", "catalog_sha256", "source", "tools"}
+    ),
+    "delegated_tool_requested": frozenset(
+        {
+            "call_id",
+            "tool_name",
+            "arguments",
+            "arguments_sha256",
+            "catalog_revision",
+            "catalog_sha256",
+        }
+    ),
     "output_unit_generated": frozenset({"unit", "overflowed", "text"}),
     "tool_result": frozenset({"tool_name", "raw_input", "validated_input", "output"}),
     "tool_error": frozenset({"tool_name", "tool_input", "error", "error_type"}),

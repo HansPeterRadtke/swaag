@@ -147,9 +147,13 @@ def test_ag_ui_sdk_conformance_assets_are_pinned_and_parse() -> None:
     probe = ROOT / "scripts" / "ag-ui-sdk-conformance.mjs"
     preparer = ROOT / "scripts" / "prepare-ag-ui-conformance.py"
     runner = ROOT / "scripts" / "run-ag-ui-sdk-conformance.py"
+    client_tool_probe = ROOT / "scripts" / "ag-ui-client-tool-conformance.mjs"
+    client_tool_runner = ROOT / "scripts" / "run-ag-ui-client-tool-conformance.py"
     installer_source = installer.read_text(encoding="utf-8")
     probe_source = probe.read_text(encoding="utf-8")
     runner_source = runner.read_text(encoding="utf-8")
+    client_tool_probe_source = client_tool_probe.read_text(encoding="utf-8")
+    client_tool_runner_source = client_tool_runner.read_text(encoding="utf-8")
 
     shell_check = subprocess.run(
         ["bash", "-n", str(installer)],
@@ -163,8 +167,21 @@ def test_ag_ui_sdk_conformance_assets_are_pinned_and_parse() -> None:
         capture_output=True,
         check=False,
     )
+    client_tool_node_check = subprocess.run(
+        ["node", "--check", str(client_tool_probe)],
+        text=True,
+        capture_output=True,
+        check=False,
+    )
     python_check = subprocess.run(
-        ["python", "-m", "py_compile", str(preparer), str(runner)],
+        [
+            "python",
+            "-m",
+            "py_compile",
+            str(preparer),
+            str(runner),
+            str(client_tool_runner),
+        ],
         text=True,
         capture_output=True,
         check=False,
@@ -172,6 +189,7 @@ def test_ag_ui_sdk_conformance_assets_are_pinned_and_parse() -> None:
 
     assert shell_check.returncode == 0, shell_check.stderr
     assert node_check.returncode == 0, node_check.stderr
+    assert client_tool_node_check.returncode == 0, client_tool_node_check.stderr
     assert python_check.returncode == 0, python_check.stderr
     assert 'VERSION="0.0.59"' in installer_source
     assert "@ag-ui/client@${VERSION}" in installer_source
@@ -186,3 +204,10 @@ def test_ag_ui_sdk_conformance_assets_are_pinned_and_parse() -> None:
     assert "onRunFinishedEvent" in probe_source
     assert "model_client=no_inference" in runner_source
     assert "complete_without_executor" in runner_source
+    assert "clientProvided !== true" in client_tool_probe_source
+    assert 'role: "tool"' in client_tool_probe_source
+    assert "TOOL_CALL_START" in client_tool_probe_source
+    assert "TOOL_CALL_RESULT" not in client_tool_probe_source
+    assert "_NoInferenceClient" in client_tool_runner_source
+    assert "model_client=no_inference" in client_tool_runner_source
+    assert '"inference_allowed": False' in client_tool_runner_source

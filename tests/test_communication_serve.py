@@ -19,6 +19,11 @@ from opentelemetry.sdk.trace.export.in_memory_span_exporter import (
 
 from swaag.cli import _build_parser
 from swaag.communication import CommunicationService, require_loopback_bind_host
+from swaag.delegated_tools import (
+    DelegatedToolInputRequired,
+    DelegatedToolResultInput,
+    prepare_delegated_tool_spec,
+)
 from swaag.heartbeat import watchdog_interval_seconds
 from swaag.protocol_adapters import AgUiProjectionAdapter
 from swaag.runtime import AgentRuntime
@@ -969,7 +974,7 @@ def test_communication_transport_serves_dynamic_ag_ui_capabilities(make_config):
             "resumable": False,
         }
         assert capabilities["tools"]["supported"] is True
-        assert capabilities["tools"]["clientProvided"] is False
+        assert capabilities["tools"]["clientProvided"] is True
         assert [item["name"] for item in capabilities["tools"]["items"]] == [
             "calculator"
         ]
@@ -984,6 +989,351 @@ def test_communication_transport_serves_dynamic_ag_ui_capabilities(make_config):
         assert "GET only" in post_error["error"]
 
     asyncio.run(exercise())
+
+
+def test_ag_ui_client_tool_round_trip_is_durable_without_model_access(
+    make_config, monkeypatch
+) -> None:
+    service = CommunicationService(AgentRuntime(make_config(), model_client=object()))
+    client_tool = {
+        "name": "select_record",
+        "description": "Select one record in the connected client.",
+        "parameters": {
+            "type": "object",
+            "properties": {"record_id": {"type": "string"}},
+            "required": ["record_id"],
+            "additionalProperties": False,
+        },
+        "metadata": {"owner": "client"},
+    }
+
+    def request_without_model(worker_id: str):
+        service.workers.store.transition(
+            worker_id,
+            "queued",
+            expected={"created"},
+            event_type="worker_queued",
+        )
+        working = service.workers.store.transition(
+            worker_id,
+            "working",
+            expected={"queued"},
+            increment_run_count=True,
+            event_type="worker_started",
+        )
+        catalog = service.runtime.delegated_tools.latest_catalog(
+            working.session_id
+        )
+        assert catalog is not None
+        state = service.runtime.history.rebuild_from_history(
+            working.session_id, write_projections=False
+        )
+        with pytest.raises(DelegatedToolInputRequired) as wait:
+            service.runtime._request_delegated_tool(
+                state,
+                catalog=catalog,
+                spec=catalog.tools[0],
+                arguments={"record_id": "record-7"},
+            )
+        call = wait.value.call
+        service.workers._sync_history_events(working)
+        return service.workers.store.transition(
+            worker_id,
+            "input_required",
+            expected={"working"},
+            event_type="worker_delegated_tool_input_required",
+            event_payload={
+                "call_id": call.call_id,
+                "tool_name": call.tool_name,
+                "arguments": call.arguments,
+            },
+        )
+
+    observed = {}
+
+    def complete_without_model(worker_id: str, message: str, *, source: str, **_):
+        observed["message"] = message
+        observed["source"] = source
+        current = service.workers.store.get(worker_id)
+        history = service.runtime.history.read_history(current.session_id)
+        observed["tool_result"] = next(
+            event
+            for event in history
+            if event.event_type == "tool_result"
+            and event.payload.get("delegated") is True
+        )
+        service.workers.store.transition(
+            worker_id,
+            "queued",
+            expected={"input_required"},
+            event_type="worker_resumed",
+        )
+        service.workers.store.transition(
+            worker_id,
+            "working",
+            expected={"queued"},
+            increment_run_count=True,
+            event_type="worker_started",
+        )
+        return service.workers.store.transition(
+            worker_id,
+            "completed",
+            expected={"working"},
+            result="completed after client execution",
+            event_type="worker_completed",
+        )
+
+    monkeypatch.setattr(service.workers, "start", request_without_model)
+    first_payload = _ag_ui_input()
+    first_payload["tools"] = [client_tool]
+    first_run = AgUiProjectionAdapter().user_run(first_payload)
+    first_record, first_start, _, _, _ = service._ag_ui_begin(first_run)
+    first_events = AgUiProjectionAdapter().events(
+        first_record,
+        service.workers.events(
+            first_record.worker_id, after_sequence=first_start
+        ),
+        thread_id=first_run.thread_id,
+        run_id=first_run.run_id,
+    )
+    pending = service.runtime.delegated_tools.pending_call(
+        first_record.session_id
+    )
+    assert pending is not None
+
+    monkeypatch.setattr(service.workers, "message", complete_without_model)
+    second_payload = _ag_ui_input(run_id="run-2")
+    second_payload["tools"] = [client_tool]
+    second_payload["messages"].append(
+        {
+            "id": "client-tool-result-1",
+            "role": "tool",
+            "toolCallId": pending.call_id,
+            "content": '{"selected":"record-7"}',
+            "metadata": {"durationMs": 5},
+        }
+    )
+    second_record, second_start, _, duplicate, _ = service._ag_ui_begin(
+        AgUiProjectionAdapter().user_run(second_payload)
+    )
+    second_events = service.workers.events(
+        second_record.worker_id, after_sequence=second_start
+    )
+    resolved = service.runtime.delegated_tools.call(pending.call_id)
+    service.workers.shutdown()
+
+    event_types = [event["type"] for event in first_events]
+    assert event_types.count("TOOL_CALL_START") == 1
+    assert event_types.count("TOOL_CALL_ARGS") == 1
+    assert event_types.count("TOOL_CALL_END") == 1
+    assert event_types[-1] == "RUN_FINISHED"
+    assert first_events[-1]["outcome"] == {"type": "success"}
+    assert first_events[-1]["metadata"]["swaagToolCallId"] == pending.call_id
+    assert second_record.status == "completed"
+    assert duplicate is False
+    assert observed["source"] == "ag_ui:run-2"
+    assert pending.call_id in observed["message"]
+    assert observed["tool_result"].payload["output"]["content"] == (
+        '{"selected":"record-7"}'
+    )
+    assert resolved is not None and resolved.status == "resolved"
+    assert resolved.result_message_id == "client-tool-result-1"
+    assert resolved.history_event_hash == observed["tool_result"].hash
+    assert not any(
+        event.event_type == "worker_history_event"
+        and event.payload.get("history_event_type") == "tool_result"
+        for event in second_events
+    )
+
+
+def test_ag_ui_rejects_client_tool_name_collisions(make_config) -> None:
+    service = CommunicationService(AgentRuntime(make_config(), model_client=object()))
+    payload = _ag_ui_input()
+    payload["tools"] = [
+        {
+            "name": "calculator",
+            "description": "Shadow the server calculator.",
+            "parameters": {
+                "type": "object",
+                "properties": {"expression": {"type": "string"}},
+                "required": ["expression"],
+                "additionalProperties": False,
+            },
+        }
+    ]
+
+    with pytest.raises(ValueError, match="collide"):
+        service._ag_ui_begin(AgUiProjectionAdapter().user_run(payload))
+    service.workers.shutdown()
+
+
+def test_ag_ui_accepts_only_exact_known_historical_tool_messages(make_config) -> None:
+    service = CommunicationService(AgentRuntime(make_config(), model_client=object()))
+    worker = service.workers.create("Continue a protocol conversation.")
+    service.store.set_protocol_worker("ag_ui", "thread-1", worker.worker_id)
+    tool = {
+        "name": "select_record",
+        "description": "Select one record in the connected client.",
+        "parameters": {
+            "type": "object",
+            "properties": {"record_id": {"type": "string"}},
+            "required": ["record_id"],
+            "additionalProperties": False,
+        },
+    }
+    catalog = service.runtime.delegated_tools.bind_catalog(
+        worker.session_id,
+        source="ag_ui",
+        external_context_id="thread-1",
+        external_request_id="original-tool-run",
+        tools=[prepare_delegated_tool_spec(tool)],
+    )
+    call = service.runtime.delegated_tools.request_call(
+        worker.session_id,
+        catalog_revision=catalog.revision,
+        tool_name="select_record",
+        arguments={"record_id": "record-7"},
+    )
+    result = DelegatedToolResultInput(
+        message_id="client-tool-result-1",
+        call_id=call.call_id,
+        content='{"selected":"record-7"}',
+        error=None,
+        metadata={"durationMs": 5},
+    )
+    service.runtime.accept_delegated_tool_result(
+        worker.session_id,
+        call.call_id,
+        source="ag_ui",
+        external_request_id="original-result-run",
+        result=result,
+    )
+    payload = _ag_ui_input(run_id="history-run")
+    payload["tools"] = [tool]
+    payload["messages"].append(
+        {
+            "id": result.message_id,
+            "role": "tool",
+            "toolCallId": call.call_id,
+            "content": result.content,
+            "metadata": result.metadata,
+        }
+    )
+
+    record, _start, _end, duplicate, _state = service._ag_ui_begin(
+        AgUiProjectionAdapter().user_run(payload)
+    )
+    assert record.worker_id == worker.worker_id
+    assert duplicate is False
+
+    changed = _ag_ui_input(run_id="changed-history-run")
+    changed["tools"] = [tool]
+    changed["messages"].append(
+        {
+            "id": result.message_id,
+            "role": "tool",
+            "toolCallId": call.call_id,
+            "content": "different",
+            "metadata": result.metadata,
+        }
+    )
+    with pytest.raises(ValueError, match="differs from durable exact result"):
+        service._ag_ui_begin(AgUiProjectionAdapter().user_run(changed))
+    assert (
+        service.store.protocol_state_for_message("ag_ui", "changed-history-run")
+        is None
+    )
+    service.workers.shutdown()
+
+
+def test_ag_ui_rejects_a_terminal_tool_result_from_another_run_before_state_bind(
+    make_config,
+) -> None:
+    service = CommunicationService(AgentRuntime(make_config(), model_client=object()))
+    worker = service.workers.create("Continue after connected-client execution.")
+    service.store.set_protocol_worker("ag_ui", "thread-1", worker.worker_id)
+    service.workers.store.transition(
+        worker.worker_id,
+        "queued",
+        expected={"created"},
+        event_type="worker_queued",
+    )
+    working = service.workers.store.transition(
+        worker.worker_id,
+        "working",
+        expected={"queued"},
+        event_type="worker_started",
+    )
+    tool = prepare_delegated_tool_spec(
+        {
+            "name": "select_record",
+            "description": "Select one record in the connected client.",
+            "parameters": {
+                "type": "object",
+                "properties": {"record_id": {"type": "string"}},
+                "required": ["record_id"],
+                "additionalProperties": False,
+            },
+        }
+    )
+    catalog = service.runtime.delegated_tools.bind_catalog(
+        worker.session_id,
+        source="ag_ui",
+        external_context_id="thread-1",
+        external_request_id="catalog-run",
+        tools=[tool],
+    )
+    call = service.runtime.delegated_tools.request_call(
+        worker.session_id,
+        catalog_revision=catalog.revision,
+        tool_name=tool.name,
+        arguments={"record_id": "record-7"},
+    )
+    result = DelegatedToolResultInput(
+        message_id="client-tool-result-1",
+        call_id=call.call_id,
+        content='{"selected":"record-7"}',
+        error=None,
+        metadata={},
+    )
+    service.runtime.accept_delegated_tool_result(
+        worker.session_id,
+        call.call_id,
+        source="ag_ui",
+        external_request_id="accepted-result-run",
+        result=result,
+    )
+    service.workers.store.transition(
+        worker.worker_id,
+        "input_required",
+        expected={working.status},
+        event_type="worker_delegated_tool_input_required",
+        event_payload={"call_id": call.call_id, "tool_name": call.tool_name},
+    )
+    payload = _ag_ui_input(run_id="different-result-run")
+    payload["tools"] = [
+        {
+            "name": tool.name,
+            "description": tool.description,
+            "parameters": tool.parameters,
+        }
+    ]
+    payload["messages"].append(
+        {
+            "id": result.message_id,
+            "role": "tool",
+            "toolCallId": result.call_id,
+            "content": result.content,
+        }
+    )
+
+    with pytest.raises(ValueError, match="different exact result"):
+        service._ag_ui_begin(AgUiProjectionAdapter().user_run(payload))
+    assert (
+        service.store.protocol_state_for_message("ag_ui", "different-result-run")
+        is None
+    )
+    service.workers.shutdown()
 
 
 def test_ag_ui_resume_validates_and_resolves_the_durable_interrupt(
