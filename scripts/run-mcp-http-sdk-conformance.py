@@ -10,6 +10,7 @@ from pathlib import Path
 from typing import Any
 
 from swaag.communication import CommunicationService
+from swaag.mcp import McpInputRequired
 from swaag.config import load_config
 from swaag.runtime import AgentRuntime
 from swaag.utils import stable_json_dumps, utc_now_iso
@@ -52,6 +53,45 @@ async def _run(args: argparse.Namespace) -> dict[str, Any]:
     calculator.input_schema = calculator_schema
 
     service = CommunicationService(runtime)
+
+    def _calculator_mrtr(arguments: dict[str, Any], context):
+        response = context.input_responses.get("multiplier")
+        if response is None:
+            return McpInputRequired(
+                input_requests={
+                    "multiplier": {
+                        "method": "elicitation/create",
+                        "params": {
+                            "mode": "form",
+                            "message": "Choose a deterministic multiplier",
+                            "requestedSchema": {
+                                "type": "object",
+                                "properties": {
+                                    "multiplier": {"type": "number", "title": "Multiplier"}
+                                },
+                                "required": ["multiplier"],
+                            },
+                        },
+                    }
+                },
+                request_state="calculator-mrtr-v1",
+            )
+        if context.request_state != "calculator-mrtr-v1":
+            raise ValueError("calculator MRTR requestState mismatch")
+        if response.get("action") != "accept":
+            raise ValueError("calculator MRTR elicitation was not accepted")
+        content = response.get("content")
+        if not isinstance(content, dict):
+            raise ValueError("calculator MRTR elicitation content is missing")
+        multiplier = content.get("multiplier")
+        if not isinstance(multiplier, (int, float)) or isinstance(multiplier, bool):
+            raise ValueError("calculator MRTR multiplier must be numeric")
+        expression = arguments.get("expression")
+        if not isinstance(expression, str) or not expression:
+            raise ValueError("calculator expression must be a non-empty string")
+        return {"expression": f"({expression}) * ({multiplier})"}
+
+    service.mcp.register_multi_round_trip_handler("calculator", _calculator_mrtr)
     server = await asyncio.start_server(service.handle_client, "127.0.0.1", 0)
     port = int(server.sockets[0].getsockname()[1])
     probe = Path(__file__).with_name("mcp-http-sdk-conformance.mjs")
@@ -97,8 +137,10 @@ async def _run(args: argparse.Namespace) -> dict[str, Any]:
             )
         sdk_result = json.loads(stdout)
         calculator_result = sdk_result.get("toolCalls", {}).get("calculator", {})
-        if calculator_result.get("result") != 42:
-            raise RuntimeError("official MCP SDK probe omitted the verified tool result")
+        if calculator_result.get("result") != 126:
+            raise RuntimeError("official MCP SDK probe omitted the verified MRTR tool result")
+        if calculator_result.get("elicitationCalls") != 1:
+            raise RuntimeError("official MCP SDK probe did not auto-fulfill exactly one elicitation")
         if calculator_result.get("mirroredParameterHeader") != "Expression":
             raise RuntimeError("official MCP SDK probe omitted mirrored-header evidence")
         subscription_result = sdk_result.get("subscription", {})

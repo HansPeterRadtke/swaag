@@ -551,3 +551,100 @@ def test_mcp_transport_configuration_accepts_explicit_bindings(
     )
 
     assert config.mcp.transport == transport
+
+
+def test_mcp_multi_round_trip_handler_requires_explicit_registration(make_config) -> None:
+    runtime = AgentRuntime(make_config(), model_client=object())
+    adapter = McpAdapter(runtime)
+    request = {
+        "jsonrpc": "2.0",
+        "id": "retry",
+        "method": "tools/call",
+        "params": {
+            **_metadata(),
+            "name": "calculator",
+            "arguments": {"expression": "6 * 7"},
+            "requestState": "opaque",
+            "inputResponses": {"x": {"action": "accept", "content": {"value": 2}}},
+        },
+    }
+    response = adapter.handle_http(request, _headers("tools/call", name="calculator"))
+    assert response.status == 200
+    assert response.payload["error"]["code"] == -32602
+    assert "does not support MCP multi-round-trip" in response.payload["error"]["message"]
+
+
+def test_mcp_multi_round_trip_handler_retries_into_canonical_tool_execution(make_config) -> None:
+    from swaag.mcp import McpInputRequired
+
+    runtime = AgentRuntime(make_config(), model_client=object())
+    adapter = McpAdapter(runtime)
+
+    def handler(arguments, context):
+        if not context.input_responses:
+            return McpInputRequired(
+                {
+                    "factor": {
+                        "method": "elicitation/create",
+                        "params": {
+                            "mode": "form",
+                            "message": "Factor?",
+                            "requestedSchema": {
+                                "type": "object",
+                                "properties": {"factor": {"type": "number"}},
+                                "required": ["factor"],
+                            },
+                        },
+                    }
+                },
+                "state-v1",
+            )
+        assert context.request_state == "state-v1"
+        factor = context.input_responses["factor"]["content"]["factor"]
+        return {"expression": f"({arguments['expression']}) * ({factor})"}
+
+    adapter.register_multi_round_trip_handler("calculator", handler)
+    first = {
+        "jsonrpc": "2.0",
+        "id": 1,
+        "method": "tools/call",
+        "params": {**_metadata(), "name": "calculator", "arguments": {"expression": "6 * 7"}},
+    }
+    initial = adapter.handle_http(first, _headers("tools/call", name="calculator"))
+    assert initial.status == 200
+    assert initial.payload["result"]["resultType"] == "input_required"
+    assert initial.payload["result"]["requestState"] == "state-v1"
+    retry = copy.deepcopy(first)
+    retry["id"] = 2
+    retry["params"]["requestState"] = "state-v1"
+    retry["params"]["inputResponses"] = {
+        "factor": {"action": "accept", "content": {"factor": 3}}
+    }
+    completed = adapter.handle_http(retry, _headers("tools/call", name="calculator"))
+    assert completed.status == 200
+    assert completed.payload["result"]["resultType"] == "complete"
+    assert completed.payload["result"]["structuredContent"]["result"] == 126
+
+
+def test_mcp_multi_round_trip_rejects_wrapped_input_response(make_config) -> None:
+    from swaag.mcp import McpInputRequired
+
+    runtime = AgentRuntime(make_config(), model_client=object())
+    adapter = McpAdapter(runtime, multi_round_trip_handlers={
+        "calculator": lambda arguments, context: McpInputRequired({}, "state")
+    })
+    request = {
+        "jsonrpc": "2.0",
+        "id": 1,
+        "method": "tools/call",
+        "params": {
+            **_metadata(),
+            "name": "calculator",
+            "arguments": {"expression": "1"},
+            "inputResponses": {"factor": {"method": "elicitation/create", "result": {}}},
+        },
+    }
+    response = adapter.handle_http(request, _headers("tools/call", name="calculator"))
+    assert response.status == 200
+    assert response.payload["error"]["code"] == -32602
+    assert "bare MCP input response objects" in response.payload["error"]["message"]

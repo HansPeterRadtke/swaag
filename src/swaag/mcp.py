@@ -10,7 +10,7 @@ import json
 import re
 import sys
 import threading
-from typing import Any, Mapping, TextIO
+from typing import Any, Callable, Mapping, TextIO
 from urllib.parse import urlsplit
 
 from swaag.runtime import AgentRuntime
@@ -45,6 +45,23 @@ class McpHttpSubscription:
 
 
 @dataclass(slots=True, frozen=True)
+class McpMultiRoundTripContext:
+    input_responses: Mapping[str, dict[str, Any]]
+    request_state: str | None
+
+
+@dataclass(slots=True, frozen=True)
+class McpInputRequired:
+    input_requests: Mapping[str, dict[str, Any]]
+    request_state: str | None = None
+
+
+McpMultiRoundTripHandler = Callable[
+    [dict[str, Any], McpMultiRoundTripContext], McpInputRequired | dict[str, Any]
+]
+
+
+@dataclass(slots=True, frozen=True)
 class _MirroredParameter:
     header_name: str
     path: tuple[str, ...]
@@ -56,10 +73,28 @@ class McpAdapter:
 
     protocol_version = "2026-07-28"
 
-    def __init__(self, runtime: AgentRuntime):
+    def __init__(
+        self,
+        runtime: AgentRuntime,
+        *,
+        multi_round_trip_handlers: Mapping[str, McpMultiRoundTripHandler] | None = None,
+    ):
         self.runtime = runtime
         self._subscription_lock = threading.Lock()
         self._subscriptions: dict[str | int, threading.Event] = {}
+        self._multi_round_trip_handlers: dict[str, McpMultiRoundTripHandler] = dict(
+            multi_round_trip_handlers or {}
+        )
+
+    def register_multi_round_trip_handler(
+        self, tool_name: str, handler: McpMultiRoundTripHandler
+    ) -> None:
+        name = str(tool_name).strip()
+        if not name:
+            raise ValueError("MCP multi-round-trip tool name must be non-empty")
+        if not callable(handler):
+            raise TypeError("MCP multi-round-trip handler must be callable")
+        self._multi_round_trip_handlers[name] = handler
 
     def _result(self, request_id: Any, result: Any) -> dict[str, Any]:
         if isinstance(result, dict):
@@ -161,6 +196,69 @@ class McpAdapter:
             )
         return None
 
+    @staticmethod
+    def _multi_round_trip_context(
+        params: Mapping[str, Any], request_id: Any
+    ) -> tuple[McpMultiRoundTripContext | None, dict[str, Any] | None]:
+        raw_responses = params.get("inputResponses", {})
+        if not isinstance(raw_responses, dict):
+            return None, {
+                "code": -32602,
+                "message": "tools/call inputResponses must be an object",
+            }
+        responses: dict[str, dict[str, Any]] = {}
+        for key, value in raw_responses.items():
+            if not isinstance(key, str) or not key:
+                return None, {
+                    "code": -32602,
+                    "message": "tools/call inputResponses keys must be non-empty strings",
+                }
+            if not isinstance(value, dict) or "method" in value or "result" in value:
+                return None, {
+                    "code": -32602,
+                    "message": (
+                        "tools/call inputResponses entries must be bare MCP input response objects"
+                    ),
+                }
+            responses[key] = dict(value)
+        request_state = params.get("requestState")
+        if request_state is not None and not isinstance(request_state, str):
+            return None, {
+                "code": -32602,
+                "message": "tools/call requestState must be a string",
+            }
+        return McpMultiRoundTripContext(responses, request_state), None
+
+    @staticmethod
+    def _validate_input_required(result: McpInputRequired) -> dict[str, Any]:
+        input_requests = dict(result.input_requests)
+        if not input_requests and result.request_state is None:
+            raise ValueError(
+                "MCP input_required requires at least one input request or requestState"
+            )
+        for key, request in input_requests.items():
+            if not isinstance(key, str) or not key:
+                raise ValueError("MCP input request keys must be non-empty strings")
+            if not isinstance(request, dict):
+                raise ValueError("MCP input requests must be objects")
+            method = request.get("method")
+            params = request.get("params")
+            if method not in {"elicitation/create", "sampling/createMessage", "roots/list"}:
+                raise ValueError(f"Unsupported MCP input request method: {method!r}")
+            if not isinstance(params, dict):
+                raise ValueError("MCP embedded input request params must be an object")
+        if result.request_state is not None and not isinstance(result.request_state, str):
+            raise ValueError("MCP input_required requestState must be a string")
+        return {
+            "resultType": "input_required",
+            **({"inputRequests": input_requests} if input_requests else {}),
+            **(
+                {"requestState": result.request_state}
+                if result.request_state is not None
+                else {}
+            ),
+        }
+
     def handle(
         self,
         request: dict[str, Any],
@@ -241,6 +339,33 @@ class McpAdapter:
             if tool is None:
                 return self._error(
                     request_id, -32602, f"Unknown or disabled tool: {name}"
+                )
+            mrtr_handler = self._multi_round_trip_handlers.get(name)
+            if mrtr_handler is not None:
+                mrtr_context, mrtr_error = self._multi_round_trip_context(params, request_id)
+                if mrtr_error is not None:
+                    return self._error(
+                        request_id, int(mrtr_error["code"]), str(mrtr_error["message"])
+                    )
+                assert mrtr_context is not None
+                try:
+                    mrtr_result = mrtr_handler(dict(arguments), mrtr_context)
+                    if isinstance(mrtr_result, McpInputRequired):
+                        return self._result(
+                            request_id, self._validate_input_required(mrtr_result)
+                        )
+                    if not isinstance(mrtr_result, dict):
+                        raise TypeError(
+                            "MCP multi-round-trip handler must return McpInputRequired or tool arguments"
+                        )
+                    arguments = dict(mrtr_result)
+                except (TypeError, ValueError) as exc:
+                    return self._error(request_id, -32602, str(exc))
+            elif "inputResponses" in params or "requestState" in params:
+                return self._error(
+                    request_id,
+                    -32602,
+                    f"Tool does not support MCP multi-round-trip input: {name}",
                 )
             try:
                 tool.validate(arguments)

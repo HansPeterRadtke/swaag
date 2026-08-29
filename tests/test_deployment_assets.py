@@ -93,12 +93,17 @@ def test_mcp_sdk_conformance_assets_are_pinned_and_parse() -> None:
     assert '"notifications/tools/list_changed"' in http_probe_source
     assert "await client.listen(" in http_probe_source
     assert "subscription.honoredFilter" in http_probe_source
+    assert 'client.setRequestHandler("elicitation/create"' in http_probe_source
+    assert "elicitationCalls" in http_probe_source
     assert "await subscription.close()" in http_probe_source
     assert "subscriptionReadyPath" in http_probe_source
     assert "_NoInferenceClient" in http_runner_source
     assert "model_client=no_inference" in http_runner_source
     assert "subscription_ready.exists()" in http_runner_source
     assert "conformance-catalog-revision" in http_runner_source
+    assert "register_multi_round_trip_handler" in http_runner_source
+    assert "McpInputRequired" in http_runner_source
+    assert "calculator-mrtr-v1" in http_runner_source
 
 
 def test_a2a_sdk_conformance_assets_are_pinned_and_parse() -> None:

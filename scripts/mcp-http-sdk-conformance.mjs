@@ -40,7 +40,7 @@ const transport = new StreamableHTTPClientTransport(new URL(endpoint));
 const client = new Client(
   { name: "swaag-http-conformance-probe", version: "1.0.0" },
   {
-    capabilities: {},
+    capabilities: { elicitation: { form: {} } },
     versionNegotiation: {
       mode: { pin: "2026-07-28" },
       probe: { timeoutMs: 10000 },
@@ -80,13 +80,21 @@ try {
   if (files.isError || files.structuredContent === undefined) {
     throw new Error("official client did not decode list_files output");
   }
+  let elicitationCalls = 0;
+  client.setRequestHandler("elicitation/create", async (request) => {
+    elicitationCalls += 1;
+    if (request.params.message !== "Choose a deterministic multiplier") {
+      throw new Error("unexpected MRTR elicitation message");
+    }
+    return { action: "accept", content: { multiplier: 3 } };
+  });
   const calculated = await client.callTool({
     name: "calculator",
     arguments: { expression: "6 * 7" },
   });
   if (
     calculated.isError ||
-    calculated.structuredContent?.result !== 42
+    calculated.structuredContent?.result !== 126
   ) {
     throw new Error("official client did not execute the mirrored-header call");
   }
@@ -145,6 +153,7 @@ try {
         isError: calculated.isError ?? false,
         result: calculated.structuredContent.result,
         mirroredParameterHeader: "Expression",
+        elicitationCalls,
       },
     },
     subscription: {
