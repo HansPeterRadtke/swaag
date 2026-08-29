@@ -219,9 +219,23 @@ class AttachmentConfig:
 
 
 @dataclass(slots=True)
+class McpAuthorizationConfig:
+    enabled: bool
+    resource_uri: str
+    authorization_servers: list[str]
+    allowed_origins: list[str]
+    introspection_url: str
+    introspection_client_id: str
+    introspection_client_secret: str
+    required_scopes: list[str]
+    timeout_seconds: float
+
+
+@dataclass(slots=True)
 class McpConfig:
     enabled: bool
     transport: str
+    authorization: McpAuthorizationConfig
 
 
 @dataclass(slots=True)
@@ -451,9 +465,21 @@ def _coerce_config(data: dict[str, Any]) -> AgentConfig:
         extraction_timeout_seconds=int(data["attachments"]["extraction_timeout_seconds"]),
         all2text_command=str(data["attachments"]["all2text_command"]),
     )
+    mcp_auth_data = data["mcp"].get("authorization", {})
     mcp = McpConfig(
         enabled=bool(data["mcp"]["enabled"]),
         transport=str(data["mcp"]["transport"]),
+        authorization=McpAuthorizationConfig(
+            enabled=bool(mcp_auth_data.get("enabled", False)),
+            resource_uri=str(mcp_auth_data.get("resource_uri", "")),
+            authorization_servers=[str(item) for item in mcp_auth_data.get("authorization_servers", [])],
+            allowed_origins=[str(item) for item in mcp_auth_data.get("allowed_origins", [])],
+            introspection_url=str(mcp_auth_data.get("introspection_url", "")),
+            introspection_client_id=str(mcp_auth_data.get("introspection_client_id", "")),
+            introspection_client_secret=str(mcp_auth_data.get("introspection_client_secret", "")),
+            required_scopes=[str(item) for item in mcp_auth_data.get("required_scopes", [])],
+            timeout_seconds=float(mcp_auth_data.get("timeout_seconds", 5.0)),
+        ),
     )
     communication = CommunicationConfig(
         enabled=bool(data["communication"]["enabled"]),
@@ -667,6 +693,23 @@ def _coerce_config(data: dict[str, Any]) -> AgentConfig:
         raise ValueError(
             "mcp.transport must be stdio, streamable_http, or both"
         )
+    if mcp.authorization.timeout_seconds <= 0:
+        raise ValueError("mcp.authorization.timeout_seconds must be positive")
+    if mcp.authorization.enabled:
+        if not mcp.authorization.resource_uri.startswith(("http://", "https://")):
+            raise ValueError("mcp.authorization.resource_uri must be an absolute HTTP(S) URI")
+        if not mcp.authorization.authorization_servers:
+            raise ValueError("mcp.authorization.authorization_servers must not be empty when enabled")
+        if not all(item.startswith(("http://", "https://")) for item in mcp.authorization.authorization_servers):
+            raise ValueError("mcp.authorization.authorization_servers must contain absolute HTTP(S) URIs")
+        if not all(item.startswith(("http://", "https://")) for item in mcp.authorization.allowed_origins):
+            raise ValueError("mcp.authorization.allowed_origins must contain absolute HTTP(S) origins")
+        if not mcp.authorization.introspection_url.startswith(("http://", "https://")):
+            raise ValueError("mcp.authorization.introspection_url must be an absolute HTTP(S) URI")
+        if not mcp.authorization.introspection_client_id:
+            raise ValueError("mcp.authorization.introspection_client_id is required when enabled")
+        if not mcp.authorization.introspection_client_secret:
+            raise ValueError("mcp.authorization.introspection_client_secret is required when enabled")
 
     return AgentConfig(
         model=model,

@@ -24,7 +24,7 @@ import jsonpatch
 from swaag.config import AgentConfig
 from swaag.delegated_tools import DelegatedToolCall, DelegatedToolResultInput
 from swaag.heartbeat import systemd_notify, watchdog_interval_seconds
-from swaag.mcp import McpAdapter, McpHttpResponse, McpHttpSubscription
+from swaag.mcp import McpAdapter, McpHttpResponse, McpHttpSubscription, McpOAuthResourceServer
 from swaag.protocol_adapters import (
     A2AContentTypeNotSupportedError,
     A2AProtocolError,
@@ -990,6 +990,7 @@ class CommunicationService:
         self.workers = WorkerManager(runtime, max_workers=max_concurrency)
         self.task_api = TaskApi(self.workers)
         self.mcp = McpAdapter(runtime)
+        self.mcp_oauth = McpOAuthResourceServer(runtime.config.mcp.authorization)
         self._advertised_host = str(runtime.config.communication.host).strip()
         self._advertised_port = int(runtime.config.communication.port)
         self._reconcile_ag_ui_shared_state_history()
@@ -3614,6 +3615,98 @@ class CommunicationService:
                     params,
                 )
             raise ValueError(f"unknown communication op: {op}")
+
+    async def handle_mcp_http_client(
+        self, reader: asyncio.StreamReader, writer: asyncio.StreamWriter
+    ) -> None:
+        """Dedicated MCP-only HTTP listener for optional authenticated exposure."""
+        try:
+            first_line = await reader.readline()
+            try:
+                parts = first_line.decode("ascii").strip().split()
+                if len(parts) != 3 or parts[2] not in {"HTTP/1.0", "HTTP/1.1"}:
+                    raise ValueError("malformed HTTP request line")
+                method, request_target, _version = parts
+                target = urlsplit(request_target)
+                if (
+                    target.scheme
+                    or target.netloc
+                    or target.fragment
+                    or not target.path.startswith("/")
+                ):
+                    raise ValueError("HTTP request target must be an origin-form path")
+                path = target.path
+                if target.query:
+                    raise ValueError("MCP HTTP endpoint does not accept query parameters")
+                headers = await self._read_http_headers(reader)
+            except (UnicodeDecodeError, ValueError) as exc:
+                await self._write_http_response(
+                    writer,
+                    status=400,
+                    reason="Bad Request",
+                    body=json.dumps({"error": str(exc)}, sort_keys=True).encode(),
+                )
+                return
+
+            resource_path = urlsplit(self.runtime.config.mcp.authorization.resource_uri).path or "/"
+            metadata_paths = {
+                "/.well-known/oauth-protected-resource",
+                "/.well-known/oauth-protected-resource" + resource_path,
+            }
+            if self.mcp_oauth.enabled and method == "GET" and path in metadata_paths:
+                await self._write_http_response(
+                    writer,
+                    status=200,
+                    reason="OK",
+                    body=json.dumps(
+                        self.mcp_oauth.protected_resource_metadata(), sort_keys=True
+                    ).encode(),
+                    headers={"Cache-Control": "public, max-age=300"},
+                )
+                return
+            if path != "/mcp":
+                await self._write_http_response(
+                    writer,
+                    status=404,
+                    reason="Not Found",
+                    body=b'{"error":"not found"}',
+                )
+                return
+            origin_response = self.mcp.http_origin_preflight(headers)
+            if origin_response is not None:
+                await self._write_mcp_http_response(writer, origin_response)
+                return
+            if method != "POST":
+                await self._write_http_response(
+                    writer,
+                    status=405,
+                    reason="Method Not Allowed",
+                    body=b'{"error":"MCP Streamable HTTP accepts POST only"}',
+                    headers={"Allow": "POST"},
+                )
+                return
+            auth_response = await asyncio.to_thread(self.mcp_oauth.authorize, headers)
+            if auth_response is not None:
+                await self._write_mcp_http_response(writer, auth_response)
+                return
+            await self._handle_mcp_http(headers=headers, reader=reader, writer=writer)
+        finally:
+            writer.close()
+            await writer.wait_closed()
+
+    async def serve_mcp_http(self, host: str, port: int) -> None:
+        """Serve only MCP HTTP on loopback; external exposure requires a TLS reverse proxy."""
+        candidate = str(host).strip()
+        if not candidate:
+            raise ValueError("MCP HTTP bind host must not be empty")
+        candidate = require_loopback_bind_host(candidate)
+        if not self.runtime.config.mcp.enabled:
+            raise ValueError("MCP is disabled in configuration")
+        if self.runtime.config.mcp.transport not in {"streamable_http", "both"}:
+            raise ValueError("MCP Streamable HTTP transport is disabled in configuration")
+        server = await asyncio.start_server(self.handle_mcp_http_client, candidate, int(port))
+        async with server:
+            await server.serve_forever()
 
     async def handle_client(self, reader: asyncio.StreamReader, writer: asyncio.StreamWriter) -> None:
         try:

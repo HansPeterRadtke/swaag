@@ -47,6 +47,14 @@ def _ag_ui_input(*, run_id: str = "run-1", resume=None) -> dict:
     return payload
 
 
+def test_mcp_http_cli_requires_explicit_bind() -> None:
+    parser = _build_parser()
+    args = parser.parse_args(["mcp-http", "--host", "127.0.0.1", "--port", "9443"])
+    assert args.command == "mcp-http"
+    assert args.host == "127.0.0.1"
+    assert args.port == 9443
+
+
 def test_communication_serve_cli_accepts_config_defaults():
     parser = _build_parser()
     args = parser.parse_args(["communication", "serve"] )
@@ -64,6 +72,20 @@ def test_communication_bind_accepts_only_loopback(host: str) -> None:
 def test_communication_bind_rejects_unauthenticated_non_loopback(host: str) -> None:
     with pytest.raises(ValueError, match="loopback"):
         require_loopback_bind_host(host)
+
+
+def test_dedicated_mcp_http_server_rejects_non_loopback(make_config) -> None:
+    async def exercise() -> None:
+        config = make_config()
+        config.mcp.enabled = True
+        config.mcp.transport = "streamable_http"
+        runtime = AgentRuntime(config, model_client=object())
+        service = CommunicationService(runtime)
+        with pytest.raises(ValueError, match="loopback"):
+            await service.serve_mcp_http("0.0.0.0", 9443)
+        service.workers.shutdown()
+
+    asyncio.run(exercise())
 
 
 def test_watchdog_interval_uses_half_systemd_window(monkeypatch):

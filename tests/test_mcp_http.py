@@ -11,7 +11,7 @@ import pytest
 
 from swaag.communication import CommunicationService
 from swaag.config import load_config
-from swaag.mcp import McpAdapter
+from swaag.mcp import McpAdapter, McpOAuthResourceServer
 from swaag.runtime import AgentRuntime
 
 
@@ -648,3 +648,146 @@ def test_mcp_multi_round_trip_rejects_wrapped_input_response(make_config) -> Non
     assert response.status == 200
     assert response.payload["error"]["code"] == -32602
     assert "bare MCP input response objects" in response.payload["error"]["message"]
+
+
+
+
+def test_mcp_oauth_config_fails_closed_when_incomplete(monkeypatch) -> None:
+    env = {
+        "SWAAG__MCP__AUTHORIZATION__ENABLED": "true",
+        "SWAAG__MCP__AUTHORIZATION__RESOURCE_URI": "https://mcp.example.test/mcp",
+    }
+    with pytest.raises(ValueError, match="authorization_servers"):
+        load_config(env=env)
+
+class _FakeIntrospectionResponse:
+    def __init__(self, payload: dict[str, Any], status_code: int = 200):
+        self._payload = payload
+        self.status_code = status_code
+
+    def raise_for_status(self) -> None:
+        if self.status_code >= 400:
+            import requests
+            raise requests.HTTPError(f"status {self.status_code}")
+
+    def json(self) -> dict[str, Any]:
+        return dict(self._payload)
+
+
+def _enable_mcp_oauth(config) -> None:
+    config.mcp.enabled = True
+    config.mcp.transport = "streamable_http"
+    auth = config.mcp.authorization
+    auth.enabled = True
+    auth.resource_uri = "https://mcp.example.test/mcp"
+    auth.authorization_servers = ["https://auth.example.test"]
+    auth.allowed_origins = ["https://client.example.test"]
+    auth.introspection_url = "https://auth.example.test/introspect"
+    auth.introspection_client_id = "swaag-resource"
+    auth.introspection_client_secret = "secret"
+    auth.required_scopes = ["mcp:tools"]
+    auth.timeout_seconds = 1.0
+
+
+def test_mcp_oauth_resource_server_challenges_and_validates(monkeypatch, make_config) -> None:
+    config = make_config()
+    _enable_mcp_oauth(config)
+    auth = McpOAuthResourceServer(config.mcp.authorization)
+
+    missing = auth.authorize({})
+    assert missing is not None and missing.status == 401
+    assert missing.headers is not None
+    assert 'resource_metadata="https://mcp.example.test/.well-known/oauth-protected-resource/mcp"' in missing.headers["WWW-Authenticate"]
+
+    payloads = iter([
+        {"active": False},
+        {"active": True, "aud": "https://other.example/mcp", "scope": "mcp:tools"},
+        {"active": True, "aud": "https://mcp.example.test/mcp", "scope": "other"},
+        {"active": True, "aud": ["https://mcp.example.test/mcp"], "scope": "mcp:tools extra"},
+    ])
+    calls: list[dict[str, Any]] = []
+
+    def fake_post(url, **kwargs):
+        calls.append({"url": url, **kwargs})
+        return _FakeIntrospectionResponse(next(payloads))
+
+    monkeypatch.setattr("swaag.mcp.requests.post", fake_post)
+    invalid = auth.authorize({"authorization": "Bearer bad"})
+    assert invalid is not None and invalid.status == 401
+    wrong_aud = auth.authorize({"authorization": "Bearer wrong-aud"})
+    assert wrong_aud is not None and wrong_aud.status == 401
+    insufficient = auth.authorize({"authorization": "Bearer narrow"})
+    assert insufficient is not None and insufficient.status == 403
+    assert insufficient.headers is not None and 'scope="mcp:tools"' in insufficient.headers["WWW-Authenticate"]
+    assert auth.authorize({"authorization": "Bearer good"}) is None
+    assert len(calls) == 4
+    assert calls[-1]["url"] == "https://auth.example.test/introspect"
+    assert calls[-1]["auth"] == ("swaag-resource", "secret")
+    assert calls[-1]["data"] == {"token": "good", "token_type_hint": "access_token"}
+
+
+def test_dedicated_mcp_http_listener_serves_metadata_and_requires_oauth(monkeypatch, make_config, tmp_path: Path) -> None:
+    async def exercise() -> None:
+        config = make_config()
+        config.sessions.root = tmp_path / "sessions-oauth"
+        _enable_mcp_oauth(config)
+        no_inference = _NoInferenceClient()
+        runtime = AgentRuntime(config, model_client=no_inference)
+        runtime.create_or_load_session()
+        service = CommunicationService(runtime)
+        monkeypatch.setattr(
+            "swaag.mcp.requests.post",
+            lambda *args, **kwargs: _FakeIntrospectionResponse({
+                "active": True,
+                "aud": "https://mcp.example.test/mcp",
+                "scope": "mcp:tools",
+            }),
+        )
+        server = await asyncio.start_server(service.handle_mcp_http_client, "127.0.0.1", 0)
+        port = int(server.sockets[0].getsockname()[1])
+
+        async def request(method: str, path: str, *, payload=None, headers=None):
+            body = b"" if payload is None else json.dumps(payload).encode()
+            merged = {"Host": "localhost", **(headers or {})}
+            if payload is not None:
+                merged["Content-Length"] = str(len(body))
+            raw = f"{method} {path} HTTP/1.1\r\n".encode()
+            raw += b"".join(f"{k}: {v}\r\n".encode() for k, v in merged.items())
+            reader, writer = await asyncio.open_connection("127.0.0.1", port)
+            writer.write(raw + b"\r\n" + body)
+            await writer.drain()
+            response = await reader.read()
+            writer.close(); await writer.wait_closed()
+            head, response_body = response.split(b"\r\n\r\n", 1)
+            lines = head.decode().split("\r\n")
+            response_headers = {k.casefold(): v.strip() for k, v in (line.split(":", 1) for line in lines[1:])}
+            return lines[0], response_headers, response_body
+
+        status, _headers_out, body = await request("GET", "/.well-known/oauth-protected-resource/mcp")
+        assert status == "HTTP/1.1 200 OK"
+        metadata = json.loads(body)
+        assert metadata["resource"] == "https://mcp.example.test/mcp"
+        assert metadata["authorization_servers"] == ["https://auth.example.test"]
+        assert metadata["scopes_supported"] == ["mcp:tools"]
+
+        discover = {"jsonrpc": "2.0", "id": "auth-discover", "method": "server/discover", "params": _metadata()}
+        base_headers = {
+            "Content-Type": "application/json",
+            "Accept": "application/json, text/event-stream",
+            "MCP-Protocol-Version": "2026-07-28",
+            "Mcp-Method": "server/discover",
+            "Origin": "https://client.example.test",
+        }
+        unauthorized_status, unauthorized_headers, _ = await request("POST", "/mcp", payload=discover, headers=base_headers)
+        assert unauthorized_status == "HTTP/1.1 401 Unauthorized"
+        assert unauthorized_headers["www-authenticate"].startswith("Bearer ")
+        ok_status, _ok_headers, ok_body = await request(
+            "POST", "/mcp", payload=discover, headers={**base_headers, "Authorization": "Bearer good"}
+        )
+        assert ok_status == "HTTP/1.1 200 OK"
+        assert json.loads(ok_body)["result"]["supportedVersions"] == ["2026-07-28"]
+
+        server.close(); await server.wait_closed(); service.workers.shutdown()
+        assert no_inference.accesses == []
+
+    asyncio.run(exercise())

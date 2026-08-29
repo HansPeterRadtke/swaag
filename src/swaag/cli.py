@@ -95,6 +95,11 @@ def _build_parser() -> argparse.ArgumentParser:
     edit_parser.add_argument("--pattern")
 
     subparsers.add_parser("mcp-stdio", help="Serve enabled SWAAG tools over MCP JSON-RPC on stdio.")
+    mcp_http_parser = subparsers.add_parser(
+        "mcp-http", help="Serve the dedicated loopback MCP-only Streamable HTTP endpoint."
+    )
+    mcp_http_parser.add_argument("--host", required=True, help="Explicit bind host.")
+    mcp_http_parser.add_argument("--port", required=True, type=int, help="Explicit bind port.")
 
     communication_parser = subparsers.add_parser("communication", help="Use the durable communication/control service.")
     communication_sub = communication_parser.add_subparsers(dest="communication_command", required=True)
@@ -495,6 +500,10 @@ def main(argv: Sequence[str] | None = None) -> int:
             if runtime.config.mcp.transport not in {"stdio", "both"}:
                 raise ValueError("MCP stdio transport is disabled in configuration")
             McpAdapter(runtime).serve_stdio()
+            return 0
+        if args.command == "mcp-http":
+            service = CommunicationService.from_runtime(runtime)
+            asyncio.run(service.serve_mcp_http(args.host, args.port))
             return 0
         if args.command == "communication":
             try:

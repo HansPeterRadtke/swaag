@@ -10,9 +10,12 @@ import json
 import re
 import sys
 import threading
+
+import requests
 from typing import Any, Callable, Mapping, TextIO
 from urllib.parse import urlsplit
 
+from swaag.config import McpAuthorizationConfig
 from swaag.runtime import AgentRuntime
 from swaag.tools.base import ToolValidationError
 
@@ -59,6 +62,135 @@ class McpInputRequired:
 McpMultiRoundTripHandler = Callable[
     [dict[str, Any], McpMultiRoundTripContext], McpInputRequired | dict[str, Any]
 ]
+
+
+class McpOAuthResourceServer:
+    """OAuth 2.x protected-resource boundary for externally exposed MCP HTTP."""
+
+    def __init__(self, config: McpAuthorizationConfig):
+        self.config = config
+
+    @property
+    def enabled(self) -> bool:
+        return bool(self.config.enabled)
+
+    def protected_resource_metadata(self) -> dict[str, Any]:
+        if not self.enabled:
+            raise ValueError("MCP OAuth protected-resource metadata is disabled")
+        payload: dict[str, Any] = {
+            "resource": self.config.resource_uri,
+            "authorization_servers": list(self.config.authorization_servers),
+            "bearer_methods_supported": ["header"],
+        }
+        if self.config.required_scopes:
+            payload["scopes_supported"] = list(self.config.required_scopes)
+        return payload
+
+    def _challenge(self, *, error: str | None = None, description: str | None = None, scope: str | None = None) -> str:
+        metadata_url = self.config.resource_uri.rstrip("/")
+        metadata_url = metadata_url.split("://", 1)
+        if len(metadata_url) != 2:
+            raise ValueError("MCP OAuth resource URI must be absolute")
+        scheme, rest = metadata_url
+        host, _, path = rest.partition("/")
+        well_known = f"{scheme}://{host}/.well-known/oauth-protected-resource"
+        if path:
+            well_known += "/" + path
+        parts = [f'resource_metadata="{well_known}"']
+        if error:
+            parts.append(f'error="{error}"')
+        if description:
+            safe = description.replace('"', "'")
+            parts.append(f'error_description="{safe}"')
+        if scope:
+            parts.append(f'scope="{scope}"')
+        return "Bearer " + ", ".join(parts)
+
+    @staticmethod
+    def _audiences(payload: Mapping[str, Any]) -> set[str]:
+        raw = payload.get("aud")
+        if isinstance(raw, str):
+            return {raw}
+        if isinstance(raw, list):
+            return {str(item) for item in raw if isinstance(item, str)}
+        raw = payload.get("resource")
+        return {raw} if isinstance(raw, str) else set()
+
+    @staticmethod
+    def _scopes(payload: Mapping[str, Any]) -> set[str]:
+        raw = payload.get("scope")
+        if isinstance(raw, str):
+            return {item for item in raw.split() if item}
+        raw = payload.get("scp")
+        if isinstance(raw, list):
+            return {str(item) for item in raw if isinstance(item, str)}
+        return set()
+
+    def authorize(self, headers: Mapping[str, str]) -> McpHttpResponse | None:
+        if not self.enabled:
+            return None
+        authorization = headers.get("authorization", "")
+        if not authorization.startswith("Bearer ") or not authorization[7:].strip():
+            return McpHttpResponse(
+                401,
+                {"error": "unauthorized"},
+                {"WWW-Authenticate": self._challenge()},
+            )
+        token = authorization[7:].strip()
+        try:
+            response = requests.post(
+                self.config.introspection_url,
+                data={"token": token, "token_type_hint": "access_token"},
+                auth=(
+                    self.config.introspection_client_id,
+                    self.config.introspection_client_secret,
+                ),
+                headers={"Accept": "application/json"},
+                timeout=self.config.timeout_seconds,
+            )
+            response.raise_for_status()
+            payload = response.json()
+        except (requests.RequestException, ValueError) as exc:
+            return McpHttpResponse(
+                503,
+                {"error": "authorization_server_unavailable"},
+                {"Cache-Control": "no-store"},
+            )
+        if not isinstance(payload, dict) or payload.get("active") is not True:
+            return McpHttpResponse(
+                401,
+                {"error": "invalid_token"},
+                {
+                    "WWW-Authenticate": self._challenge(
+                        error="invalid_token", description="Access token is inactive or invalid"
+                    )
+                },
+            )
+        if self.config.resource_uri not in self._audiences(payload):
+            return McpHttpResponse(
+                401,
+                {"error": "invalid_token"},
+                {
+                    "WWW-Authenticate": self._challenge(
+                        error="invalid_token", description="Access token audience does not match this MCP resource"
+                    )
+                },
+            )
+        missing = [scope for scope in self.config.required_scopes if scope not in self._scopes(payload)]
+        if missing:
+            required = " ".join(self.config.required_scopes)
+            return McpHttpResponse(
+                403,
+                {"error": "insufficient_scope", "required_scopes": list(self.config.required_scopes)},
+                {
+                    "WWW-Authenticate": self._challenge(
+                        error="insufficient_scope",
+                        description="Access token lacks required scope",
+                        scope=required,
+                    )
+                },
+            )
+        return None
 
 
 @dataclass(slots=True, frozen=True)
@@ -744,8 +876,7 @@ class McpAdapter:
                 )
         return None
 
-    @staticmethod
-    def _is_allowed_origin(origin: str) -> bool:
+    def _is_allowed_origin(self, origin: str) -> bool:
         if not origin or origin == "null" or any(char.isspace() for char in origin):
             return False
         try:
@@ -766,9 +897,14 @@ class McpAdapter:
         if parsed.hostname.casefold() == "localhost":
             return True
         try:
-            return ipaddress.ip_address(parsed.hostname).is_loopback
+            if ipaddress.ip_address(parsed.hostname).is_loopback:
+                return True
         except ValueError:
-            return False
+            pass
+        if self.runtime.config.mcp.authorization.enabled:
+            normalized = origin.rstrip("/")
+            return normalized in {item.rstrip("/") for item in self.runtime.config.mcp.authorization.allowed_origins}
+        return False
 
     @staticmethod
     def _accepted_media_types(raw_accept: str) -> set[str]:

@@ -354,6 +354,18 @@ enabled = false
 # "stdio", "streamable_http" on the loopback communication service, or "both".
 transport = "stdio"
 
+[mcp.authorization]
+# Disabled by default. Required before exposing the loopback MCP-only listener through a TLS reverse proxy.
+enabled = false
+resource_uri = ""
+authorization_servers = []
+allowed_origins = []
+introspection_url = ""
+introspection_client_id = ""
+introspection_client_secret = ""
+required_scopes = []
+timeout_seconds = 5.0
+
 # -----------------------------------------------------------
 # [communication] — PARALLEL COMMUNICATION/CONTROL SERVICE
 # Empty model_base_url reuses the main configured model endpoint.
