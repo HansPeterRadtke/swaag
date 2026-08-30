@@ -72,8 +72,11 @@ def _validate_schema(schema: Any, *, path: str, root: bool = False) -> None:
         return
     if schema_type in {"string", "integer", "number", "boolean", "null"}:
         enum = schema.get("enum")
-        if enum is not None and not isinstance(enum, list):
-            raise PortableSchemaError(f"{path}.enum must be a list")
+        if enum is not None:
+            if not isinstance(enum, list):
+                raise PortableSchemaError(f"{path}.enum must be a list")
+            if not enum:
+                raise PortableSchemaError(f"{path}.enum must be non-empty")
         return
     raise PortableSchemaError(f"{path}.type is unsupported or missing: {schema_type!r}")
 

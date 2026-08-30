@@ -1099,7 +1099,15 @@ def test_zero_tool_budget_removes_tools_from_action_schema_and_prompt(make_confi
     runtime = AgentRuntime(config, model_client=client)
     result = runtime.run_turn("Answer from the supplied context without tools.")
     assert result.assistant_text == "done"
-    assert '"enum": []' in str(seen["schema"]) or "'enum': []" in str(seen["schema"])
+    assert "'enum': []" not in str(seen["schema"])
+    assert '"enum": []' not in str(seen["schema"])
+    tool_item = seen["schema"]["properties"]["tool_calls"]["items"]
+    assert tool_item == {
+        "type": "object",
+        "properties": {},
+        "required": [],
+        "additionalProperties": False,
+    }
     assert "If no tools are listed" in seen["prompt"]
 
 

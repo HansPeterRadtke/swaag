@@ -201,27 +201,16 @@ def completion_evaluation_contract(
         )
         for source_kind, source_id in evidence_sources
     ]
-    request_schema: dict[str, Any]
+    properties: dict[str, dict[str, Any]] = {
+        "complete": _boolean(),
+        "reason": _string(),
+        "remaining_work": _array(_string()),
+    }
     if request_variants:
-        request_schema = {"anyOf": request_variants}
-    else:
-        request_schema = _closed_object(
-            {
-                "source_kind": {"type": "string", "enum": []},
-                "source_id": {"type": "string", "enum": []},
-                "purpose": _string(),
-            }
-        )
+        properties["evidence_requests"] = _array({"anyOf": request_variants})
     return _contract(
         "completion_evaluation",
-        _closed_object(
-            {
-                "complete": _boolean(),
-                "reason": _string(),
-                "remaining_work": _array(_string()),
-                "evidence_requests": _array(request_schema),
-            }
-        ),
+        _closed_object(properties),
     )
 
 
@@ -247,12 +236,11 @@ def agent_action_contract(tool_specs: Iterable[tuple], *, allow_silent_completio
     if tool_call_variants:
         tool_call_schema: dict[str, Any] = {"anyOf": tool_call_variants}
     else:
-        tool_call_schema = _closed_object(
-            {
-                "tool_name": {"type": "string", "enum": []},
-                "arguments": _closed_object({}),
-            }
-        )
+        # No enabled tool exists. Keep the array item grammar valid; any non-empty
+        # array is rejected mechanically by action_from_payload because no tool
+        # name can be enabled. Never use enum: []: llama.cpp turns an impossible
+        # enum into a zero-width grammar production that can emit malformed JSON.
+        tool_call_schema = _closed_object({})
     return _contract(
         "agent_action",
         _closed_object(

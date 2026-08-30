@@ -18,8 +18,16 @@ def test_completion_contract_requires_semantic_decision_and_remaining_work():
         "complete",
         "reason",
         "remaining_work",
-        "evidence_requests",
     }
+    assert "evidence_requests" not in schema["properties"]
+
+
+def test_completion_contract_exposes_only_real_evidence_source_identities():
+    schema = completion_evaluation_contract([("history_event", "session:7")]).json_schema
+    assert "evidence_requests" in schema["properties"]
+    request_item = schema["properties"]["evidence_requests"]["items"]["anyOf"][0]
+    assert request_item["properties"]["source_kind"]["enum"] == ["history_event"]
+    assert request_item["properties"]["source_id"]["enum"] == ["session:7"]
 
 
 def test_completion_prompt_contains_goal_candidate_and_evidence(make_config):
@@ -195,14 +203,14 @@ class _HistoricalProjectionClient(_CompletionClient):
                 {"projection": "historical-marker-91 remains completion evidence"}
             )
         else:
-            response = json.dumps(
-                {
-                    "complete": True,
-                    "reason": "Verified.",
-                    "remaining_work": [],
-                    "evidence_requests": [],
-                }
-            )
+            body = {
+                "complete": True,
+                "reason": "Verified.",
+                "remaining_work": [],
+            }
+            if "evidence_requests" in payload["json_schema"]["properties"]:
+                body["evidence_requests"] = []
+            response = json.dumps(body)
         return CompletionResult(
             text=response,
             raw_request=payload,
@@ -242,14 +250,14 @@ class _EvidenceRequestClient(_CompletionClient):
                 }
             )
         else:
-            response = json.dumps(
-                {
-                    "complete": True,
-                    "reason": "The exact evidence verifies completion.",
-                    "remaining_work": [],
-                    "evidence_requests": [],
-                }
-            )
+            body = {
+                "complete": True,
+                "reason": "The exact evidence verifies completion.",
+                "remaining_work": [],
+            }
+            if "evidence_requests" in payload["json_schema"]["properties"]:
+                body["evidence_requests"] = []
+            response = json.dumps(body)
         return CompletionResult(
             text=response,
             raw_request=payload,
@@ -508,7 +516,6 @@ def test_completion_evaluation_keeps_prior_turn_history_exact_when_it_fits(
                     "complete": True,
                     "reason": "Verified.",
                     "remaining_work": [],
-                    "evidence_requests": [],
                 }
             )
         ]
@@ -630,7 +637,6 @@ def test_completion_evaluation_recompiles_after_output_starvation(make_config) -
                     "complete": True,
                     "reason": "Verified.",
                     "remaining_work": [],
-                    "evidence_requests": [],
                 }
             )
         ]
@@ -682,7 +688,6 @@ def test_completion_evaluation_semantically_projects_only_after_measured_overflo
                     "complete": True,
                     "reason": "Verified.",
                     "remaining_work": [],
-                    "evidence_requests": [],
                 }
             ),
         ]
