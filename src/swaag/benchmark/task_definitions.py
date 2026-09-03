@@ -107,8 +107,25 @@ class BenchmarkTaskDefinition:
     tags: list[str] = field(default_factory=list)
     setup_instructions: list[str] = field(default_factory=list)
     config_overrides: dict[str, Any] = field(default_factory=dict)
+    benchmark_max_total_actions: int | None = None
+    benchmark_tool_call_budget: int | None = None
+    benchmark_max_consecutive_identical_tool_calls: int | None = 3
 
     def __post_init__(self) -> None:
+        # Evaluation budgets belong to the benchmark oracle, not AgentConfig.
+        # Absorb legacy benchmark catalog entries so they cannot silently change
+        # production runtime semantics.
+        legacy_action_limit = self.config_overrides.pop("runtime_max_total_actions", None)
+        legacy_tool_limit = self.config_overrides.pop("runtime_tool_call_budget", None)
+        legacy_repeat_limit = self.config_overrides.pop(
+            "benchmark_max_consecutive_identical_tool_calls", None
+        )
+        if self.benchmark_max_total_actions is None and legacy_action_limit is not None:
+            self.benchmark_max_total_actions = int(legacy_action_limit)
+        if self.benchmark_tool_call_budget is None and legacy_tool_limit is not None:
+            self.benchmark_tool_call_budget = int(legacy_tool_limit)
+        if legacy_repeat_limit is not None:
+            self.benchmark_max_consecutive_identical_tool_calls = int(legacy_repeat_limit)
         self.difficulty = normalize_benchmark_difficulty(
             self.difficulty,
             task_type=self.task_type,
@@ -2376,6 +2393,9 @@ def make_benchmark_task(
     tags: list[str] | tuple[str, ...],
     description: str,
     config_overrides: dict[str, Any] | None = None,
+    benchmark_max_total_actions: int | None = None,
+    benchmark_tool_call_budget: int | None = None,
+    benchmark_max_consecutive_identical_tool_calls: int | None = 3,
     live_capable: bool = True,
 ) -> BenchmarkTaskDefinition:
     normalized_tags = list(tags)
@@ -2403,8 +2423,6 @@ def make_benchmark_task(
     max_total_actions, tool_call_budget = (repo_limits if repo_repair else base_limits)[difficulty]
     default_overrides = {
         "tools_allow_side_effect_tools": True,
-        "runtime_max_total_actions": max_total_actions,
-        "runtime_tool_call_budget": tool_call_budget,
     }
     return BenchmarkTaskDefinition(
         task_id=task_id,
@@ -2420,6 +2438,15 @@ def make_benchmark_task(
             "Do not attach a model-response fixture.",
         ],
         config_overrides={**default_overrides, **(config_overrides or {})},
+        benchmark_max_total_actions=(
+            max_total_actions if benchmark_max_total_actions is None else int(benchmark_max_total_actions)
+        ),
+        benchmark_tool_call_budget=(
+            tool_call_budget if benchmark_tool_call_budget is None else int(benchmark_tool_call_budget)
+        ),
+        benchmark_max_consecutive_identical_tool_calls=(
+            benchmark_max_consecutive_identical_tool_calls
+        ),
     )
 
 
@@ -2616,9 +2643,9 @@ def history_benchmark_tasks() -> list[BenchmarkTaskDefinition]:
             ],
             config_overrides={
                 "tools_allow_side_effect_tools": False,
-                "runtime_max_total_actions": 4,
-                "runtime_tool_call_budget": 0,
             },
+            benchmark_max_total_actions=4,
+            benchmark_tool_call_budget=0,
         )
         for task_id, difficulty, tags, description, builder in specs
     ]

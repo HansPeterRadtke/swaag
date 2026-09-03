@@ -120,7 +120,6 @@ class Tool(abc.ABC):
     output_schema: dict[str, Any] | None = None
     usage_guidance: str = ""
     kind: ToolKind = "pure"
-    repeated_observation_is_redundant: bool = False
     required_runtime_capability: str | None = None
 
     def prompt_tuple(self) -> tuple[str, str, dict[str, Any], str]:

@@ -3,6 +3,7 @@ from __future__ import annotations
 import os
 import sqlite3
 import time
+from datetime import datetime, timezone
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Any, Callable, Iterable
@@ -90,6 +91,7 @@ class InferenceRequestCoordinator:
         capacity_resolver: Callable[[], tuple[int, str]],
         poll_seconds: float = 0.02,
         aging_seconds_per_priority: float = 1.0,
+        max_running_seconds: float | None = None,
     ):
         self.path = Path(root).expanduser() / "inference_requests.sqlite3"
         self.path.parent.mkdir(parents=True, exist_ok=True)
@@ -98,6 +100,11 @@ class InferenceRequestCoordinator:
         self.poll_seconds = max(0.005, float(poll_seconds))
         self.aging_seconds_per_priority = max(
             0.001, float(aging_seconds_per_priority)
+        )
+        self.max_running_seconds = (
+            None
+            if max_running_seconds is None
+            else max(1.0, float(max_running_seconds))
         )
         self._capacity: tuple[int, str] | None = None
         with self._connect() as connection:
@@ -299,6 +306,24 @@ class InferenceRequestCoordinator:
             reset_queue=True,
         )
 
+    def suspend(self, request_id: str, *, reason: str) -> InferenceRequest:
+        """Release backend capacity while a preempted call is not yet eligible to replay."""
+        return self._transition_from_running(
+            request_id,
+            "suspended",
+            error=reason,
+        )
+
+    def resume(self, request_id: str, *, reason: str | None = None) -> InferenceRequest:
+        """Make a suspended preempted call runnable again once replay is actually ready."""
+        return self._transition(
+            request_id,
+            "queued",
+            expected={"suspended"},
+            error=reason,
+            reset_queue=True,
+        )
+
     def complete(self, request_id: str) -> InferenceRequest:
         return self._transition_from_running(request_id, "completed")
 
@@ -306,7 +331,7 @@ class InferenceRequestCoordinator:
         return self._transition(
             request_id,
             "failed",
-            expected={"queued", "running"},
+            expected={"queued", "running", "suspended"},
             error=error,
         )
 
@@ -320,7 +345,7 @@ class InferenceRequestCoordinator:
         return self._transition(
             request_id,
             "cancelled",
-            expected={"queued", "running"},
+            expected={"queued", "running", "suspended"},
             error=reason,
             cancellation_requested_at=requested_at or utc_now_iso(),
         )
@@ -329,7 +354,7 @@ class InferenceRequestCoordinator:
         return self._transition(
             request_id,
             "superseded",
-            expected={"queued", "running"},
+            expected={"queued", "running", "suspended"},
             error=reason,
         )
 
@@ -363,21 +388,32 @@ class InferenceRequestCoordinator:
             rows = connection.execute(
                 """
                 SELECT * FROM inference_requests
-                WHERE backend_key=? AND status IN ('queued', 'running')
+                WHERE backend_key=? AND status IN ('queued', 'running', 'suspended')
                 """,
                 (self.backend_key,),
             ).fetchall()
+        now_epoch = time.time()
         for row in rows:
             item = self._record(row)
-            if item is None or _pid_is_alive(item.owner_pid):
+            if item is None:
                 continue
+            owner_alive = _pid_is_alive(item.owner_pid)
+            stale_running = (
+                item.status == "running"
+                and self.max_running_seconds is not None
+                and item.started_at is not None
+                and _iso_epoch(item.started_at) is not None
+                and now_epoch - float(_iso_epoch(item.started_at)) > self.max_running_seconds
+            )
+            if owner_alive and not stale_running:
+                continue
+            error = (
+                f"inference running lease exceeded {self.max_running_seconds:.1f}s"
+                if stale_running
+                else "inference owner process ended before terminal state"
+            )
             try:
-                reconciled.append(
-                    self.fail(
-                        item.request_id,
-                        error="inference owner process ended before terminal state",
-                    )
-                )
+                reconciled.append(self.fail(item.request_id, error=error))
             except RuntimeError:
                 continue
         return reconciled
@@ -443,7 +479,8 @@ class InferenceRequestCoordinator:
                     """
                     UPDATE inference_requests SET
                         status=?, queued_at=?, queued_epoch=?, updated_at=?,
-                        completed_at=NULL, error=?
+                        started_at=NULL, completed_at=NULL, backend_capacity=NULL,
+                        capacity_source=NULL, queue_wait_seconds=NULL, error=?
                     WHERE request_id=?
                     """,
                     (status, now, queued_epoch, now, error, request_id),
@@ -488,3 +525,13 @@ def _pid_is_alive(value: Any) -> bool:
     except OSError:
         return False
     return True
+
+
+def _iso_epoch(value: str) -> float | None:
+    try:
+        parsed = datetime.fromisoformat(str(value).replace("Z", "+00:00"))
+        if parsed.tzinfo is None:
+            parsed = parsed.replace(tzinfo=timezone.utc)
+        return parsed.timestamp()
+    except (TypeError, ValueError, OverflowError):
+        return None

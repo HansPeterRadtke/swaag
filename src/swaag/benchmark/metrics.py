@@ -108,9 +108,13 @@ def compute_benchmark_metrics(results: list[Any]) -> BenchmarkAggregateMetrics:
     secondary = {
         "average_action_cycles_per_task": _mean_metric(results, "action_count"),
         "retries_per_task": _mean_metric(results, "retries"),
-        "drift_recoveries_per_task": _mean_metric(results, "no_progress_stops"),
-        "no_progress_stops": sum(int(item.metrics.get("no_progress_stops", 0)) for item in results),
-        "no_progress_rate": _rate(sum(1 for item in results if int(item.metrics.get("no_progress_stops", 0)) > 0), total),
+        "legacy_no_progress_stops": sum(
+            int(item.metrics.get("no_progress_stops", 0)) for item in results
+        ),
+        "legacy_no_progress_rate": _rate(
+            sum(1 for item in results if int(item.metrics.get("no_progress_stops", 0)) > 0),
+            total,
+        ),
         "average_model_progress_events_per_task": _mean_metric(results, "model_request_progress_events"),
         "model_retry_rate": _rate(sum(int(item.metrics.get("model_retry_events", 0)) for item in results), total),
         "unconstrained_contract_violations": sum(int(item.metrics.get("unconstrained_contract_violations", 0)) for item in results),

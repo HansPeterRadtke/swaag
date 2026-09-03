@@ -39,23 +39,6 @@ class FailureAnalyzer:
                 subsystem="runtime",
                 improvement_hints=["Return recoverable runtime evidence to the action loop when possible."],
             )
-        repeated = [
-            event for event in rejected
-            if "repeated" in str(event.payload.get("reason", "")).lower()
-            or "materially different" in str(event.payload.get("reason", "")).lower()
-        ]
-        if repeated or int(getattr(metrics, "no_progress_stops", 0)) > 0:
-            return FailureAnalysis(
-                category="loop_no_progress",
-                reason="The action loop repeated or exhausted progress without satisfying verification.",
-                evidence={
-                    "rejected_actions": len(rejected),
-                    "repeated_rejections": len(repeated),
-                    "action_count": len(selected_actions),
-                },
-                subsystem="action_loop",
-                improvement_hints=["Use the latest evidence to force a materially different next action."],
-            )
         if tool_errors:
             last = tool_errors[-1]
             return FailureAnalysis(

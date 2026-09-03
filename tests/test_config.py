@@ -38,12 +38,14 @@ def test_model_profile_and_structured_output_env_overrides_are_loaded(tmp_path: 
     env = {
         "SWAAG__SESSIONS__ROOT": str(tmp_path / "sessions"),
         "SWAAG__MODEL__PROFILE_NAME": "mid_context",
+        "SWAAG__MODEL__MAX_SEMANTIC_RESPONSIBILITIES_PER_CALL": "3",
         "SWAAG__MODEL__STRUCTURED_OUTPUT_MODE": "server_schema",
         "SWAAG__MODEL__PROGRESS_POLL_SECONDS": "2.5",
     }
     config = load_config(env=env)
 
     assert config.model.profile_name == "mid_context"
+    assert config.model.max_semantic_responsibilities_per_call == 3
     assert config.model.structured_output_mode == "server_schema"
     assert config.model.progress_poll_seconds == 2.5
 
@@ -155,3 +157,28 @@ def test_environment_aubro_overrides_are_loaded(tmp_path: Path) -> None:
     assert config.environment.aubro_max_text_chars == 1234
     assert config.environment.aubro_max_results == 7
     assert config.environment.aubro_max_links == 9
+
+
+def test_semantic_responsibility_limit_must_be_positive(tmp_path: Path) -> None:
+    with pytest.raises(ValueError, match="max_semantic_responsibilities_per_call"):
+        load_config(env={
+            "SWAAG__SESSIONS__ROOT": str(tmp_path / "sessions"),
+            "SWAAG__MODEL__MAX_SEMANTIC_RESPONSIBILITIES_PER_CALL": "0",
+        })
+
+
+def test_legacy_repeated_action_limit_migrates_to_validation_recovery_limit(tmp_path):
+    path = tmp_path / "legacy.toml"
+    path.write_text("[runtime]\nmax_repeated_action_occurrences = 5\n", encoding="utf-8")
+    config = load_config([path], env={})
+    assert config.runtime.max_validation_recovery_cycles == 5
+    assert "max_repeated_action_occurrences" not in config.raw["runtime"]
+    assert config.raw["runtime"]["max_validation_recovery_cycles"] == 5
+
+
+def test_new_validation_recovery_env_key_wins_over_legacy_alias():
+    config = load_config(env={
+        "SWAAG__RUNTIME__MAX_REPEATED_ACTION_OCCURRENCES": "5",
+        "SWAAG__RUNTIME__MAX_VALIDATION_RECOVERY_CYCLES": "7",
+    })
+    assert config.runtime.max_validation_recovery_cycles == 7

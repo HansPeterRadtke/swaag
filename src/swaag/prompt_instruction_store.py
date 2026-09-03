@@ -7,10 +7,12 @@ from pathlib import Path
 from typing import Any
 
 from swaag.config import AgentConfig
+from swaag.redaction import configured_secret_values, redact_for_persistence
 from swaag.prompt_instructions import (
     PromptInstructionError,
     enforce_prompt_instruction_limits,
     make_prompt_instruction,
+    TRUSTED_PROMPT_INSTRUCTION_AUTHORITIES,
 )
 from swaag.sqlite_schema import apply_sqlite_migrations
 from swaag.types import PromptInstruction
@@ -92,6 +94,7 @@ class PromptInstructionStore:
     def __init__(self, root: Path, config: AgentConfig):
         self.path = Path(root).expanduser() / "user_prompt_instructions.sqlite3"
         self.config = config
+        self.secret_values = configured_secret_values(config)
         self.path.parent.mkdir(parents=True, exist_ok=True)
         with self._connect() as connection:
             apply_sqlite_migrations(
@@ -116,6 +119,10 @@ class PromptInstructionStore:
             raise PromptInstructionStoreError(
                 "prompt instruction event payload must be an object"
             )
+        payload.setdefault("authority", "learned_model")
+        payload.setdefault("source_kind", "model_learned")
+        payload.setdefault("source_ref", "")
+        payload.setdefault("specificity", 0)
         return payload, PromptInstruction(**payload)
 
     def _read_events(
@@ -235,6 +242,15 @@ class PromptInstructionStore:
                     raise PromptInstructionError(
                         f"user prompt instruction already exists: {instruction_id}"
                     )
+                if (
+                    action in {"replace", "remove"}
+                    and existing is not None
+                    and existing.authority in TRUSTED_PROMPT_INSTRUCTION_AUTHORITIES
+                    and not (instruction is not None and instruction.metadata.get("trusted_mutation") is True)
+                ):
+                    raise PromptInstructionError(
+                        "trusted prompt instructions cannot be replaced or removed through ordinary/model mutation"
+                    )
                 if action in {"replace", "remove"} and existing is None:
                     raise PromptInstructionError(
                         f"unknown user prompt instruction: {instruction_id}"
@@ -247,6 +263,12 @@ class PromptInstructionStore:
                     assert existing is not None
                     assert instruction is not None
                     instruction.created_at = existing.created_at
+                if instruction is not None:
+                    instruction = PromptInstruction(
+                        **redact_for_persistence(
+                            asdict(instruction), secret_values=self.secret_values
+                        )
+                    )
                 candidate = [
                     item
                     for item in current
@@ -332,6 +354,151 @@ class PromptInstructionStore:
             instruction=instruction,
             origin_session_id=origin_session_id,
         )
+
+    def add_trusted(
+        self,
+        *,
+        title: str,
+        content: str,
+        scopes: list[str],
+        authority: str,
+        source_kind: str,
+        source_ref: str,
+        specificity: int = 0,
+        categories: list[str] | None = None,
+        origin_session_id: str = "trusted_ingestion",
+    ) -> PromptInstructionStoreMutation:
+        if authority not in TRUSTED_PROMPT_INSTRUCTION_AUTHORITIES:
+            raise PromptInstructionError(
+                f"trusted ingestion cannot create authority {authority!r}"
+            )
+        instruction = make_prompt_instruction(
+            self.config,
+            title=title,
+            content=content,
+            scopes=scopes,
+            categories=categories,
+            authority=authority,
+            source_kind=source_kind,
+            source_ref=source_ref,
+            specificity=specificity,
+        )
+        return self._append(
+            action="add",
+            instruction_id=instruction.instruction_id,
+            instruction=instruction,
+            origin_session_id=origin_session_id,
+        )
+
+    def replace_trusted(
+        self,
+        *,
+        instruction_id: str,
+        title: str,
+        content: str,
+        scopes: list[str],
+        authority: str,
+        source_kind: str,
+        source_ref: str,
+        specificity: int = 0,
+        categories: list[str] | None = None,
+        origin_session_id: str = "trusted_ingestion",
+    ) -> PromptInstructionStoreMutation:
+        if authority not in TRUSTED_PROMPT_INSTRUCTION_AUTHORITIES:
+            raise PromptInstructionError(
+                f"trusted ingestion cannot create authority {authority!r}"
+            )
+        instruction = make_prompt_instruction(
+            self.config,
+            title=title,
+            content=content,
+            scopes=scopes,
+            categories=categories,
+            instruction_id=instruction_id,
+            authority=authority,
+            source_kind=source_kind,
+            source_ref=source_ref,
+            specificity=specificity,
+        )
+        instruction.metadata["trusted_mutation"] = True
+        result = self._append(
+            action="replace",
+            instruction_id=instruction_id,
+            instruction=instruction,
+            origin_session_id=origin_session_id,
+        )
+        if result.instruction is not None:
+            result.instruction.metadata.pop("trusted_mutation", None)
+        return result
+
+    def remove_trusted(
+        self,
+        *,
+        instruction_id: str,
+        origin_session_id: str = "trusted_ingestion",
+    ) -> PromptInstructionStoreMutation:
+        current = next((item for item in self.list() if item.instruction_id == instruction_id), None)
+        if current is None:
+            raise PromptInstructionError(f"unknown user prompt instruction: {instruction_id}")
+        if current.authority not in TRUSTED_PROMPT_INSTRUCTION_AUTHORITIES:
+            raise PromptInstructionError("remove_trusted requires a trusted instruction")
+        tombstone = PromptInstruction(**asdict(current))
+        tombstone.metadata = dict(tombstone.metadata)
+        tombstone.metadata["trusted_mutation"] = True
+        # _append's remove action stores no instruction, so perform a trusted replace marker check by
+        # temporarily using the explicit trusted-removal path below.
+        return self._append_trusted_remove(
+            instruction_id=instruction_id,
+            origin_session_id=origin_session_id,
+        )
+
+    def _append_trusted_remove(
+        self,
+        *,
+        instruction_id: str,
+        origin_session_id: str,
+    ) -> PromptInstructionStoreMutation:
+        # Trusted removal is deliberately not exposed through the model tool.
+        with self._connect() as connection:
+            events = self._read_events(connection)
+            current = self._rebuild(events)
+        existing = next((item for item in current if item.instruction_id == instruction_id), None)
+        if existing is None or existing.authority not in TRUSTED_PROMPT_INSTRUCTION_AUTHORITIES:
+            raise PromptInstructionError("trusted prompt instruction not found")
+        # Use a marker instruction for authorization, then write the normal remove event through
+        # a short dedicated transaction to keep the hash chain format unchanged.
+        with self._connect() as connection:
+            connection.execute("BEGIN IMMEDIATE")
+            try:
+                events = self._read_events(connection)
+                sequence = (events[-1].sequence + 1) if events else 1
+                event_id = new_id("user_instruction_event")
+                timestamp = utc_now_iso()
+                previous_hash = events[-1].event_hash if events else None
+                material = _event_material(
+                    sequence=sequence, event_id=event_id, timestamp=timestamp,
+                    action="remove", instruction_id=instruction_id, instruction_payload=None,
+                    origin_session_id=origin_session_id, previous_hash=previous_hash,
+                )
+                event_hash = sha256_text(stable_json_dumps(material, indent=None))
+                connection.execute(
+                    """INSERT INTO prompt_instruction_events (
+                        sequence, event_id, timestamp, action, instruction_id,
+                        instruction_json, origin_session_id, previous_hash, event_hash
+                    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)""",
+                    (sequence, event_id, timestamp, "remove", instruction_id, None,
+                     origin_session_id, previous_hash, event_hash),
+                )
+                connection.commit()
+            except Exception:
+                connection.rollback()
+                raise
+        event = PromptInstructionStoreEvent(
+            sequence=sequence, event_id=event_id, timestamp=timestamp, action="remove",
+            instruction_id=instruction_id, instruction=None, origin_session_id=origin_session_id,
+            previous_hash=previous_hash, event_hash=event_hash,
+        )
+        return PromptInstructionStoreMutation(instruction=None, event=event)
 
     def replace(
         self,

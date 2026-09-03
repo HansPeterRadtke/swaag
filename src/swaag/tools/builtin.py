@@ -815,7 +815,6 @@ class EditTextTool(Tool):
 
 
 class ListFilesTool(Tool):
-    repeated_observation_is_redundant = True
     name = "list_files"
     description = "List actual files under a workspace path. Use '.' to discover repository contents instead of guessing file locations."
     usage_guidance = "If a referenced file path is unknown or a prior path lookup failed, list the relevant workspace directory before inferring what files exist."
@@ -846,7 +845,6 @@ class ListFilesTool(Tool):
 
 
 class ReadFileTool(Tool):
-    repeated_observation_is_redundant = True
     name = "read_file"
     description = "Read a full UTF-8 file from the persistent workspace."
     usage_guidance = "Read one exact file per call. Do not guess contents from filenames; if the path is unknown, locate it with list_files or search_repo first."
@@ -883,7 +881,6 @@ class ReadFileTool(Tool):
 
 
 class SearchInFileTool(Tool):
-    repeated_observation_is_redundant = True
     name = "search_in_file"
     description = "Search one workspace file for a literal string or regex and return an exact resumable page of match locations."
     usage_guidance = (
@@ -966,7 +963,6 @@ class SearchInFileTool(Tool):
 
 
 class SearchRepoTool(Tool):
-    repeated_observation_is_redundant = True
     name = "search_repo"
     description = "Search across workspace files for a literal string or regex and return an exact resumable page of matches."
     usage_guidance = (
@@ -1145,7 +1141,6 @@ class WriteFileTool(Tool):
 
 
 class InspectDiffTool(Tool):
-    repeated_observation_is_redundant = True
     name = "inspect_diff"
     description = "Inspect the current diff for one workspace file against the last remembered environment state."
     kind = "stateful"
@@ -1182,7 +1177,6 @@ class InspectDiffTool(Tool):
 
 
 class ListChangesTool(Tool):
-    repeated_observation_is_redundant = True
     name = "list_changes"
     description = "List created, modified, and deleted files from the persistent workspace state."
     kind = "stateful"
@@ -1210,7 +1204,6 @@ class ListChangesTool(Tool):
 
 
 class WorkspaceSnapshotTool(Tool):
-    repeated_observation_is_redundant = True
     name = "workspace_snapshot"
     description = "Return a structured snapshot of the current workspace state."
     kind = "stateful"

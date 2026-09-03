@@ -191,7 +191,6 @@ def _project_history_text(
 
 
 class HistorySearchTool(Tool):
-    repeated_observation_is_redundant = True
     name = "history_search"
     description = "Search durable exact agent history for earlier user messages, tool calls/results, decisions, and events. Returns explicitly bounded ranked previews and sequence numbers; use history_window for exact surrounding events."
     usage_guidance = "Use when current context or summaries may omit an older exact detail. For the active session, pass session_ref=null (or use the exact active session_id/name from environment state); never invent a session label. Search first, then use the exact session_id and sequence returned by history_search with history_window. Ranked search is not exhaustive when result_limit_reached or ranking_candidate_limit_reached is true. Optional semantic_matches are only bounded candidate references from a derived embedding index; retrieve the exact event before relying on them."
@@ -348,7 +347,6 @@ class HistorySearchTool(Tool):
 
 
 class HistoryWindowTool(Tool):
-    repeated_observation_is_redundant = True
     name = "history_window"
     description = "Read an exactly resumable bounded window of durable history events by sequence number. This is the authoritative retrieval path after history_search identifies relevant events."
     usage_guidance = "Use small windows around relevant sequence numbers. For the active session, pass session_ref=null; after history_search, prefer the exact session_id it returned. Returned payloads are exact durable event data, not summaries. Continue at next_sequence until finished is true when complete traversal is required."
@@ -429,7 +427,6 @@ class HistoryWindowTool(Tool):
 
 
 class HistoryAnalyzeTool(Tool):
-    repeated_observation_is_redundant = True
     name = "history_analyze"
     description = "Analyze complete durable exact history with a model-backed read-only root-cause pass. Returns goal/constraint reconstruction, failure evidence, candidate root causes, exact source event sequences, the wrong strategy, a materially different recommended strategy, and unresolved uncertainties."
     usage_guidance = "Use when repeated failures, user corrections, or ambiguous prior behavior require deeper root-cause analysis. For the active session, pass session_ref=null (or the exact active session_id/name from environment state), never a guessed label. The analyzer is read-only; use its returned source_sequences and exact session_id with history_window for surrounding evidence."

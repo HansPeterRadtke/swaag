@@ -759,3 +759,33 @@ def test_completion_evaluation_semantically_projects_only_after_measured_overflo
     ]
     assert len(failed_compilations) == 2
     assert sum(event.event_type == "tool_result_projected" for event in events) == 2
+
+
+def test_completion_verdict_contract_has_one_semantic_field():
+    from swaag.grammar import completion_verdict_contract
+    schema = completion_verdict_contract().json_schema
+    assert set(schema["properties"]) == {"complete"}
+    assert schema["required"] == ["complete"]
+
+
+def test_single_responsibility_completion_uses_verdict_only_contract(make_config):
+    client = _CompletionClient([json.dumps({"complete": True})])
+    runtime = AgentRuntime(
+        make_config(
+            model__context_limit=12_000,
+            model__max_semantic_responsibilities_per_call=1,
+        ),
+        model_client=client,
+    )
+    state = runtime.create_or_load_session()
+    result = runtime._evaluate_completion(
+        state,
+        original_request="Finish the requested work.",
+        selected_action=_completed_action(),
+        tool_results=[],
+    )
+    assert result["complete"] is True
+    assert result["remaining_work"] == []
+    assert result["reason"] == "single-responsibility completion verdict: complete"
+    assert client.requests[-1]["contract"] == "completion_verdict"
+    assert set(client.requests[-1]["json_schema"]["properties"]) == {"complete"}

@@ -8,6 +8,7 @@ from dataclasses import asdict
 from pathlib import Path
 from typing import Any, Callable, Iterable, Iterator
 
+from swaag.redaction import redact_for_persistence
 from swaag.environment.state import EnvironmentState, ProcessRecord, ShellSessionState, WorkspaceState
 from swaag.heartbeat import validate_worker_phase, validate_worker_substate
 from swaag.history_archive import HistoryArchiveStore
@@ -176,10 +177,12 @@ class HistoryStore:
         *,
         write_projections: bool = True,
         event_observer: Callable[[HistoryEvent], None] | None = None,
+        secret_values: Iterable[str] = (),
     ):
         self.root = Path(root).expanduser()
         self.write_projections = write_projections
         self.event_observer = event_observer
+        self.secret_values = tuple(str(item) for item in secret_values if str(item))
         _ensure_directory(self.root)
         self._init_sqlite_history()
 
@@ -1172,8 +1175,12 @@ class HistoryStore:
         metadata: dict[str, Any] | None = None,
         derived_writes: Iterable[DerivedFileWrite] = (),
     ) -> HistoryEvent:
-        payload = to_jsonable(payload)
-        metadata = to_jsonable(dict(metadata or {}))
+        payload = redact_for_persistence(
+            to_jsonable(payload), secret_values=self.secret_values
+        )
+        metadata = redact_for_persistence(
+            to_jsonable(dict(metadata or {})), secret_values=self.secret_values
+        )
         event = self._next_event(state, event_type, payload, metadata)
         self._append_marshaled_event(state, event)
         for write_plan in derived_writes:

@@ -28,7 +28,7 @@ def _result(*, task_id: str, task_type: str, difficulty: str, success: bool, fal
             "action_count": 3,
             "retries": 1 if not success else 0,
             "replans": 1 if not success else 0,
-            "no_progress_stops": 0,
+            "no_progress_stops": 0,  # legacy input compatibility
             "tool_failures": 0,
             "llm_fallback_rate": 0.0,
             "verification_failures": verification_failures,

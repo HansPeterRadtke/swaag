@@ -10,6 +10,9 @@ Role = Literal["user", "assistant", "tool", "summary"]
 ContractMode = Literal["json_schema"]
 ModelCallKind = Literal[
     "action",
+    "action_tool_call",
+    "action_capability_selection",
+    "action_terminal_response",
     "summary",
     "tool_result_projection",
     "evidence_projection",
@@ -63,6 +66,10 @@ class PromptInstruction:
     updated_at: str
     categories: list[str] = field(default_factory=list)
     metadata: dict[str, Any] = field(default_factory=dict)
+    authority: str = "learned_model"
+    source_kind: str = "model_learned"
+    source_ref: str = ""
+    specificity: int = 0
 
 
 @dataclass(slots=True)
@@ -241,7 +248,6 @@ class SessionMetrics:
     successful_turns: int = 0
     failed_turns: int = 0
     tool_call_budget_hits: int = 0
-    no_progress_stops: int = 0
     max_iteration_stops: int = 0
     model_request_progress_events: int = 0
     model_retry_events: int = 0

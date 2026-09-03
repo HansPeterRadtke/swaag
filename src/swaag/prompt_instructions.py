@@ -23,6 +23,41 @@ PROMPT_INSTRUCTION_SCOPES = (
 MAX_PROMPT_INSTRUCTION_CATEGORIES = 16
 MAX_PROMPT_INSTRUCTION_CATEGORY_CHARS = 120
 
+PROMPT_INSTRUCTION_AUTHORITY_RANK = {
+    "learned_model": 0,
+    "durable_user_policy": 20,
+    "project_policy": 40,
+    "voice_recording": 60,
+    "explicit_user_correction": 80,
+}
+TRUSTED_PROMPT_INSTRUCTION_AUTHORITIES = frozenset(
+    {"durable_user_policy", "project_policy", "voice_recording", "explicit_user_correction"}
+)
+
+
+def prompt_instruction_authority_rank(item: PromptInstruction) -> int:
+    return int(PROMPT_INSTRUCTION_AUTHORITY_RANK.get(item.authority, -1))
+
+
+def is_trusted_prompt_instruction(item: PromptInstruction) -> bool:
+    return item.authority in TRUSTED_PROMPT_INSTRUCTION_AUTHORITIES
+
+
+def sort_prompt_instructions_by_authority(
+    instructions: list[PromptInstruction],
+) -> list[PromptInstruction]:
+    # Highest authority/specificity/newest first. The prompt header defines conflict precedence.
+    return sorted(
+        instructions,
+        key=lambda item: (
+            prompt_instruction_authority_rank(item),
+            int(item.specificity),
+            str(item.updated_at),
+            item.instruction_id,
+        ),
+        reverse=True,
+    )
+
 
 def validate_prompt_instruction_fields(
     config: AgentConfig,
@@ -95,6 +130,10 @@ def make_prompt_instruction(
     scopes: list[str],
     categories: list[str] | None = None,
     instruction_id: str | None = None,
+    authority: str = "learned_model",
+    source_kind: str = "model_learned",
+    source_ref: str = "",
+    specificity: int = 0,
 ) -> PromptInstruction:
     title, content, scopes, categories = validate_prompt_instruction_fields(
         config,
@@ -103,6 +142,15 @@ def make_prompt_instruction(
         scopes=scopes,
         categories=categories,
     )
+    if authority not in PROMPT_INSTRUCTION_AUTHORITY_RANK:
+        raise PromptInstructionError(f"unknown prompt instruction authority: {authority}")
+    specificity = int(specificity)
+    if specificity < 0 or specificity > 100:
+        raise PromptInstructionError("prompt instruction specificity must be between 0 and 100")
+    source_kind = str(source_kind).strip()
+    source_ref = str(source_ref).strip()
+    if authority in TRUSTED_PROMPT_INSTRUCTION_AUTHORITIES and (not source_kind or not source_ref):
+        raise PromptInstructionError("trusted prompt instructions require source_kind and source_ref provenance")
     now = utc_now_iso()
     return PromptInstruction(
         instruction_id=instruction_id or new_id("instruction"),
@@ -112,6 +160,10 @@ def make_prompt_instruction(
         created_at=now,
         updated_at=now,
         categories=categories,
+        authority=authority,
+        source_kind=source_kind,
+        source_ref=source_ref,
+        specificity=specificity,
     )
 
 
@@ -144,9 +196,9 @@ def prompt_instructions_for_kind(
     instructions: list[PromptInstruction],
     kind: ModelCallKind,
 ) -> list[PromptInstruction]:
-    return [
+    return sort_prompt_instructions_by_authority([
         item for item in instructions if "all" in item.scopes or kind in item.scopes
-    ]
+    ])
 
 
 def render_prompt_instructions(instructions: list[PromptInstruction]) -> str:

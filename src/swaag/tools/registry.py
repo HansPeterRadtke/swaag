@@ -27,7 +27,6 @@ class LoadToolsTool(Tool):
         "Request only tools relevant to the next work; loaded schemas become available on the next model action."
     )
     kind = "pure"
-    repeated_observation_is_redundant = False
     input_schema = {
         "type": "object",
         "properties": {

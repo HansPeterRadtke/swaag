@@ -1,3 +1,4 @@
+import pytest
 from pathlib import Path
 from types import SimpleNamespace
 
@@ -217,3 +218,100 @@ def test_benchmark_run_cli_returns_distinct_blocked_status(
     )
 
     assert benchmark_runner.main(["run", "--output", str(tmp_path)]) == 2
+
+
+def test_benchmark_loop_guard_cancels_after_three_identical_tool_calls(tmp_path, make_config):
+    import time
+    from swaag.benchmark.benchmark_runner import _benchmark_model_loop_guard
+    from swaag.runtime import AgentRuntime
+    config = make_config(model__context_limit=32000)
+    config.sessions.root = tmp_path / "sessions"
+    runtime = AgentRuntime(config)
+    state = runtime.create_or_load_session()
+    runtime.history.set_active_run(state.session_id, run_id="run-test", user_text="x")
+    with _benchmark_model_loop_guard(runtime, state, max_consecutive_identical_tool_calls=3, poll_seconds=0.01) as info:
+        for _ in range(3):
+            runtime.history.record_event(state, "tool_called", {"tool_name": "read_file", "tool_input": {"path": "a.txt"}})
+        deadline=time.time()+1.0
+        while not info.get("triggered") and time.time()<deadline:
+            time.sleep(0.01)
+    assert info["triggered"] is True
+    assert info["streak"] == 3
+    assert runtime.preemption.cancellation_requested(state.session_id, "run-test")
+
+
+def test_benchmark_checkpoint_round_trip_and_signature_validation(tmp_path):
+    from swaag.benchmark.benchmark_runner import (
+        _benchmark_checkpoint_signature,
+        _checkpoint_task_result,
+        _load_benchmark_checkpoint,
+    )
+    from swaag.benchmark.result_collector import BenchmarkTaskResult
+    from swaag.benchmark.task_definitions import get_benchmark_tasks
+
+    task = get_benchmark_tasks()[0]
+    signature = _benchmark_checkpoint_signature(
+        selected_tasks=[task], seeds=[17, 42, 91], live_subset=False,
+        use_live_model=True, agent_behavior_mode=None,
+        model_base_url="http://127.0.0.1:14829", model_profile="small_fast",
+        structured_output_mode="server_schema", timeout_seconds=300,
+        task_timeout_seconds=None, connect_timeout_seconds=5,
+        max_consecutive_identical_tool_calls=3,
+    )
+    path = tmp_path / "benchmark_checkpoint.json"
+    checkpoint = _load_benchmark_checkpoint(path, signature=signature)
+    result = BenchmarkTaskResult(
+        task_id=task.task_id, task_type=task.task_type, difficulty=task.difficulty,
+        tags=list(task.tags), description=task.description, expected_outcome="success",
+        success=False, false_positive=False, session_id="session_x", assistant_text="",
+        deterministic_verification_passed=False,
+        verification_summary={"checks": {}, "evidence": {}, "reason": "test"},
+        quality_summary={"passed": False, "checks": {}, "evidence": {}, "oracle": {}},
+        metrics={"seed_results": []}, failure_category="model_loop",
+        failure_reason="test", failure_subsystem="model_behavior",
+    )
+    _checkpoint_task_result(path, checkpoint=checkpoint, result=result)
+    loaded = _load_benchmark_checkpoint(path, signature=signature)
+    assert loaded["completed_tasks"][task.task_id]["failure_category"] == "model_loop"
+    bad = dict(signature)
+    bad["seeds"] = [99]
+    with pytest.raises(RuntimeError, match="does not match"):
+        _load_benchmark_checkpoint(path, signature=bad)
+
+
+def test_benchmark_task_limits_do_not_leak_into_agent_config(tmp_path):
+    from swaag.benchmark.task_definitions import BenchmarkTaskDefinition
+
+    task = BenchmarkTaskDefinition(
+        task_id="budget-policy", task_type="quality", description="x",
+        build=lambda p: None,  # type: ignore[arg-type]
+        config_overrides={"runtime_max_total_actions": 7, "runtime_tool_call_budget": 9},
+    )
+    assert task.benchmark_max_total_actions == 7
+    assert task.benchmark_tool_call_budget == 9
+    assert "runtime_max_total_actions" not in task.config_overrides
+    assert "runtime_tool_call_budget" not in task.config_overrides
+
+
+def test_benchmark_execution_guard_enforces_action_budget(tmp_path, make_config):
+    import time
+    from swaag.benchmark.benchmark_runner import _benchmark_execution_guard
+    from swaag.runtime import AgentRuntime
+
+    config = make_config(model__context_limit=32000)
+    config.sessions.root = tmp_path / "sessions"
+    runtime = AgentRuntime(config)
+    state = runtime.create_or_load_session()
+    runtime.history.set_active_run(state.session_id, run_id="run-budget", user_text="x")
+    with _benchmark_execution_guard(
+        runtime, state, max_total_actions=2, max_tool_calls=None,
+        max_consecutive_identical_tool_calls=None, poll_seconds=0.01,
+    ) as info:
+        for i in range(2):
+            runtime.history.record_event(state, "agent_action_selected", {"action_index": i + 1, "action": {"assistant_message": "", "tool_calls": [], "status": {"state": "working", "current_step": "x", "next_step": "y", "risk_flags": []}, "continuation": {"should_continue": True, "reason": "test"}}, "occurrence": 1})
+        deadline = time.time() + 1.0
+        while not info.get("triggered") and time.time() < deadline:
+            time.sleep(0.01)
+    assert info["kind"] == "action_budget"
+    assert info["action_count"] == 2
+    assert runtime.preemption.cancellation_requested(state.session_id, "run-budget")

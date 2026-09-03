@@ -14,6 +14,7 @@ from typing import Any, Callable, Iterator
 
 import requests
 
+from swaag.redaction import configured_secret_values
 from swaag.action import ActionValidationError, AgentAction, action_from_payload
 from swaag.attachments import AttachmentStore, find_attachment
 from swaag.compression import message_source_event_references, summary_message_payload
@@ -37,9 +38,13 @@ from swaag.environment.artifacts import TextArtifactStore
 from swaag.fsops import ensure_dir, restore_tree, snapshot_tree, write_text
 from swaag.grammar import (
     agent_action_contract,
+    agent_capability_selection_contract,
+    agent_tool_call_contract,
+    agent_terminal_response_contract,
     audio_rendering_contract,
     communication_status_contract,
     completion_evaluation_contract,
+    completion_verdict_contract,
     evidence_projection_contract,
     note_selection_contract,
     prompt_instruction_selection_contract,
@@ -64,6 +69,8 @@ from swaag.prompt_instructions import (
     MAX_PROMPT_INSTRUCTION_CATEGORIES,
     MAX_PROMPT_INSTRUCTION_CATEGORY_CHARS,
     prompt_instructions_for_kind,
+    is_trusted_prompt_instruction,
+    sort_prompt_instructions_by_authority,
 )
 from swaag.prompt_instruction_store import PromptInstructionStore
 from swaag.model_cache import build_model_client
@@ -217,6 +224,8 @@ class RuntimeContextProjection:
     text: str
 
 
+
+
 class AgentRuntime:
     """A constrained model/tool loop with exact history and context admission."""
 
@@ -264,9 +273,14 @@ class AgentRuntime:
             config.sessions.root,
             write_projections=config.sessions.write_projections,
             event_observer=event_observer,
+            secret_values=configured_secret_values(config),
         )
-        if history_store is not None and event_observer is not None:
-            history_store.event_observer = event_observer
+        if history_store is not None:
+            history_store.secret_values = tuple(
+                sorted(set(history_store.secret_values) | set(configured_secret_values(config)))
+            )
+            if event_observer is not None:
+                history_store.event_observer = event_observer
         self.prompts = PromptBuilder(config)
         self.telemetry = telemetry or OperationalTelemetry()
         self._inference_context = threading.local()
@@ -274,6 +288,17 @@ class AgentRuntime:
             config.sessions.root,
             backend_key=self._inference_backend_key(),
             capacity_resolver=self._inference_capacity,
+            max_running_seconds=(
+                max(
+                    int(config.model.timeout_seconds),
+                    int(config.model.simple_timeout_seconds),
+                    int(config.model.structured_timeout_seconds),
+                    int(config.model.verification_timeout_seconds),
+                    int(config.model.benchmark_timeout_seconds),
+                )
+                + int(config.model.connect_timeout_seconds)
+                + 30
+            ),
         )
         self._token_counter = token_counter
         self._token_count_cache: dict[str, CountResult] = {}
@@ -730,13 +755,8 @@ class AgentRuntime:
         )
         tool_results: list[ToolExecutionResult] = []
         budget_reports: list[BudgetReport] = []
-        previous_action_signature = ""
-        consecutive_action_occurrences = 0
-        rejected_signature_counts: dict[str, int] = {}
-        rejected_observation_counts: dict[str, int] = {}
         validation_failure_counts: dict[str, int] = {}
         tool_calls_used = 0
-        observation_signatures_since_state_change: set[str] = set()
         recovery_feedback = ""
         action_minimum_output_tokens = int(self.config.context.reserved_response_tokens)
         accepted_actions = 0
@@ -791,36 +811,83 @@ class AgentRuntime:
                 remaining_tool_calls = self.config.runtime.tool_call_budget - tool_calls_used
                 tool_specs = (
                     self.tools.staged_prompt_tuples(
-                        self.config,
-                        loaded_tool_names,
-                        delegated_specs,
+                        self.config, loaded_tool_names, delegated_specs,
                         runtime_capabilities=runtime_capabilities,
                     )
-                    if remaining_tool_calls > 0
-                    else []
+                    if remaining_tool_calls > 0 else []
                 )
                 tool_names = [str(item[0]) for item in tool_specs]
+                if self._single_responsibility_mode():
+                    try:
+                        selected_action = None
+                        concrete_tool_specs = [
+                            item for item in tool_specs if str(item[0]) != "load_tools"
+                        ]
+                        # First give the model the concrete schemas it has already loaded.
+                        # Discovery is only another semantic responsibility when the focused
+                        # tool-call decision declines all currently loaded tools.
+                        if concrete_tool_specs and remaining_tool_calls > 0:
+                            selected_action = self._single_responsibility_tool_action(
+                                state,
+                                original_request=original_request,
+                                pending_messages=pending_messages,
+                                tool_specs=concrete_tool_specs,
+                                capability_index=[],
+                                remaining_tool_calls=remaining_tool_calls,
+                                validation_feedback=validation_feedback,
+                                seed_offset=(mechanical_attempt - 1) * 7 + validation_attempt,
+                            )
+                        if (selected_action is None or not selected_action.tool_calls) and self.config.tools.staged_discovery and remaining_tool_calls > 0:
+                            discovery_action = self._single_responsibility_capability_action(
+                                state,
+                                original_request=original_request,
+                                pending_messages=pending_messages,
+                                capability_index=capability_index,
+                                loaded_tool_names=loaded_tool_names,
+                                validation_feedback=validation_feedback,
+                                seed_offset=(mechanical_attempt - 1) * 7 + validation_attempt + 1,
+                            )
+                            if discovery_action is not None and discovery_action.tool_calls:
+                                selected_action = discovery_action
+                        if selected_action is None or not selected_action.tool_calls:
+                            selected_action = self._single_responsibility_terminal_action(
+                                state,
+                                original_request=original_request,
+                                pending_messages=pending_messages,
+                                allow_silent_completion=allow_silent_completion,
+                                validation_feedback=validation_feedback,
+                                seed_offset=(mechanical_attempt - 1) * 3 + validation_attempt,
+                            )
+                        break
+                    except ModelCallStateChanged:
+                        self._refresh_state_from_history(state)
+                        recovery_feedback = (
+                            "The target session changed while the previous model request was preempted for communication. "
+                            "The stale request was discarded. Re-evaluate the current authoritative history and continue from the updated state."
+                        )
+                        state_changed_during_call = True
+                        break
+                    except OutputBudgetExhaustedError as exc:
+                        validation_feedback = (
+                            f"The previous single-responsibility call exhausted its {exc.reserved_tokens}-token output budget. "
+                            "Be concise and emit one complete valid JSON object."
+                        )
+                    except (ActionValidationError, ValueError) as exc:
+                        validation_feedback = str(exc)
+                    continue
+
                 contract = agent_action_contract(
-                    tool_specs,
-                    allow_silent_completion=allow_silent_completion,
+                    tool_specs, allow_silent_completion=allow_silent_completion
                 )
                 self._heartbeat(
-                    state,
-                    phase="context_compilation",
-                    substate="collecting_inputs",
-                    detail=f"preparing action {action_index}",
-                    active_kind="action",
-                    active_id=str(action_index),
-                    operation_kind="agent_action",
+                    state, phase="context_compilation", substate="collecting_inputs",
+                    detail=f"preparing action {action_index}", active_kind="action",
+                    active_id=str(action_index), operation_kind="agent_action",
                 )
                 prepared = self._prepare_action_call(
-                    state,
-                    original_request=original_request,
-                    pending_messages=pending_messages,
-                    tool_specs=tool_specs,
-                    capability_index=capability_index if remaining_tool_calls > 0 else [],
-                    contract=contract,
-                    validation_feedback=validation_feedback,
+                    state, original_request=original_request, pending_messages=pending_messages,
+                    tool_specs=tool_specs, capability_index=capability_index if remaining_tool_calls > 0 else [],
+                    contract=contract, validation_feedback=validation_feedback,
                     minimum_output_tokens=action_minimum_output_tokens,
                 )
                 budget_reports.append(prepared.report)
@@ -835,31 +902,21 @@ class AgentRuntime:
                         raise ActionValidationError(
                             f"tool_calls contains {len(action.tool_calls)} calls but only {remaining_tool_calls} remain in the mechanical budget"
                         )
-                    delegated_calls = [
-                        tool_call
-                        for tool_call in action.tool_calls
-                        if tool_call.tool_name in delegated_by_name
-                    ]
+                    delegated_calls = [call for call in action.tool_calls if call.tool_name in delegated_by_name]
                     if delegated_calls and len(action.tool_calls) != 1:
                         raise ActionValidationError(
-                            "A client-executed tool must be the only tool call in its "
-                            "action because the run pauses for the client result"
+                            "A client-executed tool must be the only tool call in its action because the run pauses for the client result"
                         )
                     for tool_call in action.tool_calls:
                         try:
-                            delegated_spec = delegated_by_name.get(
-                                tool_call.tool_name
-                            )
+                            delegated_spec = delegated_by_name.get(tool_call.tool_name)
                             if delegated_spec is not None:
                                 _validate_schema_value(
-                                    tool_call.arguments,
-                                    delegated_spec.parameters,
+                                    tool_call.arguments, delegated_spec.parameters,
                                     path=f"delegated tool {tool_call.tool_name}",
                                 )
                             else:
-                                self.tools.get(tool_call.tool_name).validate(
-                                    tool_call.arguments
-                                )
+                                self.tools.get(tool_call.tool_name).validate(tool_call.arguments)
                         except (ValueError, TypeError) as exc:
                             raise ActionValidationError(
                                 f"Invalid input for tool {tool_call.tool_name}: {exc}"
@@ -868,9 +925,7 @@ class AgentRuntime:
 
                 try:
                     selected_action = self._execute_structured_call(
-                        state,
-                        prepared,
-                        validator=validate,
+                        state, prepared, validator=validate,
                         seed_offset=(mechanical_attempt - 1) * 3 + (validation_attempt - 1),
                     )
                     break
@@ -890,27 +945,18 @@ class AgentRuntime:
                         f"The reconstructed call now requires at least {action_minimum_output_tokens} output tokens."
                     )
                     self.history.record_event(
-                        state,
-                        "agent_action_rejected",
-                        {
-                            "action_index": action_index,
-                            "validation_attempt": validation_attempt,
-                            "reason": validation_feedback,
-                            "finish_reason": exc.finish_reason,
-                            "previous_output_tokens": exc.reserved_tokens,
-                            "next_minimum_output_tokens": action_minimum_output_tokens,
-                        },
+                        state, "agent_action_rejected",
+                        {"action_index": action_index, "validation_attempt": validation_attempt,
+                         "reason": validation_feedback, "finish_reason": exc.finish_reason,
+                         "previous_output_tokens": exc.reserved_tokens,
+                         "next_minimum_output_tokens": action_minimum_output_tokens},
                     )
                 except (ActionValidationError, ValueError) as exc:
                     validation_feedback = str(exc)
                     self.history.record_event(
-                        state,
-                        "agent_action_rejected",
-                        {
-                            "action_index": action_index,
-                            "validation_attempt": validation_attempt,
-                            "reason": validation_feedback,
-                        },
+                        state, "agent_action_rejected",
+                        {"action_index": action_index, "validation_attempt": validation_attempt,
+                         "reason": validation_feedback},
                     )
 
             if state_changed_during_call:
@@ -923,7 +969,7 @@ class AgentRuntime:
                 validation_key = recovery_feedback.strip()
                 validation_failure_counts[validation_key] = validation_failure_counts.get(validation_key, 0) + 1
                 failure_count = validation_failure_counts[validation_key]
-                if failure_count > max(1, int(self.config.runtime.max_repeated_action_occurrences)):
+                if failure_count > max(1, int(self.config.runtime.max_validation_recovery_cycles)):
                     return self._finish_turn(
                         state,
                         "I stopped because the model repeated the same invalid action beyond the configured validation-recovery limit.",
@@ -932,7 +978,7 @@ class AgentRuntime:
                     )
                 recovery_feedback += (
                     f" This same validation failure has now occurred in {failure_count} mechanical cycle(s). "
-                    "Do not retry the same invalid tool usage; choose the explicitly recommended valid tool or a materially different action."
+                    "The exact previous tool usage failed deterministic validation under the recorded state. Use the validation evidence to choose valid arguments, another tool, or retry only if relevant state has changed."
                 )
                 continue
 
@@ -973,24 +1019,7 @@ class AgentRuntime:
             action_minimum_output_tokens = int(self.config.context.reserved_response_tokens)
 
             action_payload = asdict(selected_action)
-            # Duplicate detection is about repeated mechanical work, not cosmetic
-            # changes to status wording or assistant prose. For tool-bearing actions,
-            # compare exactly the calls and continuation decision.
-            signature_payload = (
-                {
-                    "tool_calls": action_payload.get("tool_calls", []),
-                    "continue_loop": action_payload.get("continue_loop", False),
-                }
-                if action_payload.get("tool_calls")
-                else action_payload
-            )
-            signature = stable_json_dumps(signature_payload, indent=None)
-            if signature == previous_action_signature:
-                consecutive_action_occurrences += 1
-            else:
-                previous_action_signature = signature
-                consecutive_action_occurrences = 1
-            occurrence = consecutive_action_occurrences
+            occurrence = 1
             self.history.record_event(
                 state,
                 "agent_action_selected",
@@ -1025,104 +1054,10 @@ class AgentRuntime:
                     },
                 )
 
-            if occurrence > 1:
-                rejected_signature_counts[signature] = rejected_signature_counts.get(signature, 0) + 1
-                rejected_count = rejected_signature_counts[signature]
-                exact_calls = stable_json_dumps(action_payload.get("tool_calls", []), indent=None)
-                edit_paths = [
-                    str(call.get("arguments", {}).get("path", ""))
-                    for call in action_payload.get("tool_calls", [])
-                    if call.get("tool_name") == "edit_text" and call.get("arguments", {}).get("path")
-                ]
-                recovery_feedback = (
-                    "This exact mechanical action was rejected because it repeats the immediately preceding action and would produce no new evidence. "
-                    f"It has now been rejected {rejected_count} time(s). Exact rejected tool calls: {exact_calls}. "
-                    "Do not emit these exact tool calls again. Choose a materially different next action using the evidence already returned: use materially different arguments or a different tool. "
-                )
-                if edit_paths:
-                    recovery_feedback += (
-                        "Because the rejected action contains edit_text, reread the current target file before proposing another edit if the prior edit failed or the expected old_text may be stale. "
-                        f"Relevant edit target(s): {', '.join(edit_paths)}. "
-                    )
-                if rejected_count >= 3:
-                    recovery_feedback += (
-                        "Repeatedly retrying this signature is a hard no-progress loop. You MUST choose a different mechanical action now; do not merely rephrase status or assistant text. "
-                    )
-                recovery_feedback += "Do not modify tests or files the user explicitly forbade changing."
-                self.history.record_event(
-                    state,
-                    "agent_action_rejected",
-                    {
-                        "action_index": action_index,
-                        "validation_attempt": 0,
-                        "reason": recovery_feedback,
-                    },
-                )
-                if rejected_count > max(1, int(self.config.runtime.max_repeated_action_occurrences)):
-                    return self._finish_turn(
-                        state,
-                        "I stopped because the model repeated the same rejected mechanical action beyond the configured no-progress limit.",
-                        tool_results,
-                        budget_reports,
-                    )
-                continue
-
-            visible_observation_signatures = self._visible_observation_signatures(state)
-            repeated_observation_calls: list[dict[str, Any]] = []
-            for tool_call in selected_action.tool_calls:
-                if tool_call.tool_name in delegated_by_name:
-                    continue
-                tool = self.tools.get(tool_call.tool_name)
-                if not tool.repeated_observation_is_redundant:
-                    continue
-                observation_signature = stable_json_dumps(
-                    {"tool_name": tool_call.tool_name, "arguments": tool_call.arguments},
-                    indent=None,
-                )
-                if (
-                    observation_signature in observation_signatures_since_state_change
-                    and observation_signature in visible_observation_signatures
-                ):
-                    rejected_observation_counts[observation_signature] = rejected_observation_counts.get(observation_signature, 0) + 1
-                    repeated_observation_calls.append(
-                        {
-                            "tool_name": tool_call.tool_name,
-                            "arguments": tool_call.arguments,
-                            "rejected_count": rejected_observation_counts[observation_signature],
-                        }
-                    )
-            if repeated_observation_calls:
-                exact_observations = stable_json_dumps(repeated_observation_calls, indent=None)
-                recovery_feedback = (
-                    "This action was rejected because it repeats observation calls whose exact results are already available and no state-changing tool has run since those observations. "
-                    f"Already-observed calls: {exact_observations}. Do NOT issue these same observations again. "
-                    "Use the evidence already returned. If the requested answer can be derived from that evidence, synthesize and return the final answer now instead of rereading. "
-                    "If evidence is genuinely missing, inspect a different source or use materially different tool arguments. "
-                )
-                if any(int(item["rejected_count"]) >= 2 for item in repeated_observation_calls):
-                    recovery_feedback += (
-                        "This observation has already been rejected repeatedly, so another identical read/search/inspection is a hard no-progress loop. You MUST either answer from existing evidence or choose different evidence. "
-                    )
-                self.history.record_event(
-                    state,
-                    "agent_action_rejected",
-                    {
-                        "action_index": action_index,
-                        "validation_attempt": 0,
-                        "reason": recovery_feedback,
-                    },
-                )
-                if any(
-                    int(item["rejected_count"]) > max(1, int(self.config.runtime.max_repeated_action_occurrences))
-                    for item in repeated_observation_calls
-                ):
-                    return self._finish_turn(
-                        state,
-                        "I stopped because the model repeated an already-visible observation beyond the configured no-progress limit.",
-                        tool_results,
-                        budget_reports,
-                    )
-                continue
+            # Repetition is observable runtime data, not a semantic error. External state may
+            # change between identical calls, so the runtime must not reject or terminate an
+            # action merely because its signature or an observation call repeats. Benchmark
+            # policy may bound total actions/tool calls and score repetition for a specific task.
 
             self._consume_pending_control_messages(
                 state,
@@ -1180,7 +1115,6 @@ class AgentRuntime:
                         )
                     tool = self.tools.get(tool_call.tool_name)
                     effective_kind = tool.effective_kind(tool_call.arguments)
-                    repeated_observation_is_redundant = tool.repeated_observation_is_redundant
                     self._heartbeat(
                         state,
                         phase="tool_execution",
@@ -1228,15 +1162,18 @@ class AgentRuntime:
                         )
                         break
                     tool_calls_used += 1
-                    if repeated_observation_is_redundant:
-                        observation_signatures_since_state_change.add(
-                            stable_json_dumps(
-                                {"tool_name": tool_call.tool_name, "arguments": tool_call.arguments},
-                                indent=None,
-                            )
+                    if result is None and self._single_responsibility_mode() and tool_call.tool_name != "load_tools":
+                        recovery_feedback = (
+                            f"The concrete invocation of {tool_call.tool_name!r} failed mechanically. "
+                            "The capability remains available. Use the exact tool error already visible in history to "
+                            "correct the arguments, choose another capability if appropriate, or finish from existing evidence. "
+                            "The previous invocation failed with the recorded error. Decide from the current task and state whether retrying the same invocation, changing arguments, or choosing another tool is useful."
                         )
-                    elif result is not None and effective_kind in {"stateful", "side_effect"}:
-                        observation_signatures_since_state_change.clear()
+                        self.history.record_event(
+                            state,
+                            "tool_invocation_failed_recoverably",
+                            {"action_index": action_index, "tool_name": tool_call.tool_name, "reason": recovery_feedback},
+                        )
                     if result is not None:
                         tool_results.append(result)
                         if tool_call.tool_name == "load_tools":
@@ -1465,6 +1402,304 @@ class AgentRuntime:
                 },
             )
             self.history.mark_control_message_processed(state.session_id, control_id)
+
+    def _single_responsibility_mode(self) -> bool:
+        return int(self.config.model.max_semantic_responsibilities_per_call) <= 1
+
+    def _prepare_single_responsibility_call(
+        self,
+        state: SessionState,
+        *,
+        assembly: PromptAssembly,
+        contract: ContractSpec,
+        minimum_output_tokens: int | None = None,
+    ) -> PreparedCall:
+        effective_minimum = (
+            self.config.context.reserved_response_tokens
+            if minimum_output_tokens is None
+            else int(minimum_output_tokens)
+        )
+        compilation = self._compile_context(
+            state, assembly, contract, minimum_output_tokens=effective_minimum
+        )
+        self.history.record_event(
+            state,
+            "context_compiled",
+            {
+                "kind": assembly.kind,
+                "prompt_mode": assembly.prompt_mode,
+                "accounting": compilation.accounting(),
+                "cap_error": "" if compilation.report.fits else "context_limit_exceeded",
+                "candidate_only": not compilation.report.fits,
+            },
+        )
+        self.history.record_event(
+            state,
+            "budget_checked",
+            {
+                "kind": assembly.kind,
+                "prompt_mode": assembly.prompt_mode,
+                "budget_report": asdict(compilation.report),
+                "cap_error": "" if compilation.report.fits else "context_limit_exceeded",
+                "candidate_only": not compilation.report.fits,
+            },
+        )
+        if not compilation.report.fits:
+            raise BudgetExceededError(
+                f"The exact {assembly.kind} prompt does not fit the model context.",
+                compilation.report,
+            )
+        self._record_prompt_built(state, assembly, contract, compilation.report)
+        return PreparedCall(
+            assembly=assembly, report=compilation.report,
+            prompt_mode=assembly.prompt_mode, contract=contract,
+        )
+
+    def _single_responsibility_capability_action(
+        self,
+        state: SessionState,
+        *,
+        original_request: str,
+        pending_messages: list[str],
+        capability_index: list[tuple[str, str, str]],
+        loaded_tool_names: set[str],
+        validation_feedback: str,
+        seed_offset: int,
+    ) -> AgentAction | None:
+        available = [
+            item for item in capability_index
+            if str(item[0]) != "load_tools" and str(item[0]) not in loaded_tool_names
+        ]
+        if not available:
+            return None
+        components = self._runtime_context_components(
+            state, self._counter(state), selected_notes=list(state.notes)
+        )
+        names = [str(item[0]) for item in available]
+        contract = agent_capability_selection_contract(names)
+        assembly = self.prompts.build_agent_capability_selection_prompt(
+            list(state.messages), original_request=original_request,
+            pending_user_messages=pending_messages, capability_index=available,
+            context_components=components, validation_feedback=validation_feedback,
+        )
+        prepared = self._prepare_single_responsibility_call(
+            state, assembly=assembly, contract=contract
+        )
+
+        def validate(payload: dict[str, Any]) -> AgentAction | None:
+            capability = payload.get("capability")
+            if not isinstance(capability, str) or capability not in {*names, "none"}:
+                raise ActionValidationError(f"invalid capability selection: {capability!r}")
+            if capability == "none":
+                return None
+            arguments = self.tools.get("load_tools").validate({"tool_names": [capability]})
+            return action_from_payload(
+                {
+                    "assistant_message": "",
+                    "tool_calls": [{"tool_name": "load_tools", "arguments": arguments}],
+                    "continue_loop": True,
+                    "silent_completion": False,
+                    "status": {
+                        "situation": "A required capability was selected.",
+                        "action": "Load its exact tool schema.",
+                        "reason": "Capability identity selection is complete.",
+                        "importance": "normal",
+                    },
+                    "questions": [],
+                },
+                enabled_tool_names=["load_tools"],
+            )
+
+        return self._execute_structured_call(
+            state, prepared, validator=validate, seed_offset=seed_offset
+        )
+
+    def _completed_tool_calls_for_prompt(
+        self,
+        state: SessionState,
+        tool_specs: list[tuple[str, str, dict, str]],
+    ) -> list[dict[str, Any]]:
+        available_names = {str(item[0]) for item in tool_specs}
+        completed_calls: list[dict[str, Any]] = []
+        for message in state.messages:
+            if message.role != "tool" or not message.name or message.name not in available_names:
+                continue
+            metadata = message.metadata if isinstance(message.metadata, dict) else {}
+            if metadata.get("source_event_type") != "tool_result":
+                continue
+            arguments = metadata.get("validated_input", metadata.get("raw_input", {}))
+            if not isinstance(arguments, dict):
+                continue
+            completed_calls.append(
+                {
+                    "tool_name": message.name,
+                    "arguments": arguments,
+                    "source_event_sequence": metadata.get("source_event_sequence"),
+                }
+            )
+        return completed_calls
+
+    def _single_responsibility_tool_action(
+        self,
+        state: SessionState,
+        *,
+        original_request: str,
+        pending_messages: list[str],
+        tool_specs: list[tuple[str, str, dict, str]],
+        capability_index: list[tuple[str, str, str]],
+        remaining_tool_calls: int,
+        validation_feedback: str,
+        seed_offset: int,
+    ) -> AgentAction | None:
+        if not tool_specs and not capability_index:
+            return None
+        contract = agent_tool_call_contract(tool_specs)
+        components = self._runtime_context_components(
+            state, self._counter(state), selected_notes=list(state.notes)
+        )
+        assembly = self.prompts.build_agent_tool_call_prompt(
+            list(state.messages),
+            tool_specs,
+            original_request=original_request,
+            pending_user_messages=pending_messages,
+            context_components=components,
+            capability_index=capability_index,
+            completed_tool_calls=self._completed_tool_calls_for_prompt(
+                state, tool_specs
+            ),
+            validation_feedback=validation_feedback,
+        )
+        prepared = self._prepare_single_responsibility_call(
+            state, assembly=assembly, contract=contract
+        )
+        tool_names = [str(item[0]) for item in tool_specs]
+        enabled = set(tool_names)
+
+        def validate(payload: dict[str, Any]) -> AgentAction:
+            calls_payload = payload.get("tool_calls")
+            if not isinstance(calls_payload, list):
+                raise ActionValidationError("tool_calls must be an array")
+            if len(calls_payload) > remaining_tool_calls:
+                raise ActionValidationError(
+                    f"tool_calls contains {len(calls_payload)} calls but only {remaining_tool_calls} remain in the mechanical budget"
+                )
+            calls = []
+            for index, item in enumerate(calls_payload):
+                if not isinstance(item, dict):
+                    raise ActionValidationError(f"tool_calls[{index}] must be an object")
+                name = item.get("tool_name")
+                arguments = item.get("arguments")
+                if not isinstance(name, str) or name not in enabled:
+                    raise ActionValidationError(f"tool_calls[{index}].tool_name is not enabled: {name!r}")
+                if not isinstance(arguments, dict):
+                    raise ActionValidationError(f"tool_calls[{index}].arguments must be an object")
+                delegated_spec = None
+                # Delegated tool schemas are already constrained by the contract;
+                # server tools additionally run their native validator here.
+                try:
+                    self.tools.get(name).validate(arguments)
+                except KeyError:
+                    _validate_schema_value(
+                        arguments,
+                        next(item[2] for item in tool_specs if str(item[0]) == name),
+                        path=f"delegated tool {name}",
+                    )
+                calls.append({"tool_name": name, "arguments": arguments})
+            if not calls:
+                return action_from_payload(
+                    {
+                        "assistant_message": "No concrete loaded tool is needed for the next step.",
+                        "tool_calls": [],
+                        "continue_loop": False,
+                        "silent_completion": False,
+                        "status": {
+                            "situation": "No concrete loaded tool was selected.",
+                            "action": "Prepare a terminal response.",
+                            "reason": "Tool selection returned no executable work.",
+                            "importance": "normal",
+                        },
+                        "questions": [],
+                    },
+                    enabled_tool_names=tool_names,
+                )
+            return action_from_payload(
+                {
+                    "assistant_message": "",
+                    "tool_calls": calls,
+                    "continue_loop": True,
+                    "silent_completion": False,
+                    "status": {
+                        "situation": "Concrete tool work is ready.",
+                        "action": "Execute the selected tool call(s).",
+                        "reason": "The tool-selection call chose executable work.",
+                        "importance": "normal",
+                    },
+                    "questions": [],
+                },
+                enabled_tool_names=tool_names,
+            )
+
+        return self._execute_structured_call(
+            state, prepared, validator=validate, seed_offset=seed_offset
+        )
+
+    def _single_responsibility_terminal_action(
+        self,
+        state: SessionState,
+        *,
+        original_request: str,
+        pending_messages: list[str],
+        allow_silent_completion: bool,
+        validation_feedback: str,
+        seed_offset: int,
+    ) -> AgentAction:
+        contract = agent_terminal_response_contract(
+            allow_silent_completion=allow_silent_completion
+        )
+        components = self._runtime_context_components(
+            state, self._counter(state), selected_notes=list(state.notes)
+        )
+        assembly = self.prompts.build_agent_terminal_response_prompt(
+            list(state.messages),
+            original_request=original_request,
+            pending_user_messages=pending_messages,
+            context_components=components,
+            allow_silent_completion=allow_silent_completion,
+            validation_feedback=validation_feedback,
+        )
+        prepared = self._prepare_single_responsibility_call(
+            state, assembly=assembly, contract=contract
+        )
+
+        def validate(payload: dict[str, Any]) -> AgentAction:
+            message = payload.get("assistant_message")
+            silent = payload.get("silent_completion", False)
+            if not isinstance(message, str) or not isinstance(silent, bool):
+                raise ActionValidationError("terminal response fields have invalid types")
+            if silent and not allow_silent_completion:
+                raise ActionValidationError("silent completion is not permitted")
+            if not message.strip() and not silent:
+                raise ActionValidationError("terminal response must be non-empty")
+            return action_from_payload(
+                {
+                    "assistant_message": message,
+                    "tool_calls": [],
+                    "continue_loop": False,
+                    "silent_completion": silent,
+                    "status": {
+                        "situation": "A terminal response is ready.",
+                        "action": "Return the user-facing result.",
+                        "reason": "No concrete tool work was selected for this step.",
+                        "importance": "normal",
+                    },
+                    "questions": [],
+                },
+                enabled_tool_names=[],
+            )
+
+        return self._execute_structured_call(
+            state, prepared, validator=validate, seed_offset=seed_offset
+        )
 
     def _prepare_action_call(
         self,
@@ -1792,14 +2027,19 @@ class AgentRuntime:
                 if self._completion_evidence_source_key(item)
                 not in reexpanded_evidence
             ]
-            contract = completion_evaluation_contract(
-                (
-                    str(item["source_kind"]),
-                    str(item["source_id"]),
+            single_verdict = self._single_responsibility_mode()
+            contract = (
+                completion_verdict_contract()
+                if single_verdict
+                else completion_evaluation_contract(
+                    (
+                        str(item["source_kind"]),
+                        str(item["source_id"]),
+                    )
+                    for item in available_sources
                 )
-                for item in available_sources
             )
-            assembly = self.prompts.build_completion_evaluation_prompt(
+            prompt_kwargs = dict(
                 original_request=original_request,
                 assistant_message=selected_action.assistant_message,
                 status_json=stable_json_dumps(asdict(selected_action.status), indent=None),
@@ -1809,9 +2049,15 @@ class AgentRuntime:
                     "" if historical_evidence_projection else historical_evidence
                 ),
                 historical_evidence_projection=historical_evidence_projection,
-                evidence_source_inventory=available_sources,
                 reexpanded_evidence_rows=list(reexpanded_evidence.values()),
                 reexpanded_evidence_projections=reexpanded_evidence_projections,
+            )
+            assembly = (
+                self.prompts.build_completion_verdict_prompt(**prompt_kwargs)
+                if single_verdict
+                else self.prompts.build_completion_evaluation_prompt(
+                    **prompt_kwargs, evidence_source_inventory=available_sources
+                )
             )
             compilation = self._compile_context(
                 state,
@@ -1955,14 +2201,25 @@ class AgentRuntime:
                                 },
                             )
                         continue
+                    complete = bool(payload.get("complete", False))
                     result = {
-                        "complete": bool(payload.get("complete", False)),
-                        "reason": str(payload.get("reason", "")).strip(),
-                        "remaining_work": [
-                            str(item)
-                            for item in payload.get("remaining_work", [])
-                            if isinstance(item, str)
-                        ],
+                        "complete": complete,
+                        "reason": (
+                            "single-responsibility completion verdict: complete"
+                            if single_verdict and complete
+                            else "single-responsibility completion verdict: incomplete"
+                            if single_verdict
+                            else str(payload.get("reason", "")).strip()
+                        ),
+                        "remaining_work": (
+                            []
+                            if single_verdict
+                            else [
+                                str(item)
+                                for item in payload.get("remaining_work", [])
+                                if isinstance(item, str)
+                            ]
+                        ),
                         "evidence_source_references": [
                             reference
                             for row in evidence_rows
@@ -4674,9 +4931,12 @@ class AgentRuntime:
             name="durable_prompt_instructions",
             category="system_prompt_instruction",
             text=(
-                "\n\n[DURABLE MODEL-AUTHORED INSTRUCTIONS SELECTED FOR THIS CALL]\n"
-                "Apply every instruction below. Broad call-kind scopes and any "
-                "fine-grained semantic selection are recorded in durable provenance.\n"
+                "\n\n[DURABLE INSTRUCTIONS SELECTED FOR THIS CALL]\n"
+                "Apply every instruction below. The current user request remains the highest "
+                "authority for this turn. Within durable instructions, higher authority wins "
+                "on conflict; for equal authority, higher specificity then newer updated_at wins. "
+                "Trusted recording/user/project instructions are never semantically deselected by a model. "
+                "Learned-model instructions are lower-authority operating preferences.\n"
                 + rendered
             ),
         )
@@ -4756,7 +5016,7 @@ class AgentRuntime:
         state: SessionState,
         kind: ModelCallKind,
     ) -> list[tuple[str, Any]]:
-        return [
+        rows = [
             ("user", item)
             for item in prompt_instructions_for_kind(
                 self.prompt_instruction_store.list(),
@@ -4769,6 +5029,9 @@ class AgentRuntime:
                 kind,
             )
         ]
+        ordered = sort_prompt_instructions_by_authority([item for _, item in rows])
+        source_by_id = {item.instruction_id: store for store, item in rows}
+        return [(source_by_id[item.instruction_id], item) for item in ordered]
 
     def _select_prompt_instruction_sources(
         self,
@@ -4777,7 +5040,9 @@ class AgentRuntime:
         scoped_sources: list[tuple[str, Any]],
     ) -> tuple[list[tuple[str, Any]], dict[str, Any]]:
         candidates = [
-            source for source in scoped_sources if source[1].categories
+            source
+            for source in scoped_sources
+            if source[1].categories and not is_trusted_prompt_instruction(source[1])
         ]
         if not candidates:
             return scoped_sources, {
@@ -4876,7 +5141,8 @@ class AgentRuntime:
             selected_sources = [
                 source
                 for source in scoped_sources
-                if not source[1].categories
+                if is_trusted_prompt_instruction(source[1])
+                or not source[1].categories
                 or (source[0], source[1].instruction_id) in selected_keys
             ]
             return selected_sources, {
@@ -6079,6 +6345,45 @@ class AgentRuntime:
         )
         return request
 
+    def _suspend_inference(
+        self,
+        state: SessionState,
+        request_id: str,
+        *,
+        reason: str,
+    ) -> InferenceRequest:
+        before = self.inference.get(request_id)
+        request = self.inference.suspend(request_id, reason=reason)
+        if before is not None and before.status == "running":
+            self.telemetry.record_inference_released(
+                call_kind=request.call_kind,
+                source=request.source,
+                priority=request.priority,
+                status="suspended",
+            )
+        return request
+
+    def _resume_inference(
+        self,
+        state: SessionState,
+        request_id: str,
+        *,
+        reason: str | None = None,
+    ) -> InferenceRequest:
+        request = self.inference.resume(request_id, reason=reason)
+        self.history.record_event(
+            state,
+            "inference_request_requeued",
+            {
+                "request_id": request.request_id,
+                "call_id": request.call_id,
+                "kind": request.call_kind,
+                "reason": reason or "resumed",
+                "attempt": request.attempt_count,
+            },
+        )
+        return request
+
     def _finish_inference(
         self,
         state: SessionState,
@@ -6204,7 +6509,7 @@ class AgentRuntime:
         )
         current = self.inference.get(inference_request_id)
         if current is not None and current.status == "running":
-            self._requeue_inference(
+            self._suspend_inference(
                 state,
                 inference_request_id,
                 reason=f"preempted:{pending.preemption_id}",
@@ -6262,6 +6567,13 @@ class AgentRuntime:
             )
             raise ModelCallStateChanged(
                 "target session changed during communication; stale model request was not replayed"
+            )
+        current = self.inference.get(inference_request_id)
+        if current is not None and current.status == "suspended":
+            self._resume_inference(
+                state,
+                inference_request_id,
+                reason=f"replay_ready:{pending.preemption_id}",
             )
         guard.record(
             "model_call_replayed",

@@ -18,6 +18,7 @@ class ModelConfig:
     tokenize_endpoint: str
     health_endpoint: str
     profile_name: str
+    max_semantic_responsibilities_per_call: int
     model_identity: str
     provider_name: str
     api_key_env: str
@@ -61,7 +62,7 @@ class RuntimeConfig:
     capture_model_io: bool
     lean_on_overflow: bool
     strict_budget: bool
-    max_repeated_action_occurrences: int
+    max_validation_recovery_cycles: int
     completion_evaluation_enabled: bool
 
 
@@ -272,8 +273,6 @@ class ExternalBenchmarkAgentGenerationConfig:
     model_structured_timeout_seconds: int
     allow_stateful_tools: bool
     allow_side_effect_tools: bool
-    runtime_max_total_actions: int
-    runtime_tool_call_budget: int
     solver_max_attempts: int
     git_remote_base_url: str
     model_name_or_path: str
@@ -334,6 +333,18 @@ class AgentConfig:
 
     def config_fingerprint(self) -> str:
         return sha256_text(json.dumps(self.raw, sort_keys=True))
+
+
+def _migrate_config_aliases(data: dict[str, Any]) -> dict[str, Any]:
+    migrated = dict(data)
+    runtime = migrated.get("runtime")
+    if isinstance(runtime, dict) and "max_repeated_action_occurrences" in runtime:
+        runtime = dict(runtime)
+        if "max_validation_recovery_cycles" not in runtime:
+            runtime["max_validation_recovery_cycles"] = runtime["max_repeated_action_occurrences"]
+        runtime.pop("max_repeated_action_occurrences", None)
+        migrated["runtime"] = runtime
+    return migrated
 
 
 def _deep_merge(base: dict[str, Any], override: dict[str, Any]) -> dict[str, Any]:
@@ -399,7 +410,9 @@ def _coerce_config(data: dict[str, Any]) -> AgentConfig:
     context_data.pop("workspace_manifest_max_files", None)
     context_data.pop("note_prompt_token_cap", None)
     context = ContextConfig(**context_data)
-    runtime = RuntimeConfig(**data["runtime"])
+    runtime_data = dict(data["runtime"])
+    runtime_data.pop("max_repeated_action_occurrences", None)
+    runtime = RuntimeConfig(**runtime_data)
     sessions = SessionConfig(
         root=Path(data["sessions"]["root"]).expanduser(),
         write_projections=bool(data["sessions"]["write_projections"]),
@@ -515,8 +528,6 @@ def _coerce_config(data: dict[str, Any]) -> AgentConfig:
             ),
             allow_stateful_tools=bool(data["external_benchmarks"]["agent_generation"]["allow_stateful_tools"]),
             allow_side_effect_tools=bool(data["external_benchmarks"]["agent_generation"]["allow_side_effect_tools"]),
-            runtime_max_total_actions=int(data["external_benchmarks"]["agent_generation"]["runtime_max_total_actions"]),
-            runtime_tool_call_budget=int(data["external_benchmarks"]["agent_generation"]["runtime_tool_call_budget"]),
             solver_max_attempts=int(data["external_benchmarks"]["agent_generation"]["solver_max_attempts"]),
             git_remote_base_url=str(data["external_benchmarks"]["agent_generation"]["git_remote_base_url"]),
             model_name_or_path=str(data["external_benchmarks"]["agent_generation"]["model_name_or_path"]),
@@ -548,6 +559,10 @@ def _coerce_config(data: dict[str, Any]) -> AgentConfig:
     )
 
     _validate_positive("model.context_limit", model.context_limit)
+    _validate_positive(
+        "model.max_semantic_responsibilities_per_call",
+        model.max_semantic_responsibilities_per_call,
+    )
     _validate_non_negative(
         "model.remote_context_limit_fallback",
         model.remote_context_limit_fallback,
@@ -582,7 +597,7 @@ def _coerce_config(data: dict[str, Any]) -> AgentConfig:
     _validate_positive("runtime.max_total_actions", runtime.max_total_actions)
     if not 0.0 <= runtime.verification_confidence_threshold <= 1.0:
         raise ValueError("runtime.verification_confidence_threshold must be between 0.0 and 1.0")
-    _validate_positive("runtime.max_repeated_action_occurrences", runtime.max_repeated_action_occurrences)
+    _validate_positive("runtime.max_validation_recovery_cycles", runtime.max_validation_recovery_cycles)
     _validate_positive("notes.max_notes", notes.max_notes)
     _validate_positive("notes.max_note_chars", notes.max_note_chars)
     _validate_positive("notes.max_total_chars", notes.max_total_chars)
@@ -648,14 +663,6 @@ def _coerce_config(data: dict[str, Any]) -> AgentConfig:
     _validate_positive(
         "external_benchmarks.agent_generation.model_structured_timeout_seconds",
         external_benchmarks.agent_generation.model_structured_timeout_seconds,
-    )
-    _validate_positive(
-        "external_benchmarks.agent_generation.runtime_max_total_actions",
-        external_benchmarks.agent_generation.runtime_max_total_actions,
-    )
-    _validate_positive(
-        "external_benchmarks.agent_generation.runtime_tool_call_budget",
-        external_benchmarks.agent_generation.runtime_tool_call_budget,
     )
     _validate_positive(
         "external_benchmarks.agent_generation.solver_max_attempts",
@@ -754,7 +761,13 @@ def load_config(config_paths: list[str | Path] | None = None, env: dict[str, str
     for path in search_paths:
         if not path.exists():
             raise FileNotFoundError(f"Config file not found: {path}")
-        merged = _deep_merge(merged, _load_toml_file(path))
+        merged = _deep_merge(merged, _migrate_config_aliases(_load_toml_file(path)))
 
+    env = dict(env)
+    legacy_env = "SWAAG__RUNTIME__MAX_REPEATED_ACTION_OCCURRENCES"
+    new_env = "SWAAG__RUNTIME__MAX_VALIDATION_RECOVERY_CYCLES"
+    if legacy_env in env and new_env not in env:
+        env[new_env] = env[legacy_env]
+    env.pop(legacy_env, None)
     merged = _apply_env_overrides(merged, env)
     return _coerce_config(merged)

@@ -268,9 +268,9 @@ def capability_benchmark_tasks() -> list[BenchmarkTaskDefinition]:
         ],
         "config_overrides": {
             "tools_allow_side_effect_tools": True,
-            "runtime_max_total_actions": 18,
-            "runtime_tool_call_budget": 20,
         },
+        "benchmark_max_total_actions": 18,
+        "benchmark_tool_call_budget": 20,
     }
     return [
         BenchmarkTaskDefinition(

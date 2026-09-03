@@ -14,7 +14,6 @@ class AgentStatusLookupTool(Tool):
     description = "Read durable status for another SWAAG session without changing it."
     usage_guidance = "Use an exact session id/name. Returns active goal, waiting/running state, pending controls, turn/event counts, and the complete durable semantic status history."
     kind = "pure"
-    repeated_observation_is_redundant = True
     input_schema = {
         "type": "object",
         "properties": {"session_ref": {"anyOf": [{"type": "string"}, {"type": "null"}]}},

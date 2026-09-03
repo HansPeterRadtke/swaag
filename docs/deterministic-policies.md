@@ -93,3 +93,11 @@ names, task metadata, expected answers, benchmark fixtures, or source-string
 patterns is presumed semantic and must be removed or justified by a hard protocol,
 security, integrity, or resource invariant. Tests and benchmark traces should prove
 the boundary rather than encode fixture-specific repairs.
+
+## Semantic repetition boundary
+
+Deterministic runtime policy may reject malformed schemas, invalid tool arguments, unavailable capabilities, authorization failures, stale context snapshots, exhausted resource budgets, or other mechanically provable protocol violations. It must not reject a successful external observation merely because the same tool name and arguments appeared previously. External state can change independently of Swaag, so usefulness or redundancy of a repeated observation is a semantic decision for the model.
+
+Finite evaluation loops are different: a benchmark owns its task oracle and may define task-specific action, tool-call, wall-clock, or repeated-call cutoffs. Those limits terminate and score the benchmark seed; they do not alter production AgentConfig semantics.
+
+`runtime.max_validation_recovery_cycles` is a protocol-recovery limit for repeated **validation failures before an action executes**. It is not duplicate-action detection. The legacy `runtime.max_repeated_action_occurrences` config key is migrated to this canonical name for compatibility.

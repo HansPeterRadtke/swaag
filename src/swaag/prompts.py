@@ -367,6 +367,272 @@ class PromptBuilder:
             template_names=(self._config.prompts.action_template,),
         )
 
+
+    def build_agent_capability_selection_prompt(
+        self,
+        messages: list[Message],
+        *,
+        original_request: str,
+        pending_user_messages: list[str],
+        capability_index: Iterable[tuple[str, str, str]],
+        context_components: list[PromptComponent] | None = None,
+        validation_feedback: str = "",
+    ) -> PromptAssembly:
+        history, current_user, turn_transcript = self.partition_turn(messages)
+        capabilities = list(capability_index)
+        rendered_capabilities = "\n".join(
+            f"- {name}: {description} {guidance}".strip()
+            for name, description, guidance in capabilities
+            if str(name) != "load_tools"
+        )
+        components = [
+            PromptComponent(
+                name="original_user_request", category="current_user",
+                text=f"Original user request, verbatim and authoritative:\n{original_request}\n\n",
+            ),
+            *self.message_prompt_components(
+                history, prefix="conversation_history", category="history",
+                header="Previous conversation messages, verbatim:", optional=True,
+            ),
+            PromptComponent(
+                name="current_user_turn", category="current_user",
+                text=("Current user message, verbatim:\n" +
+                      f"{current_user.content if current_user is not None else original_request}\n\n"),
+            ),
+            *self.message_prompt_components(
+                turn_transcript, prefix="current_turn", category="turn_context",
+                header="Exact assistant actions and tool results since the current user message:",
+            ),
+        ]
+        if pending_user_messages:
+            pending = "\n\n".join(
+                f"[USER INTERVENTION {index}]\n{text}"
+                for index, text in enumerate(pending_user_messages, start=1)
+            )
+            components.append(PromptComponent(
+                name="pending_user_interventions", category="current_user",
+                text=f"New user interventions, verbatim and authoritative:\n{pending}\n\n",
+            ))
+        if context_components:
+            components.extend(context_components)
+        components.append(PromptComponent(
+            name="capability_selection_index", category="tool_descriptions",
+            text=f"Existing capability identities and descriptions:\n{rendered_capabilities}\n\n",
+        ))
+        if validation_feedback:
+            components.append(PromptComponent(
+                name="mechanical_validation_feedback", category="instruction",
+                text=f"Previous selection was mechanically invalid: {validation_feedback}\n\n",
+            ))
+        components.append(PromptComponent(
+            name="agent_capability_selection_instruction", category="instruction",
+            text=(
+                "Choose exactly one existing capability identity that is the best concrete NEXT capability needed "
+                "for the user's current task. This call has one semantic responsibility: capability selection. "
+                "Choose none only when no not-yet-loaded capability should be loaded now. Do not choose a loader, "
+                "do not choose several capabilities, do not plan future steps, and do not write user-facing prose."
+            ),
+        ))
+        return self._assemble(
+            "action_capability_selection", "standard", components, template_names=()
+        )
+
+    def build_agent_tool_call_prompt(
+        self,
+        messages: list[Message],
+        tools: Iterable[tuple],
+        *,
+        original_request: str,
+        pending_user_messages: list[str],
+        context_components: list[PromptComponent] | None = None,
+        capability_index: Iterable[tuple[str, str, str]] | None = None,
+        tool_result_projections: dict[int, str] | None = None,
+        completed_tool_calls: list[dict] | None = None,
+        validation_feedback: str = "",
+    ) -> PromptAssembly:
+        assembly = self.build_agent_action_prompt(
+            messages,
+            tools,
+            original_request=original_request,
+            pending_user_messages=pending_user_messages,
+            prompt_mode="standard",
+            context_components=context_components,
+            capability_index=capability_index,
+            tool_result_projections=tool_result_projections,
+            validation_feedback=validation_feedback,
+        )
+        components = [
+            component
+            for component in assembly.components[3:-1]
+            if component.name != "agent_action_instruction"
+        ]
+        if completed_tool_calls:
+            lines = [
+                "Previously completed tool calls whose corresponding results are present in the current authoritative transcript:"
+            ]
+            for item in completed_tool_calls:
+                lines.append(
+                    "- "
+                    + stable_json_dumps(
+                        {
+                            "tool_name": item.get("tool_name"),
+                            "arguments": item.get("arguments", {}),
+                        },
+                        indent=None,
+                    )
+                    + f" -> recorded execution; corresponding result/error evidence source event sequence={item.get('source_event_sequence', 'unknown')}."
+                )
+            components.append(
+                PromptComponent(
+                    name="completed_tool_calls",
+                    category="tool_result",
+                    text="\n".join(lines) + "\n\n",
+                )
+            )
+        components.append(
+            PromptComponent(
+                name="agent_tool_call_instruction",
+                category="instruction",
+                text=(
+                    "Choose concrete tool calls and their exact arguments for the next useful mechanical work. "
+                    "This call has one semantic responsibility: tool selection/arguments. Do not write user-facing "
+                    "prose, status, questions, completion judgments, or continuation flags. Return an empty tool_calls "
+                    "array when no currently loaded tool should be executed. If a relevant capability is listed but "
+                    "not loaded, select load_tools for that capability instead of guessing its schema. Calls in one "
+                    "response must be independent; a later call must not depend on an earlier call's result. Treat the "
+                    "previously-completed-tool-calls section, when present, as factual history only. Repetition may be "
+                    "semantically useful when external state or freshness matters; decide that from the task and evidence."
+                ),
+            )
+        )
+        return self._assemble(
+            "action_tool_call",
+            "standard",
+            components,
+            template_names=(),
+        )
+
+    def build_agent_terminal_response_prompt(
+        self,
+        messages: list[Message],
+        *,
+        original_request: str,
+        pending_user_messages: list[str],
+        context_components: list[PromptComponent] | None = None,
+        tool_result_projections: dict[int, str] | None = None,
+        allow_silent_completion: bool = False,
+        validation_feedback: str = "",
+    ) -> PromptAssembly:
+        history, current_user, turn_transcript = self.partition_turn(messages)
+        components = [
+            PromptComponent(
+                name="original_user_request", category="current_user",
+                text=f"Original user request, verbatim and authoritative:\n{original_request}\n\n",
+            ),
+            *self.message_prompt_components(
+                history, prefix="conversation_history", category="history",
+                header="Previous conversation messages, verbatim:", optional=True,
+                tool_result_projections=tool_result_projections,
+            ),
+            PromptComponent(
+                name="current_user_turn", category="current_user",
+                text=("Current user message, verbatim:\n" +
+                      f"{current_user.content if current_user is not None else original_request}\n\n"),
+            ),
+            *self.message_prompt_components(
+                turn_transcript, prefix="current_turn", category="turn_context",
+                header="Exact assistant actions and tool results since the current user message:",
+                tool_result_projections=tool_result_projections,
+            ),
+        ]
+        if pending_user_messages:
+            pending = "\n\n".join(
+                f"[USER INTERVENTION {index}]\n{text}"
+                for index, text in enumerate(pending_user_messages, start=1)
+            )
+            components.append(PromptComponent(
+                name="pending_user_interventions", category="current_user",
+                text=f"New user interventions, verbatim and authoritative:\n{pending}\n\n",
+            ))
+        if context_components:
+            components.extend(context_components)
+        if validation_feedback:
+            components.append(PromptComponent(
+                name="mechanical_validation_feedback", category="instruction",
+                text=("The previous constrained output was mechanically invalid. Correct only that structural error:\n"
+                      + validation_feedback + "\n\n"),
+            ))
+        components.append(PromptComponent(
+            name="agent_terminal_response_instruction", category="instruction",
+            text=(
+                "Produce the complete terminal user-facing response for the current request using only authoritative "
+                "request/history/tool evidence. This call has one semantic responsibility: final response generation. "
+                "Do not choose tools, plan another action, emit status, or judge completion. The message must be non-empty "
+                + ("unless the enclosing protocol explicitly requires silence; set silent_completion accordingly."
+                   if allow_silent_completion else "and silent_completion must be false.")
+            ),
+        ))
+        return self._assemble("action_terminal_response", "standard", components, template_names=())
+
+    def build_completion_verdict_prompt(
+        self,
+        *,
+        original_request: str,
+        assistant_message: str,
+        status_json: str,
+        tool_evidence: str = "",
+        tool_evidence_rows: list[dict] | None = None,
+        tool_result_projections: dict[int, str] | None = None,
+        historical_evidence: str = "",
+        historical_evidence_projection: str = "",
+        reexpanded_evidence_rows: list[dict] | None = None,
+        reexpanded_evidence_projections: dict[str, str] | None = None,
+    ) -> PromptAssembly:
+        base = self.build_completion_evaluation_prompt(
+            original_request=original_request,
+            assistant_message=assistant_message,
+            status_json=status_json,
+            tool_evidence=tool_evidence,
+            tool_evidence_rows=tool_evidence_rows,
+            tool_result_projections=tool_result_projections,
+            historical_evidence=historical_evidence,
+            historical_evidence_projection=historical_evidence_projection,
+            evidence_source_inventory=[],
+            reexpanded_evidence_rows=reexpanded_evidence_rows,
+            reexpanded_evidence_projections=reexpanded_evidence_projections,
+        )
+        user_components = [
+            component
+            for component in base.components[3:-1]
+            if component.name not in {
+                "completion_evidence_source_inventory",
+                "completion_instruction",
+            }
+        ]
+        user_components.append(
+            PromptComponent(
+                name="completion_verdict_instruction",
+                category="instruction",
+                text=(
+                    "\nDecide only whether the user's objective is actually complete from the supplied authoritative evidence. "
+                    "Return complete=true only when no meaningful requested work remains. Do not generate a reason, "
+                    "remaining-work list, evidence request, plan, status, or user-facing prose. Return only the constrained JSON object.\n"
+                ),
+            )
+        )
+        return self._assemble_with_system(
+            "completion_evaluation",
+            "lean",
+            (
+                "You are an independent completion evaluator. Make exactly one semantic decision: whether the user's "
+                "actual objective is complete from the supplied evidence. Deterministic tool/test evidence is authoritative "
+                "for what mechanically happened. Do not reward final-looking prose and do not invent missing evidence. "
+                "Return only the constrained JSON object."
+            ),
+            user_components,
+            template_names=(),
+        )
+
     def build_completion_evaluation_prompt(
         self,
         *,

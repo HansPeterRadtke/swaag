@@ -28,6 +28,9 @@ completion_endpoint = "/completion"
 tokenize_endpoint = "/tokenize"
 health_endpoint = "/health"
 profile_name = "small_fast"
+# Maximum independent semantic decisions requested from the model in one call.
+# 1 is the measured small-model setting; larger values deliberately permit fused calls.
+max_semantic_responsibilities_per_call = 6
 # Optional explicit model/revision identifier. When empty, SWAAG fingerprints the live server properties.
 model_identity = ""
 # OpenTelemetry GenAI provider discriminator; custom providers are permitted by the convention.
@@ -71,7 +74,7 @@ verification_confidence_threshold = 0.7
 capture_model_io = true
 lean_on_overflow = true
 strict_budget = true
-max_repeated_action_occurrences = 2
+max_validation_recovery_cycles = 2
 completion_evaluation_enabled = true
 tool_timeout_seconds = 10
 background_poll_seconds = 0.1
@@ -403,8 +406,6 @@ model_timeout_seconds = 180
 model_structured_timeout_seconds = 240
 allow_stateful_tools = true
 allow_side_effect_tools = true
-runtime_max_total_actions = 40
-runtime_tool_call_budget = 24
 solver_max_attempts = 2
 git_remote_base_url = "https://github.com"
 model_name_or_path = "swaag/real-agent-cli"

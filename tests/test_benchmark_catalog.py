@@ -151,17 +151,19 @@ def test_capability_benchmark_tasks_cover_new_agent_primitives(tmp_path) -> None
 
 def test_repo_task_budgets_leave_room_for_one_failed_edit_verify_cycle() -> None:
     tasks = {task.task_id: task for task in get_benchmark_tasks()}
-    easy = tasks["coding_implement_function"].config_overrides
-    normal = tasks["coding_multifile_fix"].config_overrides
-    assert easy["runtime_tool_call_budget"] >= 10
-    assert easy["runtime_max_total_actions"] >= 12
-    assert normal["runtime_tool_call_budget"] >= easy["runtime_tool_call_budget"]
-    assert normal["runtime_max_total_actions"] >= easy["runtime_max_total_actions"]
-    assert normal["runtime_tool_call_budget"] >= 20
-    hard = tasks["coding_run_tests_environment"].config_overrides
-    assert hard["runtime_tool_call_budget"] >= 28
-    assert hard["runtime_max_total_actions"] >= 24
-
+    easy = tasks["coding_implement_function"]
+    normal = tasks["coding_multifile_fix"]
+    hard = tasks["coding_run_tests_environment"]
+    assert easy.benchmark_tool_call_budget is not None and easy.benchmark_tool_call_budget >= 10
+    assert easy.benchmark_max_total_actions is not None and easy.benchmark_max_total_actions >= 12
+    assert normal.benchmark_tool_call_budget is not None and normal.benchmark_tool_call_budget >= easy.benchmark_tool_call_budget
+    assert normal.benchmark_max_total_actions is not None and normal.benchmark_max_total_actions >= easy.benchmark_max_total_actions
+    assert normal.benchmark_tool_call_budget >= 20
+    assert hard.benchmark_tool_call_budget is not None and hard.benchmark_tool_call_budget >= 28
+    assert hard.benchmark_max_total_actions is not None and hard.benchmark_max_total_actions >= 24
+    for task in (easy, normal, hard):
+        assert "runtime_tool_call_budget" not in task.config_overrides
+        assert "runtime_max_total_actions" not in task.config_overrides
 
 def test_failure_tasks_verify_policy_evidence_and_preserved_state_not_magic_refusal_words(tmp_path) -> None:
     from swaag.benchmark.verifier import verify_benchmark_contract
@@ -263,12 +265,12 @@ def test_history_capability_prompts_use_explicit_active_session_reference(tmp_pa
 
 def test_non_repository_generated_tasks_have_recovery_headroom() -> None:
     tasks = {task.task_id: task for task in get_benchmark_tasks()}
-    easy_read = tasks["reading_generated_incident_structured_extract"].config_overrides
-    assert easy_read["runtime_tool_call_budget"] >= 8
-    assert easy_read["runtime_max_total_actions"] >= 6
-    hard_read = tasks["reading_generated_authoritative_source_selection"].config_overrides
-    assert hard_read["runtime_tool_call_budget"] >= 16
-    assert hard_read["runtime_max_total_actions"] >= 12
+    easy_read = tasks["reading_generated_incident_structured_extract"]
+    assert easy_read.benchmark_tool_call_budget >= 8
+    assert easy_read.benchmark_max_total_actions >= 6
+    hard_read = tasks["reading_generated_authoritative_source_selection"]
+    assert hard_read.benchmark_tool_call_budget >= 16
+    assert hard_read.benchmark_max_total_actions >= 12
 
 
 def test_multistep_semantic_contracts_do_not_require_byte_exact_formatting(tmp_path) -> None:

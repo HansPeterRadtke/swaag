@@ -6,6 +6,7 @@ from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any
 
+from swaag.redaction import redact_for_persistence, redact_text
 from swaag.benchmark.metrics import BenchmarkAggregateMetrics, compute_benchmark_metrics
 from swaag.benchmark.report import render_benchmark_report
 from swaag.benchmark.scoring import TASK_SCORE_COMPONENT_WEIGHTS, build_task_rubric
@@ -93,8 +94,9 @@ def _cache_transparency_summary(tasks: list[BenchmarkTaskResult]) -> tuple[dict[
 
 
 class ResultCollector:
-    def __init__(self) -> None:
+    def __init__(self, *, secret_values: tuple[str, ...] = ()) -> None:
         self._results: list[BenchmarkTaskResult] = []
+        self.secret_values = tuple(str(item) for item in secret_values if str(item))
 
     def add(self, result: BenchmarkTaskResult) -> None:
         self._results.append(result)
@@ -224,12 +226,18 @@ class ResultCollector:
         }
         results_fd = os.open(results_path, os.O_WRONLY | os.O_CREAT | os.O_TRUNC, 0o644)
         try:
-            os.write(results_fd, (stable_json_dumps(asdict(report), indent=2) + "\n").encode("utf-8"))
+            sanitized_payload = redact_for_persistence(
+                asdict(report), secret_values=self.secret_values
+            )
+            os.write(results_fd, (stable_json_dumps(sanitized_payload, indent=2) + "\n").encode("utf-8"))
         finally:
             os.close(results_fd)
         report_fd = os.open(report_path, os.O_WRONLY | os.O_CREAT | os.O_TRUNC, 0o644)
         try:
-            os.write(report_fd, render_benchmark_report(report).encode("utf-8"))
+            rendered = redact_text(
+                render_benchmark_report(report), secret_values=self.secret_values
+            )
+            os.write(report_fd, rendered.encode("utf-8"))
         finally:
             os.close(report_fd)
         return report

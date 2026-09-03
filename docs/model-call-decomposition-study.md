@@ -395,15 +395,15 @@ The proposed sequential weak-model action primitive was tested on two scenarios 
 
 This decisively **disproves A5 in its naive form**. A focused single-tool schema makes concrete tool construction reliable, but exact tool-result history alone does not make this model track which subgoal has already been satisfied.
 
-### A6 — existing mechanical duplicate feedback
+### A6 — former runtime duplicate-rejection experiment (invalid production assumption)
 
-Swaag already has deterministic duplicate/no-progress detection. For a repeated tool-bearing action it compares the exact tool-call/continuation signature; repeated observation tools are also tracked by exact tool name+arguments when their result is still visible. This is mechanically knowable and does not require semantic correctness judgment.
+At the time of this experiment, Swaag rejected repeated tool-bearing actions and repeated observation calls by comparing exact tool names/arguments and recently visible results. The experiment treated that as mechanically knowable no-progress detection. Subsequent review showed that assumption is invalid for external observations: an identical read/search/poll call may be meaningful because external state can change independently of Swaag. Production runtime therefore must not infer semantic uselessness from call identity alone.
 
-The study replayed the same A5 second-step situations while adding the production duplicate-rejection wording: the exact prior invocation was rejected as immediately repeated, the exact rejected call was shown, and the model was instructed to choose materially different arguments or a different tool using the evidence already returned.
+The study replayed the same A5 second-step situations while adding that former duplicate-rejection wording: the exact prior invocation was rejected as immediately repeated, the exact rejected call was shown, and the model was instructed to choose materially different arguments or a different tool using the evidence already returned.
 
-Result: **0/6** advancement for calculator→time and **0/6** advancement for search→read. The model ignored the explicit duplicate feedback. For search it sometimes changed arguments (for example regex flags, path, or max_matches) while still repeating the same semantic observation.
+Result: **0/6** advancement for calculator→time and **0/6** advancement for search→read. The model ignored the feedback. For search it sometimes changed arguments (for example regex flags, path, or max_matches) while still repeating the same semantic observation.
 
-Therefore A6 is also **disproved** as a weak-model solution. Existing duplicate protection remains valuable mechanically because it prevents repeated execution/no-progress loops, but it does not teach this model the correct next semantic subgoal.
+Therefore A6 remains useful only as historical evidence about this weak model: explicit duplicate feedback did not teach the next semantic subgoal. It is **not** evidence for production duplicate rejection. Production Swaag now permits repeated external observations; finite-loop cutoffs belong to benchmarks that own the task oracle and evaluation boundary.
 
 ### Important production-context caveat: staged tool discovery
 

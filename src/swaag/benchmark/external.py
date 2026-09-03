@@ -15,6 +15,7 @@ from typing import Any, Sequence
 from urllib import error as urllib_error
 from urllib import request as urllib_request
 
+from swaag.redaction import configured_secret_values, redact_text
 from swaag.benchmark.errors import LocalSwebenchFailure
 from swaag.config import AgentConfig, ExternalBenchmarkTargetConfig, load_config
 from swaag.fsops import ensure_dir, remove_file, write_text
@@ -518,6 +519,7 @@ def _run_target(
     ensure_dir(target_output)
     stdout_path = target_output / "stdout.txt"
     stderr_path = target_output / "stderr.txt"
+    secret_values = configured_secret_values(config)
     values = {
         "output_dir": str(target_output.resolve()),
         "run_id": f"{canonical}-{mode}",
@@ -583,7 +585,7 @@ def _run_target(
             workdir=str(workdir),
         ) from exc
     except subprocess.TimeoutExpired as exc:
-        write_text(stdout_path, _coerce_subprocess_text(exc.stdout), encoding="utf-8")
+        write_text(stdout_path, redact_text(_coerce_subprocess_text(exc.stdout), secret_values=secret_values), encoding="utf-8")
         stderr_text = _coerce_subprocess_text(exc.stderr).strip()
         message = f"Benchmark command timed out after {timeout_seconds} seconds"
         if stderr_text:
@@ -593,8 +595,8 @@ def _run_target(
             command=command,
             workdir=str(workdir),
         ) from exc
-    write_text(stdout_path, completed.stdout, encoding="utf-8")
-    write_text(stderr_path, completed.stderr, encoding="utf-8")
+    write_text(stdout_path, redact_text(completed.stdout, secret_values=secret_values), encoding="utf-8")
+    write_text(stderr_path, redact_text(completed.stderr, secret_values=secret_values), encoding="utf-8")
     blocker_reason = None
     evaluation_summary: dict[str, int] | None = None
     environment_status = "ready"
@@ -890,6 +892,7 @@ def run_external_benchmarks(
         shutil.rmtree(output_dir)
     ensure_dir(output_dir)
     config = load_config() if config is None else config
+    secret_values = configured_secret_values(config)
     variable_map = dict(variables or {})
     results: list[ExternalBenchmarkRunResult] = []
     started = time.monotonic()
@@ -929,7 +932,7 @@ def run_external_benchmarks(
             stdout_path = issue_dir / "stdout.txt"
             stderr_path = issue_dir / "stderr.txt"
             write_text(stdout_path, "", encoding="utf-8")
-            write_text(stderr_path, str(exc), encoding="utf-8")
+            write_text(stderr_path, redact_text(str(exc), secret_values=secret_values), encoding="utf-8")
             status = "external_blocked" if isinstance(exc, ExternalBenchmarkBlocked) else "failed"
             result = ExternalBenchmarkRunResult(
                 benchmark_id=canonical,
@@ -959,7 +962,7 @@ def run_external_benchmarks(
             stdout_path = issue_dir / "stdout.txt"
             stderr_path = issue_dir / "stderr.txt"
             write_text(stdout_path, "", encoding="utf-8")
-            write_text(stderr_path, str(exc), encoding="utf-8")
+            write_text(stderr_path, redact_text(str(exc), secret_values=secret_values), encoding="utf-8")
             result = ExternalBenchmarkRunResult(
                 benchmark_id=canonical,
                 benchmark_label=BENCHMARK_LABELS.get(canonical, canonical),

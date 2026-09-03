@@ -172,7 +172,6 @@ class _CompletionRedirectClient(_WorkerClient):
                     "complete": True,
                     "reason": "The revised direction is reflected in the candidate.",
                     "remaining_work": [],
-                    "evidence_requests": [],
                 }
             ),
         )

@@ -16,6 +16,7 @@ from typing import Any, Sequence
 
 import requests
 
+from swaag.redaction import configured_secret_values, redact_for_persistence
 from swaag.benchmark.failure_analyzer import FailureAnalysis, FailureAnalyzer
 from swaag.benchmark import external as external_benchmarks
 from swaag.benchmark.result_collector import BenchmarkTaskResult, ResultCollector
@@ -31,6 +32,7 @@ from swaag.config import AgentConfig, load_config
 from swaag.live_runtime_profiles import get_documented_final_live_benchmark_recommendation
 from swaag.model import LlamaCppClient, stable_llama_server_properties
 from swaag.runtime import AgentRuntime
+from swaag.preemption import RunCancellationRequested
 from swaag.communication import CommunicationService
 from swaag.types import SessionState
 from swaag.model_cache import MissingReplayEntryError, RecordReplayModelClient
@@ -40,6 +42,285 @@ from swaag.benchmark.verifier import verify_benchmark_contract
 
 class BenchmarkSeedTimeout(BaseException):
     """Abort a benchmark seed after a mechanical wall-clock budget expires."""
+
+
+class BenchmarkModelLoopDetected(RuntimeError):
+    """Benchmark-only termination after enough repeated-call evidence is observed."""
+
+
+class BenchmarkBudgetExceeded(RuntimeError):
+    """Benchmark-only termination after a task evaluation budget is exhausted."""
+
+
+@contextlib.contextmanager
+def _benchmark_execution_guard(
+    runtime: AgentRuntime,
+    state: SessionState,
+    *,
+    max_total_actions: int | None,
+    max_tool_calls: int | None,
+    max_consecutive_identical_tool_calls: int | None,
+    poll_seconds: float = 0.1,
+):
+    """Bound a benchmark seed without changing production runtime semantics.
+
+    The benchmark owns these limits because it owns the task oracle and finite test
+    boundary. Production Swaag may legally repeat external observations or continue
+    taking actions beyond these values.
+    """
+    action_limit = None if max_total_actions is None else max(0, int(max_total_actions))
+    tool_limit = None if max_tool_calls is None else max(0, int(max_tool_calls))
+    repeat_limit = (
+        None
+        if max_consecutive_identical_tool_calls is None
+        else max(1, int(max_consecutive_identical_tool_calls))
+    )
+    info: dict[str, Any] = {
+        "triggered": False,
+        "action_count": 0,
+        "tool_call_count": 0,
+        "repeat_streak": 0,
+    }
+    if action_limit is None and tool_limit is None and repeat_limit is None:
+        yield info
+        return
+    stop = threading.Event()
+
+    def _trigger(*, kind: str, reason: str, event_sequence: int, **extra: Any) -> None:
+        info.update(
+            {
+                "triggered": True,
+                "kind": kind,
+                "reason": reason,
+                "event_sequence": event_sequence,
+                **extra,
+            }
+        )
+        active = runtime.history.read_active_run(state.session_id)
+        run_id = "" if not isinstance(active, dict) else str(active.get("run_id", ""))
+        if run_id:
+            runtime.preemption.request_run_cancellation(
+                state.session_id, run_id, reason=reason
+            )
+
+    def _watch() -> None:
+        last_sequence = 0
+        last_signature = ""
+        streak = 0
+        actions = 0
+        tools = 0
+        while not stop.wait(max(0.02, float(poll_seconds))):
+            try:
+                events = runtime.history.read_history(state.session_id)
+            except Exception:
+                continue
+            for event in events:
+                sequence = int(event.sequence)
+                if sequence <= last_sequence:
+                    continue
+                last_sequence = max(last_sequence, sequence)
+                if event.event_type == "agent_action_selected":
+                    actions += 1
+                    info["action_count"] = actions
+                    if action_limit is not None and actions >= action_limit:
+                        _trigger(
+                            kind="action_budget",
+                            reason=(
+                                f"benchmark action budget reached: {actions}/{action_limit}; "
+                                "the benchmark has enough evidence for this seed"
+                            ),
+                            event_sequence=sequence,
+                            limit=action_limit,
+                        )
+                        return
+                    continue
+                if event.event_type != "tool_called":
+                    continue
+                tools += 1
+                info["tool_call_count"] = tools
+                payload = event.payload if isinstance(event.payload, dict) else {}
+                signature = stable_json_dumps(
+                    {
+                        "tool_name": payload.get("tool_name"),
+                        "tool_input": payload.get("tool_input", {}),
+                    },
+                    indent=None,
+                )
+                if signature == last_signature:
+                    streak += 1
+                else:
+                    last_signature = signature
+                    streak = 1
+                info["repeat_streak"] = streak
+                if repeat_limit is not None and streak >= repeat_limit:
+                    _trigger(
+                        kind="model_loop",
+                        reason=(
+                            "benchmark model-loop cutoff: identical tool invocation "
+                            f"repeated {streak} consecutive times; signature={signature}"
+                        ),
+                        event_sequence=sequence,
+                        streak=streak,
+                        signature=signature,
+                        limit=repeat_limit,
+                    )
+                    return
+                if tool_limit is not None and tools >= tool_limit:
+                    _trigger(
+                        kind="tool_budget",
+                        reason=(
+                            f"benchmark tool-call budget reached: {tools}/{tool_limit}; "
+                            "the benchmark has enough evidence for this seed"
+                        ),
+                        event_sequence=sequence,
+                        limit=tool_limit,
+                    )
+                    return
+
+    watcher = threading.Thread(
+        target=_watch,
+        name=f"benchmark-guard-{state.session_id}",
+        daemon=True,
+    )
+    watcher.start()
+    try:
+        yield info
+    finally:
+        stop.set()
+        watcher.join(timeout=1.0)
+
+
+# Backward-compatible private alias for focused tests/tools created during the study.
+def _benchmark_model_loop_guard(
+    runtime: AgentRuntime,
+    state: SessionState,
+    *,
+    max_consecutive_identical_tool_calls: int | None,
+    poll_seconds: float = 0.1,
+):
+    return _benchmark_execution_guard(
+        runtime,
+        state,
+        max_total_actions=None,
+        max_tool_calls=None,
+        max_consecutive_identical_tool_calls=max_consecutive_identical_tool_calls,
+        poll_seconds=poll_seconds,
+    )
+
+
+BENCHMARK_CHECKPOINT_VERSION = 1
+
+
+def _atomic_write_json(path: Path, payload: dict[str, Any]) -> None:
+    path.parent.mkdir(parents=True, exist_ok=True)
+    tmp = path.with_name(path.name + ".tmp")
+    fd = os.open(tmp, os.O_WRONLY | os.O_CREAT | os.O_TRUNC, 0o644)
+    try:
+        sanitized = redact_for_persistence(
+            payload, secret_values=configured_secret_values(load_config())
+        )
+        os.write(fd, (stable_json_dumps(sanitized, indent=2) + "\n").encode("utf-8"))
+        os.fsync(fd)
+    finally:
+        os.close(fd)
+    os.replace(tmp, path)
+    try:
+        dir_fd = os.open(path.parent, os.O_RDONLY)
+    except OSError:
+        return
+    try:
+        os.fsync(dir_fd)
+    finally:
+        os.close(dir_fd)
+
+
+def _benchmark_checkpoint_signature(
+    *,
+    selected_tasks: Sequence[BenchmarkTaskDefinition],
+    seeds: Sequence[int],
+    live_subset: bool,
+    use_live_model: bool,
+    agent_behavior_mode: str | None,
+    model_base_url: str,
+    model_profile: str | None,
+    structured_output_mode: str | None,
+    timeout_seconds: int | None,
+    task_timeout_seconds: int | None,
+    connect_timeout_seconds: int | None,
+    max_consecutive_identical_tool_calls: int | None,
+) -> dict[str, Any]:
+    task_policy = [
+        {
+            "task_id": task.task_id,
+            "task_type": task.task_type,
+            "difficulty": task.difficulty,
+            "tags": list(task.tags),
+            "config_overrides": dict(sorted(task.config_overrides.items())),
+            "benchmark_max_total_actions": task.benchmark_max_total_actions,
+            "benchmark_tool_call_budget": task.benchmark_tool_call_budget,
+            "benchmark_max_consecutive_identical_tool_calls": (
+                task.benchmark_max_consecutive_identical_tool_calls
+            ),
+        }
+        for task in selected_tasks
+    ]
+    return {
+        "version": BENCHMARK_CHECKPOINT_VERSION,
+        "task_ids": [task.task_id for task in selected_tasks],
+        "task_policy_sha256": sha256_text(stable_json_dumps(task_policy, indent=None)),
+        "seeds": [int(seed) for seed in seeds],
+        "live_subset": bool(live_subset),
+        "use_live_model": bool(use_live_model),
+        "agent_behavior_mode": agent_behavior_mode or "",
+        "model_base_url": model_base_url,
+        "model_profile": model_profile or "",
+        "structured_output_mode": structured_output_mode or "",
+        "timeout_seconds": timeout_seconds,
+        "task_timeout_seconds": task_timeout_seconds,
+        "connect_timeout_seconds": connect_timeout_seconds,
+        "max_consecutive_identical_tool_calls": max_consecutive_identical_tool_calls,
+    }
+
+
+def _load_benchmark_checkpoint(
+    path: Path,
+    *,
+    signature: dict[str, Any],
+) -> dict[str, Any]:
+    if not path.exists():
+        return {
+            "version": BENCHMARK_CHECKPOINT_VERSION,
+            "signature": signature,
+            "completed_tasks": {},
+        }
+    payload = json.loads(path.read_text(encoding="utf-8"))
+    if int(payload.get("version", -1)) != BENCHMARK_CHECKPOINT_VERSION:
+        raise RuntimeError(
+            f"Unsupported benchmark checkpoint version at {path}; use --clean or a new output directory."
+        )
+    if payload.get("signature") != signature:
+        raise RuntimeError(
+            "Benchmark checkpoint configuration does not match this run. "
+            "Use --clean or a new output directory instead of mixing incompatible results."
+        )
+    completed = payload.get("completed_tasks", {})
+    if not isinstance(completed, dict):
+        raise RuntimeError(f"Invalid benchmark checkpoint completed_tasks at {path}")
+    return payload
+
+
+def _checkpoint_task_result(
+    path: Path,
+    *,
+    checkpoint: dict[str, Any],
+    result: BenchmarkTaskResult,
+) -> None:
+    completed = checkpoint.setdefault("completed_tasks", {})
+    completed[result.task_id] = asdict(result)
+    checkpoint["last_completed_task"] = result.task_id
+    checkpoint["completed_task_count"] = len(completed)
+    checkpoint["updated_at_epoch"] = time.time()
+    _atomic_write_json(path, checkpoint)
 
 
 def _benchmark_execution_blocker(error: Exception | None) -> dict[str, str] | None:
@@ -223,8 +504,6 @@ def _build_config(
         config.model.seed = int(seed)
     config.tools.allow_side_effect_tools = bool(overrides.get("tools_allow_side_effect_tools", config.tools.allow_side_effect_tools))
     config.tools.allow_stateful_tools = bool(overrides.get("tools_allow_stateful_tools", config.tools.allow_stateful_tools))
-    config.runtime.max_total_actions = int(overrides.get("runtime_max_total_actions", config.runtime.max_total_actions))
-    config.runtime.tool_call_budget = int(overrides.get("runtime_tool_call_budget", config.runtime.tool_call_budget))
     config.environment.max_capture_chars = int(overrides.get("environment_max_capture_chars", config.environment.max_capture_chars))
     return config
 
@@ -763,6 +1042,7 @@ def run_benchmarks(
     structured_output_mode: str | None = None,
     progress_poll_seconds: float | None = None,
     task_timeout_seconds: int | None = None,
+    max_consecutive_identical_tool_calls: int | None = 3,
     seeds: list[int] | None = None,
     agent_behavior_mode: str | None = None,
     replay_cache_root: Path | None = None,
@@ -775,7 +1055,6 @@ def run_benchmarks(
     os.makedirs(sessions_root, exist_ok=True)
 
     analyzer = FailureAnalyzer()
-    collector = ResultCollector()
     selected_tasks = _load_tasks(task_ids, live_subset=live_subset)
     resolved_agent_behavior_mode = _normalize_agent_behavior_mode(agent_behavior_mode)
     benchmark_started = time.monotonic()
@@ -809,8 +1088,40 @@ def run_benchmarks(
     effective_replay_cache_root = _benchmark_replay_cache_root(
         replay_cache_root
     )
+    collector = ResultCollector(secret_values=configured_secret_values(load_config()))
+    checkpoint_path = output_dir / "benchmark_checkpoint.json"
+    checkpoint_signature = _benchmark_checkpoint_signature(
+        selected_tasks=selected_tasks,
+        seeds=effective_seeds,
+        live_subset=live_subset,
+        use_live_model=use_live_model,
+        agent_behavior_mode=resolved_agent_behavior_mode,
+        model_base_url=effective_base_url,
+        model_profile=effective_profile,
+        structured_output_mode=effective_structured_output_mode,
+        timeout_seconds=effective_timeout,
+        task_timeout_seconds=effective_task_timeout,
+        connect_timeout_seconds=effective_connect_timeout,
+        max_consecutive_identical_tool_calls=max_consecutive_identical_tool_calls,
+    )
+    checkpoint = _load_benchmark_checkpoint(
+        checkpoint_path, signature=checkpoint_signature
+    )
+    completed_checkpoint_tasks = checkpoint.get("completed_tasks", {})
+    resumed_task_count = 0
     total_tasks = len(selected_tasks)
     for task_index, task in enumerate(selected_tasks, start=1):
+        checkpoint_result = completed_checkpoint_tasks.get(task.task_id)
+        if isinstance(checkpoint_result, dict):
+            collector.add(BenchmarkTaskResult(**checkpoint_result))
+            resumed_task_count += 1
+            _print_benchmark_progress(
+                current=task_index,
+                total=total_tasks,
+                task=task,
+                status="checkpointed skip",
+            )
+            continue
         planned_cache_mode = _planned_cache_mode(
             output_dir,
             task,
@@ -882,13 +1193,31 @@ def run_benchmarks(
             runtime_error: Exception | None = None
             assistant_text = ""
             task_started = time.monotonic()
+            loop_info: dict[str, Any] = {"triggered": False}
+            task_loop_limit = task.benchmark_max_consecutive_identical_tool_calls
+            if task_loop_limit is None:
+                task_loop_limit = max_consecutive_identical_tool_calls
             try:
                 with _benchmark_seed_timeout(effective_task_timeout):
-                    turn = _run_turn_with_communication_probe(runtime, state, scenario)
+                    with _benchmark_execution_guard(
+                        runtime,
+                        state,
+                        max_total_actions=task.benchmark_max_total_actions,
+                        max_tool_calls=task.benchmark_tool_call_budget,
+                        max_consecutive_identical_tool_calls=task_loop_limit,
+                    ) as loop_info:
+                        turn = _run_turn_with_communication_probe(runtime, state, scenario)
                 assistant_text = turn.assistant_text
             except BenchmarkSeedTimeout as exc:
                 runtime_error = TimeoutError(str(exc))
                 state = _record_benchmark_timeout_event(runtime, state, runtime_error)
+            except RunCancellationRequested as exc:
+                if loop_info.get("triggered") and loop_info.get("kind") == "model_loop":
+                    runtime_error = BenchmarkModelLoopDetected(str(loop_info))
+                elif loop_info.get("triggered"):
+                    runtime_error = BenchmarkBudgetExceeded(str(loop_info))
+                else:
+                    runtime_error = exc
             except Exception as exc:
                 runtime_error = exc
             execution_blocker = _benchmark_execution_blocker(runtime_error)
@@ -928,7 +1257,23 @@ def run_benchmarks(
             assert verification is not None
             assert quality is not None
             failure = None
-            if execution_blocker is not None:
+            if isinstance(runtime_error, BenchmarkModelLoopDetected):
+                failure = FailureAnalysis(
+                    category="model_loop",
+                    reason=str(runtime_error),
+                    evidence={"benchmark_policy": loop_info},
+                    subsystem="model_behavior",
+                    improvement_hints=[],
+                )
+            elif isinstance(runtime_error, BenchmarkBudgetExceeded):
+                failure = FailureAnalysis(
+                    category="benchmark_budget_exhausted",
+                    reason=str(runtime_error),
+                    evidence={"benchmark_policy": loop_info},
+                    subsystem="model_behavior",
+                    improvement_hints=[],
+                )
+            elif execution_blocker is not None:
                 failure = FailureAnalysis(
                     category="benchmark_execution_blocked",
                     reason=execution_blocker["reason"],
@@ -1011,8 +1356,7 @@ def run_benchmarks(
                 "oracle": {},
             }
             aggregate_session_id = aggregate_session_id or state.session_id
-        collector.add(
-            BenchmarkTaskResult(
+        task_result = BenchmarkTaskResult(
                 task_id=task.task_id,
                 task_type=task.task_type,
                 difficulty=task.difficulty,
@@ -1048,6 +1392,9 @@ def run_benchmarks(
                 history_path=aggregate_history_paths[0] if aggregate_history_paths else None,
                 workspace=aggregate_workspace_paths[0] if aggregate_workspace_paths else "",
             )
+        collector.add(task_result)
+        _checkpoint_task_result(
+            checkpoint_path, checkpoint=checkpoint, result=task_result
         )
         task_score_percent, _ = build_task_rubric(
             success=aggregate_success,
@@ -1116,9 +1463,17 @@ def run_benchmarks(
             "seeds": effective_seeds,
             "wall_clock_seconds": round(time.monotonic() - benchmark_started, 3),
             "task_count": len(selected_tasks),
+            "checkpoint_path": str(checkpoint_path),
+            "checkpoint_version": BENCHMARK_CHECKPOINT_VERSION,
+            "resumed_task_count": resumed_task_count,
+            "fresh_task_count": len(selected_tasks) - resumed_task_count,
         },
     )
     payload = asdict(report)
+    checkpoint["finished"] = True
+    checkpoint["finished_at_epoch"] = time.time()
+    checkpoint["final_results_path"] = str(report.run_metadata.get("results_path", ""))
+    _atomic_write_json(checkpoint_path, checkpoint)
     _print_benchmark_summary(payload)
     return payload
 
@@ -1191,6 +1546,30 @@ def _build_parser() -> argparse.ArgumentParser:
     context_layout_parser.add_argument("--output", default="context_layout_output.json", help="JSON result path.")
     context_layout_parser.add_argument("--json", action="store_true", help="Print the full JSON report.")
 
+    constraint_decoding_parser = subparsers.add_parser(
+        "constraint-decoding",
+        help="Stress generation-time JSON-schema constrained decoding across production runtime contracts.",
+    )
+    constraint_decoding_parser.add_argument(
+        "--output", default="constraint_decoding_output.json", help="Checkpointed JSON result path."
+    )
+    constraint_decoding_parser.add_argument(
+        "--case", action="append", default=[], help="Run only the named contract case. Repeat as needed."
+    )
+    constraint_decoding_parser.add_argument(
+        "--seeds", default="17,42,91", help="Comma-separated exact generation seeds."
+    )
+    constraint_decoding_parser.add_argument(
+        "--repetitions-per-seed", type=int, default=10, help="Repeated calls for every case/seed pair."
+    )
+    constraint_decoding_parser.add_argument("--model-base-url", help="Optional live model endpoint override.")
+    constraint_decoding_parser.add_argument("--timeout-seconds", type=int, help="Override the no-token timeout.")
+    constraint_decoding_parser.add_argument(
+        "--no-resume", dest="resume", action="store_false", help="Reject reuse of an existing checkpoint."
+    )
+    constraint_decoding_parser.set_defaults(resume=True)
+    constraint_decoding_parser.add_argument("--json", action="store_true", help="Print the full JSON report.")
+
     tool_strategy_parser = subparsers.add_parser(
         "tool-strategy",
         help="Compare generic shell use with bespoke structured tools on identical live tasks.",
@@ -1258,6 +1637,20 @@ def _build_parser() -> argparse.ArgumentParser:
     context_engineering_parser.add_argument(
         "--json", action="store_true", help="Print the full JSON report."
     )
+
+    long_horizon_parser = subparsers.add_parser(
+        "long-horizon-context",
+        help="Stress repeated compaction, adversarial conflicts, semantic retrieval, and measured overflow provenance.",
+    )
+    long_horizon_parser.add_argument(
+        "--output", default="long_horizon_context_output", help="Checkpointed artifact directory."
+    )
+    long_horizon_parser.add_argument("--cycles", type=int, default=12, help="Repeated semantic compaction cycles.")
+    long_horizon_parser.add_argument("--overflow-trials", type=int, default=3, help="Independent measured-overflow projection trials.")
+    long_horizon_parser.add_argument("--model-base-url", help="Optional already-running model endpoint override.")
+    long_horizon_parser.add_argument("--timeout-seconds", type=int, help="Override the no-token timeout.")
+    long_horizon_parser.add_argument("--clean", action="store_true", help="Replace an existing artifact directory.")
+    long_horizon_parser.add_argument("--json", action="store_true", help="Print the full JSON report.")
 
     response_presentation_parser = subparsers.add_parser(
         "response-presentation",
@@ -1622,6 +2015,34 @@ def main(argv: Sequence[str] | None = None) -> int:
                 print(f"{field}={values['passed']}/{values['completed']}")
             print(f"output={args.output}")
         return 0 if report["passed"] == report["total"] else 1
+    if args.command == "constraint-decoding":
+        from swaag.benchmark.constraint_decoding import run_constraint_decoding_benchmark
+
+        report = run_constraint_decoding_benchmark(
+            config=_live_experiment_config(
+                model_base_url=args.model_base_url,
+                timeout_seconds=args.timeout_seconds,
+            ),
+            output_path=Path(args.output),
+            seeds=_parse_seed_list(args.seeds, default=(17, 42, 91)),
+            repetitions_per_seed=int(args.repetitions_per_seed),
+            case_ids=list(args.case),
+            resume=bool(args.resume),
+        )
+        if args.json:
+            print(stable_json_dumps(report, indent=2))
+        else:
+            print(
+                f"structurally_valid={report['structurally_valid']}/{report['completed_calls']} "
+                f"({report['structural_valid_percent']}%)"
+            )
+            print(
+                f"semantic_passed={report['semantic_passed']}/{report['completed_calls']} "
+                f"({report['semantic_pass_percent']}%)"
+            )
+            print(f"output={args.output}")
+        return 0 if report["complete"] and report["structurally_valid"] == report["planned_calls"] else 1
+
     if args.command == "tool-strategy":
         from swaag.benchmark.tool_strategy import run_tool_strategy_benchmark
 
@@ -1718,6 +2139,27 @@ def main(argv: Sequence[str] | None = None) -> int:
                 f"output={Path(args.output) / 'context_engineering_results.json'}"
             )
         return 0 if report["complete"] and report["passed"] == report["total"] else 1
+    if args.command == "long-horizon-context":
+        from swaag.benchmark.long_horizon_context import run_long_horizon_context_benchmark
+
+        report = run_long_horizon_context_benchmark(
+            output_dir=Path(args.output),
+            config=_live_experiment_config(
+                model_base_url=args.model_base_url,
+                timeout_seconds=args.timeout_seconds,
+            ),
+            cycles=int(args.cycles),
+            overflow_trials=int(args.overflow_trials),
+            clean=bool(args.clean),
+        )
+        if args.json:
+            print(stable_json_dumps(report, indent=2))
+        else:
+            for name, row in report["dimensions"].items():
+                print(f"{name}={row['passed']}/{row['total']}")
+            print(f"output={Path(args.output) / 'long_horizon_context_results.json'}")
+        return 0 if report["complete"] and report["all_dimensions_passed"] else 1
+
     if args.command == "response-presentation":
         from swaag.benchmark.response_presentation import (
             run_response_presentation_benchmark,

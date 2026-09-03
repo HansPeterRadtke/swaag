@@ -58,8 +58,6 @@ def test_external_benchmark_defaults_cover_all_required_integrations() -> None:
     assert config.external_benchmarks.agent_generation.allow_side_effect_tools is True
     assert config.external_benchmarks.agent_generation.model_timeout_seconds == 180
     assert config.external_benchmarks.agent_generation.model_structured_timeout_seconds == 240
-    assert config.external_benchmarks.agent_generation.runtime_max_total_actions == 40
-    assert config.external_benchmarks.agent_generation.runtime_tool_call_budget == 24
     assert config.external_benchmarks.agent_generation.solver_max_attempts == 2
     assert config.external_benchmarks.agent_generation.git_remote_base_url == "https://github.com"
     assert "Task details:" in config.external_benchmarks.agent_generation.prompt_template

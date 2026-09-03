@@ -188,6 +188,14 @@ def presentation_evaluation_contract() -> ContractSpec:
     )
 
 
+
+def completion_verdict_contract() -> ContractSpec:
+    """One semantic responsibility: decide only whether the objective is complete."""
+    return _contract(
+        "completion_verdict",
+        _closed_object({"complete": _boolean()}),
+    )
+
 def completion_evaluation_contract(
     evidence_sources: Iterable[tuple[str, str]] = (),
 ) -> ContractSpec:
@@ -213,6 +221,67 @@ def completion_evaluation_contract(
         _closed_object(properties),
     )
 
+
+
+
+
+def agent_capability_selection_contract(capability_names: Iterable[str]) -> ContractSpec:
+    """One semantic responsibility: choose one existing capability identity."""
+    names = sorted({str(name) for name in capability_names if str(name).strip() and str(name) != "load_tools"})
+    return _contract(
+        "agent_capability_selection",
+        _closed_object(
+            {
+                "capability": {"type": "string", "enum": [*names, "none"]},
+            }
+        ),
+    )
+
+def agent_tool_call_contract(tool_specs: Iterable[tuple]) -> ContractSpec:
+    """One semantic responsibility: select concrete tool calls and arguments."""
+    tool_call_variants: list[dict[str, Any]] = []
+    seen: set[str] = set()
+    for item in sorted(tool_specs, key=lambda value: str(value[0])):
+        name = str(item[0])
+        if name in seen:
+            continue
+        seen.add(name)
+        input_schema = item[2]
+        if not isinstance(input_schema, dict):
+            raise TypeError(f"Tool {name!r} has no JSON object input schema")
+        tool_call_variants.append(
+            _closed_object(
+                {
+                    "tool_name": {"type": "string", "enum": [name]},
+                    "arguments": deepcopy(input_schema),
+                }
+            )
+        )
+    if tool_call_variants:
+        item_schema: dict[str, Any] = {"anyOf": tool_call_variants}
+    else:
+        item_schema = _closed_object({})
+    return _contract(
+        "agent_tool_call",
+        _closed_object({"tool_calls": _array(item_schema)}),
+    )
+
+
+def agent_terminal_response_contract(*, allow_silent_completion: bool = False) -> ContractSpec:
+    """One semantic responsibility: produce the terminal user-facing response."""
+    return _contract(
+        "agent_terminal_response",
+        _closed_object(
+            {
+                "assistant_message": _string(),
+                "silent_completion": (
+                    _boolean()
+                    if allow_silent_completion
+                    else {"type": "boolean", "enum": [False]}
+                ),
+            }
+        ),
+    )
 
 def agent_action_contract(tool_specs: Iterable[tuple], *, allow_silent_completion: bool = False) -> ContractSpec:
     tool_call_variants: list[dict[str, Any]] = []

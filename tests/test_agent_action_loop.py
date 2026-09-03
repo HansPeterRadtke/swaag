@@ -733,27 +733,6 @@ def test_control_during_tool_action_preserves_completed_evidence_and_abandons_re
     assert interrupted[0].payload["abandoned_tool_calls"] == 1
 
 
-def test_identical_model_tool_response_is_rejected_for_recovery(make_config) -> None:
-    repeated = _action(
-        tool_calls=[("calculator", {"expression": "1 + 1"})],
-        continue_loop=True,
-    )
-    recovered = _action(message="Recovered after duplicate rejection.", continue_loop=False)
-    runtime, client = _runtime(make_config, [repeated, repeated, repeated, recovered])
-
-    result = runtime.run_turn("Keep calculating 1 + 1 forever.")
-
-    assert result.assistant_text == "Recovered after duplicate rejection."
-    assert len(client.requests) == 4
-    assert len(result.tool_results) == 1
-    events = runtime.history.read_history(result.session_id)
-    assert any(
-        event.event_type == "agent_action_rejected"
-        and "materially different next action" in str(event.payload.get("reason", ""))
-        for event in events
-    )
-
-
 def test_failure_analyzer_supports_current_action_loop_metrics_without_legacy_fields() -> None:
     from swaag.benchmark.failure_analyzer import FailureAnalyzer
     from swaag.types import HistoryEvent, SessionState
@@ -1111,7 +1090,7 @@ def test_zero_tool_budget_removes_tools_from_action_schema_and_prompt(make_confi
     assert "If no tools are listed" in seen["prompt"]
 
 
-def test_immediate_duplicate_action_is_rejected_before_second_execution(make_config, tmp_path) -> None:
+def test_immediate_duplicate_action_is_allowed_to_execute_again(make_config, tmp_path) -> None:
     config = make_config(runtime__tool_call_budget=4, runtime__max_total_actions=3, model__context_limit=32_000)
     config.sessions.root = tmp_path / "sessions"
     config.tools.read_roots = [tmp_path]
@@ -1123,8 +1102,12 @@ def test_immediate_duplicate_action_is_rejected_before_second_execution(make_con
     result = runtime.run_turn("Read a.txt once, then answer.")
     events = runtime.history.read_history(result.session_id)
     called = [e for e in events if e.event_type == "tool_called" and e.payload.get("tool_name") == "read_file"]
-    assert len(called) == 1
-    assert any(e.event_type == "agent_action_rejected" and "immediately preceding action" in str(e.payload.get("reason", "")) for e in events)
+    assert len(called) == 2
+    assert not any(
+        e.event_type == "agent_action_rejected"
+        and "immediately preceding action" in str(e.payload.get("reason", ""))
+        for e in events
+    )
 
 
 def test_benchmark_answer_fragments_are_case_insensitive_and_support_alternatives(tmp_path) -> None:
@@ -1338,7 +1321,7 @@ def test_action_seed_schedule_is_deterministic_for_same_base_seed(make_config) -
     assert run_once() == run_once() == [23, 26]
 
 
-def test_duplicate_tool_action_ignores_cosmetic_status_changes(make_config, tmp_path) -> None:
+def test_duplicate_tool_action_with_cosmetic_status_changes_is_allowed(make_config, tmp_path) -> None:
     config = make_config(runtime__tool_call_budget=4, runtime__max_total_actions=3, model__context_limit=32_000)
     config.sessions.root = tmp_path / "sessions"
     config.tools.read_roots = [tmp_path]
@@ -1363,34 +1346,12 @@ def test_duplicate_tool_action_ignores_cosmetic_status_changes(make_config, tmp_
     result = runtime.run_turn("Read a.txt once and answer with its content.")
     events = runtime.history.read_history(result.session_id)
     called = [e for e in events if e.event_type == "tool_called" and e.payload.get("tool_name") == "read_file"]
-    assert len(called) == 1
-    assert any(e.event_type == "agent_action_rejected" and "immediately preceding action" in str(e.payload.get("reason", "")) for e in events)
-
-
-def test_repeated_pure_call_is_rejected_until_state_changes(make_config, tmp_path) -> None:
-    config = make_config(runtime__tool_call_budget=5, runtime__max_total_actions=6, model__context_limit=32_000, tools__allow_side_effect_tools=True)
-    config.sessions.root = tmp_path / "sessions"
-    config.tools.read_roots = [tmp_path]
-    (tmp_path / "a.txt").write_text("alpha\n", encoding="utf-8")
-    (tmp_path / "b.txt").write_text("bravo\n", encoding="utf-8")
-    first_read = _action(tool_calls=[("read_file", {"path": "a.txt"})], continue_loop=True)
-    different_read = _action(tool_calls=[("read_file", {"path": "b.txt"})], continue_loop=True)
-    redundant_read = _action(
-        tool_calls=[("read_file", {"path": "a.txt"})],
-        continue_loop=True,
-        situation="Checking again.", status_action="Reread.", reason="Double-check.",
+    assert len(called) == 2
+    assert not any(
+        e.event_type == "agent_action_rejected"
+        and "immediately preceding action" in str(e.payload.get("reason", ""))
+        for e in events
     )
-    write = _action(tool_calls=[("write_file", {"path": "a.txt", "content": "beta\n", "create": False})], continue_loop=True)
-    reread_after_change = _action(tool_calls=[("read_file", {"path": "a.txt"})], continue_loop=True)
-    finish = _action(message="beta", continue_loop=False)
-    client = FakeModelClient([first_read, different_read, redundant_read, write, reread_after_change, finish])
-    runtime = AgentRuntime(config, model_client=client)
-    result = runtime.run_turn("Read a.txt and b.txt, change a.txt to beta, then reread a.txt.")
-    events = runtime.history.read_history(result.session_id)
-    reads = [e for e in events if e.event_type == "tool_called" and e.payload.get("tool_name") == "read_file"]
-    assert len(reads) == 3
-    assert any(e.event_type == "agent_action_rejected" and "repeats observation calls" in str(e.payload.get("reason", "")) for e in events)
-    assert result.assistant_text == "beta"
 
 
 def test_action_prompt_requires_explicit_decision_not_only_evidence(make_config) -> None:
@@ -1420,29 +1381,6 @@ def test_environment_state_exposes_authoritative_active_session(make_config) -> 
     assert f'"session_id": "{state.session_id}"' in environment
 
 
-def test_rejected_duplicate_does_not_consume_accepted_action_budget(make_config, tmp_path) -> None:
-    config = make_config(runtime__tool_call_budget=2, runtime__max_total_actions=2, model__context_limit=32_000)
-    config.sessions.root = tmp_path / "sessions"
-    config.tools.read_roots = [tmp_path]
-    (tmp_path / "a.txt").write_text("alpha\n", encoding="utf-8")
-    read = _action(tool_calls=[("read_file", {"path": "a.txt"})], continue_loop=True)
-    duplicate = _action(
-        tool_calls=[("read_file", {"path": "a.txt"})],
-        continue_loop=True,
-        situation="Checking again.", status_action="Reread.", reason="Double-checking.",
-    )
-    finish = _action(message="alpha", continue_loop=False)
-    client = FakeModelClient([read, duplicate, finish])
-    runtime = AgentRuntime(config, model_client=client)
-    result = runtime.run_turn("Read a.txt once and answer with its content.")
-    assert result.assistant_text == "alpha"
-    events = runtime.history.read_history(result.session_id)
-    called = [e for e in events if e.event_type == "tool_called" and e.payload.get("tool_name") == "read_file"]
-    assert len(called) == 1
-    terminal = [e for e in events if e.event_type == "agent_action_terminal"]
-    assert terminal[-1].payload["action_index"] == 2
-
-
 def test_validation_retry_exhaustion_retries_same_semantic_action(make_config) -> None:
     config = make_config(runtime__tool_call_budget=0, runtime__max_total_actions=1, model__context_limit=32_000)
     bad = '{"assistant_message":'
@@ -1457,83 +1395,105 @@ def test_validation_retry_exhaustion_retries_same_semantic_action(make_config) -
     assert len(client.requests) == 4
 
 
-def test_duplicate_recovery_feedback_contains_exact_calls_and_edit_reread_guidance(make_config, tmp_path) -> None:
-    config = make_config(runtime__tool_call_budget=2, runtime__max_total_actions=3, model__context_limit=32_000, tools__allow_side_effect_tools=True)
-    config.sessions.root = tmp_path / "sessions"
-    config.tools.read_roots = [tmp_path]
-    (tmp_path / "a.py").write_text("value = 1\n", encoding="utf-8")
-    first = _action(
-        tool_calls=[("edit_text", {"path": "a.py", "operation": "replace_exact", "old_text": "missing", "new_text": "value = 2", "replace_all": False})],
-        continue_loop=True,
+def test_single_responsibility_tool_contract_contains_only_tool_calls(make_config):
+    from swaag.grammar import agent_tool_call_contract
+    runtime = AgentRuntime(make_config())
+    schema = agent_tool_call_contract(runtime.tools.prompt_tuples(runtime.config)).json_schema
+    assert set(schema["properties"]) == {"tool_calls"}
+    assert schema["required"] == ["tool_calls"]
+
+
+def test_single_responsibility_terminal_contract_contains_only_response_fields():
+    from swaag.grammar import agent_terminal_response_contract
+    schema = agent_terminal_response_contract().json_schema
+    assert set(schema["properties"]) == {"assistant_message", "silent_completion"}
+    assert schema["required"] == ["assistant_message", "silent_completion"]
+
+
+def test_single_responsibility_mode_uses_tool_only_then_terminal_calls(make_config):
+    config = make_config(
+        model__max_semantic_responsibilities_per_call=1,
+        tools__staged_discovery=False,
+        model__context_limit=32_000,
     )
-    duplicate = _action(
-        tool_calls=[("edit_text", {"path": "a.py", "operation": "replace_exact", "old_text": "missing", "new_text": "value = 2", "replace_all": False})],
-        continue_loop=True,
-        situation="Retrying.", status_action="Retry edit.", reason="Try again.",
-    )
-    read = _action(tool_calls=[("read_file", {"path": "a.py"})], continue_loop=True)
-    finish = _action(message="done", continue_loop=False)
-    client = FakeModelClient([first, duplicate, read, finish])
+    responses = [
+        json.dumps({"tool_calls": [{"tool_name": "calculator", "arguments": {"expression": "37 * 19"}}]}),
+        json.dumps({"tool_calls": []}),
+        json.dumps({"assistant_message": "703", "silent_completion": False}),
+    ]
+    client = FakeModelClient(responses)
     runtime = AgentRuntime(config, model_client=client)
-    result = runtime.run_turn("Inspect a.py and fix it if needed.")
+    result = runtime.run_turn("What is 37 * 19? Use the calculator.")
+    assert result.assistant_text == "703"
+    assert [request["contract"] for request in client.requests] == [
+        "agent_tool_call", "agent_tool_call", "agent_terminal_response"
+    ]
+    assert set(client.requests[0]["json_schema"]["properties"]) == {"tool_calls"}
+    assert "continue_loop" not in client.requests[0]["json_schema"]["properties"]
+
+
+def test_fused_mode_keeps_legacy_action_contract(make_config):
+    config = make_config(
+        model__max_semantic_responsibilities_per_call=6,
+        tools__staged_discovery=False,
+        model__context_limit=32_000,
+    )
+    client = FakeModelClient([_action(message="done", continue_loop=False)])
+    runtime = AgentRuntime(config, model_client=client)
+    result = runtime.run_turn("Say done.")
     assert result.assistant_text == "done"
-    events = runtime.history.read_history(result.session_id)
-    rejected = [e for e in events if e.event_type == "agent_action_rejected"]
-    reason = "\n".join(str(e.payload.get("reason", "")) for e in rejected)
-    assert '"tool_name":"edit_text"' in reason
-    assert "reread the current target file" in reason
-    assert "a.py" in reason
+    assert client.requests[0]["contract"] == "agent_action"
 
 
-def test_repeated_observation_feedback_requires_synthesis_from_existing_evidence(make_config, tmp_path) -> None:
-    config = make_config(runtime__tool_call_budget=3, runtime__max_total_actions=3, model__context_limit=32_000)
-    config.sessions.root = tmp_path / "sessions"
-    config.tools.read_roots = [tmp_path]
-    (tmp_path / "facts.txt").write_text("owner=team-blue\n", encoding="utf-8")
-    (tmp_path / "other.txt").write_text("status=green\n", encoding="utf-8")
-    first = _action(tool_calls=[("read_file", {"path": "facts.txt"})], continue_loop=True)
-    different = _action(tool_calls=[("read_file", {"path": "other.txt"})], continue_loop=True)
-    repeated = _action(
-        tool_calls=[("read_file", {"path": "facts.txt"})],
-        continue_loop=True,
-        situation="Need certainty.", status_action="Read again.", reason="Double-check.",
+def test_single_responsibility_staged_discovery_selects_capability_then_loads_it(make_config):
+    config = make_config(
+        model__max_semantic_responsibilities_per_call=1,
+        tools__staged_discovery=True,
+        model__context_limit=32_000,
     )
-    finish = _action(message='{"owner":"team-blue"}', continue_loop=False)
-    client = FakeModelClient([first, different, repeated, finish])
+    client = FakeModelClient([
+        json.dumps({"capability": "calculator"}),
+        json.dumps({"tool_calls": [{"tool_name": "calculator", "arguments": {"expression": "37 * 19"}}]}),
+        json.dumps({"tool_calls": []}),
+        json.dumps({"capability": "none"}),
+        json.dumps({"assistant_message": "703", "silent_completion": False}),
+    ])
     runtime = AgentRuntime(config, model_client=client)
-    result = runtime.run_turn("Read facts.txt and other.txt and return the owner as JSON.")
-    assert result.assistant_text == '{"owner":"team-blue"}'
-    events = runtime.history.read_history(result.session_id)
-    rejected = [e for e in events if e.event_type == "agent_action_rejected"]
-    reason = "\n".join(str(e.payload.get("reason", "")) for e in rejected)
-    assert "Already-observed calls" in reason
-    assert "synthesize and return the final answer now" in reason
-    assert 'facts.txt' in reason
+    result = runtime.run_turn("What is 37 * 19? Use the calculator.")
+    assert result.assistant_text == "703"
+    assert [request["contract"] for request in client.requests] == [
+        "agent_capability_selection",
+        "agent_tool_call",
+        "agent_tool_call",
+        "agent_capability_selection",
+        "agent_terminal_response",
+    ]
+    first_schema = client.requests[0]["json_schema"]
+    assert "calculator" in first_schema["properties"]["capability"]["enum"]
+    assert "load_tools" not in first_schema["properties"]["capability"]["enum"]
 
 
-def test_repeated_observation_is_allowed_after_compaction_removes_visible_result(make_config, tmp_path) -> None:
-    config = make_config(runtime__tool_call_budget=4, runtime__max_total_actions=4, model__context_limit=32_000)
+def test_single_responsibility_tool_prompt_highlights_completed_observation(make_config, tmp_path):
+    config = make_config(
+        model__max_semantic_responsibilities_per_call=1,
+        tools__staged_discovery=False,
+        model__context_limit=32_000,
+    )
     config.sessions.root = tmp_path / "sessions"
     config.tools.read_roots = [tmp_path]
     (tmp_path / "a.txt").write_text("alpha\n", encoding="utf-8")
-    runtime, _client = _runtime(make_config, [_action(message="unused", continue_loop=False)])
-    runtime.config = config
-    state = runtime.create_or_load_session()
-    signature = stable_json_dumps({"tool_name": "read_file", "arguments": {"path": "a.txt"}}, indent=None)
-    runtime._record_message(state, Message(role="tool", name="read_file", content="alpha", created_at="t", metadata={"validated_input": {"path": "a.txt"}}))
-    assert signature in runtime._visible_observation_signatures(state)
-    state.messages = [Message(role="system", content="summary only", created_at="t")]
-    assert signature not in runtime._visible_observation_signatures(state)
-
-
-def test_duplicate_no_progress_limit_stops_boundedly(make_config, tmp_path) -> None:
-    config = make_config(runtime__tool_call_budget=4, runtime__max_total_actions=10, runtime__max_repeated_action_occurrences=2, model__context_limit=32_000)
-    config.sessions.root = tmp_path / "sessions"
-    config.tools.read_roots = [tmp_path]
-    (tmp_path / "a.txt").write_text("alpha\n", encoding="utf-8")
-    repeated = _action(tool_calls=[("read_file", {"path": "a.txt"})], continue_loop=True)
-    runtime, client = _runtime(make_config, [repeated, repeated, repeated, repeated])
-    runtime.config = config
-    result = runtime.run_turn("Read a.txt and answer.")
-    assert "no-progress limit" in result.assistant_text
-    assert len(client.requests) == 4
+    client = FakeModelClient([
+        json.dumps({"tool_calls": [{"tool_name": "read_file", "arguments": {"path": "a.txt"}}]}),
+        json.dumps({"tool_calls": []}),
+        json.dumps({"assistant_message": "alpha", "silent_completion": False}),
+    ])
+    runtime = AgentRuntime(config, model_client=client)
+    result = runtime.run_turn("Read a.txt and answer with its content.")
+    assert result.assistant_text == "alpha"
+    second_tool_request = [r for r in client.requests if r["contract"] == "agent_tool_call"][1]
+    prompt = second_tool_request["prompt"]
+    assert "Previously completed tool calls whose corresponding results are present in the current authoritative transcript" in prompt
+    assert '"tool_name":"read_file"' in prompt
+    assert '"path":"a.txt"' in prompt
+    assert "recorded execution; corresponding result/error evidence" in prompt
+    assert "Repetition may be semantically useful when external state or freshness matters" in prompt

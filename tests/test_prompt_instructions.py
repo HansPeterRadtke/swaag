@@ -318,8 +318,8 @@ def test_central_compiler_injects_every_matching_instruction_into_system_role(
     selected_event = runtime.history.read_history(state.session_id)[-1]
     assert selected_event.event_type == "prompt_instructions_selected"
     assert selected_event.payload["instruction_ids"] == [
-        action.instruction_id,
         universal.instruction_id,
+        action.instruction_id,
     ]
     assert selected_event.payload["exact"] is True
     event_count = state.event_count
@@ -419,8 +419,8 @@ def test_central_compiler_semantically_selects_fine_grained_instruction_categori
         "implementation",
     ]
     assert selected.payload["instruction_ids"] == [
-        programming.instruction_id,
         call_wide.instruction_id,
+        programming.instruction_id,
     ]
 
 
@@ -636,3 +636,140 @@ def test_user_prompt_instruction_store_rejects_tampered_event_chain(
         connection.commit()
     with pytest.raises(PromptInstructionStoreError, match="hash verification failed"):
         store.list()
+
+
+def test_trusted_prompt_instruction_authority_requires_provenance_and_orders_deterministically(make_config):
+    from swaag.prompt_instructions import (
+        make_prompt_instruction,
+        sort_prompt_instructions_by_authority,
+    )
+    config = make_config()
+    learned = make_prompt_instruction(
+        config,
+        title="Learned",
+        content="Prefer concise output.",
+        scopes=["communication_status"],
+    )
+    with pytest.raises(PromptInstructionError, match="require source_kind and source_ref"):
+        make_prompt_instruction(
+            config,
+            title="Recording",
+            content="Always include the blocker.",
+            scopes=["communication_status"],
+            authority="voice_recording",
+        )
+    recording_old = make_prompt_instruction(
+        config,
+        title="Recording old",
+        content="Use format A.",
+        scopes=["communication_status"],
+        authority="voice_recording",
+        source_kind="voicebutton_recording",
+        source_ref="recording-1",
+        specificity=50,
+    )
+    recording_new_specific = make_prompt_instruction(
+        config,
+        title="Recording specific",
+        content="Use format B for benchmark status.",
+        scopes=["communication_status"],
+        authority="voice_recording",
+        source_kind="voicebutton_recording",
+        source_ref="recording-2",
+        specificity=90,
+    )
+    correction = make_prompt_instruction(
+        config,
+        title="Explicit correction",
+        content="Never claim semantic certainty from runtime state.",
+        scopes=["communication_status"],
+        authority="explicit_user_correction",
+        source_kind="direct_user_correction",
+        source_ref="conversation:turn-7",
+        specificity=80,
+    )
+    ordered = sort_prompt_instructions_by_authority(
+        [learned, recording_old, recording_new_specific, correction]
+    )
+    assert [item.title for item in ordered] == [
+        "Explicit correction",
+        "Recording specific",
+        "Recording old",
+        "Learned",
+    ]
+
+
+def test_trusted_store_ingestion_is_explicit_and_legacy_rows_remain_learned(make_config):
+    config = make_config()
+    store = PromptInstructionStore(config.sessions.root, config)
+    legacy = store.add(
+        title="Learned user-store rule",
+        content="Prefer direct language.",
+        scopes=["communication_status"],
+        origin_session_id="session-model",
+    ).instruction
+    assert legacy is not None and legacy.authority == "learned_model"
+    trusted = store.add_trusted(
+        title="Recorded project rule",
+        content="Status answers must distinguish mechanical facts from semantic conclusions.",
+        scopes=["communication_status"],
+        authority="voice_recording",
+        source_kind="voicebutton_recording",
+        source_ref="/data/recordings/project/2026-09-02T20-00.ogg",
+        specificity=70,
+    ).instruction
+    assert trusted is not None
+    rebuilt = store.list()
+    assert rebuilt[0].authority == "learned_model"
+    assert rebuilt[1].authority == "voice_recording"
+    assert rebuilt[1].source_ref.endswith(".ogg")
+    with pytest.raises(PromptInstructionError, match="trusted ingestion cannot create authority"):
+        store.add_trusted(
+            title="Fake",
+            content="x",
+            scopes=["communication_status"],
+            authority="learned_model",
+            source_kind="fake",
+            source_ref="fake",
+        )
+
+
+def test_trusted_instruction_bypasses_semantic_selector(make_config):
+    config = make_config()
+    client = _InstructionSelectionClient()
+    runtime = AgentRuntime(config, model_client=client)
+    state = runtime.create_or_load_session()
+    runtime.prompt_instruction_store.add_trusted(
+        title="Recording authority",
+        content="Include exact blocker evidence.",
+        scopes=["communication_status"],
+        categories=["reporting"],
+        authority="voice_recording",
+        source_kind="voicebutton_recording",
+        source_ref="recording:42",
+        specificity=80,
+    )
+    runtime.prompt_instruction_store.add(
+        title="Learned categorized rule",
+        content="Use bullet summaries.",
+        scopes=["communication_status"],
+        categories=["reporting"],
+        origin_session_id=state.session_id,
+    )
+    assembly = runtime.prompts.build_semantic_operation_prompt(
+        kind="communication_status",
+        system_instruction="Explain status.",
+        components=[PromptComponent(name="q", category="current_user", text="What happened?")],
+    )
+    client.selected = []
+    runtime._compile_context(
+        state,
+        assembly,
+        yes_no_contract(),
+        minimum_output_tokens=64,
+        context_limit_resolution=(12_000, "test"),
+    )
+    exact = next(c for c in assembly.components if c.name == "durable_prompt_instructions")
+    assert "Recording authority" in exact.text
+    assert "Learned categorized rule" not in exact.text
+    assert "Trusted recording/user/project instructions are never semantically deselected" in exact.text

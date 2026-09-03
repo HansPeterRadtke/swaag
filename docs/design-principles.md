@@ -103,3 +103,13 @@ Operational telemetry should map onto OpenTelemetry GenAI conventions where appl
 Swaag keeps a sequential inner model/tool loop but now surrounds it with independently addressable durable workers, a transport-neutral task/event API, backend-neutral inference admission, ordered control and cancellation, worker-aware wakeup dispatch, and a supervised communication service. Every current production semantic operation uses central full-fidelity-first context compilation. Raw event history and artifacts remain authoritative while overflow projections retain exact lineage. Independent completion evaluation, staged semantic tool discovery, caller-defined output, response-presentation stages, protocol adapters, and OpenTelemetry instrumentation are implemented and covered by deterministic tests.
 
 This is still not the completed target. Live model experiments and replay catalogs remain required for context layout, compaction, tool strategy, research, autonomy, prompt instructions, presentation, cancellation, and long-horizon behavior. Communication model routing lacks a genuinely distinct small/strong deployment comparison. AG-UI, A2A, MCP, and Open WebUI adapters still have the conformance and exposure gaps recorded in `TODO.md`; attachment specialists and the host Collector/live telemetry path remain partial. Do not promote those partial areas to complete based only on unit tests or interface shape.
+
+## Benchmark/runtime separation
+
+Production runtime enforces only mechanically knowable safety, protocol, authorization, resource, and state-consistency constraints. Benchmark task definitions own evaluation-only action/tool/repetition budgets because the benchmark owns the task oracle and finite test boundary. Benchmark limits must never be injected into production AgentConfig.
+
+The benchmark runner persists an atomic configuration-signed checkpoint after each completed task. Compatible restarts restore completed task results and skip them; incompatible settings are rejected rather than silently mixing results. `--clean` is the explicit destructive opt-in.
+
+## Evaluation dimensions must remain separable
+
+Benchmarks must not collapse mechanically different claims into one pass rate. Generation-time schema validity is separate from semantic correctness. Exact long-horizon fact preservation is separate from provenance/recoverability, semantic retrieval, resistance to later conflicting material, and measured overflow handling. A benchmark may aggregate these dimensions for convenience only if it also reports every constituent dimension independently. See `docs/benchmark-methodology.md`.
