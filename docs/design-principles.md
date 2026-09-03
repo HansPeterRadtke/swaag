@@ -113,3 +113,7 @@ The benchmark runner persists an atomic configuration-signed checkpoint after ea
 ## Evaluation dimensions must remain separable
 
 Benchmarks must not collapse mechanically different claims into one pass rate. Generation-time schema validity is separate from semantic correctness. Exact long-horizon fact preservation is separate from provenance/recoverability, semantic retrieval, resistance to later conflicting material, and measured overflow handling. A benchmark may aggregate these dimensions for convenience only if it also reports every constituent dimension independently. See `docs/benchmark-methodology.md`.
+
+## Durable instruction authority
+
+Durable semantic memory has an explicit trust boundary. Model-authored rules are learned operating preferences and may never assign themselves project/user authority. Trusted project or user instructions require a trusted ingestion path with source provenance. Trusted entries are never removed from a call by model relevance selection; conflicts within the durable layer resolve deterministically by authority, specificity, then recency. The current user request remains the governing authority for the current turn.
