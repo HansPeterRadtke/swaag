@@ -46,6 +46,7 @@ from swaag.grammar import (
     completion_evaluation_contract,
     completion_verdict_contract,
     evidence_projection_contract,
+    history_compaction_selection_contract,
     note_selection_contract,
     prompt_instruction_selection_contract,
     prompt_instruction_projection_contract,
@@ -303,7 +304,7 @@ class AgentRuntime:
         self._token_counter = token_counter
         self._token_count_cache: dict[str, CountResult] = {}
         self._sleep = time.sleep
-        self._max_model_unavailable_attempts: int = max(1, int(self.config.model.max_retries) + 1)
+        self._max_model_unavailable_attempts: int | None = None
 
     @classmethod
     def from_config_paths(cls, config_paths: list[str] | None = None) -> AgentRuntime:
@@ -1719,12 +1720,6 @@ class AgentRuntime:
         remaining_runtime_projection_calls = [
             max(8, int(self.config.context.max_compaction_rounds) * 8)
         ]
-        selection_counter = self._counter(state)
-        selection_components = self._runtime_context_components(
-            state,
-            selection_counter,
-            selected_notes=list(state.notes),
-        )
         authoritative_messages = self.history.read_authoritative_messages(
             state.session_id
         )
@@ -1734,18 +1729,11 @@ class AgentRuntime:
             authoritative_messages if has_derived_history else projected_messages
         )
         history_source = "authoritative_message_events"
-        selection_assembly = self.prompts.build_agent_action_prompt(
-            history_messages,
-            tool_specs,
-            original_request=original_request,
-            pending_user_messages=pending_messages,
-            prompt_mode="standard",
-            context_components=selection_components,
-            capability_index=capability_index,
-            tool_result_projections=tool_result_projections,
-            validation_feedback=validation_feedback,
-        )
-        selected_notes = self._select_action_notes(state, selection_assembly)
+        # Full-fidelity note state gets the first measured admission attempt.
+        # Relevance selection is semantic reduction and must only occur after
+        # measured overflow proves that exact inclusion does not fit.
+        selected_notes = list(state.notes)
+        note_selection_attempted = False
         max_rounds = max(0, int(self.config.context.max_compaction_rounds))
         effective_minimum = (
             self.config.context.reserved_response_tokens
@@ -1835,6 +1823,12 @@ class AgentRuntime:
                 )
             if not self.config.context.compact_on_overflow or compaction_round >= max_rounds:
                 break
+            if not note_selection_attempted and state.notes:
+                note_selection_attempted = True
+                reduced_notes = self._select_action_notes(state, assembly)
+                if {note.note_id for note in reduced_notes} != {note.note_id for note in selected_notes}:
+                    selected_notes = reduced_notes
+                    continue
             projected = self._project_largest_tool_result_for_overflow(
                 state,
                 original_request=original_request,
@@ -2002,7 +1996,7 @@ class AgentRuntime:
         remaining_historical_projection_calls = [
             max(16, int(self.config.context.max_compaction_rounds) * 16)
         ]
-        context_limit_resolution = self._resolve_context_limit()
+        context_limit_resolution = self._resolve_context_limit(state)
         projections: dict[int, str] = {}
         reexpanded_evidence: dict[str, dict[str, Any]] = {}
         reexpanded_evidence_projections: dict[str, str] = {}
@@ -2617,7 +2611,7 @@ class AgentRuntime:
             indent=None,
         )
         exact_evidence_tokens = self._counter(state).count_text(exact_evidence).tokens
-        context_limit_resolution = self._resolve_context_limit()
+        context_limit_resolution = self._resolve_context_limit(state)
         minimum_output_tokens = 128
         # Let the central budget policy derive this operation's soft output
         # maximum from the live context limit. A fixed cap can repeatedly
@@ -3951,7 +3945,11 @@ class AgentRuntime:
             if recovered is not None:
                 compilation = recovered
                 prompt_instruction_projected = True
-        if compilation.report.fits:
+        reduction_cap = max(0, int(self.config.context.semantic_reduction_max_input_tokens))
+        exceeds_reduction_working_set = (
+            reduction_cap > 0 and compilation.report.input_tokens > reduction_cap
+        )
+        if compilation.report.fits and not exceeds_reduction_working_set:
             if remaining_calls[0] <= 0:
                 raise BudgetExceededError(
                     f"{assembly.kind} exhausted its bounded semantic call budget",
@@ -4015,6 +4013,17 @@ class AgentRuntime:
                     raise ValueError(f"{assembly.kind} output must not be empty")
                 return reduced, final_prepared.report
 
+        if exceeds_reduction_working_set:
+            self.history.record_event(
+                state,
+                "semantic_reduction_working_set_exceeded",
+                {
+                    "kind": assembly.kind,
+                    "hierarchical_depth": depth,
+                    "input_tokens": compilation.report.input_tokens,
+                    "working_set_limit_tokens": reduction_cap,
+                },
+            )
         if depth >= 16 or len(source_text) < 2:
             raise BudgetExceededError(
                 f"An exact source cannot be segmented enough to fit {assembly.kind}",
@@ -4448,7 +4457,7 @@ class AgentRuntime:
                     )
                 ),
                 remaining_calls=remaining_calls,
-                context_limit_resolution=self._resolve_context_limit(),
+                context_limit_resolution=self._resolve_context_limit(state),
             )
         except (BudgetExceededError, OutputBudgetExhaustedError) as exc:
             self.history.record_event(
@@ -4847,7 +4856,7 @@ class AgentRuntime:
         self._materialize_prompt_protocol(assembly)
         activity("measuring_context", f"measuring {assembly.kind} context")
         context_limit, context_limit_source = (
-            self._resolve_context_limit()
+            self._resolve_context_limit(state)
             if context_limit_resolution is None
             else context_limit_resolution
         )
@@ -5513,16 +5522,17 @@ class AgentRuntime:
                 minimum_output_tokens = expanded
                 output_retry += 1
 
-    def _resolve_context_limit(self) -> tuple[int, str]:
-        resolver = getattr(self.client, "context_limit_resolution", None)
-        if callable(resolver):
-            value, source = resolver()
-        else:
+    def _resolve_context_limit(self, state: SessionState | None = None) -> tuple[int, str]:
+        def resolve() -> tuple[int, str]:
+            resolver = getattr(self.client, "context_limit_resolution", None)
+            if callable(resolver):
+                return resolver()
             server_resolver = getattr(self.client, "server_context_limit", None)
             if callable(server_resolver):
-                value, source = server_resolver(), "server_props:n_ctx"
-            else:
-                value, source = self.config.model.context_limit, "configured"
+                return server_resolver(), "server_props:n_ctx"
+            return self.config.model.context_limit, "configured"
+
+        value, source = self._retry_model_server_operation(resolve, state=state)
         if not isinstance(value, int) or isinstance(value, bool) or value <= 0:
             raise ModelClientError(f"Invalid resolved model context limit: {value!r}")
         return int(value), str(source)
@@ -5852,6 +5862,249 @@ class AgentRuntime:
             int(replacement_tokens),
         )
 
+    def _select_history_compaction_spans(
+        self,
+        state: SessionState,
+        messages: list[Message],
+    ) -> list[dict[str, Any]]:
+        """Semantically rank contiguous history spans without using age as relevance.
+
+        The exact history is first partitioned mechanically into several contiguous
+        windows so every region is evaluated by the model. Multi-message windows
+        that cannot fit the selector are split again. Adjacent windows may then be
+        composed only when none is protected. Composite spans inherit the worst
+        semantic criticality of their constituents and never consume the entire
+        history, so at least one exact region remains.
+        """
+        if len(messages) <= 1:
+            return []
+        criticality_rank = {
+            "compressible": 0,
+            "ordinary": 1,
+            "important": 2,
+            "protect": 3,
+        }
+        criticality_by_rank = {rank: name for name, rank in criticality_rank.items()}
+        # Four mechanically sized regions give the selector enough granularity to
+        # preserve an important old region while still composing enough safe
+        # neighboring material to recover a large measured overflow.
+        partition_count = min(4, len(messages))
+        boundaries = [
+            (index * len(messages)) // partition_count
+            for index in range(partition_count + 1)
+        ]
+        pending: list[tuple[int, int]] = [
+            (boundaries[index], boundaries[index + 1])
+            for index in range(partition_count)
+            if boundaries[index + 1] > boundaries[index]
+        ]
+        evaluated: list[dict[str, Any]] = []
+        while pending:
+            source_start, source_end = pending.pop(0)
+            if source_end <= source_start:
+                continue
+            window = messages[source_start:source_end]
+            rendered = self.prompts.render_messages(window)
+            references = message_source_event_references(window)
+            request = SemanticCallRequest(
+                kind="history_compaction_selection",
+                system_instruction=(
+                    "Judge whether this exact contiguous history window is safe to compress now. "
+                    "Do not use age or recency as a relevance signal. Protect current user direction, "
+                    "non-negotiable constraints, unresolved work, promises/commitments, causal facts, "
+                    "identifiers, paths/references, exact tool outcomes, and information whose wording "
+                    "may matter. Mark a window compressible only when semantic summarization can safely "
+                    "replace its exact text while raw source events remain recoverable."
+                ),
+                components=[
+                    PromptComponent(
+                        name="history_compaction_candidate",
+                        category="history",
+                        text=(
+                            f"Candidate span indexes: start={source_start}, end_exclusive={source_end}\n"
+                            f"Source-event references: {stable_json_dumps(references, indent=2)}\n\n"
+                            f"Exact candidate transcript:\n{rendered}"
+                        ),
+                    )
+                ],
+                contract=history_compaction_selection_contract(),
+                minimum_output_tokens=64,
+                desired_output_tokens=192,
+                include_prompt_instructions=False,
+            )
+            try:
+                payload = self._execute_tool_semantic_call(state, request)
+                criticality = str(payload["criticality"])
+                reason = str(payload["reason"])
+            except SemanticCallContextOverflow:
+                if source_end - source_start > 1:
+                    split = source_start + ((source_end - source_start) // 2)
+                    pending[0:0] = [(source_start, split), (split, source_end)]
+                    continue
+                # A single oversized message is not semantically irrelevant merely
+                # because one selector prompt cannot hold it. Mechanically split the
+                # exact text, evaluate every fragment, then aggregate the worst
+                # criticality back to the original message.
+                original = window[0]
+                fragments: list[tuple[str, int]] = [(original.content, 0)]
+                fragment_results: list[tuple[str, str]] = []
+                while fragments:
+                    content, depth = fragments.pop(0)
+                    fragment = Message(
+                        role=original.role,
+                        content=content,
+                        created_at=original.created_at,
+                        name=original.name,
+                        metadata={
+                            **original.metadata,
+                            "history_compaction_selector_fragment_depth": depth,
+                        },
+                    )
+                    fragment_rendered = self.prompts.render_messages([fragment])
+                    fragment_request = SemanticCallRequest(
+                        kind="history_compaction_selection",
+                        system_instruction=(
+                            "Judge this exact fragment of one oversized history message. "
+                            "Do not use age or recency as relevance. Protect any fragment containing "
+                            "current user direction, non-negotiable constraints, unresolved work, "
+                            "promises/commitments, causal facts, identifiers, paths/references, exact "
+                            "tool outcomes, or wording whose exact form may matter. Mark compressible "
+                            "only if semantic summarization can safely replace this fragment while the "
+                            "raw source event remains recoverable."
+                        ),
+                        components=[
+                            PromptComponent(
+                                name="history_compaction_candidate_fragment",
+                                category="history",
+                                text=(
+                                    f"Original message index: {source_start}\n"
+                                    f"Fragment depth: {depth}\n"
+                                    f"Source-event references: {stable_json_dumps(references, indent=2)}\n\n"
+                                    f"Exact fragment transcript:\n{fragment_rendered}"
+                                ),
+                            )
+                        ],
+                        contract=history_compaction_selection_contract(),
+                        minimum_output_tokens=64,
+                        desired_output_tokens=192,
+                        include_prompt_instructions=False,
+                    )
+                    try:
+                        fragment_payload = self._execute_tool_semantic_call(
+                            state, fragment_request
+                        )
+                    except SemanticCallContextOverflow:
+                        if len(content) < 2 or depth >= 24:
+                            fragment_results.append(
+                                (
+                                    "protect",
+                                    "Exact fragment cannot be segmented enough to fit selector context.",
+                                )
+                            )
+                            continue
+                        midpoint = len(content) // 2
+                        fragments[0:0] = [
+                            (content[:midpoint], depth + 1),
+                            (content[midpoint:], depth + 1),
+                        ]
+                        continue
+                    except (ModelCallStateChanged, RunCancellationRequested):
+                        raise
+                    except Exception:
+                        return []
+                    fragment_results.append(
+                        (
+                            str(fragment_payload["criticality"]),
+                            str(fragment_payload["reason"]),
+                        )
+                    )
+                if not fragment_results:
+                    return []
+                worst_rank = max(
+                    criticality_rank[result[0]] for result in fragment_results
+                )
+                criticality = criticality_by_rank[worst_rank]
+                reason = (
+                    "Aggregated oversized-message fragment judgments: "
+                    + " | ".join(
+                        f"{level}: {fragment_reason}"
+                        for level, fragment_reason in fragment_results
+                    )
+                )
+            except (ModelCallStateChanged, RunCancellationRequested):
+                raise
+            except Exception:
+                return []
+            evaluated.append(
+                {
+                    "source_message_start": source_start,
+                    "source_message_count": source_end - source_start,
+                    "criticality": criticality,
+                    "reason": reason,
+                    "source_tokens": int(self._counter(state).count_text(rendered).tokens),
+                    "source_sha256": sha256_text(rendered),
+                    "source_event_references": references,
+                    "constituent_windows": 1,
+                }
+            )
+        if not evaluated:
+            return []
+        evaluated.sort(key=lambda item: int(item["source_message_start"]))
+
+        candidates: list[dict[str, Any]] = [dict(item) for item in evaluated]
+        # Compose every adjacent non-protected run. Composition is based only on
+        # already-recorded semantic judgments; no age or recency preference enters.
+        for left in range(len(evaluated)):
+            if evaluated[left]["criticality"] == "protect":
+                continue
+            worst_rank = -1
+            reasons: list[str] = []
+            for right in range(left, len(evaluated)):
+                item = evaluated[right]
+                if item["criticality"] == "protect":
+                    break
+                worst_rank = max(worst_rank, criticality_rank[str(item["criticality"])])
+                reasons.append(str(item["reason"]))
+                if right == left:
+                    continue
+                source_start = int(evaluated[left]["source_message_start"])
+                source_end = int(item["source_message_start"]) + int(item["source_message_count"])
+                source_count = source_end - source_start
+                if source_count >= len(messages):
+                    continue
+                source_messages = messages[source_start:source_end]
+                rendered = self.prompts.render_messages(source_messages)
+                candidates.append(
+                    {
+                        "source_message_start": source_start,
+                        "source_message_count": source_count,
+                        "criticality": criticality_by_rank[worst_rank],
+                        "reason": "Composite of semantically evaluated adjacent windows: " + " | ".join(reasons),
+                        "source_tokens": int(self._counter(state).count_text(rendered).tokens),
+                        "source_sha256": sha256_text(rendered),
+                        "source_event_references": message_source_event_references(source_messages),
+                        "constituent_windows": right - left + 1,
+                    }
+                )
+        # Deduplicate exact spans, preferring the semantically safest representation.
+        by_span: dict[tuple[int, int], dict[str, Any]] = {}
+        for candidate in candidates:
+            key = (
+                int(candidate["source_message_start"]),
+                int(candidate["source_message_count"]),
+            )
+            existing = by_span.get(key)
+            if existing is None or criticality_rank[str(candidate["criticality"])] < criticality_rank[str(existing["criticality"])]:
+                by_span[key] = candidate
+        return sorted(
+            by_span.values(),
+            key=lambda item: (
+                criticality_rank[str(item["criticality"])],
+                -int(item["source_tokens"]),
+                str(item["source_sha256"]),
+            ),
+        )
+
     def _record_history_reduction(
         self,
         state: SessionState,
@@ -5863,10 +6116,12 @@ class AgentRuntime:
     ) -> None:
         self.history.record_event(state, "summary_created", event_payload)
         if reproject_authoritative:
+            source_start = int(event_payload.get("source_message_start", 0))
             source_count = int(event_payload["source_message_count"])
             projected_messages = [
+                *complete_source_messages[:source_start],
                 Message(**dict(event_payload["summary_message"])),
-                *complete_source_messages[source_count:],
+                *complete_source_messages[source_start + source_count :],
             ]
             self.history.record_event(
                 state,
@@ -5901,20 +6156,24 @@ class AgentRuntime:
         reproject_authoritative = authoritative_messages is not None
         if len(complete_source_messages) <= 2:
             return False
-        # Keep one message outside the candidate and require at least one exact
-        # source to be replaced. Semantic retention within the candidate belongs
-        # to the summary model, not a configured age cutoff.
-        maximum_source = len(complete_source_messages) - 1
-        if maximum_source <= 0:
+        ranked_spans = self._select_history_compaction_spans(
+            state, complete_source_messages
+        )
+        if not ranked_spans:
             return False
 
         contract = summary_contract()
-        context_limit_resolution = self._resolve_context_limit()
+        context_limit_resolution = self._resolve_context_limit(state)
         minimum_summary_tokens = int(self.config.context.reserved_summary_tokens)
         required_recovery = max(1, int(required_recovery_tokens))
-        hierarchical_target: tuple[int, int] | None = None
-        for source_count in range(1, maximum_source + 1):
-            source_messages = complete_source_messages[:source_count]
+        for selection_rank, candidate in enumerate(ranked_spans, start=1):
+            if candidate["criticality"] == "protect":
+                continue
+            source_start = int(candidate["source_message_start"])
+            source_count = int(candidate["source_message_count"])
+            source_messages = complete_source_messages[
+                source_start : source_start + source_count
+            ]
             target = self._history_compaction_target(
                 state,
                 source_messages,
@@ -5923,8 +6182,6 @@ class AgentRuntime:
             if target is None:
                 continue
             target_summary_tokens, estimated_source_tokens = target
-            if source_count == 1:
-                hierarchical_target = target
             adaptive_cap = max(0, source_count - 1)
             assembly = self.prompts.build_summary_prompt(
                 source_messages,
@@ -5942,63 +6199,102 @@ class AgentRuntime:
             )
             report = compilation.report
             if not report.fits:
-                continue
-            self.history.record_event(
-                state,
-                "context_compiled",
-                {
-                    "kind": "summary",
-                    "prompt_mode": "lean",
-                    "accounting": compilation.accounting(),
-                    "target_summary_tokens": target_summary_tokens,
-                },
-            )
-            self._record_prompt_built(state, assembly, contract, report)
-            self.telemetry.record_semantic_reduction(
-                call_kind="summary",
-                target_tokens=target_summary_tokens,
-                hierarchical_depth=0,
-            )
-            try:
-                payload, final_prepared = self._execute_with_output_recovery(
-                    state,
-                    PreparedCall(assembly, report, "lean", contract),
-                    minimum_output_tokens=minimum_summary_tokens,
-                    desired_output_tokens=target_summary_tokens + 64,
-                    context_limit_resolution=context_limit_resolution,
+                # The relevance boundary has already been chosen semantically.
+                # If that selected region is too large for one summary call, render
+                # it as one synthetic exact transcript and hierarchically reduce it
+                # without making any further age/relevance decision inside the span.
+                synthetic = Message(
+                    role="user",
+                    content=self.prompts.render_messages(source_messages),
+                    created_at=utc_now_iso(),
                 )
-            except _OutputRecoveryContextOverflow as exc:
-                minimum_summary_tokens = exc.minimum_output_tokens
-                continue
-            report = final_prepared.report
-            summary_text = str(payload.get("summary", "")).strip()
-            if not summary_text:
-                raise ValueError("summary must not be empty")
-            preserve_recent = self._validated_preserve_recent_messages(
-                payload.get("preserve_recent_messages", 0),
-                source_count=source_count,
-                maximum=adaptive_cap,
-            )
+                summary_text, report = self._summarize_oversized_message(
+                    state,
+                    synthetic,
+                    target_summary_tokens=target_summary_tokens,
+                    context_limit_resolution=context_limit_resolution,
+                    remaining_calls=[
+                        max(16, int(self.config.context.max_compaction_rounds) * 16)
+                    ],
+                )
+                preserve_recent = 0
+                hierarchical = True
+            else:
+                self.history.record_event(
+                    state,
+                    "context_compiled",
+                    {
+                        "kind": "summary",
+                        "prompt_mode": "lean",
+                        "accounting": compilation.accounting(),
+                        "target_summary_tokens": target_summary_tokens,
+                    },
+                )
+                self._record_prompt_built(state, assembly, contract, report)
+                self.telemetry.record_semantic_reduction(
+                    call_kind="summary",
+                    target_tokens=target_summary_tokens,
+                    hierarchical_depth=0,
+                )
+                try:
+                    payload, final_prepared = self._execute_with_output_recovery(
+                        state,
+                        PreparedCall(assembly, report, "lean", contract),
+                        minimum_output_tokens=minimum_summary_tokens,
+                        desired_output_tokens=target_summary_tokens + 64,
+                        context_limit_resolution=context_limit_resolution,
+                    )
+                except _OutputRecoveryContextOverflow as exc:
+                    minimum_summary_tokens = exc.minimum_output_tokens
+                    continue
+                report = final_prepared.report
+                summary_text = str(payload.get("summary", "")).strip()
+                if not summary_text:
+                    raise ValueError("summary must not be empty")
+                preserve_recent = self._validated_preserve_recent_messages(
+                    payload.get("preserve_recent_messages", 0),
+                    source_count=source_count,
+                    maximum=adaptive_cap,
+                )
+                hierarchical = False
+
             effective_source_count = source_count - preserve_recent
+            if effective_source_count <= 0:
+                continue
+            effective_source_messages = source_messages[:effective_source_count]
             source_event_references = message_source_event_references(
-                source_messages[:effective_source_count]
+                effective_source_messages
             )
             summary_payload = summary_message_payload(
                 summary_text,
                 source_message_count=effective_source_count,
                 created_at=utc_now_iso(),
+                source_message_start=source_start,
                 source_event_references=source_event_references,
             )
             recovered_tokens, actual_source_tokens, replacement_tokens = (
                 self._compaction_recovery(
-                    state,
-                    source_messages[:effective_source_count],
-                    summary_payload,
+                    state, effective_source_messages, summary_payload
                 )
             )
             if recovered_tokens <= 0:
                 continue
+            self.history.record_event(
+                state,
+                "history_compaction_span_selected",
+                {
+                    "source_message_start": source_start,
+                    "source_message_count": effective_source_count,
+                    "criticality": candidate["criticality"],
+                    "reason": candidate["reason"],
+                    "candidate_count": len(ranked_spans),
+                    "all_windows_evaluated": True,
+                    "selection_rank": selection_rank,
+                    "evaluated_windows": ranked_spans,
+                },
+            )
             event_payload = {
+                "source_message_start": source_start,
                 "source_message_count": effective_source_count,
                 "source_event_references": source_event_references,
                 "source_event_ranges": summary_payload["metadata"]["source_event_ranges"],
@@ -6006,6 +6302,7 @@ class AgentRuntime:
                 "summary_budget_report": asdict(report),
                 "adaptive_preserve_recent_messages": preserve_recent,
                 "candidate_source_message_count": source_count,
+                "hierarchical": hierarchical,
                 "required_recovery_tokens": required_recovery,
                 "target_summary_tokens": target_summary_tokens,
                 "estimated_source_tokens": estimated_source_tokens,
@@ -6018,55 +6315,7 @@ class AgentRuntime:
                 event_payload=event_payload,
                 complete_source_messages=complete_source_messages,
                 reproject_authoritative=reproject_authoritative,
-                hierarchical=False,
-            )
-            return True
-        source_messages = complete_source_messages[:1]
-        if source_messages and hierarchical_target is not None:
-            target_summary_tokens, estimated_source_tokens = hierarchical_target
-            summary_text, report = self._summarize_oversized_message(
-                state,
-                source_messages[0],
-                target_summary_tokens=target_summary_tokens,
-                context_limit_resolution=context_limit_resolution,
-                remaining_calls=[
-                    max(16, int(self.config.context.max_compaction_rounds) * 16)
-                ],
-            )
-            source_event_references = message_source_event_references(source_messages)
-            summary_payload = summary_message_payload(
-                summary_text,
-                source_message_count=1,
-                created_at=utc_now_iso(),
-                source_event_references=source_event_references,
-            )
-            recovered_tokens, actual_source_tokens, replacement_tokens = (
-                self._compaction_recovery(state, source_messages, summary_payload)
-            )
-            if recovered_tokens <= 0:
-                return False
-            event_payload = {
-                "source_message_count": 1,
-                "source_event_references": source_event_references,
-                "source_event_ranges": summary_payload["metadata"]["source_event_ranges"],
-                "summary_message": summary_payload,
-                "summary_budget_report": asdict(report),
-                "adaptive_preserve_recent_messages": 0,
-                "candidate_source_message_count": 1,
-                "hierarchical": True,
-                "required_recovery_tokens": required_recovery,
-                "target_summary_tokens": target_summary_tokens,
-                "estimated_source_tokens": estimated_source_tokens,
-                "actual_source_tokens": actual_source_tokens,
-                "actual_replacement_tokens": replacement_tokens,
-                "actual_recovered_tokens": recovered_tokens,
-            }
-            self._record_history_reduction(
-                state,
-                event_payload=event_payload,
-                complete_source_messages=complete_source_messages,
-                reproject_authoritative=reproject_authoritative,
-                hierarchical=True,
+                hierarchical=hierarchical,
             )
             return True
         return False
@@ -6904,7 +7153,10 @@ class AgentRuntime:
                             "evidence": failure_evidence,
                         },
                     )
-                    if transient_attempts > self._max_model_unavailable_attempts:
+                    if (
+                        self._max_model_unavailable_attempts is not None
+                        and transient_attempts > self._max_model_unavailable_attempts
+                    ):
                         guard.record(
                             "model_call_failed",
                             {
@@ -6930,7 +7182,11 @@ class AgentRuntime:
                         inference_request.request_id,
                         reason="model_unavailable_retry",
                     )
-                    self._sleep(self._model_unavailable_backoff_seconds(transient_attempts - 1))
+                    self._raise_if_run_cancelled(state)
+                    self._sleep(
+                        self._model_unavailable_backoff_seconds(transient_attempts - 1)
+                    )
+                    self._raise_if_run_cancelled(state)
                     continue
                 guard.record(
                     "model_call_failed",
@@ -7743,19 +7999,22 @@ class AgentRuntime:
             {"text_hash": text_hash, "text_chars": len(text)},
         )
         try:
-            provider = getattr(self.client, "count_text", None)
-            if callable(provider):
-                counted = provider(text)
-                if not isinstance(counted, CountResult):
-                    raise ModelClientError(
-                        "Model client returned an invalid token-count result"
-                    )
-            else:
-                counted = CountResult(
+            def count() -> CountResult:
+                provider = getattr(self.client, "count_text", None)
+                if callable(provider):
+                    result = provider(text)
+                    if not isinstance(result, CountResult):
+                        raise ModelClientError(
+                            "Model client returned an invalid token-count result"
+                        )
+                    return result
+                return CountResult(
                     tokens=int(self.client.tokenize(text)),
                     exact=True,
                     strategy="provider_tokenizer",
                 )
+
+            counted = self._retry_model_server_operation(count, state=state)
         except Exception as exc:
             guard.record(
                 "model_tokenize_failed",
@@ -7802,6 +8061,35 @@ class AgentRuntime:
             response = getattr(error, "response", None)
             return response is not None and getattr(response, "status_code", None) in {502, 503, 504}
         return False
+
+    def _retry_model_server_operation(
+        self,
+        operation: Callable[[], Any],
+        *,
+        state: SessionState | None = None,
+    ) -> Any:
+        transient_attempts = 0
+        while True:
+            if state is not None:
+                self._raise_if_run_cancelled(state)
+            try:
+                return operation()
+            except Exception as exc:
+                if not self._is_model_server_unavailable(exc):
+                    raise
+                transient_attempts += 1
+                if (
+                    self._max_model_unavailable_attempts is not None
+                    and transient_attempts > self._max_model_unavailable_attempts
+                ):
+                    raise ModelClientError("model_unavailable") from exc
+                if state is not None:
+                    self._raise_if_run_cancelled(state)
+                self._sleep(
+                    self._model_unavailable_backoff_seconds(transient_attempts - 1)
+                )
+                if state is not None:
+                    self._raise_if_run_cancelled(state)
 
     def _model_unavailable_backoff_seconds(self, attempt: int) -> float:
         return float(min(60, 2 ** min(max(attempt, 0), 6)))

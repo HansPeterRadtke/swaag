@@ -18,6 +18,7 @@ ALLOWED_EVENT_TYPES = frozenset(
         "notes_selected",
         "prompt_built",
         "context_compiled",
+        "semantic_reduction_working_set_exceeded",
         "runtime_context_projected",
         "runtime_context_projection_reused",
         "runtime_context_projection_skipped",
@@ -46,6 +47,7 @@ ALLOWED_EVENT_TYPES = frozenset(
         "summary_created",
         "history_compacted",
         "history_compressed",
+        "history_compaction_span_selected",
         "history_reprojected",
         "history_retrieved",
         "history_window_read",
@@ -472,6 +474,19 @@ REQUIRED_PAYLOAD_KEYS: dict[str, frozenset[str]] = {
     "summary_created": frozenset({"source_message_count", "summary_message", "summary_budget_report"}),
     "history_compacted": frozenset({"source_message_count", "summary_message", "summary_budget_report"}),
     "history_compressed": frozenset({"source_message_count", "summary_message", "summary_budget_report"}),
+    "semantic_reduction_working_set_exceeded": frozenset(
+        {"kind", "hierarchical_depth", "input_tokens", "working_set_limit_tokens"}
+    ),
+    "history_compaction_span_selected": frozenset(
+        {
+            "source_message_start",
+            "source_message_count",
+            "criticality",
+            "reason",
+            "candidate_count",
+            "all_windows_evaluated",
+        }
+    ),
     "history_reprojected": frozenset(
         {
             "source_message_count",

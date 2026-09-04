@@ -97,6 +97,11 @@ class FakeModelClient:
 
 
 class OutputLimitedFakeModelClient(FakeModelClient):
+    def __init__(self, responses, *, limit_contract: str | None = None):
+        super().__init__(responses)
+        self.limit_contract = limit_contract
+        self.was_limited = False
+
     def send_completion(
         self,
         payload: dict[str, Any],
@@ -104,7 +109,12 @@ class OutputLimitedFakeModelClient(FakeModelClient):
         timeout_seconds: int | None = None,
         progress_callback=None,
     ) -> CompletionResult:
-        if not self.requests:
+        should_limit = (
+            not self.was_limited
+            and (self.limit_contract is None or payload.get("contract") == self.limit_contract)
+        )
+        if should_limit:
+            self.was_limited = True
             self.requests.append(payload)
             return CompletionResult(
                 text="{",
@@ -138,10 +148,16 @@ class CharacterCountSummaryClient(FakeModelClient):
     ) -> CompletionResult:
         del timeout_seconds, progress_callback
         self.requests.append(payload)
-        summary = self.marker if self.marker in str(payload["prompt"]) else "fragment retained"
-        response = json.dumps(
-            {"summary": summary, "preserve_recent_messages": 0}
-        )
+        if payload.get("contract") == "history_compaction_selection":
+            response = json.dumps(
+                {"criticality": "compressible", "reason": "test history can be summarized"}
+            )
+        else:
+            assert payload.get("contract") == "summary"
+            summary = self.marker if self.marker in str(payload["prompt"]) else "fragment retained"
+            response = json.dumps(
+                {"summary": summary, "preserve_recent_messages": 0}
+            )
         return CompletionResult(
             text=response,
             raw_request=payload,
@@ -271,9 +287,13 @@ def test_history_compaction_creates_replayable_summary_with_exact_sources(
     make_config,
 ) -> None:
     config = make_config(model__context_limit=32_000)
-    client = FakeModelClient(
-        [json.dumps({"summary": "Earlier facts summarized.", "preserve_recent_messages": 0})]
-    )
+    def compaction_response(payload: dict[str, Any]) -> str:
+        if payload["contract"] == "history_compaction_selection":
+            return json.dumps({"criticality": "compressible", "reason": "routine test window"})
+        assert payload["contract"] == "summary"
+        return json.dumps({"summary": 'Earlier facts summarized.', "preserve_recent_messages": 0})
+
+    client = FakeModelClient([compaction_response for _ in range(256)])
     runtime = AgentRuntime(config, model_client=client)
     state = runtime.create_or_load_session()
     for role, content in (
@@ -294,7 +314,9 @@ def test_history_compaction_creates_replayable_summary_with_exact_sources(
         for event in runtime.history.read_history(state.session_id)
         if event.event_type == "history_compressed"
     )
-    assert compressed.payload["candidate_source_message_count"] == 1
+    assert compressed.payload["source_message_start"] == 0
+    assert compressed.payload["candidate_source_message_count"] == compressed.payload["source_message_count"]
+    assert 1 <= compressed.payload["source_message_count"] < 4
     assert compressed.payload["actual_recovered_tokens"] > 0
     assert compressed.payload["required_recovery_tokens"] == 1
     rebuilt = runtime.history.rebuild_from_history(state.session_id, prefer_checkpoint=False)
@@ -305,9 +327,13 @@ def test_action_reexpands_authoritative_history_when_exact_messages_fit(
     make_config,
 ) -> None:
     marker = "authoritative-history-marker-413"
-    client = FakeModelClient(
-        [json.dumps({"summary": "Derived summary only.", "preserve_recent_messages": 0})]
-    )
+    def compaction_response(payload: dict[str, Any]) -> str:
+        if payload["contract"] == "history_compaction_selection":
+            return json.dumps({"criticality": "compressible", "reason": "routine test window"})
+        assert payload["contract"] == "summary"
+        return json.dumps({"summary": 'Derived summary only.', "preserve_recent_messages": 0})
+
+    client = FakeModelClient([compaction_response for _ in range(256)])
     runtime = AgentRuntime(
         make_config(model__context_limit=32_000),
         model_client=client,
@@ -356,22 +382,28 @@ def test_action_uses_derived_history_only_after_measured_raw_overflow(
     make_config,
 ) -> None:
     marker = "oversized-authoritative-marker-739"
-    client = FakeModelClient(
-        [
-            json.dumps(
-                {"summary": "Compact derived view.", "preserve_recent_messages": 0}
-            ),
-            *[
-                json.dumps(
-                    {
-                        "summary": "Fresh projection for this action.",
-                        "preserve_recent_messages": 0,
-                    }
-                )
-                for _ in range(32)
-            ],
-        ]
-    )
+    summary_calls = 0
+
+    def context_reduction_response(payload: dict[str, Any]) -> str:
+        nonlocal summary_calls
+        if payload["contract"] == "history_compaction_selection":
+            return json.dumps(
+                {"criticality": "compressible", "reason": "routine test window"}
+            )
+        assert payload["contract"] == "summary"
+        summary_calls += 1
+        return json.dumps(
+            {
+                "summary": (
+                    "Compact derived view."
+                    if summary_calls == 1
+                    else "Fresh projection for this action."
+                ),
+                "preserve_recent_messages": 0,
+            }
+        )
+
+    client = FakeModelClient([context_reduction_response for _ in range(256)])
     config = make_config(model__context_limit=32_000)
     runtime = AgentRuntime(config, model_client=client)
     state = runtime.create_or_load_session()
@@ -440,8 +472,15 @@ def test_history_summary_recompiles_after_output_starvation(make_config) -> None
         model__context_limit=32_000,
         model__max_retries=1,
     )
+    def compaction_response(payload: dict[str, Any]) -> str:
+        if payload["contract"] == "history_compaction_selection":
+            return json.dumps({"criticality": "compressible", "reason": "routine test window"})
+        assert payload["contract"] == "summary"
+        return json.dumps({"summary": 'Earlier facts retained.', "preserve_recent_messages": 0})
+
     client = OutputLimitedFakeModelClient(
-        [json.dumps({"summary": "Earlier facts retained.", "preserve_recent_messages": 0})]
+        [compaction_response for _ in range(256)],
+        limit_contract="summary",
     )
     runtime = AgentRuntime(config, model_client=client)
     state = runtime.create_or_load_session()
@@ -457,8 +496,11 @@ def test_history_summary_recompiles_after_output_starvation(make_config) -> None
         )
 
     assert runtime._compact_once(state) is True
-    assert len(client.requests) == 2
-    assert client.requests[1]["n_predict"] > client.requests[0]["n_predict"]
+    summary_requests = [
+        request for request in client.requests if request["contract"] == "summary"
+    ]
+    assert len(summary_requests) == 2
+    assert summary_requests[1]["n_predict"] > summary_requests[0]["n_predict"]
     assert state.messages[0].content == "Earlier facts retained."
 
 
@@ -933,14 +975,68 @@ def test_summary_prompt_exposes_retention_cap(tmp_path) -> None:
     assert "preserve_recent_messages" in prompt.prompt_text
 
 
-def test_runtime_model_unavailable_retry_cap_is_finite(tmp_path) -> None:
+def test_runtime_model_unavailable_retries_are_unbounded_by_default(tmp_path) -> None:
     from swaag.config import load_config
     from swaag.runtime import AgentRuntime
 
     config = load_config(env={"SWAAG__SESSIONS__ROOT": str(tmp_path / "sessions")})
     runtime = AgentRuntime(config, model_client=object())
-    assert isinstance(runtime._max_model_unavailable_attempts, int)
-    assert runtime._max_model_unavailable_attempts >= 1
+    assert runtime._max_model_unavailable_attempts is None
+
+
+def test_context_limit_discovery_retries_transient_model_unavailability(tmp_path) -> None:
+    import requests
+
+    from swaag.config import load_config
+    from swaag.runtime import AgentRuntime
+
+    class Client:
+        def __init__(self) -> None:
+            self.calls = 0
+
+        def context_limit_resolution(self):
+            self.calls += 1
+            if self.calls == 1:
+                raise requests.ConnectionError("temporarily unavailable")
+            return 32768, "server_props:n_ctx"
+
+    config = load_config(env={"SWAAG__SESSIONS__ROOT": str(tmp_path / "sessions")})
+    client = Client()
+    runtime = AgentRuntime(config, model_client=client)
+    runtime._sleep = lambda _seconds: None
+    state = runtime.create_or_load_session()
+
+    assert runtime._resolve_context_limit(state) == (32768, "server_props:n_ctx")
+    assert client.calls == 2
+
+
+def test_exact_tokenization_retries_transient_model_unavailability(tmp_path) -> None:
+    import requests
+
+    from swaag.config import load_config
+    from swaag.runtime import AgentRuntime
+    from swaag.tokens import CountResult
+
+    class Client:
+        def __init__(self) -> None:
+            self.calls = 0
+
+        def count_text(self, text):
+            self.calls += 1
+            if self.calls == 1:
+                raise requests.Timeout("temporarily unavailable")
+            return CountResult(tokens=7, exact=True, strategy="provider_tokenizer")
+
+    config = load_config(env={"SWAAG__SESSIONS__ROOT": str(tmp_path / "sessions")})
+    client = Client()
+    runtime = AgentRuntime(config, model_client=client)
+    runtime._sleep = lambda _seconds: None
+    state = runtime.create_or_load_session()
+
+    counted = runtime._tokenize_with_history(state, "retry exact tokenization")
+    assert counted.tokens == 7
+    assert counted.exact is True
+    assert client.calls == 2
 
 
 def test_benchmark_run_cli_enables_live_model_profile(monkeypatch, tmp_path) -> None:

@@ -217,9 +217,7 @@ def test_action_note_selector_uses_exact_context_and_semantic_categories(
     assert event.payload["omitted_note_ids"] == [reporting.note_id]
 
 
-def test_action_preflight_includes_only_semantically_selected_exact_notes(
-    make_config,
-) -> None:
+def test_action_preflight_keeps_all_exact_notes_when_they_fit(make_config) -> None:
     config = make_config(model__context_limit=12_000)
     client = _NoteSelectionClient()
     runtime = AgentRuntime(
@@ -230,20 +228,20 @@ def test_action_preflight_includes_only_semantically_selected_exact_notes(
         ),
     )
     state = runtime.create_or_load_session()
-    relevant = make_note(
+    first = make_note(
         config,
         title="Current repair",
         content="Retain parser marker alpha during the repair.",
         categories=["software implementation"],
     )
-    unrelated = make_note(
+    second = make_note(
         config,
         title="Later presentation",
         content="Explain chart marker beta in the final audio report.",
         categories=["audio reporting"],
     )
-    state.notes.extend([relevant, unrelated])
-    client.selected_note_ids = [relevant.note_id]
+    state.notes.extend([first, second])
+    client.selected_note_ids = [first.note_id]
 
     prepared = runtime._prepare_action_call(
         state,
@@ -260,10 +258,87 @@ def test_action_preflight_includes_only_semantically_selected_exact_notes(
         for component in prepared.assembly.components
         if component.name == "durable_notes"
     )
-    assert relevant.content in durable.text
-    assert unrelated.content not in durable.text
+    assert first.content in durable.text
+    assert second.content in durable.text
     assert prepared.report.fits is True
+    assert client.requests == []
+    assert not any(
+        event.event_type == "notes_selected"
+        for event in runtime.history.read_history(state.session_id)
+    )
 
+
+def test_action_preflight_selects_notes_only_after_measured_overflow(make_config, monkeypatch) -> None:
+    config = make_config(model__context_limit=12_000, context__max_compaction_rounds=2)
+    client = _NoteSelectionClient()
+    runtime = AgentRuntime(
+        config,
+        model_client=client,
+        token_counter=ExactTokenCounter(
+            lambda text: len(text.split()) if text.strip() else 0
+        ),
+    )
+    state = runtime.create_or_load_session()
+    relevant = make_note(
+        config,
+        title="Current repair",
+        content="alpha " * 40,
+        categories=["software implementation"],
+    )
+    unrelated = make_note(
+        config,
+        title="Later presentation",
+        content="beta " * 40,
+        categories=["audio reporting"],
+    )
+    state.notes.extend([relevant, unrelated])
+
+    original_compile = runtime._compile_context
+    action_compiles = 0
+
+    def measured_compile(state_arg, assembly, contract, **kwargs):
+        nonlocal action_compiles
+        if assembly.kind == "action":
+            action_compiles += 1
+            if action_compiles == 1:
+                kwargs["context_limit_resolution"] = (220, "test_measured_overflow")
+        return original_compile(state_arg, assembly, contract, **kwargs)
+
+    client.selected_note_ids = [relevant.note_id]
+    monkeypatch.setattr(runtime, "_compile_context", measured_compile)
+
+    prepared = runtime._prepare_action_call(
+        state,
+        original_request="Repair the parser.",
+        pending_messages=[],
+        tool_specs=[],
+        contract=yes_no_contract(),
+        validation_feedback="",
+        minimum_output_tokens=64,
+    )
+
+    assert prepared.report.fits is True
+    assert len(client.requests) == 1
+    durable = next(
+        component
+        for component in prepared.assembly.components
+        if component.name == "durable_notes"
+    )
+    assert relevant.note_id in durable.text
+    assert unrelated.note_id not in durable.text
+    events = runtime.history.read_history(state.session_id)
+    overflowing = [
+        event for event in events
+        if event.event_type == "context_compiled"
+        and event.payload.get("kind") == "action"
+        and event.payload.get("candidate_only") is True
+    ]
+    assert overflowing
+    assert overflowing[0].payload["accounting"]["context_limit_source"] == "test_measured_overflow"
+    selected_event = next(event for event in events if event.event_type == "notes_selected")
+    assert selected_event.sequence > overflowing[0].sequence
+    assert selected_event.payload["included_note_ids"] == [relevant.note_id]
+    assert selected_event.payload["omitted_note_ids"] == [unrelated.note_id]
 
 def test_action_note_selector_failure_conservatively_includes_every_note(
     make_config,

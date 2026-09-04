@@ -1550,7 +1550,12 @@ class HistoryStore:
             state.messages.append(self._message_from_source_event(event))
             return
         if event.event_type in {"history_compacted", "history_compressed"}:
+            source_start = int(payload.get("source_message_start", 0))
             source_count = int(payload["source_message_count"])
+            if source_start < 0 or source_count <= 0 or source_start + source_count > len(state.messages):
+                raise HistoryInvariantError(
+                    "history compression span is outside the projected message list"
+                )
             summary_payload = dict(payload["summary_message"])
             summary_metadata = dict(summary_payload.get("metadata", {}))
             # Legacy summaries stored this projection fact beside Message
@@ -1564,7 +1569,11 @@ class HistoryStore:
             summary_message.metadata.setdefault("projection_event_hash", event.hash)
             summary_message.metadata.setdefault("projection_event_type", event.event_type)
             summary_message.metadata.setdefault("projection_session_id", event.session_id)
-            state.messages = [summary_message, *state.messages[source_count:]]
+            state.messages = [
+                *state.messages[:source_start],
+                summary_message,
+                *state.messages[source_start + source_count :],
+            ]
             state.compaction_count += 1
             return
         if event.event_type == "history_reprojected":

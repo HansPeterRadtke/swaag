@@ -47,6 +47,21 @@ def summary_contract() -> ContractSpec:
     )
 
 
+def history_compaction_selection_contract() -> ContractSpec:
+    return _contract(
+        "history_compaction_selection",
+        _closed_object(
+            {
+                "criticality": {
+                    "type": "string",
+                    "enum": ["protect", "important", "ordinary", "compressible"],
+                },
+                "reason": _string(),
+            }
+        ),
+    )
+
+
 def tool_result_projection_contract() -> ContractSpec:
     return _contract(
         "tool_result_projection",

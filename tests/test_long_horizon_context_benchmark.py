@@ -44,11 +44,14 @@ class _LongHorizonClient:
 
     def send_completion(self, payload: dict, **_kwargs) -> CompletionResult:
         self.requests.append(payload)
-        assert payload["contract"] == "summary"
-        text = json.dumps({
-            "summary": "\n".join(PRESERVATION_FACTS.values()),
-            "preserve_recent_messages": 0,
-        })
+        if payload["contract"] == "history_compaction_selection":
+            text = json.dumps({"criticality": "compressible", "reason": "test window"})
+        else:
+            assert payload["contract"] == "summary"
+            text = json.dumps({
+                "summary": "\n".join(PRESERVATION_FACTS.values()),
+                "preserve_recent_messages": 0,
+            })
         return CompletionResult(
             text=text,
             raw_request=payload,

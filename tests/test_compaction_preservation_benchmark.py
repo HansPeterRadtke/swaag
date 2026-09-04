@@ -57,10 +57,14 @@ class _SummaryClient:
 
     def send_completion(self, payload: dict, **_kwargs) -> CompletionResult:
         self.requests.append(payload)
-        facts = "\n".join(PRESERVATION_FACTS.values())
-        response = json.dumps(
-            {"summary": facts, "preserve_recent_messages": 0}
-        )
+        if payload["contract"] == "history_compaction_selection":
+            response = json.dumps({"criticality": "compressible", "reason": "test window"})
+        else:
+            assert payload["contract"] == "summary"
+            facts = "\n".join(PRESERVATION_FACTS.values())
+            response = json.dumps(
+                {"summary": facts, "preserve_recent_messages": 0}
+            )
         return CompletionResult(
             text=response,
             raw_request=payload,
@@ -159,3 +163,55 @@ def test_compaction_preservation_cli_passes_checkpoint_options(
     config = captured.pop("config")
     assert config.model.benchmark_timeout_seconds >= 900
     assert captured == {"cycles": 4, "output_path": output, "resume": False}
+
+
+class _SpanSelectionClient(_SummaryClient):
+    def send_completion(self, payload: dict, **_kwargs) -> CompletionResult:
+        self.requests.append(payload)
+        assert payload["contract"] == "history_compaction_selection"
+        prompt = str(payload["prompt"])
+        if "CRITICAL_OLD" in prompt:
+            response = json.dumps({"criticality": "protect", "reason": "contains exact user constraint"})
+        else:
+            response = json.dumps({"criticality": "compressible", "reason": "routine progress"})
+        return CompletionResult(
+            text=response,
+            raw_request=payload,
+            raw_response={"content": response},
+            prompt_tokens=None,
+            completion_tokens=None,
+            finish_reason="stop",
+        )
+
+
+def test_history_compaction_span_selection_is_semantic_not_oldest_first(make_config, tmp_path) -> None:
+    from swaag.runtime import AgentRuntime
+    from swaag.types import Message
+    from swaag.utils import utc_now_iso
+
+    client = _SpanSelectionClient()
+    config = make_config(model__context_limit=12_000)
+    config.sessions.root = tmp_path / "sessions"
+    runtime = AgentRuntime(config, model_client=client)
+    state = runtime.create_or_load_session()
+    for content in (
+        "CRITICAL_OLD exact user constraint must remain verbatim",
+        "CRITICAL_OLD unresolved identifier asset-7391",
+        "routine progress heartbeat one",
+        "routine progress heartbeat two",
+    ):
+        runtime._record_message(
+            state,
+            Message(role="user", content=content, created_at=utc_now_iso()),
+        )
+
+    ranked = runtime._select_history_compaction_spans(state, list(state.messages))
+
+    assert len(client.requests) == 4
+    assert ranked[0]["source_message_start"] == 2
+    assert ranked[0]["source_message_count"] == 2
+    assert ranked[0]["criticality"] == "compressible"
+    protected_starts = {
+        row["source_message_start"] for row in ranked if row["criticality"] == "protect"
+    }
+    assert {0, 1}.issubset(protected_starts)

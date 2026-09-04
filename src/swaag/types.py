@@ -14,6 +14,7 @@ ModelCallKind = Literal[
     "action_capability_selection",
     "action_terminal_response",
     "summary",
+    "history_compaction_selection",
     "tool_result_projection",
     "evidence_projection",
     "completion_evaluation",

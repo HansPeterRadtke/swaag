@@ -165,6 +165,7 @@ def summary_message_payload(
     *,
     source_message_count: int,
     created_at: str,
+    source_message_start: int = 0,
     source_event_references: Iterable[dict[str, Any]] = (),
 ) -> dict:
     references = [dict(item) for item in source_event_references]
@@ -174,6 +175,7 @@ def summary_message_payload(
         "created_at": created_at,
         "metadata": {
             "projection_kind": "history_summary",
+            "source_message_start": int(source_message_start),
             "source_message_count": int(source_message_count),
             "source_event_references": references,
             "source_event_ranges": source_event_ranges(references),

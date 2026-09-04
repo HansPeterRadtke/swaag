@@ -47,3 +47,13 @@ The decisive live studies still require:
 - retained exact seeds, schema hashes, model identity, checkpoint state, and source-event provenance.
 
 Do not use short frontier-model coding results as evidence for these long-horizon/local-model claims, and do not use structural-validity results as evidence of semantic correctness.
+
+## Semantic history span compaction
+
+History compaction must not equate age with irrelevance. After measured overflow, Swaag mechanically partitions exact history into contiguous windows and asks a constrained semantic selector to classify every region without using recency as a relevance signal. Protected regions include current user direction, non-negotiable constraints, unresolved work, commitments, causal facts, identifiers/paths, exact tool outcomes, and wording-sensitive evidence. Adjacent non-protected windows may be composed when a larger recovery span is required; a protected window is always a hard boundary. Oversized individual messages are mechanically fragmented for semantic inspection, and the original message inherits the worst criticality across all fragments. New compression events retain `source_message_start` plus `source_message_count`; legacy events without a start index remain backward-compatible prefix events with start zero.
+
+Semantic reduction subcalls may also have a backend-specific working-set cap via `context.semantic_reduction_max_input_tokens`. This is distinct from the model's normal context window. A positive value forces recursive exact-source fragmentation before inference whenever the compiled reduction input exceeds the configured working set, preventing local backends from receiving reduction requests that fit their advertised context but exceed executable memory headroom. A value of zero adds no extra cap.
+
+Context-engineering overflow correctness is gated by measured overflow, actual reduction, semantic preservation of required facts, source lineage/recoverability, and a fitting rebuilt request. Distractor retention is reported separately as semantic-selectivity quality; retaining a small irrelevant identifier does not erase an otherwise valid recovery, while the metric still exposes weak filtering. Required-fact checks normalize case and punctuation so harmless formatting changes are not scored as information loss.
+
+Transient model-service loss during context-engineering evaluation is not architectural evidence. `model_unavailable` attempts are checkpointed under `interrupted_attempts`, excluded from scored results, and rerun on resume from a fresh case session. Other model/output failures remain scored normally.

@@ -97,7 +97,7 @@ class _NoteBehaviorClient:
         )
 
 
-def test_note_behavior_benchmark_uses_production_selection_path(
+def test_note_behavior_benchmark_preserves_full_fidelity_when_notes_fit(
     make_config,
     tmp_path,
 ) -> None:
@@ -117,7 +117,7 @@ def test_note_behavior_benchmark_uses_production_selection_path(
     assert report["passed"] == report["total"] == 1
     result = report["results"][0]
     assert result["verification"]["passed"] is True
-    assert result["note_selections"]
+    assert result["note_selections"] == []
     workspace_components = [
         component
         for compilation in result["context_compilations"]

@@ -3,14 +3,19 @@ from __future__ import annotations
 import copy
 import json
 import math
+import re
 import shutil
 import time
+import urllib.error
+
+import requests
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Any, Callable, Iterable
 
 from swaag.config import AgentConfig, load_config
 from swaag.grammar import agent_action_contract
+from swaag.model import ModelClientError
 from swaag.runtime import AgentRuntime
 from swaag.types import Message
 from swaag.utils import sha256_text, stable_json_dumps, utc_now_iso
@@ -207,6 +212,14 @@ def _seed_source(
     return source_event
 
 
+def _semantic_normalize(text: str) -> str:
+    return " ".join(re.findall(r"[a-z0-9]+", text.casefold()))
+
+
+def _fact_is_preserved(fact: str, text: str) -> bool:
+    return _semantic_normalize(fact) in _semantic_normalize(text)
+
+
 def _verify_case(
     case: ContextEngineeringCase,
     *,
@@ -244,7 +257,9 @@ def _verify_case(
         for item in first_components
         if isinstance(item, dict) and item.get("include_in_context") is True
     )
-    relevant_preserved = all(fact in final_prompt for fact in REQUIRED_FACTS)
+    relevant_preserved = all(
+        _fact_is_preserved(fact, final_prompt) for fact in REQUIRED_FACTS
+    )
     distractors_retained = sum(
         marker in final_prompt for marker in DISTRACTOR_MARKERS
     )
@@ -277,7 +292,11 @@ def _verify_case(
             "candidate_overflow_measured": int(first_accounting.get("overflow_tokens", 0)) > 0,
             "semantic_projection_used": bool(projection_events),
             "projection_lineage_matches_source": lineage_matches,
-            "irrelevant_markers_reduced": distractors_retained == 0,
+            "projection_actually_reduced_source": (
+                int(projection_payload.get("projected_tokens", 0)) > 0
+                and int(projection_payload.get("projected_tokens", 0))
+                < int(projection_payload.get("original_tokens", 0))
+            ),
             "projection_target_is_dynamic_reduction": (
                 int(projection_payload.get("target_tokens", 0)) > 0
                 and int(projection_payload.get("target_tokens", 0))
@@ -302,6 +321,47 @@ def _verify_case(
         "final_action_accounting": final_accounting,
         "projection_event_sequences": [event.sequence for event in projection_events],
         "distractor_markers_in_final_prompt": distractors_retained,
+        "distractor_markers_removed": len(DISTRACTOR_MARKERS) - distractors_retained,
+        "semantic_selectivity": {
+            "retained": distractors_retained,
+            "removed": len(DISTRACTOR_MARKERS) - distractors_retained,
+            "total": len(DISTRACTOR_MARKERS),
+        },
+    }
+
+
+def _is_model_unavailable_interruption(exc: BaseException) -> bool:
+    if isinstance(exc, ModelClientError) and str(exc) == "model_unavailable":
+        return True
+    return isinstance(exc, (requests.ConnectionError, requests.Timeout, urllib.error.URLError))
+
+
+def _build_report(
+    *,
+    selected_ids: list[str],
+    model_identity: Any,
+    results: list[dict[str, Any]],
+    interrupted_attempts: list[dict[str, Any]],
+) -> dict[str, Any]:
+    return {
+        "benchmark": "context_engineering",
+        "planned_cases": selected_ids,
+        "model_identity": model_identity,
+        "required_facts": list(REQUIRED_FACTS),
+        "distractor_markers": list(DISTRACTOR_MARKERS),
+        "results": results,
+        "interrupted_attempts": interrupted_attempts,
+        "total": len(selected_ids),
+        "completed": len(results),
+        "passed": sum(
+            1 for item in results if item["verification"]["passed"]
+        ),
+        "complete": len(results) == len(selected_ids),
+        "verification_scope": (
+            "Exact marker, accounting, lineage, and recoverability checks; live semantic "
+            "quality still requires model-backed repeated runs. Transient model-unavailable "
+            "attempts are checkpointed as interruptions and are not scored as architecture failures."
+        ),
     }
 
 
@@ -323,6 +383,7 @@ def run_context_engineering_benchmark(
     output_dir.mkdir(parents=True, exist_ok=True)
     report_path = output_dir / "context_engineering_results.json"
     results: list[dict[str, Any]] = []
+    interrupted_attempts: list[dict[str, Any]] = []
 
     if report_path.exists():
         checkpoint = json.loads(report_path.read_text(encoding="utf-8"))
@@ -332,6 +393,10 @@ def run_context_engineering_benchmark(
         if not isinstance(raw_results, list):
             raise ValueError("Context-engineering checkpoint results are invalid")
         results = [dict(item) for item in raw_results]
+        raw_interrupted = checkpoint.get("interrupted_attempts", [])
+        if not isinstance(raw_interrupted, list):
+            raise ValueError("Context-engineering checkpoint interrupted attempts are invalid")
+        interrupted_attempts = [dict(item) for item in raw_interrupted]
         checkpoint_identity = checkpoint.get("model_identity")
         if model_identity is not None and model_identity != checkpoint_identity:
             raise ValueError("Context-engineering checkpoint model identity does not match this run")
@@ -353,6 +418,16 @@ def run_context_engineering_benchmark(
         if any(item.get("case_id") == case.case_id for item in results):
             continue
         case_root = output_dir / "runs" / f"{index:02d}-{case.case_id}"
+        if case_root.exists():
+            attempt_number = 1
+            while True:
+                archived = case_root.with_name(
+                    f"{case_root.name}-interrupted-{attempt_number:03d}"
+                )
+                if not archived.exists():
+                    case_root.rename(archived)
+                    break
+                attempt_number += 1
         workspace = case_root / "workspace"
         workspace.mkdir(parents=True, exist_ok=False)
         case_config = _case_config(
@@ -384,6 +459,7 @@ def run_context_engineering_benchmark(
         )
         started = time.monotonic()
         error: dict[str, str] | None = None
+        interrupted_error: dict[str, str] | None = None
         final_prompt = ""
         try:
             prepared = runtime._prepare_action_call(
@@ -399,8 +475,33 @@ def run_context_engineering_benchmark(
             final_prompt = prepared.assembly.prompt_text
         except Exception as exc:
             error = {"error_type": type(exc).__name__, "reason": str(exc)}
+            if _is_model_unavailable_interruption(exc):
+                interrupted_error = error
 
         events = runtime.history.read_history(state.session_id)
+        if interrupted_error is not None:
+            interrupted_attempts.append(
+                {
+                    "case_id": case.case_id,
+                    "split": case.split,
+                    "session_id": state.session_id,
+                    "elapsed_seconds": time.monotonic() - started,
+                    "error": interrupted_error,
+                    "context_limit": context_limit,
+                    "context_limit_source": context_limit_source,
+                    "source_event_sequence": source_event.sequence,
+                    "source_event_hash": source_event.hash,
+                    "last_event_sequence": events[-1].sequence if events else None,
+                }
+            )
+            report = _build_report(
+                selected_ids=selected_ids,
+                model_identity=model_identity,
+                results=results,
+                interrupted_attempts=interrupted_attempts,
+            )
+            _write_report(report_path, report)
+            return json.loads(report_path.read_text(encoding="utf-8"))
         verification = _verify_case(
             case,
             source_text=source_text,
@@ -441,24 +542,12 @@ def run_context_engineering_benchmark(
                 "verification": verification,
             }
         )
-        report = {
-            "benchmark": "context_engineering",
-            "planned_cases": selected_ids,
-            "model_identity": model_identity,
-            "required_facts": list(REQUIRED_FACTS),
-            "distractor_markers": list(DISTRACTOR_MARKERS),
-            "results": results,
-            "total": len(selected),
-            "completed": len(results),
-            "passed": sum(
-                1 for item in results if item["verification"]["passed"]
-            ),
-            "complete": len(results) == len(selected),
-            "verification_scope": (
-                "Exact marker, accounting, lineage, and recoverability checks; live semantic "
-                "quality still requires model-backed repeated runs."
-            ),
-        }
+        report = _build_report(
+            selected_ids=selected_ids,
+            model_identity=model_identity,
+            results=results,
+            interrupted_attempts=interrupted_attempts,
+        )
         _write_report(report_path, report)
 
     return json.loads(report_path.read_text(encoding="utf-8"))

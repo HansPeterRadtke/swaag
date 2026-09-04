@@ -124,6 +124,86 @@ def test_context_engineering_benchmark_exercises_fit_and_overflow_paths(
     assert resumed == report
 
 
+
+def test_semantic_reduction_working_set_cap_fragments_before_inference(
+    make_config,
+    tmp_path,
+) -> None:
+    clients: list[_ProjectionClient] = []
+    runtimes: list[AgentRuntime] = []
+
+    def runtime_factory(config):
+        client = _ProjectionClient()
+        runtime = AgentRuntime(config, model_client=client)
+        clients.append(client)
+        runtimes.append(runtime)
+        return runtime
+
+    cap = 1200
+    report = run_context_engineering_benchmark(
+        output_dir=tmp_path / "working-set-cap",
+        config=make_config(
+            model__context_limit=4096,
+            context__semantic_reduction_max_input_tokens=cap,
+        ),
+        case_ids=["measured_overflow_projection"],
+        runtime_factory=runtime_factory,
+    )
+
+    assert report["complete"] is True
+    assert report["passed"] == 1
+    assert clients and clients[0].requests
+    # Fake client tokenization is one token per whitespace-delimited token.
+    assert all(
+        len(str(request["prompt"]).split()) <= cap
+        for request in clients[0].requests
+    )
+    events = runtimes[0].history.read_history(report["results"][0]["session_id"])
+    exceeded = [
+        event for event in events
+        if event.event_type == "semantic_reduction_working_set_exceeded"
+    ]
+    assert exceeded
+    assert all(event.payload["working_set_limit_tokens"] == cap for event in exceeded)
+    assert any(event.payload["input_tokens"] > cap for event in exceeded)
+
+
+
+def test_context_engineering_verifier_preserves_semantic_fact_with_formatting_changes(
+    make_config,
+    tmp_path,
+) -> None:
+    class _FormattingProjectionClient(_ProjectionClient):
+        def send_completion(self, payload: dict[str, Any], **_kwargs) -> CompletionResult:
+            self.requests.append(payload)
+            prompt = str(payload["prompt"])
+            if any(fact in prompt for fact in REQUIRED_FACTS):
+                projection = (
+                    "Change ticket: CHG-7419-Z\n"
+                    "Deadline: 2042-06-19T15:40:00Z\n"
+                    "Negative constraint: never delete the source archive\n"
+                    "Checksum causality: The checksum failed because source row 812 was absent."
+                )
+            else:
+                projection = "Routine healthy-record noise only."
+            text = json.dumps({"projection": projection})
+            return CompletionResult(
+                text=text, raw_request=payload, raw_response={"content": text},
+                prompt_tokens=None, completion_tokens=None, finish_reason="stop",
+            )
+
+    report = run_context_engineering_benchmark(
+        output_dir=tmp_path / "formatting-preservation",
+        config=make_config(model__context_limit=512),
+        case_ids=["measured_overflow_projection"],
+        runtime_factory=lambda config: AgentRuntime(
+            config, model_client=_FormattingProjectionClient()
+        ),
+    )
+    assert report["passed"] == 1
+    result = report["results"][0]
+    assert result["verification"]["checks"]["required_facts_preserved"] is True
+
 def test_context_engineering_cli_passes_checkpoint_options(
     make_config,
     monkeypatch,
@@ -175,3 +255,101 @@ def test_context_engineering_cli_passes_checkpoint_options(
         "case_ids": ["full_fidelity_fit"],
         "clean": True,
     }
+
+
+def test_context_engineering_model_unavailable_is_resumable_interruption(
+    make_config,
+    tmp_path,
+) -> None:
+    from swaag.model import ModelClientError
+
+    class _UnavailableProjectionClient(_ProjectionClient):
+        def send_completion(self, payload: dict[str, Any], **_kwargs) -> CompletionResult:
+            self.requests.append(payload)
+            raise ModelClientError("model_unavailable")
+
+    output = tmp_path / "context-engineering-interrupted"
+
+    def unavailable_runtime(config):
+        runtime = AgentRuntime(config, model_client=_UnavailableProjectionClient())
+        runtime._max_model_unavailable_attempts = 0
+        runtime._sleep = lambda _seconds: None
+        return runtime
+
+    interrupted = run_context_engineering_benchmark(
+        output_dir=output,
+        config=make_config(model__context_limit=512),
+        case_ids=["measured_overflow_projection"],
+        runtime_factory=unavailable_runtime,
+    )
+
+    assert interrupted["complete"] is False
+    assert interrupted["completed"] == 0
+    assert interrupted["passed"] == 0
+    assert interrupted["results"] == []
+    assert len(interrupted["interrupted_attempts"]) == 1
+    assert interrupted["interrupted_attempts"][0]["error"] == {
+        "error_type": "ModelClientError",
+        "reason": "model_unavailable",
+    }
+
+    def healthy_runtime(config):
+        return AgentRuntime(config, model_client=_ProjectionClient())
+
+    resumed = run_context_engineering_benchmark(
+        output_dir=output,
+        config=make_config(model__context_limit=512),
+        case_ids=["measured_overflow_projection"],
+        runtime_factory=healthy_runtime,
+    )
+
+    assert resumed["complete"] is True
+    assert resumed["completed"] == resumed["passed"] == 1
+    assert len(resumed["interrupted_attempts"]) == 1
+    assert resumed["results"][0]["verification"]["passed"] is True
+    archived = output / "runs" / "01-measured_overflow_projection-interrupted-001"
+    assert archived.exists()
+
+
+def test_context_engineering_raw_endpoint_connection_error_is_resumable_interruption(
+    make_config,
+    tmp_path,
+) -> None:
+    import requests
+
+    class _ConnectionErrorRuntime(AgentRuntime):
+        def _prepare_action_call(self, *args, **kwargs):
+            raise requests.ConnectionError("endpoint disappeared during context preparation")
+
+    output = tmp_path / "context-engineering-connection-interrupted"
+
+    def unavailable_runtime(config):
+        return _ConnectionErrorRuntime(config, model_client=_ProjectionClient())
+
+    interrupted = run_context_engineering_benchmark(
+        output_dir=output,
+        config=make_config(model__context_limit=512),
+        case_ids=["measured_overflow_projection"],
+        runtime_factory=unavailable_runtime,
+    )
+
+    assert interrupted["complete"] is False
+    assert interrupted["completed"] == 0
+    assert interrupted["passed"] == 0
+    assert interrupted["results"] == []
+    assert len(interrupted["interrupted_attempts"]) == 1
+    assert interrupted["interrupted_attempts"][0]["error"]["error_type"] == "ConnectionError"
+
+    def healthy_runtime(config):
+        return AgentRuntime(config, model_client=_ProjectionClient())
+
+    resumed = run_context_engineering_benchmark(
+        output_dir=output,
+        config=make_config(model__context_limit=512),
+        case_ids=["measured_overflow_projection"],
+        runtime_factory=healthy_runtime,
+    )
+
+    assert resumed["complete"] is True
+    assert resumed["completed"] == resumed["passed"] == 1
+    assert len(resumed["interrupted_attempts"]) == 1

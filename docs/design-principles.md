@@ -117,3 +117,7 @@ Benchmarks must not collapse mechanically different claims into one pass rate. G
 ## Durable instruction authority
 
 Durable semantic memory has an explicit trust boundary. Model-authored rules are learned operating preferences and may never assign themselves project/user authority. Trusted project or user instructions require a trusted ingestion path with source provenance. Trusted entries are never removed from a call by model relevance selection; conflicts within the durable layer resolve deterministically by authority, specificity, then recency. The current user request remains the governing authority for the current turn.
+
+## Context reduction requires measured need and executable headroom
+
+Exact context that fits should be admitted before semantic reduction. Durable notes are therefore included exactly on the first measured action candidate; semantic note selection is an overflow-recovery step, not a mandatory pre-filter. History compression likewise must not select material merely because it is old: semantic span selection determines what may be reduced, while deterministic code only enforces measured budgets, provenance, replay, and protected-span boundaries. For local backends, advertised context capacity is not proof that a near-limit reduction request is executable; an explicit semantic-reduction working-set cap may force hierarchical source fragmentation before inference without shrinking the ordinary agent context window.

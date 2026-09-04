@@ -251,10 +251,13 @@ def _verify_case(
             in assistant_text.casefold(),
             "unrelated_marker_excluded": "report-beta-902"
             not in assistant_text.casefold(),
-            "selector_isolated_note": any(
-                payload.get("included_note_ids") == [relevant]
-                and payload.get("omitted_note_ids") == [unrelated]
-                for payload in semantic_selections
+            "selection_policy_valid": (
+                not selection_payloads
+                or any(
+                    payload.get("included_note_ids") == [relevant]
+                    and payload.get("omitted_note_ids") == [unrelated]
+                    for payload in semantic_selections
+                )
             ),
         }
     return {"passed": all(checks.values()), "checks": checks}

@@ -106,6 +106,9 @@ safety_margin_tokens = 64
 max_compaction_rounds = 4
 allow_estimate_fallback = true
 compact_on_overflow = true
+# Optional resource-safety cap for semantic reduction subcalls only.
+# 0 means no additional cap beyond the model context window.
+semantic_reduction_max_input_tokens = 0
 
 # -----------------------------------------------------------
 # [sessions] — SESSION STORAGE

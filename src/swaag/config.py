@@ -50,6 +50,7 @@ class ContextConfig:
     max_compaction_rounds: int
     allow_estimate_fallback: bool
     compact_on_overflow: bool
+    semantic_reduction_max_input_tokens: int = 0
 
 
 @dataclass(slots=True)
