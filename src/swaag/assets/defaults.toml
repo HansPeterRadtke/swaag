@@ -373,6 +373,15 @@ required_scopes = []
 timeout_seconds = 5.0
 
 # -----------------------------------------------------------
+# [a2a.authorization] — OPTIONAL A2A HTTP BEARER BOUNDARY
+# The communication listener remains loopback-only; expose only A2A routes through TLS.
+# -----------------------------------------------------------
+[a2a.authorization]
+enabled = false
+public_base_url = ""
+bearer_token = ""
+
+# -----------------------------------------------------------
 # [communication] — PARALLEL COMMUNICATION/CONTROL SERVICE
 # Empty model_base_url reuses the main configured model endpoint.
 # -----------------------------------------------------------

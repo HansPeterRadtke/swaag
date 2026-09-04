@@ -114,9 +114,11 @@ def configured_secret_values(config: object) -> tuple[str, ...]:
     values: list[str] = []
     mcp = getattr(config, "mcp", None)
     auth = getattr(mcp, "authorization", None)
+    a2a_auth = getattr(config, "a2a_authorization", None)
     model = getattr(config, "model", None)
     candidates = [
         getattr(auth, "introspection_client_secret", ""),
+        getattr(a2a_auth, "bearer_token", ""),
     ]
     env_name = str(getattr(model, "api_key_env", "") or "").strip()
     if env_name:

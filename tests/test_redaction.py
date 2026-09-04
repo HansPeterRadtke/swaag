@@ -75,6 +75,7 @@ def test_prompt_instruction_store_redacts_configured_secret(make_config, monkeyp
     from swaag.prompt_instruction_store import PromptInstructionStore
     config = make_config()
     config.mcp.authorization.introspection_client_secret = "store-secret"
+    config.a2a_authorization.bearer_token = "a2a-secret"
     store = PromptInstructionStore(config.sessions.root, config)
     store.add(
         title="Sensitive learned rule",
@@ -106,3 +107,15 @@ def test_result_collector_redacts_reports(tmp_path):
     assert "report-secret" not in combined
     assert "report-bearer" not in combined
     assert "[REDACTED]" in combined
+
+
+def test_configured_secret_values_include_a2a_bearer(make_config) -> None:
+    from swaag.redaction import configured_secret_values, redact_text
+
+    config = make_config()
+    config.a2a_authorization.bearer_token = "a2a-secret-value"
+    secrets = configured_secret_values(config)
+    assert "a2a-secret-value" in secrets
+    assert "a2a-secret-value" not in redact_text(
+        "Authorization: Bearer a2a-secret-value", secret_values=secrets
+    )

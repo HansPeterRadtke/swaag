@@ -7,9 +7,9 @@ from dataclasses import dataclass, field
 from importlib import resources
 from pathlib import Path
 from typing import Any
+from urllib.parse import urlparse
 
 from swaag.utils import expand_env_in_value, sha256_text
-
 
 @dataclass(slots=True)
 class ModelConfig:
@@ -241,6 +241,13 @@ class McpConfig:
 
 
 @dataclass(slots=True)
+class A2AAuthorizationConfig:
+    enabled: bool
+    public_base_url: str
+    bearer_token: str
+
+
+@dataclass(slots=True)
 class CommunicationConfig:
     enabled: bool
     model_base_url: str
@@ -327,13 +334,21 @@ class AgentConfig:
     archive: ArchiveConfig
     attachments: AttachmentConfig
     mcp: McpConfig
+    a2a_authorization: A2AAuthorizationConfig
     communication: CommunicationConfig
     budget_policy: BudgetPolicyConfig
     external_benchmarks: ExternalBenchmarksConfig
     raw: dict[str, Any] = field(repr=False)
 
     def config_fingerprint(self) -> str:
-        return sha256_text(json.dumps(self.raw, sort_keys=True))
+        fingerprint_data = json.loads(json.dumps(self.raw))
+        mcp_auth = fingerprint_data.get("mcp", {}).get("authorization", {})
+        if isinstance(mcp_auth, dict) and "introspection_client_secret" in mcp_auth:
+            mcp_auth["introspection_client_secret"] = "[CREDENTIAL]"
+        a2a_auth = fingerprint_data.get("a2a", {}).get("authorization", {})
+        if isinstance(a2a_auth, dict) and "bearer_token" in a2a_auth:
+            a2a_auth["bearer_token"] = "[CREDENTIAL]"
+        return sha256_text(json.dumps(fingerprint_data, sort_keys=True))
 
 
 def _migrate_config_aliases(data: dict[str, Any]) -> dict[str, Any]:
@@ -495,6 +510,13 @@ def _coerce_config(data: dict[str, Any]) -> AgentConfig:
             timeout_seconds=float(mcp_auth_data.get("timeout_seconds", 5.0)),
         ),
     )
+    a2a_auth_data = data.get("a2a", {}).get("authorization", {})
+    a2a_authorization = A2AAuthorizationConfig(
+        enabled=bool(a2a_auth_data.get("enabled", False)),
+        public_base_url=str(a2a_auth_data.get("public_base_url", "")),
+        bearer_token=str(a2a_auth_data.get("bearer_token", "")),
+    )
+
     communication = CommunicationConfig(
         enabled=bool(data["communication"]["enabled"]),
         model_base_url=str(data["communication"]["model_base_url"]),
@@ -718,6 +740,21 @@ def _coerce_config(data: dict[str, Any]) -> AgentConfig:
             raise ValueError("mcp.authorization.introspection_client_id is required when enabled")
         if not mcp.authorization.introspection_client_secret:
             raise ValueError("mcp.authorization.introspection_client_secret is required when enabled")
+    if a2a_authorization.enabled:
+        public_url = urlparse(a2a_authorization.public_base_url)
+        if (
+            public_url.scheme != "https"
+            or not public_url.netloc
+            or public_url.username is not None
+            or public_url.password is not None
+            or public_url.query
+            or public_url.fragment
+        ):
+            raise ValueError(
+                "a2a.authorization.public_base_url must be an absolute HTTPS URL without credentials, query, or fragment when enabled"
+            )
+        if not a2a_authorization.bearer_token:
+            raise ValueError("a2a.authorization.bearer_token is required when enabled")
 
     return AgentConfig(
         model=model,
@@ -738,6 +775,7 @@ def _coerce_config(data: dict[str, Any]) -> AgentConfig:
         archive=archive,
         attachments=attachments,
         mcp=mcp,
+        a2a_authorization=a2a_authorization,
         communication=communication,
         budget_policy=budget_policy,
         external_benchmarks=external_benchmarks,

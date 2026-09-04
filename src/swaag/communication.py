@@ -5,6 +5,7 @@ import base64
 import binascii
 import copy
 import hashlib
+import hmac
 import ipaddress
 import json
 import signal
@@ -2238,16 +2239,20 @@ class CommunicationService:
             )
 
     def _a2a_agent_card(self) -> dict[str, Any]:
-        host = self._advertised_host
-        if host in {"", "0.0.0.0", "::"}:
-            host = "127.0.0.1"
-        try:
-            if ipaddress.ip_address(host).version == 6:
-                host = f"[{host}]"
-        except ValueError:
-            pass
-        port = self._advertised_port
-        return {
+        auth = self.runtime.config.a2a_authorization
+        if auth.enabled:
+            base_url = auth.public_base_url.rstrip("/")
+        else:
+            host = self._advertised_host
+            if host in {"", "0.0.0.0", "::"}:
+                host = "127.0.0.1"
+            try:
+                if ipaddress.ip_address(host).version == 6:
+                    host = f"[{host}]"
+            except ValueError:
+                pass
+            base_url = f"http://{host}:{self._advertised_port}"
+        card = {
             "name": "Swaag",
             "description": (
                 "Durable autonomous workers with resumable tasks, exact history, "
@@ -2255,12 +2260,12 @@ class CommunicationService:
             ),
             "supportedInterfaces": [
                 {
-                    "url": f"http://{host}:{port}/a2a/v1",
+                    "url": f"{base_url}/a2a/v1",
                     "protocolBinding": "JSONRPC",
                     "protocolVersion": A2AProjectionAdapter.protocol_version,
                 },
                 {
-                    "url": f"http://{host}:{port}/a2a/rest",
+                    "url": f"{base_url}/a2a/rest",
                     "protocolBinding": "HTTP+JSON",
                     "protocolVersion": A2AProjectionAdapter.protocol_version,
                 },
@@ -2284,6 +2289,36 @@ class CommunicationService:
                 }
             ],
         }
+        if auth.enabled:
+            card["securitySchemes"] = {
+                "swaagBearer": {
+                    "httpAuthSecurityScheme": {
+                        "scheme": "Bearer",
+                        "bearerFormat": "opaque",
+                        "description": "Bearer credential obtained out of band for this Swaag A2A deployment.",
+                    }
+                }
+            }
+            card["securityRequirements"] = [{"schemes": {"swaagBearer": {"list": []}}}]
+        return card
+
+    def _a2a_authorization_response(
+        self, headers: Mapping[str, str]
+    ) -> tuple[int, str, bytes, dict[str, str]] | None:
+        auth = self.runtime.config.a2a_authorization
+        if not auth.enabled:
+            return None
+        authorization = headers.get("authorization", "")
+        prefix = "Bearer "
+        token = authorization[len(prefix):] if authorization.startswith(prefix) else ""
+        if not token or not hmac.compare_digest(token, auth.bearer_token):
+            return (
+                401,
+                "Unauthorized",
+                b'{"error":"unauthorized"}',
+                {"WWW-Authenticate": 'Bearer realm="swaag-a2a"'},
+            )
+        return None
 
     def _ag_ui_capabilities(self) -> dict[str, Any]:
         tools = [
@@ -3384,6 +3419,23 @@ class CommunicationService:
                             headers={"Cache-Control": "public, max-age=300", "ETag": etag},
                         )
                     return
+                is_a2a_request = (
+                    path == "/a2a/v1"
+                    or path == "/a2a/rest"
+                    or path.startswith("/a2a/rest/")
+                )
+                if is_a2a_request:
+                    denied = self._a2a_authorization_response(headers)
+                    if denied is not None:
+                        status, reason, body, response_headers = denied
+                        await self._write_http_response(
+                            writer,
+                            status=status,
+                            reason=reason,
+                            body=body,
+                            headers=response_headers,
+                        )
+                        return
                 if path == "/ag-ui/capabilities":
                     if method != "GET":
                         await self._write_http_response(

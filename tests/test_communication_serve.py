@@ -412,6 +412,139 @@ def test_communication_transport_serves_a2a_agent_card_and_jsonrpc(make_config):
     asyncio.run(exercise())
 
 
+def test_a2a_bearer_boundary_advertises_https_and_fails_closed(make_config):
+    async def exercise() -> None:
+        config = make_config()
+        config.a2a_authorization.enabled = True
+        config.a2a_authorization.public_base_url = "https://agents.example.test/swaag"
+        config.a2a_authorization.bearer_token = "test-secret-token"
+        service = CommunicationService(AgentRuntime(config, model_client=object()))
+        server = await asyncio.start_server(service.handle_client, "127.0.0.1", 0)
+        port = server.sockets[0].getsockname()[1]
+        created = service.task_api.execute(
+            "create", {"objective": "inspect authenticated A2A binding", "start": False}
+        )
+        worker_id = created["worker"]["worker_id"]
+
+        async def http(raw: bytes) -> tuple[str, dict[str, str], bytes]:
+            reader, writer = await asyncio.open_connection("127.0.0.1", port)
+            writer.write(raw)
+            await writer.drain()
+            response = await reader.read()
+            writer.close()
+            await writer.wait_closed()
+            head, body = response.split(b"\r\n\r\n", 1)
+            lines = head.decode().split("\r\n")
+            headers = {
+                name.casefold(): value.strip()
+                for name, value in (line.split(":", 1) for line in lines[1:])
+            }
+            return lines[0], headers, body
+
+        status, _headers, body = await http(
+            b"GET /.well-known/agent-card.json HTTP/1.1\r\nHost: localhost\r\n\r\n"
+        )
+        card = json.loads(body)
+        assert status == "HTTP/1.1 200 OK"
+        assert card["supportedInterfaces"][0]["url"] == (
+            "https://agents.example.test/swaag/a2a/v1"
+        )
+        assert card["supportedInterfaces"][1]["url"] == (
+            "https://agents.example.test/swaag/a2a/rest"
+        )
+        assert card["securityRequirements"] == [{"schemes": {"swaagBearer": {"list": []}}}]
+        assert card["securitySchemes"]["swaagBearer"]["httpAuthSecurityScheme"]["scheme"] == "Bearer"
+
+        request = json.dumps(
+            {
+                "jsonrpc": "2.0",
+                "id": "auth-get",
+                "method": "GetTask",
+                "params": {"id": worker_id},
+            }
+        ).encode()
+        base = (
+            b"POST /a2a/v1 HTTP/1.1\r\n"
+            b"Host: localhost\r\n"
+            b"A2A-Version: 1.0\r\n"
+            b"Content-Type: application/json\r\n"
+        )
+        status, headers, body = await http(
+            base + f"Content-Length: {len(request)}\r\n\r\n".encode() + request
+        )
+        assert status == "HTTP/1.1 401 Unauthorized"
+        assert headers["www-authenticate"] == 'Bearer realm="swaag-a2a"'
+        assert json.loads(body) == {"error": "unauthorized"}
+
+        status, _headers, body = await http(
+            base
+            + b"Authorization: Bearer wrong-token\r\n"
+            + f"Content-Length: {len(request)}\r\n\r\n".encode()
+            + request
+        )
+        assert status == "HTTP/1.1 401 Unauthorized"
+
+        status, _headers, body = await http(
+            base
+            + b"Authorization: Bearer test-secret-token\r\n"
+            + f"Content-Length: {len(request)}\r\n\r\n".encode()
+            + request
+        )
+        assert status == "HTTP/1.1 200 OK"
+        assert json.loads(body)["result"]["id"] == worker_id
+
+        server.close()
+        await server.wait_closed()
+        service.workers.shutdown()
+
+    asyncio.run(exercise())
+
+
+def test_a2a_authorization_requires_https_public_url_and_token(tmp_path):
+    from swaag.config import load_config
+
+    base_env = {
+        "SWAAG__SESSIONS__ROOT": str(tmp_path / "sessions"),
+        "SWAAG__TOOLS__READ_ROOTS": f'["{tmp_path}"]',
+        "SWAAG__TOOLS__STAGED_DISCOVERY": "false",
+        "SWAAG__RUNTIME__COMPLETION_EVALUATION_ENABLED": "false",
+        "SWAAG__MODEL__BASE_URL": "http://127.0.0.1:9999",
+        "SWAAG__MODEL__CACHE_ENABLED": "false",
+        "SWAAG__RETRIEVAL__BACKEND": "unavailable",
+        "SWAAG__A2A__AUTHORIZATION__ENABLED": "true",
+    }
+    with pytest.raises(ValueError, match="absolute HTTPS"):
+        load_config(
+            env={
+                **base_env,
+                "SWAAG__A2A__AUTHORIZATION__PUBLIC_BASE_URL": "http://agents.example.test",
+                "SWAAG__A2A__AUTHORIZATION__BEARER_TOKEN": "secret",
+            }
+        )
+    with pytest.raises(ValueError, match="bearer_token"):
+        load_config(
+            env={
+                **base_env,
+                "SWAAG__A2A__AUTHORIZATION__PUBLIC_BASE_URL": "https://agents.example.test",
+                "SWAAG__A2A__AUTHORIZATION__BEARER_TOKEN": "",
+            }
+        )
+    for invalid_url in (
+        "https://",
+        "https://user:secret@agents.example.test",
+        "https://agents.example.test?token=secret",
+        "https://agents.example.test#internal",
+    ):
+        with pytest.raises(ValueError, match="absolute HTTPS"):
+            load_config(
+                env={
+                    **base_env,
+                    "SWAAG__A2A__AUTHORIZATION__PUBLIC_BASE_URL": invalid_url,
+                    "SWAAG__A2A__AUTHORIZATION__BEARER_TOKEN": "secret",
+                }
+            )
+
+
 def test_a2a_http_creates_unary_and_streaming_tasks_without_client_ids(
     make_config, monkeypatch
 ):
