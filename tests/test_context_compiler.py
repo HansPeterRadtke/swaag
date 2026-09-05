@@ -251,3 +251,67 @@ def test_context_limit_is_not_silently_inflated_to_policy_floor(make_config):
 
     assert result.report.context_limit == 128
     assert not result.report.fits
+
+
+def test_context_compiler_fails_closed_on_unaccounted_serialized_prompt_material(make_config):
+    import pytest
+
+    config = make_config(model__context_limit=4096)
+    compiler = ContextCompiler(config)
+    assembly = PromptAssembly(
+        kind="action",
+        prompt_mode="standard",
+        prompt_text="accounted HIDDEN",
+        components=[PromptComponent(name="accounted", text="accounted")],
+    )
+    with pytest.raises(ValueError, match="not exactly represented"):
+        compiler.compile(
+            assembly,
+            agent_action_contract([]),
+            ConservativeEstimator(chars_per_token=1.0),
+            minimum_output_tokens=64,
+        )
+
+
+def test_context_compiler_records_serialized_component_hashes_and_sizes(make_config):
+    from swaag.utils import sha256_text
+
+    config = make_config(model__context_limit=4096)
+    compiler = ContextCompiler(config)
+    components = [
+        PromptComponent(name="system", category="system_prompt", text="SYS"),
+        PromptComponent(name="retrieved_evidence", category="retrieved", text="EVIDENCE"),
+        PromptComponent(name="protocol_frame", category="wrapper", text="END"),
+    ]
+    assembly = PromptAssembly(
+        kind="action",
+        prompt_mode="standard",
+        prompt_text="".join(component.text for component in components),
+        components=components,
+    )
+    result = compiler.compile(
+        assembly,
+        agent_action_contract([]),
+        ConservativeEstimator(chars_per_token=1.0),
+        minimum_output_tokens=64,
+    )
+    accounting = result.accounting()
+    assert accounting["serialized_prompt_chars"] == len(assembly.prompt_text)
+    assert accounting["serialized_prompt_sha256"] == sha256_text(assembly.prompt_text)
+    serialized = [item for item in accounting["components"] if item["include_in_context"]]
+    assert [item["index"] for item in serialized] == [0, 1, 2]
+    assert [item["name"] for item in serialized] == [
+        "system",
+        "retrieved_evidence",
+        "protocol_frame",
+    ]
+    assert [item["chars"] for item in serialized] == [3, 8, 3]
+    assert [item["sha256"] for item in serialized] == [
+        sha256_text("SYS"),
+        sha256_text("EVIDENCE"),
+        sha256_text("END"),
+    ]
+    schema = next(item for item in accounting["components"] if item["name"] == "constraint_schema")
+    assert schema["include_in_context"] is False
+    assert schema["chars"] > 0
+    assert len(schema["sha256"]) == 64

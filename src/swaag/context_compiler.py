@@ -7,7 +7,7 @@ from swaag.budgeting import CallBudgetPlan, compute_call_budget, structured_outp
 from swaag.config import AgentConfig
 from swaag.tokens import TokenCounter, build_budget
 from swaag.types import BudgetReport, ContractSpec, PromptAssembly, PromptComponent
-from swaag.utils import stable_json_dumps
+from swaag.utils import sha256_text, stable_json_dumps
 
 
 @dataclass(slots=True)
@@ -18,6 +18,9 @@ class ContextCompilation:
     minimum_output_tokens: int
     desired_output_tokens: int
     context_limit_source: str
+    serialized_prompt_chars: int
+    serialized_prompt_sha256: str
+    serialized_components: list[dict[str, Any]]
 
     @property
     def overflow_tokens(self) -> int:
@@ -51,7 +54,9 @@ class ContextCompilation:
             "desired_output_tokens": self.desired_output_tokens,
             "context_limit_source": self.context_limit_source,
             "policy": asdict(self.plan),
-            "components": [asdict(item) for item in self.report.breakdown],
+            "serialized_prompt_chars": self.serialized_prompt_chars,
+            "serialized_prompt_sha256": self.serialized_prompt_sha256,
+            "components": self.serialized_components,
         }
 
 
@@ -80,6 +85,15 @@ class ContextCompiler:
         context_limit: int | None = None,
         context_limit_source: str = "configured",
     ) -> ContextCompilation:
+        serialized_components = [
+            component for component in assembly.components if component.include_in_context
+        ]
+        reconstructed_prompt = "".join(component.text for component in serialized_components)
+        if reconstructed_prompt != assembly.prompt_text:
+            raise ValueError(
+                "PromptAssembly prompt_text contains serialized material that is not exactly represented by include_in_context components"
+            )
+
         effective_context_limit = max(
             int(self.config.model.context_limit if context_limit is None else context_limit),
             1,
@@ -151,6 +165,22 @@ class ContextCompiler:
             reserved_response_tokens=reserved,
             safety_margin_tokens=safety_margin,
         )
+        prompt_count = counter.count_text(assembly.prompt_text)
+        if prompt_count.tokens != report.input_tokens:
+            raise ValueError(
+                "Context accounting does not exactly reproduce serialized prompt token count"
+            )
+        component_rows: list[dict[str, Any]] = []
+        for index, (component, item) in enumerate(zip(components, report.breakdown, strict=True)):
+            row = asdict(item)
+            row.update(
+                {
+                    "index": index,
+                    "chars": len(component.text),
+                    "sha256": sha256_text(component.text),
+                }
+            )
+            component_rows.append(row)
         return ContextCompilation(
             report=report,
             plan=plan,
@@ -158,4 +188,7 @@ class ContextCompiler:
             minimum_output_tokens=int(minimum_output_tokens),
             desired_output_tokens=desired_output,
             context_limit_source=str(context_limit_source),
+            serialized_prompt_chars=len(assembly.prompt_text),
+            serialized_prompt_sha256=sha256_text(assembly.prompt_text),
+            serialized_components=component_rows,
         )
