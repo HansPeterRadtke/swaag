@@ -474,3 +474,144 @@ def test_external_mcp_credential_provider_conflicting_static_header_fails(
     )
     with pytest.raises(ExternalMcpError, match="conflicts with configured header Authorization"):
         client.list_tools()
+
+
+def test_oversized_external_mcp_result_uses_generic_projection_and_exact_history_recovery(
+    make_config, tmp_path: Path
+) -> None:
+    from swaag.model import CompletionRequestPolicy
+    from swaag.types import CompletionResult, ContractSpec
+
+    marker = "EXTERNAL-MCP-REQUIRED-MARKER-91827"
+
+    class ProjectionClient:
+        is_deterministic_test_client = True
+
+        def __init__(self):
+            self.requests = []
+
+        def tokenize(self, text: str) -> int:
+            return len(text)
+
+        def tokenize_selection(self, text: str) -> int:
+            return len(text)
+
+        def select_request_policy(self, *, contract: ContractSpec, **_kwargs):
+            return CompletionRequestPolicy(
+                "test", "server_schema", contract.mode, 30, 0.01
+            )
+
+        def resolve_contract(self, contract: ContractSpec, **kwargs):
+            return contract, self.select_request_policy(contract=contract, **kwargs)
+
+        def build_completion_request(
+            self,
+            prompt: str,
+            *,
+            max_tokens: int,
+            contract: ContractSpec,
+            temperature=None,
+        ):
+            return {
+                "prompt": prompt,
+                "n_predict": max_tokens,
+                "contract": contract.name,
+                "json_schema": contract.json_schema,
+            }
+
+        def send_completion(self, payload, **_kwargs):
+            self.requests.append(payload)
+            projection = marker if marker in payload["prompt"] else "irrelevant bulk"
+            response = json.dumps({"projection": projection})
+            return CompletionResult(
+                text=response,
+                raw_request=payload,
+                raw_response={"content": response},
+                prompt_tokens=None,
+                completion_tokens=None,
+                finish_reason="stop",
+            )
+
+    server = tmp_path / "large_mcp.py"
+    server.write_text(
+        "import json,sys\n"
+        f"marker={marker!r}\n"
+        "bulk='noise-'*600 + marker + '-tail'*600\n"
+        "for line in sys.stdin:\n"
+        "  if not line.strip(): continue\n"
+        "  req=json.loads(line); rid=req['id']\n"
+        "  if req['method']=='tools/list':\n"
+        "    result={'resultType':'complete','tools':[{'name':'external_large','description':'Return large external evidence.','inputSchema':{'type':'object','properties':{},'additionalProperties':False}}]}\n"
+        "  elif req['method']=='tools/call':\n"
+        "    result={'resultType':'complete','content':[{'type':'text','text':bulk}],'structuredContent':{'evidence':bulk},'isError':False}\n"
+        "  else: result={'resultType':'complete'}\n"
+        "  print(json.dumps({'jsonrpc':'2.0','id':rid,'result':result}),flush=True)\n"
+    )
+    config = make_config(
+        model__context_limit=2_000,
+        context__max_compaction_rounds=4,
+        context__safety_margin_tokens=32,
+    )
+    config.sessions.root = tmp_path / "sessions"
+    config.external_tools.mcp_servers["large"] = ExternalMcpServerConfig(
+        enabled=True,
+        optional=False,
+        transport="stdio",
+        command=[sys.executable, str(server)],
+        url="",
+        header_env={},
+        credential_command=[],
+        credential_refresh_skew_seconds=30.0,
+        timeout_seconds=5.0,
+    )
+    client = ProjectionClient()
+    runtime = AgentRuntime(config, model_client=client)
+    state = runtime.create_or_load_session()
+    spec = runtime.external_mcp.specs()[0]
+
+    result = runtime._execute_external_mcp_tool(state, spec=spec, arguments={})
+    assert result is not None
+    assert marker in result.display_text
+
+    events_before_projection = runtime.history.read_history(state.session_id)
+    source = next(
+        event
+        for event in reversed(events_before_projection)
+        if event.event_type == "tool_result" and event.payload.get("tool_name") == "external_large"
+    )
+    exact_evidence = source.payload["output"]["structured_content"]["evidence"]
+    assert marker in exact_evidence
+    assert len(exact_evidence) > 5_000
+    assert source.payload["executor"] == "mcp"
+
+    tool_message = state.messages[-1]
+    assert tool_message.metadata["source_event_sequence"] == source.sequence
+    assert tool_message.metadata["source_event_hash"] == source.hash
+    projection = runtime._create_tool_result_projection(
+        state,
+        original_request="Recover only the required external marker.",
+        message=tool_message,
+        target_tokens=128,
+        original_tokens=len(tool_message.content),
+        overflow_tokens=10_000,
+    )
+    assert projection == marker
+    assert client.requests
+
+    projected = next(
+        event
+        for event in reversed(runtime.history.read_history(state.session_id))
+        if event.event_type == "tool_result_projected"
+    )
+    assert projected.payload["source_event_sequence"] == source.sequence
+    assert projected.payload["source_event_hash"] == source.hash
+    assert projected.payload["tool_name"] == "external_large"
+    assert projected.payload["projected_tokens"] < projected.payload["original_tokens"]
+
+    # Projection is disposable prompt material. The full MCP evidence is still
+    # authoritative and boundedly re-readable from normal history.
+    recovered = runtime.history.read_history_window(
+        state.session_id, start_sequence=source.sequence, limit=1
+    )[0]
+    assert recovered.hash == source.hash
+    assert recovered.payload["output"]["structured_content"]["evidence"] == exact_evidence
