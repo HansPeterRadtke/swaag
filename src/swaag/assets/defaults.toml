@@ -372,7 +372,10 @@ timeout_seconds = 5.0
 # External MCP servers are opt-in. Named sub-tables may configure local stdio
 # commands or remote Streamable HTTP URLs. Remote credentials/headers should be
 # supplied through per-server `header_env` mappings (HTTP header -> environment
-# variable name), never literal model/tool content. Optional servers disappear from
+# variable name), never literal model/tool content. For expiring credentials/OAuth, a
+# per-server `credential_command` may return JSON headers plus `expires_at_epoch`;
+# SWAAG refreshes before expiry and once after 401/403 without persisting the token.
+# Optional servers disappear from
 # the capability catalog when unavailable instead of failing SWAAG.
 
 [a2a.authorization]

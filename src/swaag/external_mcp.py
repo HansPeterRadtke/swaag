@@ -4,6 +4,7 @@ from dataclasses import dataclass
 import json
 import os
 import subprocess
+import time
 from typing import Any, Iterable
 
 import requests
@@ -212,6 +213,8 @@ class ExternalMcpClient:
         self.server_name = server_name
         self.config = config
         self._request_index = 0
+        self._credential_headers: dict[str, str] = {}
+        self._credential_expires_at: float | None = None
 
     def _request_payload(self, method: str, params: dict[str, Any] | None = None) -> dict[str, Any]:
         self._request_index += 1
@@ -260,9 +263,93 @@ class ExternalMcpClient:
             raise ExternalMcpError(f"MCP stdio server {self.server_name} returned a non-object response")
         return response
 
-    def _http_request(self, request: dict[str, Any]) -> dict[str, Any]:
-        if not self.config.url:
-            raise ExternalMcpError(f"MCP server {self.server_name} has no Streamable HTTP URL")
+
+    def _run_credential_provider(self, reason: str) -> dict[str, str]:
+        if not self.config.credential_command:
+            return {}
+        request = {
+            "server_name": self.server_name,
+            "url": self.config.url,
+            "reason": reason,
+        }
+        try:
+            completed = subprocess.run(
+                self.config.credential_command,
+                input=stable_json_dumps(request, indent=None) + "\n",
+                text=True,
+                capture_output=True,
+                timeout=float(self.config.timeout_seconds),
+                check=False,
+            )
+        except (OSError, subprocess.TimeoutExpired) as exc:
+            raise ExternalMcpError(
+                f"MCP credential provider for {self.server_name} unavailable: {type(exc).__name__}: {exc}"
+            ) from exc
+        if completed.returncode != 0:
+            detail = completed.stderr.strip() or completed.stdout.strip() or f"exit {completed.returncode}"
+            raise ExternalMcpError(
+                f"MCP credential provider for {self.server_name} failed: {detail}"
+            )
+        try:
+            payload = json.loads(completed.stdout)
+        except json.JSONDecodeError as exc:
+            raise ExternalMcpError(
+                f"MCP credential provider for {self.server_name} returned invalid JSON"
+            ) from exc
+        if not isinstance(payload, dict):
+            raise ExternalMcpError(
+                f"MCP credential provider for {self.server_name} returned a non-object response"
+            )
+        raw_headers = payload.get("headers", {})
+        if not isinstance(raw_headers, dict) or not raw_headers:
+            raise ExternalMcpError(
+                f"MCP credential provider for {self.server_name} returned no headers"
+            )
+        headers: dict[str, str] = {}
+        for header_name, value in raw_headers.items():
+            if not isinstance(header_name, str) or not header_name.strip() or any(
+                ch in header_name for ch in "\r\n:"
+            ):
+                raise ExternalMcpError(
+                    f"MCP credential provider for {self.server_name} returned an invalid header name"
+                )
+            if not isinstance(value, str) or not value or "\r" in value or "\n" in value:
+                raise ExternalMcpError(
+                    f"MCP credential provider for {self.server_name} returned an invalid header value"
+                )
+            headers[header_name] = value
+        expires_at = payload.get("expires_at_epoch")
+        if expires_at is None:
+            self._credential_expires_at = None
+        elif isinstance(expires_at, (int, float)) and not isinstance(expires_at, bool):
+            self._credential_expires_at = float(expires_at)
+        else:
+            raise ExternalMcpError(
+                f"MCP credential provider for {self.server_name} returned invalid expires_at_epoch"
+            )
+        self._credential_headers = headers
+        return dict(headers)
+
+    def _credential_headers_for_request(self, *, force_refresh: bool = False) -> dict[str, str]:
+        if not self.config.credential_command:
+            return {}
+        now = time.time()
+        refresh_due = (
+            not self._credential_headers
+            or force_refresh
+            or (
+                self._credential_expires_at is not None
+                and self._credential_expires_at
+                <= now + float(self.config.credential_refresh_skew_seconds)
+            )
+        )
+        if refresh_due:
+            return self._run_credential_provider(
+                "unauthorized" if force_refresh else "initial_or_expired"
+            )
+        return dict(self._credential_headers)
+
+    def _http_headers(self, *, force_refresh: bool = False) -> dict[str, str]:
         headers = {"Accept": "application/json, text/event-stream"}
         for header_name, env_name in self.config.header_env.items():
             value = os.environ.get(env_name)
@@ -271,6 +358,20 @@ class ExternalMcpClient:
                     f"MCP HTTP server {self.server_name} requires environment variable {env_name} for header {header_name}"
                 )
             headers[header_name] = value
+        for header_name, value in self._credential_headers_for_request(
+            force_refresh=force_refresh
+        ).items():
+            if header_name in headers and headers[header_name] != value:
+                raise ExternalMcpError(
+                    f"MCP credential provider for {self.server_name} conflicts with configured header {header_name}"
+                )
+            headers[header_name] = value
+        return headers
+
+    def _http_request(self, request: dict[str, Any]) -> dict[str, Any]:
+        if not self.config.url:
+            raise ExternalMcpError(f"MCP server {self.server_name} has no Streamable HTTP URL")
+        headers = self._http_headers()
         try:
             response = requests.post(
                 self.config.url,
@@ -278,6 +379,16 @@ class ExternalMcpClient:
                 headers=headers,
                 timeout=float(self.config.timeout_seconds),
             )
+            if (
+                response.status_code in {401, 403}
+                and self.config.credential_command
+            ):
+                response = requests.post(
+                    self.config.url,
+                    json=request,
+                    headers=self._http_headers(force_refresh=True),
+                    timeout=float(self.config.timeout_seconds),
+                )
         except requests.RequestException as exc:
             raise ExternalMcpError(
                 f"MCP HTTP server {self.server_name} unavailable: {type(exc).__name__}: {exc}"

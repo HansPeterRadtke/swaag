@@ -240,6 +240,8 @@ class ExternalMcpServerConfig:
     command: list[str]
     url: str
     header_env: dict[str, str]
+    credential_command: list[str]
+    credential_refresh_skew_seconds: float
     timeout_seconds: float
 
 
@@ -532,6 +534,10 @@ def _coerce_config(data: dict[str, Any]) -> AgentConfig:
                 header_env={str(k): str(v) for k, v in payload.get("header_env", {}).items()}
                 if isinstance(payload.get("header_env", {}), dict)
                 else {},
+                credential_command=[str(item) for item in payload.get("credential_command", [])],
+                credential_refresh_skew_seconds=float(
+                    payload.get("credential_refresh_skew_seconds", 30.0)
+                ),
                 timeout_seconds=float(payload.get("timeout_seconds", 30.0)),
             )
             for name, payload in raw_mcp_servers.items()
@@ -792,6 +798,14 @@ def _coerce_config(data: dict[str, Any]) -> AgentConfig:
                 raise ValueError(
                     f"external_tools.mcp_servers.{server_name}.header_env values must be environment variable names"
                 )
+        if server.credential_command and server.transport != "streamable_http":
+            raise ValueError(
+                f"external_tools.mcp_servers.{server_name}.credential_command requires streamable_http transport"
+            )
+        if server.credential_refresh_skew_seconds < 0:
+            raise ValueError(
+                f"external_tools.mcp_servers.{server_name}.credential_refresh_skew_seconds must be non-negative"
+            )
 
     if a2a_authorization.enabled:
         public_url = urlparse(a2a_authorization.public_base_url)

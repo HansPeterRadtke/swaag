@@ -34,6 +34,8 @@ def test_external_mcp_stdio_discovers_and_calls_schema_driven_tool(tmp_path: Pat
         command=[sys.executable, str(server)],
         url="",
         header_env={},
+        credential_command=[],
+        credential_refresh_skew_seconds=30.0,
         timeout_seconds=5.0,
     )
     client = ExternalMcpClient("dummy", config)
@@ -58,6 +60,8 @@ def test_optional_external_mcp_server_disappears_from_catalog(tmp_path: Path) ->
                     command=[str(tmp_path / "does-not-exist")],
                     url="",
                     header_env={},
+                    credential_command=[],
+                    credential_refresh_skew_seconds=30.0,
                     timeout_seconds=1.0,
                 )
             }
@@ -79,6 +83,8 @@ def test_required_external_mcp_server_fails_closed(tmp_path: Path) -> None:
                         command=[str(tmp_path / "does-not-exist")],
                         url="",
                         header_env={},
+                        credential_command=[],
+                        credential_refresh_skew_seconds=30.0,
                         timeout_seconds=1.0,
                     )
                 }
@@ -99,6 +105,8 @@ def test_runtime_mcp_tool_is_external_not_system_and_records_normal_tool_result(
         command=[sys.executable, str(server)],
         url="",
         header_env={},
+        credential_command=[],
+        credential_refresh_skew_seconds=30.0,
         timeout_seconds=5.0,
     )
     runtime = AgentRuntime(config, model_client=object())
@@ -217,6 +225,8 @@ def test_external_mcp_streamable_http_json_transport() -> None:
                 command=[],
                 url=f"http://127.0.0.1:{server.server_port}/mcp",
                 header_env={},
+                credential_command=[],
+                credential_refresh_skew_seconds=30.0,
                 timeout_seconds=5.0,
             ),
         )
@@ -268,6 +278,8 @@ def test_external_mcp_streamable_http_uses_header_environment(monkeypatch) -> No
                 command=[],
                 url=f"http://127.0.0.1:{server.server_port}/mcp",
                 header_env={"Authorization": "SWAAG_TEST_MCP_AUTH"},
+                credential_command=[],
+                credential_refresh_skew_seconds=30.0,
                 timeout_seconds=5.0,
             ),
         )
@@ -291,8 +303,174 @@ def test_external_mcp_missing_header_environment_fails_before_network(monkeypatc
             command=[],
             url="http://127.0.0.1:1/mcp",
             header_env={"Authorization": "SWAAG_TEST_MISSING_MCP_AUTH"},
+            credential_command=[],
+            credential_refresh_skew_seconds=30.0,
             timeout_seconds=1.0,
         ),
     )
     with pytest.raises(ExternalMcpError, match="SWAAG_TEST_MISSING_MCP_AUTH"):
+        client.list_tools()
+
+
+
+def _write_credential_provider(path: Path, log_path: Path, *, expiring: bool = False) -> None:
+    path.write_text(
+        "import json,sys,time\n"
+        f"log={str(log_path)!r}\n"
+        "request=json.load(sys.stdin)\n"
+        "with open(log,'a',encoding='utf-8') as f: f.write(request['reason']+'\\n')\n"
+        "token='fresh-token' if request['reason']=='unauthorized' else 'stale-token'\n"
+        + (
+            "expires=time.time()+1\n"
+            if expiring
+            else "expires=time.time()+3600\n"
+        )
+        + "print(json.dumps({'headers':{'Authorization':'Bearer '+token},'expires_at_epoch':expires}))\n"
+    )
+
+
+def test_external_mcp_credential_provider_refreshes_after_unauthorized(tmp_path: Path) -> None:
+    import threading
+    from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
+
+    log_path = tmp_path / "credential.log"
+    provider = tmp_path / "credential_provider.py"
+    _write_credential_provider(provider, log_path)
+    observed = []
+
+    class Handler(BaseHTTPRequestHandler):
+        def do_POST(self):
+            authorization = self.headers.get("Authorization")
+            observed.append(authorization)
+            length = int(self.headers.get("content-length", "0"))
+            request = json.loads(self.rfile.read(length))
+            if authorization != "Bearer fresh-token":
+                self.send_response(401)
+                self.send_header("content-length", "0")
+                self.end_headers()
+                return
+            body = json.dumps({
+                "jsonrpc": "2.0",
+                "id": request["id"],
+                "result": {"resultType": "complete", "tools": []},
+            }).encode()
+            self.send_response(200)
+            self.send_header("content-type", "application/json")
+            self.send_header("content-length", str(len(body)))
+            self.end_headers()
+            self.wfile.write(body)
+
+        def log_message(self, _format, *_args):
+            return
+
+    server = ThreadingHTTPServer(("127.0.0.1", 0), Handler)
+    thread = threading.Thread(target=server.serve_forever, daemon=True)
+    thread.start()
+    try:
+        client = ExternalMcpClient(
+            "oauth-helper",
+            ExternalMcpServerConfig(
+                enabled=True,
+                optional=False,
+                transport="streamable_http",
+                command=[],
+                url=f"http://127.0.0.1:{server.server_port}/mcp",
+                header_env={},
+                credential_command=[sys.executable, str(provider)],
+                credential_refresh_skew_seconds=30.0,
+                timeout_seconds=5.0,
+            ),
+        )
+        assert client.list_tools() == ()
+        assert observed == ["Bearer stale-token", "Bearer fresh-token"]
+        assert log_path.read_text().splitlines() == ["initial_or_expired", "unauthorized"]
+        # Fresh credentials are cached; another request does not invoke the provider again.
+        assert client.list_tools() == ()
+        assert observed[-1] == "Bearer fresh-token"
+        assert log_path.read_text().splitlines() == ["initial_or_expired", "unauthorized"]
+        assert "fresh-token" not in repr(client.config)
+    finally:
+        server.shutdown()
+        thread.join(timeout=5)
+        server.server_close()
+
+
+def test_external_mcp_credential_provider_refreshes_before_expiry(tmp_path: Path) -> None:
+    import threading
+    from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
+
+    log_path = tmp_path / "credential.log"
+    provider = tmp_path / "credential_provider.py"
+    _write_credential_provider(provider, log_path, expiring=True)
+
+    class Handler(BaseHTTPRequestHandler):
+        def do_POST(self):
+            length = int(self.headers.get("content-length", "0"))
+            request = json.loads(self.rfile.read(length))
+            body = json.dumps({
+                "jsonrpc": "2.0",
+                "id": request["id"],
+                "result": {"resultType": "complete", "tools": []},
+            }).encode()
+            self.send_response(200)
+            self.send_header("content-type", "application/json")
+            self.send_header("content-length", str(len(body)))
+            self.end_headers()
+            self.wfile.write(body)
+
+        def log_message(self, _format, *_args):
+            return
+
+    server = ThreadingHTTPServer(("127.0.0.1", 0), Handler)
+    thread = threading.Thread(target=server.serve_forever, daemon=True)
+    thread.start()
+    try:
+        client = ExternalMcpClient(
+            "expiring-helper",
+            ExternalMcpServerConfig(
+                enabled=True,
+                optional=False,
+                transport="streamable_http",
+                command=[],
+                url=f"http://127.0.0.1:{server.server_port}/mcp",
+                header_env={},
+                credential_command=[sys.executable, str(provider)],
+                credential_refresh_skew_seconds=30.0,
+                timeout_seconds=5.0,
+            ),
+        )
+        client.list_tools()
+        client.list_tools()
+        assert log_path.read_text().splitlines() == [
+            "initial_or_expired",
+            "initial_or_expired",
+        ]
+    finally:
+        server.shutdown()
+        thread.join(timeout=5)
+        server.server_close()
+
+
+def test_external_mcp_credential_provider_conflicting_static_header_fails(
+    tmp_path: Path, monkeypatch
+) -> None:
+    provider = tmp_path / "credential_provider.py"
+    log_path = tmp_path / "credential.log"
+    _write_credential_provider(provider, log_path)
+    monkeypatch.setenv("SWAAG_STATIC_AUTH", "Bearer static")
+    client = ExternalMcpClient(
+        "conflict",
+        ExternalMcpServerConfig(
+            enabled=True,
+            optional=False,
+            transport="streamable_http",
+            command=[],
+            url="http://127.0.0.1:1/mcp",
+            header_env={"Authorization": "SWAAG_STATIC_AUTH"},
+            credential_command=[sys.executable, str(provider)],
+            credential_refresh_skew_seconds=30.0,
+            timeout_seconds=1.0,
+        ),
+    )
+    with pytest.raises(ExternalMcpError, match="conflicts with configured header Authorization"):
         client.list_tools()
