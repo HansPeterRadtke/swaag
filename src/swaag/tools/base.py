@@ -114,6 +114,9 @@ class ToolContext:
 
 
 class Tool(abc.ABC):
+    # Repository-owned tools are layer-2 system capabilities. Domain/external
+    # capabilities must enter through the external/delegated tool catalog.
+    layer: str = "system"
     name: str
     description: str
     input_schema: dict[str, Any]

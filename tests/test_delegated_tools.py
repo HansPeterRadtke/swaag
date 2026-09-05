@@ -505,3 +505,82 @@ def test_worker_stages_delegated_tool_and_resumes_from_exact_client_result(
     assert runtime.delegated_tools.call(call.call_id).history_event_hash == (
         delegated_result.hash
     )
+
+
+def test_generic_external_tools_are_schema_driven_and_staged(make_config) -> None:
+    from swaag.tools.registry import ToolRegistry
+
+    lookup = prepare_delegated_tool_spec(
+        {
+            "name": "external_lookup",
+            "description": "Look up a value in an external service.",
+            "parameters": {
+                "type": "object",
+                "properties": {"query": {"type": "string"}},
+                "required": ["query"],
+                "additionalProperties": False,
+            },
+            "metadata": {"example": True},
+        }
+    )
+    transform = prepare_delegated_tool_spec(
+        {
+            "name": "external_transform",
+            "description": "Transform opaque external input.",
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "payload": {"type": "string"},
+                    "mode": {"type": "string"},
+                },
+                "required": ["payload", "mode"],
+                "additionalProperties": False,
+            },
+            "metadata": {"example": True},
+        }
+    )
+    config = make_config()
+    registry = ToolRegistry()
+    index = registry.capability_index(config, delegated_tools=(lookup, transform))
+    assert (lookup.name, lookup.description, lookup.prompt_tuple()[3]) in index
+    assert (transform.name, transform.description, transform.prompt_tuple()[3]) in index
+    staged = registry.staged_prompt_tuples(
+        config, ["external_transform"], delegated_tools=(lookup, transform)
+    )
+    names = [item[0] for item in staged]
+    assert "load_tools" in names
+    assert "external_transform" in names
+    assert "external_lookup" not in names
+    schema = next(item[2] for item in staged if item[0] == "external_transform")
+    assert schema == transform.parameters
+
+
+def test_runtime_binds_external_tool_catalog_without_provider_specific_code(make_config) -> None:
+    runtime = AgentRuntime(make_config(), model_client=object())
+    state = runtime.create_or_load_session()
+    catalog = runtime.bind_external_tool_catalog(
+        state.session_id,
+        source="dummy_connector",
+        external_context_id="external-context",
+        external_request_id="catalog-1",
+        tools=[
+            {
+                "name": "external_lookup",
+                "description": "Fetch opaque external evidence.",
+                "parameters": {
+                    "type": "object",
+                    "properties": {"key": {"type": "string"}},
+                    "required": ["key"],
+                    "additionalProperties": False,
+                },
+                "metadata": {"transport": "dummy"},
+            }
+        ],
+    )
+    assert catalog.source == "dummy_connector"
+    assert catalog.tools[0].name == "external_lookup"
+    index = runtime.tools.capability_index(
+        runtime.config, delegated_tools=catalog.tools
+    )
+    assert any(item[0] == "external_lookup" for item in index)
+    assert "external_lookup" not in runtime.tools.system_tool_names()

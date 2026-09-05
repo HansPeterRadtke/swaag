@@ -78,12 +78,6 @@ class EnvironmentConfig:
     shell_executable: str
     command_timeout_seconds: int
     max_capture_chars: int
-    aubro_entrypoint: str
-    aubro_src: str
-    aubro_timeout_seconds: int
-    aubro_max_text_chars: int
-    aubro_max_results: int
-    aubro_max_links: int
 
 
 @dataclass(slots=True)
@@ -216,8 +210,6 @@ class ArchiveConfig:
 class AttachmentConfig:
     max_upload_bytes: int
     preview_chars: int
-    extraction_timeout_seconds: int
-    all2text_command: str
 
 
 @dataclass(slots=True)
@@ -238,6 +230,21 @@ class McpConfig:
     enabled: bool
     transport: str
     authorization: McpAuthorizationConfig
+
+
+@dataclass(slots=True)
+class ExternalMcpServerConfig:
+    enabled: bool
+    optional: bool
+    transport: str
+    command: list[str]
+    url: str
+    timeout_seconds: float
+
+
+@dataclass(slots=True)
+class ExternalToolsConfig:
+    mcp_servers: dict[str, ExternalMcpServerConfig]
 
 
 @dataclass(slots=True)
@@ -334,6 +341,7 @@ class AgentConfig:
     archive: ArchiveConfig
     attachments: AttachmentConfig
     mcp: McpConfig
+    external_tools: ExternalToolsConfig
     a2a_authorization: A2AAuthorizationConfig
     communication: CommunicationConfig
     budget_policy: BudgetPolicyConfig
@@ -491,8 +499,6 @@ def _coerce_config(data: dict[str, Any]) -> AgentConfig:
     attachments = AttachmentConfig(
         max_upload_bytes=int(data["attachments"]["max_upload_bytes"]),
         preview_chars=int(data["attachments"]["preview_chars"]),
-        extraction_timeout_seconds=int(data["attachments"]["extraction_timeout_seconds"]),
-        all2text_command=str(data["attachments"]["all2text_command"]),
     )
     mcp_auth_data = data["mcp"].get("authorization", {})
     mcp = McpConfig(
@@ -510,6 +516,25 @@ def _coerce_config(data: dict[str, Any]) -> AgentConfig:
             timeout_seconds=float(mcp_auth_data.get("timeout_seconds", 5.0)),
         ),
     )
+    external_tools_data = data.get("external_tools", {})
+    raw_mcp_servers = external_tools_data.get("mcp_servers", {})
+    if not isinstance(raw_mcp_servers, dict):
+        raise ValueError("external_tools.mcp_servers must be a table")
+    external_tools = ExternalToolsConfig(
+        mcp_servers={
+            str(name): ExternalMcpServerConfig(
+                enabled=bool(payload.get("enabled", True)),
+                optional=bool(payload.get("optional", True)),
+                transport=str(payload.get("transport", "stdio")),
+                command=[str(item) for item in payload.get("command", [])],
+                url=str(payload.get("url", "")),
+                timeout_seconds=float(payload.get("timeout_seconds", 30.0)),
+            )
+            for name, payload in raw_mcp_servers.items()
+            if isinstance(payload, dict)
+        }
+    )
+
     a2a_auth_data = data.get("a2a", {}).get("authorization", {})
     a2a_authorization = A2AAuthorizationConfig(
         enabled=bool(a2a_auth_data.get("enabled", False)),
@@ -609,10 +634,6 @@ def _coerce_config(data: dict[str, Any]) -> AgentConfig:
     _validate_non_negative("context.safety_margin_tokens", context.safety_margin_tokens)
     _validate_positive("environment.command_timeout_seconds", environment.command_timeout_seconds)
     _validate_positive("environment.max_capture_chars", environment.max_capture_chars)
-    _validate_positive("environment.aubro_timeout_seconds", environment.aubro_timeout_seconds)
-    _validate_positive("environment.aubro_max_text_chars", environment.aubro_max_text_chars)
-    _validate_positive("environment.aubro_max_results", environment.aubro_max_results)
-    _validate_positive("environment.aubro_max_links", environment.aubro_max_links)
     _validate_positive("runtime.tool_timeout_seconds", runtime.tool_timeout_seconds)
     if runtime.background_poll_seconds < 0:
         raise ValueError("runtime.background_poll_seconds must be non-negative")
@@ -710,9 +731,6 @@ def _coerce_config(data: dict[str, Any]) -> AgentConfig:
     _validate_non_negative("archive.min_event_count", archive.min_event_count)
     _validate_positive("attachments.max_upload_bytes", attachments.max_upload_bytes)
     _validate_positive("attachments.preview_chars", attachments.preview_chars)
-    _validate_positive("attachments.extraction_timeout_seconds", attachments.extraction_timeout_seconds)
-    if not attachments.all2text_command.strip():
-        raise ValueError("attachments.all2text_command must not be empty")
     _validate_positive("communication.max_concurrent_requests", communication.max_concurrent_requests)
     _validate_positive("communication.port", communication.port)
     if not 1 <= communication.port <= 65535:
@@ -740,6 +758,28 @@ def _coerce_config(data: dict[str, Any]) -> AgentConfig:
             raise ValueError("mcp.authorization.introspection_client_id is required when enabled")
         if not mcp.authorization.introspection_client_secret:
             raise ValueError("mcp.authorization.introspection_client_secret is required when enabled")
+    for server_name, server in external_tools.mcp_servers.items():
+        if not server_name.strip():
+            raise ValueError("external_tools.mcp_servers names must not be empty")
+        if server.transport not in {"stdio", "streamable_http"}:
+            raise ValueError(
+                f"external_tools.mcp_servers.{server_name}.transport must be stdio or streamable_http"
+            )
+        if server.timeout_seconds <= 0:
+            raise ValueError(
+                f"external_tools.mcp_servers.{server_name}.timeout_seconds must be positive"
+            )
+        if server.transport == "stdio" and not server.command:
+            raise ValueError(
+                f"external_tools.mcp_servers.{server_name}.command is required for stdio"
+            )
+        if server.transport == "streamable_http":
+            parsed_url = urlparse(server.url)
+            if parsed_url.scheme not in {"http", "https"} or not parsed_url.netloc:
+                raise ValueError(
+                    f"external_tools.mcp_servers.{server_name}.url must be an absolute HTTP(S) URL"
+                )
+
     if a2a_authorization.enabled:
         public_url = urlparse(a2a_authorization.public_base_url)
         if (
@@ -775,6 +815,7 @@ def _coerce_config(data: dict[str, Any]) -> AgentConfig:
         archive=archive,
         attachments=attachments,
         mcp=mcp,
+        external_tools=external_tools,
         a2a_authorization=a2a_authorization,
         communication=communication,
         budget_policy=budget_policy,

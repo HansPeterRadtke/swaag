@@ -86,7 +86,7 @@ background_poll_seconds = 0.1
 # allow_side_effect_tools: set true only if destructive writes are intended.
 # -----------------------------------------------------------
 [tools]
-enabled = ["echo", "time_now", "calculator", "list_files", "read_file", "read_text", "search_in_file", "search_repo", "history_search", "history_window", "history_analyze", "read_artifact", "list_attachments", "read_attachment", "inspect_attachment_capabilities", "extract_attachment", "browser_search", "browser_browse", "terminal", "notes", "prompt_instructions", "shared_state", "edit_text", "write_file", "run_tests", "shell_command", "poll_process", "kill_process", "wait_seconds", "schedule_wakeup", "list_wakeups", "cancel_wakeup"]
+enabled = ["echo", "time_now", "calculator", "list_files", "read_file", "read_text", "search_in_file", "search_repo", "history_search", "history_window", "history_analyze", "read_artifact", "list_attachments", "read_attachment", "terminal", "notes", "prompt_instructions", "shared_state", "edit_text", "write_file", "run_tests", "shell_command", "poll_process", "kill_process", "wait_seconds", "schedule_wakeup", "list_wakeups", "cancel_wakeup"]
 read_roots = ["."]
 allow_stateful_tools = true
 allow_side_effect_tools = false
@@ -127,12 +127,6 @@ write_projections = true
 shell_executable = "bash"
 command_timeout_seconds = 30
 max_capture_chars = 4000
-aubro_entrypoint = ""
-aubro_src = ""
-aubro_timeout_seconds = 45
-aubro_max_text_chars = 4000
-aubro_max_results = 5
-aubro_max_links = 5
 
 # -----------------------------------------------------------
 # [logging] — LOGGING LEVEL
@@ -349,8 +343,6 @@ min_event_count = 100
 [attachments]
 max_upload_bytes = 104857600
 preview_chars = 12000
-extraction_timeout_seconds = 300
-all2text_command = "all2text"
 
 # -----------------------------------------------------------
 # [mcp] — EXTERNAL INTEROPERABILITY BOUNDARY
@@ -376,6 +368,11 @@ timeout_seconds = 5.0
 # [a2a.authorization] — OPTIONAL A2A HTTP BEARER BOUNDARY
 # The communication listener remains loopback-only; expose only A2A routes through TLS.
 # -----------------------------------------------------------
+[external_tools.mcp_servers]
+# External MCP servers are opt-in. Named sub-tables may configure local stdio
+# commands or remote Streamable HTTP URLs. Optional servers disappear from the
+# available external capability catalog when unavailable instead of failing SWAAG.
+
 [a2a.authorization]
 enabled = false
 public_base_url = ""

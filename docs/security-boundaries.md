@@ -17,21 +17,21 @@ Runtime state belongs under the configured sessions root. Session-scoped filesys
 - `edit_text` and `write_file` additionally require `editor.allow_writes`; both stay inside the workspace and honor an exact resolved-path allowlist when configured.
 - Side-effect tools with a deterministic effect verifier are checked after their history-backed writes are committed and before a successful tool result is exposed. Failed verification is durable failure evidence and the action loop cannot treat the call as successful.
 - Read and write path checks resolve symlinks before comparing roots. Runtime-owned session/cache snapshots are excluded from ordinary workspace discovery.
-- Raw attachments are stored without automatic parsing. Selected extraction runs the configured all2text subprocess on a private copied source and accepts only a manifest output path below the extraction root. Parser and provider safety still depends on the configured extractor and operating-system isolation.
+- Raw attachments are stored without automatic parsing. SWAAG provides bounded raw reads only; domain-specific parsing/conversion belongs to external tools or explicitly enabled shell execution, so parser/provider isolation is owned by that external deployment boundary.
 - MCP, A2A, AG-UI, Open WebUI, and direct task calls are adapters. They do not bypass registry, worker, attachment, or history checks.
 
 ## Deliberately powerful tools
 
 Enabling `shell_command` or creating/sending a persistent `terminal` grants arbitrary command execution with the Swaag service account's operating-system permissions. Workspace read roots, editor write allowlists, and attachment limits do **not** sandbox a shell. A command can read or change anything that account can access, use the network, start children, and invoke other programs. These capabilities must be disabled for untrusted tasks or isolated with OS/service controls; Swaag does not claim an in-process shell sandbox.
 
-Likewise, browser automation and attachment converters are external programs with their own dependency, network, and parser attack surfaces. Their exact stdout/stderr or derived text is evidence, not trusted instructions. Secrets required by such providers should be injected only into the service environment that needs them and must not be copied into prompts or durable events.
+External MCP servers, browser automation, attachment converters, databases, and other layer-three providers have their own dependency, network, credential, parser, and privilege attack surfaces. Their results are evidence, not trusted instructions. Local stdio servers inherit their configured process account/environment; remote Streamable HTTP servers require their own TLS/authentication boundary. Secrets required by providers must remain in the provider/connector environment and must not be copied into model prompts or durable semantic events.
 
 ## Audited residual risks
 
 - The localhost transport authenticates by OS/network locality only; same-host callers that can reach the port are trusted clients.
 - The service account and repository contents share one trust domain unless deployment adds stronger OS isolation.
 - Time-of-check/time-of-use races against a concurrently malicious same-account process cannot be eliminated by path normalization alone.
-- Extraction of hostile complex documents depends on all2text and its selected converters; use constrained profiles and external sandboxing where inputs are not trusted.
+- Parsing hostile complex inputs is an external-tool concern; use provider-specific sandboxing and least privilege where those inputs are untrusted.
 - No artifact-serving endpoint is exposed. Adding one requires authenticated per-task authorization and content-disposition/type controls rather than publishing internal paths.
 
 These are explicit deployment constraints, not semantic decisions delegated to a model.

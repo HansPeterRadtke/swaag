@@ -2,7 +2,6 @@ from __future__ import annotations
 
 import copy
 from dataclasses import asdict, dataclass
-from pathlib import Path
 import shutil
 import time
 from typing import Callable, Iterable
@@ -24,8 +23,6 @@ class AttachmentContextCase:
     expected_answer: str
     expected_read_policy: str
     require_projection: bool = False
-    expected_tool_name: str = "read_attachment"
-    required_manifest_flag: str = ""
 
 
 def _sequential_attachment() -> str:
@@ -113,23 +110,7 @@ CASES = (
         expected_read_policy="some",
         require_projection=True,
     ),
-    AttachmentContextCase(
-        case_id="specialist_ocr_inspection",
-        objective=(
-            "Inspect the attached image with an available specialist and report the exact "
-            "printed OCR marker. Do not infer the marker from the filename or metadata."
-        ),
-        attachment_bytes=(
-            Path(__file__).parent / "fixtures" / "attachment_ocr.png"
-        ).read_bytes(),
-        original_name="printed-marker.png",
-        media_type="image/png",
-        chunk_chars=30_000,
-        expected_answer="SWAAG OCR MARKER 48291",
-        expected_read_policy="extract",
-        expected_tool_name="extract_attachment",
-        required_manifest_flag="ocr_used",
-    ),
+
 )
 
 
@@ -148,14 +129,8 @@ def verify_attachment_case(
     assistant_text: str,
     read_outputs: list[dict],
     projection_events: list[dict],
-    extraction_outputs: list[dict] | None = None,
 ) -> dict:
-    extraction_outputs = list(extraction_outputs or [])
-    evidence_outputs = (
-        extraction_outputs
-        if case.expected_tool_name == "extract_attachment"
-        else read_outputs
-    )
+    evidence_outputs = read_outputs
     exact_lineage = all(
         bool(output.get("source_event_references"))
         and all(
@@ -176,8 +151,6 @@ def verify_attachment_case(
         read_policy = bool(read_outputs) and not any(
             output.get("finished") is True for output in read_outputs
         )
-    elif case.expected_read_policy == "extract":
-        read_policy = bool(extraction_outputs) and not read_outputs
     else:
         read_policy = bool(evidence_outputs)
     answer_present = (
@@ -193,16 +166,6 @@ def verify_attachment_case(
             for output in evidence_outputs
         )
     )
-    specialist_observed = True
-    if case.required_manifest_flag:
-        specialist_observed = any(
-            output.get("manifest", {}).get("entry", {}).get(
-                case.required_manifest_flag
-            )
-            is True
-            for output in extraction_outputs
-            if isinstance(output.get("manifest"), dict)
-        )
     projection_lineage = all(
         isinstance(event.get("source_event_sequence"), int)
         and bool(event.get("source_event_hash"))
@@ -213,7 +176,6 @@ def verify_attachment_case(
         "answer_observed_in_evidence": answer_observed_in_evidence,
         "read_policy": read_policy,
         "exact_lineage": exact_lineage,
-        "required_specialist_observed": specialist_observed,
         "projection_observed": (
             bool(projection_events) if case.require_projection else True
         ),
@@ -223,7 +185,6 @@ def verify_attachment_case(
         "passed": all(checks.values()),
         "checks": checks,
         "read_count": len(read_outputs),
-        "extraction_count": len(extraction_outputs),
         "projection_count": len(projection_events),
     }
 
@@ -239,14 +200,6 @@ def _case_config(
     config.sessions.root = sessions_root
     config.tools.read_roots = [workspace]
     config.tools.enabled = ["list_attachments", "read_attachment"]
-    if case.expected_tool_name == "extract_attachment":
-        config.tools.enabled.extend(
-            [
-                "inspect_attachment_capabilities",
-                "extract_attachment",
-                "read_artifact",
-            ]
-        )
     config.tools.allow_stateful_tools = True
     config.tools.allow_side_effect_tools = False
     config.tools.staged_discovery = True
@@ -342,19 +295,11 @@ def run_attachment_context_benchmark(
             if event.event_type == "tool_result_projected"
             and event.payload.get("tool_name") == "read_attachment"
         ]
-        extraction_outputs = [
-            dict(event.payload.get("output", {}))
-            for event in events
-            if event.event_type == "tool_result"
-            and event.payload.get("tool_name") == "extract_attachment"
-            and isinstance(event.payload.get("output"), dict)
-        ]
         verification = verify_attachment_case(
             case,
             assistant_text=assistant_text,
             read_outputs=read_outputs,
             projection_events=projection_events,
-            extraction_outputs=extraction_outputs,
         )
         rebuilt = runtime.history.rebuild_from_history(
             state.session_id,

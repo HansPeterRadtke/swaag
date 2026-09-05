@@ -799,7 +799,7 @@ def test_open_webui_projection_emits_persistence_safe_canonical_sources() -> Non
                     "url": "https://example.test/docs",
                     "document": "Exact evidence passage.",
                     "document_truncated": False,
-                    "tool_name": "browser_browse",
+                    "tool_name": "external_fetch",
                 },
             }
         },

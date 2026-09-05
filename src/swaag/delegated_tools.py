@@ -77,10 +77,16 @@ class DelegatedToolSpec:
     metadata: dict[str, Any]
 
     def prompt_tuple(self) -> tuple[str, str, dict[str, Any], str]:
-        guidance = (
-            "Execution is delegated to the connected client. If selected, the "
-            "current run pauses until that client returns the exact result."
-        )
+        if self.metadata.get("external_executor") == "mcp":
+            guidance = (
+                "This is an external MCP tool. SWAAG executes it through the configured MCP server "
+                "and returns the exact result to the current run."
+            )
+        else:
+            guidance = (
+                "Execution is delegated to the connected external tool provider. If selected, "
+                "the current run pauses until that provider returns the exact result."
+            )
         return self.name, self.description, self.parameters, guidance
 
 
@@ -125,6 +131,13 @@ class DelegatedToolCall:
     history_event_type: str | None
     history_event_sequence: int | None
     history_event_hash: str | None
+
+
+# Public architecture terminology: delegated tools are layer-3 external tools.
+# Compatibility names remain because protocol adapters already persist them.
+ExternalToolSpec = DelegatedToolSpec
+ExternalToolCatalog = DelegatedToolCatalog
+ExternalToolCall = DelegatedToolCall
 
 
 class DelegatedToolInputRequired(RuntimeError):

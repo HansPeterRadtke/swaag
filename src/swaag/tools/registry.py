@@ -104,6 +104,10 @@ class ToolRegistry:
             self.register(LoadToolsTool(self))
 
     def register(self, tool: Tool) -> None:
+        if tool.layer != "system":
+            raise ValueError(
+                f"ToolRegistry accepts repository-owned system tools only: {tool.name}"
+            )
         if tool.name in self._tools:
             raise ValueError(f"Duplicate tool registration: {tool.name}")
         self._tools[tool.name] = tool
@@ -116,6 +120,19 @@ class ToolRegistry:
 
     def registered_names(self) -> frozenset[str]:
         return frozenset(self._tools)
+
+    def system_tool_names(self) -> frozenset[str]:
+        return frozenset(self._tools)
+
+    def enabled_system_tools(
+        self,
+        config: AgentConfig,
+        *,
+        runtime_capabilities: Mapping[str, object] | None = None,
+    ) -> list[Tool]:
+        return self.enabled_domain_tools(
+            config, runtime_capabilities=runtime_capabilities
+        )
 
     def enabled_domain_tools(
         self,

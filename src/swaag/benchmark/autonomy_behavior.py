@@ -40,40 +40,24 @@ class AutonomyBehaviorCase:
 
 CASES = (
     AutonomyBehaviorCase(
-        case_id="local_evidence_before_web",
+        case_id="local_evidence_before_external_tools",
         category="research",
         prompt=(
             "Read the authoritative local status record and report its exact deployment marker. "
-            "Do not browse because this task is explicitly about the supplied local state."
+            "Do not call external tools because this task is explicitly about the supplied local state."
         ),
         fixture_files=(("status.txt", "deployment_marker=READY-LOCAL-731\n"),),
-        enabled_tools=("read_file", "browser_search", "browser_browse"),
+        enabled_tools=("read_file",),
         required_tools=("read_file",),
-        forbidden_tools=("browser_search", "browser_browse"),
+        forbidden_tools=(),
         required_fragments=("READY-LOCAL-731",),
     ),
     AutonomyBehaviorCase(
-        case_id="current_fact_requires_web",
+        case_id="self_contained_no_external_tools",
         category="research",
-        prompt=(
-            "The local memo is old. Determine the current stable CPython 3 release as of today "
-            "from an official python.org source, cite the exact source URL, and explain that the "
-            "memo is not current. Do not answer from memory."
-        ),
-        fixture_files=(("old-memo.txt", "Recorded in 2022: current Python release=3.10.0\n"),),
-        enabled_tools=("read_file", "browser_search", "browser_browse", "read_artifact"),
-        required_tools=("read_file",),
-        required_any_tools=("browser_search", "browser_browse"),
-        required_fragments=("python",),
-        require_external_source=True,
-        require_source_citation=True,
-    ),
-    AutonomyBehaviorCase(
-        case_id="self_contained_no_web",
-        category="research",
-        prompt="Compute 17 + 25. Return the exact numeric answer; web research would add no value.",
-        enabled_tools=("calculator", "browser_search", "browser_browse"),
-        forbidden_tools=("browser_search", "browser_browse"),
+        prompt="Compute 17 + 25. Return the exact numeric answer; external lookup would add no value.",
+        enabled_tools=("calculator",),
+        forbidden_tools=(),
         exact_answer="42",
         required_fragments=("42",),
         question_policy="none",
@@ -88,9 +72,9 @@ CASES = (
         fixture_files=(
             ("rollout.txt", "approval=pending\ndeployment_started=false\nreason=change-review-open\n"),
         ),
-        enabled_tools=("read_file", "browser_search"),
+        enabled_tools=("read_file",),
         required_tools=("read_file",),
-        forbidden_tools=("browser_search",),
+        forbidden_tools=(),
         required_fragments=("pending", "not", "deployed"),
     ),
     AutonomyBehaviorCase(
@@ -221,8 +205,8 @@ CASES = (
             "workspace and do not perform additional work."
         ),
         fixture_files=(("unrelated.txt", "irrelevant=true\n"),),
-        enabled_tools=("list_files", "read_file", "browser_search"),
-        forbidden_tools=("list_files", "read_file", "browser_search"),
+        enabled_tools=("list_files", "read_file"),
+        forbidden_tools=("list_files", "read_file"),
         exact_answer="READY",
         required_fragments=("READY",),
         question_policy="none",
@@ -488,19 +472,14 @@ def run_autonomy_behavior_benchmark(
             raise ValueError("Autonomy-behavior runtime model identity changed")
         state = runtime.create_or_load_session()
         available_tools = set(runtime.tools.tool_names(case_config))
-        browser_required = bool(case.required_any_tools) and bool(
-            {"browser_search", "browser_browse"} & set(case.required_any_tools)
-        )
-        execution_blocked = browser_required and not bool(
-            {"browser_search", "browser_browse"} & available_tools
-        )
+        execution_blocked = False
         assistant_text = ""
         error: dict[str, str] | None = None
         started = time.monotonic()
         if execution_blocked:
             error = {
                 "error_type": "CapabilityUnavailable",
-                "reason": "No configured browser capability is available in the runtime environment",
+                "reason": "Required capability is unavailable in the runtime environment",
             }
         else:
             try:

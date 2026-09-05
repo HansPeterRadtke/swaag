@@ -62,19 +62,19 @@ Neither bounded matrix showed an accuracy reason to impose a new universal produ
 
 This validates cancellation and fresh admission for the deployed server/client pair. It does not claim transformer-state suspension, token accounting for discarded prefill, parallel-slot behavior, or vLLM equivalence.
 
-## Attachment capability discovery - 2026-08-28
+## Historical external all2text capability experiment - 2026-08-28
 
 - Artifact: `/data/var/swaag/manual-tests/attachment-capabilities-20260828T023257`.
-- Method: invoke the production `inspect_attachment_capabilities` tool against the existing `/data/venv/bin/all2text` environment without supplying or reading an attachment, then re-read the tool's exact artifact through Swaag's durable store.
+- Historical method: the then-current SWAAG tree contained an all2text-specific built-in adapter and invoked it against `/data/venv/bin/all2text`. That provider-specific coupling has since been removed; all2text is now an independent optional MCP external tool.
 - Result: 14 provider statuses, 53 provider-family statuses, 40 optional Python libraries, and 9 external tools were represented in the compact result. The exact 176,306-character JSON response was retained as artifact `artifact_54de7023a923` with SHA-256 `dd88a304e77a054d51dcbcc4a6e30373ceefd69a711a8e5815e28fc61a48f7cf`.
-- Interpretation: the model can now inspect actual host capability evidence before choosing an extraction profile, while deterministic code neither reads the raw attachment nor chooses a provider. The probe does not validate extraction quality or imply that every reported contract-only specialist is executable.
+- Interpretation: retained only as historical provider evidence. It must not be read as justification for an all2text-specific SWAAG system tool.
 
-## Attachment OCR extraction - 2026-08-28
+## Historical external OCR experiment - 2026-08-28
 
 - Artifact: `/data/var/swaag/manual-tests/attachment-ocr-20260828T033954`.
-- Method: create a raw PNG containing `SWAAG OCR MARKER 48291`, add it through the production attachment store, and invoke the normal `extract_attachment` tool with the all2text `tools` profile. The tool itself received only the model-selectable attachment ID and profile; no Swaag file-type route selected OCR.
+- Historical method: the then-current tree called an all2text-specific built-in extraction adapter on a synthetic PNG. That adapter and synthetic OCR acceptance case have since been removed from SWAAG; OCR remains an all2text/external-provider concern.
 - Result: all2text selected its image-analysis route and the configured Tesseract provider, reported `ocr_used=true`, and recovered the exact marker at 94% reported confidence. Swaag retained the complete 24,001-character derived result as `artifact_3ae6ad0784cb` with SHA-256 `bb6a6e42b362127b9515f163701985d7a6abbe5f4dde253fbb0dac73ce2cf4cc`, plus the exact manifest and successful-process diagnostics.
-- Interpretation: the existing manifest-backed all2text adapter already exposes a working selectable OCR specialist on this host, so a duplicate direct Tesseract adapter would add a specialized branch without new behavior. This verifies the mechanical extraction path, not the live model's semantic decision to inspect or its ability to choose among multiple specialists; those remain benchmark work.
+- Interpretation: historical evidence that the external all2text environment could perform OCR. It is not a SWAAG architectural requirement and is not part of mandatory SWAAG validation.
 
 ## OpenTelemetry Collector path - 2026-08-28
 

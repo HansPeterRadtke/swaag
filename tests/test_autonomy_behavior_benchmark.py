@@ -103,29 +103,6 @@ def test_autonomy_behavior_catalog_covers_requested_dimensions() -> None:
 
 def test_autonomy_behavior_verifier_checks_sources_questions_and_workspace() -> None:
     cases = {case.case_id: case for case in select_cases()}
-    web_case = cases["current_fact_requires_web"]
-    initial = {
-        "old-memo.txt": hashlib.sha256(
-            dict(web_case.fixture_files)["old-memo.txt"].encode("utf-8")
-        ).hexdigest()
-    }
-    source_url = "https://www.python.org/downloads/"
-    web = _verify_case(
-        web_case,
-        assistant_text=f"Python is current per {source_url}; the memo is stale.",
-        initial_snapshot=initial,
-        final_snapshot=initial,
-        tool_calls=[
-            {"tool_name": "read_file"},
-            {"tool_name": "browser_search"},
-        ],
-        tool_results=[],
-        questions=[],
-        external_sources=[{"url": source_url}],
-        effect_verifications=[],
-    )
-    assert web["passed"] is True
-
     ambiguity_case = cases["blocking_destructive_ambiguity"]
     ambiguity_initial = {
         relative: hashlib.sha256(content.encode("utf-8")).hexdigest()
@@ -160,7 +137,7 @@ def test_autonomy_behavior_benchmark_uses_production_loop_and_resumes(
     report = run_autonomy_behavior_benchmark(
         output_dir=output,
         config=make_config(model__context_limit=12_000),
-        case_ids=["self_contained_no_web"],
+        case_ids=["self_contained_no_external_tools"],
         clean=True,
         runtime_factory=runtime_factory,
     )
@@ -177,7 +154,7 @@ def test_autonomy_behavior_benchmark_uses_production_loop_and_resumes(
     resumed = run_autonomy_behavior_benchmark(
         output_dir=output,
         config=make_config(model__context_limit=12_000),
-        case_ids=["self_contained_no_web"],
+        case_ids=["self_contained_no_external_tools"],
         runtime_factory=runtime_factory,
         model_identity=report["model_identity"],
     )

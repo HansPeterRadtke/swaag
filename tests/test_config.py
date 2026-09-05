@@ -84,13 +84,7 @@ def test_attachment_defaults_preserve_raw_bytes_without_automatic_extraction() -
 
     assert config.attachments.max_upload_bytes == 100 * 1024 * 1024
     assert config.attachments.preview_chars == 12000
-    assert config.attachments.all2text_command == "all2text"
-    assert {
-        "list_attachments",
-        "read_attachment",
-        "inspect_attachment_capabilities",
-        "extract_attachment",
-    }.issubset(config.tools.enabled)
+    assert {"list_attachments", "read_attachment"}.issubset(config.tools.enabled)
 
 
 def test_safe_resumable_search_tools_are_enabled_by_default() -> None:
@@ -139,26 +133,6 @@ def test_legacy_runtime_context_caps_are_accepted_but_no_longer_drop_candidates(
 
 
 
-def test_environment_aubro_overrides_are_loaded(tmp_path: Path) -> None:
-    env = {
-        "SWAAG__SESSIONS__ROOT": str(tmp_path / "sessions"),
-        "SWAAG__ENVIRONMENT__AUBRO_ENTRYPOINT": "/usr/bin/python3 -m aubro.cli",
-        "SWAAG__ENVIRONMENT__AUBRO_SRC": str(tmp_path / "aubro_src"),
-        "SWAAG__ENVIRONMENT__AUBRO_TIMEOUT_SECONDS": "90",
-        "SWAAG__ENVIRONMENT__AUBRO_MAX_TEXT_CHARS": "1234",
-        "SWAAG__ENVIRONMENT__AUBRO_MAX_RESULTS": "7",
-        "SWAAG__ENVIRONMENT__AUBRO_MAX_LINKS": "9",
-    }
-    config = load_config(env=env)
-
-    assert config.environment.aubro_entrypoint == "/usr/bin/python3 -m aubro.cli"
-    assert config.environment.aubro_src == str(tmp_path / "aubro_src")
-    assert config.environment.aubro_timeout_seconds == 90
-    assert config.environment.aubro_max_text_chars == 1234
-    assert config.environment.aubro_max_results == 7
-    assert config.environment.aubro_max_links == 9
-
-
 def test_semantic_responsibility_limit_must_be_positive(tmp_path: Path) -> None:
     with pytest.raises(ValueError, match="max_semantic_responsibilities_per_call"):
         load_config(env={
@@ -182,3 +156,16 @@ def test_new_validation_recovery_env_key_wins_over_legacy_alias():
         "SWAAG__RUNTIME__MAX_VALIDATION_RECOVERY_CYCLES": "7",
     })
     assert config.runtime.max_validation_recovery_cycles == 7
+
+
+def test_default_tool_registry_contains_only_system_layer_capabilities() -> None:
+    from swaag.tools.registry import ToolRegistry
+
+    registry = ToolRegistry()
+    assert all(registry.get(name).layer == "system" for name in registry.registered_names())
+    assert {
+        "browser_search",
+        "browser_browse",
+        "extract_attachment",
+        "inspect_attachment_capabilities",
+    }.isdisjoint(registry.registered_names())
