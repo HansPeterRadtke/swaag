@@ -2,6 +2,7 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 import json
+import os
 import subprocess
 from typing import Any, Iterable
 
@@ -262,11 +263,19 @@ class ExternalMcpClient:
     def _http_request(self, request: dict[str, Any]) -> dict[str, Any]:
         if not self.config.url:
             raise ExternalMcpError(f"MCP server {self.server_name} has no Streamable HTTP URL")
+        headers = {"Accept": "application/json, text/event-stream"}
+        for header_name, env_name in self.config.header_env.items():
+            value = os.environ.get(env_name)
+            if not value:
+                raise ExternalMcpError(
+                    f"MCP HTTP server {self.server_name} requires environment variable {env_name} for header {header_name}"
+                )
+            headers[header_name] = value
         try:
             response = requests.post(
                 self.config.url,
                 json=request,
-                headers={"Accept": "application/json, text/event-stream"},
+                headers=headers,
                 timeout=float(self.config.timeout_seconds),
             )
         except requests.RequestException as exc:

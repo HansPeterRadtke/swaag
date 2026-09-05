@@ -239,6 +239,7 @@ class ExternalMcpServerConfig:
     transport: str
     command: list[str]
     url: str
+    header_env: dict[str, str]
     timeout_seconds: float
 
 
@@ -528,6 +529,9 @@ def _coerce_config(data: dict[str, Any]) -> AgentConfig:
                 transport=str(payload.get("transport", "stdio")),
                 command=[str(item) for item in payload.get("command", [])],
                 url=str(payload.get("url", "")),
+                header_env={str(k): str(v) for k, v in payload.get("header_env", {}).items()}
+                if isinstance(payload.get("header_env", {}), dict)
+                else {},
                 timeout_seconds=float(payload.get("timeout_seconds", 30.0)),
             )
             for name, payload in raw_mcp_servers.items()
@@ -778,6 +782,15 @@ def _coerce_config(data: dict[str, Any]) -> AgentConfig:
             if parsed_url.scheme not in {"http", "https"} or not parsed_url.netloc:
                 raise ValueError(
                     f"external_tools.mcp_servers.{server_name}.url must be an absolute HTTP(S) URL"
+                )
+        for header_name, env_name in server.header_env.items():
+            if not header_name.strip() or any(ch in header_name for ch in "\r\n:"):
+                raise ValueError(
+                    f"external_tools.mcp_servers.{server_name}.header_env contains an invalid header name"
+                )
+            if not env_name.strip():
+                raise ValueError(
+                    f"external_tools.mcp_servers.{server_name}.header_env values must be environment variable names"
                 )
 
     if a2a_authorization.enabled:

@@ -370,8 +370,10 @@ timeout_seconds = 5.0
 # -----------------------------------------------------------
 [external_tools.mcp_servers]
 # External MCP servers are opt-in. Named sub-tables may configure local stdio
-# commands or remote Streamable HTTP URLs. Optional servers disappear from the
-# available external capability catalog when unavailable instead of failing SWAAG.
+# commands or remote Streamable HTTP URLs. Remote credentials/headers should be
+# supplied through per-server `header_env` mappings (HTTP header -> environment
+# variable name), never literal model/tool content. Optional servers disappear from
+# the capability catalog when unavailable instead of failing SWAAG.
 
 [a2a.authorization]
 enabled = false

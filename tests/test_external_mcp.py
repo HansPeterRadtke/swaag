@@ -33,6 +33,7 @@ def test_external_mcp_stdio_discovers_and_calls_schema_driven_tool(tmp_path: Pat
         transport="stdio",
         command=[sys.executable, str(server)],
         url="",
+        header_env={},
         timeout_seconds=5.0,
     )
     client = ExternalMcpClient("dummy", config)
@@ -56,6 +57,7 @@ def test_optional_external_mcp_server_disappears_from_catalog(tmp_path: Path) ->
                     transport="stdio",
                     command=[str(tmp_path / "does-not-exist")],
                     url="",
+                    header_env={},
                     timeout_seconds=1.0,
                 )
             }
@@ -76,6 +78,7 @@ def test_required_external_mcp_server_fails_closed(tmp_path: Path) -> None:
                         transport="stdio",
                         command=[str(tmp_path / "does-not-exist")],
                         url="",
+                        header_env={},
                         timeout_seconds=1.0,
                     )
                 }
@@ -95,6 +98,7 @@ def test_runtime_mcp_tool_is_external_not_system_and_records_normal_tool_result(
         transport="stdio",
         command=[sys.executable, str(server)],
         url="",
+        header_env={},
         timeout_seconds=5.0,
     )
     runtime = AgentRuntime(config, model_client=object())
@@ -212,6 +216,7 @@ def test_external_mcp_streamable_http_json_transport() -> None:
                 transport="streamable_http",
                 command=[],
                 url=f"http://127.0.0.1:{server.server_port}/mcp",
+                header_env={},
                 timeout_seconds=5.0,
             ),
         )
@@ -222,3 +227,72 @@ def test_external_mcp_streamable_http_json_transport() -> None:
         server.shutdown()
         thread.join(timeout=5)
         server.server_close()
+
+
+def test_external_mcp_streamable_http_uses_header_environment(monkeypatch) -> None:
+    import threading
+    from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
+
+    observed = {}
+
+    class Handler(BaseHTTPRequestHandler):
+        def do_POST(self):
+            observed["authorization"] = self.headers.get("Authorization")
+            length = int(self.headers.get("content-length", "0"))
+            request = json.loads(self.rfile.read(length))
+            body = json.dumps({
+                "jsonrpc": "2.0",
+                "id": request["id"],
+                "result": {"resultType": "complete", "tools": []},
+            }).encode()
+            self.send_response(200)
+            self.send_header("content-type", "application/json")
+            self.send_header("content-length", str(len(body)))
+            self.end_headers()
+            self.wfile.write(body)
+
+        def log_message(self, _format, *_args):
+            return
+
+    server = ThreadingHTTPServer(("127.0.0.1", 0), Handler)
+    thread = threading.Thread(target=server.serve_forever, daemon=True)
+    thread.start()
+    monkeypatch.setenv("SWAAG_TEST_MCP_AUTH", "Bearer external-secret")
+    try:
+        client = ExternalMcpClient(
+            "remote-auth",
+            ExternalMcpServerConfig(
+                enabled=True,
+                optional=False,
+                transport="streamable_http",
+                command=[],
+                url=f"http://127.0.0.1:{server.server_port}/mcp",
+                header_env={"Authorization": "SWAAG_TEST_MCP_AUTH"},
+                timeout_seconds=5.0,
+            ),
+        )
+        assert client.list_tools() == ()
+        assert observed["authorization"] == "Bearer external-secret"
+        assert "external-secret" not in repr(client.config)
+    finally:
+        server.shutdown()
+        thread.join(timeout=5)
+        server.server_close()
+
+
+def test_external_mcp_missing_header_environment_fails_before_network(monkeypatch) -> None:
+    monkeypatch.delenv("SWAAG_TEST_MISSING_MCP_AUTH", raising=False)
+    client = ExternalMcpClient(
+        "remote-auth",
+        ExternalMcpServerConfig(
+            enabled=True,
+            optional=False,
+            transport="streamable_http",
+            command=[],
+            url="http://127.0.0.1:1/mcp",
+            header_env={"Authorization": "SWAAG_TEST_MISSING_MCP_AUTH"},
+            timeout_seconds=1.0,
+        ),
+    )
+    with pytest.raises(ExternalMcpError, match="SWAAG_TEST_MISSING_MCP_AUTH"):
+        client.list_tools()

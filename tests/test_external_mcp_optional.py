@@ -40,6 +40,7 @@ def test_real_aubro_mcp_server_is_discoverable() -> None:
             transport="stdio",
             command=_repo_command(repo, "aubro.mcp_server"),
             url="",
+            header_env={},
             timeout_seconds=20.0,
         ),
     )
@@ -63,6 +64,7 @@ def test_real_all2text_mcp_capabilities_are_callable() -> None:
             transport="stdio",
             command=_repo_command(repo, "all2text.mcp_server"),
             url="",
+            header_env={},
             timeout_seconds=30.0,
         ),
     )
@@ -89,6 +91,7 @@ def test_real_aubro_mcp_search_when_browser_environment_is_available() -> None:
             transport="stdio",
             command=_repo_command(repo, "aubro.mcp_server"),
             url="",
+            header_env={},
             timeout_seconds=90.0,
         ),
     )
