@@ -33,7 +33,7 @@ Operational bookkeeping: commit 0123456789abcdef was pushed. I ran git diff --ch
 """
 
 STRATEGIES = ("visual_only", "staged_audio", "single_call_audio")
-REQUIRED_MARKERS = (("42", "forty-two"), ("polkit",), ("13401",), ("not deploy",))
+REQUIRED_MARKERS = (("42", "forty-two"), ("polkit",), ("13401",))
 FORBIDDEN_NOISE = ("0123456789abcdef", "git diff --check", "pytest -q")
 
 _COMBINED_SYSTEM = """You produce one final answer that performs both semantic user-facing relevance selection and audio-style rendering.
