@@ -17,7 +17,9 @@ MCP_PROTOCOL_VERSION = "2026-07-28"
 
 
 class ExternalMcpError(RuntimeError):
-    pass
+    def __init__(self, message: str, *, evidence: dict[str, Any] | None = None):
+        super().__init__(message)
+        self.evidence = dict(evidence or {})
 
 
 def _schema_allows_null(schema: dict[str, Any]) -> bool:
@@ -394,8 +396,14 @@ class ExternalMcpClient:
                 f"MCP HTTP server {self.server_name} unavailable: {type(exc).__name__}: {exc}"
             ) from exc
         if response.status_code >= 400:
+            body = response.text
             raise ExternalMcpError(
-                f"MCP HTTP server {self.server_name} returned HTTP {response.status_code}: {response.text[:1000]}"
+                f"MCP HTTP server {self.server_name} returned HTTP {response.status_code}: {body[:1000]}",
+                evidence={
+                    "http_status": int(response.status_code),
+                    "content_type": response.headers.get("content-type", ""),
+                    "response_body": body,
+                },
             )
         content_type = response.headers.get("content-type", "").lower()
         if "text/event-stream" in content_type:
@@ -410,14 +418,35 @@ class ExternalMcpClient:
                 if isinstance(parsed, dict):
                     payloads.append(parsed)
             if not payloads:
-                raise ExternalMcpError(f"MCP HTTP server {self.server_name} returned no SSE JSON response")
+                raise ExternalMcpError(
+                    f"MCP HTTP server {self.server_name} returned no SSE JSON response",
+                    evidence={
+                        "http_status": int(response.status_code),
+                        "content_type": response.headers.get("content-type", ""),
+                        "response_body": response.text,
+                    },
+                )
             return payloads[-1]
         try:
             parsed = response.json()
         except ValueError as exc:
-            raise ExternalMcpError(f"MCP HTTP server {self.server_name} returned invalid JSON") from exc
+            raise ExternalMcpError(
+                f"MCP HTTP server {self.server_name} returned invalid JSON",
+                evidence={
+                    "http_status": int(response.status_code),
+                    "content_type": response.headers.get("content-type", ""),
+                    "response_body": response.text,
+                },
+            ) from exc
         if not isinstance(parsed, dict):
-            raise ExternalMcpError(f"MCP HTTP server {self.server_name} returned a non-object response")
+            raise ExternalMcpError(
+                f"MCP HTTP server {self.server_name} returned a non-object response",
+                evidence={
+                    "http_status": int(response.status_code),
+                    "content_type": response.headers.get("content-type", ""),
+                    "response_body": response.text,
+                },
+            )
         return parsed
 
     def request(self, method: str, params: dict[str, Any] | None = None) -> dict[str, Any]:

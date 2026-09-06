@@ -35,7 +35,7 @@ from swaag.embedding_index import (
     OpenAICompatibleEmbeddingProvider,
 )
 from swaag.environment.environment import AgentEnvironment
-from swaag.external_mcp import ExternalMcpManager
+from swaag.external_mcp import ExternalMcpError, ExternalMcpManager
 from swaag.environment.artifacts import TextArtifactStore
 from swaag.fsops import ensure_dir, restore_tree, snapshot_tree, write_text
 from swaag.grammar import (
@@ -7815,11 +7815,28 @@ class AgentRuntime:
             )
             result = ToolExecutionResult(spec.name, output, display_text)
         except Exception as exc:
-            evidence = {}
+            evidence: dict[str, Any] = {}
             error_type = type(exc).__name__
             if isinstance(exc, ToolExecutionError):
                 evidence = to_jsonable(exc.evidence)
                 error_type = exc.error_type
+            elif isinstance(exc, ExternalMcpError):
+                raw_evidence = dict(exc.evidence)
+                response_body = raw_evidence.pop("response_body", None)
+                evidence = to_jsonable(raw_evidence)
+                if isinstance(response_body, str):
+                    artifact = TextArtifactStore(
+                        self.config.sessions.root, state.session_id
+                    ).create(response_body, kind="external_mcp_error_response")
+                    evidence.update(
+                        {
+                            "response_body_artifact_id": artifact.artifact_id,
+                            "response_body_sha256": artifact.sha256,
+                            "response_body_chars": artifact.size_chars,
+                            "response_body_preview": response_body[:1000],
+                            "response_body_finished": len(response_body) <= 1000,
+                        }
+                    )
             error_payload = {
                 "call_id": call_id,
                 "tool_name": spec.name,

@@ -7,6 +7,7 @@ import sys
 import pytest
 
 from swaag.config import ExternalMcpServerConfig, ExternalToolsConfig
+from swaag.delegated_tools import prepare_delegated_tool_spec
 from swaag.external_mcp import ExternalMcpClient, ExternalMcpError, ExternalMcpManager
 from swaag.runtime import AgentRuntime
 
@@ -615,3 +616,111 @@ def test_oversized_external_mcp_result_uses_generic_projection_and_exact_history
     )[0]
     assert recovered.hash == source.hash
     assert recovered.payload["output"]["structured_content"]["evidence"] == exact_evidence
+
+
+def test_external_mcp_http_error_preserves_exact_body_as_artifact(
+    make_config, tmp_path: Path
+) -> None:
+    import threading
+    from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
+
+    from swaag.environment.artifacts import TextArtifactStore
+
+    marker = "EXTERNAL-MCP-ERROR-MARKER-77219"
+    body_text = "failure-prefix-" + ("x" * 3500) + marker + ("y" * 1200)
+
+    class Handler(BaseHTTPRequestHandler):
+        def do_POST(self):
+            _ = self.rfile.read(int(self.headers.get("content-length", "0")))
+            body = body_text.encode()
+            self.send_response(502)
+            self.send_header("content-type", "text/plain; charset=utf-8")
+            self.send_header("content-length", str(len(body)))
+            self.end_headers()
+            self.wfile.write(body)
+
+        def log_message(self, _format, *_args):
+            return
+
+    server = ThreadingHTTPServer(("127.0.0.1", 0), Handler)
+    thread = threading.Thread(target=server.serve_forever, daemon=True)
+    thread.start()
+    try:
+        config = make_config()
+        config.sessions.root = tmp_path / "sessions"
+        config.external_tools.mcp_servers["failing"] = ExternalMcpServerConfig(
+            enabled=True,
+            optional=True,
+            transport="streamable_http",
+            command=[],
+            url=f"http://127.0.0.1:{server.server_port}/mcp",
+            header_env={},
+            credential_command=[],
+            credential_refresh_skew_seconds=30.0,
+            timeout_seconds=5.0,
+        )
+        runtime = AgentRuntime(config, model_client=object())
+        state = runtime.create_or_load_session()
+        # Avoid construction-time discovery hitting the failing server: inject the
+        # external tool spec after runtime construction and retain the same manager
+        # client for execution.
+        client = ExternalMcpClient("failing", config.external_tools.mcp_servers["failing"])
+        spec = prepare_delegated_tool_spec(
+            {
+                "name": "failing_external",
+                "description": "Return a failing external response.",
+                "parameters": {
+                    "type": "object",
+                    "properties": {},
+                    "required": [],
+                    "additionalProperties": False,
+                },
+                "metadata": {
+                    "external_executor": "mcp",
+                    "mcp_server": "failing",
+                    "mcp_input_schema": {
+                        "type": "object",
+                        "properties": {},
+                        "additionalProperties": False,
+                    },
+                },
+            }
+        )
+        runtime.external_mcp._clients["failing"] = client
+        from swaag.external_mcp import ExternalMcpTool
+
+        runtime.external_mcp._tools_by_name[spec.name] = ExternalMcpTool(
+            server_name="failing", spec=spec
+        )
+
+        result = runtime._execute_external_mcp_tool(state, spec=spec, arguments={})
+        assert result is None
+        error_event = next(
+            event
+            for event in reversed(runtime.history.read_history(state.session_id))
+            if event.event_type == "tool_error"
+        )
+        evidence = error_event.payload["evidence"]
+        assert evidence["http_status"] == 502
+        assert evidence["response_body_chars"] == len(body_text)
+        assert len(evidence["response_body_preview"]) == 1000
+        assert evidence["response_body_finished"] is False
+        assert marker not in evidence["response_body_preview"]
+        assert "response_body" not in evidence
+
+        artifact = TextArtifactStore(config.sessions.root, state.session_id)
+        recovered = artifact.read(
+            evidence["response_body_artifact_id"], start_offset=0, max_chars=len(body_text) + 1
+        )
+        assert recovered["finished"] is True
+        assert recovered["sha256"] == evidence["response_body_sha256"]
+        assert recovered["text"] == body_text
+        assert marker in recovered["text"]
+
+        tool_message = state.messages[-1]
+        assert marker not in tool_message.content
+        assert evidence["response_body_artifact_id"] in tool_message.content
+    finally:
+        server.shutdown()
+        thread.join(timeout=5)
+        server.server_close()
