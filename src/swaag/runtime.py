@@ -571,6 +571,7 @@ class AgentRuntime:
 
     def resume_turn_in_session(self, state: SessionState, original_request: str) -> TurnResult:
         """Resume an interrupted durable task without duplicating its user request."""
+        self._refresh_state_from_history(state)
         objective = original_request.strip()
         if not objective:
             raise ValueError("original_request must not be empty")
@@ -619,6 +620,7 @@ class AgentRuntime:
                 self.history.clear_active_run(state.session_id, run_id=run_id)
 
     def run_pending_controls_in_session(self, state: SessionState) -> TurnResult | None:
+        self._refresh_state_from_history(state)
         self._deliver_due_wakeups(state)
         if not self.history.list_pending_control_messages(state.session_id):
             return None

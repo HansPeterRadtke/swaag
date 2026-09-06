@@ -1593,3 +1593,114 @@ def test_single_responsibility_tool_prompt_highlights_completed_observation(make
     assert '"path":"a.txt"' in prompt
     assert "recorded execution; corresponding result/error evidence" in prompt
     assert "Repetition may be semantically useful when external state or freshness matters" in prompt
+
+
+def test_resume_turn_refreshes_stale_state_from_append_only_history(make_config) -> None:
+    marker = "resume-authoritative-marker-88231"
+
+    class ResumeClient(FakeModelClient):
+        def __init__(self):
+            super().__init__([])
+            self.prompt = ""
+
+        def send_completion(self, payload, **kwargs):
+            self.requests.append(payload)
+            self.prompt = payload["prompt"]
+            return CompletionResult(
+                text=json.dumps(
+                    {
+                        "assistant_message": "resumed",
+                        "tool_calls": [],
+                        "continue_loop": False,
+                        "status": {
+                            "situation": "resumed",
+                            "action": "finish",
+                            "reason": "test",
+                            "importance": "normal",
+                        },
+                        "questions": [],
+                    }
+                ),
+                raw_request=payload,
+                raw_response={},
+                prompt_tokens=None,
+                completion_tokens=None,
+                finish_reason="stop",
+            )
+
+    client = ResumeClient()
+    runtime = AgentRuntime(make_config(model__context_limit=32_000), model_client=client)
+    state = runtime.create_or_load_session()
+    runtime._record_message(
+        state,
+        Message(role="user", content="original objective", created_at="t"),
+    )
+
+    stale = runtime.history.rebuild_from_history(state.session_id, write_projections=False)
+    fresh = runtime.history.rebuild_from_history(state.session_id, write_projections=False)
+    runtime._record_message(
+        fresh,
+        Message(role="assistant", content=f"out-of-band exact evidence {marker}", created_at="t"),
+    )
+    assert marker not in "\n".join(message.content for message in stale.messages)
+
+    result = runtime.resume_turn_in_session(stale, "original objective")
+    assert result.assistant_text == "resumed"
+    assert marker in client.prompt
+    assert marker in "\n".join(message.content for message in stale.messages)
+
+
+def test_pending_controls_refresh_stale_state_before_selecting_original_request(make_config) -> None:
+    marker = "control-authoritative-marker-55109"
+
+    class ControlClient(FakeModelClient):
+        def __init__(self):
+            super().__init__([])
+            self.prompt = ""
+
+        def send_completion(self, payload, **kwargs):
+            self.requests.append(payload)
+            self.prompt = payload["prompt"]
+            return CompletionResult(
+                text=json.dumps(
+                    {
+                        "assistant_message": "control handled",
+                        "tool_calls": [],
+                        "continue_loop": False,
+                        "status": {
+                            "situation": "control",
+                            "action": "finish",
+                            "reason": "test",
+                            "importance": "normal",
+                        },
+                        "questions": [],
+                    }
+                ),
+                raw_request=payload,
+                raw_response={},
+                prompt_tokens=None,
+                completion_tokens=None,
+                finish_reason="stop",
+            )
+
+    client = ControlClient()
+    runtime = AgentRuntime(make_config(model__context_limit=32_000), model_client=client)
+    state = runtime.create_or_load_session()
+    runtime._record_message(
+        state,
+        Message(role="user", content="original control objective", created_at="t"),
+    )
+    stale = runtime.history.rebuild_from_history(state.session_id, write_projections=False)
+    fresh = runtime.history.rebuild_from_history(state.session_id, write_projections=False)
+    runtime._record_message(
+        fresh,
+        Message(role="assistant", content=f"new durable evidence {marker}", created_at="t"),
+    )
+    runtime.history.enqueue_control_message(
+        state.session_id, "reconsider using new durable evidence", source="test"
+    )
+
+    result = runtime.run_pending_controls_in_session(stale)
+    assert result is not None
+    assert result.assistant_text == "control handled"
+    assert marker in client.prompt
