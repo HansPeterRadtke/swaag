@@ -337,11 +337,49 @@ def _read_json_file(path: Path) -> dict[str, Any] | None:
     return payload if isinstance(payload, dict) else None
 
 
-def _read_text_excerpt(path: Path, *, max_chars: int = 20000) -> str:
+def _find_markers_in_file(
+    path: Path,
+    markers: Sequence[str],
+    *,
+    chunk_chars: int = 65536,
+) -> set[str]:
+    if chunk_chars <= 0:
+        raise ValueError("chunk_chars must be positive")
+    normalized = tuple(str(marker).lower() for marker in markers if str(marker))
+    if not normalized:
+        return set()
+    overlap = max(len(marker) for marker in normalized) - 1
+    found: set[str] = set()
+    carry = ""
     try:
-        return path.read_text(encoding="utf-8", errors="replace")[:max_chars]
+        with path.open("r", encoding="utf-8", errors="replace") as handle:
+            while True:
+                chunk = handle.read(chunk_chars)
+                if not chunk:
+                    return found
+                combined = (carry + chunk).lower()
+                for marker in normalized:
+                    if marker in combined:
+                        found.add(marker)
+                if len(found) == len(normalized):
+                    return found
+                carry = combined[-overlap:] if overlap > 0 else ""
     except OSError:
-        return ""
+        return found
+
+
+def _find_blocker_marker_in_file(
+    path: Path,
+    *,
+    chunk_chars: int = 65536,
+) -> str | None:
+    found = _find_markers_in_file(
+        path, _SWEBENCH_EXTERNAL_BLOCKER_SNIPPETS, chunk_chars=chunk_chars
+    )
+    for marker in _SWEBENCH_EXTERNAL_BLOCKER_SNIPPETS:
+        if marker in found:
+            return marker
+    return None
 
 
 def _swebench_external_blocker_reason(*texts: str) -> str | None:
@@ -448,8 +486,14 @@ def _classify_swebench_report(
     }
     if summary["error_instances"] <= 0 and summary["completed_instances"] >= summary["submitted_instances"]:
         return "passed", None, summary
-    artifact_texts = [_read_text_excerpt(Path(path)) for path in artifact_paths if path.endswith(".log")]
-    blocker_marker = _swebench_external_blocker_reason(stdout_text, stderr_text, *artifact_texts)
+    blocker_marker = _swebench_external_blocker_reason(stdout_text, stderr_text)
+    if blocker_marker is None:
+        for artifact_path in artifact_paths:
+            if not artifact_path.endswith(".log"):
+                continue
+            blocker_marker = _find_blocker_marker_in_file(Path(artifact_path))
+            if blocker_marker is not None:
+                break
     if blocker_marker is not None:
         reason = (
             "Official SWE-bench evaluator reported instance build/runtime errors caused by external infrastructure: "
@@ -477,23 +521,25 @@ def _classify_terminal_bench_report(
         "task_count": int(report_payload.get("task_count", 0) or 0),
     }
     failure_modes = summary_payload.get("failure_modes", {})
-    combined = "\n".join(
-        [
-            stdout_text,
-            stderr_text,
-            *(
-                _read_text_excerpt(Path(path))
-                for path in report_payload.get("run_log_files", [])
-                if isinstance(path, str)
-            ),
-        ]
-    ).lower()
+    terminal_markers = (
+        "docker compose command",
+        "returned non-zero exit status",
+        "docker compose",
+        "not found",
+    )
+    combined_inline = (stdout_text + "\n" + stderr_text).lower()
+    found_markers = {marker for marker in terminal_markers if marker in combined_inline}
+    for path in report_payload.get("run_log_files", []):
+        if isinstance(path, str):
+            found_markers.update(
+                _find_markers_in_file(Path(path), terminal_markers)
+            )
     if summary["resolved_count"] > 0 and summary["unresolved_count"] == 0:
         return "passed", None, summary
-    if "docker compose command" in combined and "returned non-zero exit status" in combined:
+    if {"docker compose command", "returned non-zero exit status"}.issubset(found_markers):
         reason = "Terminal-Bench environment failed while running docker compose for the task container"
         return "external_blocked", reason, summary
-    if "docker compose" in combined and "not found" in combined:
+    if {"docker compose", "not found"}.issubset(found_markers):
         reason = "Terminal-Bench environment could not find a working docker compose command"
         return "external_blocked", reason, summary
     if isinstance(failure_modes, dict) and failure_modes.get("unknown_agent_error"):

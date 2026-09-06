@@ -923,3 +923,67 @@ def test_external_benchmark_preserves_passed_swebench_report_summary(tmp_path: P
     assert result["status"] == "passed"
     assert result["evaluation_summary"]["completed_instances"] == 1
     assert result["evaluation_summary"]["unresolved_instances"] == 1
+
+
+def test_swebench_blocker_scan_reads_entire_log_artifact(tmp_path: Path) -> None:
+    marker = "temporary failure in name resolution"
+    log_path = tmp_path / "late-blocker.log"
+    log_path.write_text(("x" * 50000) + marker + ("y" * 50000), encoding="utf-8")
+    status, reason, summary = external_benchmarks._classify_swebench_report(
+        {
+            "total_instances": 1,
+            "submitted_instances": 1,
+            "completed_instances": 0,
+            "resolved_instances": 0,
+            "unresolved_instances": 1,
+            "empty_patch_instances": 0,
+            "error_instances": 1,
+        },
+        stdout_text="",
+        stderr_text="",
+        artifact_paths=[str(log_path)],
+    )
+    assert status == "external_blocked"
+    assert marker in (reason or "")
+    assert summary["error_instances"] == 1
+
+
+def test_blocker_scan_detects_marker_split_across_chunks(tmp_path: Path) -> None:
+    marker = "connection reset by peer"
+    log_path = tmp_path / "split-blocker.log"
+    split_at = len(marker) // 2
+    log_path.write_text(
+        ("a" * 31) + marker[:split_at] + marker[split_at:] + ("b" * 31),
+        encoding="utf-8",
+    )
+    assert (
+        external_benchmarks._find_blocker_marker_in_file(log_path, chunk_chars=40)
+        == marker
+    )
+
+
+def test_terminal_bench_blocker_scan_reads_entire_run_log(tmp_path: Path) -> None:
+    log_path = tmp_path / "late-terminal-blocker.log"
+    log_path.write_text(
+        ("x" * 50000)
+        + "docker compose command"
+        + ("y" * 50000)
+        + "returned non-zero exit status",
+        encoding="utf-8",
+    )
+    status, reason, summary = external_benchmarks._classify_terminal_bench_report(
+        {
+            "task_count": 1,
+            "run_log_files": [str(log_path)],
+            "results_summary": {
+                "resolved_count": 0,
+                "unresolved_count": 1,
+                "failure_modes": {"unknown_agent_error": 1},
+            },
+        },
+        stdout_text="",
+        stderr_text="",
+    )
+    assert status == "external_blocked"
+    assert "docker compose" in (reason or "")
+    assert summary["unresolved_count"] == 1
