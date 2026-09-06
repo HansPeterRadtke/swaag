@@ -42,8 +42,8 @@ def test_external_mcp_stdio_discovers_and_calls_schema_driven_tool(tmp_path: Pat
     client = ExternalMcpClient("dummy", config)
     tools = client.list_tools()
     assert [tool.name for tool in tools] == ["dummy_lookup"]
-    assert tools[0].metadata["external_executor"] == "mcp"
-    assert tools[0].metadata["mcp_server"] == "dummy"
+    assert tools[0].metadata["external_execution_mode"] == "runtime"
+    assert tools[0].metadata["external_provider_id"] == "mcp:dummy"
     assert tools[0].metadata["mcp_input_schema"]["required"] == ["key"]
     result = client.call_tool("dummy_lookup", {"key": "alpha"})
     assert result.is_error is False
@@ -112,7 +112,7 @@ def test_runtime_mcp_tool_is_external_not_system_and_records_normal_tool_result(
     )
     runtime = AgentRuntime(config, model_client=object())
     state = runtime.create_or_load_session()
-    specs = runtime.external_mcp.specs()
+    specs = runtime.runtime_external_tools.specs()
     assert [spec.name for spec in specs] == ["dummy_lookup"]
     assert "dummy_lookup" not in runtime.tools.system_tool_names()
     index = runtime.tools.capability_index(config, specs)
@@ -120,9 +120,11 @@ def test_runtime_mcp_tool_is_external_not_system_and_records_normal_tool_result(
     staged = runtime.tools.staged_prompt_tuples(config, ["dummy_lookup"], specs)
     dummy = next(item for item in staged if item[0] == "dummy_lookup")
     assert dummy[2]["required"] == ["key"]
-    assert "MCP" in dummy[3]
+    assert "external tool" in dummy[3].lower()
+    assert "provider adapter" in dummy[3].lower()
+    assert "MCP" not in dummy[3]
 
-    result = runtime._execute_external_mcp_tool(
+    result = runtime._execute_runtime_external_tool(
         state, spec=specs[0], arguments={"key": "beta"}
     )
     assert result is not None
@@ -132,7 +134,7 @@ def test_runtime_mcp_tool_is_external_not_system_and_records_normal_tool_result(
         for event in runtime.history.read_history(state.session_id)
         if event.event_type == "tool_result"
     ]
-    assert tool_events[-1].payload["executor"] == "mcp"
+    assert tool_events[-1].payload["executor"] == "external_runtime"
     assert tool_events[-1].payload["tool_name"] == "dummy_lookup"
 
 
@@ -568,9 +570,9 @@ def test_oversized_external_mcp_result_uses_generic_projection_and_exact_history
     client = ProjectionClient()
     runtime = AgentRuntime(config, model_client=client)
     state = runtime.create_or_load_session()
-    spec = runtime.external_mcp.specs()[0]
+    spec = runtime.runtime_external_tools.specs()[0]
 
-    result = runtime._execute_external_mcp_tool(state, spec=spec, arguments={})
+    result = runtime._execute_runtime_external_tool(state, spec=spec, arguments={})
     assert result is not None
     assert marker in result.display_text
 
@@ -583,7 +585,7 @@ def test_oversized_external_mcp_result_uses_generic_projection_and_exact_history
     exact_evidence = source.payload["output"]["structured_content"]["evidence"]
     assert marker in exact_evidence
     assert len(exact_evidence) > 5_000
-    assert source.payload["executor"] == "mcp"
+    assert source.payload["executor"] == "external_runtime"
 
     tool_message = state.messages[-1]
     assert tool_message.metadata["source_event_sequence"] == source.sequence
@@ -676,7 +678,8 @@ def test_external_mcp_http_error_preserves_exact_body_as_artifact(
                     "additionalProperties": False,
                 },
                 "metadata": {
-                    "external_executor": "mcp",
+                    "external_execution_mode": "runtime",
+                    "external_provider_id": "mcp:failing",
                     "mcp_server": "failing",
                     "mcp_input_schema": {
                         "type": "object",
@@ -686,14 +689,16 @@ def test_external_mcp_http_error_preserves_exact_body_as_artifact(
                 },
             }
         )
-        runtime.external_mcp._clients["failing"] = client
+        mcp_adapter = runtime.runtime_external_tools._adapters[0]
+        mcp_adapter._clients["failing"] = client
         from swaag.external_mcp import ExternalMcpTool
 
-        runtime.external_mcp._tools_by_name[spec.name] = ExternalMcpTool(
+        mcp_adapter._tools_by_name[spec.name] = ExternalMcpTool(
             server_name="failing", spec=spec
         )
+        runtime.runtime_external_tools.refresh()
 
-        result = runtime._execute_external_mcp_tool(state, spec=spec, arguments={})
+        result = runtime._execute_runtime_external_tool(state, spec=spec, arguments={})
         assert result is None
         error_event = next(
             event

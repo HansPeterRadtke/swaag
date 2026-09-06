@@ -35,7 +35,8 @@ from swaag.embedding_index import (
     OpenAICompatibleEmbeddingProvider,
 )
 from swaag.environment.environment import AgentEnvironment
-from swaag.external_mcp import ExternalMcpError, ExternalMcpManager
+from swaag.external_tool_adapters import build_runtime_external_tool_manager
+from swaag.external_tools import RuntimeExternalToolError
 from swaag.environment.artifacts import TextArtifactStore
 from swaag.fsops import ensure_dir, restore_tree, snapshot_tree, write_text
 from swaag.grammar import (
@@ -251,7 +252,7 @@ class AgentRuntime:
         )
         self.preemption = ModelPreemptionCoordinator(config.sessions.root)
         self.delegated_tools = DelegatedToolStore(config.sessions.root)
-        self.external_mcp = ExternalMcpManager(config.external_tools)
+        self.runtime_external_tools = build_runtime_external_tool_manager(config)
         self.prompt_instruction_store = PromptInstructionStore(
             config.sessions.root,
             config,
@@ -413,8 +414,7 @@ class AgentRuntime:
     ) -> DelegatedToolCatalog:
         """Bind a layer-3 tool catalog supplied by any external connector.
 
-        Transport-specific code (MCP clients, APIs, UI clients, local plugin
-        processes, etc.) converts its provider metadata to portable tool schemas;
+        Transport-specific code converts provider metadata to portable tool schemas;
         the core runtime remains unaware of the provider's domain.
         """
         normalized = tuple(
@@ -785,10 +785,12 @@ class AgentRuntime:
         delegated_catalog: DelegatedToolCatalog | None = None
         client_delegated_specs: tuple[DelegatedToolSpec, ...] = ()
         client_delegated_by_name: dict[str, DelegatedToolSpec] = {}
-        mcp_specs: tuple[DelegatedToolSpec, ...] = self.external_mcp.specs()
-        mcp_by_name: dict[str, DelegatedToolSpec] = {tool.name: tool for tool in mcp_specs}
-        delegated_specs: tuple[DelegatedToolSpec, ...] = mcp_specs
-        delegated_by_name: dict[str, DelegatedToolSpec] = dict(mcp_by_name)
+        runtime_external_specs: tuple[DelegatedToolSpec, ...] = self.runtime_external_tools.specs()
+        runtime_external_by_name: dict[str, DelegatedToolSpec] = {
+            tool.name: tool for tool in runtime_external_specs
+        }
+        delegated_specs: tuple[DelegatedToolSpec, ...] = runtime_external_specs
+        delegated_by_name: dict[str, DelegatedToolSpec] = dict(runtime_external_by_name)
         capability_index = list(base_capability_index)
         loaded_tool_names: set[str] = (
             set()
@@ -817,15 +819,15 @@ class AgentRuntime:
                 () if delegated_catalog is None else delegated_catalog.tools
             )
             client_delegated_by_name = {tool.name: tool for tool in client_delegated_specs}
-            mcp_specs = self.external_mcp.specs()
-            mcp_by_name = {tool.name: tool for tool in mcp_specs}
-            external_collisions = set(client_delegated_by_name) & set(mcp_by_name)
+            runtime_external_specs = self.runtime_external_tools.specs()
+            runtime_external_by_name = {tool.name: tool for tool in runtime_external_specs}
+            external_collisions = set(client_delegated_by_name) & set(runtime_external_by_name)
             if external_collisions:
                 raise HistoryInvariantError(
-                    "external tool names collide across client and MCP catalogs: "
+                    "external tool names collide across runtime and client catalogs: "
                     + ", ".join(sorted(external_collisions))
                 )
-            delegated_specs = (*client_delegated_specs, *mcp_specs)
+            delegated_specs = (*client_delegated_specs, *runtime_external_specs)
             delegated_by_name = {tool.name: tool for tool in delegated_specs}
             collisions = set(delegated_by_name) & self.tools.registered_names()
             if collisions:
@@ -1167,20 +1169,20 @@ class AgentRuntime:
                             spec=client_delegated_spec,
                             arguments=tool_call.arguments,
                         )
-                    mcp_spec = mcp_by_name.get(tool_call.tool_name)
-                    if mcp_spec is not None:
+                    runtime_external_spec = runtime_external_by_name.get(tool_call.tool_name)
+                    if runtime_external_spec is not None:
                         self._heartbeat(
                             state,
                             phase="tool_execution",
                             substate="running",
-                            detail=f"calling external MCP tool {tool_call.tool_name}",
-                            active_kind="external_mcp_tool",
+                            detail=f"calling external tool {tool_call.tool_name}",
+                            active_kind="external_tool",
                             active_id=tool_call.tool_name,
                             operation_kind=tool_call.tool_name,
                         )
-                        result = self._execute_external_mcp_tool(
+                        result = self._execute_runtime_external_tool(
                             state,
-                            spec=mcp_spec,
+                            spec=runtime_external_spec,
                             arguments=tool_call.arguments,
                         )
                         tool_calls_used += 1
@@ -1194,7 +1196,7 @@ class AgentRuntime:
                                 "tool_call_index": tool_call_index,
                                 "tool_name": tool_call.tool_name,
                                 "success": result is not None,
-                                "executor": "mcp",
+                                "executor": "external_runtime",
                             },
                         )
                         continue
@@ -7757,26 +7759,25 @@ class AgentRuntime:
             )
         return call
 
-    def _execute_external_mcp_tool(
+    def _execute_runtime_external_tool(
         self,
         state: SessionState,
         *,
         spec: DelegatedToolSpec,
         arguments: dict[str, Any],
     ) -> ToolExecutionResult | None:
-        _validate_schema_value(
-            arguments, spec.parameters, path=f"external MCP tool {spec.name}"
-        )
+        _validate_schema_value(arguments, spec.parameters, path=f"external tool {spec.name}")
         call_id = new_id("tool_call")
-        guard = self.history.guard(state, f"external_mcp_tool:{spec.name}")
+        provider_id = str(spec.metadata.get("external_provider_id", "external"))
+        guard = self.history.guard(state, f"external_tool:{spec.name}")
         guard.record(
             "tool_called",
             {
                 "call_id": call_id,
                 "tool_name": spec.name,
                 "tool_input": arguments,
-                "executor": "mcp",
-                "mcp_server": spec.metadata.get("mcp_server"),
+                "executor": "external_runtime",
+                "external_provider_id": provider_id,
             },
         )
         guard.record(
@@ -7786,8 +7787,8 @@ class AgentRuntime:
                 "tool_name": spec.name,
                 "tool_kind": "external",
                 "isolated": True,
-                "executor": "mcp",
-                "mcp_server": spec.metadata.get("mcp_server"),
+                "executor": "external_runtime",
+                "external_provider_id": provider_id,
                 "policy": {
                     "allow_stateful_tools": self.config.tools.allow_stateful_tools,
                     "allow_side_effect_tools": self.config.tools.allow_side_effect_tools,
@@ -7795,18 +7796,19 @@ class AgentRuntime:
             },
         )
         try:
-            call_result = self.external_mcp.call(spec.name, arguments)
+            call_result = self.runtime_external_tools.call(spec.name, arguments)
+            provider_id = call_result.provider_id or provider_id
             output = {
                 "structured_content": call_result.structured_content,
                 "content": call_result.content,
                 "is_error": call_result.is_error,
-                "mcp_server": call_result.server_name,
+                "external_provider_id": provider_id,
                 "raw_result": call_result.raw_result,
             }
             if call_result.is_error:
                 raise ToolExecutionError(
-                    "External MCP tool reported an execution error",
-                    error_type="ExternalMcpToolError",
+                    "External tool provider reported an execution error",
+                    error_type="RuntimeExternalToolError",
                     evidence=output,
                 )
             display_text = stable_json_dumps(
@@ -7822,14 +7824,14 @@ class AgentRuntime:
             if isinstance(exc, ToolExecutionError):
                 evidence = to_jsonable(exc.evidence)
                 error_type = exc.error_type
-            elif isinstance(exc, ExternalMcpError):
+            elif isinstance(exc, RuntimeExternalToolError):
                 raw_evidence = dict(exc.evidence)
                 response_body = raw_evidence.pop("response_body", None)
                 evidence = to_jsonable(raw_evidence)
                 if isinstance(response_body, str):
                     artifact = TextArtifactStore(
                         self.config.sessions.root, state.session_id
-                    ).create(response_body, kind="external_mcp_error_response")
+                    ).create(response_body, kind="external_tool_error_response")
                     evidence.update(
                         {
                             "response_body_artifact_id": artifact.artifact_id,
@@ -7845,8 +7847,8 @@ class AgentRuntime:
                 "tool_input": arguments,
                 "error": str(exc),
                 "error_type": error_type,
-                "executor": "mcp",
-                "mcp_server": spec.metadata.get("mcp_server"),
+                "executor": "external_runtime",
+                "external_provider_id": provider_id,
                 "evidence": evidence,
             }
             event = guard.record("tool_error", error_payload)
@@ -7878,8 +7880,8 @@ class AgentRuntime:
                 "validated_input": arguments,
                 "output": to_jsonable(result.output),
                 "source_event_references": [],
-                "executor": "mcp",
-                "mcp_server": spec.metadata.get("mcp_server"),
+                "executor": "external_runtime",
+                "external_provider_id": provider_id,
             },
         )
         guard.require_all("tool_called", "tool_result")
@@ -7895,8 +7897,8 @@ class AgentRuntime:
                     "raw_input": arguments,
                     "validated_input": arguments,
                     "output": result.output,
-                    "executor": "mcp",
-                    "mcp_server": spec.metadata.get("mcp_server"),
+                    "executor": "external_runtime",
+                    "external_provider_id": provider_id,
                     "source_event_sequence": event.sequence,
                     "source_event_hash": event.hash,
                     "source_event_type": event.event_type,

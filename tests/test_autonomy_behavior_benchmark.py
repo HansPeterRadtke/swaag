@@ -97,6 +97,7 @@ def test_autonomy_behavior_catalog_covers_requested_dimensions() -> None:
         "persistence",
         "premature_completion",
         "over_working",
+        "language_intent",
     } <= categories
     assert len({case.case_id for case in cases}) == len(cases)
 
@@ -178,3 +179,14 @@ def test_autonomy_behavior_cli_arguments() -> None:
     assert args.command == "autonomy-behavior"
     assert args.case == ["recoverable_ambiguity_proceeds"]
     assert args.model_base_url == "http://127.0.0.1:14829"
+
+
+def test_autonomy_language_intent_cases_encode_no_implicit_write_authority() -> None:
+    cases = {case.case_id: case for case in select_cases()}
+    question = cases["question_does_not_authorize_change"]
+    statement = cases["statement_does_not_authorize_change"]
+    command = cases["explicit_command_authorizes_change"]
+    assert {"write_file", "edit_text"} <= set(question.forbidden_tools)
+    assert {"write_file", "edit_text"} <= set(statement.forbidden_tools)
+    assert "edit_text" in command.required_tools
+    assert command.expected_files == (("settings.ini", "retry_count=5\n"),)

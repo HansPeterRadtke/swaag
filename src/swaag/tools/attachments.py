@@ -64,7 +64,7 @@ class ReadAttachmentTool(Tool):
     name = "read_attachment"
     description = "Read an exact bounded UTF-8 slice from one raw attachment after deciding that direct text inspection is useful."
     usage_guidance = (
-        "Use the exact attachment_id. Binary or non-UTF-8 content is not coerced to text. Use an enabled external tool, MCP capability, or shell-accessible host utility when semantic inspection of binary content is required. Raw bytes remain authoritative outside context. If finished=false, "
+        "Use the exact attachment_id. Binary or non-UTF-8 content is not coerced to text. Use an enabled external tool or shell-accessible host utility when semantic inspection of binary content is required. Raw bytes remain authoritative outside context. If finished=false, "
         "advance start_offset to next_offset and continue until the evidence needed by the task is complete."
     )
     kind = "pure"

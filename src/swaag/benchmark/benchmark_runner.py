@@ -1683,6 +1683,25 @@ def _build_parser() -> argparse.ArgumentParser:
         "--json", action="store_true", help="Print the full JSON report."
     )
 
+    response_length_parser = subparsers.add_parser(
+        "response-length",
+        help="Measure exact-word versus qualitative response-length instruction following.",
+    )
+    response_length_parser.add_argument(
+        "--output", default="response_length_output", help="Checkpointed artifact directory."
+    )
+    response_length_parser.add_argument(
+        "--case", action="append", default=[], help="Run only the named response-length case."
+    )
+    response_length_parser.add_argument(
+        "--model-base-url", help="Optional alternate model endpoint for model-size comparisons."
+    )
+    response_length_parser.add_argument(
+        "--timeout-seconds", type=int, help="Override the no-token timeout for this live experiment."
+    )
+    response_length_parser.add_argument("--clean", action="store_true", help="Replace an existing artifact directory.")
+    response_length_parser.add_argument("--json", action="store_true", help="Print the full JSON report.")
+
     prompt_instruction_parser = subparsers.add_parser(
         "prompt-instructions",
         help="Run live scoped-instruction persistence, revision, and self-repair experiments.",
@@ -2188,6 +2207,27 @@ def main(argv: Sequence[str] | None = None) -> int:
                 f"output={Path(args.output) / 'response_presentation_results.json'}"
             )
         return 0 if report["complete"] and report["passed"] == report["total"] else 1
+    if args.command == "response-length":
+        from swaag.benchmark.response_length import run_response_length_benchmark
+
+        report = run_response_length_benchmark(
+            output_dir=Path(args.output),
+            config=_live_experiment_config(
+                model_base_url=args.model_base_url,
+                timeout_seconds=args.timeout_seconds,
+            ),
+            case_names=list(args.case),
+            clean=bool(args.clean),
+        )
+        if args.json:
+            print(stable_json_dumps(report, indent=2))
+        else:
+            print(f"passed={report['passed']}/{report['total']}")
+            for result in report["results"]:
+                print(f"{result['case']}={result['word_count']} words ({'passed' if result['passed'] else 'failed'})")
+            print(f"output={Path(args.output) / 'response_length_results.json'}")
+        return 0 if report["complete"] and report["passed"] == report["total"] else 1
+
     if args.command == "prompt-instructions":
         from swaag.benchmark.prompt_instruction_behavior import (
             run_prompt_instruction_behavior_benchmark,

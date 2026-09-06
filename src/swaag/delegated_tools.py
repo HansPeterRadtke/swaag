@@ -77,10 +77,10 @@ class DelegatedToolSpec:
     metadata: dict[str, Any]
 
     def prompt_tuple(self) -> tuple[str, str, dict[str, Any], str]:
-        if self.metadata.get("external_executor") == "mcp":
+        if self.metadata.get("external_execution_mode") == "runtime":
             guidance = (
-                "This is an external MCP tool. SWAAG executes it through the configured MCP server "
-                "and returns the exact result to the current run."
+                "This is an external tool that SWAAG can execute through its configured provider "
+                "adapter. If selected, the exact provider result returns to the current run."
             )
         else:
             guidance = (

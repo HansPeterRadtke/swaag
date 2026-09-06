@@ -11,15 +11,14 @@ import requests
 
 from swaag.config import ExternalMcpServerConfig, ExternalToolsConfig
 from swaag.delegated_tools import DelegatedToolSpec, prepare_delegated_tool_spec
+from swaag.external_tools import RuntimeExternalToolCallResult, RuntimeExternalToolError
 from swaag.utils import stable_json_dumps
 
 MCP_PROTOCOL_VERSION = "2026-07-28"
 
 
-class ExternalMcpError(RuntimeError):
-    def __init__(self, message: str, *, evidence: dict[str, Any] | None = None):
-        super().__init__(message)
-        self.evidence = dict(evidence or {})
+class ExternalMcpError(RuntimeExternalToolError):
+    pass
 
 
 def _schema_allows_null(schema: dict[str, Any]) -> bool:
@@ -489,7 +488,8 @@ class ExternalMcpClient:
                     "description": item.get("description", ""),
                     "parameters": portable_schema,
                     "metadata": {
-                        "external_executor": "mcp",
+                        "external_execution_mode": "runtime",
+                        "external_provider_id": f"mcp:{self.server_name}",
                         "mcp_server": self.server_name,
                         "mcp_input_schema": input_schema,
                     },
@@ -517,6 +517,8 @@ class ExternalMcpClient:
 
 
 class ExternalMcpManager:
+    adapter_id = "mcp"
+
     def __init__(self, config: ExternalToolsConfig):
         self.config = config
         self._clients = {
@@ -561,7 +563,7 @@ class ExternalMcpManager:
     def has_tool(self, tool_name: str) -> bool:
         return tool_name in self._tools_by_name
 
-    def call(self, tool_name: str, arguments: dict[str, Any]) -> ExternalMcpCallResult:
+    def call(self, tool_name: str, arguments: dict[str, Any]) -> RuntimeExternalToolCallResult:
         try:
             item = self._tools_by_name[tool_name]
         except KeyError as exc:
@@ -573,4 +575,12 @@ class ExternalMcpManager:
             if isinstance(original_schema, dict)
             else dict(arguments)
         )
-        return client.call_tool(tool_name, prepared_arguments)
+        result = client.call_tool(tool_name, prepared_arguments)
+        return RuntimeExternalToolCallResult(
+            provider_id=f"mcp:{item.server_name}",
+            tool_name=result.tool_name,
+            structured_content=result.structured_content,
+            content=result.content,
+            is_error=result.is_error,
+            raw_result=result.raw_result,
+        )
