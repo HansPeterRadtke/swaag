@@ -49,6 +49,8 @@ def run_child_probe(
     model_base_url: str,
     context_limit: int,
     output_path: Path,
+    phase_label: str = "phase-two",
+    query: bool = True,
 ) -> dict[str, Any]:
     env = dict(os.environ)
     env["SWAAG__SESSIONS__ROOT"] = str(sessions_root)
@@ -76,7 +78,7 @@ def run_child_probe(
     for index in range(16):
         message = Message(
             role="assistant" if index % 2 else "user",
-            content=f"Long unrelated subprocess phase-two progress {index + 1}: housekeeping only.",
+            content=f"Long unrelated subprocess {phase_label} progress {index + 1}: housekeeping only.",
             created_at=utc_now_iso(),
         )
         phase_two_messages.append(message)
@@ -88,36 +90,38 @@ def run_child_probe(
     second_compaction = runtime._compact_once(state)
 
     retained_text = runtime.prompts.render_messages(state.messages)
-    contract = _contract(user_fact, tool_fact, attachment_fact)
-    exact = False
+    exact = not query
     response_sha256: str | None = None
     error: dict[str, str] | None = None
-    try:
-        completion = runtime.client.complete(
-            (
+    if query:
+        contract = _contract(user_fact, tool_fact, attachment_fact)
+        try:
+            prompt = (
                 "This is the first query for three early authoritative values after long unrelated "
-                "work, a complete Python-process restart, and more unrelated work. Recover all three "
+                "work, multiple complete Python-process restarts, and more unrelated work. Recover all three "
                 "exact values. The attachment is authoritative raw evidence and is included below.\n\n"
                 + retained_text
                 + "\n\nAuthoritative raw attachment evidence:\n"
                 + attachment_text
-            ),
-            max_tokens=192,
-            contract=contract,
-            temperature=0.0,
-            kind="benchmark_quality_judge",
-            live_mode=True,
-        )
-        payload = json.loads(completion.text)
-        _validate_schema_value(payload, contract.json_schema or {}, path=contract.name)
-        exact = (
-            payload.get("user_constraint") == user_fact
-            and payload.get("tool_result") == tool_fact
-            and payload.get("attachment_value") == attachment_fact
-        )
-        response_sha256 = sha256_text(completion.text)
-    except Exception as exc:
-        error = {"error_type": type(exc).__name__, "reason": str(exc)}
+            )
+            completion = runtime.client.complete(
+                prompt,
+                max_tokens=192,
+                contract=contract,
+                temperature=0.0,
+                kind="benchmark_quality_judge",
+                live_mode=True,
+            )
+            payload = json.loads(completion.text)
+            _validate_schema_value(payload, contract.json_schema or {}, path=contract.name)
+            exact = (
+                payload.get("user_constraint") == user_fact
+                and payload.get("tool_result") == tool_fact
+                and payload.get("attachment_value") == attachment_fact
+            )
+            response_sha256 = sha256_text(completion.text)
+        except Exception as exc:
+            error = {"error_type": type(exc).__name__, "reason": str(exc)}
 
     events = runtime.history.read_history(session_id)
     tool_event_present = any(
@@ -156,7 +160,9 @@ def run_child_probe(
         "tool_event_present": tool_event_present,
         "user_event_present": user_event_present,
         "attachment_event_present": attachment_event_present,
-        "exact_delayed_retrieval": exact,
+        "query_performed": query,
+        "phase_label": phase_label,
+        "exact_delayed_retrieval": exact if query else None,
         "response_sha256": response_sha256,
         "model_identity": getattr(runtime.client, "cache_identity", lambda: type(runtime.client).__name__)(),
         "context_limit": resolved_limit,
@@ -178,6 +184,8 @@ def main(argv: list[str] | None = None) -> int:
     parser.add_argument("--model-base-url", required=True)
     parser.add_argument("--context-limit", required=True, type=int)
     parser.add_argument("--output", required=True)
+    parser.add_argument("--phase-label", default="phase-two")
+    parser.add_argument("--skip-query", action="store_true")
     args = parser.parse_args(argv)
     report = run_child_probe(
         sessions_root=Path(args.sessions_root),
@@ -189,6 +197,8 @@ def main(argv: list[str] | None = None) -> int:
         model_base_url=args.model_base_url,
         context_limit=args.context_limit,
         output_path=Path(args.output),
+        phase_label=args.phase_label,
+        query=not args.skip_query,
     )
     print(stable_json_dumps(report, indent=2))
     return 0 if report["passed"] else 1

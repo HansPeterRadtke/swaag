@@ -1688,6 +1688,16 @@ def _build_parser() -> argparse.ArgumentParser:
     multisource_parser.add_argument("--clean", action="store_true")
     multisource_parser.add_argument("--json", action="store_true")
 
+    chain_parser = subparsers.add_parser(
+        "process-restart-chain",
+        help="Test delayed multi-source relevance across two real process restarts and three compactions.",
+    )
+    chain_parser.add_argument("--output", default="process_restart_chain_output")
+    chain_parser.add_argument("--model-base-url")
+    chain_parser.add_argument("--timeout-seconds", type=int)
+    chain_parser.add_argument("--clean", action="store_true")
+    chain_parser.add_argument("--json", action="store_true")
+
     response_presentation_parser = subparsers.add_parser(
         "response-presentation",
         help="Compare user-relevance and audio-presentation strategies on the live model.",
@@ -2252,6 +2262,20 @@ def main(argv: Sequence[str] | None = None) -> int:
             print(f"passed={report['passed']}")
             print(f"different_process={report['different_process']}")
             print(f"output={Path(args.output) / 'process_restart_multisource.json'}")
+        return 0 if report["passed"] else 1
+
+    if args.command == "process-restart-chain":
+        from swaag.benchmark.process_restart_chain import run_process_restart_chain_benchmark
+        report = run_process_restart_chain_benchmark(
+            output_dir=Path(args.output),
+            config=_live_experiment_config(model_base_url=args.model_base_url, timeout_seconds=args.timeout_seconds),
+            clean=bool(args.clean),
+        )
+        if args.json:
+            print(stable_json_dumps(report, indent=2))
+        else:
+            print(f"passed={report['passed']}")
+            print(f"distinct_processes={report['distinct_processes']}")
         return 0 if report["passed"] else 1
 
     if args.command == "response-presentation":
