@@ -1848,3 +1848,14 @@ def test_pending_controls_refresh_stale_state_before_selecting_original_request(
     assert result is not None
     assert result.assistant_text == "control handled"
     assert marker in client.prompt
+
+
+def test_core_runtime_does_not_depend_on_requests_for_model_retry_classification() -> None:
+    from pathlib import Path
+
+    text = Path("src/swaag/runtime.py").read_text(encoding="utf-8")
+    assert "import requests" not in text
+    assert "requests.ConnectionError" not in text
+    assert "requests.Timeout" not in text
+    assert "requests.HTTPError" not in text
+    assert "model_service_unavailable" in text

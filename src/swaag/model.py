@@ -24,6 +24,20 @@ class ModelClientError(RuntimeError):
     pass
 
 
+def model_service_unavailable(error: BaseException) -> bool:
+    """Classify transport-specific temporary model-service failures for neutral callers."""
+    if isinstance(error, (requests.ConnectionError, requests.Timeout)):
+        return True
+    if isinstance(error, requests.HTTPError):
+        response = getattr(error, "response", None)
+        return response is not None and getattr(response, "status_code", None) in {
+            502,
+            503,
+            504,
+        }
+    return False
+
+
 class ModelHTTPError(requests.HTTPError):
     """HTTP completion failure retaining the provider's exact response body."""
 

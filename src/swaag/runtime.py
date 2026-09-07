@@ -12,7 +12,6 @@ from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any, Callable, Iterable, Iterator
 
-import requests
 
 from swaag.redaction import configured_secret_values
 from swaag.action import ActionValidationError, AgentAction, action_from_payload
@@ -58,7 +57,12 @@ from swaag.grammar import (
 from swaag.history import HistoryInvariantError, HistoryStore
 from swaag.heartbeat import heartbeat_payload, systemd_notify
 from swaag.inference import InferenceRequest, InferenceRequestCoordinator
-from swaag.model import LlamaCppClient, ModelClientError, uses_chat_completions_transport
+from swaag.model import (
+    LlamaCppClient,
+    ModelClientError,
+    model_service_unavailable,
+    uses_chat_completions_transport,
+)
 from swaag.preemption import (
     ModelCallPreempted,
     ModelCallStateChanged,
@@ -6573,7 +6577,7 @@ class AgentRuntime:
                     guard,
                     exc,
                 )
-                if self._is_model_server_unavailable(exc):
+                if model_service_unavailable(exc):
                     transient_attempts += 1
                     telemetry_operation.record_retry()
                     guard.record(
@@ -7642,14 +7646,6 @@ class AgentRuntime:
         self._token_count_cache[text_hash] = counted
         return counted
 
-    def _is_model_server_unavailable(self, error: BaseException) -> bool:
-        if isinstance(error, (requests.ConnectionError, requests.Timeout)):
-            return True
-        if isinstance(error, requests.HTTPError):
-            response = getattr(error, "response", None)
-            return response is not None and getattr(response, "status_code", None) in {502, 503, 504}
-        return False
-
     def _retry_model_server_operation(
         self,
         operation: Callable[[], Any],
@@ -7663,7 +7659,7 @@ class AgentRuntime:
             try:
                 return operation()
             except Exception as exc:
-                if not self._is_model_server_unavailable(exc):
+                if not model_service_unavailable(exc):
                     raise
                 transient_attempts += 1
                 if (
