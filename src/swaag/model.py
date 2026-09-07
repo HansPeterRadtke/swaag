@@ -7,7 +7,7 @@ from urllib.parse import urlparse
 import time
 import threading
 from pathlib import Path
-from typing import Any, Callable
+from typing import Any, Callable, Protocol
 
 import requests
 
@@ -22,6 +22,36 @@ from swaag.utils import sha256_text, stable_json_dumps
 
 class ModelClientError(RuntimeError):
     pass
+
+
+class ModelClient(Protocol):
+    def health(self) -> dict[str, Any]: ...
+
+    def tokenize(self, text: str) -> int: ...
+
+    def resolve_contract(
+        self,
+        contract: ContractSpec,
+        *,
+        kind: str,
+        prompt: str,
+        max_tokens: int,
+    ) -> tuple[ContractSpec, Any]: ...
+
+    def build_completion_request(
+        self,
+        prompt: str,
+        *,
+        max_tokens: int,
+        contract: ContractSpec,
+        **kwargs: Any,
+    ) -> dict[str, Any]: ...
+
+    def send_completion(
+        self,
+        payload: dict[str, Any],
+        **kwargs: Any,
+    ) -> CompletionResult: ...
 
 
 def model_service_unavailable(error: BaseException) -> bool:

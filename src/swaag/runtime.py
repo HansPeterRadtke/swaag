@@ -58,7 +58,7 @@ from swaag.history import HistoryInvariantError, HistoryStore
 from swaag.heartbeat import heartbeat_payload, systemd_notify
 from swaag.inference import InferenceRequest, InferenceRequestCoordinator
 from swaag.model import (
-    LlamaCppClient,
+    ModelClient,
     ModelClientError,
     model_service_unavailable,
     uses_chat_completions_transport,
@@ -230,7 +230,7 @@ class AgentRuntime:
         self,
         config: AgentConfig,
         *,
-        model_client: LlamaCppClient | None = None,
+        model_client: ModelClient | None = None,
         tool_registry: ToolRegistry | None = None,
         history_store: HistoryStore | None = None,
         token_counter: ExactTokenCounter | ConservativeEstimator | None = None,

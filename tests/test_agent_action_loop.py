@@ -1859,3 +1859,12 @@ def test_core_runtime_does_not_depend_on_requests_for_model_retry_classification
     assert "requests.Timeout" not in text
     assert "requests.HTTPError" not in text
     assert "model_service_unavailable" in text
+
+
+def test_core_runtime_does_not_name_concrete_model_client() -> None:
+    from pathlib import Path
+
+    text = Path("src/swaag/runtime.py").read_text(encoding="utf-8")
+    assert "LlamaCppClient" not in text
+    assert "ModelClient" in text
+    assert "build_model_client" in text

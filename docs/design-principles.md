@@ -97,6 +97,7 @@ Workspace state, notes, attachment references, and learned prompt instructions e
 Exact completion-evidence recovery is provider-driven for the same reason. The core only coordinates evidence requests, generic source identities, measured token budgets, and semantic projection after overflow. Source-specific discovery and exact re-expansion live behind evidence providers so artifacts, attachments, and future evidence classes do not become source-kind branches in the harness.
 
 Model transport failures are classified inside the model subsystem. AgentRuntime consumes only the neutral temporary-service-unavailable predicate and therefore does not depend on HTTP-library exception classes or status-code semantics.
+ AgentRuntime also depends on the neutral model-client protocol and factory rather than naming the concrete live client implementation.
 
 User-facing relevance selection and audio presentation are separate semantic operations. A final answer should omit operational noise that is not meaningful to the user, while preserving requested evidence. Optional audio-style conversion may rewrite tables, lists, numbers, and visual structure into listenable prose, potentially with a smaller model or another device, but it must preserve the complete selected information. Do not burden a reasoning-heavy worker call with presentation work without comparing the one-call and staged alternatives. Benchmark information preservation, spam removal, latency, and small-model suitability before enabling either transformation by default.
 
