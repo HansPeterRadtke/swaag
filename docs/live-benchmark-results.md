@@ -145,3 +145,13 @@ This validates cancellation and fresh admission for the deployed server/client p
 - Delayed query: the child's first explicit request after the real process boundary recovered the exact token `process-handoff-P7-88421`. Parent and child both fingerprint the same Q4_K_M model/server and both resolve the context limit as 16384 from server props.
 - Evidence handling: exact child stdout/stderr are retained as files with SHA-256 hashes in the parent report; the structured child report records model identity, context-limit provenance, rebuild equality, lineage, compaction success, and exact retrieval.
 - Interpretation: delayed relevance and durable history reconstruction survive an actual Python-process restart in this Q4/16K trajectory, not merely an in-process runtime recreation. This remains one bounded trajectory and should still be extended across longer delays and other source types.
+
+## Thor Qwen3.8-27B Q4_K_M real process restart + multi-source delayed relevance - 2026-09-07
+
+- Model/runtime: Thor, direct uncached `LlamaCppClient`, `Qwen3.8-27B-UD-Q4_K_M.gguf`, server-discovered `n_ctx=16384`, loopback port 14911.
+- Artifacts: `/data/var/swaag/benchmarks/retained/thor-q4-process-restart-multisource-live16k-20260907.json` and `/data/var/swaag/benchmarks/retained/thor-q4-process-restart-multisource-child-live16k-20260907.json`.
+- Source diversity: the parent recorded three different authoritative sources before the delay: a user constraint (`constraint-user-C4-55109`), a genuine `tool_result` event plus tool-role message (`tool-result-T8-66317`), and a stored text attachment whose raw content contains `attachment-value-A2-77403`.
+- Delay/restart path: 16 unrelated phase-one messages, semantic compaction, a real Python-process restart, 16 additional unrelated phase-two messages, and a second compaction. Parent PID 1992517 and child PID 1993716 prove the OS-process boundary.
+- Child verification: reopened state equals an explicit append-only rebuild; event counts match; the attachment blob survives restart and passes exact raw re-read; user, tool-result, and attachment-added durable events remain present; no phase-two raw message repeats any answer value.
+- Delayed query: the first explicit later request returned all three exact values in one constrained response. Parent and child fingerprint the same Q4_K_M model/server and both resolve 16384 from server props.
+- Interpretation: this extends the single-token restart result across three durable source classes and a longer delay. User history, tool-result provenance, and raw attachment storage all remain usable after compaction plus a real process restart in this bounded Q4/16K trajectory.

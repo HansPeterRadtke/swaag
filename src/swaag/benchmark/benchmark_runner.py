@@ -1678,6 +1678,16 @@ def _build_parser() -> argparse.ArgumentParser:
         "--json", action="store_true", help="Print the full JSON report."
     )
 
+    multisource_parser = subparsers.add_parser(
+        "process-restart-multisource",
+        help="Test multiple delayed source types across a real process restart and repeated compaction.",
+    )
+    multisource_parser.add_argument("--output", default="process_restart_multisource_output")
+    multisource_parser.add_argument("--model-base-url")
+    multisource_parser.add_argument("--timeout-seconds", type=int)
+    multisource_parser.add_argument("--clean", action="store_true")
+    multisource_parser.add_argument("--json", action="store_true")
+
     response_presentation_parser = subparsers.add_parser(
         "response-presentation",
         help="Compare user-relevance and audio-presentation strategies on the live model.",
@@ -2224,6 +2234,24 @@ def main(argv: Sequence[str] | None = None) -> int:
             print(f"passed={report['passed']}")
             print(f"different_process={report['different_process']}")
             print(f"output={Path(args.output) / 'process_restart_delayed_relevance.json'}")
+        return 0 if report["passed"] else 1
+
+    if args.command == "process-restart-multisource":
+        from swaag.benchmark.process_restart_multisource import run_process_restart_multisource_benchmark
+        report = run_process_restart_multisource_benchmark(
+            output_dir=Path(args.output),
+            config=_live_experiment_config(
+                model_base_url=args.model_base_url,
+                timeout_seconds=args.timeout_seconds,
+            ),
+            clean=bool(args.clean),
+        )
+        if args.json:
+            print(stable_json_dumps(report, indent=2))
+        else:
+            print(f"passed={report['passed']}")
+            print(f"different_process={report['different_process']}")
+            print(f"output={Path(args.output) / 'process_restart_multisource.json'}")
         return 0 if report["passed"] else 1
 
     if args.command == "response-presentation":
