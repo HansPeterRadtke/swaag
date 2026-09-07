@@ -73,8 +73,8 @@ def test_runtime_can_enable_background_derived_embedding_index(
     config.embedding_index.base_url = "http://embedding.invalid"
     config.embedding_index.model = "fake-embedding"
     monkeypatch.setattr(
-        "swaag.runtime.OpenAICompatibleEmbeddingProvider",
-        lambda *_args, **_kwargs: _FakeEmbeddingProvider(),
+        "swaag.runtime.build_embedding_provider",
+        lambda _config: _FakeEmbeddingProvider(),
     )
 
     runtime = AgentRuntime(config, model_client=object())
@@ -336,3 +336,12 @@ def test_direct_runtime_tool_call_cannot_bypass_configured_enablement(
     assert run.error is not None
     assert run.error["error_type"] == "PermissionError"
     assert "not enabled by configuration" in run.error["error"]
+
+
+def test_core_callers_do_not_name_concrete_embedding_transport() -> None:
+    from pathlib import Path
+
+    for path in (Path("src/swaag/runtime.py"), Path("src/swaag/tools/history.py")):
+        text = path.read_text(encoding="utf-8")
+        assert "OpenAICompatibleEmbeddingProvider" not in text
+        assert "build_embedding_provider" in text

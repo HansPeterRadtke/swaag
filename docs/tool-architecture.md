@@ -17,6 +17,8 @@ Layer 2 also owns system-context contributors. Workspace manifests, durable note
 
 Completion verification follows the same boundary. Layer 1 may ask for completion evidence and may semantically project already integrity-checked text after measured overflow, but it does not know how a particular evidence source is identified, inventoried, integrity-checked, or read. Those mechanics belong to pluggable evidence-source providers. Built-in providers currently cover SWAAG text artifacts and raw attachments; new source kinds can be added without editing AgentRuntime.
 
+Derived semantic indexing follows the same provider rule. Runtime and history search depend only on the neutral embedding-provider interface and factory; concrete transport dialects are constructed inside the embedding subsystem rather than named by Layer 1 or system-tool callers.
+
 ## Layer 3 - external/open-world tools
 
 Everything domain-specific belongs outside the SWAAG repository: browser automation, web search providers, OCR/document conversion, speech systems, databases, proprietary APIs, image generation, remote services, and future capabilities that do not yet exist. External tools can live on the same machine or another machine and can have arbitrary dependencies, credentials, permissions, sandboxes, installation requirements, and failure modes.

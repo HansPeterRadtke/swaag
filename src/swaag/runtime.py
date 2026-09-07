@@ -29,11 +29,8 @@ from swaag.delegated_tools import (
     DelegatedToolStore,
     prepare_delegated_tool_spec,
 )
-from swaag.embedding_index import (
-    AsyncEmbeddingIndexer,
-    DerivedEmbeddingIndex,
-    OpenAICompatibleEmbeddingProvider,
-)
+from swaag.embedding_index import AsyncEmbeddingIndexer, DerivedEmbeddingIndex
+from swaag.embedding_providers import build_embedding_provider
 from swaag.environment.environment import AgentEnvironment
 from swaag.external_tool_adapters import build_runtime_external_tool_manager
 from swaag.external_tools import RuntimeExternalToolError
@@ -254,12 +251,7 @@ class AgentRuntime:
         self._embedding_indexer: AsyncEmbeddingIndexer | None = None
         event_observer = None
         if config.embedding_index.enabled:
-            provider = OpenAICompatibleEmbeddingProvider(
-                config.embedding_index.base_url,
-                config.embedding_index.endpoint,
-                config.embedding_index.model,
-                config.embedding_index.timeout_seconds,
-            )
+            provider = build_embedding_provider(config.embedding_index)
             self._embedding_indexer = AsyncEmbeddingIndexer(
                 DerivedEmbeddingIndex(config.sessions.root, provider),
                 config.embedding_index.fields,

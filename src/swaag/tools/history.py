@@ -4,7 +4,8 @@ from dataclasses import asdict, dataclass, replace
 from typing import Any
 
 from swaag.history import HistoryStore
-from swaag.embedding_index import DerivedEmbeddingIndex, OpenAICompatibleEmbeddingProvider
+from swaag.embedding_index import DerivedEmbeddingIndex
+from swaag.embedding_providers import build_embedding_provider
 from swaag.grammar import history_analysis_contract, tool_result_projection_contract
 from swaag.tools.base import (
     SemanticCallContextOverflow,
@@ -270,12 +271,7 @@ class HistorySearchTool(Tool):
         semantic_index_error = ""
         if embedding_cfg.enabled and result["search_backend"] != "archive_fts5":
             try:
-                provider = OpenAICompatibleEmbeddingProvider(
-                    embedding_cfg.base_url,
-                    embedding_cfg.endpoint,
-                    embedding_cfg.model,
-                    embedding_cfg.timeout_seconds,
-                )
+                provider = build_embedding_provider(embedding_cfg)
                 index = DerivedEmbeddingIndex(context.config.sessions.root, provider)
                 indexed_through = index.complete_through(result["session_id"])
                 highest = indexed_through
