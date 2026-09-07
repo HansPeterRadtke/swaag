@@ -1200,3 +1200,35 @@ class PromptBuilder:
                 self._config.prompts.summary_template,
             ),
         )
+
+    def build_summary_refinement_prompt(
+        self,
+        messages: list[Message],
+        *,
+        fixed_verbatim_spans: list[str],
+        target_semantic_summary_tokens: int,
+        prompt_mode: str = "lean",
+    ) -> PromptAssembly:
+        history_block = self.render_messages(messages)
+        system_prompt = self._load_template(self._config.prompts.summary_system_template)
+        user_text = (
+            "Rewrite only the semantic summary for this exact transcript. The exact spans below "
+            "were already selected semantically and are frozen. They will be carried verbatim "
+            "outside your summary, so do not repeat, paraphrase, normalize, add, remove, reorder, "
+            "or reinterpret those exact facts. Use the summary only for relationships, context, "
+            "and important meaning not already carried by the frozen spans. "
+            f"The summary field should fit within approximately {max(0, int(target_semantic_summary_tokens))} tokens. "
+            "It may be empty when the frozen spans already carry all material meaning.\n\n"
+            "Frozen verbatim spans:\n"
+            + stable_json_dumps(fixed_verbatim_spans, indent=2)
+            + "\n\nExact source transcript:\n"
+            + history_block
+            + "\n\nReturn one JSON object with the single key `summary`."
+        )
+        return self._assemble_with_system(
+            "summary",
+            prompt_mode,
+            system_prompt,
+            [PromptComponent(name="summary_refinement", category="history", text=user_text)],
+            template_names=(self._config.prompts.summary_system_template,),
+        )

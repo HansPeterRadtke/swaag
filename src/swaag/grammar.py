@@ -43,7 +43,20 @@ def yes_no_contract() -> ContractSpec:
 def summary_contract() -> ContractSpec:
     return _contract(
         "summary",
-        _closed_object({"summary": _string(), "preserve_recent_messages": {"type": "integer"}}),
+        _closed_object(
+            {
+                "summary": _string(),
+                "preserve_recent_messages": {"type": "integer"},
+                "verbatim_spans": {"type": "array", "items": _string()},
+            }
+        ),
+    )
+
+
+def summary_refinement_contract() -> ContractSpec:
+    return _contract(
+        "summary_refinement",
+        _closed_object({"summary": _string()}),
     )
 
 

@@ -5,6 +5,8 @@ import json
 from swaag.benchmark import benchmark_runner
 from swaag.benchmark.compaction_preservation import (
     PRESERVATION_FACTS,
+    ROUTINE_PROGRESS_MESSAGES_PER_LATER_CYCLE,
+    _routine_progress_messages,
     run_compaction_preservation_benchmark,
 )
 from swaag.model import CompletionRequestPolicy
@@ -63,7 +65,7 @@ class _SummaryClient:
             assert payload["contract"] == "summary"
             facts = "\n".join(PRESERVATION_FACTS.values())
             response = json.dumps(
-                {"summary": facts, "preserve_recent_messages": 0}
+                {"summary": facts, "preserve_recent_messages": 0, "verbatim_spans": []}
             )
         return CompletionResult(
             text=response,
@@ -215,3 +217,26 @@ def test_history_compaction_span_selection_is_semantic_not_oldest_first(make_con
         row["source_message_start"] for row in ranked if row["criticality"] == "protect"
     }
     assert {0, 1}.issubset(protected_starts)
+
+
+def test_later_compaction_cycles_add_independent_routine_pressure() -> None:
+    messages = _routine_progress_messages(2)
+    assert len(messages) == ROUTINE_PROGRESS_MESSAGES_PER_LATER_CYCLE
+    assert len(messages) >= 8
+    assert {message.role for message in messages} == {"user", "assistant"}
+    assert all("Routine progress cycle 2 item" in message.content for message in messages)
+    assert all(value not in "\n".join(message.content for message in messages) for value in PRESERVATION_FACTS.values())
+
+
+def test_compaction_checkpoint_records_pressure_version(make_config, tmp_path) -> None:
+    report = run_compaction_preservation_benchmark(
+        config=make_config(model__context_limit=12_000),
+        cycles=2,
+        output_path=tmp_path / "compaction.json",
+        model_client=_SummaryClient(),
+    )
+    assert report["benchmark_version"] == 3
+    assert (
+        report["routine_progress_messages_per_later_cycle"]
+        == ROUTINE_PROGRESS_MESSAGES_PER_LATER_CYCLE
+    )

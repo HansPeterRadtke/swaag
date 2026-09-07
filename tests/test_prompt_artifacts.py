@@ -277,3 +277,46 @@ def test_central_compiler_rejects_calls_without_a_real_system_prompt(
             minimum_output_tokens=64,
             context_limit_resolution=(8_000, "test"),
         )
+
+
+def test_summary_prompt_requires_verbatim_mechanically_exact_facts(tmp_path) -> None:
+    from swaag.config import load_config
+    from swaag.prompts import PromptBuilder
+
+    config = load_config(env={"SWAAG__SESSIONS__ROOT": str(tmp_path / "sessions")})
+    text = PromptBuilder(config)._load_template(config.prompts.summary_system_template)
+    assert "copy the decisive source phrase or value verbatim" in text
+    assert "negative/user constraints" in text
+    assert "hashes/checksums" in text
+    assert "promises/commitments" in text
+    assert "completion criteria/status" in text
+
+
+def test_summary_prompt_treats_exact_spans_as_part_of_replacement_budget(tmp_path) -> None:
+    from swaag.config import load_config
+    from swaag.prompts import PromptBuilder
+    from swaag.types import Message
+
+    config = load_config(env={"SWAAG__SESSIONS__ROOT": str(tmp_path / "sessions")})
+    prompt = PromptBuilder(config).build_summary_prompt(
+        [Message(role="user", content="constraint: keep-me-exact", created_at="t")],
+        target_summary_tokens=80,
+    )
+    rendered = prompt.prompt_text
+    assert "final retained content" in rendered
+    assert "do not duplicate or paraphrase facts already represented" in rendered
+    assert "do not restate or paraphrase a fact" in rendered
+    assert "Do not use `verbatim_spans` for decoy/noise labels" in rendered
+    assert "summary may be only a minimal connective sentence" in rendered
+
+
+def test_summary_prompt_prioritizes_exact_messages_over_derived_summaries(tmp_path) -> None:
+    from swaag.config import load_config
+    from swaag.prompts import PromptBuilder
+
+    config = load_config(env={"SWAAG__SESSIONS__ROOT": str(tmp_path / "sessions")})
+    text = PromptBuilder(config)._load_template(config.prompts.summary_system_template)
+    assert "exact source messages" in text
+    assert "outrank any derived `[SUMMARY]` projection" in text
+    assert "scoped only to its recorded `source_event_ranges`" in text
+    assert "never let a derived summary relabel, cancel, or supersede exact facts" in text

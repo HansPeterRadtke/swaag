@@ -12,6 +12,10 @@ from swaag.tools.base import _validate_schema_value
 from swaag.utils import sha256_text, stable_json_dumps, utc_now_iso
 
 
+BENCHMARK_VERSION = 3
+ROUTINE_PROGRESS_MESSAGES_PER_LATER_CYCLE = 8
+
+
 PRESERVATION_FACTS = {
     "date": "2041-09-17T14:35:00Z",
     "identifier": "asset-R7K-4419",
@@ -34,6 +38,33 @@ ADVERSARIAL_DECOYS = {
     "file_path": "/tmp/decoy-ledger.csv",
     "completion_state": "the task is already complete",
 }
+
+
+
+
+def _routine_progress_messages(cycle: int) -> list[Message]:
+    """Return an independent block of explicitly routine history for later cycles.
+
+    Repeated-compaction evaluation must create a fresh semantic compression
+    opportunity after the previous cycle has already condensed the authoritative
+    state.  The block is mechanically sized but semantically neutral; the model
+    remains responsible for deciding whether it is safe to compress and which
+    span should be selected.
+    """
+    rows: list[Message] = []
+    for index in range(1, ROUTINE_PROGRESS_MESSAGES_PER_LATER_CYCLE + 1):
+        role = "user" if index % 2 else "assistant"
+        rows.append(
+            Message(
+                role=role,
+                content=(
+                    f"Routine progress cycle {cycle} item {index}: background housekeeping "
+                    "continued normally; this update adds no task-relevant state."
+                ),
+                created_at=utc_now_iso(),
+            )
+        )
+    return rows
 
 
 def _adversarial_message(cycle: int) -> str:
@@ -176,7 +207,9 @@ def run_compaction_preservation_benchmark(
         previous = json.loads(output_path.read_text(encoding="utf-8"))
         expected = {
             "benchmark": "history_compaction_preservation",
+            "benchmark_version": BENCHMARK_VERSION,
             "cycles_planned": cycles,
+            "routine_progress_messages_per_later_cycle": ROUTINE_PROGRESS_MESSAGES_PER_LATER_CYCLE,
             "facts": PRESERVATION_FACTS,
             "model_identity": identity,
             "context_limit": context_limit,
@@ -236,22 +269,8 @@ def run_compaction_preservation_benchmark(
 
     for cycle in range(len(results) + 1, cycles + 1):
         if cycle > 1:
-            runtime._record_message(
-                state,
-                Message(
-                    role="user",
-                    content=f"Cycle {cycle} adds routine progress without changing the authoritative facts.",
-                    created_at=utc_now_iso(),
-                ),
-            )
-            runtime._record_message(
-                state,
-                Message(
-                    role="assistant",
-                    content=f"Routine cycle {cycle} progress acknowledged.",
-                    created_at=utc_now_iso(),
-                ),
-            )
+            for progress_message in _routine_progress_messages(cycle):
+                runtime._record_message(state, progress_message)
         if adversarial_conflicts:
             runtime._record_message(
                 state,
@@ -328,6 +347,8 @@ def run_compaction_preservation_benchmark(
         )
         report = {
             "benchmark": "history_compaction_preservation",
+            "benchmark_version": BENCHMARK_VERSION,
+            "routine_progress_messages_per_later_cycle": ROUTINE_PROGRESS_MESSAGES_PER_LATER_CYCLE,
             "model_identity": identity,
             "context_limit": context_limit,
             "context_limit_source": context_limit_source,

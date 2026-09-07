@@ -319,3 +319,13 @@ def test_context_order_benchmark_resumes_matching_partial_checkpoint(
     assert resumed["completed"] == resumed["passed"] == 3
     assert resumed["complete"] is True
     assert len(resumed["model_identity_history"]) == 2
+
+
+def test_live_experiment_config_uses_discovered_endpoint_context_limit(monkeypatch) -> None:
+    monkeypatch.setattr(
+        "swaag.benchmark.benchmark_runner._discover_server_context_limit",
+        lambda _base_url, *, timeout_seconds: 16_384,
+    )
+    config = _live_experiment_config(model_base_url="http://127.0.0.1:14911")
+    assert config.model.base_url == "http://127.0.0.1:14911"
+    assert config.model.context_limit == 16_384

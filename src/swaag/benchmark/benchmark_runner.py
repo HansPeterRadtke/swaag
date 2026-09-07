@@ -404,6 +404,12 @@ def _live_experiment_config(
     config = load_config()
     if model_base_url:
         config.model.base_url = str(model_base_url).rstrip("/")
+    discovery_timeout = max(5, min(15, int(config.model.connect_timeout_seconds)))
+    discovered_context_limit = _discover_server_context_limit(
+        config.model.base_url, timeout_seconds=discovery_timeout
+    )
+    if discovered_context_limit is not None:
+        config.model.context_limit = discovered_context_limit
     recommendation = get_documented_final_live_benchmark_recommendation()
     effective_timeout = int(
         timeout_seconds

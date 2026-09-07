@@ -56,6 +56,7 @@ from swaag.grammar import (
     presentation_evaluation_contract,
     response_relevance_contract,
     summary_contract,
+    summary_refinement_contract,
     tool_result_projection_contract,
     yes_no_contract,
 )
@@ -5764,12 +5765,17 @@ class AgentRuntime:
             maximum_preserve_recent_messages=0,
             target_summary_tokens=target_summary_tokens,
         )
+        source_tokens = self._counter(state).count_text(message.content).tokens
+        desired_summary_output_tokens = self._summary_structured_output_reserve(
+            target_summary_tokens=target_summary_tokens,
+            source_tokens=source_tokens,
+        )
         compilation = self._compile_context(
             state,
             assembly,
             contract,
             minimum_output_tokens=minimum_output_tokens,
-            desired_output_tokens=target_summary_tokens + 64,
+            desired_output_tokens=desired_summary_output_tokens,
             context_limit_resolution=context_limit_resolution,
         )
         prompt_instruction_projected = False
@@ -5784,7 +5790,7 @@ class AgentRuntime:
                 contract,
                 compilation,
                 minimum_output_tokens=minimum_output_tokens,
-                desired_output_tokens=target_summary_tokens + 64,
+                desired_output_tokens=desired_summary_output_tokens,
                 context_limit_resolution=context_limit_resolution,
             )
             if recovered is not None:
@@ -5840,6 +5846,12 @@ class AgentRuntime:
                 summary_text = str(payload.get("summary", "")).strip()
                 if not summary_text:
                     raise ValueError("hierarchical summary must not be empty")
+                verbatim_spans = self._validated_verbatim_spans(
+                    payload.get("verbatim_spans", []), source_text=message.content
+                )
+                summary_text = self._merge_summary_verbatim_spans(
+                    summary_text, verbatim_spans
+                )
                 return summary_text, final_prepared.report
 
         if depth >= 16 or len(message.content) < 2:
@@ -6227,6 +6239,22 @@ class AgentRuntime:
             hierarchical=hierarchical,
         )
 
+    @staticmethod
+    def _summary_structured_output_reserve(
+        *, target_summary_tokens: int, source_tokens: int
+    ) -> int:
+        """Reserve room for semantic summary plus exact-span structured output.
+
+        Exact spans are model-selected source substrings, so their output requirement
+        grows with the selected source. Bound the soft reserve to avoid consuming the
+        whole context while giving structured summaries materially more headroom than
+        the legacy summary-only schema.
+        """
+        target = max(1, int(target_summary_tokens))
+        source = max(0, int(source_tokens))
+        exact_allowance = min(source, max(256, target * 2))
+        return target + exact_allowance + 128
+
     def _compact_once(
         self,
         state: SessionState,
@@ -6268,6 +6296,10 @@ class AgentRuntime:
             if target is None:
                 continue
             target_summary_tokens, estimated_source_tokens = target
+            desired_summary_output_tokens = self._summary_structured_output_reserve(
+                target_summary_tokens=target_summary_tokens,
+                source_tokens=estimated_source_tokens,
+            )
             adaptive_cap = max(0, source_count - 1)
             assembly = self.prompts.build_summary_prompt(
                 source_messages,
@@ -6284,6 +6316,7 @@ class AgentRuntime:
                 context_limit_resolution=context_limit_resolution,
             )
             report = compilation.report
+            summary_refinement_used = False
             if not report.fits:
                 # The relevance boundary has already been chosen semantically.
                 # If that selected region is too large for one summary call, render
@@ -6333,10 +6366,22 @@ class AgentRuntime:
                 except _OutputRecoveryContextOverflow as exc:
                     minimum_summary_tokens = exc.minimum_output_tokens
                     continue
+                except OutputBudgetExhaustedError:
+                    # This semantic region could not produce a valid bounded summary
+                    # even after the generic output-headroom retry. Leave history
+                    # untouched and try the next model-ranked compaction candidate.
+                    continue
                 report = final_prepared.report
-                summary_text = str(payload.get("summary", "")).strip()
-                if not summary_text:
+                semantic_summary_text = str(payload.get("summary", "")).strip()
+                if not semantic_summary_text:
                     raise ValueError("summary must not be empty")
+                source_text = self.prompts.render_messages(source_messages)
+                verbatim_spans = self._validated_verbatim_spans(
+                    payload.get("verbatim_spans", []), source_text=source_text
+                )
+                summary_text = self._merge_summary_verbatim_spans(
+                    semantic_summary_text, verbatim_spans
+                )
                 preserve_recent = self._validated_preserve_recent_messages(
                     payload.get("preserve_recent_messages", 0),
                     source_count=source_count,
@@ -6363,7 +6408,54 @@ class AgentRuntime:
                     state, effective_source_messages, summary_payload
                 )
             )
-            if recovered_tokens <= 0:
+            if recovered_tokens < required_recovery and not hierarchical:
+                exact_only_text = self._merge_summary_verbatim_spans("", verbatim_spans).strip()
+                exact_only_payload = summary_message_payload(
+                    exact_only_text or "Exact retained facts.",
+                    source_message_count=effective_source_count,
+                    created_at=utc_now_iso(),
+                    source_message_start=source_start,
+                    source_event_references=source_event_references,
+                )
+                max_recovery, _exact_source_tokens, _exact_replacement_tokens = (
+                    self._compaction_recovery(
+                        state, effective_source_messages, exact_only_payload
+                    )
+                )
+                if max_recovery < required_recovery:
+                    continue
+                try:
+                    summary_text, report = self._refine_summary_with_frozen_spans(
+                        state,
+                        source_messages=source_messages,
+                        verbatim_spans=verbatim_spans,
+                        target_summary_tokens=target_summary_tokens,
+                        context_limit_resolution=context_limit_resolution,
+                        minimum_output_tokens=minimum_summary_tokens,
+                    )
+                    summary_refinement_used = True
+                except (
+                    _OutputRecoveryContextOverflow,
+                    BudgetExceededError,
+                    OutputBudgetExhaustedError,
+                ):
+                    # Frozen exact facts remain authoritative; if the semantic-only
+                    # refinement cannot fit/finish, reject this candidate instead of
+                    # trimming or re-ranking those facts deterministically.
+                    continue
+                summary_payload = summary_message_payload(
+                    summary_text,
+                    source_message_count=effective_source_count,
+                    created_at=utc_now_iso(),
+                    source_message_start=source_start,
+                    source_event_references=source_event_references,
+                )
+                recovered_tokens, actual_source_tokens, replacement_tokens = (
+                    self._compaction_recovery(
+                        state, effective_source_messages, summary_payload
+                    )
+                )
+            if recovered_tokens < required_recovery:
                 continue
             self.history.record_event(
                 state,
@@ -6389,6 +6481,7 @@ class AgentRuntime:
                 "adaptive_preserve_recent_messages": preserve_recent,
                 "candidate_source_message_count": source_count,
                 "hierarchical": hierarchical,
+                "summary_refinement_used": summary_refinement_used,
                 "required_recovery_tokens": required_recovery,
                 "target_summary_tokens": target_summary_tokens,
                 "estimated_source_tokens": estimated_source_tokens,
@@ -6406,6 +6499,90 @@ class AgentRuntime:
             return True
         return False
 
+
+    def _refine_summary_with_frozen_spans(
+        self,
+        state: SessionState,
+        *,
+        source_messages: list[Message],
+        verbatim_spans: list[str],
+        target_summary_tokens: int,
+        context_limit_resolution: tuple[int, str],
+        minimum_output_tokens: int,
+    ) -> tuple[str, BudgetReport]:
+        exact_block = self._merge_summary_verbatim_spans("", verbatim_spans).strip()
+        exact_tokens = self._counter(state).count_text(exact_block).tokens if exact_block else 0
+        semantic_target = max(0, int(target_summary_tokens) - exact_tokens)
+        contract = summary_refinement_contract()
+        assembly = self.prompts.build_summary_refinement_prompt(
+            source_messages,
+            fixed_verbatim_spans=verbatim_spans,
+            target_semantic_summary_tokens=semantic_target,
+            prompt_mode="lean",
+        )
+        desired_output_tokens = max(32, semantic_target + 32)
+        compilation = self._compile_context(
+            state,
+            assembly,
+            contract,
+            minimum_output_tokens=min(minimum_output_tokens, desired_output_tokens),
+            desired_output_tokens=desired_output_tokens,
+            context_limit_resolution=context_limit_resolution,
+        )
+        if not compilation.report.fits:
+            raise BudgetExceededError(
+                "Frozen-span summary refinement does not fit the model context",
+                compilation.report,
+            )
+        self.history.record_event(
+            state,
+            "context_compiled",
+            {
+                "kind": "summary",
+                "prompt_mode": "lean",
+                "accounting": compilation.accounting(),
+                "summary_refinement": True,
+                "target_semantic_summary_tokens": semantic_target,
+                "frozen_verbatim_span_count": len(verbatim_spans),
+            },
+        )
+        self._record_prompt_built(state, assembly, contract, compilation.report)
+        self.telemetry.record_semantic_reduction(
+            call_kind="summary",
+            target_tokens=semantic_target,
+            hierarchical_depth=0,
+        )
+        payload, final_prepared = self._execute_with_output_recovery(
+            state,
+            PreparedCall(assembly, compilation.report, "lean", contract),
+            minimum_output_tokens=min(minimum_output_tokens, desired_output_tokens),
+            desired_output_tokens=desired_output_tokens,
+            context_limit_resolution=context_limit_resolution,
+        )
+        summary_text = str(payload.get("summary", "")).strip()
+        return self._merge_summary_verbatim_spans(summary_text, verbatim_spans), final_prepared.report
+
+    @staticmethod
+    def _validated_verbatim_spans(value: Any, *, source_text: str) -> list[str]:
+        if not isinstance(value, list) or not all(isinstance(item, str) for item in value):
+            raise ValueError("verbatim_spans must be an array of strings")
+        spans: list[str] = []
+        for raw in value:
+            span = raw.strip()
+            if not span:
+                continue
+            if span not in source_text:
+                raise ValueError("verbatim_spans entries must be exact substrings of the source transcript")
+            if span not in spans:
+                spans.append(span)
+        return spans
+
+    @staticmethod
+    def _merge_summary_verbatim_spans(summary_text: str, spans: list[str]) -> str:
+        missing = [span for span in spans if span not in summary_text]
+        if not missing:
+            return summary_text
+        return summary_text.rstrip() + "\n\nVerbatim retained facts:\n" + "\n".join(missing)
 
     @staticmethod
     def _validated_preserve_recent_messages(value: Any, *, source_count: int, maximum: int) -> int:

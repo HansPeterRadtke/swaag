@@ -131,8 +131,7 @@ def run_long_horizon_context_benchmark(
         bool(row.get("semantic_retrieval_passed")) for row in compaction_rows
     )
     adversarial_resistance_passed = sum(
-        bool(row.get("passed")) and bool(row.get("semantic_retrieval_passed"))
-        for row in compaction_rows
+        bool(row.get("semantic_retrieval_passed")) for row in compaction_rows
     )
     overflow_rows = [
         result

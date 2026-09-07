@@ -156,7 +156,7 @@ class CharacterCountSummaryClient(FakeModelClient):
             assert payload.get("contract") == "summary"
             summary = self.marker if self.marker in str(payload["prompt"]) else "fragment retained"
             response = json.dumps(
-                {"summary": summary, "preserve_recent_messages": 0}
+                {"summary": summary, "preserve_recent_messages": 0, "verbatim_spans": []}
             )
         return CompletionResult(
             text=response,
@@ -291,7 +291,7 @@ def test_history_compaction_creates_replayable_summary_with_exact_sources(
         if payload["contract"] == "history_compaction_selection":
             return json.dumps({"criticality": "compressible", "reason": "routine test window"})
         assert payload["contract"] == "summary"
-        return json.dumps({"summary": 'Earlier facts summarized.', "preserve_recent_messages": 0})
+        return json.dumps({"summary": 'Earlier facts summarized.', "preserve_recent_messages": 0, "verbatim_spans": []})
 
     client = FakeModelClient([compaction_response for _ in range(256)])
     runtime = AgentRuntime(config, model_client=client)
@@ -323,6 +323,144 @@ def test_history_compaction_creates_replayable_summary_with_exact_sources(
     assert rebuilt.messages == state.messages
 
 
+def test_history_compaction_skips_output_exhausted_candidate_without_mutating_history(
+    make_config,
+) -> None:
+    class _AlwaysLimitedSummaryClient(FakeModelClient):
+        def send_completion(
+            self,
+            payload: dict[str, Any],
+            *,
+            timeout_seconds: int | None = None,
+            progress_callback=None,
+        ) -> CompletionResult:
+            if payload["contract"] == "summary":
+                self.requests.append(payload)
+                return CompletionResult(
+                    text="{",
+                    raw_request=payload,
+                    raw_response={"content": "{", "stop_type": "limit"},
+                    prompt_tokens=None,
+                    completion_tokens=payload["n_predict"],
+                    finish_reason="length",
+                )
+            return super().send_completion(
+                payload,
+                timeout_seconds=timeout_seconds,
+                progress_callback=progress_callback,
+            )
+
+    def selector(payload: dict[str, Any]) -> str:
+        assert payload["contract"] == "history_compaction_selection"
+        return json.dumps(
+            {"criticality": "compressible", "reason": "candidate is routine"}
+        )
+
+    client = _AlwaysLimitedSummaryClient([selector for _ in range(256)])
+    runtime = AgentRuntime(
+        make_config(model__context_limit=32_000, model__max_retries=1),
+        model_client=client,
+    )
+    state = runtime.create_or_load_session()
+    for role, content in (
+        ("user", "routine alpha " * 500),
+        ("assistant", "routine beta " * 500),
+        ("user", "routine gamma " * 500),
+        ("assistant", "routine delta " * 500),
+    ):
+        runtime._record_message(
+            state, Message(role=role, content=content, created_at="t")
+        )
+    before = [(m.role, m.content) for m in state.messages]
+
+    assert runtime._compact_once(state) is False
+    assert [(m.role, m.content) for m in state.messages] == before
+    exhaustion_events = [
+        event
+        for event in runtime.history.read_history(state.session_id)
+        if event.event_type == "model_output_budget_exhausted"
+    ]
+    assert exhaustion_events
+    assert not any(
+        event.event_type == "history_compressed"
+        for event in runtime.history.read_history(state.session_id)
+    )
+
+
+
+def test_summary_structured_output_reserve_accounts_for_exact_spans() -> None:
+    assert AgentRuntime._summary_structured_output_reserve(
+        target_summary_tokens=230, source_tokens=500
+    ) == 818
+    assert AgentRuntime._summary_structured_output_reserve(
+        target_summary_tokens=100, source_tokens=50
+    ) == 278
+    assert AgentRuntime._summary_structured_output_reserve(
+        target_summary_tokens=100, source_tokens=10_000
+    ) == 484
+
+
+def test_history_compaction_refines_semantic_summary_with_frozen_exact_spans(
+    make_config,
+) -> None:
+    marker = "exact-preserved-marker-991"
+
+    def response(payload: dict[str, Any]) -> str:
+        contract = payload["contract"]
+        if contract == "history_compaction_selection":
+            return json.dumps(
+                {"criticality": "compressible", "reason": "routine test window"}
+            )
+        if contract == "summary":
+            return json.dumps(
+                {
+                    "summary": "verbose " * 3_000,
+                    "preserve_recent_messages": 0,
+                    "verbatim_spans": [marker],
+                }
+            )
+        assert contract == "summary_refinement"
+        assert marker in str(payload["prompt"])
+        assert "Frozen verbatim spans" in str(payload["prompt"])
+        return json.dumps({"summary": "Compact relationship retained."})
+
+    client = FakeModelClient([response for _ in range(256)])
+    runtime = AgentRuntime(
+        make_config(model__context_limit=32_000), model_client=client
+    )
+    state = runtime.create_or_load_session()
+    for role, content in (
+        ("user", ("routine source material " * 500) + marker),
+        ("assistant", "acknowledged"),
+        ("user", "continue"),
+        ("assistant", "continuing"),
+    ):
+        runtime._record_message(
+            state, Message(role=role, content=content, created_at="t")
+        )
+
+    assert runtime._compact_once(state) is True
+
+    contracts = [request["contract"] for request in client.requests]
+    assert "summary" in contracts
+    assert "summary_refinement" in contracts
+    refinement = next(
+        request for request in client.requests if request["contract"] == "summary_refinement"
+    )
+    assert set(refinement["json_schema"]["required"]) == {"summary"}
+    assert "verbatim_spans" not in refinement["json_schema"]["properties"]
+    assert "preserve_recent_messages" not in refinement["json_schema"]["properties"]
+    assert marker in state.messages[0].content
+    assert "Compact relationship retained." in state.messages[0].content
+    compressed = next(
+        event
+        for event in runtime.history.read_history(state.session_id)
+        if event.event_type == "history_compressed"
+    )
+    assert compressed.payload["actual_recovered_tokens"] > 0
+    assert compressed.payload["summary_refinement_used"] is True
+
+
 def test_action_reexpands_authoritative_history_when_exact_messages_fit(
     make_config,
 ) -> None:
@@ -331,7 +469,7 @@ def test_action_reexpands_authoritative_history_when_exact_messages_fit(
         if payload["contract"] == "history_compaction_selection":
             return json.dumps({"criticality": "compressible", "reason": "routine test window"})
         assert payload["contract"] == "summary"
-        return json.dumps({"summary": 'Derived summary only.', "preserve_recent_messages": 0})
+        return json.dumps({"summary": 'Derived summary only.', "preserve_recent_messages": 0, "verbatim_spans": []})
 
     client = FakeModelClient([compaction_response for _ in range(256)])
     runtime = AgentRuntime(
@@ -476,7 +614,7 @@ def test_history_summary_recompiles_after_output_starvation(make_config) -> None
         if payload["contract"] == "history_compaction_selection":
             return json.dumps({"criticality": "compressible", "reason": "routine test window"})
         assert payload["contract"] == "summary"
-        return json.dumps({"summary": 'Earlier facts retained.', "preserve_recent_messages": 0})
+        return json.dumps({"summary": 'Earlier facts retained.', "preserve_recent_messages": 0, "verbatim_spans": []})
 
     client = OutputLimitedFakeModelClient(
         [compaction_response for _ in range(256)],
@@ -539,7 +677,7 @@ def test_oversized_single_history_message_is_hierarchically_summarized(
 ) -> None:
     marker = "critical-history-marker-731"
     config = make_config(
-        model__context_limit=2_000,
+        model__context_limit=5_000,
         context__max_compaction_rounds=4,
         context__safety_margin_tokens=32,
     )
@@ -945,7 +1083,7 @@ def test_summary_contract_requires_adaptive_retention_decision() -> None:
 
     schema = summary_contract().json_schema
     assert schema is not None
-    assert set(schema["required"]) == {"summary", "preserve_recent_messages"}
+    assert set(schema["required"]) == {"summary", "preserve_recent_messages", "verbatim_spans"}
     assert schema["properties"]["preserve_recent_messages"] == {"type": "integer"}
 
 

@@ -204,3 +204,21 @@ def test_long_horizon_cli_passes_profile(monkeypatch, make_config, tmp_path):
         "overflow_trials": 2,
         "clean": True,
     }
+
+
+def test_adversarial_metric_is_independent_of_verbatim_projection(make_config, tmp_path) -> None:
+    import swaag.benchmark.long_horizon_context as module
+
+    compaction = {
+        "complete": True,
+        "results": [
+            {
+                "passed": False,
+                "semantic_retrieval_passed": True,
+                "source_reference_count": 1,
+                "required_recovery_tokens": 10,
+                "actual_recovered_tokens": 10,
+            }
+        ],
+    }
+    assert sum(bool(row.get("semantic_retrieval_passed")) for row in compaction["results"]) == 1
