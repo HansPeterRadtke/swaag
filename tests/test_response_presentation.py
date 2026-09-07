@@ -199,3 +199,15 @@ def test_response_presentation_rejects_unknown_mode(make_config) -> None:
             assistant_message="Done.",
             modes={"telepathy"},
         )
+
+
+def test_audio_prompt_requires_context_sensitive_precision() -> None:
+    from pathlib import Path
+
+    audio = Path("src/swaag/assets/prompts/audio_rendering_system.txt").read_text(encoding="utf-8")
+    evaluator = Path("src/swaag/assets/prompts/presentation_evaluation_system.txt").read_text(encoding="utf-8")
+    assert "context-sensitive numeric precision" in audio
+    assert "round or simplify" in audio
+    assert "thresholds" in audio
+    assert "harmless context-appropriate rounding" in evaluator
+    assert "Do reject rounding that erases meaningful precision" in evaluator

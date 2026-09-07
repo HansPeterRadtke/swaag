@@ -182,3 +182,10 @@ This validates cancellation and fresh admission for the deployed server/client p
 - Result: passed across a real process restart. The child reopens/rebuilds exact history, appends unrelated work, compacts, and confirms the original tool-result event remains present. Both old and new message lineages remain represented; no answer value leaks into unrelated post-restart raw messages.
 - Retrieval semantics: the first later constrained query returns the tool-derived value as historical and the newer user-derived value as current, with supersession understood. This demonstrates cross-source temporal reconciliation rather than source erasure or blanket newest-text selection.
 - Next pressure case: reverse the direction so a newer explicitly authoritative tool result supersedes an older user fact, then add same-time/source-authority conflicts where recency alone is insufficient.
+
+## Thor Qwen3.8-27B Q4_K_M audio context-sensitive precision - 2026-09-07
+
+- Direct uncached Thor Q4_K_M with server-discovered 16384 context passed both precision directions under the production response-presentation path and independent presentation evaluation.
+- Rough-value case: source profit `427.3218 euros`, with an explicit request for an approximate spoken amount, rendered as about four hundred twenty-seven euros rather than preserving machine precision.
+- Exact-threshold case: source threshold `0.0375 volts`, with an explicit requirement not to round, preserved `0.0375` exactly in the audio presentation.
+- The audio renderer and evaluator now state the intended rule directly: simplify precision only when it is semantically irrelevant to scale, thresholds, comparisons, status or decisions; preserve exact technical values whenever precision or exact form carries information.
