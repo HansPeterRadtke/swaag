@@ -45,6 +45,7 @@ def run_child_probe(
     new_value: str,
     old_sequence: int,
     update_sequence: int,
+    old_tool_event_sequence: int | None = None,
     model_base_url: str,
     context_limit: int,
     output_path: Path,
@@ -118,6 +119,16 @@ def run_child_probe(
         event.sequence == update_sequence and event.event_type == "message_added" and new_value in str(event.payload)
         for event in events
     )
+    old_tool_event_present = (
+        True
+        if old_tool_event_sequence is None
+        else any(
+            event.sequence == old_tool_event_sequence
+            and event.event_type == "tool_result"
+            and old_value in str(event.payload)
+            for event in events
+        )
+    )
     compression_refs = [
         ref
         for event in events
@@ -140,6 +151,7 @@ def run_child_probe(
             no_recent_answer_leak,
             old_event_present,
             new_event_present,
+            old_tool_event_present,
             old_lineage_present,
             new_lineage_present,
             exact,
@@ -154,6 +166,8 @@ def run_child_probe(
         "update_sequence": update_sequence,
         "old_event_present": old_event_present,
         "new_event_present": new_event_present,
+        "old_tool_event_sequence": old_tool_event_sequence,
+        "old_tool_event_present": old_tool_event_present,
         "old_lineage_present": old_lineage_present,
         "new_lineage_present": new_lineage_present,
         "exact_supersession_retrieval": exact,
@@ -175,6 +189,7 @@ def main(argv: list[str] | None = None) -> int:
     parser.add_argument("--new-value", required=True)
     parser.add_argument("--old-sequence", required=True, type=int)
     parser.add_argument("--update-sequence", required=True, type=int)
+    parser.add_argument("--old-tool-event-sequence", type=int)
     parser.add_argument("--model-base-url", required=True)
     parser.add_argument("--context-limit", required=True, type=int)
     parser.add_argument("--output", required=True)
@@ -186,6 +201,7 @@ def main(argv: list[str] | None = None) -> int:
         new_value=args.new_value,
         old_sequence=args.old_sequence,
         update_sequence=args.update_sequence,
+        old_tool_event_sequence=args.old_tool_event_sequence,
         model_base_url=args.model_base_url,
         context_limit=args.context_limit,
         output_path=Path(args.output),
