@@ -11,10 +11,175 @@ from swaag.benchmark.context_engineering import run_context_engineering_benchmar
 from swaag.config import AgentConfig, load_config
 from swaag.redaction import configured_secret_values, redact_for_persistence
 from swaag.runtime import AgentRuntime
-from swaag.utils import stable_json_dumps
+from swaag.tools.base import _validate_schema_value
+from swaag.types import ContractSpec, Message
+from swaag.utils import sha256_text, stable_json_dumps, utc_now_iso
 
 
-BENCHMARK_VERSION = 1
+BENCHMARK_VERSION = 2
+
+DELAYED_RELEVANCE_FACT = "handoff-token-R9-77124"
+
+
+def _delayed_relevance_contract() -> ContractSpec:
+    return ContractSpec(
+        name="long_horizon_delayed_relevance",
+        mode="json_schema",
+        json_schema={
+            "type": "object",
+            "properties": {
+                "handoff_token": {"type": "string", "enum": [DELAYED_RELEVANCE_FACT]}
+            },
+            "required": ["handoff_token"],
+            "additionalProperties": False,
+        },
+    )
+
+
+def _run_restart_delayed_relevance_trial(
+    *,
+    output_dir: Path,
+    config: AgentConfig,
+    model_client: object | None,
+) -> dict[str, Any]:
+    trial_config = deepcopy(config)
+    trial_config.sessions.root = output_dir / "restart-delayed" / "sessions"
+    runtime_a = AgentRuntime(trial_config, model_client=model_client)
+    state_a = runtime_a.create_or_load_session()
+    runtime_a._record_message(
+        state_a,
+        Message(
+            role="user",
+            content=(
+                "Authoritative early handoff fact. Do not use it until a later explicit query. "
+                f"handoff_token={DELAYED_RELEVANCE_FACT}"
+            ),
+            created_at=utc_now_iso(),
+        ),
+    )
+    for index in range(8):
+        runtime_a._record_message(
+            state_a,
+            Message(
+                role="assistant" if index % 2 else "user",
+                content=f"Unrelated phase-one progress {index + 1}: routine housekeeping only.",
+                created_at=utc_now_iso(),
+            ),
+        )
+    first_compaction = runtime_a._compact_once(state_a)
+    session_id = state_a.session_id
+    before_restart_events = runtime_a.history.read_history(session_id)
+    early_event = next(
+        event
+        for event in before_restart_events
+        if event.event_type == "message_added"
+        and DELAYED_RELEVANCE_FACT in str(event.payload)
+    )
+
+    runtime_b = AgentRuntime(trial_config, model_client=model_client)
+    state_b = runtime_b.create_or_load_session(session_id)
+    explicit_rebuild = runtime_b.history.rebuild_from_history(
+        session_id, prefer_checkpoint=False
+    )
+    restart_replay_matches = [
+        (m.role, m.content, m.metadata) for m in state_b.messages
+    ] == [
+        (m.role, m.content, m.metadata) for m in explicit_rebuild.messages
+    ]
+    restart_event_count_matches = state_b.event_count == explicit_rebuild.event_count
+
+    phase_two_messages: list[Message] = []
+    for index in range(8):
+        message = Message(
+            role="assistant" if index % 2 else "user",
+            content=f"Unrelated phase-two progress {index + 1}: routine housekeeping only.",
+            created_at=utc_now_iso(),
+        )
+        phase_two_messages.append(message)
+        runtime_b._record_message(state_b, message)
+    second_compaction = runtime_b._compact_once(state_b)
+    recent_source_text = "\n".join(message.content for message in phase_two_messages)
+    no_recent_answer_leak = DELAYED_RELEVANCE_FACT not in recent_source_text
+    retained_text = runtime_b.prompts.render_messages(state_b.messages)
+    contract = _delayed_relevance_contract()
+    error: dict[str, str] | None = None
+    exact = False
+    response_sha256: str | None = None
+    try:
+        completion = runtime_b.client.complete(
+            (
+                "This is the first query for an early authoritative fact after unrelated work "
+                "and a fresh runtime reconstruction. Recover the exact handoff token from the retained state.\n\n"
+                + retained_text
+            ),
+            max_tokens=128,
+            contract=contract,
+            temperature=0.0,
+            kind="benchmark_quality_judge",
+            live_mode=True,
+        )
+        payload = json.loads(completion.text)
+        _validate_schema_value(payload, contract.json_schema or {}, path=contract.name)
+        exact = payload.get("handoff_token") == DELAYED_RELEVANCE_FACT
+        response_sha256 = sha256_text(completion.text)
+    except Exception as exc:
+        error = {"error_type": type(exc).__name__, "reason": str(exc)}
+
+    final_events = runtime_b.history.read_history(session_id)
+    early_source_event_present = any(
+        event.sequence == early_event.sequence
+        and event.event_type == "message_added"
+        and DELAYED_RELEVANCE_FACT in str(event.payload)
+        for event in final_events
+    )
+    compression_refs = [
+        ref
+        for event in final_events
+        if event.event_type == "history_compressed"
+        for ref in event.payload.get("source_event_references", [])
+        if isinstance(ref, dict)
+    ]
+    early_lineage_present = any(
+        int(ref.get("sequence", 0)) == early_event.sequence for ref in compression_refs
+    ) or any(
+        DELAYED_RELEVANCE_FACT in message.content for message in state_b.messages
+    )
+    passed = all(
+        (
+            first_compaction,
+            second_compaction,
+            restart_replay_matches,
+            restart_event_count_matches,
+            no_recent_answer_leak,
+            early_source_event_present,
+            early_lineage_present,
+            exact,
+        )
+    )
+    context_limit, context_limit_source = runtime_b._resolve_context_limit()
+    report = {
+        "passed": passed,
+        "session_id": session_id,
+        "first_compaction": first_compaction,
+        "second_compaction": second_compaction,
+        "restart_replay_matches": restart_replay_matches,
+        "restart_event_count_matches": restart_event_count_matches,
+        "no_recent_answer_leak": no_recent_answer_leak,
+        "early_source_event_sequence": early_event.sequence,
+        "early_source_event_present": early_source_event_present,
+        "early_lineage_present": early_lineage_present,
+        "model_identity": getattr(
+            runtime_b.client, "cache_identity", lambda: type(runtime_b.client).__name__
+        )(),
+        "context_limit": context_limit,
+        "context_limit_source": context_limit_source,
+        "exact_delayed_retrieval": exact,
+        "response_sha256": response_sha256,
+        "error": error,
+    }
+    _atomic_report(output_dir / "restart_delayed_relevance.json", report, config=trial_config)
+    return report
+
 
 
 def _atomic_report(path: Path, payload: dict[str, Any], *, config: AgentConfig) -> None:
@@ -97,6 +262,12 @@ def run_long_horizon_context_benchmark(
         semantic_retrieval_probe=True,
     )
 
+    restart_delayed_relevance = _run_restart_delayed_relevance_trial(
+        output_dir=output_dir,
+        config=base,
+        model_client=compaction_model_client,
+    )
+
     overflow_reports: list[dict[str, Any]] = []
     for trial in range(1, overflow_trials + 1):
         trial_dir = output_dir / "overflow" / f"trial-{trial:03d}"
@@ -114,6 +285,7 @@ def run_long_horizon_context_benchmark(
             "signature": signature,
             "complete": False,
             "compaction": compaction,
+            "restart_delayed_relevance": restart_delayed_relevance,
             "overflow_trials_completed": len(overflow_reports),
             "overflow_reports": overflow_reports,
         }
@@ -142,6 +314,7 @@ def run_long_horizon_context_benchmark(
     overflow_passed = sum(_overflow_pass(row) for row in overflow_rows)
     complete = (
         bool(compaction.get("complete"))
+        and bool(restart_delayed_relevance.get("passed"))
         and len(overflow_reports) == overflow_trials
         and all(report.get("complete") is True for report in overflow_reports)
     )
@@ -151,6 +324,7 @@ def run_long_horizon_context_benchmark(
         and provenance_passed == cycles
         and semantic_retrieval_passed == cycles
         and adversarial_resistance_passed == cycles
+        and bool(restart_delayed_relevance.get("passed"))
         and overflow_passed == overflow_trials
     )
     aggregate = {
@@ -163,6 +337,7 @@ def run_long_horizon_context_benchmark(
             "provenance_recoverability": "Compacted state retains source references and enough recovery evidence to reconstruct durable originals.",
             "semantic_retrieval": "A separate constrained model probe recovers the exact authoritative values after every compaction cycle.",
             "adversarial_conflict_resistance": "Later explicitly untrusted contradictory values do not displace authoritative facts in semantic retrieval.",
+            "restart_delayed_relevance": "An early fact remains exactly retrievable only after unrelated work, recursive compaction, a fresh runtime reconstruction boundary, and more unrelated work without recent answer leakage.",
             "measured_overflow_projection": "Independent trials prove actual context overflow, semantic projection, exact lineage, raw-source recovery, preserved required facts, and final fit.",
         },
         "dimensions": {
@@ -173,9 +348,14 @@ def run_long_horizon_context_benchmark(
                 "passed": adversarial_resistance_passed,
                 "total": cycles,
             },
+            "restart_delayed_relevance": {
+                "passed": int(bool(restart_delayed_relevance.get("passed"))),
+                "total": 1,
+            },
             "measured_overflow_projection": {"passed": overflow_passed, "total": overflow_trials},
         },
         "compaction": compaction,
+        "restart_delayed_relevance": restart_delayed_relevance,
         "overflow_trials_completed": len(overflow_reports),
         "overflow_reports": overflow_reports,
     }

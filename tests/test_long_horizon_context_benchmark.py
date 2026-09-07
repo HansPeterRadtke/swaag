@@ -8,7 +8,11 @@ from swaag.benchmark.compaction_preservation import (
     PRESERVATION_FACTS,
     run_compaction_preservation_benchmark,
 )
-from swaag.benchmark.long_horizon_context import run_long_horizon_context_benchmark
+from swaag.benchmark.long_horizon_context import (
+    DELAYED_RELEVANCE_FACT,
+    _run_restart_delayed_relevance_trial,
+    run_long_horizon_context_benchmark,
+)
 from swaag.model import CompletionRequestPolicy
 from swaag.types import CompletionResult, ContractSpec
 
@@ -46,12 +50,22 @@ class _LongHorizonClient:
         self.requests.append(payload)
         if payload["contract"] == "history_compaction_selection":
             text = json.dumps({"criticality": "compressible", "reason": "test window"})
+        elif payload["contract"] == "summary_refinement":
+            text = json.dumps({"summary": "Compact relationship retained."})
         else:
             assert payload["contract"] == "summary"
-            text = json.dumps({
-                "summary": "\n".join(PRESERVATION_FACTS.values()),
-                "preserve_recent_messages": 0,
-            })
+            if DELAYED_RELEVANCE_FACT in str(payload["prompt"]):
+                text = json.dumps({
+                    "summary": "Delayed handoff fact retained.",
+                    "preserve_recent_messages": 0,
+                    "verbatim_spans": [DELAYED_RELEVANCE_FACT],
+                })
+            else:
+                text = json.dumps({
+                    "summary": "\n".join(PRESERVATION_FACTS.values()),
+                    "preserve_recent_messages": 0,
+                    "verbatim_spans": [],
+                })
         return CompletionResult(
             text=text,
             raw_request=payload,
@@ -62,8 +76,11 @@ class _LongHorizonClient:
         )
 
     def complete(self, prompt: str, *, max_tokens: int, contract: ContractSpec, temperature: float, kind: str, live_mode: bool):
-        assert contract.name == "long_horizon_authoritative_retrieval"
-        payload = dict(PRESERVATION_FACTS)
+        if contract.name == "long_horizon_delayed_relevance":
+            payload = {"handoff_token": DELAYED_RELEVANCE_FACT}
+        else:
+            assert contract.name == "long_horizon_authoritative_retrieval"
+            payload = dict(PRESERVATION_FACTS)
         text = json.dumps(payload)
         return CompletionResult(
             text=text,
@@ -149,6 +166,10 @@ def test_long_horizon_aggregate_keeps_dimensions_separate(monkeypatch, make_conf
         "swaag.benchmark.long_horizon_context.run_context_engineering_benchmark",
         lambda **kwargs: overflow_calls.append(str(kwargs["output_dir"])) or _overflow_report(),
     )
+    monkeypatch.setattr(
+        "swaag.benchmark.long_horizon_context._run_restart_delayed_relevance_trial",
+        lambda **_kwargs: {"passed": True},
+    )
     report = run_long_horizon_context_benchmark(
         output_dir=tmp_path / "long",
         config=make_config(model__context_limit=4096),
@@ -162,6 +183,7 @@ def test_long_horizon_aggregate_keeps_dimensions_separate(monkeypatch, make_conf
         "provenance_recoverability": {"passed": 2, "total": 2},
         "semantic_retrieval": {"passed": 2, "total": 2},
         "adversarial_conflict_resistance": {"passed": 2, "total": 2},
+        "restart_delayed_relevance": {"passed": 1, "total": 1},
         "measured_overflow_projection": {"passed": 3, "total": 3},
     }
     assert len(overflow_calls) == 3
@@ -222,3 +244,22 @@ def test_adversarial_metric_is_independent_of_verbatim_projection(make_config, t
         ],
     }
     assert sum(bool(row.get("semantic_retrieval_passed")) for row in compaction["results"]) == 1
+
+
+def test_restart_delayed_relevance_trial_replays_and_recovers_early_fact(make_config, tmp_path) -> None:
+    client = _LongHorizonClient()
+    config = make_config(model__context_limit=12_000)
+    report = _run_restart_delayed_relevance_trial(
+        output_dir=tmp_path / "restart",
+        config=config,
+        model_client=client,
+    )
+    assert report["passed"] is True
+    assert report["first_compaction"] is True
+    assert report["second_compaction"] is True
+    assert report["restart_replay_matches"] is True
+    assert report["restart_event_count_matches"] is True
+    assert report["no_recent_answer_leak"] is True
+    assert report["early_source_event_present"] is True
+    assert report["early_lineage_present"] is True
+    assert report["exact_delayed_retrieval"] is True
