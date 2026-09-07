@@ -130,3 +130,15 @@ def test_task_api_accepts_attachments_before_worker_start(make_config, tmp_path:
     assert listed["attachments"][0]["source"] == "upload_transport"
     assert "storage_ref" not in listed["attachments"][0]
     assert inspected["attachments"][0]["size_bytes"] == len(b"evidence")
+
+
+def test_attachment_references_are_absent_when_attachment_capabilities_are_disabled(make_config) -> None:
+    from swaag.runtime import AgentRuntime
+
+    config = make_config(tools__enabled=["list_files"])
+    runtime = AgentRuntime(config, model_client=None)
+    state = runtime.create_or_load_session()
+    runtime.add_attachment(b"hello", original_name="a.txt", media_type="text/plain", session_id=state.session_id)
+    state = runtime.create_or_load_session(state.session_id)
+    components = runtime._runtime_context_components(state, runtime._counter(state))
+    assert all(component.name != "attachment_references" for component in components)

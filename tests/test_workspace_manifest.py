@@ -196,3 +196,13 @@ def test_measured_workspace_overflow_uses_semantic_projection_with_raw_recovery(
     )
     assert "added_after_projection.py" in refreshed_manifest
     assert "SEMANTIC PROJECTION" not in refreshed_manifest
+
+
+def test_workspace_manifest_is_absent_when_filesystem_capability_is_disabled(make_config) -> None:
+    from swaag.runtime import AgentRuntime
+
+    config = make_config(tools__enabled=["notes"])
+    runtime = AgentRuntime(config, model_client=None)
+    state = runtime.create_or_load_session()
+    components = runtime._runtime_context_components(state, runtime._counter(state))
+    assert all(component.name != "workspace_file_manifest" for component in components)

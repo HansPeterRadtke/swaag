@@ -8,6 +8,7 @@ import pytest
 
 from swaag.grammar import yes_no_contract
 from swaag.model import CompletionRequestPolicy
+from swaag.note_context import NoteContextManager
 from swaag.notes import (
     NoteError,
     compact_notes,
@@ -183,7 +184,7 @@ def test_action_note_selector_uses_exact_context_and_semantic_categories(
         context_components=components,
     )
 
-    selected = runtime._select_action_notes(state, assembly)
+    selected = NoteContextManager(runtime).select_for_action(state, assembly)
 
     assert [note.note_id for note in selected] == [programming.note_id]
     assert len(client.requests) == 1
@@ -194,7 +195,9 @@ def test_action_note_selector_uses_exact_context_and_semantic_categories(
     selected_components = runtime._runtime_context_components(
         state,
         runtime._counter(state),
-        selected_notes=selected,
+        context_state={
+            "durable_notes.selected_ids": [note.note_id for note in selected]
+        },
     )
     durable = next(
         component
@@ -372,7 +375,7 @@ def test_action_note_selector_failure_conservatively_includes_every_note(
         ],
     )
 
-    selected = runtime._select_action_notes(state, assembly)
+    selected = NoteContextManager(runtime).select_for_action(state, assembly)
 
     assert [note.note_id for note in selected] == [
         note.note_id for note in state.notes
@@ -499,3 +502,15 @@ def test_measured_note_overflow_projects_semantically_and_records_recovery(
     projected_event = runtime.history.read_history(state.session_id)[-1]
     assert projected_event.event_type == "runtime_context_projected"
     assert projected_event.payload["source_locator"]["recovery_tool"] == "notes"
+
+
+def test_durable_notes_are_absent_when_notes_capability_is_disabled(make_config) -> None:
+    from swaag.notes import make_note
+    from swaag.runtime import AgentRuntime
+
+    config = make_config(tools__enabled=["list_files"])
+    runtime = AgentRuntime(config, model_client=None)
+    state = runtime.create_or_load_session()
+    state.notes.append(make_note(config, title="Hidden", content="must not auto-inject"))
+    components = runtime._runtime_context_components(state, runtime._counter(state))
+    assert all(component.name != "durable_notes" for component in components)

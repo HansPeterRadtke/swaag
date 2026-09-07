@@ -773,3 +773,36 @@ def test_trusted_instruction_bypasses_semantic_selector(make_config):
     assert "Recording authority" in exact.text
     assert "Learned categorized rule" not in exact.text
     assert "Trusted recording/user/project instructions are never semantically deselected" in exact.text
+
+
+def test_prompt_instructions_are_not_injected_when_capability_is_disabled(make_config) -> None:
+    from swaag.prompt_instructions import make_prompt_instruction
+    from swaag.runtime import AgentRuntime
+
+    config = make_config(tools__enabled=["list_files"])
+    runtime = AgentRuntime(config, model_client=None)
+    state = runtime.create_or_load_session()
+    state.prompt_instructions.append(
+        make_prompt_instruction(
+            config,
+            title="Disabled",
+            content="must not be injected",
+            scopes=["action"],
+        )
+    )
+    assembly = runtime.prompts.build_semantic_operation_prompt(
+        kind="action",
+        system_instruction="Do the task.",
+        components=[
+            PromptComponent(
+                name="request",
+                category="current_user",
+                text="Continue.",
+            )
+        ],
+    )
+    runtime._inject_system_prompt_contributors(state, assembly)
+    assert all(
+        component.name != "durable_prompt_instructions"
+        for component in assembly.components
+    )

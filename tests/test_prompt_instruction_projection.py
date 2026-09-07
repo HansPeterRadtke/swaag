@@ -164,7 +164,7 @@ def test_prompt_instructions_project_only_after_measured_overflow(
     assert failed.report.fits is False
     assert failed.overflow_tokens > 0
 
-    recovered = runtime._recover_prompt_instruction_overflow(
+    recovered = runtime._recover_system_prompt_contributor_overflow(
         state,
         assembly,
         yes_no_contract(),

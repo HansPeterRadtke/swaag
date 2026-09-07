@@ -83,7 +83,7 @@ def _case_config(
     config.sessions.root = sessions_root
     config.tools.read_roots = [workspace]
     config.model.cache_enabled = False
-    config.tools.enabled = ["calculator"]
+    config.tools.enabled = ["calculator", "prompt_instructions"]
     config.tools.allow_stateful_tools = False
     config.tools.allow_side_effect_tools = False
     config.tools.staged_discovery = False

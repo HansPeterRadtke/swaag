@@ -50,9 +50,6 @@ from swaag.grammar import (
     completion_verdict_contract,
     evidence_projection_contract,
     history_compaction_selection_contract,
-    note_selection_contract,
-    prompt_instruction_selection_contract,
-    prompt_instruction_projection_contract,
     presentation_evaluation_contract,
     response_relevance_contract,
     summary_contract,
@@ -70,22 +67,16 @@ from swaag.preemption import (
     ModelPreemptionCoordinator,
     RunCancellationRequested,
 )
-from swaag.prompt_instructions import (
-    MAX_PROMPT_INSTRUCTION_CATEGORIES,
-    MAX_PROMPT_INSTRUCTION_CATEGORY_CHARS,
-    prompt_instructions_for_kind,
-    is_trusted_prompt_instruction,
-    sort_prompt_instructions_by_authority,
-)
 from swaag.prompt_instruction_store import PromptInstructionStore
 from swaag.model_cache import build_model_client
-from swaag.notes import (
-    MAX_NOTE_CATEGORIES,
-    MAX_NOTE_CATEGORY_CHARS,
-    render_notes,
-)
 from swaag.prompts import PromptBuilder
 from swaag.scheduler import WakeupStore
+from swaag.system_context import (
+    SystemContextSource,
+    reduce_system_context_for_overflow,
+    runtime_system_context_sources,
+)
+from swaag.system_prompt_contributors import default_system_prompt_contributors
 from swaag.schema_portability import assert_portable_json_schema
 from swaag.telemetry import OperationalTelemetry, TelemetryOperation
 from swaag.tokens import (
@@ -111,7 +102,6 @@ from swaag.types import (
     HistoryEvent,
     Message,
     ModelCallKind,
-    Note,
     PromptAssembly,
     PromptArtifact,
     PromptComponent,
@@ -258,6 +248,7 @@ class AgentRuntime:
             config.sessions.root,
             config,
         )
+        self.system_prompt_contributors = default_system_prompt_contributors()
         self.tools = tool_registry or ToolRegistry()
         self._runtime_capability_lock = threading.RLock()
         self._runtime_capabilities: dict[str, dict[str, object]] = {}
@@ -1558,7 +1549,7 @@ class AgentRuntime:
         if not available:
             return None
         components = self._runtime_context_components(
-            state, self._counter(state), selected_notes=list(state.notes)
+            state, self._counter(state)
         )
         names = [str(item[0]) for item in available]
         contract = agent_capability_selection_contract(names)
@@ -1640,7 +1631,7 @@ class AgentRuntime:
             return None
         contract = agent_tool_call_contract(tool_specs)
         components = self._runtime_context_components(
-            state, self._counter(state), selected_notes=list(state.notes)
+            state, self._counter(state)
         )
         assembly = self.prompts.build_agent_tool_call_prompt(
             list(state.messages),
@@ -1742,7 +1733,7 @@ class AgentRuntime:
             allow_silent_completion=allow_silent_completion
         )
         components = self._runtime_context_components(
-            state, self._counter(state), selected_notes=list(state.notes)
+            state, self._counter(state)
         )
         assembly = self.prompts.build_agent_terminal_response_prompt(
             list(state.messages),
@@ -1813,11 +1804,9 @@ class AgentRuntime:
             authoritative_messages if has_derived_history else projected_messages
         )
         history_source = "authoritative_message_events"
-        # Full-fidelity note state gets the first measured admission attempt.
-        # Relevance selection is semantic reduction and must only occur after
-        # measured overflow proves that exact inclusion does not fit.
-        selected_notes = list(state.notes)
-        note_selection_attempted = False
+        # System-owned context contributors begin at full fidelity. Semantic
+        # contributor reduction is attempted only after measured overflow.
+        system_context_state: dict[str, object] = {}
         max_rounds = max(0, int(self.config.context.max_compaction_rounds))
         effective_minimum = (
             self.config.context.reserved_response_tokens
@@ -1881,7 +1870,7 @@ class AgentRuntime:
                 state,
                 counter,
                 projections=runtime_context_projections,
-                selected_notes=selected_notes,
+                context_state=system_context_state,
             )
             assembly = build_action_assembly(history_messages, context_components)
             compilation = self._compile_context(
@@ -1907,12 +1896,10 @@ class AgentRuntime:
                 )
             if not self.config.context.compact_on_overflow or compaction_round >= max_rounds:
                 break
-            if not note_selection_attempted and state.notes:
-                note_selection_attempted = True
-                reduced_notes = self._select_action_notes(state, assembly)
-                if {note.note_id for note in reduced_notes} != {note.note_id for note in selected_notes}:
-                    selected_notes = reduced_notes
-                    continue
+            if reduce_system_context_for_overflow(
+                self, state, assembly, system_context_state
+            ):
+                continue
             projected = self._project_largest_tool_result_for_overflow(
                 state,
                 original_request=original_request,
@@ -1938,7 +1925,7 @@ class AgentRuntime:
                 compilation=compilation,
                 existing_projections=runtime_context_projections,
                 remaining_calls=remaining_runtime_projection_calls,
-                selected_notes=selected_notes,
+                context_state=system_context_state,
             )
             if projected_context is not None:
                 source_name, projection = projected_context
@@ -1960,7 +1947,7 @@ class AgentRuntime:
             history_messages = list(state.messages)
             history_source = "dynamic_history_projection"
 
-        recovered = self._recover_prompt_instruction_overflow(
+        recovered = self._recover_system_prompt_contributor_overflow(
             state,
             assembly,
             contract,
@@ -2178,7 +2165,7 @@ class AgentRuntime:
                     )
                 )
             ):
-                recovered = self._recover_prompt_instruction_overflow(
+                recovered = self._recover_system_prompt_contributor_overflow(
                     state,
                     assembly,
                     contract,
@@ -2791,7 +2778,7 @@ class AgentRuntime:
                     or (not evidence_rows and not runtime_semantic_evidence)
                 )
             ):
-                recovered = self._recover_prompt_instruction_overflow(
+                recovered = self._recover_system_prompt_contributor_overflow(
                     state,
                     assembly,
                     contract,
@@ -3099,7 +3086,7 @@ class AgentRuntime:
                     or not evidence_rows
                 )
             ):
-                recovered = self._recover_prompt_instruction_overflow(
+                recovered = self._recover_system_prompt_contributor_overflow(
                     state,
                     assembly,
                     contract,
@@ -3510,7 +3497,7 @@ class AgentRuntime:
             },
         )
         if not compilation.report.fits:
-            recovered = self._recover_prompt_instruction_overflow(
+            recovered = self._recover_system_prompt_contributor_overflow(
                 state,
                 assembly,
                 contract,
@@ -4017,7 +4004,7 @@ class AgentRuntime:
             and self._counter(state).count_text(source_text).tokens
             <= compilation.overflow_tokens + 32
         ):
-            recovered = self._recover_prompt_instruction_overflow(
+            recovered = self._recover_system_prompt_contributor_overflow(
                 state,
                 assembly,
                 contract,
@@ -4253,193 +4240,16 @@ class AgentRuntime:
         )
         return projection
 
-    def _select_action_notes(
-        self,
-        state: SessionState,
-        assembly: PromptAssembly,
-    ) -> list[Note]:
-        candidates = list(state.notes)
-        if not candidates:
-            self.history.record_event(
-                state,
-                "notes_selected",
-                {
-                    "included_note_ids": [],
-                    "omitted_note_ids": [],
-                    "tokens": 0,
-                    "exact": True,
-                    "semantic_selection": False,
-                    "selection_fallback": False,
-                    "operation_categories": [],
-                    "selection_reason": "No durable note candidates exist.",
-                    "candidate_note_references": [],
-                },
-            )
-            return []
-
-        target_rows = [
-            asdict(component)
-            for component in assembly.components
-            if component.category != "wrapper"
-            and component.include_in_context
-            and component.name != "durable_notes"
-        ]
-        target_context = stable_json_dumps(
-            {"call_kind": "action", "components": target_rows},
-            indent=2,
-        )
-        target_context_sha256 = sha256_text(target_context)
-        candidate_rows = [asdict(note) for note in candidates]
-        candidate_references = [
-            {
-                "note_id": note.note_id,
-                "sha256": sha256_text(
-                    stable_json_dumps(asdict(note), indent=None)
-                ),
-            }
-            for note in candidates
-        ]
-        system_template = self.config.prompts.note_selection_system_template
-        user_template = self.config.prompts.note_selection_template
-        request = SemanticCallRequest(
-            kind="note_selection",
-            system_instruction=self.prompts.template_text(system_template),
-            components=[
-                PromptComponent(
-                    name="note_selection_task",
-                    category="system_prompt_instruction",
-                    text=self.prompts.template_text(user_template).format(
-                        target_context_sha256=target_context_sha256,
-                        target_context=target_context,
-                        candidate_notes=stable_json_dumps(
-                            candidate_rows,
-                            indent=2,
-                        ),
-                    ),
-                )
-            ],
-            contract=note_selection_contract(
-                note.note_id for note in candidates
-            ),
-            minimum_output_tokens=128,
-            desired_output_tokens=384,
-            prompt_template_names=(system_template, user_template),
-        )
-        semantic_selection = True
-        selection_fallback = False
-        operation_categories: list[str] = []
-        selection_reason = ""
-        try:
-            payload = self._execute_tool_semantic_call(state, request)
-            for raw_category in payload["operation_categories"]:
-                category = str(raw_category).strip()
-                if not category or len(category) > MAX_NOTE_CATEGORY_CHARS:
-                    raise ValueError(
-                        "note selector returned an invalid operation category"
-                    )
-                if category not in operation_categories:
-                    operation_categories.append(category)
-            if len(operation_categories) > MAX_NOTE_CATEGORIES:
-                raise ValueError(
-                    "note selector returned too many operation categories"
-                )
-            selected_ids = {
-                str(note_id) for note_id in payload["selected_note_ids"]
-            }
-            selected = [
-                note for note in candidates if note.note_id in selected_ids
-            ]
-            selection_reason = str(payload["reason"])
-        except (ModelCallStateChanged, RunCancellationRequested):
-            raise
-        except Exception as exc:
-            semantic_selection = False
-            selection_fallback = True
-            selected = candidates
-            selection_reason = (
-                "Semantic selector failed; every exact note candidate was included."
-            )
-            self.history.record_event(
-                state,
-                "note_selection_failed",
-                {
-                    "target_context_sha256": target_context_sha256,
-                    "candidate_note_references": candidate_references,
-                    "error": str(exc),
-                    "error_type": type(exc).__name__,
-                    "fallback": "include_all_notes",
-                },
-            )
-
-        selected_text = render_notes(selected)
-        counted = self._counter(state).count_text(selected_text)
-        selected_ids = {note.note_id for note in selected}
-        self.history.record_event(
-            state,
-            "notes_selected",
-            {
-                "included_note_ids": [note.note_id for note in selected],
-                "omitted_note_ids": [
-                    note.note_id
-                    for note in candidates
-                    if note.note_id not in selected_ids
-                ],
-                "tokens": counted.tokens,
-                "exact": counted.exact,
-                "semantic_selection": semantic_selection,
-                "selection_fallback": selection_fallback,
-                "operation_categories": operation_categories,
-                "selection_reason": selection_reason,
-                "selection_target_context_sha256": target_context_sha256,
-                "candidate_note_references": candidate_references,
-            },
-        )
-        return selected
-
     def _runtime_context_sources(
         self,
         state: SessionState,
         *,
-        selected_notes: list[Note] | None = None,
-    ) -> dict[str, str]:
-        filesystem = AgentEnvironment(self.config, state).filesystem
-        workspace_files = filesystem.list_files(".")
-        return {
-            "workspace_file_manifest": stable_json_dumps(
-                {
-                    "workspace_root": state.environment.workspace.root,
-                    "files": workspace_files,
-                    "count": len(workspace_files),
-                },
-                indent=2,
-            ),
-            "durable_notes": render_notes(
-                state.notes if selected_notes is None else selected_notes
-            ),
-        }
+        context_state: dict[str, object] | None = None,
+    ) -> list[SystemContextSource]:
+        return runtime_system_context_sources(
+            self.config, state, context_state=context_state
+        )
 
-    def _runtime_context_source_locator(
-        self,
-        state: SessionState,
-        source_name: str,
-    ) -> dict[str, object]:
-        if source_name == "workspace_file_manifest":
-            return {
-                "authoritative_source": "live_filesystem",
-                "workspace_root": state.environment.workspace.root,
-                "recovery_tool": "list_files",
-                "recovery_arguments": {
-                    "path": state.environment.workspace.root,
-                },
-            }
-        if source_name == "durable_notes":
-            return {
-                "authoritative_source": "durable_note_events",
-                "session_id": state.session_id,
-                "recovery_tool": "notes",
-                "recovery_arguments": {"action": "list"},
-            }
-        raise ValueError(f"Unknown runtime context source: {source_name}")
 
     def _project_runtime_context_for_overflow(
         self,
@@ -4449,21 +4259,21 @@ class AgentRuntime:
         compilation: ContextCompilation,
         existing_projections: dict[str, RuntimeContextProjection],
         remaining_calls: list[int],
-        selected_notes: list[Note] | None = None,
+        context_state: dict[str, object] | None = None,
     ) -> tuple[str, RuntimeContextProjection] | None:
         if compilation.overflow_tokens <= 0:
             return None
         sources = self._runtime_context_sources(
-            state,
-            selected_notes=selected_notes,
+            state, context_state=context_state
         )
+        source_by_name = {source.name: source for source in sources}
         report_by_name = {
             item.name: int(item.tokens) for item in compilation.report.breakdown
         }
         candidates = [
-            (report_by_name.get(name, 0), name, text)
-            for name, text in sources.items()
-            if text and report_by_name.get(name, 0) > 0
+            (report_by_name.get(source.name, 0), source.name, source.text)
+            for source in sources
+            if source.projectable and source.text and report_by_name.get(source.name, 0) > 0
         ]
         if not candidates:
             return None
@@ -4507,9 +4317,7 @@ class AgentRuntime:
                     "source_name": source_name,
                     "source_sha256": source_hash,
                     "objective_sha256": objective_hash,
-                    "source_locator": self._runtime_context_source_locator(
-                        state, source_name
-                    ),
+                    "source_locator": source_by_name[source_name].locator,
                     "projection_event_sequence": stored.sequence,
                     "target_tokens": target_tokens,
                     "projected_tokens": projected_tokens,
@@ -4520,11 +4328,7 @@ class AgentRuntime:
             projection, projection_report = self._reduce_text_hierarchically(
                 state,
                 source_text=source_text,
-                source_label=(
-                    "complete current workspace file manifest"
-                    if source_name == "workspace_file_manifest"
-                    else "all exact durable model-authored notes"
-                ),
+                source_label=source_by_name[source_name].projection_source_label,
                 target_tokens=target_tokens,
                 contract=evidence_projection_contract(),
                 output_key="projection",
@@ -4551,9 +4355,7 @@ class AgentRuntime:
                     "source_name": source_name,
                     "source_sha256": source_hash,
                     "objective_sha256": objective_hash,
-                    "source_locator": self._runtime_context_source_locator(
-                        state, source_name
-                    ),
+                    "source_locator": source_by_name[source_name].locator,
                     "previous_tokens": previous_tokens,
                     "target_tokens": target_tokens,
                     "overflow_tokens": compilation.overflow_tokens,
@@ -4576,9 +4378,7 @@ class AgentRuntime:
                     "source_name": source_name,
                     "source_sha256": source_hash,
                     "objective_sha256": objective_hash,
-                    "source_locator": self._runtime_context_source_locator(
-                        state, source_name
-                    ),
+                    "source_locator": source_by_name[source_name].locator,
                     "previous_tokens": previous_tokens,
                     "target_tokens": target_tokens,
                     "overflow_tokens": compilation.overflow_tokens,
@@ -4594,9 +4394,7 @@ class AgentRuntime:
                 "source_name": source_name,
                 "source_sha256": source_hash,
                 "objective_sha256": objective_hash,
-                "source_locator": self._runtime_context_source_locator(
-                    state, source_name
-                ),
+                "source_locator": source_by_name[source_name].locator,
                 "source_tokens": source_tokens,
                 "previous_tokens": previous_tokens,
                 "target_tokens": target_tokens,
@@ -4614,7 +4412,7 @@ class AgentRuntime:
         counter: ExactTokenCounter | ConservativeEstimator | _HistoryAwareTokenCounter,
         *,
         projections: dict[str, RuntimeContextProjection] | None = None,
-        selected_notes: list[Note] | None = None,
+        context_state: dict[str, object] | None = None,
     ) -> list[PromptComponent]:
         wakeup_store = WakeupStore(self.config.sessions.root)
         latest_handles: dict[str, str] = {}
@@ -4668,76 +4466,23 @@ class AgentRuntime:
             )
         ]
         sources = self._runtime_context_sources(
-            state,
-            selected_notes=selected_notes,
+            state, context_state=context_state
         )
         projection_map = projections or {}
-        workspace_source = sources["workspace_file_manifest"]
-        workspace_projection = projection_map.get("workspace_file_manifest")
-        if (
-            workspace_projection is not None
-            and workspace_projection.source_sha256
-            == sha256_text(workspace_source)
-        ):
-            workspace_text = (
-                "[SEMANTIC PROJECTION; the live filesystem remains authoritative]\n"
-                + workspace_projection.text
-            )
-        else:
-            workspace_text = workspace_source
-        components.append(
-            PromptComponent(
-                name="workspace_file_manifest",
-                category="environment",
-                text=(
-                    "Workspace file manifest. Use list_files on workspace_root to recover the exact current listing when needed:\n"
-                    + workspace_text
-                    + "\n\n"
-                ),
-                optional=True,
-            )
-        )
-        if state.attachments:
-            references = []
-            for attachment in state.attachments:
-                payload = asdict(attachment)
-                payload.pop("storage_ref", None)
-                references.append(payload)
-            components.append(
-                PromptComponent(
-                    name="attachment_references",
-                    category="attachments",
-                    text=(
-                        "Raw attachments available to this task. These are references and cheap mechanical facts only; "
-                        "decide whether and how to inspect them with an attachment capability:\n"
-                        + stable_json_dumps(references, indent=2)
-                        + "\n\n"
-                    ),
-                )
-            )
-        notes_source = sources["durable_notes"]
-        if notes_source:
-            notes_projection = projection_map.get("durable_notes")
+        for source in sources:
+            projection = projection_map.get(source.name)
+            projected_text = None
             if (
-                notes_projection is not None
-                and notes_projection.source_sha256 == sha256_text(notes_source)
+                projection is not None
+                and projection.source_sha256 == sha256_text(source.text)
             ):
-                notes_text = (
-                    "[SEMANTIC PROJECTION; exact notes remain authoritative and retrievable]\n"
-                    + notes_projection.text
-                )
-            else:
-                notes_text = notes_source
+                projected_text = projection.text
             components.append(
                 PromptComponent(
-                    name="durable_notes",
-                    category="notes",
-                    text=(
-                        "Durable model-authored notes. These are navigation aids; verbatim user messages and tool results remain authoritative:\n"
-                        + notes_text
-                        + "\n\n"
-                    ),
-                    optional=True,
+                    name=source.name,
+                    category=source.category,
+                    text=source.render(projection=projected_text),
+                    optional=source.optional,
                 )
             )
         return components
@@ -4929,7 +4674,7 @@ class AgentRuntime:
             f"resolving instructions for {assembly.kind}",
         )
         if include_prompt_instructions:
-            self._inject_prompt_instructions(state, assembly)
+            self._inject_system_prompt_contributors(state, assembly)
         activity("serializing_prompt", f"serializing {assembly.kind} prompt")
         self._require_system_prompt(assembly)
         self._materialize_prompt_protocol(assembly)
@@ -4966,338 +4711,15 @@ class AgentRuntime:
         )
         return compilation
 
-    def _inject_prompt_instructions(
+    def _inject_system_prompt_contributors(
         self,
         state: SessionState | None,
         assembly: PromptAssembly,
     ) -> None:
-        if state is None or any(
-            component.name
-            in {
-                "durable_prompt_instructions",
-                "durable_prompt_instruction_projection",
-            }
-            for component in assembly.components
-        ):
-            return
-        scoped_sources = self._prompt_instruction_sources(state, assembly.kind)
-        if not scoped_sources:
-            return
-        selected_sources, selection = self._select_prompt_instruction_sources(
-            state,
-            assembly,
-            scoped_sources,
-        )
-        if not selected_sources:
-            self.history.record_event(
-                state,
-                "prompt_instructions_selected",
-                {
-                    "kind": assembly.kind,
-                    "instruction_ids": [],
-                    "instruction_sources": [],
-                    "instruction_hashes": [],
-                    "exact": True,
-                    **selection,
-                },
-            )
-            return
-        selected_references = [
-            {
-                "instruction_store": instruction_store,
-                "instruction_id": item.instruction_id,
-            }
-            for instruction_store, item in selected_sources
-        ]
-        assembly.metadata["prompt_instruction_sources"] = selected_references
-        rendered_rows = [
-            {"instruction_store": instruction_store, **asdict(item)}
-            for instruction_store, item in selected_sources
-        ]
-        rendered = stable_json_dumps(rendered_rows, indent=2)
-        component = PromptComponent(
-            name="durable_prompt_instructions",
-            category="system_prompt_instruction",
-            text=(
-                "\n\n[DURABLE INSTRUCTIONS SELECTED FOR THIS CALL]\n"
-                "Apply every instruction below. The current user request remains the highest "
-                "authority for this turn. Within durable instructions, higher authority wins "
-                "on conflict; for equal authority, higher specificity then newer updated_at wins. "
-                "Trusted recording/user/project instructions are never semantically deselected by a model. "
-                "Learned-model instructions are lower-authority operating preferences.\n"
-                + rendered
-            ),
-        )
-        insert_at = next(
-            (
-                index
-                for index, existing in enumerate(assembly.components)
-                if existing.name == "fallback_message_separator"
-            ),
-            None,
-        )
-        if insert_at is None:
-            raise ModelClientError(
-                "Prompt assembly is missing the system/user message separator"
-            )
-        assembly.components.insert(insert_at, component)
-        ranges: list[PromptMessageRange] = []
-        for message_range in assembly.message_ranges:
-            start = message_range.component_start
-            end = message_range.component_end
-            if message_range.role == "system" and end == insert_at:
-                end += 1
-            else:
-                if start >= insert_at:
-                    start += 1
-                if end >= insert_at:
-                    end += 1
-            ranges.append(
-                PromptMessageRange(
-                    role=message_range.role,
-                    component_start=start,
-                    component_end=end,
-                )
-            )
-        assembly.message_ranges = ranges
-        assembly.prompt_text = "".join(item.text for item in assembly.components)
-        instruction_hashes = [
-            {
-                "instruction_id": item.instruction_id,
-                "instruction_store": instruction_store,
-                "sha256": sha256_text(
-                    stable_json_dumps(
-                        {
-                            "instruction_store": instruction_store,
-                            **asdict(item),
-                        },
-                        indent=None,
-                    )
-                ),
-            }
-            for instruction_store, item in selected_sources
-        ]
-        combined_hash = sha256_text(rendered)
-        assembly.prompt_artifacts.append(
-            PromptArtifact(
-                source=f"durable_prompt_instructions:{assembly.kind}",
-                sha256=combined_hash,
-            )
-        )
-        self.history.record_event(
-            state,
-            "prompt_instructions_selected",
-            {
-                "kind": assembly.kind,
-                "instruction_ids": [
-                    item.instruction_id for _, item in selected_sources
-                ],
-                "instruction_sources": selected_references,
-                "instruction_hashes": instruction_hashes,
-                "exact": True,
-                **selection,
-            },
-        )
+        for contributor in self.system_prompt_contributors:
+            contributor.inject(self, state, assembly)
 
-    def _prompt_instruction_sources(
-        self,
-        state: SessionState,
-        kind: ModelCallKind,
-    ) -> list[tuple[str, Any]]:
-        rows = [
-            ("user", item)
-            for item in prompt_instructions_for_kind(
-                self.prompt_instruction_store.list(),
-                kind,
-            )
-        ] + [
-            ("session", item)
-            for item in prompt_instructions_for_kind(
-                state.prompt_instructions,
-                kind,
-            )
-        ]
-        ordered = sort_prompt_instructions_by_authority([item for _, item in rows])
-        source_by_id = {item.instruction_id: store for store, item in rows}
-        return [(source_by_id[item.instruction_id], item) for item in ordered]
-
-    def _select_prompt_instruction_sources(
-        self,
-        state: SessionState,
-        assembly: PromptAssembly,
-        scoped_sources: list[tuple[str, Any]],
-    ) -> tuple[list[tuple[str, Any]], dict[str, Any]]:
-        candidates = [
-            source
-            for source in scoped_sources
-            if source[1].categories and not is_trusted_prompt_instruction(source[1])
-        ]
-        if not candidates:
-            return scoped_sources, {
-                "semantic_selection": False,
-                "selection_fallback": False,
-                "operation_categories": [],
-                "selection_reason": "No fine-grained categorized candidates.",
-            }
-        target_rows = [
-            asdict(component)
-            for component in assembly.components
-            if component.category != "wrapper" and component.include_in_context
-        ]
-        target_context = stable_json_dumps(
-            {"call_kind": assembly.kind, "components": target_rows},
-            indent=2,
-        )
-        target_context_sha256 = sha256_text(target_context)
-        candidate_rows = [
-            {"instruction_store": instruction_store, **asdict(instruction)}
-            for instruction_store, instruction in candidates
-        ]
-        candidate_references = [
-            {
-                "instruction_store": instruction_store,
-                "instruction_id": instruction.instruction_id,
-                "sha256": sha256_text(
-                    stable_json_dumps(
-                        {
-                            "instruction_store": instruction_store,
-                            **asdict(instruction),
-                        },
-                        indent=None,
-                    )
-                ),
-            }
-            for instruction_store, instruction in candidates
-        ]
-        system_template = (
-            self.config.prompts.prompt_instruction_selection_system_template
-        )
-        user_template = self.config.prompts.prompt_instruction_selection_template
-        user_text = self.prompts.template_text(user_template).format(
-            call_kind=assembly.kind,
-            target_context_sha256=target_context_sha256,
-            target_context=target_context,
-            candidate_instructions=stable_json_dumps(candidate_rows, indent=2),
-        )
-        request = SemanticCallRequest(
-            kind="prompt_instruction_selection",
-            system_instruction=self.prompts.template_text(system_template),
-            components=[
-                PromptComponent(
-                    name="prompt_instruction_selection_task",
-                    category="system_prompt_instruction",
-                    text=user_text,
-                )
-            ],
-            contract=prompt_instruction_selection_contract(
-                (
-                    instruction_store,
-                    instruction.instruction_id,
-                )
-                for instruction_store, instruction in candidates
-            ),
-            minimum_output_tokens=128,
-            desired_output_tokens=384,
-            include_prompt_instructions=False,
-            prompt_template_names=(system_template, user_template),
-        )
-        try:
-            payload = self._execute_tool_semantic_call(state, request)
-            operation_categories: list[str] = []
-            for raw_category in payload["operation_categories"]:
-                category = str(raw_category).strip()
-                if (
-                    not category
-                    or len(category) > MAX_PROMPT_INSTRUCTION_CATEGORY_CHARS
-                ):
-                    raise ValueError(
-                        "prompt instruction selector returned an invalid operation category"
-                    )
-                if category not in operation_categories:
-                    operation_categories.append(category)
-            if len(operation_categories) > MAX_PROMPT_INSTRUCTION_CATEGORIES:
-                raise ValueError(
-                    "prompt instruction selector returned too many operation categories"
-                )
-            selected_keys = {
-                (
-                    str(reference["instruction_store"]),
-                    str(reference["instruction_id"]),
-                )
-                for reference in payload["selected_instructions"]
-            }
-            selected_sources = [
-                source
-                for source in scoped_sources
-                if is_trusted_prompt_instruction(source[1])
-                or not source[1].categories
-                or (source[0], source[1].instruction_id) in selected_keys
-            ]
-            return selected_sources, {
-                "semantic_selection": True,
-                "selection_fallback": False,
-                "operation_categories": operation_categories,
-                "selection_reason": str(payload["reason"]),
-                "selection_target_context_sha256": target_context_sha256,
-                "selection_candidate_references": candidate_references,
-            }
-        except (ModelCallStateChanged, RunCancellationRequested):
-            raise
-        except Exception as exc:
-            self.history.record_event(
-                state,
-                "prompt_instruction_selection_failed",
-                {
-                    "kind": assembly.kind,
-                    "target_context_sha256": target_context_sha256,
-                    "candidate_instruction_references": candidate_references,
-                    "error": str(exc),
-                    "error_type": type(exc).__name__,
-                    "fallback": "include_all_scoped_candidates",
-                },
-            )
-            return scoped_sources, {
-                "semantic_selection": False,
-                "selection_fallback": True,
-                "operation_categories": [],
-                "selection_reason": (
-                    "Semantic selector failed; every broad-scope candidate was included."
-                ),
-                "selection_target_context_sha256": target_context_sha256,
-                "selection_candidate_references": candidate_references,
-            }
-
-    def _selected_prompt_instruction_rows(
-        self,
-        state: SessionState,
-        assembly: PromptAssembly,
-    ) -> list[dict[str, Any]]:
-        rows = [
-            {"instruction_store": instruction_store, **asdict(item)}
-            for instruction_store, item in self._prompt_instruction_sources(
-                state,
-                assembly.kind,
-            )
-        ]
-        references = assembly.metadata.get("prompt_instruction_sources")
-        if not isinstance(references, list):
-            return rows
-        selected = {
-            (
-                str(reference.get("instruction_store", "")),
-                str(reference.get("instruction_id", "")),
-            )
-            for reference in references
-            if isinstance(reference, dict)
-        }
-        return [
-            row
-            for row in rows
-            if (str(row["instruction_store"]), str(row["instruction_id"]))
-            in selected
-        ]
-
-    def _recover_prompt_instruction_overflow(
+    def _recover_system_prompt_contributor_overflow(
         self,
         state: SessionState,
         assembly: PromptAssembly,
@@ -5308,170 +4730,25 @@ class AgentRuntime:
         desired_output_tokens: int | None = None,
         context_limit_resolution: tuple[int, str] | None = None,
     ) -> ContextCompilation | None:
-        if (
-            failed.report.fits
-            or not self.config.context.compact_on_overflow
-            or assembly.kind == "prompt_instruction_projection"
-        ):
-            return None
-        source_component = next(
-            (
-                component
-                for component in assembly.components
-                if component.name == "durable_prompt_instructions"
-            ),
-            None,
-        )
-        source_report = next(
-            (
-                component
-                for component in failed.report.breakdown
-                if component.name == "durable_prompt_instructions"
-            ),
-            None,
-        )
-        if source_component is None or source_report is None:
-            return None
-        source_tokens = int(source_report.tokens)
-        overflow_tokens = max(1, int(failed.overflow_tokens))
-        if source_tokens <= overflow_tokens + 32:
-            return None
-
-        source_rows = self._selected_prompt_instruction_rows(
-            state,
-            assembly,
-        )
-        if not source_rows:
-            return None
-        exact_source = stable_json_dumps(source_rows, indent=2)
-        source_sha256 = sha256_text(exact_source)
-        references = [
-            {
-                "instruction_store": str(row["instruction_store"]),
-                "instruction_id": str(row["instruction_id"]),
-                "sha256": sha256_text(stable_json_dumps(row, indent=None)),
-            }
-            for row in source_rows
-        ]
-        projection_header = (
-            "\n\n[DURABLE MODEL-AUTHORED INSTRUCTION PROJECTION FOR THIS CALL KIND]\n"
-            "Measured context overflow required this model-authored derived view. "
-            "Apply every operative rule below. Exact source instructions remain "
-            "authoritative and recoverable through the prompt_instructions capability.\n"
-        )
-        counter = self._counter(state)
-        header_tokens = counter.count_text(projection_header).tokens
-        target_tokens = max(
-            32,
-            source_tokens - overflow_tokens - header_tokens - 16,
-        )
-        if target_tokens >= source_tokens:
-            return None
-        remaining_calls = [max(8, int(self.config.context.max_compaction_rounds) * 8)]
-        maximum_rounds = max(1, int(self.config.context.max_compaction_rounds) + 1)
-        for round_index in range(maximum_rounds):
-            projection, projection_report = self._reduce_text_hierarchically(
+        for contributor in self.system_prompt_contributors:
+            recovered = contributor.recover_overflow(
+                self,
                 state,
-                source_text=exact_source,
-                source_label=(
-                    f"exact durable instructions for {assembly.kind} calls"
-                ),
-                target_tokens=target_tokens,
-                contract=prompt_instruction_projection_contract(),
-                output_key="projection",
-                build_assembly=lambda text, _label, target: (
-                    self.prompts.build_prompt_instruction_projection_prompt(
-                        call_kind=assembly.kind,
-                        source_instructions=text,
-                        source_sha256=sha256_text(text),
-                        source_tokens=counter.count_text(text).tokens,
-                        overflow_tokens=overflow_tokens,
-                        target_tokens=target,
-                    )
-                ),
-                remaining_calls=remaining_calls,
-                context_limit_resolution=context_limit_resolution,
-                include_prompt_instructions=False,
-            )
-            projected_tokens = counter.count_text(projection).tokens
-            candidate = copy.deepcopy(assembly)
-            replacement_index = next(
-                index
-                for index, component in enumerate(candidate.components)
-                if component.name == "durable_prompt_instructions"
-            )
-            candidate.components[replacement_index] = PromptComponent(
-                name="durable_prompt_instruction_projection",
-                category="system_prompt_instruction",
-                text=projection_header + projection,
-            )
-            candidate.prompt_text = "".join(
-                component.text for component in candidate.components
-            )
-            candidate.prompt_artifacts = [
-                artifact
-                for artifact in candidate.prompt_artifacts
-                if artifact.source != "prompt_protocol:server_chat_template"
-                and not artifact.source.startswith("durable_prompt_instructions:")
-                and not artifact.source.startswith(
-                    "durable_prompt_instruction_projection:"
-                )
-            ] + [
-                PromptArtifact(
-                    source=(
-                        f"durable_prompt_instruction_projection:{assembly.kind}:"
-                        f"{source_sha256}"
-                    ),
-                    sha256=sha256_text(projection),
-                )
-            ]
-            recovered = self._compile_context(
-                state,
-                candidate,
+                assembly,
                 contract,
+                failed,
                 minimum_output_tokens=minimum_output_tokens,
                 desired_output_tokens=desired_output_tokens,
                 context_limit_resolution=context_limit_resolution,
-                include_prompt_instructions=False,
             )
-            if recovered.report.fits:
-                assembly.components = candidate.components
-                assembly.message_ranges = candidate.message_ranges
-                assembly.prompt_text = candidate.prompt_text
-                assembly.prompt_artifacts = candidate.prompt_artifacts
-                self.history.record_event(
-                    state,
-                    "prompt_instruction_projection_created",
-                    {
-                        "kind": assembly.kind,
-                        "source_instruction_references": references,
-                        "source_sha256": source_sha256,
-                        "source_tokens": source_tokens,
-                        "overflow_tokens": overflow_tokens,
-                        "target_tokens": target_tokens,
-                        "projected_tokens": projected_tokens,
-                        "projection": projection,
-                        "projection_sha256": sha256_text(projection),
-                        "projection_budget_report": asdict(projection_report),
-                        "reduction_round": round_index,
-                        "exact_source_recovery": {
-                            "session_id": state.session_id,
-                            "capability": "prompt_instructions",
-                            "instruction_references": references,
-                        },
-                    },
-                )
+            if recovered is not None:
                 return recovered
-            reduction = max(
-                16,
-                int(recovered.overflow_tokens) + 16,
-                projected_tokens - target_tokens,
-            )
-            next_target = max(32, target_tokens - reduction)
-            if next_target >= target_tokens:
-                break
-            target_tokens = next_target
         return None
+
+
+
+
+
 
     def _execute_tool_semantic_call(
         self, state: SessionState, request: SemanticCallRequest
@@ -5531,7 +4808,7 @@ class AgentRuntime:
                 and request.include_prompt_instructions
                 and request.allow_prompt_instruction_projection
             ):
-                recovered = self._recover_prompt_instruction_overflow(
+                recovered = self._recover_system_prompt_contributor_overflow(
                     state,
                     assembly,
                     request.contract,
@@ -5776,7 +5053,7 @@ class AgentRuntime:
             and self._counter(state).count_text(message.content).tokens
             <= compilation.overflow_tokens + 32
         ):
-            recovered = self._recover_prompt_instruction_overflow(
+            recovered = self._recover_system_prompt_contributor_overflow(
                 state,
                 assembly,
                 contract,
@@ -6726,7 +6003,7 @@ class AgentRuntime:
                     and include_prompt_instructions
                     and allow_prompt_instruction_projection
                 ):
-                    recovered = self._recover_prompt_instruction_overflow(
+                    recovered = self._recover_system_prompt_contributor_overflow(
                         state,
                         current.assembly,
                         current.contract,

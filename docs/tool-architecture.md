@@ -12,6 +12,8 @@ System tools are repository-owned capabilities that expose SWAAG state or generi
 
 A system tool may depend on SWAAG internals or on generic operating-system interfaces. It must not embed a particular external service/provider merely because that provider is commonly useful. Shell is deliberately powerful and can itself discover or invoke programs available to the service account; that host-level fallback does not make those programs part of SWAAG.
 
+Layer 2 also owns system-context contributors. Workspace manifests, durable notes, attachment references, and learned prompt instructions are not hidden Layer 1 context sources. An enabled Layer 2 capability contributes its own exact context, locator/provenance metadata, and semantic overflow behavior through generic contributor interfaces. Disabling the capability removes that contribution. Layer 1 only budgets, compiles, projects, and invokes generic contributor hooks; it does not know note categories, filesystem-manifest semantics, attachment-reader semantics, or learned-instruction selection rules.
+
 ## Layer 3 - external/open-world tools
 
 Everything domain-specific belongs outside the SWAAG repository: browser automation, web search providers, OCR/document conversion, speech systems, databases, proprietary APIs, image generation, remote services, and future capabilities that do not yet exist. External tools can live on the same machine or another machine and can have arbitrary dependencies, credentials, permissions, sandboxes, installation requirements, and failure modes.
