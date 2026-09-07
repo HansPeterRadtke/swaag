@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import json
+from pathlib import Path
 
 import pytest
 
@@ -320,3 +321,14 @@ def test_summary_prompt_prioritizes_exact_messages_over_derived_summaries(tmp_pa
     assert "outrank any derived `[SUMMARY]` projection" in text
     assert "scoped only to its recorded `source_event_ranges`" in text
     assert "never let a derived summary relabel, cancel, or supersede exact facts" in text
+
+
+def test_shipped_prompt_assets_do_not_embed_host_external_installations() -> None:
+    prompt_root = Path("src/swaag/assets/prompts")
+    violations: list[str] = []
+    for path in sorted(prompt_root.glob("*.txt")):
+        text = path.read_text(encoding="utf-8")
+        if "/data/src/external/" in text or "SKILL_DIR" in text:
+            violations.append(path.name)
+    assert violations == []
+    assert not (prompt_root / "system_presentation.txt").exists()
