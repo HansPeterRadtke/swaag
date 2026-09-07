@@ -16,7 +16,7 @@ import requests
 
 from swaag.redaction import configured_secret_values
 from swaag.action import ActionValidationError, AgentAction, action_from_payload
-from swaag.attachments import AttachmentStore, find_attachment
+from swaag.attachments import AttachmentStore
 from swaag.compression import message_source_event_references, summary_message_payload
 from swaag.context_compiler import ContextCompilation, ContextCompiler
 from swaag.config import AgentConfig, load_config
@@ -38,6 +38,7 @@ from swaag.environment.environment import AgentEnvironment
 from swaag.external_tool_adapters import build_runtime_external_tool_manager
 from swaag.external_tools import RuntimeExternalToolError
 from swaag.environment.artifacts import TextArtifactStore
+from swaag.evidence_sources import default_completion_evidence_source_providers
 from swaag.fsops import ensure_dir, restore_tree, snapshot_tree, write_text
 from swaag.grammar import (
     agent_action_contract,
@@ -249,6 +250,9 @@ class AgentRuntime:
             config,
         )
         self.system_prompt_contributors = default_system_prompt_contributors()
+        self.completion_evidence_source_providers = (
+            default_completion_evidence_source_providers()
+        )
         self.tools = tool_registry or ToolRegistry()
         self._runtime_capability_lock = threading.RLock()
         self._runtime_capabilities: dict[str, dict[str, object]] = {}
@@ -3643,14 +3647,6 @@ class AgentRuntime:
                 pending.extend(item)
         return leaves
 
-    @staticmethod
-    def _is_generated_id(value: str, prefix: str) -> bool:
-        stem = f"{prefix}_"
-        suffix = value[len(stem) :] if value.startswith(stem) else ""
-        return len(suffix) == 12 and all(
-            character in "0123456789abcdef" for character in suffix
-        )
-
     def _completion_evidence_source_inventory(
         self,
         state: SessionState,
@@ -3672,74 +3668,14 @@ class AgentRuntime:
         )
         source_events = self.history.read_history(state.session_id)
         inventory: list[dict[str, Any]] = []
-        artifact_ids = sorted(
-            value
-            for value in referenced_values
-            if self._is_generated_id(value, "artifact")
-        )
-        for artifact_id in artifact_ids:
-            references = [
-                event
-                for event in source_events
-                if event.event_type == "artifact_created"
-                and event.payload.get("artifact_id") == artifact_id
-            ]
-            if not references:
-                continue
-            source_event = references[-1]
-            inventory.append(
-                {
-                    "source_kind": "text_artifact",
-                    "source_id": artifact_id,
-                    "content_kind": str(source_event.payload.get("kind", "")),
-                    "size_chars": int(
-                        source_event.payload.get("size_chars", 0)
-                    ),
-                    "sha256": str(source_event.payload.get("sha256", "")),
-                    "source_event_references": [
-                        self._communication_evidence_reference(event)
-                        for event in references
-                    ],
-                }
-            )
-
-        referenced_attachment_ids = {
-            value
-            for value in referenced_values
-            if self._is_generated_id(value, "attachment")
-        }
-        for reference in state.attachments:
-            if reference.attachment_id not in referenced_attachment_ids:
-                continue
-            metadata = reference.metadata
-            source_references = []
-            sequence = metadata.get("source_event_sequence")
-            source_hash = metadata.get("source_event_hash")
-            if isinstance(sequence, int) and isinstance(source_hash, str):
-                source_references.append(
-                    {
-                        "session_id": str(
-                            metadata.get(
-                                "source_event_session_id", state.session_id
-                            )
-                        ),
-                        "sequence": sequence,
-                        "hash": source_hash,
-                        "event_type": str(
-                            metadata.get("source_event_type", "attachment_added")
-                        ),
-                    }
+        for provider in self.completion_evidence_source_providers:
+            inventory.extend(
+                provider.inventory(
+                    config=self.config,
+                    state=state,
+                    source_events=source_events,
+                    referenced_values=referenced_values,
                 )
-            inventory.append(
-                {
-                    "source_kind": "raw_attachment",
-                    "source_id": reference.attachment_id,
-                    "original_name": reference.original_name,
-                    "media_type": reference.media_type,
-                    "size_bytes": reference.size_bytes,
-                    "sha256": reference.sha256,
-                    "source_event_references": source_references,
-                }
             )
         return sorted(
             inventory,
@@ -3754,40 +3690,19 @@ class AgentRuntime:
         purpose: str,
     ) -> dict[str, Any]:
         source_kind = str(source["source_kind"])
-        source_id = str(source["source_id"])
-        row = dict(source)
+        provider = next(
+            (
+                item
+                for item in self.completion_evidence_source_providers
+                if item.source_kind == source_kind
+            ),
+            None,
+        )
+        if provider is None:
+            raise ValueError(f"Unsupported completion evidence source: {source_kind}")
+        row = provider.reexpand(config=self.config, state=state, source=source)
         row["requested_purpose"] = purpose
-        row["integrity_verified"] = True
-        if source_kind == "text_artifact":
-            artifact = TextArtifactStore(
-                self.config.sessions.root, state.session_id
-            ).get(source_id)
-            if (
-                artifact.sha256 != str(source.get("sha256", ""))
-                or artifact.size_chars != int(source.get("size_chars", -1))
-            ):
-                raise HistoryInvariantError(
-                    "Completion evidence artifact metadata differs from its source event"
-                )
-            row["text"] = Path(artifact.path).read_text(encoding="utf-8")
-            return row
-        if source_kind == "raw_attachment":
-            reference = find_attachment(state.attachments, source_id)
-            data = AttachmentStore(
-                self.config.sessions.root,
-                max_upload_bytes=self.config.attachments.max_upload_bytes,
-            ).read_bytes(reference)
-            try:
-                row["text"] = data.decode("utf-8")
-            except UnicodeDecodeError as exc:
-                row["integrity_verified"] = True
-                row["read_error"] = (
-                    "The exact raw bytes are not UTF-8 text; a selected specialist "
-                    f"reader is required ({exc})."
-                )
-                row["text"] = ""
-            return row
-        raise ValueError(f"Unsupported completion evidence source: {source_kind}")
+        return row
 
     def _project_completion_evidence_source_for_overflow(
         self,

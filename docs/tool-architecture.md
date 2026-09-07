@@ -14,6 +14,8 @@ A system tool may depend on SWAAG internals or on generic operating-system inter
 
 Layer 2 also owns system-context contributors. Workspace manifests, durable notes, attachment references, and learned prompt instructions are not hidden Layer 1 context sources. An enabled Layer 2 capability contributes its own exact context, locator/provenance metadata, and semantic overflow behavior through generic contributor interfaces. Disabling the capability removes that contribution. Layer 1 only budgets, compiles, projects, and invokes generic contributor hooks; it does not know note categories, filesystem-manifest semantics, attachment-reader semantics, or learned-instruction selection rules.
 
+Completion verification follows the same boundary. Layer 1 may ask for completion evidence and may semantically project already integrity-checked text after measured overflow, but it does not know how a particular evidence source is identified, inventoried, integrity-checked, or read. Those mechanics belong to pluggable evidence-source providers. Built-in providers currently cover SWAAG text artifacts and raw attachments; new source kinds can be added without editing AgentRuntime.
+
 ## Layer 3 - external/open-world tools
 
 Everything domain-specific belongs outside the SWAAG repository: browser automation, web search providers, OCR/document conversion, speech systems, databases, proprietary APIs, image generation, remote services, and future capabilities that do not yet exist. External tools can live on the same machine or another machine and can have arbitrary dependencies, credentials, permissions, sandboxes, installation requirements, and failure modes.

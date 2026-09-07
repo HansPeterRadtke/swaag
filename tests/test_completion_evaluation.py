@@ -789,3 +789,48 @@ def test_single_responsibility_completion_uses_verdict_only_contract(make_config
     assert result["reason"] == "single-responsibility completion verdict: complete"
     assert client.requests[-1]["contract"] == "completion_verdict"
     assert set(client.requests[-1]["json_schema"]["properties"]) == {"complete"}
+
+
+def test_completion_evidence_source_provider_is_pluggable_without_runtime_branch(make_config) -> None:
+    runtime = AgentRuntime(make_config(), model_client=None)
+    state = runtime.create_or_load_session()
+
+    class _Provider:
+        source_kind = "custom_source"
+
+        def inventory(self, *, config, state, source_events, referenced_values):
+            del config, state, source_events
+            if "custom-ref-1" not in referenced_values:
+                return []
+            return [
+                {
+                    "source_kind": self.source_kind,
+                    "source_id": "custom-ref-1",
+                    "sha256": "custom-sha",
+                    "source_event_references": [],
+                }
+            ]
+
+        def reexpand(self, *, config, state, source):
+            del config, state
+            return {**source, "integrity_verified": True, "text": "custom exact evidence"}
+
+    runtime.completion_evidence_source_providers = (_Provider(),)
+    inventory = runtime._completion_evidence_source_inventory(
+        state,
+        evidence_rows=[{"external_ref": "custom-ref-1"}],
+        historical_events=[],
+    )
+    assert inventory == [
+        {
+            "source_kind": "custom_source",
+            "source_id": "custom-ref-1",
+            "sha256": "custom-sha",
+            "source_event_references": [],
+        }
+    ]
+    expanded = runtime._reexpand_completion_evidence_source(
+        state, source=inventory[0], purpose="verify completion"
+    )
+    assert expanded["text"] == "custom exact evidence"
+    assert expanded["requested_purpose"] == "verify completion"
