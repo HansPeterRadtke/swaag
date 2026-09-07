@@ -5,6 +5,7 @@ from typing import TYPE_CHECKING, Protocol
 
 from swaag.context_compiler import ContextCompilation
 from swaag.prompt_instruction_context import PromptInstructionContextManager
+from swaag.prompt_instruction_store import PromptInstructionStore
 from swaag.types import ContractSpec, PromptAssembly, SessionState
 
 if TYPE_CHECKING:
@@ -36,6 +37,7 @@ class SystemPromptContributor(Protocol):
 
 @dataclass(frozen=True)
 class PromptInstructionContributor:
+    store: PromptInstructionStore
     name: str = "prompt_instructions"
 
     def enabled(self, runtime: "AgentRuntime") -> bool:
@@ -45,7 +47,7 @@ class PromptInstructionContributor:
         self, runtime: "AgentRuntime", state: SessionState | None, assembly: PromptAssembly
     ) -> None:
         if self.enabled(runtime):
-            PromptInstructionContextManager(runtime).inject(state, assembly)
+            PromptInstructionContextManager(runtime, self.store).inject(state, assembly)
 
     def recover_overflow(
         self,
@@ -61,7 +63,7 @@ class PromptInstructionContributor:
     ) -> ContextCompilation | None:
         if not self.enabled(runtime):
             return None
-        return PromptInstructionContextManager(runtime).recover_overflow(
+        return PromptInstructionContextManager(runtime, self.store).recover_overflow(
             state,
             assembly,
             contract,
@@ -72,5 +74,11 @@ class PromptInstructionContributor:
         )
 
 
-def default_system_prompt_contributors() -> tuple[SystemPromptContributor, ...]:
-    return (PromptInstructionContributor(),)
+def default_system_prompt_contributors(
+    config,
+) -> tuple[SystemPromptContributor, ...]:
+    return (
+        PromptInstructionContributor(
+            PromptInstructionStore(config.sessions.root, config)
+        ),
+    )

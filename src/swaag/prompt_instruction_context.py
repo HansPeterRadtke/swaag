@@ -8,6 +8,7 @@ from swaag.context_compiler import ContextCompilation
 from swaag.grammar import prompt_instruction_projection_contract, prompt_instruction_selection_contract
 from swaag.model import ModelClientError
 from swaag.preemption import ModelCallStateChanged, RunCancellationRequested
+from swaag.prompt_instruction_store import PromptInstructionStore
 from swaag.prompt_instructions import (
     MAX_PROMPT_INSTRUCTION_CATEGORIES,
     MAX_PROMPT_INSTRUCTION_CATEGORY_CHARS,
@@ -32,8 +33,11 @@ if TYPE_CHECKING:
 
 
 class PromptInstructionContextManager:
-    def __init__(self, runtime: "AgentRuntime") -> None:
+    def __init__(
+        self, runtime: "AgentRuntime", store: PromptInstructionStore
+    ) -> None:
         self.runtime = runtime
+        self.store = store
 
     def inject(
         self,
@@ -178,7 +182,7 @@ class PromptInstructionContextManager:
         rows = [
             ("user", item)
             for item in prompt_instructions_for_kind(
-                runtime.prompt_instruction_store.list(),
+                self.store.list(),
                 kind,
             )
         ] + [

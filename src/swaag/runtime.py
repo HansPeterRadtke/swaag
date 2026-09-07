@@ -68,7 +68,6 @@ from swaag.preemption import (
     ModelPreemptionCoordinator,
     RunCancellationRequested,
 )
-from swaag.prompt_instruction_store import PromptInstructionStore
 from swaag.model_cache import build_model_client
 from swaag.prompts import PromptBuilder
 from swaag.scheduler import WakeupStore
@@ -245,11 +244,7 @@ class AgentRuntime:
         self.preemption = ModelPreemptionCoordinator(config.sessions.root)
         self.delegated_tools = DelegatedToolStore(config.sessions.root)
         self.runtime_external_tools = build_runtime_external_tool_manager(config)
-        self.prompt_instruction_store = PromptInstructionStore(
-            config.sessions.root,
-            config,
-        )
-        self.system_prompt_contributors = default_system_prompt_contributors()
+        self.system_prompt_contributors = default_system_prompt_contributors(config)
         self.completion_evidence_source_providers = (
             default_completion_evidence_source_providers()
         )

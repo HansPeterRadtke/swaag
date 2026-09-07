@@ -739,7 +739,8 @@ def test_trusted_instruction_bypasses_semantic_selector(make_config):
     client = _InstructionSelectionClient()
     runtime = AgentRuntime(config, model_client=client)
     state = runtime.create_or_load_session()
-    runtime.prompt_instruction_store.add_trusted(
+    instruction_store = PromptInstructionStore(config.sessions.root, config)
+    instruction_store.add_trusted(
         title="Recording authority",
         content="Include exact blocker evidence.",
         scopes=["communication_status"],
@@ -749,7 +750,7 @@ def test_trusted_instruction_bypasses_semantic_selector(make_config):
         source_ref="recording:42",
         specificity=80,
     )
-    runtime.prompt_instruction_store.add(
+    instruction_store.add(
         title="Learned categorized rule",
         content="Use bullet summaries.",
         scopes=["communication_status"],
