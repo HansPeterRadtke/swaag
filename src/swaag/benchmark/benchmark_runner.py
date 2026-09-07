@@ -1698,6 +1698,16 @@ def _build_parser() -> argparse.ArgumentParser:
     chain_parser.add_argument("--clean", action="store_true")
     chain_parser.add_argument("--json", action="store_true")
 
+    supersession_parser = subparsers.add_parser(
+        "process-restart-supersession",
+        help="Test authoritative supersession across compaction and a real process restart.",
+    )
+    supersession_parser.add_argument("--output", default="process_restart_supersession_output")
+    supersession_parser.add_argument("--model-base-url")
+    supersession_parser.add_argument("--timeout-seconds", type=int)
+    supersession_parser.add_argument("--clean", action="store_true")
+    supersession_parser.add_argument("--json", action="store_true")
+
     response_presentation_parser = subparsers.add_parser(
         "response-presentation",
         help="Compare user-relevance and audio-presentation strategies on the live model.",
@@ -2276,6 +2286,20 @@ def main(argv: Sequence[str] | None = None) -> int:
         else:
             print(f"passed={report['passed']}")
             print(f"distinct_processes={report['distinct_processes']}")
+        return 0 if report["passed"] else 1
+
+    if args.command == "process-restart-supersession":
+        from swaag.benchmark.process_restart_supersession import run_process_restart_supersession_benchmark
+        report = run_process_restart_supersession_benchmark(
+            output_dir=Path(args.output),
+            config=_live_experiment_config(model_base_url=args.model_base_url, timeout_seconds=args.timeout_seconds),
+            clean=bool(args.clean),
+        )
+        if args.json:
+            print(stable_json_dumps(report, indent=2))
+        else:
+            print(f"passed={report['passed']}")
+            print(f"different_process={report['different_process']}")
         return 0 if report["passed"] else 1
 
     if args.command == "response-presentation":
