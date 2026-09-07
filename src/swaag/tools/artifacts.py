@@ -84,6 +84,13 @@ class ReadArtifactTool(Tool):
             output=output,
             display_text=f"read_artifact result: {stable_json_dumps(output, indent=2)}",
             generated_events=[event],
+            context_updates={
+                "latest_artifact_cursor": {
+                    "artifact_id": output["artifact_id"],
+                    "next_offset": output["next_offset"],
+                    "finished": bool(output["finished"]),
+                }
+            },
         )
 
 

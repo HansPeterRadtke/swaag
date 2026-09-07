@@ -1473,10 +1473,16 @@ def test_environment_context_exposes_latest_mechanical_handles(make_config, tmp_
             "raw_input": {},
             "validated_input": {},
             "output": {"artifact_id": "artifact_abc123", "next_offset": 4096, "finished": False},
+            "context_updates": {
+                "latest_artifact_cursor": {
+                    "artifact_id": "artifact_abc123", "next_offset": 4096, "finished": False
+                }
+            },
         },
     )
     components = runtime._runtime_context_components(state, runtime._counter(state))
     environment = next(item.text for item in components if item.name == "environment_state")
+    assert '"tool_context"' in environment
     assert '"latest_artifact_cursor"' in environment
     assert '"next_offset": 4096' in environment
 

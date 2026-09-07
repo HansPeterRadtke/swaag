@@ -131,6 +131,8 @@ class ToolExecutionResult:
     display_text: str
     generated_events: list[ToolGeneratedEvent] = field(default_factory=list)
     completed: bool = True
+    recovery_feedback: str = ""
+    context_updates: dict[str, Any] = field(default_factory=dict)
 
 
 @dataclass(slots=True)

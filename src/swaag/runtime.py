@@ -1280,11 +1280,8 @@ class AgentRuntime:
                                     "loaded_tool_names": sorted(loaded_tool_names),
                                 },
                             )
-                        if tool_call.tool_name == "run_tests" and not bool(result.output.get("passed", False)):
-                            recovery_feedback = (
-                                "The run_tests result failed. Treat its exact stdout/stderr as evidence. Decide the next action from "
-                                "the task and current evidence; do not assume the same verification command is required or sufficient."
-                            )
+                        if result.recovery_feedback:
+                            recovery_feedback = result.recovery_feedback
                     self.history.record_event(
                         state,
                         "agent_tool_call_completed",
@@ -4621,7 +4618,7 @@ class AgentRuntime:
     ) -> list[PromptComponent]:
         wakeup_store = WakeupStore(self.config.sessions.root)
         latest_handles: dict[str, str] = {}
-        latest_artifact_cursor: dict[str, object] = {}
+        tool_context_updates: dict[str, object] = {}
         for event in self.history.iter_history(state.session_id):
             if event.event_type != "tool_result":
                 continue
@@ -4639,16 +4636,11 @@ class AgentRuntime:
                 value = output.get(key)
                 if isinstance(value, str) and value.strip():
                     latest_handles[key] = value.strip()
-            if event.payload.get("tool_name") == "read_artifact":
-                artifact_id = output.get("artifact_id")
-                next_offset = output.get("next_offset")
-                finished = output.get("finished")
-                if isinstance(artifact_id, str) and artifact_id.strip() and isinstance(next_offset, int):
-                    latest_artifact_cursor = {
-                        "artifact_id": artifact_id.strip(),
-                        "next_offset": next_offset,
-                        "finished": bool(finished),
-                    }
+            updates = event.payload.get("context_updates", {})
+            if isinstance(updates, dict):
+                for key, value in updates.items():
+                    if isinstance(key, str) and key.strip():
+                        tool_context_updates[key.strip()] = to_jsonable(value)
         environment = {
             "active_session": {
                 "session_id": state.session_id,
@@ -4666,7 +4658,7 @@ class AgentRuntime:
                 to_jsonable(item) for item in wakeup_store.list(session_id=state.session_id)
             ],
             "latest_handles": latest_handles,
-            "latest_artifact_cursor": latest_artifact_cursor,
+            "tool_context": tool_context_updates,
         }
         components = [
             PromptComponent(
@@ -8056,6 +8048,7 @@ class AgentRuntime:
                 "raw_input": arguments,
                 "validated_input": arguments,
                 "output": to_jsonable(result.output),
+                "context_updates": to_jsonable(result.context_updates),
                 "source_event_references": [],
                 "executor": "external_runtime",
                 "external_provider_id": provider_id,
@@ -8074,6 +8067,7 @@ class AgentRuntime:
                     "raw_input": arguments,
                     "validated_input": arguments,
                     "output": result.output,
+                    "context_updates": result.context_updates,
                     "executor": "external_runtime",
                     "external_provider_id": provider_id,
                     "source_event_sequence": event.sequence,
@@ -8303,6 +8297,7 @@ class AgentRuntime:
                 "raw_input": invocation.raw_input,
                 "validated_input": invocation.validated_input,
                 "output": to_jsonable(result.output),
+                "context_updates": to_jsonable(result.context_updates),
                 "source_event_references": nested_source_references,
             },
         )
@@ -8319,6 +8314,7 @@ class AgentRuntime:
                     "raw_input": invocation.raw_input,
                     "validated_input": invocation.validated_input,
                     "output": result.output,
+                    "context_updates": result.context_updates,
                     "source_event_sequence": tool_result_event.sequence,
                     "source_event_hash": tool_result_event.hash,
                     "source_event_type": tool_result_event.event_type,

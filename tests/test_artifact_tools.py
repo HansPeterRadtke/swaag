@@ -110,3 +110,30 @@ def test_read_artifact_validation(make_config) -> None:
 
 def test_read_artifact_enabled_by_default(make_config) -> None:
     assert "read_artifact" in ToolRegistry().tool_names(make_config())
+
+
+def test_read_artifact_emits_generic_context_update(make_config, tmp_path) -> None:
+    from swaag.environment.artifacts import TextArtifactStore
+    from swaag.runtime import AgentRuntime
+    from swaag.types import ToolDecision
+
+    runtime = AgentRuntime(make_config(), model_client=None)
+    state = runtime.create_or_load_session()
+    store = TextArtifactStore(runtime.config.sessions.root, state.session_id)
+    created = store.create("abcdef", kind="test")
+    result = runtime._execute_tool(
+        state,
+        ToolDecision(
+            action="tool",
+            response="",
+            tool_name="read_artifact",
+            tool_input={"artifact_id": created.artifact_id, "start_offset": 0, "max_chars": 3},
+        ),
+    )
+    assert result is not None
+    assert result.context_updates["latest_artifact_cursor"]["next_offset"] == 3
+    event = next(
+        event for event in reversed(runtime.history.read_history(state.session_id))
+        if event.event_type == "tool_result"
+    )
+    assert event.payload["context_updates"] == result.context_updates

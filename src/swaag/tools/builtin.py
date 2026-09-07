@@ -1354,10 +1354,17 @@ class RunTestsTool(Tool):
         return {"process_started", "process_completed"}
 
     def execute(self, validated_input: dict[str, Any], context: ToolContext) -> ToolExecutionResult:
-        return context.environment.run_tests(
+        result = context.environment.run_tests(
             validated_input["command"],
             background=bool(validated_input.get("background", False)),
         )
+        if result.completed and not bool(result.output.get("passed", False)):
+            result.recovery_feedback = (
+                "The verification result failed. Treat its exact stdout/stderr as evidence. "
+                "Decide the next action from the task and current evidence; do not assume the "
+                "same verification command is required or sufficient."
+            )
+        return result
 
 
 class PollProcessTool(Tool):
