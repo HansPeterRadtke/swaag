@@ -1658,6 +1658,26 @@ def _build_parser() -> argparse.ArgumentParser:
     long_horizon_parser.add_argument("--clean", action="store_true", help="Replace an existing artifact directory.")
     long_horizon_parser.add_argument("--json", action="store_true", help="Print the full JSON report.")
 
+    process_restart_parser = subparsers.add_parser(
+        "process-restart-delayed",
+        help="Test delayed relevance across a real Python-process restart and repeated compaction.",
+    )
+    process_restart_parser.add_argument(
+        "--output", default="process_restart_delayed_output", help="Artifact directory."
+    )
+    process_restart_parser.add_argument(
+        "--model-base-url", help="Optional already-running model endpoint override."
+    )
+    process_restart_parser.add_argument(
+        "--timeout-seconds", type=int, help="Override the no-token timeout."
+    )
+    process_restart_parser.add_argument(
+        "--clean", action="store_true", help="Replace an existing artifact directory."
+    )
+    process_restart_parser.add_argument(
+        "--json", action="store_true", help="Print the full JSON report."
+    )
+
     response_presentation_parser = subparsers.add_parser(
         "response-presentation",
         help="Compare user-relevance and audio-presentation strategies on the live model.",
@@ -2184,6 +2204,27 @@ def main(argv: Sequence[str] | None = None) -> int:
                 print(f"{name}={row['passed']}/{row['total']}")
             print(f"output={Path(args.output) / 'long_horizon_context_results.json'}")
         return 0 if report["complete"] and report["all_dimensions_passed"] else 1
+
+    if args.command == "process-restart-delayed":
+        from swaag.benchmark.process_restart_delayed import (
+            run_process_restart_delayed_relevance_benchmark,
+        )
+
+        report = run_process_restart_delayed_relevance_benchmark(
+            output_dir=Path(args.output),
+            config=_live_experiment_config(
+                model_base_url=args.model_base_url,
+                timeout_seconds=args.timeout_seconds,
+            ),
+            clean=bool(args.clean),
+        )
+        if args.json:
+            print(stable_json_dumps(report, indent=2))
+        else:
+            print(f"passed={report['passed']}")
+            print(f"different_process={report['different_process']}")
+            print(f"output={Path(args.output) / 'process_restart_delayed_relevance.json'}")
+        return 0 if report["passed"] else 1
 
     if args.command == "response-presentation":
         from swaag.benchmark.response_presentation import (
