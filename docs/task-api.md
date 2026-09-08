@@ -42,6 +42,8 @@ Run the checkpointed live comparison with `python -m swaag.benchmark response-pr
 
 Status questions use a separate context-compiled operation over exact worker events and mechanical state. When `communication.model_base_url` selects a separate runtime, its constrained status output can request stronger interpretation. Swaag then sends the unchanged evidence snapshot to the main runtime at communication priority and records integrity-linked escalation request, resolution or failure events. Run `python -m swaag.benchmark communication-routing --assistant-model-base-url URL --output /data/var/swaag/benchmarks/communication-routing` before relying on a smaller model in production.
 
+For concurrent voice or chat operation, the separate communication runtime is the responsive conversation/status side while the main worker remains the task owner. A task-changing user utterance must enter the worker `message`/control path; the communication model must not mutate the task independently. Genuine simultaneous inference requires separate backend capacity. For Android/STT/TTS integration and presentation routing, see `voice-and-communication.md`.
+
 ## Durable event cursors
 
 `events` returns worker events after `after_sequence` with a bounded `limit`. `events.wait` uses the same cursor and waits up to 60 seconds for a new event or an input-required/terminal state; its `timed_out` and `terminal` fields distinguish those outcomes. Reissuing the request with `next_sequence` is resumable and does not depend on a live connection.

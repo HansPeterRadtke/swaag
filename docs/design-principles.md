@@ -76,6 +76,8 @@ Semantic status should receive enough context to be meaningful, potentially the 
 
 The current status path implements that separation as its own constrained, context-compiled operation. It starts with the complete exact status evidence snapshot, reduces only after measured overflow, validates source-event citations, and records results or failures in an operation history without writing into the concurrently active worker history. An optional separately configured communication runtime can answer without preemption or semantically escalate the unchanged snapshot to the main runtime; escalation lifecycle events preserve both operation identities, exact evidence lineage, and whether the trigger was semantic or mechanical assistant failure. Mechanical heartbeat state remains independently readable even if semantic interpretation fails.
 
+For voice clients, speech recognition and synthesis remain outside the agent core. The voice wrapper commits finalized user text to the durable task/control interfaces, uses the communication runtime for concurrent status conversation, and speaks separately verified audio presentations for final user-facing answers. The communication runtime is not a second task owner.
+
 ## Interfaces and files
 
 Swaag should not be architected around voice, one browser UI, CLI text, or one proprietary client. Attachments are raw files or durable references plus user intent. The LLM decides whether content inspection is necessary. Copying images does not require image understanding; analyzing them does.

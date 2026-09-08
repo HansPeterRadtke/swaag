@@ -20,6 +20,8 @@ The implementation is intentionally small while the intended harness architectur
 - `docs/hmi-design-requirements.md` — researched information-integrity, readability, control, touch, tooltip, accessibility, and physical-device validation contract for clients.
 - `docs/research-and-standards.md` — external systems, protocols, benchmarks, and research discipline.
 - `docs/task-api.md` — durable worker operations and caller-defined structured output.
+- `docs/manual.md` — installation, configuration, operation, workers, protocols, recovery, deployment, and troubleshooting manual.
+- `docs/voice-and-communication.md` — Android/voice integration and the two-model background-worker plus communication-model topology.
 
 ## Core behavior
 
@@ -29,7 +31,9 @@ Status questions use an independent constrained LLM operation over deterministic
 
 Repository-owned system tools are registered centrally and exposed with closed JSON schemas. They cover SWAAG state and generic host capabilities such as history, notes, prompt instructions, shared state, raw attachments, filesystem/workspace access, shell/process/terminal execution, artifacts, calculations, short waits, and durable wakeups. Domain-specific capabilities are not built-ins. External tools arrive through generic schema-driven catalogs; MCP servers can be discovered over stdio or Streamable HTTP, and only semantically selected external schemas are staged into the model context. Automated Browser (Aubro), all2text, databases, proprietary APIs, OCR, browser automation, and similar providers remain independent layer-three systems. Model-authored prompt instructions carry explicit operation scopes plus a semantic session/user persistence choice; their Layer 2 system-prompt contributor selects and injects matching exact entries into the system role while preserving source IDs, hashes, provenance, and token cost. Disabling the capability removes that automatic contribution. Exact instructions remain full fidelity whenever they fit. Only a measured overflow that cannot be recovered from another reducible source permits a per-call model-authored instruction projection; the raw stores and projection provenance remain authoritative and recoverable. Durable wakeups support human-readable relative durations and timezone-aware absolute times, survive process restarts, and are delivered exactly once as session control messages. The communication service dispatches due wakeups through the owning durable worker lifecycle; the mutually exclusive standalone dispatcher provides the same worker-aware behavior for deployments without that service.
 
-Task callers may opt into separately compiled `visual` and `audio` response presentations. The raw verified worker result remains authoritative; relevance selection and listenable rendering are distinct semantic calls, and independent constrained evaluation rejects information loss or operational spam before a variant is exposed. No extra presentation call runs by default while live strategy and small-model benchmarks remain incomplete.
+Task callers may opt into separately compiled `visual` and `audio` response presentations. The raw verified worker result remains authoritative; relevance selection and listenable rendering are distinct semantic calls, and independent constrained evaluation rejects information loss or operational spam before a variant is exposed. No extra presentation call runs by default. For voice clients, use the verified `audio` presentation as TTS input rather than speaking the raw worker result.
+
+A second communication model may run alongside the main worker model. Configure `[communication].model_base_url` to a separate fast endpoint and enable the communication service. Status/history questions can then be answered from separately budgeted durable worker evidence without making the busy worker service the conversation synchronously; semantic escalation can send unchanged evidence to the main model when stronger reasoning is needed. The main worker remains the task owner, and task-changing user speech is forwarded as durable worker control rather than executed by a competing communication agent. See `docs/voice-and-communication.md`.
 
 ## Installation
 
@@ -88,7 +92,7 @@ Runtime state belongs under `/data/var`; source code belongs under `/data/src`.
 
 ## Documentation
 
-Current supporting documents cover installation, history projections, memory and deterministic editing, and live runtime profiles under `doc/`.
+Start with `docs/manual.md` for the operational manual. The remaining files under `docs/` are focused design contracts, protocol references, research, benchmark evidence, security guidance, and the implementation TODO. `docs/voice-and-communication.md` is the deployment guide for Android voice clients and concurrent two-model communication.
 
 ## Observability
 
