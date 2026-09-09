@@ -1336,6 +1336,34 @@ class CommunicationService:
     ) -> dict[str, Any]:
         if protocol == "open_webui" and operation == "send":
             return self._open_webui_send(params)
+        if protocol == "ag_ui" and operation == "submit":
+            run = AgUiProjectionAdapter().user_run(params)
+            record, start_sequence, end_sequence, duplicate, state_snapshot = self._ag_ui_begin(run)
+            return {
+                "protocol": "ag-ui",
+                "thread_id": run.thread_id,
+                "run_id": run.run_id,
+                "worker": self.task_api.execute("get", {"worker_id": record.worker_id}),
+                "start_sequence": start_sequence,
+                "end_sequence": end_sequence,
+                "duplicate": duplicate,
+                "state_revision": state_snapshot.revision,
+            }
+        if protocol == "ag_ui" and operation == "context":
+            thread_id = _required_protocol_text(params, "thread_id", protocol="AG-UI")
+            worker_id = self.store.protocol_worker("ag_ui", thread_id)
+            if worker_id is None:
+                return {
+                    "protocol": "ag-ui",
+                    "thread_id": thread_id,
+                    "worker": None,
+                }
+            worker = self.task_api.execute("get", {"worker_id": worker_id})
+            return {
+                "protocol": "ag-ui",
+                "thread_id": thread_id,
+                "worker": worker,
+            }
         if protocol == "a2a" and operation == "send":
             return self._a2a_send(params, wait_for_completion=True)
         if protocol == "a2a" and operation == "list":

@@ -247,6 +247,65 @@ def test_communication_transport_exposes_task_api(make_config):
     asyncio.run(exercise())
 
 
+
+def test_communication_transport_submits_and_resolves_ag_ui_thread(make_config):
+    async def exercise() -> None:
+        service = CommunicationService(AgentRuntime(make_config(), model_client=object()))
+        server = await asyncio.start_server(service.handle_client, "127.0.0.1", 0)
+        port = server.sockets[0].getsockname()[1]
+        reader, writer = await asyncio.open_connection("127.0.0.1", port)
+
+        async def request(payload):
+            writer.write((json.dumps(payload) + "\n").encode())
+            await writer.drain()
+            return json.loads((await reader.readline()).decode())
+
+        missing = await request(
+            {"op": "ag_ui.context", "params": {"thread_id": "voice-thread"}}
+        )
+        submitted = await request(
+            {"op": "ag_ui.submit", "params": _ag_ui_input(run_id="voice-run")}
+        )
+        bound = await request(
+            {"op": "ag_ui.context", "params": {"thread_id": "thread-1"}}
+        )
+        duplicate = await request(
+            {"op": "ag_ui.submit", "params": _ag_ui_input(run_id="voice-run")}
+        )
+        invalid = await request(
+            {"op": "ag_ui.context", "params": {"thread_id": ""}}
+        )
+
+        writer.close()
+        await writer.wait_closed()
+        server.close()
+        await server.wait_closed()
+        service.workers.shutdown()
+
+        assert missing == {
+            "ok": True,
+            "result": {
+                "protocol": "ag-ui",
+                "thread_id": "voice-thread",
+                "worker": None,
+            },
+        }
+        assert submitted["ok"] is True, submitted
+        worker_id = submitted["result"]["worker"]["worker_id"]
+        assert submitted["result"]["thread_id"] == "thread-1"
+        assert submitted["result"]["run_id"] == "voice-run"
+        assert submitted["result"]["duplicate"] is False
+        assert bound["ok"] is True, bound
+        assert bound["result"]["thread_id"] == "thread-1"
+        assert bound["result"]["worker"]["worker_id"] == worker_id
+        assert duplicate["ok"] is True, duplicate
+        assert duplicate["result"]["worker"]["worker_id"] == worker_id
+        assert duplicate["result"]["duplicate"] is True
+        assert invalid["ok"] is False
+        assert "thread_id must be a non-empty string" in invalid["error"]
+
+    asyncio.run(exercise())
+
 def test_communication_transport_serves_a2a_agent_card_and_jsonrpc(make_config):
     async def exercise() -> None:
         config = make_config()
