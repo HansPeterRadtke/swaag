@@ -3,7 +3,7 @@ from __future__ import annotations
 import json
 from dataclasses import asdict, dataclass
 from pathlib import Path
-from typing import Any
+from typing import Any, Callable
 
 from swaag.fsops import write_text
 from swaag.types import CompletionResult, ContractSpec
@@ -79,13 +79,27 @@ class RecordReplayModelClient:
         config = getattr(self.delegate, "config", None)
         model = getattr(config, "model", None)
         if model is not None:
-            metadata["model_base_url"] = getattr(model, "base_url", "")
-            metadata["completion_endpoint"] = getattr(model, "completion_endpoint", "")
-            metadata["model_profile"] = getattr(model, "profile_name", "")
-            metadata["structured_output_mode"] = getattr(model, "structured_output_mode", "")
-            metadata["seed"] = getattr(model, "seed", None)
-            metadata["timeout_seconds"] = getattr(model, "timeout_seconds", None)
-            metadata["connect_timeout_seconds"] = getattr(model, "connect_timeout_seconds", None)
+            # Include every known model setting that can influence generated text
+            # or request shape. Transport-only send timeouts stay outside the hash.
+            for name in (
+                "base_url",
+                "completion_endpoint",
+                "profile_name",
+                "structured_output_mode",
+                "seed",
+                "temperature",
+                "top_p",
+                "stop",
+                "context_limit",
+                "timeout_seconds",
+                "connect_timeout_seconds",
+                "simple_timeout_seconds",
+                "structured_timeout_seconds",
+                "verification_timeout_seconds",
+                "benchmark_timeout_seconds",
+                "progress_poll_seconds",
+            ):
+                metadata[f"model_{name}"] = _normalize_json(getattr(model, name, None))
             metadata["request_timeout_affects_generation"] = False
         return metadata
 
@@ -211,19 +225,55 @@ class RecordReplayModelClient:
             live_mode=live_mode,
         )
 
-    def _return_from_entry(self, entry: RecordReplayEntry, payload: dict[str, Any]) -> CompletionResult:
+    def _return_from_entry(
+        self,
+        entry: RecordReplayEntry,
+        payload: dict[str, Any],
+        *,
+        stream_callback: Callable[[dict[str, Any]], None] | None = None,
+    ) -> CompletionResult:
         response_payload = dict(entry.response)
+        raw_response = response_payload.get("raw_response", {})
+        if not isinstance(raw_response, dict):
+            raw_response = {}
+        raw_response = {
+            **raw_response,
+            "replay_cache": {
+                "source": "cache",
+                "request_hash": entry.request_hash,
+                "cassette_path": str(self.cassette_path),
+                "mode": self.mode,
+            },
+        }
+        if stream_callback is not None:
+            chunks = raw_response.get("chunks", [])
+            if isinstance(chunks, list):
+                for index, chunk in enumerate(chunks, start=1):
+                    if isinstance(chunk, dict):
+                        stream_callback({
+                            "chunk_index": index,
+                            "chunk": chunk,
+                            "content": str(chunk.get("content", "")) if chunk.get("content") is not None else "",
+                            "stop": bool(chunk.get("stop")),
+                            "replayed": True,
+                        })
         self._replayed_count += 1
         return CompletionResult(
             text=str(response_payload.get("text", "")),
             raw_request=payload,
-            raw_response=response_payload.get("raw_response", {}) if isinstance(response_payload.get("raw_response", {}), dict) else {},
+            raw_response=raw_response,
             prompt_tokens=response_payload.get("prompt_tokens"),
             completion_tokens=response_payload.get("completion_tokens"),
             finish_reason=response_payload.get("finish_reason"),
         )
 
-    def send_completion(self, payload: dict[str, Any], *, timeout_seconds: int | None = None) -> CompletionResult:
+    def send_completion(
+        self,
+        payload: dict[str, Any],
+        *,
+        timeout_seconds: int | None = None,
+        stream_callback: Callable[[dict[str, Any]], None] | None = None,
+    ) -> CompletionResult:
         request_hash, request_envelope = self._request_hash(payload, timeout_seconds=timeout_seconds)
         if self.mode == "replay":
             entry = self._entries.get(request_hash)
@@ -231,21 +281,41 @@ class RecordReplayModelClient:
                 raise MissingReplayEntryError(
                     f"No replay entry for request hash {request_hash}; record a cassette for the current full request payload first."
                 )
-            return self._return_from_entry(entry, payload)
+            return self._return_from_entry(entry, payload, stream_callback=stream_callback)
         # "record" mode: replay from existing cassette entry if present (avoids unnecessary model calls),
         # otherwise call the real delegate and record the new entry.
         existing = self._entries.get(request_hash)
         if existing is not None:
-            return self._return_from_entry(existing, payload)
-        result = self.delegate.send_completion(payload, timeout_seconds=timeout_seconds)
+            return self._return_from_entry(existing, payload, stream_callback=stream_callback)
+        try:
+            result = self.delegate.send_completion(payload, timeout_seconds=timeout_seconds, stream_callback=stream_callback)
+        except TypeError as exc:
+            if "stream_callback" not in str(exc):
+                raise
+            result = self.delegate.send_completion(payload, timeout_seconds=timeout_seconds)
+        response_payload = _completion_result_payload(result)
         self._entries[request_hash] = RecordReplayEntry(
             request_hash=request_hash,
             request=request_envelope,
-            response=_completion_result_payload(result),
+            response=response_payload,
         )
         self._write_entries()
         self._recorded_count += 1
-        return result
+        raw_response = dict(result.raw_response or {})
+        raw_response["replay_cache"] = {
+            "source": "live_recorded",
+            "request_hash": request_hash,
+            "cassette_path": str(self.cassette_path),
+            "mode": self.mode,
+        }
+        return CompletionResult(
+            text=result.text,
+            raw_request=result.raw_request,
+            raw_response=raw_response,
+            prompt_tokens=result.prompt_tokens,
+            completion_tokens=result.completion_tokens,
+            finish_reason=result.finish_reason,
+        )
 
     def complete(
         self,

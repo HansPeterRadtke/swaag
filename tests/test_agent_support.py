@@ -21,7 +21,7 @@ def test_agent_test_support_families_cover_replay_and_runtime_behavior() -> None
     )
 
 
-def test_benchmark_runner_agent_tests_command_runs_real_cached_benchmark(monkeypatch, tmp_path: Path, capsys) -> None:
+def test_benchmark_runner_agent_tests_command_runs_real_benchmark_with_llm_response_cache(monkeypatch, tmp_path: Path, capsys) -> None:
     observed: dict[str, object] = {}
 
     def fake_run_agent_test_category(**kwargs):
@@ -41,15 +41,14 @@ def test_benchmark_runner_agent_tests_command_runs_real_cached_benchmark(monkeyp
             "run_metadata": {
                 "seed_cache_mode_counts": {"replay": 120, "record": 30},
                 "task_cache_mode_counts": {"mixed": 10, "replay": 40},
-                "artifact_reused_from": str(tmp_path / "artifact-cache"),
             },
             "aggregate_metrics": {
                 "failure_breakdown": {"verification_failure": 12, "wrong_edit": 5},
                 "verifier_weakness_breakdown": {"stale_source_failure": 4},
             },
-            "execution_mode": "executed_cached_benchmark",
-            "cached_benchmark_results_path": str(tmp_path / "out" / "agent_test_cached_results.json"),
-            "cached_benchmark_report_path": str(tmp_path / "out" / "agent_test_cached_report.md"),
+            "execution_mode": "executed_benchmark_with_llm_response_cache",
+            "benchmark_results_path": str(tmp_path / "out" / "agent_test_run_results.json"),
+            "benchmark_report_path": str(tmp_path / "out" / "agent_test_run_report.md"),
         }
 
     monkeypatch.setattr("swaag.benchmark.evaluation_runner.run_agent_test_category", fake_run_agent_test_category)
@@ -61,14 +60,13 @@ def test_benchmark_runner_agent_tests_command_runs_real_cached_benchmark(monkeyp
     assert observed["output_dir"] == tmp_path / "out"
     assert observed["clean"] is True
     assert "agent_test_category_summary" in captured.out
-    assert "execution_mode=executed_cached_benchmark" in captured.out
+    assert "execution_mode=executed_benchmark_with_llm_response_cache" in captured.out
     assert "difficulty_scores" in captured.out
     assert "family_scores" in captured.out
     assert "seed_cache_mode_counts=" in captured.out
-    assert "artifact_reused_from=" in captured.out
     assert "top_failure_categories=" in captured.out
     assert "top_verifier_weaknesses=" in captured.out
-    assert "cached_benchmark_results_path=" in captured.out
+    assert "benchmark_results_path=" in captured.out
 
 
 def test_benchmark_runner_test_categories_command_uses_two_category_evaluation(monkeypatch, tmp_path: Path, capsys) -> None:
@@ -95,8 +93,8 @@ def test_benchmark_runner_test_categories_command_uses_two_category_evaluation(m
                 },
                 "aggregate_metrics": {"failure_breakdown": {"wrong_tool": 3}},
                 "run_metadata": {"task_cache_mode_counts": {"replay": 50}},
-                "cached_benchmark_results_path": str(tmp_path / "eval" / "agent_test" / "agent_test_cached_results.json"),
-                "cached_benchmark_report_path": str(tmp_path / "eval" / "agent_test" / "agent_test_cached_report.md"),
+                "benchmark_results_path": str(tmp_path / "eval" / "agent_test" / "agent_test_run_results.json"),
+                "benchmark_report_path": str(tmp_path / "eval" / "agent_test" / "agent_test_run_report.md"),
             },
         }
 
@@ -113,7 +111,7 @@ def test_benchmark_runner_test_categories_command_uses_two_category_evaluation(m
     assert "agent_test_category_summary" in captured.out
     assert "group_average_percent=50.00" in captured.out
     assert "task_cache_mode_counts=" in captured.out
-    assert "cached_benchmark_results_path=" in captured.out
+    assert "benchmark_results_path=" in captured.out
 
 
 def test_manual_validation_cli_is_separate_from_tests(monkeypatch, tmp_path: Path) -> None:

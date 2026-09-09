@@ -14,7 +14,18 @@ class ReasoningSubsystem:
             "subsystem_progress",
             {"subsystem": self.name, "step_id": step.step_id, "progress": "reasoning_started"},
         )
-        assistant_text, report = runtime._answer(state)
+        if step.kind == "reasoning":
+            # Reasoning steps need interim analysis while the plan is still in
+            # progress. The final-answer guard that emits "not done" for
+            # incomplete plans must not fire here, otherwise coding tasks loop
+            # instead of producing bug analysis.
+            assistant_text, report = runtime._answer(
+                state,
+                allow_incomplete_plan=True,
+                allow_exact_finalizer=False,
+            )
+        else:
+            assistant_text, report = runtime._answer(state)
         runtime.history.record_event(
             state,
             "subsystem_progress",

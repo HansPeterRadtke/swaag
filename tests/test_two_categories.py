@@ -68,14 +68,14 @@ def test_authoritative_agent_tests_run_real_benchmark_not_pytest_wrapper() -> No
     assert not any(part.endswith("tests/test_benchmark.py") for part in agent_command)
 
 
-def test_full_cached_benchmark_test_does_not_replace_catalog_with_subset() -> None:
+def test_full_llm_response_cache_benchmark_test_does_not_replace_catalog_with_subset() -> None:
     benchmark_test = Path(__file__).resolve().parent / "test_benchmark.py"
     tree = ast.parse(benchmark_test.read_text(encoding="utf-8"), filename=str(benchmark_test))
     target = next(
         node
         for node in tree.body
         if isinstance(node, ast.FunctionDef)
-        and node.name == "test_benchmark_runner_executes_full_cached_catalog_and_writes_reports"
+        and node.name == "test_benchmark_runner_executes_full_llm_response_cache_catalog_and_writes_reports"
     )
 
     calls = [node for node in ast.walk(target) if isinstance(node, ast.Call)]
@@ -93,7 +93,7 @@ def test_full_cached_benchmark_test_does_not_replace_catalog_with_subset() -> No
         node
         for node in tree.body
         if isinstance(node, ast.FunctionDef)
-        and node.name == "_run_full_catalog_with_artifact_reuse"
+        and node.name == "_run_full_catalog_without_artifact_reuse"
     )
     helper_calls = [node for node in ast.walk(helper) if isinstance(node, ast.Call)]
     assert any(
@@ -145,13 +145,13 @@ def test_testprofile_agent_tests_prints_real_benchmark_summary(monkeypatch, tmp_
                 "prompt_understanding_mistakes": {"authority_selection": 3},
             },
             "run_metadata": {
-                "execution_mode": "executed_cached_benchmark",
+                "execution_mode": "executed_benchmark_with_llm_response_cache",
                 "seed_cache_mode_counts": {"replay": 50, "record": 3},
                 "task_cache_mode_counts": {"replay": 50, "record": 3},
             },
-            "execution_mode": "executed_cached_benchmark",
-            "cached_benchmark_results_path": "/tmp/results.json",
-            "cached_benchmark_report_path": "/tmp/report.md",
+            "execution_mode": "executed_benchmark_with_llm_response_cache",
+            "benchmark_results_path": "/tmp/results.json",
+            "benchmark_report_path": "/tmp/report.md",
         },
     )
 
@@ -160,12 +160,12 @@ def test_testprofile_agent_tests_prints_real_benchmark_summary(monkeypatch, tmp_
     captured = capsys.readouterr()
     assert exit_code == 0
     assert "== agent_test ==" in captured.out
-    assert "execution_mode=executed_cached_benchmark" in captured.out
+    assert "execution_mode=executed_benchmark_with_llm_response_cache" in captured.out
     assert "difficulty_scores" in captured.out
     assert "family_scores" in captured.out
     assert "cache_replay_mode=per_seed_record_replay" in captured.out
     assert "top_failure_categories={'verification_failure': 14, 'wrong_tool': 6}" in captured.out
-    assert "cached_benchmark_results_path=/tmp/results.json" in captured.out
+    assert "benchmark_results_path=/tmp/results.json" in captured.out
 
 
 def test_testprofile_combined_prints_code_correctness_then_benchmark(monkeypatch, tmp_path: Path, capsys) -> None:

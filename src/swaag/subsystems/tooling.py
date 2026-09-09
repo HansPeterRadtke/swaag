@@ -17,10 +17,16 @@ class ToolSubsystem:
     def _can_continue_refinement(self, step: PlanStep, preview) -> bool:
         if not preview.requires_retry:
             return False
-        checks_by_name = {str(check.get("name", "")): str(check.get("check_type", "")) for check in step.verification_checks}
         failed_names = [name for name in preview.conditions_failed if not str(name).startswith("perspective:")]
         if not failed_names:
             return False
+        # Re-running the exact same test command cannot repair command_exit_zero
+        # failures. Return control to the orchestrator so it can fail/replan from
+        # the concrete test output instead of burning attempts on an identical
+        # run_tests action until duplicate-action/loop_no_progress fires.
+        if step.expected_tool == "run_tests" or "command_exit_zero" in failed_names:
+            return False
+        checks_by_name = {str(check.get("name", "")): str(check.get("check_type", "")) for check in step.verification_checks}
         failed_types = {checks_by_name.get(name, "") for name in failed_names}
         failed_types.discard("")
         return bool(failed_types) and failed_types.issubset(self._REFINABLE_CHECK_TYPES)

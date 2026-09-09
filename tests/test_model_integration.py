@@ -28,6 +28,16 @@ class _Handler(BaseHTTPRequestHandler):
         self.end_headers()
         self.wfile.write(raw)
 
+    def _stream_response(self, chunks: list[dict]) -> None:
+        raw_parts = [f"data: {json.dumps(chunk)}\n\n".encode("utf-8") for chunk in chunks]
+        raw_parts.append(b"data: [DONE]\n\n")
+        raw = b"".join(raw_parts)
+        self.send_response(200)
+        self.send_header("Content-Type", "text/event-stream")
+        self.send_header("Content-Length", str(len(raw)))
+        self.end_headers()
+        self.wfile.write(raw)
+
     def do_GET(self) -> None:  # noqa: N802
         if self.path == "/health":
             self._json_response({"status": "ok"})
@@ -49,9 +59,10 @@ class _Handler(BaseHTTPRequestHandler):
                 self._json_response({"unexpected": True})
                 return
             if "grammar" in body:
-                self._json_response({"content": "yes", "stop": True, "tokens_evaluated": 3, "tokens_predicted": 1})
+                self._stream_response([{"content": "y", "tokens_evaluated": 3}, {"content": "es", "stop": True, "tokens_predicted": 1}])
                 return
-            self._json_response({"content": json.dumps({"action": "respond", "response": "ok", "tool_name": "none", "tool_input": {}}), "stop": True, "tokens_evaluated": 6, "tokens_predicted": 8})
+            payload = json.dumps({"action": "respond", "response": "ok", "tool_name": "none", "tool_input": {}})
+            self._stream_response([{"content": payload[:10], "tokens_evaluated": 6}, {"content": payload[10:], "stop": True, "tokens_predicted": 8}])
             return
         self._json_response({"error": "not found"}, status=404)
 
@@ -78,6 +89,7 @@ def test_llama_cpp_client_request_construction(make_config) -> None:
         completion_requests = [body for path, body in _Handler.requests if path == "/completion"]
         assert any("grammar" in item for item in completion_requests)
         assert any("json_schema" in item for item in completion_requests)
+        assert all(item.get("stream") is True for item in completion_requests)
     finally:
         server.shutdown()
         thread.join(timeout=5)
@@ -131,6 +143,49 @@ def test_llama_cpp_client_surfaces_timeout(make_config, monkeypatch) -> None:
     monkeypatch.setattr(requests, "post", _timeout)
     with pytest.raises(requests.Timeout):
         client.send_completion(client.build_completion_request("prompt", max_tokens=4, contract=yes_no_contract()))
+
+
+def test_llama_cpp_client_streaming_timeout_uses_call_timeout_and_closes_response(make_config, monkeypatch) -> None:
+    config = make_config(model__connect_timeout_seconds=3, model__progress_poll_seconds=1.0)
+    client = LlamaCppClient(config)
+    captured: dict[str, object] = {}
+
+    class _Response:
+        def __init__(self) -> None:
+            self.closed = False
+
+        def __enter__(self):
+            return self
+
+        def __exit__(self, exc_type, exc, tb) -> None:
+            self.closed = True
+
+        def raise_for_status(self) -> None:
+            return None
+
+        def iter_lines(self, decode_unicode: bool = True):
+            del decode_unicode
+            yield 'data: {"content":"ok","tokens_evaluated":1}'
+            yield 'data: {"content":"","stop":true,"tokens_predicted":1}'
+            yield "data: [DONE]"
+
+    response = _Response()
+
+    def _post(*args, **kwargs):
+        del args
+        captured["timeout"] = kwargs.get("timeout")
+        return response
+
+    monkeypatch.setattr(requests, "post", _post)
+
+    result = client.send_completion(
+        client.build_completion_request("prompt", max_tokens=4, contract=yes_no_contract()),
+        timeout_seconds=7,
+    )
+
+    assert captured["timeout"] == (3, 7.0)
+    assert response.closed is True
+    assert result.text == "ok"
 
 
 def test_request_policy_selects_timeout_by_contract_kind_and_profile(make_config) -> None:

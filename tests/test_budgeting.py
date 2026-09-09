@@ -37,7 +37,7 @@ def test_section_budgets_scale_without_fixed_tiny_caps(make_config) -> None:
     assert roomy.skills_tokens > compact.skills_tokens
 
 
-def test_runtime_budget_report_uses_dynamic_call_budget_not_legacy_reserved_tokens(make_config) -> None:
+def test_runtime_budget_report_uses_remaining_context_not_legacy_reserved_tokens(make_config) -> None:
     config = make_config(
         model__context_limit=2048,
         context__reserved_response_tokens=999,
@@ -63,9 +63,10 @@ def test_runtime_budget_report_uses_dynamic_call_budget_not_legacy_reserved_toke
     )
     dynamic = compute_call_budget(config, call_kind="analysis")
 
-    assert report.reserved_response_tokens == dynamic.output_tokens
     assert report.safety_margin_tokens == dynamic.safety_margin_tokens
+    assert report.reserved_response_tokens == config.model.context_limit - report.input_tokens - report.safety_margin_tokens
     assert report.reserved_response_tokens != 999
+    assert report.reserved_response_tokens != dynamic.output_tokens
 
 
 def test_runtime_budget_report_raises_structured_reserve_for_bounded_contracts(make_config) -> None:

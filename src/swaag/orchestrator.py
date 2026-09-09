@@ -175,14 +175,26 @@ def select_action(
         candidates.append("replan")
         scores.append(ActionScore("replan", reason="repeated_action_limit_exceeded"))
 
+    edit_failure_reason = ""
     if verification is not None and not verification.passed:
-        if verification.requires_retry:
+        edit_failure_reason = str(verification.reason or "")
+    if failure is not None:
+        edit_failure_reason = f"{edit_failure_reason} {getattr(failure, 'reason', '')} {getattr(failure, 'kind', '')}"
+    force_edit_replan = step.expected_tool == "edit_text" and (
+        "pattern" in edit_failure_reason
+        or "missing_tool_result" in edit_failure_reason
+        or "tool_result_present" in edit_failure_reason
+        or "tool_input" in edit_failure_reason
+    )
+    if verification is not None and not verification.passed:
+        if verification.requires_retry and not force_edit_replan:
             candidates.append("retry_step")
             scores.append(ActionScore("retry_step", reason=f"verification_failed={verification.reason}"))
-        if verification.requires_replan:
+        if verification.requires_replan or force_edit_replan:
             if "replan" not in candidates:
+                reason = "edit_text_requires_fresh_source_evidence" if force_edit_replan else f"verification_requires_replan={verification.reason}"
                 candidates.append("replan")
-                scores.append(ActionScore("replan", reason=f"verification_requires_replan={verification.reason}"))
+                scores.append(ActionScore("replan", reason=reason))
 
     if failure is not None and failure.requires_replan and "replan" not in candidates:
         candidates.append("replan")
@@ -196,6 +208,8 @@ def select_action(
     # ── Pick the action ───────────────────────────────────────────────────
     if forced_replan:
         chosen: ExecutionAction = "replan"
+    elif force_edit_replan:
+        chosen = "replan"
     elif verification is not None and not verification.passed and verification.requires_retry:
         chosen = "retry_step"
     elif verification is not None and not verification.passed and verification.requires_replan:

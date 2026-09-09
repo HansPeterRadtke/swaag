@@ -51,7 +51,7 @@ def _print_agent_test_summary(payload: dict[str, object], *, output_dir: Path) -
     run_metadata = payload.get("run_metadata", {})
     aggregate_metrics = payload.get("aggregate_metrics", {})
     print("== agent_test ==")
-    print(f"execution_mode={payload.get('execution_mode', run_metadata.get('execution_mode', 'executed_cached_benchmark'))}")
+    print(f"execution_mode={payload.get('execution_mode', run_metadata.get('execution_mode', 'executed_benchmark_with_llm_response_cache'))}")
     print(f"total_tasks={summary['total_tasks']}")
     print(f"successful_tasks={summary['successful_tasks']}")
     print(f"failed_tasks={summary['failed_tasks']}")
@@ -68,8 +68,6 @@ def _print_agent_test_summary(payload: dict[str, object], *, output_dir: Path) -
         print(f"seed_cache_mode_counts={run_metadata['seed_cache_mode_counts']}")
     if run_metadata.get("task_cache_mode_counts"):
         print(f"task_cache_mode_counts={run_metadata['task_cache_mode_counts']}")
-    if run_metadata.get("artifact_reused_from"):
-        print(f"artifact_reused_from={run_metadata['artifact_reused_from']}")
     if run_metadata.get("seed_cache_mode_counts"):
         print("cache_replay_mode=per_seed_record_replay")
     failure_breakdown = aggregate_metrics.get("failure_breakdown", {})
@@ -81,10 +79,10 @@ def _print_agent_test_summary(payload: dict[str, object], *, output_dir: Path) -
         print(f"top_verifier_weaknesses={verifier_weakness}")
     if understanding_mistakes:
         print(f"top_understanding_mistakes={understanding_mistakes}")
-    if payload.get("cached_benchmark_results_path"):
-        print(f"cached_benchmark_results_path={payload['cached_benchmark_results_path']}")
-    if payload.get("cached_benchmark_report_path"):
-        print(f"cached_benchmark_report_path={payload['cached_benchmark_report_path']}")
+    if payload.get("benchmark_results_path"):
+        print(f"benchmark_results_path={payload['benchmark_results_path']}")
+    if payload.get("benchmark_report_path"):
+        print(f"benchmark_report_path={payload['benchmark_report_path']}")
     print(f"artifacts={output_dir}")
 
 
@@ -112,7 +110,7 @@ def main(argv: list[str] | None = None) -> int:
             "Run an authoritative SWAAG test category.\n\n"
             "Profiles:\n"
             "  code-correctness  - deterministic binary code-correctness checks\n"
-            "  agent-tests       - real cached benchmark with score-based output\n"
+            "  agent-tests       - real benchmark with LLM response cache with score-based output\n"
             "  combined          - code-correctness first, then agent-tests\n"
             "  all               - alias for combined\n\n"
             "Manual validation is explicit real-model usage and not part of the test categories."

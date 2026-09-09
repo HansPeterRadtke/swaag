@@ -5,7 +5,6 @@ from pathlib import Path
 
 from swaag.benchmark import benchmark_runner
 from swaag.benchmark.evaluation_runner import (
-    _full_catalog_cache_key,
     run_agent_test_category,
     run_code_correctness_category,
     run_full_evaluation,
@@ -62,7 +61,6 @@ def _fake_benchmark_report() -> dict[str, object]:
             "agent_behavior_mode": "cached",
             "seed_cache_mode_counts": {"replay": 120, "record": 30},
             "task_cache_mode_counts": {"mixed": 10, "replay": 40},
-            "artifact_reused_from": "/tmp/benchmark-artifact",
         },
         "tasks": [{"task_id": "demo_task", "success": True}],
     }
@@ -112,29 +110,20 @@ def test_run_agent_test_category_never_reuses_full_catalog_artifact(monkeypatch,
 
     monkeypatch.setattr(benchmark_runner, "run_benchmarks", tracking_run_benchmarks)
 
-    # Even if a valid cached artifact exists, run_benchmarks must still be called
-    monkeypatch.setattr("swaag.benchmark.evaluation_runner._valid_full_catalog_report", lambda report_path, tasks: True)
-
     run_agent_test_category(output_dir=tmp_path / "agent", clean=True)
 
     assert len(run_benchmarks_called) == 1, "run_benchmarks must be called exactly once for every authoritative run"
     assert run_benchmarks_called[0].get("agent_behavior_mode") == "cached"
 
 
-def test_run_agent_test_category_seeds_shared_replay_cache_when_available(monkeypatch, tmp_path: Path) -> None:
-    artifact_root = tmp_path / "artifact-root"
-    cache_dir = artifact_root / _full_catalog_cache_key(get_benchmark_tasks()) / "replay_cache" / "demo_task"
-    cache_dir.mkdir(parents=True)
-    (cache_dir / "seed_42.json").write_text("{}", encoding="utf-8")
-    monkeypatch.setenv("SWAAG_FULL_CACHED_BENCHMARK_ARTIFACT_ROOT", str(artifact_root))
+def test_run_agent_test_category_does_not_seed_shared_replay_cache(monkeypatch, tmp_path: Path) -> None:
     def fake_run_benchmarks(**kwargs):
-        assert (kwargs["output_dir"] / "replay_cache" / "demo_task" / "seed_42.json").exists()
+        assert not (kwargs["output_dir"] / "replay_cache" / "demo_task" / "seed_42.json").exists()
         return _fake_benchmark_report()
 
     monkeypatch.setattr(benchmark_runner, "run_benchmarks", fake_run_benchmarks)
 
     run_agent_test_category(output_dir=tmp_path / "agent", clean=False)
-
 
 
 def test_run_test_category_evaluation_runs_only_two_categories(monkeypatch, tmp_path: Path) -> None:

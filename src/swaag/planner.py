@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 from dataclasses import asdict
-from typing import Iterable
+from typing import Iterable, Sequence
 
 from swaag.config import AgentConfig
 from swaag.types import Plan, PlanStep, PlanStepKind, PlanStepStatus, SessionState, VerificationType
@@ -600,7 +600,24 @@ def _run_tests_checks() -> tuple[list[dict[str, object]], list[str], list[str]]:
     return checks, required, []
 
 
-def create_shell_recovery_plan(goal: str) -> Plan:
+def _normalize_shell_recovery_source_hints(source_hints: Sequence[str] | None) -> list[str]:
+    if not source_hints:
+        return []
+    normalized: list[str] = []
+    seen: set[str] = set()
+    for raw_hint in source_hints:
+        hint = str(raw_hint).strip().lstrip("./")
+        if not hint:
+            continue
+        lowered = hint.lower()
+        if lowered in seen:
+            continue
+        seen.add(lowered)
+        normalized.append(hint)
+    return normalized
+
+
+def create_shell_recovery_plan(goal: str, *, source_hints: Sequence[str] | None = None) -> Plan:
     """Deterministic recovery plan for coding-style tasks when plan JSON fails.
 
     The runtime still executes through the ordinary agent loop, tool decision,
@@ -618,9 +635,10 @@ def create_shell_recovery_plan(goal: str) -> Plan:
         kind="read",
         expected_tool="shell_command",
         input_text=(
-            "Use repo-local shell commands to search for the exact failing test name first when one is provided. "
-            "Do not broaden the search to generic issue words before you have located that exact test or named symbol. "
-            "Once located, inspect only the most relevant nearby source and print concise evidence for the likely fix."
+            "Print exact source and test evidence before any edit, with the exact failing test name first. "
+            "If the request names files, print those files with labels source_file: and test_file:. "
+            "For Python coding tasks prefer: find relevant *.py files, print implementation files first, then tests, using sed -n or nl -ba. "
+            "Do not only grep for symbols; the next patch step needs actual source lines."
         ),
         expected_output="Inspection evidence",
         done_condition="tool_result:shell_command",
@@ -636,32 +654,54 @@ def create_shell_recovery_plan(goal: str) -> Plan:
         last_updated=now,
     )
     patch_checks, patch_required, patch_optional = _edit_text_checks()
-    patch_step = PlanStep(
-        step_id=new_id("step"),
-        title="Patch source",
-        goal="Apply the smallest code fix in the relevant implementation file.",
-        kind="write",
-        expected_tool="edit_text",
-        input_text=(
-            "Edit the relevant implementation file identified during inspection. "
+    normalized_hints = _normalize_shell_recovery_source_hints(source_hints)
+    patch_targets = normalized_hints or [""]
+    patch_steps: list[PlanStep] = []
+    for index, target in enumerate(patch_targets, start=1):
+        target_suffix = f": {target}" if target else ""
+        patch_goal = "Apply the smallest code fix in the relevant implementation file."
+        patch_input = (
+            "Edit the implementation file whose exact content was printed during inspection. "
             "Apply one minimal code change in the source file, not in docs or unrelated tests. "
-            "Prefer replace_pattern_once or replace_range over rewriting whole files."
-        ),
-        expected_output="Patched source file",
-        done_condition="tool_result:edit_text",
-        success_criteria="The minimal source fix is applied to the right file.",
-        expected_outputs=["Patched source file"],
-        verification_type="composite",
-        verification_checks=patch_checks,
-        required_conditions=patch_required,
-        optional_conditions=patch_optional,
-        input_refs=["inspection"],
-        output_refs=["patched_source"],
-        fallback_strategy="If patching fails, stop and report the exact failure.",
-        depends_on=[inspect_step.step_id],
-        status="pending",
-        last_updated=now,
-    )
+            "Use only a pattern that appears verbatim in the current source evidence. "
+            "Prefer replace_pattern_once or replace_range over rewriting whole files. "
+            "If no exact source evidence is available, inspect the source file first instead of guessing."
+        )
+        patch_success = "The minimal source fix is applied to the right file."
+        if target:
+            patch_goal = f"Apply the smallest code fix in `{target}`."
+            patch_input = (
+                f"Edit only `{target}` using the exact source content printed during inspection. "
+                "Apply one minimal code change in that source file, not in docs or unrelated tests. "
+                "Use only a pattern that appears verbatim in the current source evidence. "
+                "Prefer replace_pattern_once or replace_range over rewriting whole files. "
+                "If no exact source evidence is available, inspect the source file first instead of guessing."
+            )
+            patch_success = f"The minimal source fix is applied to `{target}`."
+        patch_steps.append(
+            PlanStep(
+                step_id=new_id("step"),
+                title=f"Patch source{target_suffix}",
+                goal=patch_goal,
+                kind="write",
+                expected_tool="edit_text",
+                input_text=patch_input,
+                expected_output="Patched source file",
+                done_condition="tool_result:edit_text",
+                success_criteria=patch_success,
+                expected_outputs=["Patched source file"],
+                verification_type="composite",
+                verification_checks=patch_checks,
+                required_conditions=patch_required,
+                optional_conditions=patch_optional,
+                input_refs=["inspection"],
+                output_refs=[f"patched_source_{index}"],
+                fallback_strategy="If patching fails, stop and report the exact failure.",
+                depends_on=[inspect_step.step_id] if index == 1 else [patch_steps[-1].step_id],
+                status="pending",
+                last_updated=now,
+            )
+        )
     verify_checks, verify_required, verify_optional = _run_tests_checks()
     verify_step = PlanStep(
         step_id=new_id("step"),
@@ -681,10 +721,10 @@ def create_shell_recovery_plan(goal: str) -> Plan:
         verification_checks=verify_checks,
         required_conditions=verify_required,
         optional_conditions=verify_optional,
-        input_refs=["inspection", "patched_source"],
+        input_refs=["inspection", *[ref for step in patch_steps for ref in step.output_refs]],
         output_refs=["verification"],
         fallback_strategy="If verification fails, stop and report the exact failure.",
-        depends_on=[patch_step.step_id],
+        depends_on=[patch_steps[-1].step_id],
         status="pending",
         last_updated=now,
     )
@@ -709,23 +749,17 @@ def create_shell_recovery_plan(goal: str) -> Plan:
         status="pending",
         last_updated=now,
     )
-    (
-        answer_step.expected_outputs,
-        answer_step.verification_type,
-        answer_step.verification_checks,
-        answer_step.required_conditions,
-        answer_step.optional_conditions,
-    ) = default_verification_contract(
-        kind=answer_step.kind,
-        expected_tool=answer_step.expected_tool,
-        expected_output=answer_step.expected_output,
-        done_condition=answer_step.done_condition,
-        success_criteria=answer_step.success_criteria,
-    )
+    answer_step.verification_type = "composite"
+    answer_step.verification_checks = [
+        {"name": "dependencies_completed", "check_type": "dependencies_completed"},
+        {"name": "assistant_text_nonempty", "check_type": "string_nonempty", "actual_source": "assistant_text"},
+    ]
+    answer_step.required_conditions = ["dependencies_completed", "assistant_text_nonempty"]
+    answer_step.optional_conditions = []
     return Plan(
         plan_id=new_id("plan"),
         goal=goal,
-        steps=[inspect_step, patch_step, verify_step, answer_step],
+        steps=[inspect_step, *patch_steps, verify_step, answer_step],
         success_criteria="Inspect the failing area, apply the minimal fix, verify it, and report the outcome.",
         fallback_strategy="If a recovery step fails, stop and report the exact blocker.",
         status="active",

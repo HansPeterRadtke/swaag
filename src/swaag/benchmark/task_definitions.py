@@ -122,8 +122,11 @@ class BenchmarkTaskDefinition:
         workspace = output_root / self.task_id
         os.makedirs(workspace, exist_ok=True)
         if live_mode and self.build_live is not None:
-            return self.build_live(workspace)
-        return self.build(workspace)
+            scenario = self.build_live(workspace)
+        else:
+            scenario = self.build(workspace)
+        _strengthen_verification_contract(scenario.verification_contract)
+        return scenario
 
 
 def _write(path: Path | str, content: str) -> str:
@@ -133,6 +136,47 @@ def _write(path: Path | str, content: str) -> str:
 
 def _stable_seed(task_id: str) -> int:
     return int(hashlib.sha256(task_id.encode("utf-8")).hexdigest()[:12], 16)
+
+
+def _strengthen_verification_contract(contract: BenchmarkVerificationContract) -> None:
+    """Normalize generated benchmark contracts after workspace materialization.
+
+    The verifier should prove real task outcomes from files, commands, JSON,
+    mutation fences, and explicit answer requirements. A bare
+    ``reasoning_completed`` history event is not proof of success and was
+    making the catalog look more verified than it really was.
+    """
+    has_concrete_check = bool(
+        contract.expected_answer
+        or contract.expected_answer_contains
+        or contract.expected_answer_regex
+        or contract.expected_json
+        or contract.expected_files
+        or contract.expected_file_patterns
+        or contract.command
+        or contract.required_tools_used
+        or contract.required_event_counts
+    )
+    if has_concrete_check and contract.required_history_events == ["reasoning_completed"]:
+        contract.required_history_events = []
+
+    if contract.task_type == "file_edit":
+        writable_expected = [
+            path
+            for path in contract.expected_files
+            if not path.endswith(("approval_check.json", "release_decision.json"))
+        ]
+        if not contract.allowed_modified_files and len(writable_expected) == 1:
+            contract.allowed_modified_files = list(writable_expected)
+
+    if contract.task_type in {"coding", "multi_step"}:
+        if contract.command and contract.task_type == "multi_step":
+            contract.required_tools_used = sorted(set(contract.required_tools_used) | {"shell_command"})
+        if contract.allowed_modified_files:
+            contract.forbid_unexpected_workspace_changes = True
+
+    if contract.task_type == "reading":
+        contract.forbid_unexpected_workspace_changes = True
 
 
 def _default_oracle(
@@ -1274,6 +1318,7 @@ def _build_file_edit_scenario(
             task_type="file_edit",
             expected_files={str(path): expected},
             required_history_events=["reasoning_completed"],
+            allowed_modified_files=[str(path)],
             forbid_unexpected_workspace_changes=True,
             min_tool_calls=1,
         )
@@ -2384,15 +2429,30 @@ def make_benchmark_task(
         difficulty=difficulty,
         tags=normalized_tags,
     )
-    is_complex = task_type in {"coding", "multi_step"} and difficulty in {"hard", "extremely_hard"}
+    if task_type == "coding":
+        plan_steps = 8 if difficulty in {"hard", "extremely_hard"} else 6
+        runtime_actions = 12 if difficulty in {"hard", "extremely_hard"} else 8
+        tool_budget = 10 if difficulty in {"hard", "extremely_hard"} else 6
+    elif task_type == "multi_step":
+        plan_steps = 10 if difficulty in {"hard", "extremely_hard"} else 6
+        runtime_actions = 14 if difficulty in {"hard", "extremely_hard"} else 8
+        tool_budget = 12 if difficulty in {"hard", "extremely_hard"} else 6
+    elif task_type == "file_edit":
+        plan_steps = 6 if difficulty in {"hard", "extremely_hard"} else 4
+        runtime_actions = 8 if difficulty in {"hard", "extremely_hard"} else 5
+        tool_budget = 6 if difficulty in {"hard", "extremely_hard"} else 4
+    else:
+        plan_steps = 4
+        runtime_actions = 5
+        tool_budget = 3
     default_overrides = {
         "tools_allow_side_effect_tools": True,
-        "planner_max_replans": 0,
-        "planner_max_plan_steps": 3,
-        "runtime_max_reasoning_steps": 6 if is_complex else (2 if task_type in {"coding", "multi_step"} else 1),
-        "runtime_max_total_actions": 6 if is_complex else (2 if task_type in {"coding", "multi_step"} else 1),
-        "runtime_max_tool_steps": 4 if is_complex else 1,
-        "runtime_tool_call_budget": 4 if is_complex else 1,
+        "planner_max_replans": 1,
+        "planner_max_plan_steps": plan_steps,
+        "runtime_max_reasoning_steps": runtime_actions,
+        "runtime_max_total_actions": runtime_actions,
+        "runtime_max_tool_steps": tool_budget,
+        "runtime_tool_call_budget": tool_budget,
     }
     return BenchmarkTaskDefinition(
         task_id=task_id,

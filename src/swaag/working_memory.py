@@ -6,7 +6,19 @@ from swaag.types import SessionState, WorkingMemory
 from swaag.utils import utc_now_iso
 
 
+def _looks_like_inline_evidence_prompt(text: str) -> bool:
+    lowered = text.lower()
+    markers = ("evidence:", "evidence below", "using only the evidence", "provided evidence", "oracle evidence")
+    return len(text) > 800 and any(marker in lowered for marker in markers)
+
+
 def _compact_active_goal(text: str) -> str:
+    if _looks_like_inline_evidence_prompt(text):
+        question_match = re.search(r"(?is)\bQuestion:\s*(.+?)(?:\n\s*\n|\nEvidence:|$)", text)
+        question = " ".join(question_match.group(1).split()) if question_match else ""
+        if question:
+            return f"Answer from inline evidence: {question[:240]}"
+        return "Answer from inline evidence."
     if "Task contract:" not in text:
         return text
     problem_match = re.search(r"Problem statement:\s*\n([^\n]+)", text)

@@ -217,5 +217,5 @@ def build_code_correctness_command(root: Path | None = None) -> list[str]:
 
 
 def build_agent_tests_command(root: Path | None = None) -> list[str]:
-    """Build the authoritative cached benchmark command for agent_test."""
+    """Build the authoritative benchmark with LLM response cache command for agent_test."""
     return [sys.executable, "-m", "swaag.benchmark", "agent-tests"]

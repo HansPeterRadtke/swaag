@@ -38,7 +38,6 @@ def render_benchmark_report(report) -> str:
         "task_cache_mode_counts": run_metadata.get("task_cache_mode_counts", {}),
         "replay_cache_root": run_metadata.get("replay_cache_root", ""),
         "replay_cache_policy": run_metadata.get("replay_cache_policy", ""),
-        "artifact_reused_from": run_metadata.get("artifact_reused_from", ""),
     }
     lines.extend(["## Cache / Replay Summary", ""])
     added_cache_line = False

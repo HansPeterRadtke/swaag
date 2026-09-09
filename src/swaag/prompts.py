@@ -140,6 +140,7 @@ class PromptBuilder:
             extra_instruction = (
                 "Return a single non-interactive test command.\n"
                 "Prefer the narrowest relevant test invocation.\n"
+                "The command must begin with a real executable such as `python3` or `pytest`, never the tool name `run_tests`.\n"
             )
         elif tool_name == "edit_text":
             extra_instruction = (
@@ -148,8 +149,10 @@ class PromptBuilder:
                 "Set `path` to a real file path, never `.` or a directory.\n"
                 "Set `operation` to one of: replace_pattern_once, replace_pattern_all, replace_range, insert_at, delete_range.\n"
                 "For ordinary line replacements, prefer `replace_pattern_once`.\n"
-                "Base `pattern` and `replacement` on the actual source preview in the context, not on the issue text.\n"
-                "For `replace_pattern_once` or `replace_pattern_all`, include both `pattern` and `replacement`.\n"
+                "Base `pattern` and `replacement` only on an actual source preview or file content shown in this prompt, not on the issue text or imports.\n"
+                "If no source preview for the target file is shown, return a tiny no-op replacement of an actually shown source line only if available; otherwise choose the shortest valid exact edit you can derive from the shown file content.\n"
+                "For `replace_pattern_once` or `replace_pattern_all`, include both `pattern` and `replacement`. The pattern must be short and must occur verbatim in the displayed file content.\n"
+                "Never invent placeholder functions such as pass bodies, never repeat code blocks, and never use text from tests or imports as source-file patterns.\n"
                 "If one nearby source line can anchor the fix, replace that short anchor and insert the new code around it instead of replacing a large block.\n"
                 "When adding one missing mapping or handler, use one existing nearby entry line as the full `pattern`, and set `replacement` to that same line plus the new adjacent line.\n"
                 "If the preview shows a mapping table or dispatch table, patch that table directly instead of unrelated fallback return code.\n"
@@ -165,6 +168,15 @@ class PromptBuilder:
                 "Set `create` to true only when the file should be created if it does not already exist.\n"
                 "Use write_file only when replacing the entire file is the correct action.\n"
                 "If only a portion of a file needs editing, use edit_text instead.\n"
+            )
+        elif tool_name == "read_text":
+            extra_instruction = (
+                "\n"
+                "Return arguments for one concrete text read.\n"
+                "Use exactly one of: `path`, `note_id`, or `reader_id`.\n"
+                "For local source inspection, prefer `path`.\n"
+                "Do not copy output-only fields such as `source_ref`, `source_kind`, `start_offset`, `end_offset`, `next_offset`, `finished`, or `text` into the tool input.\n"
+                "If the step names a file, use that file path directly.\n"
             )
         user_components = [
             PromptComponent(name="history", category="history", text=f"Conversation history:\n{history_block}\n\n"),

@@ -182,131 +182,12 @@ def _build_agent_test_score_summary(report: dict[str, Any]) -> dict[str, Any]:
     }
 
 
-def _full_catalog_cache_key(tasks: Sequence[Any]) -> str:
-    payload = [
-        {
-            "task_id": task.task_id,
-            "task_type": task.task_type,
-            "difficulty": task.difficulty,
-            "tags": list(task.tags),
-            "description": task.description,
-            "setup_instructions": list(task.setup_instructions),
-        }
-        for task in tasks
-    ]
-    raw = json.dumps({"version": 8, "tasks": payload}, sort_keys=True).encode("utf-8")
-    return hashlib.sha256(raw).hexdigest()[:16]
+# Full benchmark-result artifact reuse and copied intermediate benchmark state are intentionally forbidden.
+# The only benchmark cache allowed is the per-task LLM request-response replay cache
+# managed by RecordReplayModelClient.
 
-
-def _valid_full_catalog_report(report_path: Path, tasks: Sequence[Any]) -> bool:
-    if not report_path.exists():
-        return False
-    try:
-        payload = json.loads(report_path.read_text(encoding="utf-8"))
-    except (OSError, json.JSONDecodeError):
-        return False
-    expected_ids = {task.task_id for task in tasks}
-    actual_ids = {str(item.get("task_id", "")) for item in payload.get("tasks", [])}
-    metadata = payload.get("run_metadata", {})
-    seed_results = [
-        seed_result
-        for task in payload.get("tasks", [])
-        for seed_result in task.get("metrics", {}).get("seed_results", [])
-        if isinstance(seed_result, dict)
-    ]
-    return (
-        payload.get("summary", {}).get("total_tasks") == len(tasks)
-        and actual_ids == expected_ids
-        and metadata.get("agent_behavior_mode") == "cached"
-        and metadata.get("replay_cache_enabled") is True
-        and bool(seed_results)
-        and all(seed.get("replay_cache", {}).get("cassette_path") for seed in seed_results)
-    )
-
-
-def _copy_cached_full_catalog(cache_dir: Path, output_dir: Path) -> dict[str, Any]:
-    if output_dir.exists():
-        shutil.rmtree(output_dir)
-    shutil.copytree(cache_dir, output_dir)
-    old_root = str(cache_dir)
-    new_root = str(output_dir)
-    results_path = output_dir / "agent_test_cached_results.json"
-    report_path = output_dir / "agent_test_cached_report.md"
-    results_text = results_path.read_text(encoding="utf-8").replace(old_root, new_root)
-    write_text(results_path, results_text, encoding="utf-8")
-    if report_path.exists():
-        write_text(report_path, report_path.read_text(encoding="utf-8").replace(old_root, new_root), encoding="utf-8")
-    payload = json.loads(results_text)
-    run_metadata = payload.setdefault("run_metadata", {})
-    seed_cache_mode_counts: dict[str, int] = {}
-    task_cache_mode_counts: dict[str, int] = {}
-    for task in payload.get("tasks", []):
-        seed_modes = set()
-        for seed_result in task.get("metrics", {}).get("seed_results", []):
-            if not isinstance(seed_result, dict):
-                continue
-            replay_cache = seed_result.get("replay_cache", {})
-            mode = str(replay_cache.get("cache_mode") or ("replay" if replay_cache.get("cassette_path") else "uncached"))
-            seed_modes.add(mode)
-        task_mode = "uncached" if not seed_modes else (next(iter(seed_modes)) if len(seed_modes) == 1 else "mixed")
-        task_cache_mode_counts[task_mode] = task_cache_mode_counts.get(task_mode, 0) + 1
-        for mode in seed_modes or {"uncached"}:
-            seed_cache_mode_counts[mode] = seed_cache_mode_counts.get(mode, 0) + 1
-    run_metadata["artifact_reused_from"] = str(cache_dir)
-    run_metadata.setdefault("results_path", str(results_path))
-    run_metadata.setdefault("report_path", str(report_path))
-    run_metadata.setdefault("seed_cache_mode_counts", dict(sorted(seed_cache_mode_counts.items())))
-    run_metadata.setdefault("task_cache_mode_counts", dict(sorted(task_cache_mode_counts.items())))
-    return payload
-
-
-# DEV UTILITY ONLY: not called in the authoritative agent_test / combined / all paths.
-# May be used for manual inspection of previously cached full benchmark runs.
-def _reuse_full_catalog_benchmark_artifact(output_dir: Path, benchmark_task_ids: Sequence[str] | None, clean: bool) -> dict[str, Any] | None:
-    if benchmark_task_ids:
-        return None
-    from swaag.benchmark.task_definitions import get_benchmark_tasks
-
-    tasks = get_benchmark_tasks()
-    artifact_root = Path(os.environ.get("SWAAG_FULL_CACHED_BENCHMARK_ARTIFACT_ROOT", "/tmp/swaag-full-cached-benchmark-catalog"))
-    cache_dir = artifact_root / _full_catalog_cache_key(tasks)
-    report_path = cache_dir / "agent_test_cached_results.json"
-    if not _valid_full_catalog_report(report_path, tasks):
-        return None
-    if clean and output_dir.exists():
-        shutil.rmtree(output_dir)
-    return _copy_cached_full_catalog(cache_dir, output_dir)
-
-
-def _seed_full_catalog_replay_cache(output_dir: Path, benchmark_task_ids: Sequence[str] | None) -> None:
-    if benchmark_task_ids:
-        return
-    from swaag.benchmark.task_definitions import get_benchmark_tasks
-
-    target = output_dir / "replay_cache"
-    if target.exists():
-        return
-    artifact_root = Path(os.environ.get("SWAAG_FULL_CACHED_BENCHMARK_ARTIFACT_ROOT", "/tmp/swaag-full-cached-benchmark-catalog"))
-    preferred = artifact_root / _full_catalog_cache_key(get_benchmark_tasks()) / "replay_cache"
-    if preferred.exists():
-        shutil.copytree(preferred, target)
-        return
-    candidates = sorted(
-        (
-            path / "replay_cache"
-            for path in artifact_root.iterdir()
-            if path.is_dir() and path.name != preferred.parent.name and (path / "replay_cache").exists()
-        ),
-        key=lambda path: path.stat().st_mtime,
-        reverse=True,
-    ) if artifact_root.exists() else []
-    for source in candidates:
-        shutil.copytree(source, target)
-        return
-
-
-def _cached_benchmark_run_settings() -> dict[str, Any]:
-    """Stable model settings for the authoritative cached benchmark run.
+def _llm_response_cache_benchmark_run_settings() -> dict[str, Any]:
+    """Stable model settings for the authoritative benchmark with LLM response cache run.
 
     These must be consistent with the settings used in test_benchmark.py so that
     LLM response cassettes recorded there are compatible with agent_test runs.
@@ -329,8 +210,8 @@ def _render_agent_test_category_report(payload: dict[str, Any]) -> str:
     lines = [
         "# Agent Test Benchmark Report",
         "",
-        f"- execution_mode: `{payload.get('execution_mode', 'executed_cached_benchmark')}`",
-        f"- full_artifact_reuse: `{payload.get('full_artifact_reuse', False)}`",
+        f"- execution_mode: `{payload.get('execution_mode', 'executed_benchmark_with_llm_response_cache')}`",
+        f"- full_result_reuse: `{payload.get('full_result_reuse', False)}`",
         f"- total_tasks: `{summary['total_tasks']}`",
         f"- successful_tasks: `{summary['successful_tasks']}`",
         f"- failed_tasks: `{summary['failed_tasks']}`",
@@ -354,16 +235,15 @@ def _render_agent_test_category_report(payload: dict[str, Any]) -> str:
     lines.extend(
         [
             "",
-            "## Artifact Paths",
+            "## Output Paths",
             "",
-            f"- detailed_results: `{payload['cached_benchmark_results_path']}`",
-            f"- detailed_report: `{payload['cached_benchmark_report_path']}`",
+            f"- detailed_results: `{payload['benchmark_results_path']}`",
+            f"- detailed_report: `{payload['benchmark_report_path']}`",
             "",
             "## Cache / Replay Summary",
             "",
             f"- seed_cache_mode_counts: `{run_metadata.get('seed_cache_mode_counts', {})}`",
             f"- task_cache_mode_counts: `{run_metadata.get('task_cache_mode_counts', {})}`",
-            f"- artifact_reused_from: `{run_metadata.get('artifact_reused_from', '')}`",
             "",
             "## Top Failure Diagnostics",
             "",
@@ -395,14 +275,13 @@ def run_agent_test_category(
 ) -> dict[str, Any]:
     del env
     if pytest_args:
-        raise ValueError("agent_test no longer accepts pytest_args because it runs the real cached benchmark, not pytest benchmark wrappers")
+        raise ValueError("agent_test no longer accepts pytest_args because it runs the real benchmark with LLM response cache, not pytest benchmark wrappers")
     from swaag.benchmark.benchmark_runner import run_benchmarks
 
-    # Always run a fresh benchmark. Full-run artifact reuse is NOT allowed in the
-    # authoritative agent_test path. Only LLM response cassettes are cached/replayed.
+    # Always run a fresh benchmark. Full-run artifact reuse and copied replay-cache
+    # state are forbidden; only responses recorded during this output run may be reused.
     ensure_dir(output_dir)
-    _seed_full_catalog_replay_cache(output_dir, benchmark_task_ids)
-    model_settings = _cached_benchmark_run_settings()
+    model_settings = _llm_response_cache_benchmark_run_settings()
     benchmark_report = run_benchmarks(
         output_dir=output_dir,
         task_ids=list(benchmark_task_ids) if benchmark_task_ids is not None else None,
@@ -417,20 +296,20 @@ def run_agent_test_category(
         timeout_seconds=model_settings["timeout_seconds"],
         progress_poll_seconds=model_settings["progress_poll_seconds"],
     )
-    execution_mode = "executed_cached_benchmark"
+    execution_mode = "executed_benchmark_with_llm_response_cache"
     benchmark_report.setdefault("run_metadata", {})["execution_mode"] = execution_mode
     payload = {
         "category": "agent_test",
         "status": "complete",
         "execution_mode": execution_mode,
-        "full_artifact_reuse": False,
+        "full_result_reuse": False,
         "summary": benchmark_report["summary"],
         "aggregate_metrics": benchmark_report["aggregate_metrics"],
         "run_metadata": benchmark_report.get("run_metadata", {}),
         "tasks": benchmark_report.get("tasks", []),
         "score_summary": _build_agent_test_score_summary(benchmark_report),
-        "cached_benchmark_results_path": str(output_dir / "agent_test_cached_results.json"),
-        "cached_benchmark_report_path": str(output_dir / "agent_test_cached_report.md"),
+        "benchmark_results_path": str(output_dir / "agent_test_run_results.json"),
+        "benchmark_report_path": str(output_dir / "agent_test_run_report.md"),
     }
     write_text(output_dir / "agent_test_results.json", stable_json_dumps(payload, indent=2) + "\n", encoding="utf-8")
     write_text(output_dir / "agent_test_report.md", _render_agent_test_category_report(payload), encoding="utf-8")
@@ -468,7 +347,7 @@ def render_test_category_report(payload: dict[str, Any]) -> str:
         score_summary = agent["score_summary"]
         lines.extend(
             [
-                f"- execution_mode: `{agent.get('execution_mode', 'executed_cached_benchmark')}`",
+                f"- execution_mode: `{agent.get('execution_mode', 'executed_benchmark_with_llm_response_cache')}`",
                 f"- total_tasks: `{agent['summary']['total_tasks']}`",
                 f"- successful_tasks: `{agent['summary']['successful_tasks']}`",
                 f"- failed_tasks: `{agent['summary']['failed_tasks']}`",
@@ -486,7 +365,7 @@ def render_test_category_report(payload: dict[str, Any]) -> str:
     lines.extend(
         [
             "",
-            "## Artifact Paths",
+            "## Output Paths",
             "",
             "- code_correctness:",
             "  - `code_correctness/code_correctness_results.json`",
@@ -494,8 +373,8 @@ def render_test_category_report(payload: dict[str, Any]) -> str:
             "- agent_test:",
             "  - `agent_test/agent_test_results.json`",
             "  - `agent_test/agent_test_report.md`",
-            "  - `agent_test/agent_test_cached_results.json`",
-            "  - `agent_test/agent_test_cached_report.md`",
+            "  - `agent_test/agent_test_run_results.json`",
+            "  - `agent_test/agent_test_run_report.md`",
         ]
     )
     return "\n".join(lines) + "\n"

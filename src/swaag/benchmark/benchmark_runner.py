@@ -66,7 +66,16 @@ def _build_config(
     if connect_timeout_seconds is not None:
         config.model.connect_timeout_seconds = int(connect_timeout_seconds)
     if timeout_seconds is not None:
-        config.model.timeout_seconds = int(timeout_seconds)
+        resolved_timeout = int(timeout_seconds)
+        config.model.timeout_seconds = resolved_timeout
+        # Cached benchmark runs use structured contracts for nearly every
+        # request. Keep the caller-provided timeout authoritative across the
+        # benchmark profile so one pathological stream cannot stall the suite
+        # for the much larger default structured timeout.
+        config.model.simple_timeout_seconds = resolved_timeout
+        config.model.structured_timeout_seconds = resolved_timeout
+        config.model.verification_timeout_seconds = resolved_timeout
+        config.model.benchmark_timeout_seconds = resolved_timeout
     if profile_name is not None:
         config.model.profile_name = str(profile_name)
     if structured_output_mode is not None:
@@ -234,9 +243,9 @@ def _build_agent_behavior_model_client(
     replay_cache_root = output_dir / "replay_cache" / task.task_id
     os.makedirs(replay_cache_root, exist_ok=True)
     cassette_path = replay_cache_root / f"seed_{seed}.json"
-    # Always use "record" mode: client replays existing cassette entries automatically
-    # and records new ones when missing. Never fails with MissingReplayEntryError.
-    planned_mode = "replay" if cassette_path.exists() else "record"
+    # Always use record mode: replay existing LLM responses and record live LLM
+    # responses for misses. Never reuse benchmark results or intermediate state.
+    planned_mode = "record"
     wrapped = RecordReplayModelClient(
         cassette_path=cassette_path,
         mode="record",
@@ -382,7 +391,7 @@ def _print_benchmark_summary(report: dict[str, Any]) -> None:
     difficulty_scores = dict(summary.get("score_by_difficulty", {}))
     run_metadata = report.get("run_metadata", {})
     print("agent_test_summary", flush=True)
-    print(f"  execution_mode={run_metadata.get('execution_mode', 'executed_cached_benchmark')}", flush=True)
+    print(f"  execution_mode={run_metadata.get('execution_mode', 'executed_benchmark_with_llm_response_cache')}", flush=True)
     print(f"  total_tasks={summary.get('total_tasks', 0)}", flush=True)
     print(f"  successful_tasks={summary.get('successful_tasks', 0)}", flush=True)
     print(f"  failed_tasks={summary.get('failed_tasks', 0)}", flush=True)
@@ -413,8 +422,6 @@ def _print_benchmark_summary(report: dict[str, Any]) -> None:
         print(f"  seed_cache_mode_counts={stable_json_dumps(cache_seed_counts)}", flush=True)
     if cache_task_counts:
         print(f"  task_cache_mode_counts={stable_json_dumps(cache_task_counts)}", flush=True)
-    if run_metadata.get("artifact_reused_from"):
-        print(f"  artifact_reused_from={run_metadata['artifact_reused_from']}", flush=True)
     if run_metadata.get("results_path"):
         print(f"  results_path={run_metadata['results_path']}", flush=True)
     if run_metadata.get("report_path"):
@@ -435,7 +442,7 @@ def _print_agent_test_category_cli_summary(report: dict[str, Any]) -> None:
     run_metadata = report.get("run_metadata", {})
     aggregate_metrics = report.get("aggregate_metrics", {})
     print("agent_test_category_summary", flush=True)
-    print(f"  execution_mode={report.get('execution_mode', 'executed_cached_benchmark')}", flush=True)
+    print(f"  execution_mode={report.get('execution_mode', 'executed_benchmark_with_llm_response_cache')}", flush=True)
     print(f"  total_tasks={report['summary']['total_tasks']}", flush=True)
     print(f"  successful_tasks={report['summary']['successful_tasks']}", flush=True)
     print(f"  failed_tasks={report['summary']['failed_tasks']}", flush=True)
@@ -452,8 +459,6 @@ def _print_agent_test_category_cli_summary(report: dict[str, Any]) -> None:
         print(f"  seed_cache_mode_counts={stable_json_dumps(run_metadata['seed_cache_mode_counts'])}", flush=True)
     if run_metadata.get("task_cache_mode_counts"):
         print(f"  task_cache_mode_counts={stable_json_dumps(run_metadata['task_cache_mode_counts'])}", flush=True)
-    if run_metadata.get("artifact_reused_from"):
-        print(f"  artifact_reused_from={run_metadata['artifact_reused_from']}", flush=True)
     failure_breakdown = aggregate_metrics.get("failure_breakdown", {})
     verifier_weakness = aggregate_metrics.get("verifier_weakness_breakdown", {})
     if failure_breakdown:
@@ -463,8 +468,8 @@ def _print_agent_test_category_cli_summary(report: dict[str, Any]) -> None:
             f"  top_verifier_weaknesses={stable_json_dumps(dict(sorted(verifier_weakness.items(), key=lambda item: (-item[1], item[0]))[:5]))}",
             flush=True,
         )
-    print(f"  cached_benchmark_results_path={report['cached_benchmark_results_path']}", flush=True)
-    print(f"  cached_benchmark_report_path={report['cached_benchmark_report_path']}", flush=True)
+    print(f"  benchmark_results_path={report['benchmark_results_path']}", flush=True)
+    print(f"  benchmark_report_path={report['benchmark_report_path']}", flush=True)
 
 
 def run_benchmarks(
@@ -575,6 +580,10 @@ def run_benchmarks(
                 live_subset=live_subset,
             )
             runtime = AgentRuntime(config, model_client=runtime_model_client)
+            # Benchmarks must fail closed instead of looping indefinitely on
+            # an unavailable model endpoint. Frontend coding fallbacks can
+            # still proceed when applicable.
+            runtime._max_model_unavailable_attempts = 0
             state = runtime.create_or_load_session()
             runtime_error: Exception | None = None
             assistant_text = ""
@@ -623,6 +632,8 @@ def run_benchmarks(
                     replay_cache_info["cache_mode"] = "record"
                 elif actual_replayed > 0:
                     replay_cache_info["cache_mode"] = "replay"
+                else:
+                    replay_cache_info["cache_mode"] = "no_model_response"
                 replay_cache_info["recorded_count"] = actual_recorded
                 replay_cache_info["replayed_count"] = actual_replayed
             seed_results.append(
@@ -707,14 +718,14 @@ def run_benchmarks(
             ),
         )
     if resolved_agent_behavior_mode == "cached":
-        artifact_prefix = "agent_test_cached"
+        artifact_prefix = "agent_test_run"
     else:
         artifact_prefix = "manual_validation" if live_subset and use_live_model else "benchmark"
     report = collector.write(
         output_dir,
         prefix=artifact_prefix,
         run_metadata={
-            "execution_mode": "executed_cached_benchmark",
+            "execution_mode": "executed_benchmark_with_llm_response_cache",
             "mode": "live_subset" if live_subset else "full",
             "use_live_model": use_live_model,
             "agent_behavior_mode": resolved_agent_behavior_mode or "",
@@ -761,12 +772,12 @@ def _build_parser() -> argparse.ArgumentParser:
     evaluate_parser.add_argument("--pytest-arg", action="append", default=[], help="Additional argument forwarded to the code-correctness pytest command.")
     evaluate_parser.add_argument("--json", action="store_true", help="Print the full evaluation JSON.")
 
-    agent_tests_parser = subparsers.add_parser("agent-tests", help="Run the real cached benchmark for agent_test.")
+    agent_tests_parser = subparsers.add_parser("agent-tests", help="Run the real benchmark with LLM response cache for agent_test.")
     agent_tests_parser.add_argument("--output", default="agent_test_output", help="Output directory for cached agent-test results.")
     agent_tests_parser.add_argument("--clean", action="store_true", help="Delete the output directory before running.")
     agent_tests_parser.add_argument("--json", action="store_true", help="Print the full agent-test JSON.")
 
-    test_categories_parser = subparsers.add_parser("test-categories", help="Run code_correctness, then the real cached benchmark for agent_test only if code_correctness is 100%% green.")
+    test_categories_parser = subparsers.add_parser("test-categories", help="Run code_correctness, then the real benchmark with LLM response cache for agent_test only if code_correctness is 100%% green.")
     test_categories_parser.add_argument("--output", default="test_categories_output", help="Output directory for category results and reports.")
     test_categories_parser.add_argument("--clean", action="store_true", help="Delete the output directory before running.")
     test_categories_parser.add_argument("--pytest-arg", action="append", default=[], help="Additional argument forwarded to the code-correctness pytest command.")

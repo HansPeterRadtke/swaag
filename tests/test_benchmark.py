@@ -1,101 +1,19 @@
 from __future__ import annotations
 
-import hashlib
 import json
 import os
-import shutil
 from pathlib import Path
 
-from swaag.benchmark.benchmark_runner import _resolve_live_model_settings, run_benchmarks
-from swaag.benchmark.task_definitions import BenchmarkTaskDefinition, get_benchmark_tasks
+from swaag.benchmark.benchmark_runner import _build_config, _resolve_live_model_settings, run_benchmarks
+from swaag.benchmark.task_definitions import get_benchmark_tasks
 from swaag.live_runtime_profiles import get_documented_final_live_benchmark_recommendation
 
 
-def _full_catalog_cache_key(tasks: list[BenchmarkTaskDefinition]) -> str:
-    payload = [
-        {
-            "task_id": task.task_id,
-            "task_type": task.task_type,
-            "difficulty": task.difficulty,
-            "tags": list(task.tags),
-            "description": task.description,
-            "setup_instructions": list(task.setup_instructions),
-        }
-        for task in tasks
-    ]
-    raw = json.dumps({"version": 8, "tasks": payload}, sort_keys=True).encode("utf-8")
-    return hashlib.sha256(raw).hexdigest()[:16]
 
-
-def _valid_full_catalog_report(report_path: Path, tasks: list[BenchmarkTaskDefinition]) -> bool:
-    if not report_path.exists():
-        return False
-    try:
-        payload = json.loads(report_path.read_text(encoding="utf-8"))
-    except (OSError, json.JSONDecodeError):
-        return False
-    expected_ids = {task.task_id for task in tasks}
-    actual_ids = {str(item.get("task_id", "")) for item in payload.get("tasks", [])}
-    metadata = payload.get("run_metadata", {})
-    seed_results = [
-        seed_result
-        for task in payload.get("tasks", [])
-        for seed_result in task.get("metrics", {}).get("seed_results", [])
-        if isinstance(seed_result, dict)
-    ]
-    return (
-        payload.get("summary", {}).get("total_tasks") == len(tasks)
-        and actual_ids == expected_ids
-        and metadata.get("agent_behavior_mode") == "cached"
-        and metadata.get("replay_cache_enabled") is True
-        and bool(seed_results)
-        and all(seed.get("replay_cache", {}).get("cassette_path") for seed in seed_results)
-    )
-
-
-def _copy_cached_full_catalog(cache_dir: Path, output_dir: Path) -> dict:
-    if output_dir.exists():
-        shutil.rmtree(output_dir)
-    shutil.copytree(cache_dir, output_dir)
-    old_root = str(cache_dir)
-    new_root = str(output_dir)
-    results_path = output_dir / "agent_test_cached_results.json"
-    report_path = output_dir / "agent_test_cached_report.md"
-    results_text = results_path.read_text(encoding="utf-8").replace(old_root, new_root)
-    results_path.write_text(results_text, encoding="utf-8")
-    if report_path.exists():
-        report_path.write_text(report_path.read_text(encoding="utf-8").replace(old_root, new_root), encoding="utf-8")
-    return json.loads(results_text)
-
-
-def _seed_partial_replay_cache(cache_dir: Path) -> None:
-    target = cache_dir / "replay_cache"
-    if target.exists():
-        return
-    artifact_root = Path(os.environ.get("SWAAG_FULL_CACHED_BENCHMARK_ARTIFACT_ROOT", "/tmp/swaag-full-cached-benchmark-catalog"))
-    candidates = sorted(
-        (
-            path / "replay_cache"
-            for path in artifact_root.iterdir()
-            if path.is_dir() and path != cache_dir and (path / "replay_cache").exists()
-        ),
-        key=lambda path: path.stat().st_mtime,
-        reverse=True,
-    ) if artifact_root.exists() else []
-    for source in candidates:
-        shutil.copytree(source, target)
-        return
-
-
-def _run_full_catalog_with_artifact_reuse(output_dir: Path, tasks: list[BenchmarkTaskDefinition]) -> dict:
-    """Run the full cached catalog, reusing only valid full real-response cache artifacts."""
-    cache_dir = Path(os.environ.get("SWAAG_FULL_CACHED_BENCHMARK_ARTIFACT_ROOT", "/tmp/swaag-full-cached-benchmark-catalog")) / _full_catalog_cache_key(tasks)
-    if _valid_full_catalog_report(cache_dir / "agent_test_cached_results.json", tasks):
-        return _copy_cached_full_catalog(cache_dir, output_dir)
-    _seed_partial_replay_cache(cache_dir)
-    report = run_benchmarks(
-        output_dir=cache_dir,
-        clean=not cache_dir.exists(),
+def _run_full_catalog_without_artifact_reuse(output_dir: Path) -> dict:
+    return run_benchmarks(
+        output_dir=output_dir,
+        clean=True,
         agent_behavior_mode="cached",
         model_base_url=os.environ.get("SWAAG_LIVE_BASE_URL", "http://127.0.0.1:14829"),
         model_profile="small_fast",
@@ -104,29 +22,13 @@ def _run_full_catalog_with_artifact_reuse(output_dir: Path, tasks: list[Benchmar
         timeout_seconds=15,
         progress_poll_seconds=1.0,
     )
-    if not _valid_full_catalog_report(cache_dir / "agent_test_cached_results.json", tasks):
-        raise AssertionError("full cached benchmark catalog did not produce a valid real-response full-catalog report")
-    return _copy_cached_full_catalog(cache_dir, output_dir)
 
 
-def test_full_catalog_helper_seeds_partial_replay_cache_from_previous_artifacts(monkeypatch, tmp_path: Path) -> None:
-    artifact_root = tmp_path / "artifacts"
-    old_cache = artifact_root / "older-cache" / "replay_cache" / "demo_task"
-    old_cache.mkdir(parents=True)
-    (old_cache / "seed_42.json").write_text("{}", encoding="utf-8")
-    monkeypatch.setenv("SWAAG_FULL_CACHED_BENCHMARK_ARTIFACT_ROOT", str(artifact_root))
-
-    cache_dir = artifact_root / "new-cache"
-    _seed_partial_replay_cache(cache_dir)
-
-    assert (cache_dir / "replay_cache" / "demo_task" / "seed_42.json").exists()
-
-
-def test_benchmark_runner_executes_full_cached_catalog_and_writes_reports(tmp_path: Path) -> None:
+def test_benchmark_runner_executes_full_llm_response_cache_catalog_and_writes_reports(tmp_path: Path) -> None:
     output_dir = tmp_path / "benchmark"
     all_tasks = get_benchmark_tasks()
 
-    report = _run_full_catalog_with_artifact_reuse(output_dir, all_tasks)
+    report = _run_full_catalog_without_artifact_reuse(output_dir)
 
     assert report["summary"]["total_tasks"] == len(all_tasks)
     assert 0.0 <= report["summary"]["average_task_score_percent"] <= 100.0
@@ -135,10 +37,10 @@ def test_benchmark_runner_executes_full_cached_catalog_and_writes_reports(tmp_pa
     assert report["run_metadata"]["replay_cache_enabled"] is True
     assert 0.0 <= report["aggregate_metrics"]["primary"]["false_positive_rate"] <= 1.0
     assert 0.0 <= report["aggregate_metrics"]["primary"]["task_success_rate"] <= 1.0
-    assert (output_dir / "agent_test_cached_results.json").exists()
-    assert (output_dir / "agent_test_cached_report.md").exists()
+    assert (output_dir / "agent_test_run_results.json").exists()
+    assert (output_dir / "agent_test_run_report.md").exists()
 
-    persisted = json.loads((output_dir / "agent_test_cached_results.json").read_text(encoding="utf-8"))
+    persisted = json.loads((output_dir / "agent_test_run_results.json").read_text(encoding="utf-8"))
     assert persisted["summary"]["total_tasks"] == len(all_tasks)
     expected_coverage: dict[str, int] = {}
     expected_difficulties: dict[str, int] = {}
@@ -162,11 +64,32 @@ def test_benchmark_runner_executes_full_cached_catalog_and_writes_reports(tmp_pa
         for item in persisted["tasks"]
         for seed in item.get("metrics", {}).get("seed_results", [])
     )
-    report_text = (output_dir / "agent_test_cached_report.md").read_text(encoding="utf-8")
+    report_text = (output_dir / "agent_test_run_report.md").read_text(encoding="utf-8")
     assert "False Positive Analysis" in report_text
     assert "Prompt Understanding Metrics" in report_text
     assert "Benchmark-Specific Metrics" in report_text
     assert "Run Metadata" in report_text
+
+
+def test_benchmark_runner_timeout_override_caps_all_benchmark_model_timeouts(tmp_path: Path) -> None:
+    config = _build_config(
+        sessions_root=tmp_path / "sessions",
+        workspace=tmp_path / "workspace",
+        overrides={},
+        base_url="http://127.0.0.1:14829",
+        connect_timeout_seconds=5,
+        timeout_seconds=15,
+        profile_name="small_fast",
+        structured_output_mode="post_validate",
+        progress_poll_seconds=1.0,
+        seed=42,
+    )
+
+    assert config.model.timeout_seconds == 15
+    assert config.model.simple_timeout_seconds == 15
+    assert config.model.structured_timeout_seconds == 15
+    assert config.model.verification_timeout_seconds == 15
+    assert config.model.benchmark_timeout_seconds == 15
 
 
 def test_benchmark_runner_uses_live_environment_overrides_for_runtime_profile(monkeypatch) -> None:

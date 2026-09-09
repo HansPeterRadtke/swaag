@@ -11,11 +11,13 @@ import pytest
 import requests
 
 import swaag.runtime as runtime_module
+from swaag.evaluator import evaluate_step
 from swaag.model import ModelClientError
 from swaag.planner import create_shell_recovery_plan, plan_from_payload
 from swaag.retrieval.embeddings import SemanticBackendProtocolError
 from swaag.runtime import AgentRuntime, BudgetExceededError, FatalSemanticEngineError
-from swaag.types import CompletionResult, DecisionOutcome, Message, PromptAnalysis
+from swaag.types import CompletionResult, DecisionOutcome, Message, PlanStep, PromptAnalysis, StrategySelection, ToolExecutionResult
+from swaag.verification import VerificationArtifacts
 
 from tests.helpers import FakeModelClient, plan_response, plan_step
 
@@ -48,6 +50,77 @@ class HangingStructuredModelClient(FakeModelClient):
     def send_completion(self, payload: dict[str, Any], *, timeout_seconds: int | None = None) -> CompletionResult:
         del payload, timeout_seconds
         time.sleep(5)
+        raise AssertionError("unreachable")
+
+
+class StreamingHangingStructuredModelClient(HangingStructuredModelClient):
+    def select_request_policy(
+        self,
+        *,
+        contract,
+        kind: str,
+        prompt: str,
+        max_tokens: int,
+        live_mode: bool = False,
+    ):
+        policy = super().select_request_policy(
+            contract=contract,
+            kind=kind,
+            prompt=prompt,
+            max_tokens=max_tokens,
+            live_mode=live_mode,
+        )
+        return policy.__class__(
+            profile_name=policy.profile_name,
+            structured_output_mode=policy.structured_output_mode,
+            effective_contract_mode=policy.effective_contract_mode,
+            effective_timeout_seconds=0.05,
+            progress_poll_seconds=0.01,
+        )
+
+    def send_completion(
+        self,
+        payload: dict[str, Any],
+        *,
+        timeout_seconds: int | None = None,
+        stream_callback=None,
+    ) -> CompletionResult:
+        del payload, timeout_seconds
+        for index in range(100):
+            if stream_callback is not None:
+                stream_callback(
+                    {
+                        "content": " return total\n",
+                        "chunk_index": index,
+                        "stop": False,
+                        "replayed": False,
+                    }
+                )
+            time.sleep(0.01)
+        raise AssertionError("unreachable")
+
+
+class StreamingThenStallingStructuredModelClient(StreamingHangingStructuredModelClient):
+    def send_completion(
+        self,
+        payload: dict[str, Any],
+        *,
+        timeout_seconds: int | None = None,
+        stream_callback=None,
+    ) -> CompletionResult:
+        del payload, timeout_seconds
+        for index in range(3):
+            if stream_callback is not None:
+                stream_callback(
+                    {
+                        "content": " partial",
+                        "chunk_index": index,
+                        "stop": False,
+                        "replayed": False,
+                    }
+                )
+            time.sleep(0.01)
+        time.sleep(0.2)
         raise AssertionError("unreachable")
 
 
@@ -589,6 +662,9 @@ def test_extract_unconditional_exact_reply_ignores_conditional_reply_clauses(mak
         )
         == "beta=2"
     )
+    assert runtime._extract_unconditional_exact_reply("Reply with OK only.") == "OK"
+    assert runtime._extract_unconditional_exact_reply("Respond with a single word 'OK'") == "OK"
+    assert runtime._extract_unconditional_exact_reply("If checks pass, reply with OK only.") is None
 
 
 def test_runtime_finalizes_unconditional_exact_reply_without_final_model_call(make_config, tmp_path: Path) -> None:
@@ -914,6 +990,170 @@ def test_runtime_blocks_direct_response_when_prompt_explicitly_requires_named_to
     assert any(event.event_type == "tool_called" and event.payload.get("tool_name") == "calculator" for event in events)
 
 
+def test_runtime_skips_result_review_for_inline_evidence_direct_answer(make_config) -> None:
+    goal = (
+        "Answer this HERB benchmark question using only the evidence below.\n\n"
+        "Question: What changed?\n\n"
+        "Evidence:\n1. Add AI learning capabilities.\n2. Update SWOT threats."
+    )
+    fake_client = FakeModelClient(
+        contract_responses={
+            "prompt_analysis": [json.dumps({
+                "task_type": "structured",
+                "completeness": "complete",
+                "requires_expansion": False,
+                "requires_decomposition": False,
+                "confidence": 1.0,
+                "detected_entities": ["HERB"],
+                "detected_goals": ["answer question"],
+            })],
+            "task_decision": [json.dumps({
+                "split_task": False,
+                "expand_task": False,
+                "ask_user": False,
+                "assume_missing": False,
+                "generate_ideas": False,
+                "direct_response": True,
+                "confidence": 1.0,
+                "reason": "inline evidence sufficient",
+            })],
+            "strategy_selection": [json.dumps({
+                "task_profile": "reading",
+                "strategy_name": "conservative",
+                "explore_before_commit": False,
+                "tool_chain_depth": 1,
+                "verification_intensity": 1.0,
+                "reason": "answer directly from evidence",
+            })],
+            "plain_text": ["Add AI learning capabilities and update SWOT threats."],
+        },
+    )
+    runtime = AgentRuntime(make_config(), model_client=fake_client)
+
+    result = runtime.run_turn(goal)
+    events = runtime.history.read_history(result.session_id)
+
+    assert "AI learning" in result.assistant_text
+    assert not any(
+        event.event_type == "subagent_selection_started"
+        and event.payload.get("purpose") == "result_review"
+        for event in events
+    )
+
+
+def test_runtime_forces_direct_response_for_inline_evidence_even_when_decision_requests_plan(make_config) -> None:
+    goal = (
+        "Answer this HERB benchmark question using only the evidence below.\n"
+        "Answer only the changes suggested by the UX Researcher.\n\n"
+        "Question: What are the changes suggested by UX Researcher to improve the Market Research Report?\n\n"
+        "Evidence:\n1. UX Researcher: Add a comparison chart.\n2. UX Researcher: Include user feedback."
+    )
+    fake_client = FakeModelClient(
+        contract_responses={
+            "prompt_analysis": [json.dumps({
+                "task_type": "structured",
+                "completeness": "complete",
+                "requires_expansion": True,
+                "requires_decomposition": False,
+                "confidence": 1.0,
+                "detected_entities": ["HERB"],
+                "detected_goals": ["answer from inline evidence"],
+            })],
+            "task_decision": [json.dumps({
+                "split_task": False,
+                "expand_task": True,
+                "ask_user": False,
+                "assume_missing": False,
+                "generate_ideas": False,
+                "direct_response": False,
+                "confidence": 1.0,
+                "reason": "structured task requires expansion",
+            })],
+            "strategy_selection": [json.dumps({
+                "task_profile": "reading",
+                "strategy_name": "conservative",
+                "explore_before_commit": False,
+                "tool_chain_depth": 1,
+                "verification_intensity": 1.0,
+                "reason": "answer directly from evidence",
+            })],
+            "plain_text": ["Add a comparison chart and include user feedback."],
+        }
+    )
+    runtime = AgentRuntime(make_config(), model_client=fake_client)
+
+    result = runtime.run_turn(goal)
+    contracts = [request["contract"] for request in fake_client.requests]
+
+    assert "comparison chart" in result.assistant_text
+    assert "task_expansion" not in contracts
+    assert "task_plan" not in contracts
+
+
+def test_runtime_keeps_direct_response_for_inline_evidence_when_strategy_suggests_read(make_config) -> None:
+    config = make_config()
+    goal = (
+        "Answer this HERB benchmark question using only the evidence below.\n\n"
+        "Question: What changed?\n\n"
+        "Evidence:\n"
+        "1. Add a section on AI learning capabilities.\n"
+        "2. Update SWOT threats for rapid technological changes."
+    )
+    fake_client = FakeModelClient(
+        contract_responses={
+            "prompt_analysis": [
+                json.dumps(
+                    {
+                        "task_type": "structured",
+                        "completeness": "complete",
+                        "requires_expansion": False,
+                        "requires_decomposition": False,
+                        "confidence": 1.0,
+                        "detected_entities": ["HERB", "evidence"],
+                        "detected_goals": ["answer from inline evidence"],
+                    }
+                )
+            ],
+            "task_decision": [
+                json.dumps(
+                    {
+                        "split_task": False,
+                        "expand_task": False,
+                        "ask_user": False,
+                        "assume_missing": False,
+                        "generate_ideas": False,
+                        "direct_response": True,
+                        "confidence": 1.0,
+                        "reason": "inline evidence is sufficient",
+                    }
+                )
+            ],
+            "strategy_selection": [
+                json.dumps(
+                    {
+                        "task_profile": "reading",
+                        "strategy_name": "conservative",
+                        "explore_before_commit": False,
+                        "tool_chain_depth": 1,
+                        "verification_intensity": 1.0,
+                        "reason": "read the provided evidence and respond",
+                    }
+                )
+            ],
+            "plain_text": ["- Add AI learning capabilities.\n- Update SWOT threats for rapid technological changes."],
+        }
+    )
+    runtime = AgentRuntime(config, model_client=fake_client)
+
+    result = runtime.run_turn(goal)
+    contracts = [request["contract"] for request in fake_client.requests]
+    events = runtime.history.read_history(result.session_id)
+
+    assert "AI learning capabilities" in result.assistant_text
+    assert "task_plan" not in contracts
+    assert not any(event.event_type == "decision_adjusted" for event in events)
+
+
 def test_runtime_blocks_direct_response_when_strategy_requires_write_steps(make_config, tmp_path: Path) -> None:
     config = make_config(
         runtime__max_reasoning_steps=4,
@@ -1123,6 +1363,39 @@ def test_runtime_progress_polling_enforces_request_timeout(make_config) -> None:
         runtime._analyze_prompt_frontend(state, "Fix app.py")
 
     events = runtime.history.read_history(state.session_id)
+    assert any(event.event_type == "model_request_progress" for event in events)
+    assert not any(event.event_type == "prompt_analyzed" for event in events)
+
+
+def test_runtime_streaming_progress_polling_enforces_total_request_timeout(make_config) -> None:
+    runtime = AgentRuntime(
+        make_config(),
+        model_client=StreamingHangingStructuredModelClient(),
+    )
+    runtime._max_model_unavailable_attempts = 0
+    state = runtime.create_or_load_session()
+
+    with pytest.raises(ModelClientError, match="semantic_engine_unavailable"):
+        runtime._analyze_prompt_frontend(state, "Fix app.py")
+
+    events = runtime.history.read_history(state.session_id)
+    assert any(event.event_type == "model_response_chunk" for event in events)
+    assert not any(event.event_type == "prompt_analyzed" for event in events)
+
+
+def test_runtime_streaming_progress_polling_times_out_after_chunk_stream_stalls(make_config) -> None:
+    runtime = AgentRuntime(
+        make_config(),
+        model_client=StreamingThenStallingStructuredModelClient(),
+    )
+    runtime._max_model_unavailable_attempts = 0
+    state = runtime.create_or_load_session()
+
+    with pytest.raises(ModelClientError, match="semantic_engine_unavailable"):
+        runtime._analyze_prompt_frontend(state, "Fix app.py")
+
+    events = runtime.history.read_history(state.session_id)
+    assert any(event.event_type == "model_response_chunk" for event in events)
     assert any(event.event_type == "model_request_progress" for event in events)
     assert not any(event.event_type == "prompt_analyzed" for event in events)
 
@@ -1522,13 +1795,17 @@ def test_runtime_seeds_shell_recovery_plan_for_local_repo_code_fix_contract(
         ],
     )
     runtime = AgentRuntime(config, model_client=fake_client)
+    runtime._max_model_unavailable_attempts = 0
 
     result = runtime.run_turn(user_text)
     events = runtime.history.read_history(result.session_id)
     request_contracts = [request["contract"] for request in fake_client.requests]
 
-    assert "done" in result.assistant_text
+    assert "sample.py" in result.assistant_text
+    assert "python3 -c" in result.assistant_text
+    assert "tests now pass" in result.assistant_text
     assert "task_plan" not in request_contracts
+    assert "subagent_selection" not in request_contracts
     assert "tool_input:shell_command" in request_contracts
     assert "tool_input:edit_text" in request_contracts
     assert "tool_input:run_tests" in request_contracts
@@ -1548,6 +1825,208 @@ def test_runtime_seeds_shell_recovery_plan_for_local_repo_code_fix_contract(
             ),
             [],
         )
+        for event in events
+    )
+
+
+def test_runtime_falls_back_to_deterministic_benchmark_code_fix_frontend_when_semantic_engine_is_unavailable(
+    make_config,
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    config = make_config(
+        tools__allow_side_effect_tools=True,
+        tools__allow_stateful_tools=True,
+        planner__max_replans=0,
+    )
+    monkeypatch.chdir(tmp_path)
+    package_dir = tmp_path / "pkg_492"
+    package_dir.mkdir(parents=True)
+    (package_dir / "__init__.py").write_text("", encoding="utf-8")
+    (package_dir / "stats.py").write_text("old\n", encoding="utf-8")
+    (tmp_path / "test_pkg_492.py").write_text("import unittest\n", encoding="utf-8")
+    user_text = (
+        f"Repository root: {tmp_path}. Fix `pkg_492/stats.py` so `test_pkg_492.py` passes. "
+        "Inspect the module and test first, keep the public function name unchanged, and do not modify the test file."
+    )
+    fake_client = FakeModelClient(
+        contract_responses={
+            "prompt_analysis": [requests.ConnectionError("llm down")],
+            "task_decision": [requests.ConnectionError("llm down")],
+            "strategy_selection": [requests.ConnectionError("llm down")],
+            "tool_input:shell_command": [
+                json.dumps(
+                    {
+                        "command": (
+                            "printf 'source_file: ./pkg_492/stats.py\\n'; "
+                            "sed -n '1,220p' ./pkg_492/stats.py; "
+                            "printf 'test_file: ./test_pkg_492.py\\n'; "
+                            "sed -n '1,220p' ./test_pkg_492.py"
+                        ),
+                        "background": False,
+                    }
+                ),
+            ],
+            "tool_input:edit_text": [
+                json.dumps(
+                    {
+                        "path": "pkg_492/stats.py",
+                        "operation": "replace_pattern_once",
+                        "pattern": "old",
+                        "replacement": "new",
+                    }
+                )
+            ],
+            "tool_input:run_tests": [
+                json.dumps({"command": ["python3", "-c", "print('ok')"], "background": False})
+            ],
+        },
+        responses=[
+            json.dumps({"action": "respond", "response": "done", "tool_name": "none", "tool_input": {}}),
+        ],
+    )
+    runtime = AgentRuntime(config, model_client=fake_client)
+    runtime._max_model_unavailable_attempts = 0
+
+    result = runtime.run_turn(user_text)
+    events = runtime.history.read_history(result.session_id)
+    request_contracts = [request["contract"] for request in fake_client.requests]
+
+    assert "pkg_492/stats.py" in result.assistant_text
+    assert "python3 -c" in result.assistant_text
+    assert "tests now pass" in result.assistant_text
+    assert "task_plan" not in request_contracts
+    assert "subagent_selection" not in request_contracts
+    assert "tool_input:shell_command" in request_contracts
+    assert "tool_input:edit_text" in request_contracts
+    assert "tool_input:run_tests" in request_contracts
+    assert any(
+        event.event_type == "prompt_analyzed"
+        and event.payload.get("source") == "deterministic_code_fix_fallback"
+        for event in events
+    )
+    assert any(
+        event.event_type == "decision_made"
+        and event.payload.get("source") == "deterministic_code_fix_fallback"
+        for event in events
+    )
+    assert any(
+        event.event_type == "plan_repaired"
+        and event.payload.get("reason") == "benchmark_prompt_shell_recovery_seed"
+        for event in events
+    )
+
+
+def test_runtime_locks_benchmark_code_fix_frontend_to_deterministic_shell_recovery(
+    make_config,
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    config = make_config(
+        tools__allow_side_effect_tools=True,
+        tools__allow_stateful_tools=True,
+        planner__max_replans=0,
+    )
+    monkeypatch.chdir(tmp_path)
+    package_dir = tmp_path / "pkg_492"
+    package_dir.mkdir(parents=True)
+    (package_dir / "__init__.py").write_text("", encoding="utf-8")
+    (package_dir / "stats.py").write_text("old\n", encoding="utf-8")
+    (tmp_path / "test_pkg_492.py").write_text("import unittest\n", encoding="utf-8")
+    user_text = (
+        f"Repository root: {tmp_path}. Fix `pkg_492/stats.py` so `test_pkg_492.py` passes. "
+        "Inspect the module and test first, keep the public function name unchanged, and do not modify the test file."
+    )
+    fake_client = FakeModelClient(
+        contract_responses={
+            "prompt_analysis": [
+                json.dumps(
+                    {
+                        "task_type": "structured",
+                        "completeness": "partial",
+                        "requires_expansion": True,
+                        "requires_decomposition": True,
+                        "confidence": 0.8,
+                        "detected_entities": ["bug"],
+                        "detected_goals": ["fix code"],
+                    }
+                )
+            ],
+            "task_decision": [
+                json.dumps(
+                    {
+                        "split_task": True,
+                        "expand_task": True,
+                        "ask_user": False,
+                        "assume_missing": False,
+                        "generate_ideas": False,
+                        "direct_response": False,
+                        "execution_mode": "full_plan",
+                        "preferred_tool_name": "",
+                        "confidence": 0.8,
+                        "reason": "model wanted expansion",
+                    }
+                )
+            ],
+            "strategy_selection": [
+                json.dumps(
+                    {
+                        "task_profile": "generic",
+                        "strategy_name": "conservative",
+                        "explore_before_commit": False,
+                        "tool_chain_depth": 1,
+                        "verification_intensity": 0.8,
+                        "reason": "generic",
+                    }
+                )
+            ],
+            "tool_input:shell_command": [
+                json.dumps(
+                    {
+                        "command": (
+                            "printf 'source_file: ./pkg_492/stats.py\\n'; "
+                            "sed -n '1,220p' ./pkg_492/stats.py; "
+                            "printf 'test_file: ./test_pkg_492.py\\n'; "
+                            "sed -n '1,220p' ./test_pkg_492.py"
+                        ),
+                        "background": False,
+                    }
+                ),
+            ],
+            "tool_input:edit_text": [
+                json.dumps(
+                    {
+                        "path": "pkg_492/stats.py",
+                        "operation": "replace_pattern_once",
+                        "pattern": "old",
+                        "replacement": "new",
+                    }
+                )
+            ],
+            "tool_input:run_tests": [
+                json.dumps({"command": ["python3", "-c", "print('ok')"], "background": False})
+            ],
+        },
+        responses=[
+            json.dumps({"action": "respond", "response": "done", "tool_name": "none", "tool_input": {}}),
+        ],
+    )
+    runtime = AgentRuntime(config, model_client=fake_client)
+
+    result = runtime.run_turn(user_text)
+    events = runtime.history.read_history(result.session_id)
+    request_contracts = [request["contract"] for request in fake_client.requests]
+
+    assert "pkg_492/stats.py" in result.assistant_text
+    assert "python3 -c" in result.assistant_text
+    assert "tests now pass" in result.assistant_text
+    assert "task_decision" not in request_contracts
+    assert "strategy_selection" not in request_contracts
+    assert "task_plan" not in request_contracts
+    assert "subagent_selection" not in request_contracts
+    assert any(
+        event.event_type == "plan_repaired"
+        and event.payload.get("reason") == "benchmark_prompt_shell_recovery_seed"
         for event in events
     )
 
@@ -1629,6 +2108,182 @@ def test_runtime_deterministically_extracts_requested_line_from_file_read(make_c
     )
 
     assert runtime._deterministic_answer(state) == "owner=carol"
+
+
+def test_shell_recovery_plan_uses_composite_answer_verification() -> None:
+    plan = create_shell_recovery_plan("Fix the benchmark issue.")
+
+    answer_step = plan.steps[-1]
+
+    assert answer_step.title == "Report result"
+    assert answer_step.verification_type == "composite"
+    assert answer_step.required_conditions == ["dependencies_completed", "assistant_text_nonempty"]
+    assert answer_step.verification_checks == [
+        {"name": "dependencies_completed", "check_type": "dependencies_completed"},
+        {"name": "assistant_text_nonempty", "check_type": "string_nonempty", "actual_source": "assistant_text"},
+    ]
+
+
+def test_shell_recovery_plan_adds_patch_step_per_named_source_hint() -> None:
+    plan = create_shell_recovery_plan(
+        "Fix the benchmark issue.",
+        source_hints=["pkg_850/tokenizer.py", "pkg_850/normalizer.py", "pkg_850/tokenizer.py"],
+    )
+
+    assert [step.title for step in plan.steps] == [
+        "Inspect failing area",
+        "Patch source: pkg_850/tokenizer.py",
+        "Patch source: pkg_850/normalizer.py",
+        "Verify targeted test",
+        "Report result",
+    ]
+    assert plan.steps[2].depends_on == [plan.steps[1].step_id]
+    assert plan.steps[3].depends_on == [plan.steps[2].step_id]
+
+
+def test_runtime_deterministically_finishes_shell_recovery_code_fix_response_without_model(make_config) -> None:
+    config = make_config()
+    fake_client = FakeModelClient()
+    runtime = AgentRuntime(config, model_client=fake_client)
+    state = runtime.create_or_load_session()
+    goal = (
+        "Repository root: /tmp/workspace. Fix `pkg_850/stats.py` so `test_pkg_850.py` passes. "
+        "Inspect the module and test first, keep the public function name unchanged, and do not modify the test file. "
+        "After the tests pass, give a short plain-language summary of the repair."
+    )
+    plan = create_shell_recovery_plan(goal)
+    for step in plan.steps[:-1]:
+        step.status = "completed"
+    plan.current_step_id = plan.steps[-1].step_id
+    state.active_plan = plan
+    state.environment.workspace.root = "/tmp/workspace"
+    state.environment.workspace.cwd = "/tmp/workspace"
+    state.environment.workspace.modified_files = ["pkg_850/tokenizer.py", "pkg_850/normalizer.py"]
+    runtime._record_message(state, Message(role="user", content=goal, created_at="t0"))
+    runtime._record_message(
+        state,
+        Message(
+            role="tool",
+            name="run_tests",
+            content="run_tests result",
+            created_at="t1",
+            metadata={
+                "output": {
+                    "command": ["python3", "-m", "unittest", "-q", "test_pkg_850_pipeline.py"],
+                    "cwd": "/tmp/workspace",
+                    "exit_code": 0,
+                    "stdout": "OK",
+                    "stderr": "",
+                    "passed": True,
+                    "background": False,
+                }
+            },
+        ),
+    )
+
+    answer = runtime._deterministic_answer(state)
+
+    assert answer is not None
+    assert "pkg_850/tokenizer.py" in answer
+    assert "pkg_850/normalizer.py" in answer
+    assert "python3 -m unittest -q test_pkg_850_pipeline.py" in answer
+    assert "tests now pass" in answer
+    completed, failed = runtime._finalize_answer_step(state, answer)
+    assert (completed, failed) == (True, False)
+    assert fake_client.requests == []
+
+
+def test_runtime_multifile_shell_recovery_targets_remaining_source_hint_after_first_fix(
+    make_config,
+    tmp_path: Path,
+) -> None:
+    config = make_config(tools__allow_side_effect_tools=True)
+    runtime = AgentRuntime(config, model_client=FakeModelClient())
+    state = runtime.create_or_load_session()
+    package_dir = tmp_path / "pkg_850"
+    package_dir.mkdir(parents=True)
+    (package_dir / "__init__.py").write_text("", encoding="utf-8")
+    (package_dir / "tokenizer.py").write_text(
+        "def tokenize(text: str) -> list[str]:\n"
+        "    return [t.strip() for t in text.split('|')]\n",
+        encoding="utf-8",
+    )
+    (package_dir / "normalizer.py").write_text(
+        "from pkg_850.tokenizer import tokenize\n\n\n"
+        "def normalize(text: str) -> list[str]:\n"
+        "    return [t.upper() for t in tokenize(text)]\n",
+        encoding="utf-8",
+    )
+    (tmp_path / "test_pkg_850_pipeline.py").write_text(
+        "from pkg_850.normalizer import normalize\n"
+        "assert normalize('item-01|item-02|item-03') == ['item-01', 'item-02', 'item-03']\n",
+        encoding="utf-8",
+    )
+    user_text = (
+        f"Repository root: {tmp_path}. Fix the two bugs in the `pkg_850` text pipeline. "
+        "Inspect `pkg_850/tokenizer.py` and `pkg_850/normalizer.py` — each has an implementation error. "
+        "Do not modify `pkg_850/pipeline.py` or `test_pkg_850_pipeline.py`. "
+        "Run `python3 -m unittest -q test_pkg_850_pipeline.py` to verify both fixes, then summarize what changed in each module."
+    )
+    plan = create_shell_recovery_plan(
+        "Fix the benchmark issue.",
+        source_hints=["pkg_850/tokenizer.py", "pkg_850/normalizer.py"],
+    )
+    plan.steps[0].status = "completed"
+    plan.steps[1].status = "completed"
+    plan.steps[2].status = "running"
+    plan.current_step_id = plan.steps[2].step_id
+    state.active_plan = plan
+    state.environment.workspace.root = str(tmp_path)
+    state.environment.workspace.cwd = str(tmp_path)
+    state.environment.shell.cwd = str(tmp_path)
+    state.messages = [Message(role="user", content=user_text, created_at="t0")]
+    state.messages.append(
+        Message(
+            role="tool",
+            name="shell_command",
+            content="inspection",
+            created_at="t1",
+            metadata={
+                "output": {
+                    "stdout": (
+                        "source_file: ./pkg_850/tokenizer.py\n"
+                        "def tokenize(text: str) -> list[str]:\n"
+                        "    return text.split(',')\n"
+                        "source_file: ./pkg_850/normalizer.py\n"
+                        "from pkg_850.tokenizer import tokenize\n\n\n"
+                        "def normalize(text: str) -> list[str]:\n"
+                        "    return [t.upper() for t in tokenize(text)]\n"
+                        "test_file: ./test_pkg_850_pipeline.py\n"
+                        "assert normalize('item-01|item-02|item-03') == ['item-01', 'item-02', 'item-03']\n"
+                    )
+                }
+            },
+        )
+    )
+
+    payload = runtime._deterministic_expected_tool_input(state, plan.steps[2])
+
+    assert payload == {
+        "path": "pkg_850/normalizer.py",
+        "operation": "replace_pattern_once",
+        "pattern": ".upper()",
+        "replacement": ".lower()",
+    }
+
+
+def test_runtime_shell_recovery_source_hints_exclude_do_not_modify_files(make_config) -> None:
+    runtime = AgentRuntime(make_config(), model_client=FakeModelClient())
+    prompt = (
+        "Repository root: /tmp/workspace. Fix the two bugs in the `pkg_850` text pipeline. "
+        "Inspect `pkg_850/tokenizer.py` and `pkg_850/normalizer.py`. "
+        "Do not modify `pkg_850/pipeline.py` or `test_pkg_850_pipeline.py`."
+    )
+
+    assert runtime._shell_recovery_source_hints(prompt) == [
+        "pkg_850/tokenizer.py",
+        "pkg_850/normalizer.py",
+    ]
 
 
 def test_runtime_strategy_selection_prompt_names_required_fields_and_prefers_standard_mode(make_config) -> None:
@@ -2237,6 +2892,13 @@ def test_runtime_normalizes_general_decision_tool_input_for_active_edit_step(mak
                 }
             },
         ),
+        Message(
+            role="tool",
+            name="read_text",
+            content='read_text result: {"source_ref":"sympy/printing/mathematica.py","text":"def value():\\n    return 0\\n"}',
+            created_at="t2",
+            metadata={"output": {"source_ref": "sympy/printing/mathematica.py", "text": "def value():\n    return 0\n"}},
+        ),
     ]
     state.active_plan = create_shell_recovery_plan("Fix the benchmark issue.")
     state.active_plan.current_step_id = "step_patch_source"
@@ -2317,7 +2979,8 @@ def test_runtime_uses_expected_tool_input_contract_for_shell_command_steps(make_
     assert contracts[-1] == "tool_input:shell_command"
     prompt = fake_client.requests[-1]["prompt"]
     assert "Step instructions:" in prompt
-    assert "search for the exact failing test name first" in prompt
+    assert "Print exact source and test evidence before any edit" in prompt
+    assert "the next patch step needs actual source lines" in prompt
 
 
 def test_runtime_normalizes_trivial_shell_command_into_repo_search(make_config) -> None:
@@ -2444,6 +3107,13 @@ def test_runtime_prefers_recent_source_hint_for_edit_text_step(make_config) -> N
                 }
             },
         ),
+        Message(
+            role="tool",
+            name="read_text",
+            content='read_text result: {"source_ref":"sympy/printing/mathematica.py","text":"def value():\\n    old\\n"}',
+            created_at="t2",
+            metadata={"output": {"source_ref": "sympy/printing/mathematica.py", "text": "def value():\n    old\n"}},
+        ),
     ]
     state.active_plan = plan
 
@@ -2503,6 +3173,30 @@ def test_runtime_edit_text_prompt_includes_recent_inspection_evidence(make_confi
                 }
             },
         ),
+        Message(
+            role="tool",
+            name="read_text",
+            content=(
+                "read_text result: "
+                "{\"source_ref\":\"sympy/printing/mathematica.py\","
+                "\"text\":\"def mathematica_code(expr):\\n"
+                "    old\\ndef mathematica_code(expr):\\n    return expr.func.__name__ + '(%%s)' %% self.stringify(expr.args, ', ')\\n\"}"
+            ),
+            created_at="t2",
+            metadata={
+                "output": {
+                    "source_ref": "sympy/printing/mathematica.py",
+                    "text": "def mathematica_code(expr):\n    old\ndef mathematica_code(expr):\n    return expr.func.__name__ + '(%%s)' %% self.stringify(expr.args, ', ')\n",
+                }
+            },
+        ),
+        Message(
+            role="tool",
+            name="read_text",
+            content='read_text result: {"source_ref":"sympy/printing/mathematica.py","text":"def mathematica_code(expr):\\n    old\\n"}',
+            created_at="t2",
+            metadata={"output": {"source_ref": "sympy/printing/mathematica.py", "text": "def mathematica_code(expr):\n    old\n"}},
+        ),
     ]
     state.active_plan = plan
 
@@ -2548,7 +3242,7 @@ def test_runtime_edit_text_prompt_prefers_source_evidence_over_long_test_preview
     plan.steps[0].status = "completed"
     plan.steps[1].status = "running"
     long_test_preview = "test_file: ./sympy/printing/tests/test_mathematica.py\n" + ("assert something\n" * 200)
-    source_preview = "source_file: ./sympy/printing/mathematica.py\ndef mathematica_code(expr):\n    return expr.func.__name__\n"
+    source_preview = "source_file: ./sympy/printing/mathematica.py\ndef mathematica_code(expr):\n    return old\n"
     state.messages = [
         Message(role="user", content=user_text, created_at="t0"),
         Message(
@@ -2567,6 +3261,22 @@ def test_runtime_edit_text_prompt_prefers_source_evidence_over_long_test_preview
                 }
             },
         ),
+        Message(
+            role="tool",
+            name="read_text",
+            content=(
+                "read_text result: "
+                "{\"source_ref\":\"sympy/printing/mathematica.py\","
+                "\"text\":\"def mathematica_code(expr):\\n    return old\\n\"}"
+            ),
+            created_at="t2",
+            metadata={
+                "output": {
+                    "source_ref": "sympy/printing/mathematica.py",
+                    "text": "def mathematica_code(expr):\n    return old\n",
+                }
+            },
+        ),
     ]
     state.active_plan = plan
 
@@ -2578,6 +3288,86 @@ def test_runtime_edit_text_prompt_prefers_source_evidence_over_long_test_preview
     assert "def mathematica_code(expr):" in evidence
 
 
+def test_runtime_edit_text_prompt_omits_duplicate_recent_results_context(make_config) -> None:
+    config = make_config(tools__allow_side_effect_tools=True)
+    fake_client = FakeModelClient(
+        contract_responses={
+            "tool_input:edit_text": [
+                json.dumps(
+                    {
+                        "path": "sympy/printing/mathematica.py",
+                        "operation": "replace_pattern_once",
+                        "pattern": "return old",
+                        "replacement": "return new",
+                    }
+                )
+            ]
+        }
+    )
+    runtime = AgentRuntime(config, model_client=fake_client)
+    state = runtime.create_or_load_session()
+    user_text = (
+        "Task contract:\n"
+        "{\"task_kind\":\"local_repo_code_fix\",\"request_completeness\":\"complete\","
+        "\"requires_code_changes\":true,\"requires_verification\":true,\"prefer_task_expansion\":false}\n"
+        "Problem statement:\n"
+        "mathematica_code gives wrong output with Max\n"
+        "Known failing tests:\n"
+        "- test_Function\n"
+    )
+    plan = create_shell_recovery_plan("Fix the benchmark issue. mathematica_code gives wrong output with Max.")
+    plan.steps[0].status = "completed"
+    plan.steps[1].status = "running"
+    state.messages = [
+        Message(role="user", content=user_text, created_at="t0"),
+        Message(
+            role="tool",
+            name="shell_command",
+            content="shell result",
+            created_at="t1",
+            metadata={
+                "output": {
+                    "stdout": (
+                        "test_file: ./sympy/printing/tests/test_mathematica.py\n"
+                        "source_file: ./sympy/printing/mathematica.py\n"
+                        "def mathematica_code(expr):\n"
+                        "    return old\n"
+                    ),
+                    "stderr": "",
+                    "exit_code": 0,
+                    "modified_files": [],
+                    "created_files": [],
+                    "deleted_files": [],
+                }
+            },
+        ),
+        Message(
+            role="tool",
+            name="read_text",
+            content=(
+                "read_text result: "
+                "{\"source_ref\":\"sympy/printing/mathematica.py\","
+                "\"text\":\"def mathematica_code(expr):\\n    return old\\n\"}"
+            ),
+            created_at="t2",
+            metadata={
+                "output": {
+                    "source_ref": "sympy/printing/mathematica.py",
+                    "text": "def mathematica_code(expr):\n    return old\n",
+                }
+            },
+        ),
+    ]
+    state.active_plan = plan
+
+    runtime._decide(state)
+
+    prompt = fake_client.requests[-1]["prompt"]
+    assert "Recent inspection evidence:" in prompt
+    assert "Recent test evidence:" in prompt
+    assert "Recent results:" not in prompt
+
+
 def test_runtime_edit_text_prompt_uses_workspace_source_excerpt_for_long_files(make_config, tmp_path: Path) -> None:
     config = make_config(tools__allow_side_effect_tools=True)
     fake_client = FakeModelClient(
@@ -2587,8 +3377,8 @@ def test_runtime_edit_text_prompt_uses_workspace_source_excerpt_for_long_files(m
                     {
                         "path": "sympy/printing/mathematica.py",
                         "operation": "replace_pattern_once",
-                        "pattern": "old",
-                        "replacement": "new",
+                        "pattern": "TAIL_MARKER = 2",
+                        "replacement": "TAIL_MARKER = 3",
                     }
                 )
             ]
@@ -2649,6 +3439,103 @@ def test_runtime_edit_text_prompt_uses_workspace_source_excerpt_for_long_files(m
     assert "TAIL_MARKER = 2" in evidence
 
 
+def test_runtime_edit_text_prompt_includes_all_named_source_hints_and_recent_test_evidence(
+    make_config,
+    tmp_path: Path,
+) -> None:
+    config = make_config(tools__allow_side_effect_tools=True)
+    fake_client = FakeModelClient(
+        contract_responses={
+            "tool_input:edit_text": [
+                json.dumps(
+                    {
+                        "path": "pkg_545/core.py",
+                        "operation": "replace_pattern_once",
+                        "pattern": "return 30",
+                        "replacement": "return 33",
+                    }
+                )
+            ]
+        }
+    )
+    runtime = AgentRuntime(config, model_client=fake_client)
+    state = runtime.create_or_load_session()
+    workspace = tmp_path
+    package_dir = workspace / "pkg_545"
+    package_dir.mkdir(parents=True)
+    (package_dir / "__init__.py").write_text("", encoding="utf-8")
+    (package_dir / "core.py").write_text("def base_value() -> int:\n    return 30\n", encoding="utf-8")
+    (package_dir / "calc.py").write_text(
+        "from pkg_545.core import base_value\n\n\ndef total() -> int:\n    return base_value() + 10\n",
+        encoding="utf-8",
+    )
+    (package_dir / "report.py").write_text(
+        "import json\nfrom pathlib import Path\n\n\ndef describe() -> str:\n    settings = json.loads(Path('release_settings.json').read_text(encoding='utf-8'))\n    return f\"{settings['label']}:broken:tax={settings['tax_rate']}\"\n",
+        encoding="utf-8",
+    )
+    (package_dir / "compat.py").write_text(
+        "from pkg_545.report import describe\n\n\ndef release_summary() -> dict[str, str]:\n    label, total, tax = describe().split(':')\n    return {'label': label, 'total': total, 'tax': tax}\n",
+        encoding="utf-8",
+    )
+    (workspace / "release_settings.json").write_text('{"label": "release-20", "tax_rate": 5}\n', encoding="utf-8")
+    (workspace / "test_pkg_545_unit.py").write_text("assert True\n", encoding="utf-8")
+    (workspace / "test_pkg_545_compat.py").write_text("assert True\n", encoding="utf-8")
+    (workspace / "test_pkg_545_artifacts.py").write_text(
+        "import pathlib\n\nnote = pathlib.Path('release_notes.txt').read_text(encoding='utf-8')\n",
+        encoding="utf-8",
+    )
+    state.environment.workspace.root = str(workspace)
+    state.environment.workspace.cwd = str(workspace)
+    state.environment.shell.cwd = str(workspace)
+    state.messages = [
+        Message(
+            role="user",
+            content=(
+                f"Repository root: {workspace}. Repair the `pkg_545` release flow. "
+                "Inspect `pkg_545/core.py`, `pkg_545/calc.py`, `pkg_545/report.py`, `pkg_545/compat.py`, "
+                "`release_settings.json`, and the three test files. "
+                "Fix the implementation and the generated release artifact without editing the tests or the settings file. "
+                "Run `python3 -m unittest -q test_pkg_545_unit.py test_pkg_545_compat.py test_pkg_545_artifacts.py` before answering."
+            ),
+            created_at="t0",
+        ),
+        Message(
+            role="tool",
+            name="shell_command",
+            content="inspection",
+            created_at="t1",
+            metadata={
+                "output": {
+                    "stdout": (
+                        "source_file: ./pkg_545/core.py\n"
+                        "def base_value() -> int:\n    return 30\n"
+                        "source_file: ./pkg_545/calc.py\n"
+                        "def total() -> int:\n    return base_value() + 10\n"
+                        "test_file: ./test_pkg_545_artifacts.py\n"
+                        "note = pathlib.Path('release_notes.txt').read_text(encoding='utf-8')\n"
+                    )
+                }
+            },
+        ),
+    ]
+    plan = create_shell_recovery_plan("Fix the benchmark issue.")
+    plan.steps[0].status = "completed"
+    plan.steps[1].status = "running"
+    state.active_plan = plan
+
+    runtime._decide(state)
+
+    prompt = fake_client.requests[-1]["prompt"]
+    assert "source_file: ./pkg_545/core.py" in prompt
+    assert "source_file: ./pkg_545/calc.py" in prompt
+    assert "source_file: ./pkg_545/report.py" in prompt
+    assert "source_file: ./pkg_545/compat.py" in prompt
+    assert "source_file: ./release_settings.json" in prompt
+    assert "Recent test evidence:" in prompt
+    assert "test_file: ./test_pkg_545_artifacts.py" in prompt
+    assert "release_notes.txt" in prompt
+
+
 def test_runtime_edit_text_prompt_focuses_known_mapping_excerpt(make_config, tmp_path: Path) -> None:
     config = make_config(tools__allow_side_effect_tools=True)
     fake_client = FakeModelClient(
@@ -2658,8 +3545,8 @@ def test_runtime_edit_text_prompt_focuses_known_mapping_excerpt(make_config, tmp
                     {
                         "path": "sympy/printing/mathematica.py",
                         "operation": "replace_pattern_once",
-                        "pattern": "old",
-                        "replacement": "new",
+                        "pattern": '"conjugate": [(lambda x: True, "Conjugate")],',
+                        "replacement": '"conjugate": [(lambda x: True, "Conjugate")],\n    "Max": [(lambda *x: True, "Max")],',
                     }
                 )
             ]
@@ -2999,6 +3886,13 @@ def test_runtime_replaces_directory_edit_path_with_recent_source_hint(make_confi
                 }
             },
         ),
+        Message(
+            role="tool",
+            name="read_text",
+            content='read_text result: {"source_ref":"sympy/printing/mathematica.py","text":"def mathematica_code(expr):\\n    old\\n"}',
+            created_at="t2",
+            metadata={"output": {"source_ref": "sympy/printing/mathematica.py", "text": "def mathematica_code(expr):\n    old\n"}},
+        ),
     ]
     state.active_plan = plan
 
@@ -3017,8 +3911,8 @@ def test_runtime_resolves_missing_workspace_edit_path_from_problem_symbol(make_c
                     {
                         "path": str(tmp_path / "mathematica.py"),
                         "operation": "replace_pattern_once",
-                        "pattern": "old",
-                        "replacement": "new",
+                        "pattern": "return 'Max[x, 2]'",
+                        "replacement": "return 'Max[2, x]'",
                     }
                 )
             ]
@@ -3115,6 +4009,943 @@ def test_runtime_synthesizes_targeted_run_tests_command_from_recent_hint(make_co
         "-k",
         "test_Function",
     ]
+
+
+def test_runtime_shell_search_uses_prompt_file_hints_for_real_source_inspection(make_config, tmp_path: Path) -> None:
+    config = make_config(tools__allow_side_effect_tools=True)
+    fake_client = FakeModelClient(
+        contract_responses={
+            "tool_input:shell_command": [
+                json.dumps({"command": "bash", "background": False})
+            ]
+        }
+    )
+    runtime = AgentRuntime(config, model_client=fake_client)
+    state = runtime.create_or_load_session()
+    package_dir = tmp_path / "pkg_492"
+    package_dir.mkdir(parents=True)
+    (package_dir / "__init__.py").write_text("", encoding="utf-8")
+    (package_dir / "stats.py").write_text(
+        "def moving_total(values: list[int]) -> int:\n"
+        "    total = 0\n"
+        "    for value in values[:-1]:\n"
+        "        total += value\n"
+        "    return total\n",
+        encoding="utf-8",
+    )
+    (tmp_path / "test_pkg_492.py").write_text(
+        "from pkg_492.stats import moving_total\n",
+        encoding="utf-8",
+    )
+    user_text = (
+        f"Repository root: {tmp_path}. Fix `pkg_492/stats.py` so `test_pkg_492.py` passes. "
+        "Inspect the module and test first, keep the public function name unchanged, and do not modify the test file."
+    )
+    state.environment.workspace.root = str(tmp_path)
+    state.environment.workspace.cwd = str(tmp_path)
+    state.environment.shell.cwd = str(tmp_path)
+    state.messages = [Message(role="user", content=user_text, created_at="t0")]
+    state.active_plan = create_shell_recovery_plan("Fix the benchmark issue.")
+
+    decision, _ = runtime._decide(state)
+
+    assert decision.tool_name == "shell_command"
+    command = decision.tool_input["command"]
+    assert "source_file: ./pkg_492/stats.py" in command
+    assert "test_file: ./test_pkg_492.py" in command
+    assert "sed -n '1,220p' ./pkg_492/stats.py" in command
+    assert "sed -n '1,220p' ./test_pkg_492.py" in command
+
+
+def test_runtime_shell_search_includes_all_named_prompt_file_hints_for_complex_coding_tasks(
+    make_config,
+    tmp_path: Path,
+) -> None:
+    config = make_config(tools__allow_side_effect_tools=True)
+    fake_client = FakeModelClient(
+        contract_responses={
+            "tool_input:shell_command": [
+                json.dumps({"command": "bash", "background": False})
+            ]
+        }
+    )
+    runtime = AgentRuntime(config, model_client=fake_client)
+    state = runtime.create_or_load_session()
+    package_dir = tmp_path / "pkg_545"
+    package_dir.mkdir(parents=True)
+    (package_dir / "__init__.py").write_text("", encoding="utf-8")
+    for name in ("core.py", "calc.py", "report.py", "compat.py"):
+        (package_dir / name).write_text(f"# {name}\n", encoding="utf-8")
+    (tmp_path / "release_settings.json").write_text('{"label":"release-20"}\n', encoding="utf-8")
+    for name in ("test_pkg_545_unit.py", "test_pkg_545_compat.py", "test_pkg_545_artifacts.py"):
+        (tmp_path / name).write_text(f"# {name}\n", encoding="utf-8")
+    user_text = (
+        f"Repository root: {tmp_path}. Repair the `pkg_545` release flow. "
+        "Inspect `pkg_545/core.py`, `pkg_545/calc.py`, `pkg_545/report.py`, `pkg_545/compat.py`, "
+        "`release_settings.json`, and the three test files. "
+        "Fix the implementation and the generated release artifact without editing the tests or the settings file. "
+        "Run `python3 -m unittest -q test_pkg_545_unit.py test_pkg_545_compat.py test_pkg_545_artifacts.py` before answering."
+    )
+    state.environment.workspace.root = str(tmp_path)
+    state.environment.workspace.cwd = str(tmp_path)
+    state.environment.shell.cwd = str(tmp_path)
+    state.messages = [Message(role="user", content=user_text, created_at="t0")]
+    state.active_plan = create_shell_recovery_plan("Fix the benchmark issue.")
+
+    decision, _ = runtime._decide(state)
+
+    assert decision.tool_name == "shell_command"
+    command = decision.tool_input["command"]
+    assert "source_file: ./pkg_545/core.py" in command
+    assert "source_file: ./pkg_545/calc.py" in command
+    assert "source_file: ./pkg_545/report.py" in command
+    assert "source_file: ./pkg_545/compat.py" in command
+    assert "source_file: ./release_settings.json" in command
+    assert "test_file: ./test_pkg_545_unit.py" in command
+    assert "test_file: ./test_pkg_545_compat.py" in command
+    assert "test_file: ./test_pkg_545_artifacts.py" in command
+
+
+def test_runtime_deterministically_falls_back_to_shell_search_when_tool_input_model_is_unavailable(
+    make_config,
+    tmp_path: Path,
+) -> None:
+    config = make_config(tools__allow_side_effect_tools=True)
+    fake_client = FakeModelClient(
+        contract_responses={
+            "tool_input:shell_command": [
+                requests.ConnectionError("llm down"),
+            ]
+        }
+    )
+    runtime = AgentRuntime(config, model_client=fake_client)
+    runtime._max_model_unavailable_attempts = 0
+    state = runtime.create_or_load_session()
+    package_dir = tmp_path / "pkg_492"
+    package_dir.mkdir(parents=True)
+    (package_dir / "__init__.py").write_text("", encoding="utf-8")
+    (package_dir / "stats.py").write_text(
+        "def moving_total(values: list[int]) -> int:\n"
+        "    total = 0\n"
+        "    for value in values[:-1]:\n"
+        "        total += value\n"
+        "    return total\n",
+        encoding="utf-8",
+    )
+    (tmp_path / "test_pkg_492.py").write_text(
+        "from pkg_492.stats import moving_total\n",
+        encoding="utf-8",
+    )
+    user_text = (
+        f"Repository root: {tmp_path}. Fix `pkg_492/stats.py` so `test_pkg_492.py` passes. "
+        "Inspect the module and test first, keep the public function name unchanged, and do not modify the test file."
+    )
+    state.environment.workspace.root = str(tmp_path)
+    state.environment.workspace.cwd = str(tmp_path)
+    state.environment.shell.cwd = str(tmp_path)
+    state.messages = [Message(role="user", content=user_text, created_at="t0")]
+    state.active_plan = create_shell_recovery_plan("Fix the benchmark issue.")
+
+    decision, _ = runtime._decide(state)
+
+    assert decision.tool_name == "shell_command"
+    command = decision.tool_input["command"]
+    assert "source_file: ./pkg_492/stats.py" in command
+    assert "test_file: ./test_pkg_492.py" in command
+
+
+def test_runtime_synthesizes_unittest_command_from_prompt_file_hint(make_config, tmp_path: Path) -> None:
+    config = make_config(tools__allow_side_effect_tools=True)
+    fake_client = FakeModelClient(
+        contract_responses={
+            "tool_input:run_tests": [
+                json.dumps({"command": ["python3", "-m", "pytest"], "background": False})
+            ]
+        }
+    )
+    runtime = AgentRuntime(config, model_client=fake_client)
+    state = runtime.create_or_load_session()
+    user_text = (
+        f"Repository root: {tmp_path}. Fix `pkg_492/stats.py` so `test_pkg_492.py` passes. "
+        "Run `python3 -m unittest -q test_pkg_492.py` after the edit."
+    )
+    plan = create_shell_recovery_plan("Fix the benchmark issue.")
+    plan.steps[0].status = "completed"
+    plan.steps[1].status = "completed"
+    plan.steps[2].status = "running"
+    state.environment.workspace.root = str(tmp_path)
+    state.environment.workspace.cwd = str(tmp_path)
+    state.messages = [Message(role="user", content=user_text, created_at="t0")]
+    state.active_plan = plan
+
+    decision, _ = runtime._decide(state)
+
+    assert decision.tool_name == "run_tests"
+    assert decision.tool_input["command"] == ["python3", "-m", "unittest", "-q", "test_pkg_492.py"]
+
+
+def test_runtime_normalizes_pytest_command_to_synthesized_unittest_for_named_test_hint(make_config, tmp_path: Path) -> None:
+    config = make_config(tools__allow_side_effect_tools=True)
+    fake_client = FakeModelClient(
+        contract_responses={
+            "tool_input:run_tests": [
+                json.dumps({"command": ["pytest", "test_pkg_492.py"], "background": False})
+            ]
+        }
+    )
+    runtime = AgentRuntime(config, model_client=fake_client)
+    state = runtime.create_or_load_session()
+    user_text = (
+        f"Repository root: {tmp_path}. Fix `pkg_492/stats.py` so `test_pkg_492.py` passes. "
+        "Run the provided unit test after the edit."
+    )
+    plan = create_shell_recovery_plan("Fix the benchmark issue.")
+    plan.steps[0].status = "completed"
+    plan.steps[1].status = "completed"
+    plan.steps[2].status = "running"
+    state.environment.workspace.root = str(tmp_path)
+    state.environment.workspace.cwd = str(tmp_path)
+    state.messages = [Message(role="user", content=user_text, created_at="t0")]
+    state.active_plan = plan
+
+    decision, _ = runtime._decide(state)
+
+    assert decision.tool_name == "run_tests"
+    assert decision.tool_input["command"] == ["python3", "-m", "unittest", "-q", "test_pkg_492.py"]
+
+
+def test_runtime_deterministically_falls_back_to_run_tests_command_when_tool_input_model_is_unavailable(
+    make_config,
+    tmp_path: Path,
+) -> None:
+    config = make_config(tools__allow_side_effect_tools=True)
+    fake_client = FakeModelClient(
+        contract_responses={
+            "tool_input:run_tests": [
+                requests.ConnectionError("llm down"),
+            ]
+        }
+    )
+    runtime = AgentRuntime(config, model_client=fake_client)
+    runtime._max_model_unavailable_attempts = 0
+    state = runtime.create_or_load_session()
+    user_text = (
+        f"Repository root: {tmp_path}. Fix `pkg_492/stats.py` so `test_pkg_492.py` passes. "
+        "Run `python3 -m unittest -q test_pkg_492.py` after the edit."
+    )
+    plan = create_shell_recovery_plan("Fix the benchmark issue.")
+    plan.steps[0].status = "completed"
+    plan.steps[1].status = "completed"
+    plan.steps[2].status = "running"
+    state.environment.workspace.root = str(tmp_path)
+    state.environment.workspace.cwd = str(tmp_path)
+    state.messages = [Message(role="user", content=user_text, created_at="t0")]
+    state.active_plan = plan
+
+    decision, _ = runtime._decide(state)
+
+    assert decision.tool_name == "run_tests"
+    assert decision.tool_input["command"] == ["python3", "-m", "unittest", "-q", "test_pkg_492.py"]
+
+
+def test_runtime_falls_back_to_plain_text_edit_tool_input_when_structured_edit_call_is_unavailable(
+    make_config,
+    tmp_path: Path,
+) -> None:
+    config = make_config(tools__allow_side_effect_tools=True)
+    fake_client = FakeModelClient(
+        contract_responses={
+            "tool_input:edit_text": [
+                requests.ConnectionError("llm down"),
+            ],
+            "tool_input:edit_text:plain_fallback": [
+                json.dumps(
+                    {
+                        "path": "pkg_492/stats.py",
+                        "operation": "replace_pattern_once",
+                        "pattern": "for value in values[:-1]:",
+                        "replacement": "for value in values:",
+                    }
+                )
+            ],
+        }
+    )
+    runtime = AgentRuntime(config, model_client=fake_client)
+    runtime._max_model_unavailable_attempts = 0
+    state = runtime.create_or_load_session()
+    package_dir = tmp_path / "pkg_492"
+    package_dir.mkdir(parents=True)
+    (package_dir / "__init__.py").write_text("", encoding="utf-8")
+    (package_dir / "stats.py").write_text(
+        "def moving_total(values: list[int]) -> int:\n"
+        "    total = 0\n"
+        "    for value in values[:-1]:\n"
+        "        total += value\n"
+        "    return total\n",
+        encoding="utf-8",
+    )
+    (tmp_path / "test_pkg_492.py").write_text(
+        "from pkg_492.stats import moving_total\n",
+        encoding="utf-8",
+    )
+    state.environment.workspace.root = str(tmp_path)
+    state.environment.workspace.cwd = str(tmp_path)
+    state.environment.shell.cwd = str(tmp_path)
+    state.messages = [
+        Message(
+            role="user",
+            content=(
+                f"Repository root: {tmp_path}. Fix `pkg_492/stats.py` so `test_pkg_492.py` passes. "
+                "Inspect the module and test first."
+            ),
+            created_at="t0",
+        ),
+        Message(
+            role="tool",
+            name="shell_command",
+            content="inspection",
+            created_at="t1",
+            metadata={
+                "output": {
+                    "stdout": (
+                        "source_file: ./pkg_492/stats.py\n"
+                        "def moving_total(values: list[int]) -> int:\n"
+                        "    total = 0\n"
+                        "    for value in values[:-1]:\n"
+                        "        total += value\n"
+                        "    return total\n"
+                        "test_file: ./test_pkg_492.py\n"
+                        "from pkg_492.stats import moving_total\n"
+                    )
+                }
+            },
+        ),
+    ]
+    plan = create_shell_recovery_plan("Fix the benchmark issue.")
+    plan.steps[0].status = "completed"
+    plan.steps[1].status = "running"
+    state.active_plan = plan
+
+    decision, _ = runtime._decide(state)
+
+    assert decision.tool_name == "edit_text"
+    assert decision.tool_input["path"] == "pkg_492/stats.py"
+    assert decision.tool_input["pattern"] == "for value in values[:-1]:"
+    contracts = [request["contract"] for request in fake_client.requests]
+    assert "tool_input:edit_text" in contracts
+    assert "tool_input:edit_text:plain_fallback" in contracts
+
+
+def test_runtime_caps_subagent_selection_request_max_tokens(make_config) -> None:
+    fake_client = FakeModelClient(
+        contract_responses={
+            "subagent_selection": [
+                json.dumps(
+                    {
+                        "spawn": False,
+                        "subagent_type": "none",
+                        "reason": "direct response is sufficient",
+                        "focus": "",
+                    }
+                )
+            ]
+        }
+    )
+    runtime = AgentRuntime(make_config(), model_client=fake_client)
+    state = runtime.create_or_load_session()
+
+    selection = runtime._select_subagent_frontend(
+        state,
+        goal="Reply with OK only.",
+        purpose="context_retrieval_focus",
+        candidate_types=["retriever"],
+        detail_lines=["call_kind=subagent_selection"],
+    )
+
+    requests = [request for request in fake_client.requests if request.get("contract") == "subagent_selection"]
+    assert selection.spawn is False
+    assert requests
+    assert 0 < requests[-1]["n_predict"] <= 64
+
+
+def test_runtime_caps_plan_request_max_tokens(make_config) -> None:
+    fake_client = FakeModelClient(
+        contract_responses={
+            "task_plan": [
+                plan_response(
+                    goal="Answer from the provided evidence.",
+                    steps=[
+                        plan_step(
+                            "step_answer",
+                            "Answer",
+                            "respond",
+                            expected_output="concise answer",
+                            success_criteria="answers from evidence",
+                        )
+                    ],
+                )
+            ]
+        }
+    )
+    runtime = AgentRuntime(make_config(), model_client=fake_client)
+    state = runtime.create_or_load_session()
+
+    runtime._generate_plan(state, "Answer from the provided evidence.", update_existing=False, replan_reason="")
+
+    requests = [request for request in fake_client.requests if request.get("contract") == "task_plan"]
+    assert requests
+    assert 0 < requests[-1]["n_predict"] <= 512
+
+
+def test_runtime_caps_tool_input_request_max_tokens_for_edit_steps(make_config, tmp_path: Path) -> None:
+    config = make_config(tools__allow_side_effect_tools=True)
+    fake_client = FakeModelClient(
+        contract_responses={
+            "tool_input:edit_text": [
+                json.dumps(
+                    {
+                        "path": "pkg_492/stats.py",
+                        "operation": "replace_pattern_once",
+                        "pattern": "for value in values[:-1]:",
+                        "replacement": "for value in values:",
+                    }
+                )
+            ],
+        }
+    )
+    runtime = AgentRuntime(config, model_client=fake_client)
+    state = runtime.create_or_load_session()
+    package_dir = tmp_path / "pkg_492"
+    package_dir.mkdir(parents=True)
+    (package_dir / "__init__.py").write_text("", encoding="utf-8")
+    (package_dir / "stats.py").write_text(
+        "def moving_total(values: list[int]) -> int:\n"
+        "    total = 0\n"
+        "    for value in values[:-1]:\n"
+        "        total += value\n"
+        "    return total\n",
+        encoding="utf-8",
+    )
+    state.environment.workspace.root = str(tmp_path)
+    state.environment.workspace.cwd = str(tmp_path)
+    state.environment.shell.cwd = str(tmp_path)
+    state.messages = [
+        Message(
+            role="user",
+            content=(
+                f"Repository root: {tmp_path}. Fix `pkg_492/stats.py` so `test_pkg_492.py` passes. "
+                "Inspect the module and test first."
+            ),
+            created_at="t0",
+        ),
+        Message(
+            role="tool",
+            name="shell_command",
+            content="inspection",
+            created_at="t1",
+            metadata={
+                "output": {
+                    "stdout": (
+                        "source_file: ./pkg_492/stats.py\n"
+                        "def moving_total(values: list[int]) -> int:\n"
+                        "    total = 0\n"
+                        "    for value in values[:-1]:\n"
+                        "        total += value\n"
+                        "    return total\n"
+                    )
+                }
+            },
+        ),
+    ]
+    plan = create_shell_recovery_plan("Fix the benchmark issue.")
+    plan.steps[0].status = "completed"
+    plan.steps[1].status = "running"
+    state.active_plan = plan
+
+    decision, _ = runtime._decide(state)
+
+    assert decision.tool_name == "edit_text"
+    edit_requests = [request for request in fake_client.requests if request.get("contract") == "tool_input:edit_text"]
+    assert edit_requests
+    assert 0 < edit_requests[-1]["n_predict"] <= 256
+
+
+def test_runtime_prefers_deterministic_edit_payload_for_benchmark_locked_frontend(make_config, tmp_path: Path) -> None:
+    config = make_config(tools__allow_side_effect_tools=True)
+    fake_client = FakeModelClient()
+    fake_client.is_deterministic_test_client = False
+    runtime = AgentRuntime(config, model_client=fake_client)
+    state = runtime.create_or_load_session()
+    package_dir = tmp_path / "pkg_492"
+    package_dir.mkdir(parents=True)
+    (package_dir / "__init__.py").write_text("", encoding="utf-8")
+    (package_dir / "stats.py").write_text(
+        "def moving_total(values: list[int]) -> int:\n"
+        "    total = 0\n"
+        "    for value in values[:-1]:\n"
+        "        total += value\n"
+        "    return total\n",
+        encoding="utf-8",
+    )
+    state.environment.workspace.root = str(tmp_path)
+    state.environment.workspace.cwd = str(tmp_path)
+    state.environment.shell.cwd = str(tmp_path)
+    state.active_strategy = StrategySelection(
+        strategy_name="exploratory",
+        explore_before_commit=True,
+        validate_assumptions=True,
+        simplify_if_stuck=True,
+        switch_on_failure=True,
+        reason="deterministic_code_fix_fallback:benchmark_code_fix_locked_frontend",
+        task_profile="coding",
+        required_step_kinds=["read", "write", "respond"],
+        expected_flow=["read", "write", "respond"],
+    )
+    state.messages = [
+        Message(
+            role="user",
+            content=(
+                f"Repository root: {tmp_path}. Fix `pkg_492/stats.py` so `test_pkg_492.py` passes. "
+                "Inspect the module and test first."
+            ),
+            created_at="t0",
+        ),
+        Message(
+            role="tool",
+            name="shell_command",
+            content="inspection",
+            created_at="t1",
+            metadata={
+                "output": {
+                    "stdout": (
+                        "source_file: ./pkg_492/stats.py\n"
+                        "def moving_total(values: list[int]) -> int:\n"
+                        "    total = 0\n"
+                        "    for value in values[:-1]:\n"
+                        "        total += value\n"
+                        "    return total\n"
+                        "test_file: ./test_pkg_492.py\n"
+                        "import unittest\n\n"
+                        "from pkg_492.stats import moving_total\n\n"
+                        "class StatsTests(unittest.TestCase):\n"
+                        "    def test_moving_total(self) -> None:\n"
+                        "        self.assertEqual(moving_total([7, 7, 15]), 29)\n"
+                    )
+                }
+            },
+        ),
+    ]
+    plan = create_shell_recovery_plan("Fix the benchmark issue.")
+    plan.steps[0].status = "completed"
+    plan.steps[1].status = "running"
+    state.active_plan = plan
+
+    decision, _ = runtime._decide(state)
+
+    assert decision.tool_name == "edit_text"
+    assert decision.tool_input["path"] == "pkg_492/stats.py"
+    assert decision.tool_input["pattern"] == "values[:-1]"
+    assert decision.tool_input["replacement"] == "values"
+    assert fake_client.requests == []
+
+
+def test_runtime_normalizes_run_tests_tool_self_reference(make_config, tmp_path: Path) -> None:
+    config = make_config(tools__allow_side_effect_tools=True)
+    fake_client = FakeModelClient(
+        contract_responses={
+            "tool_input:run_tests": [
+                json.dumps({"command": ["run_tests", "test_pkg_492.py"], "background": False})
+            ]
+        }
+    )
+    runtime = AgentRuntime(config, model_client=fake_client)
+    state = runtime.create_or_load_session()
+    user_text = (
+        f"Repository root: {tmp_path}. Fix `pkg_492/stats.py` so `test_pkg_492.py` passes. "
+        "Run `python3 -m unittest -q test_pkg_492.py` after the edit."
+    )
+    plan = create_shell_recovery_plan("Fix the benchmark issue.")
+    plan.steps[0].status = "completed"
+    plan.steps[1].status = "completed"
+    plan.steps[2].status = "running"
+    state.environment.workspace.root = str(tmp_path)
+    state.environment.workspace.cwd = str(tmp_path)
+    state.environment.shell.cwd = str(tmp_path)
+    state.messages = [Message(role="user", content=user_text, created_at="t0")]
+    state.active_plan = plan
+
+    decision, _ = runtime._decide(state)
+
+    assert decision.tool_name == "run_tests"
+    assert decision.tool_input["command"] == ["python3", "-m", "unittest", "-q", "test_pkg_492.py"]
+
+
+def test_runtime_normalizes_replace_pattern_alias_when_source_is_available(make_config, tmp_path: Path) -> None:
+    config = make_config(tools__allow_side_effect_tools=True)
+    fake_client = FakeModelClient(
+        contract_responses={
+            "tool_input:edit_text": [
+                json.dumps(
+                    {
+                        "path": str(tmp_path / "stats.py"),
+                        "operation": "replace_pattern",
+                        "pattern": "for value in values[:-1]:",
+                        "replacement": "for value in values:",
+                    }
+                )
+            ]
+        }
+    )
+    runtime = AgentRuntime(config, model_client=fake_client)
+    state = runtime.create_or_load_session()
+    (tmp_path / "pkg_492").mkdir(parents=True)
+    (tmp_path / "pkg_492" / "stats.py").write_text(
+        "def moving_total(values: list[int]) -> int:\n"
+        "    total = 0\n"
+        "    for value in values[:-1]:\n"
+        "        total += value\n"
+        "    return total\n",
+        encoding="utf-8",
+    )
+    user_text = (
+        f"Repository root: {tmp_path}. Fix `pkg_492/stats.py` so `test_pkg_492.py` passes. "
+        "Inspect the module and test first, keep the public function name unchanged, and do not modify the test file."
+    )
+    plan = create_shell_recovery_plan("Fix the benchmark issue.")
+    plan.steps[0].status = "completed"
+    plan.steps[1].status = "running"
+    state.environment.workspace.root = str(tmp_path)
+    state.environment.workspace.cwd = str(tmp_path)
+    state.environment.shell.cwd = str(tmp_path)
+    state.messages = [
+        Message(role="user", content=user_text, created_at="t0"),
+        Message(
+            role="tool",
+            name="shell_command",
+            content="shell result",
+            created_at="t1",
+            metadata={
+                "output": {
+                    "stdout": "source_file: ./pkg_492/stats.py\n"
+                    "def moving_total(values: list[int]) -> int:\n"
+                    "    total = 0\n"
+                    "    for value in values[:-1]:\n"
+                    "        total += value\n"
+                    "    return total\n",
+                    "stderr": "",
+                    "exit_code": 0,
+                    "modified_files": [],
+                    "created_files": [],
+                    "deleted_files": [],
+                }
+            },
+        ),
+    ]
+    state.active_plan = plan
+
+    decision, _ = runtime._decide(state)
+
+    assert decision.tool_name == "edit_text"
+    assert decision.tool_input["path"] == "pkg_492/stats.py"
+    assert decision.tool_input["operation"] == "replace_pattern_once"
+
+
+def test_runtime_normalizes_read_text_payload_that_echoes_output_fields(make_config, tmp_path: Path) -> None:
+    config = make_config(tools__allow_side_effect_tools=True)
+    runtime = AgentRuntime(config, model_client=FakeModelClient())
+    state = runtime.create_or_load_session()
+    (tmp_path / "pkg_492").mkdir(parents=True)
+    (tmp_path / "pkg_492" / "stats.py").write_text("def moving_total(values):\n    return 0\n", encoding="utf-8")
+    state.environment.workspace.root = str(tmp_path)
+    state.environment.workspace.cwd = str(tmp_path)
+    step_plan = plan_from_payload(
+        {
+            "goal": "Fix the benchmark issue.",
+            "success_criteria": "Resolve the bug safely.",
+            "fallback_strategy": "Replan from the latest valid state.",
+            "steps": [
+                plan_step(
+                    "step_read",
+                    "Identify the bug",
+                    "read",
+                    expected_tool="read_text",
+                    input_text="pkg_492/stats.py",
+                    expected_output="Source text",
+                    success_criteria="The source file is read.",
+                ),
+                plan_step(
+                    "step_answer",
+                    "Answer the user",
+                    "respond",
+                    expected_output="Final assistant response",
+                    success_criteria="The user gets a final answer.",
+                    depends_on=["step_read"],
+                ),
+            ],
+        },
+        available_tools=runtime.tools.tool_names(config),
+    )
+    step = step_plan.steps[0]
+    normalized = runtime._normalize_expected_tool_input(
+        state,
+        step,
+        {
+            "path": str(tmp_path / "stats.py"),
+            "source_ref": str(tmp_path / "pkg_492" / "stats.py"),
+            "start_offset": 0,
+            "end_offset": 128,
+            "next_offset": 128,
+            "finished": True,
+            "text": "def moving_total(values):\\n    return 0\\n",
+        },
+    )
+
+    assert normalized == {"path": "pkg_492/stats.py"}
+
+
+def test_runtime_normalizes_read_file_payload_that_echoes_output_fields(make_config, tmp_path: Path) -> None:
+    config = make_config(tools__allow_side_effect_tools=True)
+    runtime = AgentRuntime(config, model_client=FakeModelClient())
+    state = runtime.create_or_load_session()
+    (tmp_path / "pkg_492").mkdir(parents=True)
+    (tmp_path / "pkg_492" / "stats.py").write_text("def moving_total(values):\n    return 0\n", encoding="utf-8")
+    state.environment.workspace.root = str(tmp_path)
+    state.environment.workspace.cwd = str(tmp_path)
+    step_plan = plan_from_payload(
+        {
+            "goal": "Fix the benchmark issue.",
+            "success_criteria": "Resolve the bug safely.",
+            "fallback_strategy": "Replan from the latest valid state.",
+            "steps": [
+                plan_step(
+                    "step_read",
+                    "Identify the bug",
+                    "read",
+                    expected_tool="read_file",
+                    input_text="pkg_492/stats.py",
+                    expected_output="Source text",
+                    success_criteria="The source file is read.",
+                ),
+                plan_step(
+                    "step_answer",
+                    "Answer the user",
+                    "respond",
+                    expected_output="Final assistant response",
+                    success_criteria="The user gets a final answer.",
+                    depends_on=["step_read"],
+                ),
+            ],
+        },
+        available_tools=runtime.tools.tool_names(config),
+    )
+    step = step_plan.steps[0]
+    normalized = runtime._normalize_expected_tool_input(
+        state,
+        step,
+        {
+            "path": str(tmp_path / "stats.py"),
+            "source_ref": str(tmp_path / "pkg_492" / "stats.py"),
+            "text": "def moving_total(values):\\n    return 0\\n",
+            "size_chars": 37,
+        },
+    )
+
+    assert normalized == {"path": "pkg_492/stats.py"}
+
+
+def test_runtime_uses_expected_tool_input_contract_for_read_text_step(make_config, tmp_path: Path) -> None:
+    config = make_config(tools__allow_side_effect_tools=True)
+    fake_client = FakeModelClient(
+        contract_responses={
+            "tool_input:read_text": [
+                json.dumps(
+                    {
+                        "path": str(tmp_path / "stats.py"),
+                        "start_offset": 0,
+                        "end_offset": 128,
+                    }
+                )
+            ]
+        }
+    )
+    runtime = AgentRuntime(config, model_client=fake_client)
+    state = runtime.create_or_load_session()
+    (tmp_path / "pkg_492").mkdir(parents=True)
+    (tmp_path / "pkg_492" / "stats.py").write_text("def moving_total(values):\n    return 0\n", encoding="utf-8")
+    state.environment.workspace.root = str(tmp_path)
+    state.environment.workspace.cwd = str(tmp_path)
+    state.environment.shell.cwd = str(tmp_path)
+    state.messages = [
+        Message(
+            role="user",
+            content=(
+                f"Repository root: {tmp_path}. Fix `pkg_492/stats.py` so `test_pkg_492.py` passes. "
+                "Inspect the module and test first."
+            ),
+            created_at="t0",
+        )
+    ]
+    step_plan = plan_from_payload(
+        {
+            "goal": "Fix the benchmark issue.",
+            "success_criteria": "Resolve the bug safely.",
+            "fallback_strategy": "Replan from the latest valid state.",
+            "steps": [
+                plan_step(
+                    "step_read",
+                    "Identify the bug",
+                    "read",
+                    expected_tool="read_text",
+                    input_text="pkg_492/stats.py",
+                    expected_output="Source text",
+                    success_criteria="The source file is read.",
+                ),
+                plan_step(
+                    "step_answer",
+                    "Answer the user",
+                    "respond",
+                    expected_output="Final assistant response",
+                    success_criteria="The user gets a final answer.",
+                    depends_on=["step_read"],
+                ),
+            ],
+        },
+        available_tools=runtime.tools.tool_names(config),
+    )
+    step_plan.steps[0].status = "running"
+    step_plan.current_step_id = step_plan.steps[0].step_id
+    state.active_plan = step_plan
+
+    decision, _ = runtime._decide(state)
+
+    assert decision.tool_name == "read_text"
+    assert decision.tool_input["path"] == "pkg_492/stats.py"
+    assert "start_offset" not in decision.tool_input
+    assert "end_offset" not in decision.tool_input
+    request_contracts = [request.get("contract") for request in fake_client.requests]
+    assert "tool_input:read_text" in request_contracts
+
+
+def test_runtime_uses_expected_tool_input_contract_for_read_file_step(make_config, tmp_path: Path) -> None:
+    config = make_config(tools__allow_side_effect_tools=True)
+    fake_client = FakeModelClient(
+        contract_responses={
+            "tool_input:read_file": [
+                json.dumps(
+                    {
+                        "source_ref": str(tmp_path / "pkg_492" / "stats.py"),
+                        "text": "def moving_total(values):\\n    return 0\\n",
+                    }
+                )
+            ]
+        }
+    )
+    runtime = AgentRuntime(config, model_client=fake_client)
+    state = runtime.create_or_load_session()
+    (tmp_path / "pkg_492").mkdir(parents=True)
+    (tmp_path / "pkg_492" / "stats.py").write_text("def moving_total(values):\n    return 0\n", encoding="utf-8")
+    state.environment.workspace.root = str(tmp_path)
+    state.environment.workspace.cwd = str(tmp_path)
+    state.environment.shell.cwd = str(tmp_path)
+    state.messages = [
+        Message(
+            role="user",
+            content=(
+                f"Repository root: {tmp_path}. Fix `pkg_492/stats.py` so `test_pkg_492.py` passes. "
+                "Inspect the module and test first."
+            ),
+            created_at="t0",
+        )
+    ]
+    step_plan = plan_from_payload(
+        {
+            "goal": "Fix the benchmark issue.",
+            "success_criteria": "Resolve the bug safely.",
+            "fallback_strategy": "Replan from the latest valid state.",
+            "steps": [
+                plan_step(
+                    "step_read",
+                    "Identify the bug",
+                    "read",
+                    expected_tool="read_file",
+                    input_text="pkg_492/stats.py",
+                    expected_output="Source text",
+                    success_criteria="The source file is read.",
+                ),
+                plan_step(
+                    "step_answer",
+                    "Answer the user",
+                    "respond",
+                    expected_output="Final assistant response",
+                    success_criteria="The user gets a final answer.",
+                    depends_on=["step_read"],
+                ),
+            ],
+        },
+        available_tools=runtime.tools.tool_names(config),
+    )
+    step_plan.steps[0].status = "running"
+    step_plan.current_step_id = step_plan.steps[0].step_id
+    state.active_plan = step_plan
+
+    decision, _ = runtime._decide(state)
+
+    assert decision.tool_name == "read_file"
+    assert decision.tool_input == {"path": "pkg_492/stats.py"}
+    request_contracts = [request.get("contract") for request in fake_client.requests]
+    assert "tool_input:read_file" in request_contracts
+
+
+def test_runtime_read_text_result_satisfies_read_file_verification_and_done_condition(make_config, tmp_path: Path) -> None:
+    config = make_config(tools__allow_side_effect_tools=True)
+    runtime = AgentRuntime(config, model_client=FakeModelClient())
+    state = runtime.create_or_load_session()
+    state.environment.workspace.root = str(tmp_path)
+    state.environment.workspace.cwd = str(tmp_path)
+    step_plan = plan_from_payload(
+        {
+            "goal": "Inspect the file safely.",
+            "success_criteria": "The source is available.",
+            "fallback_strategy": "Replan from the latest valid state.",
+            "steps": [
+                plan_step(
+                    "step_read",
+                    "Read the source",
+                    "read",
+                    expected_tool="read_file",
+                    input_text="pkg_492/stats.py",
+                    expected_output="Source text",
+                    success_criteria="The source file is read.",
+                ),
+                plan_step(
+                    "step_answer",
+                    "Answer the user",
+                    "respond",
+                    expected_output="Final assistant response",
+                    success_criteria="The user gets a final answer.",
+                    depends_on=["step_read"],
+                ),
+            ],
+        },
+        available_tools=runtime.tools.tool_names(config),
+    )
+    step = step_plan.steps[0]
+    tool_result = ToolExecutionResult(
+        tool_name="read_text",
+        output={"source_ref": "pkg_492/stats.py", "text": "def moving_total(values):\n    return 0\n", "finished": True},
+        display_text="read_text result",
+    )
+    verification = runtime._verification.verify_step(
+        runtime=runtime,
+        state=state,
+        plan=step_plan,
+        step=step,
+        artifacts=VerificationArtifacts(tool_results=[tool_result]),
+    )
+    evaluation = evaluate_step(step, tool_result=tool_result)
+
+    assert verification.passed is True
+    assert evaluation.passed is True
 
 
 def test_runtime_shell_search_falls_back_to_symbols_without_failing_tests(make_config) -> None:
@@ -3257,3 +5088,32 @@ def test_runtime_uses_overflow_recovery_planning_instead_of_blind_text_continuat
     assert result.assistant_text == "Recovered section A.\n\nRecovered section B."
     assert any(event.event_type == "output_overflow_recovery_planned" for event in events)
     assert all("continue this text" not in request.get("prompt", "").lower() for request in fake_client.requests)
+
+
+def test_runtime_failure_classifier_uses_emergency_replan_fallback_when_model_unavailable(make_config) -> None:
+    class UnavailableFailureClient(FakeModelClient):
+        def send_completion(self, request, *, timeout_seconds=None, stream_callback=None):  # type: ignore[override]
+            raise ModelClientError("semantic_engine_unavailable")
+
+    config = make_config()
+    runtime = AgentRuntime(config, model_client=UnavailableFailureClient(responses=[]))
+    state = runtime.create_or_load_session()
+    step = PlanStep(
+        step_id="step_tests",
+        title="Run tests",
+        goal="Run tests",
+        kind="tool",
+        expected_tool="run_tests",
+        input_text="Run tests",
+        expected_output="Tests pass",
+        done_condition="tool_result:run_tests",
+        success_criteria="Tests pass",
+    )
+
+    classification = runtime._classify_failure_frontend(state, step=step, reason="verification:command_exit_zero")
+    events = runtime.history.read_history(state.session_id)
+
+    assert classification.requires_replan is True
+    assert classification.retryable is False
+    assert classification.source == "deterministic_fallback_emergency_only"
+    assert any(event.event_type == "failure_classification_fallback" for event in events)

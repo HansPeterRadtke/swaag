@@ -16,6 +16,16 @@ from swaag.types import HistoryEvent, Plan, PlanStep, SessionState, ToolExecutio
 _EXECUTION_ALLOWLIST = frozenset({"python", "python3", "pytest"})
 
 
+def _tool_names_match(expected: str | None, actual: str | None) -> bool:
+    expected_name = str(expected or "").strip()
+    actual_name = str(actual or "").strip()
+    if not expected_name or not actual_name:
+        return expected_name == actual_name
+    if expected_name == actual_name:
+        return True
+    return {expected_name, actual_name} <= {"read_text", "read_file"}
+
+
 class VerificationError(RuntimeError):
     pass
 
@@ -326,7 +336,7 @@ class VerificationEngine:
         completed = {item.step_id for item in plan.steps if item.status == "completed"}
         missing_dependencies = [dependency for dependency in step.depends_on if dependency not in completed]
         latest = artifacts.latest_tool_result
-        tool_matches = latest is None or step.expected_tool in {None, "", latest.tool_name}
+        tool_matches = latest is None or _tool_names_match(step.expected_tool, latest.tool_name)
         tool_output = latest.output if latest is not None else {}
         exit_code_consistent = True
         if latest is not None and latest.tool_name == "run_tests":
@@ -594,7 +604,7 @@ class VerificationEngine:
             latest = artifacts.latest_tool_result
             actual = latest.tool_name if latest is not None else None
             expected = str(check.get("expected", ""))
-            return actual == expected, {"actual": actual, "expected": expected}
+            return _tool_names_match(expected, actual), {"actual": actual, "expected": expected}
         if check_type == "tool_output_nonempty":
             latest = artifacts.latest_tool_result
             output = latest.output if latest is not None else None

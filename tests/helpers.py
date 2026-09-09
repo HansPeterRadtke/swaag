@@ -77,7 +77,13 @@ class FakeModelClient:
             live_mode=live_mode,
         )
 
-    def send_completion(self, payload: dict[str, Any], *, timeout_seconds: int | None = None) -> CompletionResult:
+    def send_completion(
+        self,
+        payload: dict[str, Any],
+        *,
+        timeout_seconds: int | None = None,
+        stream_callback=None,
+    ) -> CompletionResult:
         self.requests.append(payload)
         contract_name = str(payload.get("contract", ""))
         response = None
@@ -107,6 +113,11 @@ class FakeModelClient:
         if callable(response):
             response = response(payload=payload)
         if isinstance(response, CompletionResult):
+            if stream_callback is not None:
+                content = str(response.text or "")
+                if content:
+                    stream_callback({"content": content, "chunk_index": 0, "stop": False, "replayed": True})
+                stream_callback({"content": "", "chunk_index": 1, "stop": True, "replayed": True})
             return response
         if not isinstance(response, str):
             raise TypeError(f"Unsupported fake response: {response!r}")

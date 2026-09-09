@@ -7,6 +7,14 @@ from swaag.types import PlanStep, SessionMetrics, ToolExecutionResult
 from swaag.verification import VerificationOutcome
 
 
+def _tool_names_match(expected: str, actual: str | None) -> bool:
+    if not actual:
+        return False
+    if actual == expected:
+        return True
+    return {expected, actual} <= {"read_text", "read_file"}
+
+
 @dataclass(slots=True)
 class EvaluationOutcome:
     passed: bool
@@ -35,7 +43,7 @@ def evaluate_step(step: PlanStep, *, tool_result: ToolExecutionResult | None = N
         return EvaluationOutcome(passed=passed, confidence=0.9 if passed else 0.0, reason="reasoning_result_nonempty", requires_retry=not passed, requires_replan=not passed)
     if step.done_condition.startswith("tool_result:"):
         expected_tool = step.done_condition.split(":", 1)[1]
-        passed = tool_result is not None and tool_result.tool_name == expected_tool and bool(tool_result.output)
+        passed = tool_result is not None and _tool_names_match(expected_tool, tool_result.tool_name) and bool(tool_result.output)
         confidence = 0.95 if passed else 0.2
         return EvaluationOutcome(
             passed=passed,

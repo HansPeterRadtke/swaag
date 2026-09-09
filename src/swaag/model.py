@@ -1,8 +1,9 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
-from typing import Any
+from typing import Any, Callable
 
+import json
 import requests
 
 from swaag.config import AgentConfig
@@ -124,6 +125,7 @@ class LlamaCppClient:
             "top_p": self.config.model.top_p,
             "seed": self.config.model.seed,
             "stop": list(self.config.model.stop),
+            "stream": True,
         }
         if contract.mode == "gbnf":
             if not contract.grammar:
@@ -135,34 +137,97 @@ class LlamaCppClient:
             payload["json_schema"] = contract.json_schema
         return payload
 
-    def send_completion(self, payload: dict[str, Any], *, timeout_seconds: int | None = None) -> CompletionResult:
-        response = requests.post(
+    def send_completion(
+        self,
+        payload: dict[str, Any],
+        *,
+        timeout_seconds: int | None = None,
+        stream_callback: Callable[[dict[str, Any]], None] | None = None,
+    ) -> CompletionResult:
+        request_payload = {**payload, "stream": True}
+        read_timeout = float(timeout_seconds) if timeout_seconds is not None else float(self.config.model.timeout_seconds)
+        token_inactivity_timeout = max(float(self.config.model.progress_poll_seconds), read_timeout)
+        with requests.post(
             f"{self._base}{self.config.model.completion_endpoint}",
-            json=payload,
-            timeout=(self.config.model.connect_timeout_seconds, timeout_seconds or self.config.model.timeout_seconds),
-        )
-        try:
-            response.raise_for_status()
-        except requests.HTTPError as exc:
-            detail = _http_error_detail(response)
-            raise requests.HTTPError(
-                f"{exc} :: {detail}",
-                request=exc.request,
-                response=exc.response,
-            ) from exc
-        body = response.json()
-        if not isinstance(body, dict):
-            raise ModelClientError(f"Unexpected completion response: {body!r}")
-        if "content" not in body:
-            raise ModelClientError(f"Completion response missing 'content': {body!r}")
-        return CompletionResult(
-            text=str(body.get("content", "")),
-            raw_request=payload,
-            raw_response=body,
-            prompt_tokens=body.get("tokens_evaluated"),
-            completion_tokens=body.get("tokens_predicted"),
-            finish_reason="stop" if body.get("stop") else None,
-        )
+            json=request_payload,
+            stream=True,
+            timeout=(self.config.model.connect_timeout_seconds, token_inactivity_timeout),
+        ) as response:
+            try:
+                response.raise_for_status()
+            except requests.HTTPError as exc:
+                detail = _http_error_detail(response)
+                raise requests.HTTPError(
+                    f"{exc} :: {detail}",
+                    request=exc.request,
+                    response=exc.response,
+                ) from exc
+
+            chunks: list[str] = []
+            raw_chunks: list[dict[str, Any]] = []
+            prompt_tokens: int | None = None
+            completion_tokens: int | None = None
+            finish_reason: str | None = None
+            saw_chunk = False
+
+            for line in response.iter_lines(decode_unicode=True):
+                if line is None:
+                    continue
+                text_line = str(line).strip()
+                if not text_line:
+                    continue
+                if text_line.startswith("data:"):
+                    text_line = text_line[5:].strip()
+                if text_line == "[DONE]":
+                    break
+                try:
+                    chunk = json.loads(text_line)
+                except ValueError as exc:
+                    raise ModelClientError(f"Malformed streaming completion chunk: {text_line[:400]!r}") from exc
+                if not isinstance(chunk, dict):
+                    raise ModelClientError(f"Unexpected streaming completion chunk: {chunk!r}")
+                saw_chunk = True
+                raw_chunks.append(chunk)
+                if stream_callback is not None:
+                    stream_callback({
+                        "chunk_index": len(raw_chunks),
+                        "chunk": chunk,
+                        "content": str(chunk.get("content", "")) if chunk.get("content") is not None else "",
+                        "stop": bool(chunk.get("stop")),
+                    })
+                content = chunk.get("content")
+                if content is not None:
+                    chunks.append(str(content))
+                if chunk.get("tokens_evaluated") is not None:
+                    prompt_tokens = chunk.get("tokens_evaluated")
+                if chunk.get("tokens_predicted") is not None:
+                    completion_tokens = chunk.get("tokens_predicted")
+                if chunk.get("stop"):
+                    finish_reason = "stop"
+
+            if not saw_chunk:
+                raise ModelClientError("Streaming completion response produced no chunks")
+            full_text = "".join(chunks)
+            if not full_text and not any(chunk.get("stop") for chunk in raw_chunks):
+                raise ModelClientError(f"Streaming completion response missing content: {raw_chunks[-1] if raw_chunks else {}}")
+            raw_response: dict[str, Any] = {
+                "content": full_text,
+                "chunks": raw_chunks,
+                "stream": True,
+                "stop": finish_reason == "stop",
+            }
+            if prompt_tokens is not None:
+                raw_response["tokens_evaluated"] = prompt_tokens
+            if completion_tokens is not None:
+                raw_response["tokens_predicted"] = completion_tokens
+            return CompletionResult(
+                text=full_text,
+                raw_request=request_payload,
+                raw_response=raw_response,
+                prompt_tokens=prompt_tokens,
+                completion_tokens=completion_tokens,
+                finish_reason=finish_reason,
+            )
 
     def complete(
         self,

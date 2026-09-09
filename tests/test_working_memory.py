@@ -4,7 +4,7 @@ import json
 from dataclasses import asdict
 
 from swaag.runtime import AgentRuntime
-from swaag.types import ExpandedTask, SessionState
+from swaag.types import ExpandedTask, Message, SessionState
 from swaag.working_memory import build_working_memory
 
 from tests.helpers import FakeModelClient, plan_response, plan_step
@@ -154,3 +154,26 @@ def test_working_memory_compacts_benchmark_task_contract_goal() -> None:
     )
 
     assert state.active_goal == "Fix the benchmark issue. mathematica_code gives wrong output with Max Verify test_Function, test_Other."
+
+def test_working_memory_compacts_long_inline_evidence_goal() -> None:
+    prompt = (
+        "Answer this HERB benchmark question using only the evidence below.\n\n"
+        "Question: What changed in the Market Research Report?\n\n"
+        "Evidence:\n"
+        + "\n".join(f"{idx}. detailed evidence text about the report and suggested changes" for idx in range(80))
+    )
+    state = SessionState(
+        session_id="s-inline",
+        created_at="t0",
+        updated_at="t0",
+        config_fingerprint="cfg",
+        model_base_url="http://example.test",
+    )
+    state.messages.append(Message(role="user", content=prompt, created_at="t0"))
+
+    memory = build_working_memory(state)
+
+    assert memory.active_goal.startswith("Answer from inline evidence:")
+    assert "What changed in the Market Research Report?" in memory.active_goal
+    assert len(memory.active_goal) < 320
+    assert "detailed evidence text" not in memory.active_goal
