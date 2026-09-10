@@ -78,6 +78,7 @@ class EnvironmentConfig:
     shell_executable: str
     command_timeout_seconds: int
     max_capture_chars: int
+    track_shell_file_changes: bool = True
 
 
 @dataclass(slots=True)

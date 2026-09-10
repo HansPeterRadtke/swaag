@@ -551,9 +551,10 @@ class AgentEnvironment:
     def run_shell_command(self, command: str, *, background: bool = False) -> ToolExecutionResult:
         if background:
             return self._start_background_shell_command(command)
-        before = self.filesystem.snapshot()
+        track_changes = bool(self.config.environment.track_shell_file_changes)
+        before = self.filesystem.snapshot() if track_changes else {}
         result, updated_shell = self.shell.execute(self.session_state.environment.shell, command, workspace_root=self.filesystem.workspace_root)
-        after = self.filesystem.snapshot()
+        after = self.filesystem.snapshot() if track_changes else {}
         snapshot = self.workspace.snapshot(before=before, after=after, cwd=result.cwd_after)
         process_record = asdict(result.process_result.record)
         bounded, artifact_events = self._bounded_output(result.process_result.stdout, result.process_result.stderr, kind="shell_command")
@@ -583,7 +584,7 @@ class AgentEnvironment:
                 {
                     "workspace_root": snapshot.root,
                     "cwd": snapshot.cwd,
-                    "snapshot_mode": "delta",
+                    "snapshot_mode": "delta" if track_changes else "disabled",
                     "files": snapshot.files,
                     "created_files": snapshot.created_files,
                     "modified_files": snapshot.modified_files,
@@ -669,7 +670,8 @@ class AgentEnvironment:
         )
 
     def _start_background_shell_command(self, command: str) -> ToolExecutionResult:
-        before = self.filesystem.snapshot()
+        track_changes = bool(self.config.environment.track_shell_file_changes)
+        before = self.filesystem.snapshot() if track_changes else {}
         record = self.process.start_background(
             ["bash", "-lc", command],
             cwd=Path(self.current_cwd),
@@ -683,9 +685,13 @@ class AgentEnvironment:
                 "cwd_before": self.current_cwd,
             },
         )
-        before_snapshot_path = Path(self._process_artifacts_root()) / record.process_id / "before_snapshot.json"
-        _fsops_write_text(before_snapshot_path, json.dumps(before), encoding="utf-8")
-        record.metadata["before_snapshot_path"] = str(before_snapshot_path)
+        if track_changes:
+            before_snapshot_path = Path(self._process_artifacts_root()) / record.process_id / "before_snapshot.json"
+            _fsops_write_text(before_snapshot_path, json.dumps(before), encoding="utf-8")
+            record.metadata["before_snapshot_path"] = str(before_snapshot_path)
+        else:
+            record.metadata["before_snapshot_path"] = ""
+            record.metadata["workspace_change_tracking"] = "disabled"
         record_payload = asdict(record)
         output = {
             "command": command,
@@ -723,9 +729,10 @@ class AgentEnvironment:
             snapshot_path = Path(before_snapshot_path)
             if snapshot_path.exists():
                 before = json.loads(snapshot_path.read_text(encoding="utf-8"))
-        after = self.filesystem.snapshot()
+        track_changes = bool(self.config.environment.track_shell_file_changes)
+        after = self.filesystem.snapshot() if track_changes else {}
         snapshot = self.workspace.snapshot(
-            before=before,
+            before=before if track_changes else {},
             after=after,
             cwd=record.metadata.get("cwd_before", record.cwd),
         )
@@ -750,7 +757,7 @@ class AgentEnvironment:
                 {
                     "workspace_root": snapshot.root,
                     "cwd": snapshot.cwd,
-                    "snapshot_mode": "delta",
+                    "snapshot_mode": "delta" if track_changes else "disabled",
                     "files": snapshot.files,
                     "created_files": snapshot.created_files,
                     "modified_files": snapshot.modified_files,

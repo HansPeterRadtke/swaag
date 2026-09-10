@@ -127,6 +127,7 @@ write_projections = true
 shell_executable = "bash"
 command_timeout_seconds = 30
 max_capture_chars = 4000
+track_shell_file_changes = true
 
 # -----------------------------------------------------------
 # [logging] — LOGGING LEVEL

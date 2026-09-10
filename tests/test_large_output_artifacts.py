@@ -45,6 +45,79 @@ def test_shell_command_large_stdout_is_bounded_and_preserved(make_config, tmp_pa
     assert "X" * 200 not in str(completed.payload)
 
 
+
+def test_shell_command_can_disable_workspace_change_tracking(
+    make_config, tmp_path: Path, monkeypatch
+) -> None:
+    config = make_config(environment__track_shell_file_changes=False)
+    config.sessions.root = tmp_path / "sessions"
+    config.tools.allow_side_effect_tools = True
+    state = _state(config, "session_shell_no_tracking")
+
+    from swaag.environment.filesystem import FilesystemManager
+
+    def forbidden_snapshot(self):
+        raise AssertionError("filesystem.snapshot must not run when shell change tracking is disabled")
+
+    monkeypatch.setattr(FilesystemManager, "snapshot", forbidden_snapshot)
+    _, result = ToolRegistry().dispatch(
+        "shell_command",
+        {"command": "printf 'ok'", "background": False},
+        config,
+        state,
+    )
+
+    assert result.output["exit_code"] == 0
+    assert result.output["stdout"] == "ok"
+    assert result.output["created_files"] == []
+    assert result.output["modified_files"] == []
+    assert result.output["deleted_files"] == []
+    workspace_event = next(
+        event for event in result.generated_events if event.event_type == "workspace_snapshot"
+    )
+    assert workspace_event.payload["snapshot_mode"] == "disabled"
+
+
+def test_background_shell_can_disable_workspace_change_tracking(
+    make_config, tmp_path: Path, monkeypatch
+) -> None:
+    config = make_config(environment__track_shell_file_changes=False)
+    config.sessions.root = tmp_path / "sessions"
+    config.tools.allow_side_effect_tools = True
+    runtime = AgentRuntime(config, model_client=object())
+    state = runtime.create_or_load_session()
+
+    from swaag.environment.filesystem import FilesystemManager
+
+    def forbidden_snapshot(self):
+        raise AssertionError("filesystem.snapshot must not run when shell change tracking is disabled")
+
+    monkeypatch.setattr(FilesystemManager, "snapshot", forbidden_snapshot)
+    started = runtime.execute_tool_once(
+        "shell_command",
+        {"command": "printf 'background-ok'", "background": True},
+        session_id=state.session_id,
+    ).tool_result
+    assert started is not None
+
+    poll = None
+    for _ in range(200):
+        poll = runtime.execute_tool_once(
+            "poll_process",
+            {"process_id": started.output["process_id"]},
+            session_id=state.session_id,
+        ).tool_result
+        assert poll is not None
+        if poll.output["completed"]:
+            break
+        time.sleep(0.02)
+
+    assert poll is not None and poll.output["completed"] is True
+    completed = poll.output["completed_tool_result"]
+    assert completed["output"]["stdout"] == "background-ok"
+    assert completed["output"]["created_files"] == []
+
+
 def test_run_tests_large_output_is_bounded_and_preserved(make_config, tmp_path: Path) -> None:
     config = make_config()
     config.sessions.root = tmp_path / "sessions"
