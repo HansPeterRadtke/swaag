@@ -59,7 +59,7 @@ class ShellSession:
             effective_env["SWAAG_CWD_FILE"] = str(cwd_path)
             effective_env["SWAAG_ENV_FILE"] = str(env_path)
             result = self.process_manager.run(
-                ["bash", "-lc", wrapped_command],
+                [self.config.environment.shell_executable, "-c", wrapped_command],
                 cwd=Path(cwd_before),
                 env=effective_env,
                 timeout_seconds=self.config.runtime.tool_timeout_seconds,

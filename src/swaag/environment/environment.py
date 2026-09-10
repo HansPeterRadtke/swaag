@@ -673,7 +673,7 @@ class AgentEnvironment:
         track_changes = bool(self.config.environment.track_shell_file_changes)
         before = self.filesystem.snapshot() if track_changes else {}
         record = self.process.start_background(
-            ["bash", "-lc", command],
+            [self.config.environment.shell_executable, "-c", command],
             cwd=Path(self.current_cwd),
             env=self.effective_env,
             timeout_seconds=self.config.runtime.tool_timeout_seconds,
