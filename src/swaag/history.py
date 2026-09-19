@@ -750,6 +750,25 @@ class HistoryStore:
             imported.append(restored)
         return imported
 
+    def list_authoritative_control_messages(self, session_id: str) -> list[dict[str, Any]]:
+        """Return durable user controls in delivery order, including already-processed controls.
+
+        Processed controls remain semantically authoritative for later actions in the same
+        durable worker/session. Pending-vs-processed is an execution state, not an authority
+        boundary.
+        """
+        with self._sqlite_connect() as connection:
+            rows = connection.execute(
+                """
+                SELECT control_id, session_id, message, source, created_at, priority, status
+                FROM control_messages
+                WHERE session_id=? AND status IN ('pending', 'processed')
+                ORDER BY created_at, control_id
+                """,
+                (session_id,),
+            ).fetchall()
+        return [dict(row) for row in rows]
+
     def mark_control_message_processed(self, session_id: str, control_id: str) -> None:
         with self._sqlite_connect() as connection:
             connection.execute(

@@ -838,9 +838,12 @@ class AgentRuntime:
                 self._ensure_delegated_catalog_observed(state, delegated_catalog)
             action_index = accepted_actions + 1
             pending_payloads = self.history.list_pending_control_messages(state.session_id)
+            authoritative_control_payloads = (
+                self.history.list_authoritative_control_messages(state.session_id)
+            )
             pending_messages = [
                 str(item.get("message", "")).strip()
-                for item in pending_payloads
+                for item in authoritative_control_payloads
                 if str(item.get("message", "")).strip()
             ]
             validation_feedback = recovery_feedback

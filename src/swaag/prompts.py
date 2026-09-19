@@ -319,7 +319,13 @@ class PromptBuilder:
                 PromptComponent(
                     name="pending_user_interventions",
                     category="current_user",
-                    text=f"New user interventions, verbatim and authoritative:\n{pending}\n\n",
+                    text=(
+                        "User interventions for this durable task, verbatim and authoritative. "
+                        "Interpret them in delivery order: later interventions supersede conflicting "
+                        "earlier task text or interventions, while non-conflicting earlier requirements "
+                        "remain in force.\n"
+                        f"{pending}\n\n"
+                    ),
                 )
             )
         if context_components:
@@ -411,7 +417,13 @@ class PromptBuilder:
             )
             components.append(PromptComponent(
                 name="pending_user_interventions", category="current_user",
-                text=f"New user interventions, verbatim and authoritative:\n{pending}\n\n",
+                text=(
+                        "User interventions for this durable task, verbatim and authoritative. "
+                        "Interpret them in delivery order: later interventions supersede conflicting "
+                        "earlier task text or interventions, while non-conflicting earlier requirements "
+                        "remain in force.\n"
+                        f"{pending}\n\n"
+                    ),
             ))
         if context_components:
             components.extend(context_components)
@@ -552,7 +564,13 @@ class PromptBuilder:
             )
             components.append(PromptComponent(
                 name="pending_user_interventions", category="current_user",
-                text=f"New user interventions, verbatim and authoritative:\n{pending}\n\n",
+                text=(
+                        "User interventions for this durable task, verbatim and authoritative. "
+                        "Interpret them in delivery order: later interventions supersede conflicting "
+                        "earlier task text or interventions, while non-conflicting earlier requirements "
+                        "remain in force.\n"
+                        f"{pending}\n\n"
+                    ),
             ))
         if context_components:
             components.extend(context_components)

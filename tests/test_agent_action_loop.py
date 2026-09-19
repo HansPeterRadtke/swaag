@@ -809,6 +809,8 @@ def test_pending_user_intervention_is_verbatim_on_next_model_call(make_config) -
 
     assert result.assistant_text.startswith("42")
     assert intervention in observed["prompt"]
+    assert intervention in observed["final_prompt"]
+    assert "later interventions supersede conflicting earlier task text" in observed["final_prompt"]
     assert '"result": 42' in observed["final_prompt"]
     assert runtime.history.list_pending_control_messages(state.session_id) == []
     events = runtime.history.read_history(state.session_id)
