@@ -1318,12 +1318,32 @@ class WorkerManager:
                     return
                 working = latest
                 first_sequence = state.event_count + 1
-                if working.run_count == 1 and not state.messages:
-                    result = self.runtime.run_turn_in_session(state, working.objective)
-                else:
-                    result = self.runtime.resume_turn_in_session(
-                        state, working.objective
+                try:
+                    if working.run_count == 1 and not state.messages:
+                        result = self.runtime.run_turn_in_session(state, working.objective)
+                    else:
+                        result = self.runtime.resume_turn_in_session(
+                            state, working.objective
+                        )
+                except ModelCallStateChanged:
+                    # A control message may invalidate any in-flight model call,
+                    # including calls made while projecting tool evidence. The
+                    # runtime deliberately refuses to replay stale context. A
+                    # durable worker must reconcile that authoritative control
+                    # instead of treating the safe preemption as worker failure.
+                    continued = self._continue_for_pending_controls(
+                        worker_id,
+                        working,
+                        phase="worker_turn_preempted",
+                        provisional_result=working.result or "",
                     )
+                    if continued is None:
+                        raise
+                    working = continued
+                    state = self.runtime.history.rebuild_from_history(
+                        working.session_id, write_projections=False
+                    )
+                    continue
                 latest = self.store.get(worker_id)
                 if latest.status == "cancellation_requested":
                     self._sync_history_events(working)

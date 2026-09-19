@@ -8,7 +8,7 @@ from typing import Any
 import pytest
 
 from swaag.model import CompletionRequestPolicy
-from swaag.preemption import ModelCallPreempted
+from swaag.preemption import ModelCallPreempted, ModelCallStateChanged
 from swaag.types import CompletionResult, ContractSpec
 from swaag.workers import WorkerManager
 
@@ -447,6 +447,64 @@ def test_worker_message_preempts_stale_request_and_rebuilds_from_control(make_co
     assert client.calls == 2
     history = runtime.history.read_history(worker.session_id)
     assert any(event.event_type == "model_call_replay_invalidated" for event in history)
+
+
+
+
+def test_worker_level_state_change_from_control_reconciles_instead_of_failing(
+    make_config, monkeypatch
+) -> None:
+    from swaag.runtime import AgentRuntime, TurnResult
+
+    runtime = AgentRuntime(make_config(model__context_limit=32_000), model_client=object())
+    manager = WorkerManager(runtime)
+    started = threading.Event()
+    release = threading.Event()
+
+    def stale_turn(state, _objective):
+        started.set()
+        assert release.wait(timeout=5)
+        raise ModelCallStateChanged(
+            "target session changed during communication; stale model request was not replayed"
+        )
+
+    def reconciled_turn(state, _objective):
+        pending = runtime.history.list_pending_control_messages(state.session_id)
+        assert [item["message"] for item in pending] == ["new exact direction"]
+        for item in pending:
+            runtime.history.mark_control_message_processed(
+                state.session_id, item["control_id"]
+            )
+        return TurnResult(
+            session_id=state.session_id,
+            assistant_text="redirect complete",
+            tool_results=[],
+            budget_reports=[],
+        )
+
+    monkeypatch.setattr(runtime, "run_turn_in_session", stale_turn)
+    monkeypatch.setattr(runtime, "resume_turn_in_session", reconciled_turn)
+
+    worker = manager.create("original direction")
+    manager.start(worker.worker_id)
+    assert started.wait(timeout=10)
+    manager.message(worker.worker_id, "new exact direction")
+    release.set()
+    finished = manager.wait(worker.worker_id, timeout_seconds=10)
+    events = manager.events(worker.worker_id)
+    manager.shutdown()
+
+    assert finished.status == "completed"
+    assert finished.result == "redirect complete"
+    assert finished.error is None
+    assert finished.run_count == 2
+    continuation = next(
+        event
+        for event in events
+        if event.event_type == "worker_control_continuation_started"
+    )
+    assert continuation.payload["phase"] == "worker_turn_preempted"
+    assert runtime.history.list_pending_control_messages(worker.session_id) == []
 
 
 def test_worker_message_preempts_provisional_completion_evaluation(make_config) -> None:
