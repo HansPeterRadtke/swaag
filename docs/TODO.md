@@ -4,7 +4,7 @@ This is the gap list between the current repository and the intended architectur
 
 ## Current integration status — 2026-09-30
 
-The merged Jetson candidate and fresh acceptance evidence are documented in [the integration audit](integration-audit-2026-09-30.md) and [live benchmark results](live-benchmark-results.md). Deployment of this candidate and integration of Infra's dirty main checkout are awaiting explicit approval after automatic approval review blocked those operations. Older deployment results below remain historical; they do not prove that this candidate is installed. External acceptance and broader benchmark roadmap items remain open where marked.
+The merged Jetson candidate and fresh acceptance evidence are documented in [the integration audit](integration-audit-2026-09-30.md) and [live benchmark results](live-benchmark-results.md). After explicit continuation approval, the verified candidate was installed and the production service restarted successfully. The fresh production verifier passes 16/16. Infra main is integrated and published with unrelated work preserved; the production OpenWebUI acceptance request is in progress. Older deployment results remain historical. External acceptance and broader benchmark roadmap items remain open where marked.
 
 ## P0 - context compilation and semantic ownership
 
