@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+from contextlib import AbstractContextManager
+
 import json
 import sqlite3
 from dataclasses import asdict, dataclass
@@ -14,7 +16,7 @@ from swaag.prompt_instructions import (
     make_prompt_instruction,
     TRUSTED_PROMPT_INSTRUCTION_AUTHORITIES,
 )
-from swaag.sqlite_schema import apply_sqlite_migrations
+from swaag.sqlite_schema import apply_sqlite_migrations, managed_sqlite_connection
 from swaag.types import PromptInstruction
 from swaag.utils import new_id, sha256_text, stable_json_dumps, utc_now_iso
 
@@ -103,12 +105,11 @@ class PromptInstructionStore:
                 migrations=_MIGRATIONS,
             )
 
-    def _connect(self) -> sqlite3.Connection:
-        connection = sqlite3.connect(self.path, timeout=30.0)
-        connection.row_factory = sqlite3.Row
-        connection.execute("PRAGMA foreign_keys=ON")
-        connection.execute("PRAGMA journal_mode=WAL")
-        return connection
+    def _connect(self) -> AbstractContextManager[sqlite3.Connection]:
+        return managed_sqlite_connection(
+            self.path,
+            pragmas=('PRAGMA foreign_keys=ON', 'PRAGMA journal_mode=WAL'),
+        )
 
     @staticmethod
     def _decode_instruction(raw: str | None) -> tuple[dict[str, Any] | None, PromptInstruction | None]:

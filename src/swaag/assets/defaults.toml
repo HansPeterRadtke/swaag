@@ -45,6 +45,11 @@ cache_enabled = true
 cache_mode = "record"
 # Empty resolves to <sessions.root parent>/llm-model-cache.json.
 cache_path = ""
+# Positive byte/entry limits. Refuse over-capacity recording without deleting replay evidence.
+cache_max_bytes = 134217728
+cache_max_entries = 16384
+# Fixed lock-file count. Change only while this cassette is not in use.
+cache_lock_stripes = 128
 timeout_seconds = 120
 connect_timeout_seconds = 10
 simple_timeout_seconds = 60
@@ -77,6 +82,14 @@ lean_on_overflow = true
 strict_budget = true
 max_validation_recovery_cycles = 2
 completion_evaluation_enabled = true
+# Durable unresolved-question capacity: reject additions, never silently discard.
+# Higher limits retain more open questions but consume more model context.
+# Positive counts: pending controls per session and nonterminal requests per backend.
+# Admission rejects at capacity; accepted work and exact replay remain intact.
+max_pending_controls = 256
+max_pending_inference = 256
+max_open_questions = 128
+max_open_question_chars = 65536
 tool_timeout_seconds = 10
 background_poll_seconds = 0.1
 
@@ -87,7 +100,7 @@ background_poll_seconds = 0.1
 # allow_side_effect_tools: set true only if destructive writes are intended.
 # -----------------------------------------------------------
 [tools]
-enabled = ["echo", "time_now", "calculator", "agent_workspace", "list_files", "read_file", "read_text", "search_in_file", "search_repo", "history_search", "history_window", "history_analyze", "read_artifact", "list_attachments", "read_attachment", "terminal", "notes", "prompt_instructions", "shared_state", "edit_text", "write_file", "run_tests", "shell_command", "poll_process", "kill_process", "wait_seconds", "schedule_wakeup", "list_wakeups", "cancel_wakeup"]
+enabled = ["echo", "time_now", "calculator", "agent_workspace", "list_files", "read_file", "read_text", "search_in_file", "search_repo", "history_search", "history_window", "history_analyze", "read_artifact", "list_attachments", "read_attachment", "terminal", "notes", "prompt_instructions", "questions", "shared_state", "edit_text", "write_file", "run_tests", "shell_command", "poll_process", "kill_process", "wait_seconds", "schedule_wakeup", "list_wakeups", "cancel_wakeup"]
 read_roots = ["."]
 allow_stateful_tools = true
 allow_side_effect_tools = false
@@ -114,6 +127,8 @@ semantic_reduction_max_input_tokens = 8192
 # Hard ceiling for one hierarchical semantic-reduction tree. The runtime derives
 # the actual allowance from exact source size/context capacity, never exceeding this.
 semantic_reduction_max_calls = 256
+# Positive in-memory memo count; FIFO eviction only causes recomputation.
+max_token_count_cache_entries = 4096
 
 # -----------------------------------------------------------
 # [sessions] — SESSION STORAGE
@@ -443,13 +458,21 @@ jwks_url = ""
 enabled = false
 model_base_url = ""
 max_concurrent_requests = 4
+# Positive counts, separate from execution concurrency. Reject rather than grow unbounded.
+max_active_workers = 128
+max_pending_requests = 128
 # Initial status/control response cap. Output-recovery may grow this only when
 # constrained generation actually exhausts the cap.
 status_max_output_tokens = 192
-enabled_tools = ["time_now", "system_resources", "calculator", "history_search", "history_window", "agent_status_lookup", "agent_control", "orchestration_control"]
+enabled_tools = ["time_now", "system_resources", "calculator", "history_search", "history_window", "agent_status_lookup", "agent_control", "orchestration_control", "background_work", "questions"]
 host = "127.0.0.1"
 port = 8765
 poll_seconds = 0.2
+# Explicit opt-in: finish_only does not dispatch queued background plans.
+# authorized_backlog starts user-authorized plans only when foreground work is idle.
+idle_work_mode = "finish_only"
+# Pending/held plan count, positive; overflow rejects without deleting work.
+max_background_plans = 128
 
 [communication.open_webui_artifacts]
 enabled = false

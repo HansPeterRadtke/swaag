@@ -257,3 +257,32 @@ def test_streaming_progress_exposes_backend_reported_usage_evidence(
     assert progress[-1]["backend_completion_tokens"] == 2
     assert progress[-1]["prompt_tokens_source"] == "tokens_evaluated"
     assert progress[-1]["completion_tokens_source"] == "tokens_predicted"
+
+
+@pytest.mark.parametrize("inferred_encoding", [None, "ISO-8859-1", "utf-8"])
+def test_sse_preserves_utf8_with_split_bytes_and_inferred_encoding(
+    make_config, monkeypatch, inferred_encoding
+):
+    import io
+
+    class ByteChunks(io.BytesIO):
+        def read(self, size=-1):
+            return super().read(1 if size != 0 else 0)
+
+    expected = "Grüße — 東京 🚀"
+    response = requests.Response()
+    response.status_code = 200
+    response.headers["Content-Type"] = "text/event-stream"
+    response.encoding = inferred_encoding
+    response.raw = ByteChunks((
+        ": keepalive\n\ndata: "
+        + json.dumps({"content": expected, "stop": True}, ensure_ascii=False)
+        + "\n\ndata: [DONE]\n\n"
+    ).encode("utf-8"))
+    monkeypatch.setattr("swaag.model.requests.post", lambda *args, **kwargs: response)
+
+    result = LlamaCppClient(make_config()).send_completion({"prompt": "x", "n_predict": 64})
+
+    assert result.text == expected
+    assert result.raw_response["content"] == expected
+    assert response.raw.closed

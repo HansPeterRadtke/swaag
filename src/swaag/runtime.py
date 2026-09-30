@@ -13,6 +13,7 @@ from pathlib import Path
 from typing import Any, Callable, Iterable, Iterator
 
 
+from swaag.questions import validate_question_capacity
 from swaag.redaction import configured_secret_values
 from swaag.action import ActionValidationError, AgentAction, action_from_payload
 from swaag.attachments import AttachmentStore
@@ -271,6 +272,7 @@ class AgentRuntime:
             write_projections=config.sessions.write_projections,
             event_observer=event_observer,
             secret_values=configured_secret_values(config),
+            max_pending_controls=config.runtime.max_pending_controls,
         )
         if history_store is not None:
             history_store.secret_values = tuple(
@@ -285,6 +287,7 @@ class AgentRuntime:
             config.sessions.root,
             backend_key=self._inference_backend_key(),
             capacity_resolver=self._inference_capacity,
+            max_pending_requests=config.runtime.max_pending_inference,
             max_running_seconds=(
                 max(
                     int(config.model.timeout_seconds),
@@ -299,6 +302,7 @@ class AgentRuntime:
         )
         self._token_counter = token_counter
         self._token_count_cache: dict[str, CountResult] = {}
+        self._token_count_cache_lock = threading.Lock()
         self._sleep = time.sleep
         self._max_model_unavailable_attempts: int | None = None
 
@@ -1034,6 +1038,12 @@ class AgentRuntime:
             if state_changed_during_call:
                 continue
 
+            if selected_action is not None:
+                try:
+                    validate_question_capacity(state, selected_action.questions, self.config)
+                except ValueError as exc:
+                    validation_feedback = str(exc)
+                    selected_action = None
             if selected_action is None:
                 recovery_feedback = validation_feedback or (
                     "The previous mechanical action could not be validated. Produce a different valid action that follows the exact tool schemas and remaining budget."
@@ -9200,8 +9210,9 @@ class AgentRuntime:
 
     def _tokenize_with_history(self, state: SessionState, text: str) -> CountResult:
         text_hash = sha256_text(text)
-        if text_hash in self._token_count_cache:
-            return self._token_count_cache[text_hash]
+        with self._token_count_cache_lock:
+            if text_hash in self._token_count_cache:
+                return self._token_count_cache[text_hash]
         guard = self.history.guard(state, "tokenize")
         guard.record(
             "model_tokenize_requested",
@@ -9260,7 +9271,10 @@ class AgentRuntime:
                 },
             )
             guard.require_all("model_tokenize_requested", "model_tokenize_result")
-        self._token_count_cache[text_hash] = counted
+        with self._token_count_cache_lock:
+            self._token_count_cache[text_hash] = counted
+            while len(self._token_count_cache) > self.config.context.max_token_count_cache_entries:
+                self._token_count_cache.pop(next(iter(self._token_count_cache)))
         return counted
 
     def _retry_model_server_operation(

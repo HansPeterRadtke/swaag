@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+from contextlib import AbstractContextManager
+
 import json
 import os
 import re
@@ -8,11 +10,13 @@ from dataclasses import asdict
 from pathlib import Path
 from typing import Any, Callable, Iterable, Iterator
 
+from swaag.capacity import positive_capacity, require_capacity
+from swaag.questions import question_record
 from swaag.redaction import redact_for_persistence
 from swaag.environment.state import EnvironmentState, ProcessRecord, ShellSessionState, WorkspaceState
 from swaag.heartbeat import validate_worker_phase, validate_worker_substate
 from swaag.history_archive import HistoryArchiveStore
-from swaag.sqlite_schema import apply_sqlite_migrations
+from swaag.sqlite_schema import apply_sqlite_migrations, managed_sqlite_connection
 from swaag.events import ALLOWED_EVENT_TYPES, READABLE_EVENT_TYPES, EventSchemaError, create_event, verify_event_integrity
 from swaag.types import (
     AttachmentReference,
@@ -54,6 +58,8 @@ CONTROL_PROCESSED_DIR_NAME = "control_processed"
 
 _STATEFUL_REBUILD_EVENT_TYPES = frozenset(
     {
+        "agent_question",
+        "agent_question_resolved",
         "session_created",
         "session_renamed",
         "message_added",
@@ -178,7 +184,9 @@ class HistoryStore:
         write_projections: bool = True,
         event_observer: Callable[[HistoryEvent], None] | None = None,
         secret_values: Iterable[str] = (),
+        max_pending_controls: int = 256,
     ):
+        self.max_pending_controls = positive_capacity(max_pending_controls, "max_pending_controls")
         self.root = Path(root).expanduser()
         self.write_projections = write_projections
         self.event_observer = event_observer
@@ -190,14 +198,11 @@ class HistoryStore:
     def sqlite_history_path(self) -> Path:
         return self.root / "history.sqlite3"
 
-    def _sqlite_connect(self) -> sqlite3.Connection:
-        connection = sqlite3.connect(self.sqlite_history_path(), timeout=30.0)
-        connection.row_factory = sqlite3.Row
-        connection.execute("PRAGMA journal_mode=WAL")
-        connection.execute("PRAGMA synchronous=FULL")
-        connection.execute("PRAGMA foreign_keys=ON")
-        connection.execute("PRAGMA busy_timeout=30000")
-        return connection
+    def _sqlite_connect(self) -> AbstractContextManager[sqlite3.Connection]:
+        return managed_sqlite_connection(
+            self.sqlite_history_path(),
+            pragmas=('PRAGMA journal_mode=WAL', 'PRAGMA synchronous=FULL', 'PRAGMA foreign_keys=ON', 'PRAGMA busy_timeout=30000'),
+        )
 
     def _init_sqlite_history(self) -> None:
         version = tuple(int(part) for part in sqlite3.sqlite_version.split(".")[:3])
@@ -688,6 +693,17 @@ class HistoryStore:
             "priority": priority,
         }
         with self._sqlite_connect() as connection:
+            connection.execute("BEGIN IMMEDIATE")
+            existing = connection.execute("SELECT session_id,message,source FROM control_messages WHERE control_id=?", (control_id,)).fetchone()
+            if existing is not None:
+                if existing["session_id"] != session_id:
+                    raise ValueError("control_id is already bound to a different session")
+                # Preserve the established idempotency contract: within one session,
+                # the first accepted payload wins even if a retry repeats new text.
+            else:
+                require_capacity(connection,
+                    "SELECT COUNT(*) FROM control_messages WHERE session_id=? AND status='pending'",
+                    (session_id,), limit=self.max_pending_controls, name="pending session controls")
             connection.execute(
                 """
                 INSERT OR IGNORE INTO control_messages(
@@ -1542,6 +1558,8 @@ class HistoryStore:
         except Exception:
             return None
         try:
+            if "open_questions" not in payload:
+                return None  # Older checkpoints omitted questions; rebuild canonical events.
             return _state_from_payload(payload)
         except Exception:
             return None
@@ -1553,6 +1571,13 @@ class HistoryStore:
         state.last_event_hash = event.hash
         self._update_metrics(state, event)
 
+        if event.event_type == "agent_question":
+            state.open_questions.append(question_record(event))
+            return
+        if event.event_type == "agent_question_resolved":
+            state.open_questions = [item for item in state.open_questions
+                                    if item["question_id"] != payload["question_id"]]
+            return
         if event.event_type == "session_created":
             state.session_id = str(payload["session_id"])
             state.created_at = str(payload["created_at"])
@@ -2000,6 +2025,7 @@ def _state_from_payload(payload: dict[str, Any]) -> SessionState:
         session_name_source=str(payload.get("session_name_source", "placeholder")),
         messages=[Message(**item) for item in payload.get("messages", [])],
         notes=[Note(**item) for item in payload.get("notes", [])],
+        open_questions=[dict(item) for item in payload.get("open_questions", [])],
         prompt_instructions=[
             PromptInstruction(**item)
             for item in payload.get("prompt_instructions", [])

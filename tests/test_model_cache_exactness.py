@@ -266,3 +266,46 @@ def test_record_mode_propagates_cooperative_cancellation(tmp_path: Path) -> None
     cached.send_completion(base_payload(), cancel_check=cancellation)
 
     assert delegate.cancel_checks == [cancellation]
+
+
+def test_cache_entry_pressure_preserves_committed_replay_bytes(tmp_path):
+    from swaag.capacity import QueueCapacityError
+    cassette=tmp_path/'bounded.json'
+    delegate=Delegate()
+    client=RecordReplayModelClient(cassette_path=cassette,mode='record',delegate=delegate,max_entries=1)
+    first=client.send_completion({'prompt':'first'})
+    original=cassette.read_bytes()
+    with pytest.raises(QueueCapacityError,match='entry capacity'):
+        client.send_completion({'prompt':'second'})
+    assert cassette.read_bytes()==original
+    replay=RecordReplayModelClient(cassette_path=cassette,mode='replay',delegate=delegate,max_entries=1)
+    assert replay.send_completion({'prompt':'first'}).text==first.text
+
+
+def test_cache_byte_pressure_and_oversized_existing_file_fail_without_replacement(tmp_path):
+    from swaag.capacity import QueueCapacityError
+    cassette=tmp_path/'bytes.json'
+    delegate=Delegate()
+    client=RecordReplayModelClient(cassette_path=cassette,mode='record',delegate=delegate)
+    client.send_completion({'prompt':'first'})
+    original=cassette.read_bytes()
+    bounded=RecordReplayModelClient(cassette_path=cassette,mode='record',delegate=delegate,max_bytes=len(original))
+    with pytest.raises(QueueCapacityError,match='byte capacity'):
+        bounded.send_completion({'prompt':'x'*10000})
+    assert cassette.read_bytes()==original
+    with pytest.raises(QueueCapacityError,match='cache_max_bytes'):
+        RecordReplayModelClient(cassette_path=cassette,mode='replay',delegate=delegate,max_bytes=len(original)-1)
+    assert cassette.read_bytes()==original
+
+
+def test_cache_counts_auxiliary_entries_and_bounds_request_lock_files(tmp_path):
+    from swaag.capacity import QueueCapacityError
+    from swaag.utils import sha256_text
+    cassette=tmp_path/'auxiliary.json'
+    client=RecordReplayModelClient(cassette_path=cassette,mode='record',delegate=Delegate(),max_entries=1,lock_stripes=3)
+    assert client.tokenize('first')==5
+    original=cassette.read_bytes()
+    with pytest.raises(QueueCapacityError,match='entry capacity'):
+        client.tokenize('second')
+    assert cassette.read_bytes()==original
+    assert len({client._request_lock_path(sha256_text(str(index))) for index in range(1000)})==3

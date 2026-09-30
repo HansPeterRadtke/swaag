@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+from contextlib import AbstractContextManager
+
 import json
 import os
 import shutil
@@ -9,7 +11,7 @@ from datetime import datetime, timezone
 from pathlib import Path
 from typing import Iterable
 
-from swaag.sqlite_schema import apply_sqlite_migrations
+from swaag.sqlite_schema import apply_sqlite_migrations, managed_sqlite_connection
 from swaag.types import HistoryEvent
 from swaag.utils import validate_storage_identifier
 
@@ -52,11 +54,11 @@ class HistoryArchiveStore:
         self.archive_root.mkdir(parents=True, exist_ok=True)
         self._init_catalog()
 
-    def _catalog(self) -> sqlite3.Connection:
-        connection = sqlite3.connect(self.catalog_path, timeout=30.0)
-        connection.row_factory = sqlite3.Row
-        connection.execute("PRAGMA journal_mode=WAL")
-        return connection
+    def _catalog(self) -> AbstractContextManager[sqlite3.Connection]:
+        return managed_sqlite_connection(
+            self.catalog_path,
+            pragmas=('PRAGMA journal_mode=WAL',),
+        )
 
     def _init_catalog(self) -> None:
         with self._catalog() as connection:
@@ -144,16 +146,14 @@ class HistoryArchiveStore:
         if entry is None:
             raise FileNotFoundError(f"Unknown archived session: {ref}")
         uri = f"file:{entry.shard_path}?mode=ro&immutable=1"
-        connection = sqlite3.connect(uri, uri=True)
-        connection.row_factory = sqlite3.Row
         sql = "SELECT * FROM events WHERE sequence>=?"
         params: list[object] = [start_sequence]
         if end_sequence is not None:
             sql += " AND sequence<=?"
             params.append(end_sequence)
         sql += " ORDER BY sequence"
-        rows = connection.execute(sql, params).fetchall()
-        connection.close()
+        with managed_sqlite_connection(uri, uri=True) as connection:
+            rows = connection.execute(sql, params).fetchall()
         return [
             HistoryEvent(
                 id=str(row["event_id"]), sequence=int(row["sequence"]), session_id=str(row["session_id"]),
@@ -173,11 +173,9 @@ class HistoryArchiveStore:
             return []
         match = " OR ".join(f'"{term}"' for term in terms)
         uri = f"file:{entry.shard_path}?mode=ro&immutable=1"
-        connection = sqlite3.connect(uri, uri=True)
-        connection.row_factory = sqlite3.Row
-        rows = connection.execute(
-            "SELECT sequence,event_type,content FROM events_fts WHERE events_fts MATCH ? ORDER BY bm25(events_fts) LIMIT ?",
-            (match, limit),
-        ).fetchall()
-        connection.close()
+        with managed_sqlite_connection(uri, uri=True) as connection:
+            rows = connection.execute(
+                "SELECT sequence,event_type,content FROM events_fts WHERE events_fts MATCH ? ORDER BY bm25(events_fts) LIMIT ?",
+                (match, limit),
+            ).fetchall()
         return [dict(row) for row in rows]

@@ -4,7 +4,18 @@ This is the gap list between the current repository and the intended architectur
 
 ## Current integration status — 2026-09-30
 
-The merged Jetson candidate and fresh acceptance evidence are documented in [the integration audit](integration-audit-2026-09-30.md) and [live benchmark results](live-benchmark-results.md). After explicit continuation approval, the verified candidate was installed and the production service restarted successfully. The fresh production verifier passes 16/16. Infra main is integrated and published with unrelated work preserved; the production OpenWebUI Pipe request and idempotent replay both passed. The cold first-turn latency remains an explicit performance issue. Older deployment results remain historical. External acceptance and broader benchmark roadmap items remain open where marked.
+The full authored Infra reading and applicability mapping now supersede the earlier selected-guideline review; see [the complete audit](complete-infra-audit-2026-09-30.md). The new candidate implements durable question resolution, authorized idle backlog, bounded queues/caches, deterministic SQLite connection cleanup, exact UTF-8 streaming, and shared model-start safety. Focused verification passed; the seven-check question trajectory and both instruction-category holdouts passed, and the final full gate passed 999 tests with three optional external-tool skips. Production currently remains on the earlier September 30 verified release. Earlier Pipe/runtime and deployment evidence remains historical until explicitly replaced. Cold interactive latency, actual browser/client acceptance, external protected protocols and broader semantic/long-horizon evaluation remain open.
+
+## Full Infra follow-up
+
+- [x] Read all authored guidance/implementation files and preserve all original recordings; account separately for credentials, binaries, catalogs and vendor bundles.
+- [x] Project unresolved questions from canonical history and require explicit evidence-backed resolution; retain unanswered assumptions and exact replay.
+- [x] Persist explicitly authorized unstarted plans with revision holds, bounded admission, idle deferral and restart recovery; keep automatic dispatch disabled by default.
+- [x] Bound active execution queues, token-count memo, model cassettes and request-lock files without discarding accepted work or replay evidence.
+- [x] Close owned SQLite connections on success, rollback and setup failure; preserve existing plans through the backlog migration.
+- [ ] Complete the frozen full release gate, real-model question/category checks and current candidate deployment verification.
+- [ ] Complete broader authorization/authority-conflict and long-horizon semantic holdouts; local mechanical success alone does not close these gates.
+
 
 ## P0 - context compilation and semantic ownership
 

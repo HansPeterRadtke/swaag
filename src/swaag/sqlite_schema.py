@@ -1,7 +1,32 @@
 from __future__ import annotations
 
 import sqlite3
-from collections.abc import Sequence
+from collections.abc import Iterator, Sequence
+from contextlib import contextmanager
+from pathlib import Path
+
+
+@contextmanager
+def managed_sqlite_connection(
+    path: str | Path,
+    *,
+    pragmas: Sequence[str] = (),
+    uri: bool = False,
+) -> Iterator[sqlite3.Connection]:
+    """Commit/rollback and close each owned connection, including setup failures.
+
+    sqlite3.Connection's own context manager handles transactions but does not
+    close the connection; relying on cyclic garbage collection exhausts handles.
+    """
+    connection = sqlite3.connect(path, timeout=30.0, uri=uri)
+    try:
+        connection.row_factory = sqlite3.Row
+        for pragma in pragmas:
+            connection.execute(pragma)
+        with connection:
+            yield connection
+    finally:
+        connection.close()
 
 
 class UnsupportedSchemaVersionError(RuntimeError):

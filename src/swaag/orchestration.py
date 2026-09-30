@@ -1,13 +1,16 @@
 from __future__ import annotations
 
+from contextlib import AbstractContextManager
+
 import json
 import math
 import sqlite3
+import threading
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
 
-from swaag.sqlite_schema import apply_sqlite_migrations
+from swaag.sqlite_schema import apply_sqlite_migrations, managed_sqlite_connection
 from swaag.utils import new_id, stable_json_dumps, utc_now_iso
 
 _ORCHESTRATION_MIGRATIONS = ((
@@ -55,6 +58,13 @@ _ORCHESTRATION_MIGRATIONS = ((
         FOREIGN KEY(plan_id) REFERENCES orchestration_plans(plan_id),
         UNIQUE(plan_id,sequence)
     )""",
+), (
+    """CREATE TABLE orchestration_backlog (
+        plan_id TEXT PRIMARY KEY REFERENCES orchestration_plans(plan_id),
+        state TEXT NOT NULL, authorized_revision INTEGER NOT NULL,
+        authorization_session_id TEXT NOT NULL, authorization_event_sequence INTEGER NOT NULL,
+        authorization_event_hash TEXT NOT NULL, created_at TEXT NOT NULL, updated_at TEXT NOT NULL
+    )""",
 ))
 
 @dataclass(slots=True, frozen=True)
@@ -77,13 +87,11 @@ class OrchestrationStore:
         with self._connect() as c:
             apply_sqlite_migrations(c, store_name='orchestration store', migrations=_ORCHESTRATION_MIGRATIONS)
 
-    def _connect(self):
-        c = sqlite3.connect(self.path, timeout=30.0)
-        c.row_factory = sqlite3.Row
-        c.execute('PRAGMA journal_mode=WAL')
-        c.execute('PRAGMA synchronous=FULL')
-        c.execute('PRAGMA foreign_keys=ON')
-        return c
+    def _connect(self) -> AbstractContextManager[sqlite3.Connection]:
+        return managed_sqlite_connection(
+            self.path,
+            pragmas=('PRAGMA journal_mode=WAL', 'PRAGMA synchronous=FULL', 'PRAGMA foreign_keys=ON'),
+        )
 
     def create_plan(
         self,
@@ -679,6 +687,7 @@ class OrchestrationManager:
         self.store = store or OrchestrationStore(workers.runtime.config.sessions.root)
         self.worker_managers = {"default": workers, **dict(worker_managers or {})}
         self.route_capability_validator = route_capability_validator
+        self._start_lock = threading.RLock()
 
     def _worker_manager(self, model_key: str | None):
         key = (model_key or "default").strip() or "default"
@@ -1089,8 +1098,16 @@ class OrchestrationManager:
         }
 
     def start_ready(self, plan_id: str) -> list[str]:
+        with self._start_lock:
+            return self._start_ready_locked(plan_id)
+
+    def _start_ready_locked(self, plan_id: str) -> list[str]:
         """Start every mechanically runnable node, ordered by configured priority."""
         plan = self.store.get_plan(plan_id)
+        with self.store._connect() as connection:
+            queued = connection.execute("SELECT 1 FROM orchestration_backlog WHERE plan_id=? AND state IN ('pending','held')", (plan_id,)).fetchone()
+        if queued is not None:
+            return []  # Idle dispatcher owns queued starts; cancel backlog before an immediate start.
         if plan.status in {"completed", "canceled"}:
             return []
         if plan.status == "draft":

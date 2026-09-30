@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+from contextlib import AbstractContextManager
+
 import json
 import math
 import sqlite3
@@ -10,7 +12,7 @@ from concurrent.futures import ThreadPoolExecutor, Future
 
 import requests
 
-from swaag.sqlite_schema import apply_sqlite_migrations
+from swaag.sqlite_schema import apply_sqlite_migrations, managed_sqlite_connection
 
 
 _EMBEDDING_INDEX_MIGRATIONS = (
@@ -85,12 +87,11 @@ class DerivedEmbeddingIndex:
         self.root.mkdir(parents=True, exist_ok=True)
         self._init()
 
-    def _connect(self) -> sqlite3.Connection:
-        connection = sqlite3.connect(self.path, timeout=30.0)
-        connection.row_factory = sqlite3.Row
-        connection.execute("PRAGMA journal_mode=WAL")
-        connection.execute("PRAGMA synchronous=NORMAL")
-        return connection
+    def _connect(self) -> AbstractContextManager[sqlite3.Connection]:
+        return managed_sqlite_connection(
+            self.path,
+            pragmas=('PRAGMA journal_mode=WAL', 'PRAGMA synchronous=NORMAL'),
+        )
 
     def _init(self) -> None:
         with self._connect() as connection:

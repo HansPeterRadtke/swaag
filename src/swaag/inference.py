@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+from contextlib import AbstractContextManager
+
 import os
 import math
 import sqlite3
@@ -9,8 +11,9 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import Any, Callable, Iterable
 
+from swaag.capacity import positive_capacity, require_capacity
 from swaag.preemption import ModelCallPreempted
-from swaag.sqlite_schema import apply_sqlite_migrations
+from swaag.sqlite_schema import apply_sqlite_migrations, managed_sqlite_connection
 from swaag.utils import new_id, utc_now_iso
 
 
@@ -106,9 +109,11 @@ class InferenceRequestCoordinator:
         poll_seconds: float = 0.02,
         aging_seconds_per_priority: float = 1.0,
         max_running_seconds: float | None = None,
+        max_pending_requests: int = 256,
     ):
         self.path = Path(root).expanduser() / "inference_requests.sqlite3"
         self.path.parent.mkdir(parents=True, exist_ok=True)
+        self.max_pending_requests = positive_capacity(max_pending_requests, "max_pending_requests")
         self.backend_key = str(backend_key)
         self.capacity_resolver = capacity_resolver
         self.poll_seconds = max(0.005, float(poll_seconds))
@@ -128,13 +133,11 @@ class InferenceRequestCoordinator:
                 migrations=_INFERENCE_STORE_MIGRATIONS,
             )
 
-    def _connect(self) -> sqlite3.Connection:
-        connection = sqlite3.connect(self.path, timeout=30.0)
-        connection.row_factory = sqlite3.Row
-        connection.execute("PRAGMA journal_mode=WAL")
-        connection.execute("PRAGMA synchronous=FULL")
-        connection.execute("PRAGMA busy_timeout=30000")
-        return connection
+    def _connect(self) -> AbstractContextManager[sqlite3.Connection]:
+        return managed_sqlite_connection(
+            self.path,
+            pragmas=('PRAGMA journal_mode=WAL', 'PRAGMA synchronous=FULL', 'PRAGMA busy_timeout=30000'),
+        )
 
     @staticmethod
     def _record(row: sqlite3.Row | None) -> InferenceRequest | None:
@@ -163,6 +166,10 @@ class InferenceRequestCoordinator:
         queued_epoch = time.time()
         request_id = new_id("inference_request")
         with self._connect() as connection:
+            connection.execute("BEGIN IMMEDIATE")
+            require_capacity(connection,
+                "SELECT COUNT(*) FROM inference_requests WHERE backend_key=? AND status IN ('queued','running','suspended')",
+                (self.backend_key,), limit=self.max_pending_requests, name="pending model requests")
             connection.execute(
                 """
                 INSERT INTO inference_requests(

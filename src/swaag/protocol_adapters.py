@@ -692,13 +692,14 @@ class AgUiProjectionAdapter:
                         "messageId": message_id,
                     },
                 ]
-        if source_type == "agent_question":
+        if source_type in {"agent_question", "agent_question_resolved"}:
             return [
                 {
                     **history_base,
                     "type": "CUSTOM",
-                    "name": "swaag.agent.question",
-                    "value": source_payload,
+                    "name": "swaag.agent.question" if source_type == "agent_question" else "swaag.agent.question.resolved",
+                    "value": ({"question_id": str(source.get("id") or event.event_id), **source_payload}
+                              if source_type == "agent_question" else source_payload),
                 }
             ]
         return [

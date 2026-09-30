@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+from contextlib import AbstractContextManager
+
 import asyncio
 import base64
 import binascii
@@ -30,6 +32,8 @@ from cryptography.hazmat.primitives.asymmetric import ec
 from cryptography.hazmat.primitives.asymmetric.utils import decode_dss_signature
 from cryptography.hazmat.primitives.ciphers.aead import AESGCM
 
+from swaag.capacity import positive_capacity, require_capacity
+from swaag.background_work import BackgroundWork
 from swaag.config import AgentConfig
 from swaag.delegated_tools import DelegatedToolCall, DelegatedToolResultInput
 from swaag.environment.artifacts import TextArtifactStore
@@ -54,7 +58,7 @@ from swaag.shared_state import (
     SharedStateSnapshot,
     shared_state_event_payload,
 )
-from swaag.sqlite_schema import apply_sqlite_migrations
+from swaag.sqlite_schema import apply_sqlite_migrations, managed_sqlite_connection
 from swaag.task_api import TaskApi
 from swaag.orchestration import OrchestrationManager
 from swaag.orchestration_api import OrchestrationApi
@@ -273,7 +277,8 @@ ProtocolStateSnapshot = SharedStateSnapshot
 
 
 class CommunicationStore:
-    def __init__(self, root: Path):
+    def __init__(self, root: Path, *, max_pending_requests: int = 128):
+        self.max_pending_requests = positive_capacity(max_pending_requests, "max_pending_requests")
         self.path = Path(root).expanduser() / "communication.sqlite3"
         self.path.parent.mkdir(parents=True, exist_ok=True)
         with self._connect() as connection:
@@ -283,12 +288,11 @@ class CommunicationStore:
                 migrations=_COMMUNICATION_STORE_MIGRATIONS,
             )
 
-    def _connect(self) -> sqlite3.Connection:
-        connection = sqlite3.connect(self.path, timeout=30.0)
-        connection.row_factory = sqlite3.Row
-        connection.execute("PRAGMA journal_mode=WAL")
-        connection.execute("PRAGMA synchronous=FULL")
-        return connection
+    def _connect(self) -> AbstractContextManager[sqlite3.Connection]:
+        return managed_sqlite_connection(
+            self.path,
+            pragmas=('PRAGMA journal_mode=WAL', 'PRAGMA synchronous=FULL'),
+        )
 
     def create(self, session_id: str, message: str, *, source: str = "communication") -> CommunicationRequest:
         text = message.strip()
@@ -297,6 +301,10 @@ class CommunicationStore:
         priority = 0
         request = CommunicationRequest(new_id("correlation"), session_id, text, source, priority, "queued", utc_now_iso())
         with self._connect() as connection:
+            connection.execute("BEGIN IMMEDIATE")
+            require_capacity(connection,
+                "SELECT COUNT(*) FROM requests WHERE status IN ('queued','processing')",
+                (), limit=self.max_pending_requests, name="pending communication requests")
             connection.execute(
                 "INSERT INTO requests(correlation_id,session_id,message,source,priority,status,created_at) VALUES(?,?,?,?,?,?,?)",
                 (request.correlation_id, request.session_id, request.message, request.source, request.priority, request.status, request.created_at),
@@ -1272,7 +1280,7 @@ class CommunicationService:
             ):
                 raise RuntimeError("A2A Agent Card ES256 signing requires a P-256 EC private key")
             self._a2a_signing_key = key
-        self.store = CommunicationStore(runtime.config.sessions.root)
+        self.store = CommunicationStore(runtime.config.sessions.root, max_pending_requests=runtime.config.communication.max_pending_requests)
         self._protocol_send_lock = threading.Lock()
         self._semaphore = asyncio.Semaphore(max(1, int(max_concurrency)))
         self.workers = WorkerManager(
@@ -1296,7 +1304,12 @@ class CommunicationService:
                 else None
             ),
         )
-        self.orchestration_api = OrchestrationApi(self.orchestration)
+        self.background_work = BackgroundWork(
+            self.orchestration, mode=runtime.config.communication.idle_work_mode,
+            max_pending=runtime.config.communication.max_background_plans,
+            foreground_busy=self._foreground_work_busy,
+        )
+        self.orchestration_api = OrchestrationApi(self.orchestration, background_work=self.background_work)
         self.mcp = McpAdapter(runtime)
         self.mcp_oauth = McpOAuthResourceServer(runtime.config.mcp.authorization)
         self._advertised_host = str(runtime.config.communication.host).strip()
@@ -5118,10 +5131,24 @@ class CommunicationService:
             systemd_notify("WATCHDOG=1", "STATUS=swaag communication service healthy")
             await asyncio.sleep(interval)
 
+    def _foreground_work_busy(self) -> bool:
+        if any(manager.store.list(statuses={"queued", "working", "cancellation_requested", "input_required"})
+               for manager in self.orchestration.worker_managers.values()):
+            return True
+        with self.store._connect() as connection:
+            if connection.execute("SELECT 1 FROM requests WHERE status IN ('queued','processing') LIMIT 1").fetchone():
+                return True
+        # Covers direct CLI/runtime turns sharing this service's durable sessions.
+        return any(self.runtime.config.sessions.root.glob("*/active_run.json"))
+
+    def _advance_orchestration(self) -> None:
+        self.orchestration.advance_active_plans()
+        self.background_work.dispatch_once()
+
     async def _orchestration_loop(self) -> None:
         while True:
             try:
-                await asyncio.to_thread(self.orchestration.advance_active_plans)
+                await asyncio.to_thread(self._advance_orchestration)
             except Exception as exc:
                 print(
                     f"swaag orchestration advance failed: {type(exc).__name__}: {exc}",

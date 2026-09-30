@@ -40,6 +40,9 @@ class ModelConfig:
     context_limit: int
     remote_context_limit_fallback: int
     stop: list[str]
+    cache_max_bytes: int = 134217728
+    cache_max_entries: int = 16384
+    cache_lock_stripes: int = 128
 
 
 @dataclass(slots=True)
@@ -52,6 +55,7 @@ class ContextConfig:
     compact_on_overflow: bool
     semantic_reduction_max_input_tokens: int = 0
     semantic_reduction_max_calls: int = 256
+    max_token_count_cache_entries: int = 4096
 
 
 @dataclass(slots=True)
@@ -66,6 +70,10 @@ class RuntimeConfig:
     strict_budget: bool
     max_validation_recovery_cycles: int
     completion_evaluation_enabled: bool
+    max_pending_controls: int = 256
+    max_pending_inference: int = 256
+    max_open_questions: int = 128
+    max_open_question_chars: int = 65536
 
 
 @dataclass(slots=True)
@@ -317,6 +325,10 @@ class CommunicationConfig:
     host: str
     port: int
     poll_seconds: float
+    max_active_workers: int = 128
+    max_pending_requests: int = 128
+    idle_work_mode: str = "finish_only"
+    max_background_plans: int = 128
     model_routes: dict[str, str] = field(default_factory=dict)
     open_webui_artifacts: OpenWebUiArtifactServingConfig = field(
         default_factory=lambda: OpenWebUiArtifactServingConfig(False, "", "", 900)
@@ -737,6 +749,10 @@ def _coerce_config(
         host=str(data["communication"]["host"]),
         port=int(data["communication"]["port"]),
         poll_seconds=float(data["communication"]["poll_seconds"]),
+        max_active_workers=data["communication"].get("max_active_workers", 128),
+        max_pending_requests=data["communication"].get("max_pending_requests", 128),
+        idle_work_mode=str(data["communication"].get("idle_work_mode", "finish_only")),
+        max_background_plans=int(data["communication"].get("max_background_plans", 128)),
         model_routes={
             str(name): str(url)
             for name, url in data["communication"].get("model_routes", {}).items()
@@ -863,6 +879,20 @@ def _coerce_config(
     if not 0.0 <= runtime.verification_confidence_threshold <= 1.0:
         raise ValueError("runtime.verification_confidence_threshold must be between 0.0 and 1.0")
     _validate_positive("runtime.max_validation_recovery_cycles", runtime.max_validation_recovery_cycles)
+    from swaag.capacity import positive_capacity
+    for capacity_name, capacity_value in (
+        ("model.cache_max_bytes", model.cache_max_bytes),
+        ("model.cache_max_entries", model.cache_max_entries),
+        ("model.cache_lock_stripes", model.cache_lock_stripes),
+        ("context.max_token_count_cache_entries", context.max_token_count_cache_entries),
+        ("runtime.max_pending_controls", runtime.max_pending_controls),
+        ("runtime.max_pending_inference", runtime.max_pending_inference),
+        ("communication.max_active_workers", communication.max_active_workers),
+        ("communication.max_pending_requests", communication.max_pending_requests),
+    ):
+        positive_capacity(capacity_value, capacity_name)
+    _validate_positive("runtime.max_open_questions", runtime.max_open_questions)
+    _validate_positive("runtime.max_open_question_chars", runtime.max_open_question_chars)
     _validate_positive("notes.max_notes", notes.max_notes)
     _validate_positive("notes.max_note_chars", notes.max_note_chars)
     _validate_positive("notes.max_total_chars", notes.max_total_chars)
@@ -957,6 +987,9 @@ def _coerce_config(
     _validate_non_negative("archive.min_event_count", archive.min_event_count)
     _validate_positive("attachments.max_upload_bytes", attachments.max_upload_bytes)
     _validate_positive("attachments.preview_chars", attachments.preview_chars)
+    if communication.idle_work_mode not in {"finish_only", "authorized_backlog"}:
+        raise ValueError("communication.idle_work_mode must be finish_only or authorized_backlog")
+    _validate_positive("communication.max_background_plans", communication.max_background_plans)
     _validate_positive("communication.max_concurrent_requests", communication.max_concurrent_requests)
     _validate_positive(
         "communication.status_max_output_tokens",
@@ -1187,6 +1220,8 @@ def _dotted_value(value: dict[str, Any], dotted: str) -> Any:
 
 def _parameter_unit(key: str) -> str | None:
     lowered = key.casefold()
+    if lowered in {"max_open_questions", "max_background_plans", "max_active_workers", "max_pending_controls", "max_pending_inference", "max_pending_requests", "cache_max_entries", "cache_lock_stripes", "max_token_count_cache_entries"}:
+        return "count"
     if lowered.endswith("_seconds"):
         return "seconds"
     if lowered.endswith("_bytes"):
@@ -1211,6 +1246,54 @@ def _parameter_semantics(
     resource_sensitive: bool,
 ) -> tuple[str, str]:
     exact: dict[str, tuple[str, str]] = {
+        "model.cache_max_bytes": (
+            "Maximum serialized record/replay cassette bytes, checked before reading and replacing the file.",
+            "At capacity the cache fails explicitly without deleting replay evidence; archive or choose another cache path before further recording.",
+        ),
+        "model.cache_max_entries": (
+            "Maximum combined completion, prompt-rendering and token-count entries in one cassette.",
+            "Limits retained cache objects; overflow leaves the previously committed cassette unchanged.",
+        ),
+        "model.cache_lock_stripes": (
+            "Fixed number of request-lock files per cassette, shared by request hashes.",
+            "More stripes reduce unrelated lock collisions but retain more lock files; change only when all users of this cassette are stopped.",
+        ),
+        "context.max_token_count_cache_entries": (
+            "Maximum in-memory exact/estimated token-count memo entries per runtime.",
+            "Oldest memo entries are evicted and recomputed when needed; authoritative tokenization history is retained.",
+        ),
+        "runtime.max_pending_controls": (
+            "Maximum unprocessed control messages per session.",
+            "Pressure rejects new controls without losing accepted ones; exact retries with the same control ID remain idempotent.",
+        ),
+        "runtime.max_pending_inference": (
+            "Maximum queued, running, or suspended model requests per backend in this runtime store.",
+            "Pressure rejects admission until a request becomes terminal; higher limits retain more pending work.",
+        ),
+        "communication.max_active_workers": (
+            "Maximum queued, working, or canceling workers across shared worker managers.",
+            "Distinct from execution thread concurrency; limits pending work and retained futures. Rejected starts leave worker state unchanged.",
+        ),
+        "communication.max_pending_requests": (
+            "Maximum queued or processing communication requests.",
+            "Pressure rejects additional requests without deleting accepted user requests; terminal records remain durable evidence.",
+        ),
+        "runtime.max_open_questions": (
+            "Maximum unresolved questions retained in the active session projection.",
+            "Higher limits consume more context; overflow rejects new questions without discarding existing evidence.",
+        ),
+        "runtime.max_open_question_chars": (
+            "Maximum combined question, reason, and provisional-assumption characters in active question state.",
+            "Higher limits consume more context; overflow requires resolving existing questions before adding more.",
+        ),
+        "communication.idle_work_mode": (
+            "Whether explicitly authorized backlog plans can start after foreground work finishes.",
+            "finish_only never dispatches backlog work; authorized_backlog opts into idle execution with recorded user provenance.",
+        ),
+        "communication.max_background_plans": (
+            "Maximum pending or held authorized background plans.",
+            "Higher limits retain a larger queue; overflow rejects additions without deleting queued work.",
+        ),
         "model.base_url": (
             "llama.cpp/OpenAI-compatible endpoint used for model inference.",
             "Changing it changes the backend/model identity and can change capacity, latency, output behavior, and cache validity.",
@@ -1364,6 +1447,10 @@ def _parameter_semantics(
 
 def _parameter_range(key: str, value: Any) -> str | None:
     lowered = key.casefold()
+    if lowered == "idle_work_mode":
+        return "finish_only|authorized_backlog"
+    if lowered in {"max_open_questions", "max_open_question_chars", "max_background_plans", "max_active_workers", "max_pending_controls", "max_pending_inference", "max_pending_requests", "cache_max_entries", "cache_lock_stripes", "max_token_count_cache_entries"}:
+        return "integer > 0"
     if isinstance(value, bool):
         return "true|false"
     if lowered.endswith("_seconds") or lowered.endswith("_bytes") or lowered.endswith("_tokens"):

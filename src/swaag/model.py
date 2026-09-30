@@ -878,6 +878,10 @@ class LlamaCppClient:
         backend_prompt_tokens: int | None = None
         backend_completion_tokens: int | None = None
         first_token_seconds: float | None = None
+        # SSE is UTF-8 even when requests infers Latin-1 for text/event-stream.
+        # Set the incremental decoder before consuming chunks so split multibyte
+        # characters and providers without a charset retain their exact text.
+        response.encoding = "utf-8"
         try:
             for raw_line in response.iter_lines(decode_unicode=True):
                 if cancel_observed.is_set():

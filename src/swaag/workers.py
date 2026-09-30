@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+from contextlib import AbstractContextManager
+
 import contextvars
 import json
 import math
@@ -13,11 +15,12 @@ from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any, Iterable
 
+from swaag.capacity import positive_capacity, require_capacity
 from swaag.delegated_tools import DelegatedToolInputRequired
 from swaag.preemption import ModelCallStateChanged, RunCancellationRequested
 from swaag.runtime import AgentRuntime
 from swaag.scheduler import WakeupStore
-from swaag.sqlite_schema import apply_sqlite_migrations
+from swaag.sqlite_schema import apply_sqlite_migrations, managed_sqlite_connection
 from swaag.structured_output import (
     CallerOutputSpec,
     merge_caller_output,
@@ -43,6 +46,7 @@ _CONTINUOUS_WORKER_CONTROL = (
 WORKER_STREAM_EVENT_TYPES = frozenset(
     {
         "agent_question",
+        "agent_question_resolved",
         "agent_status",
         "assistant_progress",
         "artifact_created",
@@ -169,7 +173,8 @@ class WorkerEvent:
 class WorkerStore:
     """Durable mechanical worker/task state, separate from semantic session history."""
 
-    def __init__(self, root: Path):
+    def __init__(self, root: Path, *, max_active_workers: int = 128):
+        self.max_active_workers = positive_capacity(max_active_workers, "max_active_workers")
         self.path = Path(root).expanduser() / "workers.sqlite3"
         self.path.parent.mkdir(parents=True, exist_ok=True)
         with self._connect() as connection:
@@ -179,14 +184,11 @@ class WorkerStore:
                 migrations=_WORKER_STORE_MIGRATIONS,
             )
 
-    def _connect(self) -> sqlite3.Connection:
-        connection = sqlite3.connect(self.path, timeout=30.0)
-        connection.row_factory = sqlite3.Row
-        connection.execute("PRAGMA journal_mode=WAL")
-        connection.execute("PRAGMA synchronous=FULL")
-        connection.execute("PRAGMA foreign_keys=ON")
-        connection.execute("PRAGMA busy_timeout=30000")
-        return connection
+    def _connect(self) -> AbstractContextManager[sqlite3.Connection]:
+        return managed_sqlite_connection(
+            self.path,
+            pragmas=('PRAGMA journal_mode=WAL', 'PRAGMA synchronous=FULL', 'PRAGMA foreign_keys=ON', 'PRAGMA busy_timeout=30000'),
+        )
 
     @staticmethod
     def _record(row: sqlite3.Row) -> WorkerRecord:
@@ -515,6 +517,10 @@ class WorkerStore:
                 raise ValueError(
                     f"Worker {worker_id} is {current.status}; expected one of {sorted(expected_states)}"
                 )
+            if status in WORKER_ACTIVE_STATES and current.status not in WORKER_ACTIVE_STATES:
+                require_capacity(connection,
+                    "SELECT COUNT(*) FROM workers WHERE status IN ('queued','working','cancellation_requested')",
+                    (), limit=self.max_active_workers, name="active worker queue")
             started_at = current.started_at
             if status == "working" and started_at is None:
                 started_at = now
@@ -633,7 +639,7 @@ class WorkerManager:
     ):
         self.runtime = runtime
         self.model_key = str(model_key).strip() or "default"
-        self.store = WorkerStore(runtime.config.sessions.root)
+        self.store = WorkerStore(runtime.config.sessions.root, max_active_workers=runtime.config.communication.max_active_workers)
         self._executor = ThreadPoolExecutor(
             max_workers=max(1, int(max_workers)), thread_name_prefix="swaag-worker"
         )
@@ -1293,9 +1299,16 @@ class WorkerManager:
                         lambda _future, item=worker_id: self._submit_deferred(item)
                     )
                 return
-            self._futures[worker_id] = self._executor.submit(
+            future = self._executor.submit(
                 submission_context.run, self._run_worker_with_context, worker_id
             )
+            self._futures[worker_id] = future
+            future.add_done_callback(lambda completed, item=worker_id: self._forget_future(item, completed))
+
+    def _forget_future(self, worker_id: str, future: Future[None]) -> None:
+        with self._futures_lock:
+            if self._futures.get(worker_id) is future:
+                self._futures.pop(worker_id, None)
 
     def _submit_deferred(self, worker_id: str) -> None:
         with self._futures_lock:
@@ -1305,12 +1318,17 @@ class WorkerManager:
             )
             if self._shutting_down:
                 return
+            existing = self._futures.get(worker_id)
+            if existing is not None and not existing.done():
+                return  # Another submit already replaced the completed future.
             current = self.store.get(worker_id)
             if current.status != "queued":
                 return
-            self._futures[worker_id] = self._executor.submit(
+            future = self._executor.submit(
                 submission_context.run, self._run_worker_with_context, worker_id
             )
+            self._futures[worker_id] = future
+            future.add_done_callback(lambda completed, item=worker_id: self._forget_future(item, completed))
 
     def _run_worker_with_context(self, worker_id: str) -> None:
         with worker_telemetry_context(worker_id):

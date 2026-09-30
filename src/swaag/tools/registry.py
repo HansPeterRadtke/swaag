@@ -14,6 +14,8 @@ from swaag.tools.attachments import ATTACHMENT_TOOLS
 from swaag.tools.builtin import BUILTIN_TOOLS
 from swaag.tools.history import HISTORY_TOOLS
 from swaag.tools.prompt_instructions import PROMPT_INSTRUCTION_TOOLS
+from swaag.tools.background_work import BACKGROUND_WORK_TOOLS
+from swaag.tools.questions import QUESTION_TOOLS
 from swaag.tools.shared_state import SHARED_STATE_TOOLS
 from swaag.tools.terminal import TERMINAL_TOOLS
 from swaag.tools.control import CONTROL_TOOLS
@@ -96,6 +98,8 @@ class ToolRegistry:
             *BUILTIN_TOOLS,
             *HISTORY_TOOLS,
             *PROMPT_INSTRUCTION_TOOLS,
+            *QUESTION_TOOLS,
+            *BACKGROUND_WORK_TOOLS,
             *SHARED_STATE_TOOLS,
             *ARTIFACT_TOOLS,
             *ATTACHMENT_TOOLS,

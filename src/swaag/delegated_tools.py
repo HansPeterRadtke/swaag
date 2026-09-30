@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+from contextlib import AbstractContextManager
+
 import json
 import sqlite3
 from dataclasses import dataclass
@@ -7,7 +9,7 @@ from pathlib import Path
 from typing import Any, Iterable
 
 from swaag.schema_portability import assert_portable_json_schema
-from swaag.sqlite_schema import apply_sqlite_migrations
+from swaag.sqlite_schema import apply_sqlite_migrations, managed_sqlite_connection
 from swaag.tools.base import _validate_schema_value
 from swaag.utils import new_id, sha256_text, stable_json_dumps, utc_now_iso
 
@@ -204,14 +206,11 @@ class DelegatedToolStore:
                 migrations=_DELEGATED_TOOL_STORE_MIGRATIONS,
             )
 
-    def _connect(self) -> sqlite3.Connection:
-        connection = sqlite3.connect(self.path, timeout=30.0)
-        connection.row_factory = sqlite3.Row
-        connection.execute("PRAGMA journal_mode=WAL")
-        connection.execute("PRAGMA synchronous=FULL")
-        connection.execute("PRAGMA foreign_keys=ON")
-        connection.execute("PRAGMA busy_timeout=30000")
-        return connection
+    def _connect(self) -> AbstractContextManager[sqlite3.Connection]:
+        return managed_sqlite_connection(
+            self.path,
+            pragmas=('PRAGMA journal_mode=WAL', 'PRAGMA synchronous=FULL', 'PRAGMA foreign_keys=ON', 'PRAGMA busy_timeout=30000'),
+        )
 
     @staticmethod
     def _spec_payload(spec: DelegatedToolSpec) -> dict[str, Any]:

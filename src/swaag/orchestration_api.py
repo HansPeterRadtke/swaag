@@ -14,11 +14,26 @@ class OrchestrationApi:
 
     version = "swaag.orchestration.v1"
 
-    def __init__(self, manager: OrchestrationManager):
+    def __init__(self, manager: OrchestrationManager, *, background_work=None):
         self.manager = manager
+        self.background_work = background_work
 
     def execute(self, operation: str, payload: dict[str, Any] | None = None) -> dict[str, Any]:
         args = dict(payload or {})
+        if operation.startswith("backlog."):
+            if self.background_work is None:
+                raise ValueError("background-work service is unavailable")
+            if operation == "backlog.list":
+                return {"version": self.version, "mode": self.background_work.mode,
+                        "backlog": self.background_work.list()}
+            if operation == "backlog.enqueue":
+                item = self.background_work.enqueue(_required_text(args, "plan_id"),
+                    authorization_session_id=_required_text(args, "authorization_session_id"),
+                    authorization_event_sequence=args.get("authorization_event_sequence"))
+                return {"version": self.version, "item": item}
+            if operation == "backlog.cancel":
+                return {"version": self.version, "canceled": self.background_work.cancel(_required_text(args, "plan_id"))}
+            raise ValueError("unknown background-work operation")
         if operation == "plan.apply":
             spec = args.get("plan_spec")
             if not isinstance(spec, dict):

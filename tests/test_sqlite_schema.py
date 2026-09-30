@@ -114,7 +114,7 @@ def test_all_runtime_sqlite_stores_record_explicit_schema_versions(
     assert _version(embeddings.path) == 1
     assert _version(prompt_instructions.path) == 1
     assert _version(delegated_tools.path) == 1
-    assert _version(orchestration.path) == 4
+    assert _version(orchestration.path) == 5
 
 
 def test_communication_stream_bounds_migration_preserves_protocol_mappings(
@@ -376,3 +376,83 @@ def test_worker_lifecycle_option_migrations_preserve_existing_rows(tmp_path) -> 
     assert record.presentation_modes == []
     assert record.inference_weight == 1.0
     assert record.model_key == "default"
+
+
+@pytest.mark.parametrize('store_name', [
+    'communication', 'workers', 'history', 'archives', 'inference',
+    'preemption', 'embeddings', 'prompt_instructions', 'delegated_tools', 'orchestration',
+])
+def test_store_connection_closes_without_garbage_collection(tmp_path, make_config, store_name):
+    """Retain the connection reference: closure must not depend on GC timing."""
+    stores = {
+        'communication': lambda: CommunicationStore(tmp_path)._connect,
+        'workers': lambda: WorkerStore(tmp_path)._connect,
+        'history': lambda: HistoryStore(tmp_path)._sqlite_connect,
+        'archives': lambda: HistoryArchiveStore(tmp_path)._catalog,
+        'inference': lambda: InferenceRequestCoordinator(
+            tmp_path, backend_key='test', capacity_resolver=lambda: (1, 'test'))._connect,
+        'preemption': lambda: ModelPreemptionCoordinator(tmp_path)._connect,
+        'embeddings': lambda: DerivedEmbeddingIndex(tmp_path, _Embeddings())._connect,
+        'prompt_instructions': lambda: PromptInstructionStore(tmp_path, make_config())._connect,
+        'delegated_tools': lambda: DelegatedToolStore(tmp_path)._connect,
+        'orchestration': lambda: OrchestrationStore(tmp_path)._connect,
+    }
+    connect = stores[store_name]()
+    with connect() as successful:
+        assert successful.execute('SELECT 1').fetchone()[0] == 1
+    with pytest.raises(sqlite3.ProgrammingError, match='closed'):
+        successful.execute('SELECT 1')
+    with pytest.raises(RuntimeError, match='operation failed'):
+        with connect() as failed:
+            raise RuntimeError('operation failed')
+    with pytest.raises(sqlite3.ProgrammingError, match='closed'):
+        failed.execute('SELECT 1')
+
+
+def test_owned_connection_preserves_commit_and_rollback(tmp_path):
+    from swaag.sqlite_schema import managed_sqlite_connection
+    path = tmp_path / 'transactions.sqlite3'
+    with managed_sqlite_connection(path) as connection:
+        connection.execute('CREATE TABLE records(value TEXT)')
+        connection.execute("INSERT INTO records VALUES ('accepted')")
+    with pytest.raises(RuntimeError):
+        with managed_sqlite_connection(path) as connection:
+            connection.execute("INSERT INTO records VALUES ('rejected')")
+            raise RuntimeError('abort')
+    with managed_sqlite_connection(path) as connection:
+        assert [row[0] for row in connection.execute('SELECT value FROM records')] == ['accepted']
+
+
+def test_owned_connection_closes_when_configuration_fails(tmp_path, monkeypatch):
+    from swaag.sqlite_schema import managed_sqlite_connection
+    original = sqlite3.connect
+    opened = []
+    def track(*args, **kwargs):
+        connection = original(*args, **kwargs)
+        opened.append(connection)
+        return connection
+    monkeypatch.setattr(sqlite3, 'connect', track)
+    with pytest.raises(sqlite3.OperationalError):
+        with managed_sqlite_connection(tmp_path / 'setup.sqlite3', pragmas=('INVALID SQL',)):
+            pytest.fail('invalid connection configuration must not be admitted')
+    assert len(opened) == 1
+    with pytest.raises(sqlite3.ProgrammingError, match='closed'):
+        opened[0].execute('SELECT 1')
+
+
+def test_background_backlog_migration_preserves_existing_plan(tmp_path):
+    from swaag.orchestration import _ORCHESTRATION_MIGRATIONS
+    from swaag.sqlite_schema import managed_sqlite_connection
+    path = tmp_path / 'orchestration.sqlite3'
+    with managed_sqlite_connection(path) as connection:
+        apply_sqlite_migrations(connection, store_name='orchestration',
+                                migrations=_ORCHESTRATION_MIGRATIONS[:4])
+        connection.execute('''INSERT INTO orchestration_plans
+            (plan_id,objective,status,created_at,updated_at,revision)
+            VALUES ('existing','preserve this plan','draft','before','before',7)''')
+        before = dict(connection.execute('SELECT * FROM orchestration_plans').fetchone())
+    store = OrchestrationStore(tmp_path)
+    with store._connect() as connection:
+        assert connection.execute('PRAGMA user_version').fetchone()[0] == 5
+        assert dict(connection.execute('SELECT * FROM orchestration_plans').fetchone()) == before
+        assert connection.execute('SELECT COUNT(*) FROM orchestration_backlog').fetchone()[0] == 0

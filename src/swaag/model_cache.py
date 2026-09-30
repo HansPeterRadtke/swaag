@@ -9,6 +9,7 @@ from pathlib import Path
 import re
 import tempfile
 import threading
+import weakref
 from typing import Any, Iterator
 
 try:  # Linux/Unix production path.
@@ -16,6 +17,7 @@ try:  # Linux/Unix production path.
 except ImportError:  # pragma: no cover - non-POSIX compatibility fallback
     fcntl = None
 
+from swaag.capacity import QueueCapacityError, positive_capacity
 from swaag.fsops import atomic_replace, ensure_dir, remove_file
 from swaag.tokens import ConservativeEstimator, CountResult
 from swaag.types import CompletionResult, ContractSpec
@@ -34,7 +36,7 @@ class RecordReplayEntry:
 
 
 _THREAD_LOCKS_GUARD = threading.Lock()
-_THREAD_LOCKS: dict[str, threading.RLock] = {}
+_THREAD_LOCKS = weakref.WeakValueDictionary()
 
 
 def _thread_lock(path: Path) -> threading.RLock:
@@ -130,6 +132,9 @@ def build_model_client(
         delegate=delegate,
         request_metadata=request_metadata,
         canonicalize_dynamic_values=canonicalize_dynamic_values,
+        max_bytes=config.model.cache_max_bytes,
+        max_entries=config.model.cache_max_entries,
+        lock_stripes=config.model.cache_lock_stripes,
     )
 
 
@@ -142,6 +147,9 @@ class RecordReplayModelClient:
         delegate: Any,
         request_metadata: dict[str, Any] | None = None,
         canonicalize_dynamic_values: bool = False,
+        max_bytes: int = 134217728,
+        max_entries: int = 16384,
+        lock_stripes: int = 128,
     ) -> None:
         normalized_mode = mode.strip().lower()
         if normalized_mode not in {"record", "replay"}:
@@ -149,6 +157,9 @@ class RecordReplayModelClient:
         self.mode = normalized_mode
         self.delegate = delegate
         self.cassette_path = Path(cassette_path)
+        self.max_bytes = positive_capacity(max_bytes, "model cache max_bytes")
+        self.max_entries = positive_capacity(max_entries, "model cache max_entries")
+        self.lock_stripes = positive_capacity(lock_stripes, "model cache lock_stripes")
         self.canonicalize_dynamic_values = bool(canonicalize_dynamic_values)
         self._canonicalize = _normalize_json if self.canonicalize_dynamic_values else _stable_json
         self._caller_request_metadata = dict(request_metadata or {})
@@ -178,7 +189,8 @@ class RecordReplayModelClient:
         return self.cassette_path.with_name(f"{self.cassette_path.name}.lock")
 
     def _request_lock_path(self, request_hash: str) -> Path:
-        return self.cassette_path.with_name(f"{self.cassette_path.name}.{request_hash}.request.lock")
+        stripe = int(request_hash[:8], 16) % self.lock_stripes
+        return self.cassette_path.with_name(f"{self.cassette_path.name}.request-{stripe}.lock")
 
     def _default_request_metadata(self) -> dict[str, Any]:
         metadata: dict[str, Any] = {
@@ -223,11 +235,25 @@ class RecordReplayModelClient:
             self._resolve_model_identity(requested_metadata)
         )
 
+    def _read_payload(self) -> dict[str, Any]:
+        # Bounded read also protects against a concurrent oversized replacement.
+        with self.cassette_path.open("rb") as handle:
+            raw = handle.read(self.max_bytes + 1)
+        if len(raw) > self.max_bytes:
+            raise QueueCapacityError("Model cache exceeds cache_max_bytes; archive it or select another cache path")
+        payload = json.loads(raw)
+        if not isinstance(payload, dict):
+            raise ValueError("model cassette must contain an object")
+        count = sum(len(payload.get(key, {})) for key in ("entries", "prompt_renderings", "token_counts"))
+        if count > self.max_entries:
+            raise QueueCapacityError("Model cache exceeds cache_max_entries; archive it or select another cache path")
+        return payload
+
     def _load_recorded_request_metadata(self) -> dict[str, Any]:
         if not self.cassette_path.exists():
             return {}
         try:
-            payload = json.loads(self.cassette_path.read_text(encoding="utf-8"))
+            payload = self._read_payload()
         except (OSError, json.JSONDecodeError):
             return {}
         metadata = payload.get("request_metadata", {}) if isinstance(payload, dict) else {}
@@ -277,7 +303,7 @@ class RecordReplayModelClient:
     def _load_entries(self) -> dict[str, RecordReplayEntry]:
         if not self.cassette_path.exists():
             return {}
-        payload = json.loads(self.cassette_path.read_text(encoding="utf-8"))
+        payload = self._read_payload()
         entries: dict[str, RecordReplayEntry] = {}
         for item in payload.get("entries", []):
             if not isinstance(item, dict):
@@ -296,7 +322,7 @@ class RecordReplayModelClient:
     def _load_prompt_renderings(self) -> dict[str, dict[str, str]]:
         if not self.cassette_path.exists():
             return {}
-        payload = json.loads(self.cassette_path.read_text(encoding="utf-8"))
+        payload = self._read_payload()
         raw = payload.get("prompt_renderings", {})
         if not isinstance(raw, dict):
             return {}
@@ -312,7 +338,7 @@ class RecordReplayModelClient:
     def _load_token_counts(self) -> dict[str, int]:
         if not self.cassette_path.exists():
             return {}
-        payload = json.loads(self.cassette_path.read_text(encoding="utf-8"))
+        payload = self._read_payload()
         raw = payload.get("token_counts", {})
         if not isinstance(raw, dict):
             return {}
@@ -342,6 +368,11 @@ class RecordReplayModelClient:
 
     def _write_entries_atomic(self) -> None:
         """Write a complete cassette atomically; caller must hold the cache lock."""
+        if len(self._entries) + len(self._prompt_renderings) + len(self._token_counts) > self.max_entries:
+            raise QueueCapacityError("Model cache entry capacity reached; existing replay evidence is unchanged")
+        serialized = self._serialized_entries()
+        if len(serialized.encode("utf-8")) > self.max_bytes:
+            raise QueueCapacityError("Model cache byte capacity reached; existing replay evidence is unchanged")
         parent = self.cassette_path.parent
         ensure_dir(parent)
         fd, temp_name = tempfile.mkstemp(
@@ -353,7 +384,7 @@ class RecordReplayModelClient:
         temp_path = Path(temp_name)
         try:
             with os.fdopen(fd, "w", encoding="utf-8", newline="\n") as handle:
-                handle.write(self._serialized_entries())
+                handle.write(serialized)
                 handle.flush()
                 os.fsync(handle.fileno())
             atomic_replace(temp_path, self.cassette_path)

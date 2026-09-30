@@ -75,6 +75,20 @@ def runtime_system_context_sources(
     context_state: dict[str, object] | None = None,
 ) -> list[SystemContextSource]:
     sources: list[SystemContextSource] = []
+    if state.open_questions:
+        sources.append(SystemContextSource(
+            name="open_questions", category="environment",
+            text=stable_json_dumps(state.open_questions, indent=2),
+            introduction="Unresolved questions from exact history; assumptions are provisional, not answers:\n",
+            locator={"authoritative_source": "history", "session_id": state.session_id,
+                     "recovery_tool": "questions", "recovery_arguments": {"operation": "list",
+                     "question_id": None, "resolution": None, "answer": None,
+                     "reason": None, "evidence_sequences": None}},
+            projection_source_label="all unresolved questions and their original criticality/assumptions",
+            projection_header="[SEMANTIC PROJECTION; recover exact questions before resolving]\n",
+            optional=False,
+            projectable=_tool_enabled(config, "questions"),
+        ))
 
     if _tool_enabled(config, "list_files"):
         filesystem = AgentEnvironment(config, state).filesystem
