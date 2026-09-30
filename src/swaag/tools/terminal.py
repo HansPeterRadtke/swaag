@@ -12,7 +12,7 @@ from swaag.utils import stable_json_dumps
 class TerminalTool(Tool):
     name = "terminal"
     description = "Manage persistent interactive PTY terminals. Create a shell, send commands or stdin, read incremental terminal output, list terminals, or close one."
-    usage_guidance = "Use shell_command for ordinary non-interactive work. Use terminal when a command needs persistent shell state or interactive stdin. Because tool calls in one action cannot consume results from earlier calls in that same action, create the terminal first, observe the returned terminal_id, then copy that exact terminal_id into terminal_ref for send/read/close in later actions; do not invent aliases. Keep reads bounded and advance start_offset with next_offset."
+    usage_guidance = "For nontrivial algorithm/search/optimization work, define the objective/error and constraints, establish a simple correct reference when feasible, compare plausible candidates on representative/adversarial inputs, and measure quality, runtime, memory, failures and parameter sensitivity. Use shell_command for ordinary non-interactive work. Use terminal when a command needs persistent shell state or interactive stdin. Because tool calls in one action cannot consume results from earlier calls in that same action, create the terminal first, observe the returned terminal_id, then copy that exact terminal_id into terminal_ref for send/read/close in later actions; do not invent aliases. Keep reads bounded and advance start_offset with next_offset."
     kind = "stateful"
     input_schema = {
         "type": "object",

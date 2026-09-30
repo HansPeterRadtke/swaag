@@ -214,3 +214,46 @@ def test_short_live_verification_keeps_verification_timeout(make_config) -> None
     )
 
     assert policy.effective_timeout_seconds == 150
+
+
+class _UsageResponse(_FakeResponse):
+    def iter_lines(self, *, decode_unicode: bool):
+        assert decode_unicode is True
+        yield 'data: ' + json.dumps(
+            {
+                "content": "a",
+                "tokens_evaluated": 12,
+                "tokens_predicted": 1,
+            }
+        )
+        yield 'data: ' + json.dumps(
+            {
+                "content": "b",
+                "tokens_evaluated": 12,
+                "tokens_predicted": 2,
+                "stop": True,
+            }
+        )
+
+
+def test_streaming_progress_exposes_backend_reported_usage_evidence(
+    make_config, monkeypatch
+) -> None:
+    client = LlamaCppClient(make_config())
+    monkeypatch.setattr(
+        "swaag.model.requests.post",
+        lambda *args, **kwargs: _UsageResponse(),
+    )
+    progress = []
+
+    result = client.send_completion(
+        {"prompt": "x", "n_predict": 4},
+        progress_callback=progress.append,
+    )
+
+    assert result.text == "ab"
+    assert progress
+    assert progress[-1]["backend_prompt_tokens"] == 12
+    assert progress[-1]["backend_completion_tokens"] == 2
+    assert progress[-1]["prompt_tokens_source"] == "tokens_evaluated"
+    assert progress[-1]["completion_tokens_source"] == "tokens_predicted"

@@ -3,6 +3,7 @@ from __future__ import annotations
 from pathlib import Path
 
 from swaag.environment.environment import AgentEnvironment
+from swaag.environment.filesystem import FilesystemManager
 from swaag.grammar import yes_no_contract
 from swaag.history import HistoryStore
 from swaag.runtime import AgentRuntime, RuntimeContextProjection
@@ -206,3 +207,92 @@ def test_workspace_manifest_is_absent_when_filesystem_capability_is_disabled(mak
     state = runtime.create_or_load_session()
     components = runtime._runtime_context_components(state, runtime._counter(state))
     assert all(component.name != "workspace_file_manifest" for component in components)
+
+
+def test_workspace_discovery_skips_outside_and_inaccessible_symlinks(make_config, tmp_path) -> None:
+    workspace = tmp_path / "workspace"
+    workspace.mkdir()
+    (workspace / "visible.txt").write_text("visible", encoding="utf-8")
+    outside = tmp_path / "outside.txt"
+    outside.write_text("outside", encoding="utf-8")
+    (workspace / "outside-link").symlink_to(outside)
+    missing = tmp_path / "missing-target"
+    (workspace / "broken-link").symlink_to(missing)
+
+    config = make_config(sessions__root=tmp_path / "sessions")
+    filesystem = FilesystemManager(config, workspace)
+    assert filesystem.list_files(".") == ["visible.txt"]
+    entries, truncated = filesystem.bounded_file_manifest(max_entries=10)
+    assert entries == ["visible.txt"]
+    assert truncated is False
+    assert filesystem.snapshot() == {"visible.txt": "visible"}
+
+
+def test_workspace_discovery_skips_permission_error_from_file_probe(make_config, tmp_path, monkeypatch) -> None:
+    workspace = tmp_path / "workspace"
+    workspace.mkdir()
+    visible = workspace / "visible.txt"
+    visible.write_text("visible", encoding="utf-8")
+    denied = workspace / "denied.txt"
+    denied.write_text("denied", encoding="utf-8")
+
+    config = make_config(sessions__root=tmp_path / "sessions")
+    filesystem = FilesystemManager(config, workspace)
+    original_is_file = Path.is_file
+
+    def guarded_is_file(path: Path) -> bool:
+        if path.name == "denied.txt":
+            raise PermissionError("simulated production sandbox denial")
+        return original_is_file(path)
+
+    monkeypatch.setattr(Path, "is_file", guarded_is_file)
+    assert filesystem.list_files(".") == ["visible.txt"]
+    assert filesystem.snapshot() == {"visible.txt": "visible"}
+
+
+def test_context_manifest_uses_git_tracked_and_nonignored_untracked_view(make_config, tmp_path) -> None:
+    import subprocess
+
+    workspace = tmp_path / "repo"
+    workspace.mkdir()
+    subprocess.run(["git", "init", "-q", str(workspace)], check=True)
+    (workspace / ".gitignore").write_text(".venv/\nbuild/\nignored.txt\n", encoding="utf-8")
+    (workspace / "tracked.txt").write_text("tracked", encoding="utf-8")
+    subprocess.run(["git", "-C", str(workspace), "add", ".gitignore", "tracked.txt"], check=True)
+    (workspace / "untracked.txt").write_text("untracked", encoding="utf-8")
+    (workspace / "ignored.txt").write_text("ignored", encoding="utf-8")
+    (workspace / ".venv").mkdir()
+    (workspace / ".venv" / "python").write_text("generated", encoding="utf-8")
+    (workspace / "build").mkdir()
+    (workspace / "build" / "artifact.bin").write_bytes(b"generated")
+
+    config = make_config(sessions__root=tmp_path / "sessions")
+    filesystem = FilesystemManager(config, workspace)
+    manifest = filesystem.context_manifest()
+    assert manifest["scope"] == "git_tracked_and_untracked_nonignored"
+    assert manifest["files"] == [".gitignore", "tracked.txt", "untracked.txt"]
+    assert manifest["count"] == 3
+    # Explicit discovery remains broader than automatic context.
+    explicit = filesystem.list_files(".")
+    assert "ignored.txt" in explicit
+    assert "build/artifact.bin" in explicit
+
+
+def test_context_manifest_non_git_fallback_prunes_only_structural_generated_dirs(make_config, tmp_path) -> None:
+    workspace = tmp_path / "plain"
+    workspace.mkdir()
+    (workspace / "source.py").write_text("print('ok')\n", encoding="utf-8")
+    for dirname in (".git", ".venv", ".pytest_cache", ".swaag", "build", "dist"):
+        directory = workspace / dirname
+        directory.mkdir()
+        (directory / "generated.txt").write_text("generated", encoding="utf-8")
+    egg = workspace / "demo.egg-info"
+    egg.mkdir()
+    (egg / "PKG-INFO").write_text("generated", encoding="utf-8")
+
+    config = make_config(sessions__root=tmp_path / "sessions")
+    filesystem = FilesystemManager(config, workspace)
+    manifest = filesystem.context_manifest()
+    assert manifest["scope"] == "filesystem_structural_fallback"
+    assert manifest["files"] == ["source.py"]
+    assert manifest["count"] == 1

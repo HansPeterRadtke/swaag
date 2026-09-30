@@ -60,7 +60,11 @@ class _SummaryClient:
     def send_completion(self, payload: dict, **_kwargs) -> CompletionResult:
         self.requests.append(payload)
         if payload["contract"] == "history_compaction_selection":
-            response = json.dumps({"criticality": "compressible", "reason": "test window"})
+            response = json.dumps({"criticality": "ordinary", "reason_code": "current_direction", "projection": ""})
+        elif payload["contract"] == "history_verbatim_selection":
+            response = json.dumps(
+                {"selected_line_ids": [], "reason": "synthetic summary already preserves benchmark facts exactly"}
+            )
         else:
             assert payload["contract"] == "summary"
             facts = "\n".join(PRESERVATION_FACTS.values())
@@ -173,9 +177,9 @@ class _SpanSelectionClient(_SummaryClient):
         assert payload["contract"] == "history_compaction_selection"
         prompt = str(payload["prompt"])
         if "CRITICAL_OLD" in prompt:
-            response = json.dumps({"criticality": "protect", "reason": "contains exact user constraint"})
+            response = json.dumps({"criticality": "protect", "reason_code": "constraint", "projection": ""})
         else:
-            response = json.dumps({"criticality": "compressible", "reason": "routine progress"})
+            response = json.dumps({"criticality": "compressible", "reason_code": "redundant_progress", "projection": ""})
         return CompletionResult(
             text=response,
             raw_request=payload,
@@ -240,3 +244,16 @@ def test_compaction_checkpoint_records_pressure_version(make_config, tmp_path) -
         report["routine_progress_messages_per_later_cycle"]
         == ROUTINE_PROGRESS_MESSAGES_PER_LATER_CYCLE
     )
+
+def test_compaction_benchmark_seeds_redundant_progress_that_can_recover_tokens(make_config, tmp_path):
+    from swaag.benchmark.compaction_preservation import _routine_progress_message
+    from swaag.runtime import AgentRuntime
+
+    config = make_config(sessions__root=tmp_path / "sessions")
+    runtime = AgentRuntime(config, model_client=object())
+    state = runtime.create_or_load_session()
+    text = _routine_progress_message(1, role="assistant")
+    assert "no new task facts" in text
+    # The source must be materially larger than a summary envelope; otherwise the
+    # runtime is correct to refuse compaction and the benchmark would be invalid.
+    assert runtime._counter(state).count_text(text).tokens > 250

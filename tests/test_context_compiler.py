@@ -6,6 +6,7 @@ from swaag.tokens import ConservativeEstimator
 from swaag.types import ContractSpec, PromptAssembly, PromptComponent
 
 
+from swaag.tokens import ExactTokenCounter
 def test_context_compiler_accounts_named_components_and_output_reserve(make_config):
     config = make_config(model__context_limit=4096)
     compiler = ContextCompiler(config)
@@ -315,3 +316,46 @@ def test_context_compiler_records_serialized_component_hashes_and_sizes(make_con
     assert schema["include_in_context"] is False
     assert schema["chars"] > 0
     assert len(schema["sha256"]) == 64
+
+
+def test_evidence_projection_uses_compact_contract_specific_output_floor(make_config):
+    from swaag.grammar import evidence_projection_contract, completion_evaluation_contract
+
+    config = make_config(model__context_limit=2048)
+    compiler = ContextCompiler(config)
+    counter = ExactTokenCounter(lambda text: len(text.split()) if text.strip() else 0)
+    assembly = PromptAssembly(
+        kind="evidence_projection",
+        prompt_mode="lean",
+        components=[PromptComponent(name="prompt", category="prompt", text="tiny evidence")],
+        prompt_text="tiny evidence",
+        prompt_artifacts=[],
+        metadata={},
+    )
+    evidence = compiler.compile(
+        assembly,
+        evidence_projection_contract(),
+        counter,
+        minimum_output_tokens=16,
+        desired_output_tokens=64,
+        context_limit=2048,
+    )
+    assert evidence.structured_output_floor_tokens == 32
+    assert evidence.report.reserved_response_tokens == 64
+
+    completion = compiler.compile(
+        PromptAssembly(
+            kind="completion_evaluation",
+            prompt_mode="lean",
+            components=[PromptComponent(name="prompt", category="prompt", text="tiny completion")],
+            prompt_text="tiny completion",
+            prompt_artifacts=[],
+            metadata={},
+        ),
+        completion_evaluation_contract([]),
+        counter,
+        minimum_output_tokens=16,
+        desired_output_tokens=64,
+        context_limit=2048,
+    )
+    assert completion.structured_output_floor_tokens >= config.budget_policy.structured_output_json_floor_tokens

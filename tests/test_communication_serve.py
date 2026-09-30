@@ -577,15 +577,16 @@ def test_a2a_authorization_requires_https_public_url_and_token(tmp_path):
             env={
                 **base_env,
                 "SWAAG__A2A__AUTHORIZATION__PUBLIC_BASE_URL": "http://agents.example.test",
-                "SWAAG__A2A__AUTHORIZATION__BEARER_TOKEN": "secret",
+                "SWAAG__A2A__AUTHORIZATION__BEARER_TOKEN_ENV": "SWAAG_TEST_A2A_TOKEN",
+                "SWAAG_TEST_A2A_TOKEN": "secret",
             }
         )
-    with pytest.raises(ValueError, match="bearer_token"):
+    with pytest.raises(ValueError, match="SWAAG_TEST_A2A_TOKEN"):
         load_config(
             env={
                 **base_env,
                 "SWAAG__A2A__AUTHORIZATION__PUBLIC_BASE_URL": "https://agents.example.test",
-                "SWAAG__A2A__AUTHORIZATION__BEARER_TOKEN": "",
+                "SWAAG__A2A__AUTHORIZATION__BEARER_TOKEN_ENV": "SWAAG_TEST_A2A_TOKEN",
             }
         )
     for invalid_url in (
@@ -599,7 +600,8 @@ def test_a2a_authorization_requires_https_public_url_and_token(tmp_path):
                 env={
                     **base_env,
                     "SWAAG__A2A__AUTHORIZATION__PUBLIC_BASE_URL": invalid_url,
-                    "SWAAG__A2A__AUTHORIZATION__BEARER_TOKEN": "secret",
+                    "SWAAG__A2A__AUTHORIZATION__BEARER_TOKEN_ENV": "SWAAG_TEST_A2A_TOKEN",
+                "SWAAG_TEST_A2A_TOKEN": "secret",
                 }
             )
 
@@ -1745,3 +1747,627 @@ def test_ag_ui_new_run_supersedes_old_stream_without_misattributing_events(
         assert first_bounds[3] == second_bounds[2]
 
     asyncio.run(exercise())
+
+
+def test_communication_transport_pushes_orchestration_notifications_over_sse(make_config):
+    async def exercise() -> None:
+        service = CommunicationService(
+            AgentRuntime(make_config(), model_client=object())
+        )
+        plan = service.orchestration.create_plan(
+            "push reporting", reporting_mode="completion_only"
+        )
+        service.orchestration.store.set_plan_status(
+            plan.plan_id, "completed", reason="benchmark complete"
+        )
+        service.orchestration.store.record_notification(
+            plan.plan_id,
+            "plan_completed",
+            {"summary": "all workers finished"},
+            importance="normal",
+        )
+        server = await asyncio.start_server(
+            service.handle_client, "127.0.0.1", 0
+        )
+        port = server.sockets[0].getsockname()[1]
+        reader, writer = await asyncio.open_connection("127.0.0.1", port)
+        writer.write(
+            (
+                f"GET /orchestration/{plan.plan_id}/notifications?after_sequence=0 "
+                "HTTP/1.1\r\n"
+                "Host: localhost\r\n"
+                "Accept: text/event-stream\r\n\r\n"
+            ).encode()
+        )
+        await writer.drain()
+        response = await asyncio.wait_for(reader.read(), timeout=2)
+        writer.close()
+        await writer.wait_closed()
+        server.close()
+        await server.wait_closed()
+        service.workers.shutdown()
+
+        head, stream = response.split(b"\r\n\r\n", 1)
+        assert b"HTTP/1.1 200 OK" in head
+        assert b"Content-Type: text/event-stream" in head
+        assert b"Cache-Control: no-store" in head
+        assert b"event: orchestration_notification" in stream
+        data_line = next(
+            line for line in stream.splitlines() if line.startswith(b"data: ")
+        )
+        payload = json.loads(data_line.removeprefix(b"data: "))
+        assert payload["kind"] == "plan_completed"
+        assert payload["payload"]["summary"] == "all workers finished"
+        assert payload["sequence"] == 1
+
+    asyncio.run(exercise())
+
+
+def test_model_route_capability_probe_is_cached(make_config):
+    main = AgentRuntime(make_config(), model_client=object())
+    route = AgentRuntime(make_config(), model_client=object())
+    calls = []
+
+    def doctor(*, session_id=None):
+        calls.append(session_id)
+        return {"json_probe": "yes"}
+
+    route.doctor = doctor
+    service = CommunicationService(
+        main,
+        worker_model_runtimes={"small": route},
+        validate_model_routes=True,
+    )
+    manager = service.worker_model_managers["small"]
+
+    first = service._probe_worker_model_route("small", manager)
+    second = service._probe_worker_model_route("small", manager)
+
+    assert first == (True, "server_schema constrained-output probe passed")
+    assert second == first
+    assert calls == ["model-route-probe-small"]
+    service.workers.shutdown()
+    manager.shutdown()
+
+
+def test_model_route_capability_probe_fails_closed_and_is_cached(make_config):
+    main = AgentRuntime(make_config(), model_client=object())
+    route = AgentRuntime(make_config(), model_client=object())
+    calls = []
+
+    def doctor(*, session_id=None):
+        calls.append(session_id)
+        raise RuntimeError("backend lacks json_schema")
+
+    route.doctor = doctor
+    service = CommunicationService(
+        main,
+        worker_model_runtimes={"bad": route},
+        validate_model_routes=True,
+    )
+    manager = service.worker_model_managers["bad"]
+
+    first = service._probe_worker_model_route("bad", manager)
+    second = service._probe_worker_model_route("bad", manager)
+
+    assert first[0] is False
+    assert "backend lacks json_schema" in first[1]
+    assert second == first
+    assert calls == ["model-route-probe-bad"]
+    service.workers.shutdown()
+    manager.shutdown()
+
+
+def test_open_webui_signed_artifact_projection_and_fetch(make_config, monkeypatch) -> None:
+    import time
+    from urllib.parse import urlsplit
+
+    from swaag.environment.artifacts import TextArtifactStore
+
+    async def exercise() -> None:
+        monkeypatch.setenv("SWAAG_TEST_ARTIFACT_SECRET", "s" * 48)
+        config = make_config()
+        config.communication.open_webui_artifacts.enabled = True
+        config.communication.open_webui_artifacts.public_base_url = "http://127.0.0.1:1"
+        config.communication.open_webui_artifacts.signing_secret_env = (
+            "SWAAG_TEST_ARTIFACT_SECRET"
+        )
+        config.communication.open_webui_artifacts.ttl_seconds = 60
+        runtime = AgentRuntime(config, model_client=object())
+        service = CommunicationService(runtime)
+        worker = service.workers.create("produce an exact artifact")
+        state = runtime.create_or_load_session(worker.session_id)
+        artifact = TextArtifactStore(config.sessions.root, worker.session_id).create(
+            "exact downloadable artifact\n", kind="verified_output"
+        )
+        runtime.history.record_event(
+            state,
+            "artifact_created",
+            {
+                "artifact_id": artifact.artifact_id,
+                "kind": artifact.kind,
+                "size_chars": artifact.size_chars,
+                "sha256": artifact.sha256,
+            },
+        )
+        events = service.workers.events(worker.worker_id)
+
+        # Disabled projection never invents a local path/file URL.
+        config.communication.open_webui_artifacts.enabled = False
+        assert all(
+            event["type"] != "files"
+            for event in service._open_webui_projection(worker, events)["events"]
+        )
+        config.communication.open_webui_artifacts.enabled = True
+
+        server = await asyncio.start_server(service.handle_client, "127.0.0.1", 0)
+        port = server.sockets[0].getsockname()[1]
+        config.communication.open_webui_artifacts.public_base_url = (
+            f"http://127.0.0.1:{port}"
+        )
+        projection = service._open_webui_projection(worker, events)
+        files_event = next(
+            event for event in projection["events"] if event["type"] == "files"
+        )
+        file_object = files_event["data"]["files"][0]
+        assert file_object["name"] == f"{artifact.artifact_id}.txt"
+        assert file_object["type"] == "text/plain"
+        assert artifact.path not in file_object["url"]
+        assert config.sessions.root.as_posix() not in file_object["url"]
+
+        async def get(url: str):
+            parsed = urlsplit(url)
+            reader, writer = await asyncio.open_connection("127.0.0.1", port)
+            target = parsed.path + ("?" + parsed.query if parsed.query else "")
+            writer.write(
+                (
+                    f"GET {target} HTTP/1.1\r\n"
+                    "Host: localhost\r\n"
+                    "Accept: text/plain\r\n\r\n"
+                ).encode()
+            )
+            await writer.drain()
+            raw = await asyncio.wait_for(reader.read(), timeout=2)
+            writer.close()
+            await writer.wait_closed()
+            head, body = raw.split(b"\r\n\r\n", 1)
+            return head, body
+
+        head, body = await get(file_object["url"])
+        assert b"HTTP/1.1 200 OK" in head
+        assert b"Content-Type: text/plain; charset=utf-8" in head
+        assert b"Cache-Control: private, no-store" in head
+        assert b"Content-Disposition: attachment;" in head
+        assert body == b"exact downloadable artifact\n"
+        assert artifact.path.encode() not in head + body
+
+        tampered = file_object["url"][:-1] + (
+            "0" if file_object["url"][-1] != "0" else "1"
+        )
+        head, _body = await get(tampered)
+        assert b"HTTP/1.1 403 Forbidden" in head
+
+        expired_at = int(time.time()) - 1
+        expired_token = service._open_webui_artifact_signature(
+            worker_id=worker.worker_id,
+            session_id=worker.session_id,
+            artifact_id=artifact.artifact_id,
+            expires=expired_at,
+        )
+        expired_url = (
+            f"http://127.0.0.1:{port}/open-webui/artifacts/"
+            f"{worker.worker_id}/{artifact.artifact_id}"
+            f"?expires={expired_at}&token={expired_token}"
+        )
+        head, _body = await get(expired_url)
+        assert b"HTTP/1.1 410 Gone" in head
+
+        other = service.workers.create("other worker")
+        cross_token = service._open_webui_artifact_signature(
+            worker_id=other.worker_id,
+            session_id=other.session_id,
+            artifact_id=artifact.artifact_id,
+            expires=int(time.time()) + 60,
+        )
+        cross_url = (
+            f"http://127.0.0.1:{port}/open-webui/artifacts/"
+            f"{other.worker_id}/{artifact.artifact_id}"
+            f"?expires={int(time.time()) + 60}&token={cross_token}"
+        )
+        # The exact expiration is part of the signature, so rebuild once consistently.
+        expires = int(time.time()) + 60
+        cross_token = service._open_webui_artifact_signature(
+            worker_id=other.worker_id,
+            session_id=other.session_id,
+            artifact_id=artifact.artifact_id,
+            expires=expires,
+        )
+        cross_url = (
+            f"http://127.0.0.1:{port}/open-webui/artifacts/"
+            f"{other.worker_id}/{artifact.artifact_id}"
+            f"?expires={expires}&token={cross_token}"
+        )
+        head, _body = await get(cross_url)
+        assert b"HTTP/1.1 404 Not Found" in head
+
+        server.close()
+        await server.wait_closed()
+        service.workers.shutdown()
+
+    asyncio.run(exercise())
+
+
+def test_open_webui_artifact_serving_requires_real_secret(make_config, monkeypatch) -> None:
+    config = make_config()
+    config.communication.open_webui_artifacts.enabled = True
+    config.communication.open_webui_artifacts.public_base_url = "http://127.0.0.1:8765"
+    config.communication.open_webui_artifacts.signing_secret_env = "MISSING_SECRET"
+    monkeypatch.delenv("MISSING_SECRET", raising=False)
+
+    with pytest.raises(RuntimeError, match="requires a signing secret"):
+        CommunicationService(AgentRuntime(config, model_client=object()))
+
+
+def _push_enabled_config(make_config, monkeypatch):
+    key_env = "SWAAG_TEST_A2A_PUSH_CREDENTIAL_KEY"
+    monkeypatch.setenv(key_env, "push-encryption-secret-0123456789abcdef")
+    config = make_config()
+    config.a2a_authorization.enabled = True
+    config.a2a_authorization.public_base_url = "https://agent.example.test"
+    config.a2a_authorization.bearer_token = "agent-control-token"
+    config.a2a_push.enabled = True
+    config.a2a_push.credential_key_env = key_env
+    config.a2a_push.allowed_hosts = ["callback.example.test"]
+    config.a2a_push.timeout_seconds = 0.5
+    config.a2a_push.max_attempts = 2
+    config.a2a_push.retry_base_seconds = 0.01
+    return config
+
+
+def test_a2a_push_encrypts_credentials_and_delivers_worker_updates(
+    make_config, monkeypatch
+):
+    import sqlite3
+
+    config = _push_enabled_config(make_config, monkeypatch)
+    service = CommunicationService(AgentRuntime(config, model_client=object()))
+    worker = service.workers.create("Produce a durable result.")
+    created = service._a2a_push_create(
+        {
+            "tenant": "",
+            "id": "config-one",
+            "taskId": worker.worker_id,
+            "url": "https://callback.example.test/a2a/events",
+            "token": "legacy-secret-token",
+            "authentication": {
+                "scheme": "Bearer",
+                "credentials": "modern-secret-token",
+            },
+        }
+    )
+    assert created["id"] == "config-one"
+    assert created["authentication"] == {
+        "scheme": "Bearer",
+        "credentials": "modern-secret-token",
+    }
+
+    with sqlite3.connect(service.store.path) as connection:
+        row = connection.execute(
+            """
+            SELECT token_ciphertext, auth_ciphertext, callback_url
+            FROM a2a_push_configs WHERE task_id=? AND config_id='config-one'
+            """,
+            (worker.worker_id,),
+        ).fetchone()
+    assert row is not None
+    stored_bytes = bytes(row[0] or b"") + bytes(row[1] or b"")
+    assert b"legacy-secret-token" not in stored_bytes
+    assert b"modern-secret-token" not in stored_bytes
+    assert row[2] == "https://callback.example.test/a2a/events"
+
+    service.workers.store.transition(
+        worker.worker_id,
+        "completed",
+        expected={"created"},
+        result="verified result",
+        event_type="worker_completed",
+    )
+    posts = []
+
+    class _Response:
+        status_code = 204
+
+    def post(url, **kwargs):
+        posts.append((url, kwargs))
+        return _Response()
+
+    monkeypatch.setattr("swaag.communication.requests.post", post)
+    assert service._a2a_push_pump_once() == 2
+    assert len(posts) == 2
+    payloads = [json.loads(call[1]["data"]) for call in posts]
+    assert {next(iter(item)) for item in payloads} == {
+        "artifactUpdate",
+        "statusUpdate",
+    }
+    for url, kwargs in posts:
+        assert url == "https://callback.example.test/a2a/events"
+        assert kwargs["headers"]["Content-Type"] == "application/a2a+json"
+        assert kwargs["headers"]["Authorization"] == "Bearer modern-secret-token"
+        assert "X-A2A-Notification-Token" not in kwargs["headers"]
+        assert kwargs["allow_redirects"] is False
+        assert kwargs["timeout"] == 0.5
+
+    with sqlite3.connect(service.store.path) as connection:
+        states = connection.execute(
+            "SELECT status, attempt_count FROM a2a_push_deliveries ORDER BY delivery_id"
+        ).fetchall()
+    assert states == [("delivered", 1), ("delivered", 1)]
+    service.workers.shutdown()
+
+
+def test_a2a_push_retry_is_durable_and_callback_host_fails_closed(
+    make_config, monkeypatch
+):
+    import sqlite3
+
+    config = _push_enabled_config(make_config, monkeypatch)
+    service = CommunicationService(AgentRuntime(config, model_client=object()))
+    worker = service.workers.create("Fail after reporting.")
+    with pytest.raises(ValueError, match="not allowlisted"):
+        service._a2a_push_create(
+            {
+                "tenant": "",
+                "id": "evil",
+                "taskId": worker.worker_id,
+                "url": "https://evil.example.test/callback",
+                "token": "x",
+                "authentication": None,
+            }
+        )
+    with pytest.raises(ValueError, match="absolute HTTPS"):
+        service._a2a_push_create(
+            {
+                "tenant": "",
+                "id": "plain-http",
+                "taskId": worker.worker_id,
+                "url": "http://callback.example.test/callback",
+                "token": "x",
+                "authentication": None,
+            }
+        )
+    service._a2a_push_create(
+        {
+            "tenant": "",
+            "id": "retry",
+            "taskId": worker.worker_id,
+            "url": "https://callback.example.test/retry",
+            "token": "legacy-token",
+            "authentication": None,
+        }
+    )
+    service.workers.store.transition(
+        worker.worker_id,
+        "failed",
+        expected={"created"},
+        error="boom",
+        event_type="worker_failed",
+    )
+    calls = []
+
+    class _Response:
+        def __init__(self, status_code):
+            self.status_code = status_code
+
+    def first_post(url, **kwargs):
+        calls.append((url, kwargs))
+        return _Response(503)
+
+    monkeypatch.setattr("swaag.communication.requests.post", first_post)
+    assert service._a2a_push_pump_once() == 1
+    with sqlite3.connect(service.store.path) as connection:
+        queued = connection.execute(
+            "SELECT delivery_id, status, attempt_count, last_error FROM a2a_push_deliveries"
+        ).fetchone()
+        assert queued is not None
+        assert queued[1] == "queued" and queued[2] == 1
+        assert "HTTP 503" in queued[3]
+        connection.execute(
+            "UPDATE a2a_push_deliveries SET next_attempt_epoch=0 WHERE delivery_id=?",
+            (queued[0],),
+        )
+        connection.commit()
+
+    def second_post(url, **kwargs):
+        calls.append((url, kwargs))
+        return _Response(204)
+
+    monkeypatch.setattr("swaag.communication.requests.post", second_post)
+    assert service._a2a_push_pump_once() == 1
+    with sqlite3.connect(service.store.path) as connection:
+        delivered = connection.execute(
+            "SELECT status, attempt_count FROM a2a_push_deliveries"
+        ).fetchone()
+    assert delivered == ("delivered", 2)
+    assert len(calls) == 2
+    assert calls[0][1]["allow_redirects"] is False
+    assert calls[0][1]["headers"]["X-A2A-Notification-Token"] == "legacy-token"
+    service.workers.shutdown()
+
+
+def test_a2a_push_jsonrpc_and_http_json_crud(make_config, monkeypatch):
+    async def exercise() -> None:
+        config = _push_enabled_config(make_config, monkeypatch)
+        config.a2a_extended_card.enabled = True
+        service = CommunicationService(AgentRuntime(config, model_client=object()))
+        worker = service.workers.create("Push CRUD task")
+        server = await asyncio.start_server(service.handle_client, "127.0.0.1", 0)
+        port = server.sockets[0].getsockname()[1]
+
+        async def request(method: str, target: str, body=None, *, content_type="application/json"):
+            reader, writer = await asyncio.open_connection("127.0.0.1", port)
+            raw = b"" if body is None else json.dumps(body).encode()
+            headers = [
+                f"{method} {target} HTTP/1.1",
+                "Host: localhost",
+                "A2A-Version: 1.0",
+                "Authorization: Bearer agent-control-token",
+                "Connection: close",
+            ]
+            if body is not None:
+                headers += [f"Content-Type: {content_type}", f"Content-Length: {len(raw)}"]
+            writer.write(("\r\n".join(headers) + "\r\n\r\n").encode() + raw)
+            await writer.drain()
+            head = await reader.readuntil(b"\r\n\r\n")
+            header_lines = head.decode().split("\r\n")
+            status = header_lines[0]
+            length = 0
+            for line in header_lines[1:]:
+                if line.lower().startswith("content-length:"):
+                    length = int(line.split(":", 1)[1])
+            payload = await reader.readexactly(length) if length else b""
+            writer.close()
+            await writer.wait_closed()
+            return status, (json.loads(payload) if payload else None)
+
+        rpc = {
+            "jsonrpc": "2.0",
+            "id": "rpc-create",
+            "method": "CreateTaskPushNotificationConfig",
+            "params": {
+                "tenant": "",
+                "id": "rpc-config",
+                "taskId": worker.worker_id,
+                "url": "https://callback.example.test/rpc",
+                "token": "rpc-token",
+                "authentication": None,
+            },
+        }
+        status, payload = await request("POST", "/a2a/v1", rpc)
+        assert status == "HTTP/1.1 200 OK"
+        assert payload["result"]["id"] == "rpc-config"
+
+        async def rpc_call(method, params, request_id):
+            status, payload = await request(
+                "POST",
+                "/a2a/v1",
+                {
+                    "jsonrpc": "2.0",
+                    "id": request_id,
+                    "method": method,
+                    "params": params,
+                },
+            )
+            assert status == "HTTP/1.1 200 OK"
+            assert payload["id"] == request_id
+            assert "error" not in payload
+            return payload["result"]
+
+        got = await rpc_call(
+            "GetTaskPushNotificationConfig",
+            {"tenant": "", "taskId": worker.worker_id, "id": "rpc-config"},
+            "rpc-get",
+        )
+        assert got["token"] == "rpc-token"
+        listed = await rpc_call(
+            "ListTaskPushNotificationConfigs",
+            {
+                "tenant": "",
+                "taskId": worker.worker_id,
+                "pageSize": 10,
+                "pageToken": "",
+            },
+            "rpc-list",
+        )
+        assert [item["id"] for item in listed["configs"]] == ["rpc-config"]
+        extended = await rpc_call(
+            "GetExtendedAgentCard",
+            {"tenant": ""},
+            "rpc-card",
+        )
+        assert extended["capabilities"]["extendedAgentCard"] is True
+        assert any(
+            skill["id"] == "durable-agent-control" for skill in extended["skills"]
+        )
+
+        rest_body = {
+            "tenant": "",
+            "id": "rest-config",
+            "taskId": worker.worker_id,
+            "url": "https://callback.example.test/rest",
+            "token": "rest-token",
+            "authentication": None,
+        }
+        collection = f"/a2a/rest/tasks/{worker.worker_id}/pushNotificationConfigs"
+        status, payload = await request(
+            "POST", collection, rest_body, content_type="application/a2a+json"
+        )
+        assert status == "HTTP/1.1 200 OK"
+        assert payload["id"] == "rest-config"
+
+        status, payload = await request("GET", collection + "?pageSize=10")
+        assert status == "HTTP/1.1 200 OK"
+        assert [item["id"] for item in payload["configs"]] == [
+            "rest-config",
+            "rpc-config",
+        ]
+        status, payload = await request("GET", collection + "/rest-config")
+        assert status == "HTTP/1.1 200 OK"
+        assert payload["token"] == "rest-token"
+        deleted = await rpc_call(
+            "DeleteTaskPushNotificationConfig",
+            {"tenant": "", "taskId": worker.worker_id, "id": "rpc-config"},
+            "rpc-delete",
+        )
+        assert deleted == {}
+        status, payload = await request("DELETE", collection + "/rest-config")
+        assert status == "HTTP/1.1 200 OK" and payload == {}
+
+        status, payload = await request("GET", "/a2a/rest/extendedAgentCard")
+        assert status == "HTTP/1.1 200 OK"
+        assert payload["capabilities"]["extendedAgentCard"] is True
+        assert any(skill["id"] == "durable-agent-control" for skill in payload["skills"])
+
+        server.close()
+        await server.wait_closed()
+        service.workers.shutdown()
+
+    asyncio.run(exercise())
+
+
+def test_a2a_agent_card_signature_verifies(make_config, monkeypatch):
+    import base64 as _base64
+    import rfc8785 as _rfc8785
+    from cryptography.hazmat.primitives import hashes as _hashes, serialization as _serialization
+    from cryptography.hazmat.primitives.asymmetric import ec as _ec
+    from cryptography.hazmat.primitives.asymmetric.utils import encode_dss_signature
+
+    key = _ec.generate_private_key(_ec.SECP256R1())
+    pem = key.private_bytes(
+        encoding=_serialization.Encoding.PEM,
+        format=_serialization.PrivateFormat.PKCS8,
+        encryption_algorithm=_serialization.NoEncryption(),
+    ).decode()
+    monkeypatch.setenv("SWAAG_TEST_A2A_CARD_KEY", pem)
+    config = make_config()
+    config.a2a_authorization.enabled = True
+    config.a2a_authorization.public_base_url = "https://agent.example.test"
+    config.a2a_authorization.bearer_token = "control"
+    config.a2a_extended_card.enabled = True
+    config.a2a_card_signing.enabled = True
+    config.a2a_card_signing.private_key_env = "SWAAG_TEST_A2A_CARD_KEY"
+    config.a2a_card_signing.key_id = "test-p256"
+    service = CommunicationService(AgentRuntime(config, model_client=object()))
+    card = service._a2a_agent_card(extended=True)
+    signature = card["signatures"][0]
+    protected = json.loads(
+        _base64.urlsafe_b64decode(signature["protected"] + "=" * (-len(signature["protected"]) % 4))
+    )
+    assert protected == {"alg": "ES256", "kid": "test-p256", "typ": "JOSE"}
+    unsigned = {name: value for name, value in card.items() if name != "signatures"}
+    payload_b64 = service._a2a_base64url(_rfc8785.dumps(unsigned))
+    signed_bytes = f"{signature['protected']}.{payload_b64}".encode("ascii")
+    raw = _base64.urlsafe_b64decode(signature["signature"] + "=" * (-len(signature["signature"]) % 4))
+    assert len(raw) == 64
+    der = encode_dss_signature(int.from_bytes(raw[:32], "big"), int.from_bytes(raw[32:], "big"))
+    key.public_key().verify(der, signed_bytes, _ec.ECDSA(_hashes.SHA256()))
+    service.workers.shutdown()

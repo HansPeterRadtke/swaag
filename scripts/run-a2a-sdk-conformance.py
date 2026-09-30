@@ -5,6 +5,7 @@ from __future__ import annotations
 import argparse
 import asyncio
 import json
+import os
 from pathlib import Path
 from typing import Any
 
@@ -35,6 +36,13 @@ async def _run(args: argparse.Namespace) -> dict[str, Any]:
     config.embedding_index.enabled = False
     config.communication.enabled = False
     config.communication.host = "127.0.0.1"
+    if args.exercise_push:
+        key_env = "SWAAG_A2A_CONFORMANCE_PUSH_KEY"
+        os.environ[key_env] = "official-a2a-push-conformance-secret-0123456789"
+        config.a2a_push.enabled = True
+        config.a2a_push.credential_key_env = key_env
+        config.a2a_push.allowed_hosts = ["callback.example.test"]
+        config.a2a_extended_card.enabled = True
     no_inference = _NoInferenceClient()
     service = CommunicationService(AgentRuntime(config, model_client=no_inference))
 
@@ -75,6 +83,8 @@ async def _run(args: argparse.Namespace) -> dict[str, Any]:
     command.extend(
         ["--exercise-new-tasks", f"--transport={args.transport}"]
     )
+    if args.exercise_push:
+        command.append("--exercise-push")
     process: asyncio.subprocess.Process | None = None
     try:
         process = await asyncio.create_subprocess_exec(
@@ -94,6 +104,8 @@ async def _run(args: argparse.Namespace) -> dict[str, Any]:
         sdk_result = json.loads(stdout)
         if sdk_result.get("newTasks") is None:
             raise RuntimeError("official A2A SDK probe omitted new-task evidence")
+        if args.exercise_push and sdk_result.get("push") is None:
+            raise RuntimeError("official A2A SDK probe omitted push/extended-card evidence")
         if no_inference.accesses:
             raise RuntimeError(
                 "model client was accessed: " + ", ".join(no_inference.accesses)
@@ -101,8 +113,9 @@ async def _run(args: argparse.Namespace) -> dict[str, Any]:
         result = {
             "completed_at": utc_now_iso(),
             "scope": (
-                "official A2A SDK new-task send/stream protocol conformance "
-                f"over {args.transport}"
+                "official A2A SDK new-task send/stream"
+                + (" plus push/extended-card" if args.exercise_push else "")
+                + f" protocol conformance over {args.transport}"
             ),
             "inference_allowed": False,
             "model_client_accesses": list(no_inference.accesses),
@@ -147,6 +160,7 @@ def main() -> int:
         "--transport", choices=("jsonrpc", "http-json"), default="jsonrpc"
     )
     parser.add_argument("--exercise-existing-task", action="store_true")
+    parser.add_argument("--exercise-push", action="store_true")
     parser.add_argument("--timeout-seconds", type=float, default=30.0)
     args = parser.parse_args()
     if args.timeout_seconds <= 0:

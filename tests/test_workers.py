@@ -214,7 +214,7 @@ class _OptionalInputClient(_WorkerClient):
                 payload,
                 json.dumps(
                     {
-                        "assistant_message": "I can proceed with blue unless you prefer another target.",
+                        "assistant_message": "Do you prefer a target other than blue? Use blue. I can continue with that provisional assumption while you decide.",
                         "tool_calls": [
                             {
                                 "tool_name": "calculator",
@@ -791,3 +791,18 @@ def test_worker_events_link_and_rehydrate_canonical_session_history(make_config)
         event for event in replayed if event.event_type == "worker_history_event"
     )
     assert replayed_link.payload["canonical_event"]["hash"] == source.hash
+
+
+@pytest.mark.parametrize("value", [float("nan"), float("inf"), float("-inf"), 0, -1, True, "2"])
+def test_invalid_inference_weight_cannot_create_or_change_worker(tmp_path, value):
+    from swaag.workers import WorkerStore
+
+    store = WorkerStore(tmp_path)
+    worker = store.create("session-existing", "keep working")
+    with pytest.raises(ValueError, match="finite and positive"):
+        store.create("session-invalid", "invalid", inference_weight=value)
+    with pytest.raises(ValueError, match="finite and positive"):
+        store.set_inference_weight(worker.worker_id, value)
+    assert store.get(worker.worker_id) == worker
+    with store._connect() as connection:
+        assert connection.execute("SELECT COUNT(*) FROM workers").fetchone()[0] == 1

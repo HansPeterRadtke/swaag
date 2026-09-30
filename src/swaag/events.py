@@ -19,6 +19,8 @@ ALLOWED_EVENT_TYPES = frozenset(
         "prompt_built",
         "context_compiled",
         "semantic_reduction_working_set_exceeded",
+        "action_prompt_mode_fallback",
+        "semantic_reduction_output_exhausted",
         "runtime_context_projected",
         "runtime_context_projection_reused",
         "runtime_context_projection_skipped",
@@ -29,6 +31,7 @@ ALLOWED_EVENT_TYPES = frozenset(
         "completion_rejected",
         "completion_evaluation_unavailable",
         "completion_evidence_reexpanded",
+        "completion_evidence_searched",
         "completion_evidence_projected",
         "caller_structured_output_created",
         "communication_status_requested",
@@ -41,6 +44,7 @@ ALLOWED_EVENT_TYPES = frozenset(
         "response_presentation_generated",
         "response_presentation_rejected",
         "response_presentation_unavailable",
+        "response_constraint_repaired",
         "budget_checked",
         "budget_rejected",
         "budget_repaired",
@@ -353,6 +357,19 @@ REQUIRED_PAYLOAD_KEYS: dict[str, frozenset[str]] = {
             "integrity_verified",
         }
     ),
+    "completion_evidence_searched": frozenset(
+        {
+            "source_kind",
+            "source_id",
+            "source_sha256",
+            "source_event_references",
+            "queries",
+            "matched_queries",
+            "match_ranges",
+            "excerpt_tokens",
+            "source_chars",
+        }
+    ),
     "completion_evidence_projected": frozenset(
         {
             "source_kind",
@@ -474,8 +491,26 @@ REQUIRED_PAYLOAD_KEYS: dict[str, frozenset[str]] = {
     "summary_created": frozenset({"source_message_count", "summary_message", "summary_budget_report"}),
     "history_compacted": frozenset({"source_message_count", "summary_message", "summary_budget_report"}),
     "history_compressed": frozenset({"source_message_count", "summary_message", "summary_budget_report"}),
+    "action_prompt_mode_fallback": frozenset(
+        {
+            "from_prompt_mode",
+            "to_prompt_mode",
+            "reason",
+            "standard_budget_report",
+            "lean_budget_report",
+        }
+    ),
     "semantic_reduction_working_set_exceeded": frozenset(
         {"kind", "hierarchical_depth", "input_tokens", "working_set_limit_tokens"}
+    ),
+    "semantic_reduction_output_exhausted": frozenset(
+        {
+            "kind",
+            "hierarchical_depth",
+            "input_tokens",
+            "reserved_response_tokens",
+            "finish_reason",
+        }
     ),
     "history_compaction_span_selected": frozenset(
         {
@@ -669,6 +704,16 @@ REQUIRED_PAYLOAD_KEYS: dict[str, frozenset[str]] = {
     ),
     "inference_request_finished": frozenset(
         {"request_id", "call_id", "kind", "status", "attempt", "error"}
+    ),
+    "response_constraint_repaired": frozenset(
+        {
+            "constraint",
+            "target_word_count",
+            "source_word_count",
+            "source_sha256",
+            "repaired_sha256",
+            "contract",
+        }
     ),
     "model_request_progress": frozenset({"kind", "prompt_mode", "attempt", "elapsed_seconds", "timeout_seconds", "policy"}),
     "model_token_progress": frozenset({"kind", "prompt_mode", "attempt", "elapsed_seconds", "completion_tokens", "tokens_per_second", "first_token_seconds", "token_timeout_seconds"}),

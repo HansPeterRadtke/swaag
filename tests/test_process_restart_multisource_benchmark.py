@@ -26,7 +26,7 @@ class _Client:
         return {"prompt": prompt, "n_predict": max_tokens, "contract": contract.name, "json_schema": contract.json_schema}
     def send_completion(self, payload: dict[str, Any], **_kwargs):
         if payload["contract"] == "history_compaction_selection":
-            text=json.dumps({"criticality":"compressible","reason":"routine window"})
+            text=json.dumps({"criticality":"compressible","reason_code":"redundant_progress","projection":""})
         elif payload["contract"] == "summary_refinement":
             text=json.dumps({"summary":"Routine progress compressed."})
         else:

@@ -1,10 +1,9 @@
-User goal:
-{original_request}
+Goal: {original_request}
+Source: sequence={source_event_sequence} hash={source_event_hash}
+Tool: {tool_name}
+Target: about {target_tokens} tokens
 
-Canonical raw tool-result source event: sequence={source_event_sequence} hash={source_event_hash}
-Tool name: {tool_name}
-
-Raw tool observation:
+Exact observation:
 {raw_tool_result}
 
-Produce a semantic projection for continuing the user goal. The `projection` value should fit within approximately {target_tokens} tokens. Preserve exact details when they may affect correctness. The raw source remains retrievable, so omit irrelevant bulk rather than blindly truncating.
+Project only goal-relevant evidence. Preserve relevant source phrases verbatim, especially identifiers, dates, numbers, negatives, quotes, paths, and causal statements. Do not insert punctuation inside retained phrases. Omit irrelevant or decoy labels. The exact source remains retrievable; reduce by semantic omission, not blind truncation.

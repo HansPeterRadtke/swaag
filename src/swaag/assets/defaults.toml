@@ -3,9 +3,10 @@
 #
 # Override precedence (lowest to highest):
 #   1. this file  — packaged defaults, defines every key
-#   2. config/local.toml  — local override file, deep-merged at startup
-#   3. SWAAG_CONFIG env var  — explicit path to an additional override
-#   4. SWAAG__SECTION__KEY=value env vars  — per-key overrides (highest)
+#   2. config/local.toml  — local project override file, deep-merged at startup
+#   3. explicit config_paths supplied by the caller, in caller order
+#   4. SWAAG_CONFIG env var  — explicit path to an additional override
+#   5. SWAAG__SECTION__KEY=value env vars  — per-key overrides (highest)
 #
 # Distinction between config types:
 #   server/model facts  — discovered from the live backend where supported
@@ -86,7 +87,7 @@ background_poll_seconds = 0.1
 # allow_side_effect_tools: set true only if destructive writes are intended.
 # -----------------------------------------------------------
 [tools]
-enabled = ["echo", "time_now", "calculator", "list_files", "read_file", "read_text", "search_in_file", "search_repo", "history_search", "history_window", "history_analyze", "read_artifact", "list_attachments", "read_attachment", "terminal", "notes", "prompt_instructions", "shared_state", "edit_text", "write_file", "run_tests", "shell_command", "poll_process", "kill_process", "wait_seconds", "schedule_wakeup", "list_wakeups", "cancel_wakeup"]
+enabled = ["echo", "time_now", "calculator", "agent_workspace", "list_files", "read_file", "read_text", "search_in_file", "search_repo", "history_search", "history_window", "history_analyze", "read_artifact", "list_attachments", "read_attachment", "terminal", "notes", "prompt_instructions", "shared_state", "edit_text", "write_file", "run_tests", "shell_command", "poll_process", "kill_process", "wait_seconds", "schedule_wakeup", "list_wakeups", "cancel_wakeup"]
 read_roots = ["."]
 allow_stateful_tools = true
 allow_side_effect_tools = false
@@ -106,9 +107,13 @@ safety_margin_tokens = 64
 max_compaction_rounds = 4
 allow_estimate_fallback = true
 compact_on_overflow = true
-# Optional resource-safety cap for semantic reduction subcalls only.
-# 0 means no additional cap beyond the model context window.
-semantic_reduction_max_input_tokens = 0
+# Resource-safety cap for semantic reduction subcalls only. Full-fidelity action
+# admission is unchanged; this bound applies only after measured overflow requires
+# semantic reduction. 0 explicitly disables the additional cap.
+semantic_reduction_max_input_tokens = 8192
+# Hard ceiling for one hierarchical semantic-reduction tree. The runtime derives
+# the actual allowance from exact source size/context capacity, never exceeding this.
+semantic_reduction_max_calls = 256
 
 # -----------------------------------------------------------
 # [sessions] — SESSION STORAGE
@@ -123,6 +128,16 @@ write_projections = true
 # shell_executable: shell used for shell_command tool.
 # command_timeout_seconds: hard timeout per shell command.
 # -----------------------------------------------------------
+[agent_data]
+# Agent-owned persistent workspace for general calculations, experiments, notes,
+# downloaded knowledge, and doability tests that must not pollute user projects.
+# The agent_workspace tool confines execution to this root with bubblewrap.
+root = "/data/var/swaag/agent-data"
+sandbox_backend = "bwrap"
+python_executable = "/usr/bin/python3"
+command_timeout_seconds = 30
+max_capture_chars = 12000
+
 [environment]
 shell_executable = "bash"
 command_timeout_seconds = 30
@@ -134,6 +149,10 @@ track_shell_file_changes = true
 # -----------------------------------------------------------
 [logging]
 level = "INFO"
+file_path = "/data/var/swaag/logs/operations.jsonl"
+queue_capacity = 4096
+max_bytes = 10485760
+backup_count = 5
 
 # -----------------------------------------------------------
 # [notes] — WORKING NOTES SUBSYSTEM LIMITS
@@ -180,6 +199,7 @@ allowed_write_paths = []
 standard_system_template = "system_standard.txt"
 lean_system_template = "system_lean.txt"
 action_template = "agent_action_user.txt"
+lean_action_template = "agent_action_lean_user.txt"
 summary_system_template = "summary_system.txt"
 summary_template = "summary_user.txt"
 tool_result_projection_system_template = "tool_result_projection_system.txt"
@@ -219,6 +239,7 @@ structured_output_schema_floor_tokens = 16
 
 [budget_policy.call_classes]
 action = "large"
+exact_word_count_repair = "small"
 summary = "medium"
 tool_result_projection = "medium"
 evidence_projection = "medium"
@@ -250,6 +271,7 @@ large = 0.10
 
 [budget_policy.output_ratio_by_kind]
 action = 0.30
+exact_word_count_repair = 0.12
 summary = 0.18
 tool_result_projection = 0.14
 evidence_projection = 0.14
@@ -268,6 +290,7 @@ benchmark_quality_judge = 0.12
 
 [budget_policy.output_floor_ratio_by_kind]
 action = 0.22
+exact_word_count_repair = 0.06
 summary = 0.10
 tool_result_projection = 0.08
 evidence_projection = 0.08
@@ -283,6 +306,15 @@ presentation_evaluation = 0.04
 notes_compaction = 0.06
 doctor = 0.03
 benchmark_quality_judge = 0.08
+
+[budget_policy.structured_output_json_floor_by_contract]
+# Compact structured operations use smaller contract-specific floors while rich
+# action/completion contracts retain the conservative global default.
+evidence_projection = 32
+communication_status = 96
+tool_result_verbatim_selection = 32
+tool_result_best_anchor = 32
+history_best_anchor = 32
 
 [budget_policy.structured_output_json_factor_by_contract]
 agent_action = 1.10
@@ -361,7 +393,8 @@ authorization_servers = []
 allowed_origins = []
 introspection_url = ""
 introspection_client_id = ""
-introspection_client_secret = ""
+# Secret value is resolved only from this environment variable when authorization is enabled.
+introspection_client_secret_env = "SWAAG_MCP_INTROSPECTION_CLIENT_SECRET"
 required_scopes = []
 timeout_seconds = 5.0
 
@@ -382,7 +415,25 @@ timeout_seconds = 5.0
 [a2a.authorization]
 enabled = false
 public_base_url = ""
-bearer_token = ""
+# Secret value is read only from this environment variable when authorization is enabled.
+bearer_token_env = "SWAAG_A2A_BEARER_TOKEN"
+
+[a2a.push]
+enabled = false
+credential_key_env = ""
+allowed_hosts = []
+timeout_seconds = 15.0
+max_attempts = 5
+retry_base_seconds = 1.0
+
+[a2a.extended_card]
+enabled = false
+
+[a2a.card_signing]
+enabled = false
+private_key_env = ""
+key_id = ""
+jwks_url = ""
 
 # -----------------------------------------------------------
 # [communication] — PARALLEL COMMUNICATION/CONTROL SERVICE
@@ -392,10 +443,24 @@ bearer_token = ""
 enabled = false
 model_base_url = ""
 max_concurrent_requests = 4
-enabled_tools = ["time_now", "calculator", "history_search", "history_window", "agent_status_lookup", "agent_control"]
+# Initial status/control response cap. Output-recovery may grow this only when
+# constrained generation actually exhausts the cap.
+status_max_output_tokens = 192
+enabled_tools = ["time_now", "system_resources", "calculator", "history_search", "history_window", "agent_status_lookup", "agent_control", "orchestration_control"]
 host = "127.0.0.1"
 port = 8765
 poll_seconds = 0.2
+
+[communication.open_webui_artifacts]
+enabled = false
+public_base_url = ""
+signing_secret_env = ""
+ttl_seconds = 900
+
+# Optional named model endpoints available to orchestration worker nodes. The
+# default worker model remains [model].base_url; routes are selected explicitly
+# by the orchestrator/user and never guessed from task wording.
+[communication.model_routes]
 
 [external_benchmarks]
 root = ".swaag/external_benchmarks"

@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import contextvars
 import json
+import math
 import os
 import sqlite3
 import threading
@@ -44,6 +45,7 @@ WORKER_STREAM_EVENT_TYPES = frozenset(
         "agent_question",
         "agent_status",
         "assistant_progress",
+        "artifact_created",
         "shared_state_updated",
         "tool_called",
         "tool_error",
@@ -119,6 +121,18 @@ _WORKER_STORE_MIGRATIONS = (
         ADD COLUMN presentation_modes_json TEXT NOT NULL DEFAULT '[]'
         """,
     ),
+    (
+        """
+        ALTER TABLE workers
+        ADD COLUMN inference_weight REAL NOT NULL DEFAULT 1.0
+        """,
+    ),
+    (
+        """
+        ALTER TABLE workers
+        ADD COLUMN model_key TEXT NOT NULL DEFAULT 'default'
+        """,
+    ),
 )
 
 
@@ -138,6 +152,8 @@ class WorkerRecord:
     run_count: int
     completion_mode: str
     presentation_modes: list[str]
+    inference_weight: float = 1.0
+    model_key: str = "default"
 
 
 @dataclass(slots=True, frozen=True)
@@ -198,6 +214,8 @@ class WorkerStore:
         output_spec: CallerOutputSpec | None = None,
         completion_mode: str = "natural",
         presentation_modes: list[str] | None = None,
+        inference_weight: float = 1.0,
+        model_key: str = "default",
     ) -> WorkerRecord:
         text = objective.strip()
         if not text:
@@ -216,6 +234,8 @@ class WorkerStore:
             raise ValueError(
                 "worker presentation_modes must contain only visual and/or audio"
             )
+        inference_weight = self._validate_inference_weight(inference_weight)
+        model_key = str(model_key).strip() or "default"
         worker_id = new_id("worker")
         now = utc_now_iso()
         with self._connect() as connection:
@@ -224,8 +244,8 @@ class WorkerStore:
                 """
                 INSERT INTO workers(
                     worker_id, session_id, objective, status, created_at, updated_at,
-                    completion_mode, presentation_modes_json
-                ) VALUES (?, ?, ?, 'created', ?, ?, ?, ?)
+                    completion_mode, presentation_modes_json, inference_weight, model_key
+                ) VALUES (?, ?, ?, 'created', ?, ?, ?, ?, ?, ?)
                 """,
                 (
                     worker_id,
@@ -235,6 +255,8 @@ class WorkerStore:
                     now,
                     mode,
                     stable_json_dumps(requested_presentations, indent=None),
+                    inference_weight,
+                    model_key,
                 ),
             )
             self._append_event(
@@ -247,6 +269,8 @@ class WorkerStore:
                     "status": "created",
                     "completion_mode": mode,
                     "presentation_modes": requested_presentations,
+                    "inference_weight": inference_weight,
+                    "model_key": model_key,
                     "caller_output_spec": (
                         output_spec.payload() if output_spec is not None else None
                     ),
@@ -429,6 +453,42 @@ class WorkerStore:
             connection.commit()
         return appended
 
+    @staticmethod
+    def _validate_inference_weight(weight: Any) -> float:
+        if (
+            isinstance(weight, bool)
+            or not isinstance(weight, (int, float))
+            or not math.isfinite(weight)
+            or weight <= 0
+        ):
+            raise ValueError("worker inference_weight must be finite and positive")
+        return float(weight)
+
+    def set_inference_weight(self, worker_id: str, weight: float) -> WorkerRecord:
+        weight = self._validate_inference_weight(weight)
+        now = utc_now_iso()
+        with self._connect() as connection:
+            row = connection.execute(
+                "SELECT inference_weight FROM workers WHERE worker_id=?", (worker_id,)
+            ).fetchone()
+            if row is None:
+                raise FileNotFoundError(f"Unknown worker: {worker_id}")
+            previous = float(row["inference_weight"])
+            if previous == weight:
+                return self.get(worker_id)
+            connection.execute(
+                "UPDATE workers SET inference_weight=?,updated_at=? WHERE worker_id=?",
+                (weight, now, worker_id),
+            )
+            self._append_event(
+                connection,
+                worker_id,
+                "worker_inference_weight_changed",
+                {"previous": previous, "current": weight},
+                timestamp=now,
+            )
+        return self.get(worker_id)
+
     def transition(
         self,
         worker_id: str,
@@ -564,8 +624,15 @@ class WorkerStore:
 class WorkerManager:
     """Runs simple sequential agents as independently addressable durable workers."""
 
-    def __init__(self, runtime: AgentRuntime, *, max_workers: int = 4):
+    def __init__(
+        self,
+        runtime: AgentRuntime,
+        *,
+        max_workers: int = 4,
+        model_key: str = "default",
+    ):
         self.runtime = runtime
+        self.model_key = str(model_key).strip() or "default"
         self.store = WorkerStore(runtime.config.sessions.root)
         self._executor = ThreadPoolExecutor(
             max_workers=max(1, int(max_workers)), thread_name_prefix="swaag-worker"
@@ -586,6 +653,7 @@ class WorkerManager:
         mechanical_fields: dict[str, str] | None = None,
         completion_mode: str = "natural",
         presentation_modes: list[str] | None = None,
+        inference_weight: float = 1.0,
     ) -> WorkerRecord:
         output_spec = prepare_caller_output_spec(output_schema, mechanical_fields)
         mode = str(completion_mode).strip()
@@ -616,6 +684,8 @@ class WorkerManager:
             output_spec=output_spec,
             completion_mode=mode,
             presentation_modes=requested_presentations,
+            inference_weight=inference_weight,
+            model_key=self.model_key,
         )
 
     def start(self, worker_id: str) -> WorkerRecord:
@@ -1319,12 +1389,19 @@ class WorkerManager:
                 working = latest
                 first_sequence = state.event_count + 1
                 try:
-                    if working.run_count == 1 and not state.messages:
-                        result = self.runtime.run_turn_in_session(state, working.objective)
-                    else:
-                        result = self.runtime.resume_turn_in_session(
-                            state, working.objective
-                        )
+                    with self.runtime.inference_priority(
+                        0,
+                        source=f"worker:{worker_id}",
+                        weight=working.inference_weight,
+                    ):
+                        if working.run_count == 1 and not state.messages:
+                            result = self.runtime.run_turn_in_session(
+                                state, working.objective
+                            )
+                        else:
+                            result = self.runtime.resume_turn_in_session(
+                                state, working.objective
+                            )
                 except ModelCallStateChanged:
                     # A control message may invalidate any in-flight model call,
                     # including calls made while projecting tool evidence. The

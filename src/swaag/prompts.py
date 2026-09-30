@@ -359,18 +359,23 @@ class PromptBuilder:
                     ),
                 )
             )
+        action_template = (
+            self._config.prompts.lean_action_template
+            if prompt_mode == "lean"
+            else self._config.prompts.action_template
+        )
         components.append(
             PromptComponent(
                 name="agent_action_instruction",
                 category="instruction",
-                text=self._load_template(self._config.prompts.action_template),
+                text=self._load_template(action_template),
             )
         )
         return self._assemble(
             "action",
             prompt_mode,
             components,
-            template_names=(self._config.prompts.action_template,),
+            template_names=(action_template,),
         )
 
 
@@ -585,7 +590,10 @@ class PromptBuilder:
             text=(
                 "Produce the complete terminal user-facing response for the current request using only authoritative "
                 "request/history/tool evidence. This call has one semantic responsibility: final response generation. "
-                "Do not choose tools, plan another action, emit status, or judge completion. The message must be non-empty "
+                "Do not choose tools, plan another action, emit status, or judge completion. Always return "
+                "response_constraints.exact_word_count: use a positive integer only when this terminal message is explicitly required "
+                "to contain exactly that many whitespace-delimited words, otherwise null. Exact counts are mechanically validated. "
+                "The message must be non-empty "
                 + ("unless the enclosing protocol explicitly requires silence; set silent_completion accordingly."
                    if allow_silent_completion else "and silent_completion must be false.")
             ),
@@ -764,10 +772,21 @@ class PromptBuilder:
         components: list[PromptComponent] = []
         for index, row in enumerate(rows, start=1):
             source_key = f"{row.get('source_kind', '')}:{row.get('source_id', '')}"
-            body = stable_json_dumps(row, indent=None)
+            display_row = dict(row)
+            literal_excerpt = str(display_row.get("literal_search_excerpt", ""))
+            if literal_excerpt:
+                display_row.pop("text", None)
+                display_row["text"] = literal_excerpt
+                display_row["evidence_view"] = "exact_literal_search_neighborhoods"
+                display_row["view_notice"] = (
+                    "Bounded exact-match view selected by model-authored literal queries; "
+                    "the complete integrity-checked source remains authoritative and recoverable."
+                )
+            body = stable_json_dumps(display_row, indent=None)
             if source_key in projections:
                 projected = dict(row)
                 projected.pop("text", None)
+                projected.pop("literal_search_excerpt", None)
                 projected["semantic_projection"] = projections[source_key].strip()
                 projected["projection_notice"] = (
                     "Derived view only; the exact integrity-checked source remains authoritative."

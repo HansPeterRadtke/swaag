@@ -8,6 +8,7 @@ from swaag.config import AgentConfig
 from swaag.delegated_tools import DelegatedToolSpec
 from swaag.environment.environment import AgentEnvironment
 from swaag.tools.base import SemanticCallRequest, Tool, ToolContext, ToolValidationError
+from swaag.tools.agent_workspace import AGENT_WORKSPACE_TOOLS
 from swaag.tools.artifacts import ARTIFACT_TOOLS
 from swaag.tools.attachments import ATTACHMENT_TOOLS
 from swaag.tools.builtin import BUILTIN_TOOLS
@@ -16,6 +17,7 @@ from swaag.tools.prompt_instructions import PROMPT_INSTRUCTION_TOOLS
 from swaag.tools.shared_state import SHARED_STATE_TOOLS
 from swaag.tools.terminal import TERMINAL_TOOLS
 from swaag.tools.control import CONTROL_TOOLS
+from swaag.tools.orchestration import ORCHESTRATION_TOOLS
 from swaag.types import SessionState, ToolExecutionResult, ToolInvocation
 
 
@@ -90,6 +92,7 @@ class ToolRegistry:
     def __init__(self, tools: Iterable[Tool] | None = None):
         self._tools: dict[str, Tool] = {}
         for tool in tools or [
+            *AGENT_WORKSPACE_TOOLS,
             *BUILTIN_TOOLS,
             *HISTORY_TOOLS,
             *PROMPT_INSTRUCTION_TOOLS,
@@ -98,6 +101,7 @@ class ToolRegistry:
             *ATTACHMENT_TOOLS,
             *TERMINAL_TOOLS,
             *CONTROL_TOOLS,
+            *ORCHESTRATION_TOOLS,
         ]:
             self.register(tool)
         if "load_tools" not in self._tools:

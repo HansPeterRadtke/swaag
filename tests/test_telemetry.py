@@ -426,3 +426,76 @@ def test_trace_carrier_rejects_unbounded_and_non_trace_fields() -> None:
     ) == {
         "traceparent": "00-1234567890abcdef1234567890abcdef-1234567890abcdef-01"
     }
+
+
+def test_preempted_attempt_usage_is_summed_with_final_replay_usage() -> None:
+    telemetry, exporter, metric_reader, tracer_provider, meter_provider = (
+        _telemetry_fixture()
+    )
+    report = BudgetReport(
+        context_limit=2_000,
+        input_tokens=100,
+        reserved_response_tokens=64,
+        safety_margin_tokens=16,
+        required_tokens=180,
+        non_context_tokens=0,
+        fits=True,
+        exact=True,
+        breakdown=[],
+    )
+    completion = CompletionResult(
+        text='{"answer":"yes"}',
+        raw_request={},
+        raw_response={},
+        prompt_tokens=100,
+        completion_tokens=10,
+        finish_reason="stop",
+    )
+
+    with telemetry.model_call(
+        session_id="session-preempt",
+        run_id="run-preempt",
+        call_id="call-preempt",
+        call_kind="agent_action",
+        operation_name="text_completion",
+        provider_name="llama.cpp",
+        model_name="local-model",
+        base_url="http://127.0.0.1:14829",
+        max_tokens=64,
+        cache_mode="disabled",
+    ) as operation:
+        operation.record_preemption()
+        operation.record_partial_model_usage(
+            input_tokens=20,
+            output_tokens=3,
+            reason="preempted",
+        )
+        operation.record_model_completion(completion, budget_report=report)
+
+    tracer_provider.force_flush()
+    spans = {span.name: span for span in exporter.get_finished_spans()}
+    model = spans["text_completion local-model"]
+    assert model.attributes["gen_ai.usage.input_tokens"] == 120
+    assert model.attributes["gen_ai.usage.output_tokens"] == 13
+    assert model.attributes["swaag.model.preemption_count"] == 1
+    partial = [event for event in model.events if event.name == "swaag.model.partial_usage"]
+    assert len(partial) == 1
+    assert partial[0].attributes["gen_ai.usage.input_tokens"] == 20
+    assert partial[0].attributes["gen_ai.usage.output_tokens"] == 3
+
+    metrics = _collect_metrics(metric_reader)
+    token_points = metrics["gen_ai.client.token.usage"].data.data_points
+    by_phase_type = {
+        (
+            point.attributes.get("swaag.model.usage.phase"),
+            point.attributes["gen_ai.token.type"],
+        ): point.sum
+        for point in token_points
+    }
+    assert by_phase_type[("preempted_attempt", "input")] == 20
+    assert by_phase_type[("preempted_attempt", "output")] == 3
+    assert by_phase_type[("completed_attempt", "input")] == 100
+    assert by_phase_type[("completed_attempt", "output")] == 10
+
+    meter_provider.shutdown()
+    tracer_provider.shutdown()

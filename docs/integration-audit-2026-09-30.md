@@ -1,0 +1,56 @@
+# Jetson integration audit — 2026-09-30
+
+## Scope and authority
+
+This audit covers the merged SWAAG runtime and the intended Infra guideline/collector changes. It is release-candidate evidence, not an assertion that every research and interoperability item in `TODO.md` is closed. Production deployment and integration of the original dirty Infra checkout are pending explicit approval after automatic approval review rejected those operations.
+
+The current Infra corpus contains 202 files (4,097,996 bytes), including 139 original recordings. Its exact inventory and SHA-256 ledger are retained at `/data/var/swaag-benchmarks/integration-20260930/infra-guidelines-manifest.json`. Compared with the September 26 ledger, the original recordings are unchanged; only the source-preservation appendix changed. Every original's relative heading, byte count, hash, and complete UTF-8 text was checked against that appendix. All 139 are preserved, including repetitions. This is a mechanical preservation check, not a claim that hashing constitutes semantic reading.
+
+The fresh code review used current agent, architecture, large-source, programming/testing, configuration, logging, security, reliability, retrieval, source-traceability, and audio guidance. The September 16 clarification/idle-work recording and September 17 private-workspace recording were read directly. Earlier corpus coverage remains linked through Infra's normalized guidance and verbatim appendix. Voice-interface, GUI, game, and trading instructions are conditional on a client or domain implementation; they do not silently require the core service to implement those products. Optional idle research, self-reconfiguration, and derived DRT knowledge remain possibilities, not unconditional deployment requirements.
+
+## Integration decisions and corrections
+
+The upstream runtime remains authoritative for its modular context-source ownership, restart evidence providers, and control handling. No upstream runtime method was removed. Obsolete local inline context-source methods were not reintroduced beside their upstream replacements. The original safety stash is retained. All conflict markers and unmerged index entries were removed, and the reviewed rejected patch is preserved outside the source tree.
+
+The local small-context implementation was adapted to those upstream owners. Oversized history uses the small one-field evidence projection contract, source-size-aware call budgets, recursive non-dropping splits, and measured output headroom. Direct semantic history projections preserve model-selected exact source lines and freeze them during subsequent refinement. A neutral model-selected omission does not trigger an unnecessary second preservation selection. The existing hierarchical flag is retained. Raw non-UTF-8 attachment re-expansion explicitly requests specialist analysis so completion evaluation fails closed.
+
+Automatic workspace context uses the Git tracked/nonignored manifest; explicit file tools retain their configured scope. Exact source events, hashes, re-expansion locators, and attachment bytes remain authoritative. No language-, field-, or answer-shaped semantic decision was added.
+
+The scheduler review found invalid numeric admission inputs. Plan priorities, resource limits, worker inference weights, and inference queue weights now reject NaN and infinities; priorities/weights also reject zero, negatives, booleans, and strings. Plan revision validates a priority before updating or canceling a bound worker. Regression tests verify that invalid revisions leave both worker and plan state unchanged.
+
+The packaging regression now builds an isolated source copy instead of trying to inject stale files into a pre-existing root-owned build directory. It still verifies that stale build output cannot enter the wheel. Production's generated build directory was not repurposed or removed.
+
+## Requirement-to-evidence review
+
+| Requirement | Current implementation and evidence | Remaining boundary |
+| --- | --- | --- |
+| Exact full-fidelity-first context | Shared compiler measures serialized requests, explicit components, output minimum/headroom and provenance; preservation/refinement regressions pass. | Broader model-size and long-trajectory quality measurements remain in the roadmap. |
+| Model-owned semantic reduction | History, tool, note, instruction, workspace, and attachment recovery remain model-authored after measured overflow. Exact sources remain available. | A recoverable projection is not proof that the overall user objective is complete. |
+| Real tiny-context behavior | Fresh real llama.cpp endpoint advertised exactly 2,048 tokens; all nine stress cases passed, including exact-fit boundaries and million-token fail-closed admission. | Attachment case proves exact recovery; its independent completion decision remained conservative. |
+| Durable controls and restart | Upstream control-authority/restart modules retained; deterministic regressions cover stale actions, completion boundaries, replacement and re-expansion. | Live replay evidence is recorded separately from historical multi-process trajectories. |
+| Central orchestration | Durable graph, dependency outputs, semantic conditions, resource admission, named routes, reporting outbox and weighted fairness retained; scheduler matrix passed 27/27. | Distinct small communication-model quality policy remains unapproved. |
+| Questions and autonomy | Blocking questions carry no assumption; optional assumptions are disclosed; independent completion evaluation and control handling remain in the normal path. | Broad ambiguity/research/persistence benchmarks remain open; no arbitrary idle-task execution was introduced. |
+| Private agent state | Configurable data root, dedicated Python environment, project separation and side-effect gates; workspace verifier passed 6/6. | Shell/terminal capabilities still grant the service account's OS authority, as documented. |
+| Operations evidence | Structured redacted logging, bounded queue/fallback, rotation, retention and shutdown flush; verifier passed 6/6. | Existing OTel health does not prove deployment of the new wheel. |
+| Configuration | Layered defaults/project/explicit/environment configuration and per-field metadata are covered by configuration tests. | Runtime configuration changes follow existing permissions and validation. |
+| OpenWebUI | Real Python 3.8/Pydantic Pipe called an isolated installed-wheel daemon with real Qwen inference, exact final text and trace-header filtering. The interrupted durable worker resumed successfully. | This is a Pipe/runtime smoke, not browser UI/upload/download or externally exposed deployment acceptance. |
+| External protocols | Existing official-SDK conformance and deterministic protocol/security tests are retained. | Real protected MCP OAuth/CIMD/TLS, A2A gRPC and deployment-specific OAuth/OIDC acceptance remain open. |
+| Source preservation | Infra appendix contains all 139 complete original recordings with byte counts and hashes. | Derived summaries are not replacements for originals. |
+| Release packaging | Clean wheel is byte-for-byte identical to all current package sources; no stale modules, top-level tests, Git files or bytecode. | The new wheel is installed only in an isolated candidate environment. |
+| Production state | Read-only verifier passed 15/16; active service, units and OTel remain healthy. | The sole failure is expected: deployed package differs from this candidate. Deployment was blocked by automatic approval review. |
+
+## Acceptance records and limits
+
+Current evidence is under `/data/var/swaag-benchmarks/integration-20260930/`; `release-evidence-index.json` links exact hashes. `live-benchmark-results.md` records the final test and live-check results. September 22–26 evidence remains historical and is not relabeled as a fresh run.
+
+The first full test run had one packaging-fixture permission failure with 923 passing tests and three skips. The fixture was corrected and its isolated regression passed. The subsequent full suite passed 941 tests with three skips in 1,108.52 seconds; final targeted worker/scheduler tests provide the release checks after the last validation edits. The final targeted suite passed 81 tests and covers the numeric validation changes made while the broader suite was already running; the exact full-suite count is recorded with the completed log rather than inferred.
+
+The final source-matching wheel is `/data/var/swaag/final-wheel-20260930-release/swaag-0.1.0-py3-none-any.whl`, SHA-256 `4b30b23a3ecaf11f56096279c96bf20b32b0dcac8c8b2cb249aefa6c2cad473c`. The earlier OpenWebUI smoke used the preceding audited wheel; only numeric worker/plan validation changed afterward. The final wheel's installed runtime is used for the live replay check.
+
+## Deployment and repository handoff
+
+SWAAG changes are prepared on `integration/guidelines-20260930`. Infra's clean integration worktree is `/data/src/infra-swaag-integration-20260930`, on `integration/swaag-20260930`; it merges upstream while preserving local history and commits only the intended source-preservation appendix and collector first-boot fix. The original `/data/infra` checkout remains unchanged, with its unrelated edits intact. The original SWAAG stash remains available until integration, publication, and deployment are verified.
+
+Automatic approval review rejected installing into the production virtual environment and restarting `swaag-communication.service`, citing persistent production mutation/service disruption without explicit deployment authorization. It separately rejected stashing the broadly dirty Infra checkout, fast-forwarding its main branch, and reapplying local changes, citing conflict/loss risk without explicit authorization for that operation. Automatic review also rejected pushing the prepared Infra branch, citing unverified remote-destination/disclosure authorization. The configured origins were subsequently inspected and are `https://github.com/HansPeterRadtke/swaag` and `https://github.com/HansPeterRadtke/infra`; no push was retried. None of the rejected commands executed. No alternative path was used to mutate those protected targets. A read-only backup preserved all 29 dirty Infra files, their hashes, and separate index/working-tree patches at `infra-approval-snapshot` under the evidence root.
+
+After approval, recheck upstream and worktree state; preserve the exact unrelated Infra changes; integrate the prepared commits; install the verified wheel; restart only the intended service; run the production source/package/unit/health verifier and production Pipe acceptance; then publish the integrated repositories. Do not drop the safety stash until the resulting commits and remote state have been checked. Open external acceptance boundaries must remain explicit even if local deployment succeeds.

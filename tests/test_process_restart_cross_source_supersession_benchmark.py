@@ -16,7 +16,7 @@ class _Client:
     def resolve_contract(self,contract:ContractSpec,**kwargs): return contract,self.select_request_policy(contract=contract,**kwargs)
     def build_completion_request(self,prompt,*,max_tokens,contract,**_kwargs): return {"prompt":prompt,"n_predict":max_tokens,"contract":contract.name,"json_schema":contract.json_schema}
     def send_completion(self,payload:dict[str,Any],**_kwargs):
-        if payload["contract"]=="history_compaction_selection": text=json.dumps({"criticality":"compressible","reason":"routine"})
+        if payload["contract"]=="history_compaction_selection": text=json.dumps({"criticality":"compressible","reason_code":"redundant_progress","projection":""})
         elif payload["contract"]=="summary_refinement": text=json.dumps({"summary":"compressed"})
         else:
             spans=[v for v in (OLD_VALUE,NEW_VALUE) if v in str(payload["prompt"])]

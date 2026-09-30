@@ -332,3 +332,21 @@ def test_shipped_prompt_assets_do_not_embed_host_external_installations() -> Non
             violations.append(path.name)
     assert violations == []
     assert not (prompt_root / "system_presentation.txt").exists()
+def test_lean_action_prompt_uses_compact_action_template(make_config) -> None:
+    from swaag.prompts import PromptBuilder
+
+    config = make_config()
+    builder = PromptBuilder(config)
+    standard = builder.build_agent_action_prompt(
+        [], [], original_request="x", pending_user_messages=[], prompt_mode="standard"
+    )
+    lean = builder.build_agent_action_prompt(
+        [], [], original_request="x", pending_user_messages=[], prompt_mode="lean"
+    )
+    standard_sources = {artifact.source for artifact in standard.prompt_artifacts}
+    lean_sources = {artifact.source for artifact in lean.prompt_artifacts}
+    assert f"assets/prompts/{config.prompts.action_template}" in standard_sources
+    assert f"assets/prompts/{config.prompts.lean_action_template}" in lean_sources
+    standard_instruction = next(c for c in standard.components if c.name == "agent_action_instruction")
+    lean_instruction = next(c for c in lean.components if c.name == "agent_action_instruction")
+    assert len(lean_instruction.text) < len(standard_instruction.text) // 2

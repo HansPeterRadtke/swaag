@@ -6,6 +6,7 @@ from datetime import datetime, timezone
 from typing import TYPE_CHECKING
 
 from swaag.config import AgentConfig, load_config
+from swaag.operations_log import configure_operations_log
 from swaag.runtime import AgentRuntime
 from swaag.scheduler import WakeupStore, parse_utc_datetime
 
@@ -77,25 +78,37 @@ def main(argv: list[str] | None = None) -> int:
     parser.add_argument("--poll-seconds", type=float, default=1.0)
     args = parser.parse_args(argv)
     config = load_config(list(args.config))
-    if args.once:
-        from swaag.workers import WorkerManager
+    operations_log = configure_operations_log(config, component="wakeup_dispatcher")
+    try:
+        if args.once:
+            from swaag.workers import WorkerManager
 
-        runtime = AgentRuntime(config)
-        workers = WorkerManager(
-            runtime,
-            max_workers=config.communication.max_concurrent_requests,
-        )
-        workers.reconcile_orphans()
-        try:
-            for session_id in dispatch_once(
-                config, runtime=runtime, workers=workers
-            ):
-                print(session_id)
-        finally:
-            workers.shutdown()
+            runtime = AgentRuntime(config)
+            workers = WorkerManager(
+                runtime,
+                max_workers=config.communication.max_concurrent_requests,
+            )
+            workers.reconcile_orphans()
+            try:
+                for session_id in dispatch_once(
+                    config, runtime=runtime, workers=workers
+                ):
+                    print(session_id)
+            finally:
+                workers.shutdown()
+            return 0
+        run_forever(config, poll_seconds=args.poll_seconds)
         return 0
-    run_forever(config, poll_seconds=args.poll_seconds)
-    return 0
+    except Exception as exc:
+        operations_log.event(
+            "process_error",
+            severity="ERROR",
+            error_type=type(exc).__name__,
+            error=str(exc),
+        )
+        raise
+    finally:
+        operations_log.shutdown(reason="wakeup_dispatcher_exit")
 
 
 if __name__ == "__main__":

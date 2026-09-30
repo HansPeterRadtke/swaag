@@ -51,6 +51,7 @@ class ContextConfig:
     allow_estimate_fallback: bool
     compact_on_overflow: bool
     semantic_reduction_max_input_tokens: int = 0
+    semantic_reduction_max_calls: int = 256
 
 
 @dataclass(slots=True)
@@ -71,6 +72,15 @@ class RuntimeConfig:
 class SessionConfig:
     root: Path
     write_projections: bool
+
+
+@dataclass(slots=True)
+class AgentDataConfig:
+    root: Path
+    sandbox_backend: str
+    python_executable: str
+    command_timeout_seconds: int
+    max_capture_chars: int
 
 
 @dataclass(slots=True)
@@ -95,6 +105,7 @@ class PromptConfig:
     standard_system_template: str
     lean_system_template: str
     action_template: str
+    lean_action_template: str
     summary_system_template: str
     summary_template: str
     tool_result_projection_system_template: str
@@ -124,6 +135,10 @@ class PromptConfig:
 @dataclass(slots=True)
 class LoggingConfig:
     level: str
+    file_path: Path
+    queue_capacity: int
+    max_bytes: int
+    backup_count: int
 
 
 @dataclass(slots=True)
@@ -171,6 +186,7 @@ class BudgetPolicyConfig:
     output_floor_ratio_by_kind: dict[str, float]
     safety_ratio: dict[str, float]
     structured_output_json_factor_by_contract: dict[str, float]
+    structured_output_json_floor_by_contract: dict[str, int]
     structured_output_json_factor_default: float
     structured_output_json_floor_tokens: int
     structured_output_schema_factor: float
@@ -221,9 +237,10 @@ class McpAuthorizationConfig:
     allowed_origins: list[str]
     introspection_url: str
     introspection_client_id: str
-    introspection_client_secret: str
-    required_scopes: list[str]
-    timeout_seconds: float
+    introspection_client_secret_env: str
+    introspection_client_secret: str = field(repr=False)
+    required_scopes: list[str] = field(default_factory=list)
+    timeout_seconds: float = 5.0
 
 
 @dataclass(slots=True)
@@ -255,7 +272,39 @@ class ExternalToolsConfig:
 class A2AAuthorizationConfig:
     enabled: bool
     public_base_url: str
-    bearer_token: str
+    bearer_token_env: str
+    bearer_token: str = field(repr=False)
+
+
+@dataclass(slots=True)
+class A2APushConfig:
+    enabled: bool
+    credential_key_env: str
+    allowed_hosts: list[str]
+    timeout_seconds: float
+    max_attempts: int
+    retry_base_seconds: float
+
+
+@dataclass(slots=True)
+class A2AExtendedCardConfig:
+    enabled: bool
+
+
+@dataclass(slots=True)
+class A2ACardSigningConfig:
+    enabled: bool
+    private_key_env: str
+    key_id: str
+    jwks_url: str
+
+
+@dataclass(slots=True)
+class OpenWebUiArtifactServingConfig:
+    enabled: bool
+    public_base_url: str
+    signing_secret_env: str
+    ttl_seconds: int
 
 
 @dataclass(slots=True)
@@ -263,10 +312,15 @@ class CommunicationConfig:
     enabled: bool
     model_base_url: str
     max_concurrent_requests: int
+    status_max_output_tokens: int
     enabled_tools: list[str]
     host: str
     port: int
     poll_seconds: float
+    model_routes: dict[str, str] = field(default_factory=dict)
+    open_webui_artifacts: OpenWebUiArtifactServingConfig = field(
+        default_factory=lambda: OpenWebUiArtifactServingConfig(False, "", "", 900)
+    )
 
 @dataclass(slots=True)
 class ExternalBenchmarkTargetConfig:
@@ -331,6 +385,7 @@ class AgentConfig:
     context: ContextConfig
     runtime: RuntimeConfig
     sessions: SessionConfig
+    agent_data: AgentDataConfig
     environment: EnvironmentConfig
     tools: ToolConfig
     prompts: PromptConfig
@@ -347,10 +402,63 @@ class AgentConfig:
     mcp: McpConfig
     external_tools: ExternalToolsConfig
     a2a_authorization: A2AAuthorizationConfig
+    a2a_push: A2APushConfig
+    a2a_extended_card: A2AExtendedCardConfig
+    a2a_card_signing: A2ACardSigningConfig
     communication: CommunicationConfig
     budget_policy: BudgetPolicyConfig
     external_benchmarks: ExternalBenchmarksConfig
     raw: dict[str, Any] = field(repr=False)
+    sources: dict[str, str] = field(default_factory=dict, repr=False)
+
+    def source_for(self, dotted_key: str) -> str:
+        return self.sources.get(str(dotted_key).strip(), "unknown")
+
+    def parameter_metadata(self) -> dict[str, dict[str, Any]]:
+        result: dict[str, dict[str, Any]] = {}
+        packaged_defaults = _load_packaged_defaults()
+        for dotted in _leaf_paths(self.raw):
+            value = _dotted_value(self.raw, dotted)
+            default_value = _dotted_value(packaged_defaults, dotted)
+            key = dotted.rsplit(".", 1)[-1]
+            group = dotted.split(".", 1)[0]
+            unit = _parameter_unit(key)
+            security_sensitive = any(
+                marker in dotted.casefold()
+                for marker in ("authorization", "credential", "secret", "private_key", "allowed_hosts")
+            )
+            resource_sensitive = any(
+                marker in key.casefold()
+                for marker in ("timeout", "limit", "max_", "capacity", "bytes", "tokens", "port")
+            )
+            criticality = (
+                "critical" if security_sensitive else "major" if resource_sensitive else "normal"
+            )
+            likelihood = (
+                "deployment-specific"
+                if any(marker in dotted for marker in ("host", "port", "base_url", "root", "path"))
+                else "occasionally tuned" if resource_sensitive else "rare"
+            )
+            description, consequences = _parameter_semantics(
+                dotted,
+                key=key,
+                group=group,
+                security_sensitive=security_sensitive,
+                resource_sensitive=resource_sensitive,
+            )
+            result[dotted] = {
+                "group": group,
+                "type": type(value).__name__,
+                "unit": unit,
+                "criticality": criticality,
+                "change_likelihood": likelihood,
+                "source": self.source_for(dotted),
+                "default_value": default_value,
+                "valid_range": _parameter_range(key, value),
+                "description": description,
+                "consequences": consequences,
+            }
+        return result
 
     def config_fingerprint(self) -> str:
         fingerprint_data = json.loads(json.dumps(self.raw))
@@ -430,7 +538,12 @@ def _validate_non_negative(name: str, value: int) -> None:
         raise ValueError(f"{name} must be non-negative")
 
 
-def _coerce_config(data: dict[str, Any]) -> AgentConfig:
+def _coerce_config(
+    data: dict[str, Any],
+    *,
+    sources: dict[str, str] | None = None,
+    secret_env: dict[str, str] | None = None,
+) -> AgentConfig:
     data = expand_env_in_value(data)
     model = ModelConfig(**data["model"])
     context_data = dict(data["context"])
@@ -445,6 +558,13 @@ def _coerce_config(data: dict[str, Any]) -> AgentConfig:
         root=Path(data["sessions"]["root"]).expanduser(),
         write_projections=bool(data["sessions"]["write_projections"]),
     )
+    agent_data = AgentDataConfig(
+        root=Path(data["agent_data"]["root"]).expanduser(),
+        sandbox_backend=str(data["agent_data"]["sandbox_backend"]),
+        python_executable=str(data["agent_data"]["python_executable"]),
+        command_timeout_seconds=int(data["agent_data"]["command_timeout_seconds"]),
+        max_capture_chars=int(data["agent_data"]["max_capture_chars"]),
+    )
     environment = EnvironmentConfig(**data["environment"])
     tools = ToolConfig(
         enabled=list(data["tools"]["enabled"]),
@@ -454,7 +574,13 @@ def _coerce_config(data: dict[str, Any]) -> AgentConfig:
         staged_discovery=bool(data["tools"].get("staged_discovery", True)),
     )
     prompts = PromptConfig(**data["prompts"])
-    logging_cfg = LoggingConfig(**data["logging"])
+    logging_cfg = LoggingConfig(
+        level=str(data["logging"]["level"]),
+        file_path=Path(data["logging"]["file_path"]).expanduser(),
+        queue_capacity=int(data["logging"]["queue_capacity"]),
+        max_bytes=int(data["logging"]["max_bytes"]),
+        backup_count=int(data["logging"]["backup_count"]),
+    )
     notes_data = dict(data["notes"])
     notes_data.pop("compact_target_chars", None)
     notes = NotesConfig(**notes_data)
@@ -472,6 +598,10 @@ def _coerce_config(data: dict[str, Any]) -> AgentConfig:
         structured_output_json_factor_by_contract={
             str(key): float(value)
             for key, value in data["budget_policy"]["structured_output_json_factor_by_contract"].items()
+        },
+        structured_output_json_floor_by_contract={
+            str(key): int(value)
+            for key, value in data["budget_policy"].get("structured_output_json_floor_by_contract", {}).items()
         },
         structured_output_json_factor_default=float(data["budget_policy"]["structured_output_json_factor_default"]),
         structured_output_json_floor_tokens=int(data["budget_policy"]["structured_output_json_floor_tokens"]),
@@ -505,6 +635,18 @@ def _coerce_config(data: dict[str, Any]) -> AgentConfig:
         preview_chars=int(data["attachments"]["preview_chars"]),
     )
     mcp_auth_data = data["mcp"].get("authorization", {})
+    literal_mcp_secret = str(mcp_auth_data.get("introspection_client_secret", ""))
+    if literal_mcp_secret:
+        raise ValueError(
+            "mcp.authorization.introspection_client_secret literal secrets are not permitted; configure introspection_client_secret_env and supply the secret through that environment variable"
+        )
+    mcp_secret_env = str(
+        mcp_auth_data.get(
+            "introspection_client_secret_env",
+            "SWAAG_MCP_INTROSPECTION_CLIENT_SECRET",
+        )
+    ).strip()
+    resolved_secret_env = dict(os.environ if secret_env is None else secret_env)
     mcp = McpConfig(
         enabled=bool(data["mcp"]["enabled"]),
         transport=str(data["mcp"]["transport"]),
@@ -515,7 +657,8 @@ def _coerce_config(data: dict[str, Any]) -> AgentConfig:
             allowed_origins=[str(item) for item in mcp_auth_data.get("allowed_origins", [])],
             introspection_url=str(mcp_auth_data.get("introspection_url", "")),
             introspection_client_id=str(mcp_auth_data.get("introspection_client_id", "")),
-            introspection_client_secret=str(mcp_auth_data.get("introspection_client_secret", "")),
+            introspection_client_secret_env=mcp_secret_env,
+            introspection_client_secret=str(resolved_secret_env.get(mcp_secret_env, "")),
             required_scopes=[str(item) for item in mcp_auth_data.get("required_scopes", [])],
             timeout_seconds=float(mcp_auth_data.get("timeout_seconds", 5.0)),
         ),
@@ -547,20 +690,79 @@ def _coerce_config(data: dict[str, Any]) -> AgentConfig:
     )
 
     a2a_auth_data = data.get("a2a", {}).get("authorization", {})
+    literal_bearer = str(a2a_auth_data.get("bearer_token", ""))
+    if literal_bearer:
+        raise ValueError(
+            "a2a.authorization.bearer_token literal secrets are not permitted; "
+            "configure bearer_token_env and supply the secret through that environment variable"
+        )
+    bearer_token_env = str(
+        a2a_auth_data.get("bearer_token_env", "SWAAG_A2A_BEARER_TOKEN")
+    ).strip()
+    resolved_secret_env = dict(os.environ if secret_env is None else secret_env)
     a2a_authorization = A2AAuthorizationConfig(
         enabled=bool(a2a_auth_data.get("enabled", False)),
         public_base_url=str(a2a_auth_data.get("public_base_url", "")),
-        bearer_token=str(a2a_auth_data.get("bearer_token", "")),
+        bearer_token_env=bearer_token_env,
+        bearer_token=str(resolved_secret_env.get(bearer_token_env, "")),
+    )
+
+    a2a_data = data.get("a2a", {})
+    a2a_push_data = a2a_data.get("push", {})
+    a2a_push = A2APushConfig(
+        enabled=bool(a2a_push_data.get("enabled", False)),
+        credential_key_env=str(a2a_push_data.get("credential_key_env", "")),
+        allowed_hosts=[str(item) for item in a2a_push_data.get("allowed_hosts", [])],
+        timeout_seconds=float(a2a_push_data.get("timeout_seconds", 15.0)),
+        max_attempts=int(a2a_push_data.get("max_attempts", 5)),
+        retry_base_seconds=float(a2a_push_data.get("retry_base_seconds", 1.0)),
+    )
+    a2a_extended_card = A2AExtendedCardConfig(
+        enabled=bool(a2a_data.get("extended_card", {}).get("enabled", False))
+    )
+    signing_data = a2a_data.get("card_signing", {})
+    a2a_card_signing = A2ACardSigningConfig(
+        enabled=bool(signing_data.get("enabled", False)),
+        private_key_env=str(signing_data.get("private_key_env", "")),
+        key_id=str(signing_data.get("key_id", "")),
+        jwks_url=str(signing_data.get("jwks_url", "")),
     )
 
     communication = CommunicationConfig(
         enabled=bool(data["communication"]["enabled"]),
         model_base_url=str(data["communication"]["model_base_url"]),
         max_concurrent_requests=int(data["communication"]["max_concurrent_requests"]),
+        status_max_output_tokens=int(data["communication"].get("status_max_output_tokens", 192)),
         enabled_tools=[str(item) for item in data["communication"]["enabled_tools"]],
         host=str(data["communication"]["host"]),
         port=int(data["communication"]["port"]),
         poll_seconds=float(data["communication"]["poll_seconds"]),
+        model_routes={
+            str(name): str(url)
+            for name, url in data["communication"].get("model_routes", {}).items()
+        },
+        open_webui_artifacts=OpenWebUiArtifactServingConfig(
+            enabled=bool(
+                data["communication"].get("open_webui_artifacts", {}).get(
+                    "enabled", False
+                )
+            ),
+            public_base_url=str(
+                data["communication"].get("open_webui_artifacts", {}).get(
+                    "public_base_url", ""
+                )
+            ),
+            signing_secret_env=str(
+                data["communication"].get("open_webui_artifacts", {}).get(
+                    "signing_secret_env", ""
+                )
+            ),
+            ttl_seconds=int(
+                data["communication"].get("open_webui_artifacts", {}).get(
+                    "ttl_seconds", 900
+                )
+            ),
+        ),
     )
     external_benchmarks = ExternalBenchmarksConfig(
         root=Path(data["external_benchmarks"]["root"]).expanduser(),
@@ -643,6 +845,14 @@ def _coerce_config(data: dict[str, Any]) -> AgentConfig:
     _validate_positive("context.reserved_response_tokens", context.reserved_response_tokens)
     _validate_positive("context.reserved_summary_tokens", context.reserved_summary_tokens)
     _validate_non_negative("context.safety_margin_tokens", context.safety_margin_tokens)
+    _validate_non_negative(
+        "context.semantic_reduction_max_input_tokens",
+        context.semantic_reduction_max_input_tokens,
+    )
+    _validate_positive(
+        "context.semantic_reduction_max_calls",
+        context.semantic_reduction_max_calls,
+    )
     _validate_positive("environment.command_timeout_seconds", environment.command_timeout_seconds)
     _validate_positive("environment.max_capture_chars", environment.max_capture_chars)
     _validate_positive("runtime.tool_timeout_seconds", runtime.tool_timeout_seconds)
@@ -672,6 +882,11 @@ def _coerce_config(data: dict[str, Any]) -> AgentConfig:
     _validate_non_negative("reader.default_overlap_chars", reader.default_overlap_chars)
     _validate_positive("reader.max_chunk_chars", reader.max_chunk_chars)
     _validate_positive("budget_policy.structured_output_json_floor_tokens", budget_policy.structured_output_json_floor_tokens)
+    for contract_name, floor in budget_policy.structured_output_json_floor_by_contract.items():
+        _validate_positive(
+            f"budget_policy.structured_output_json_floor_by_contract.{contract_name}",
+            floor,
+        )
     _validate_positive("budget_policy.structured_output_schema_floor_tokens", budget_policy.structured_output_schema_floor_tokens)
     if budget_policy.structured_output_json_factor_default <= 0:
         raise ValueError("budget_policy.structured_output_json_factor_default must be positive")
@@ -743,11 +958,51 @@ def _coerce_config(data: dict[str, Any]) -> AgentConfig:
     _validate_positive("attachments.max_upload_bytes", attachments.max_upload_bytes)
     _validate_positive("attachments.preview_chars", attachments.preview_chars)
     _validate_positive("communication.max_concurrent_requests", communication.max_concurrent_requests)
+    _validate_positive(
+        "communication.status_max_output_tokens",
+        communication.status_max_output_tokens,
+    )
     _validate_positive("communication.port", communication.port)
     if not 1 <= communication.port <= 65535:
         raise ValueError("communication.port must be between 1 and 65535")
     if communication.poll_seconds <= 0:
         raise ValueError("communication.poll_seconds must be positive")
+    artifact_serving = communication.open_webui_artifacts
+    if artifact_serving.enabled:
+        parsed_artifact_url = urlparse(artifact_serving.public_base_url)
+        host = (parsed_artifact_url.hostname or "").casefold()
+        loopback = host in {"localhost", "127.0.0.1", "::1"}
+        if (
+            parsed_artifact_url.scheme not in {"http", "https"}
+            or not parsed_artifact_url.netloc
+            or parsed_artifact_url.username is not None
+            or parsed_artifact_url.password is not None
+            or parsed_artifact_url.query
+            or parsed_artifact_url.fragment
+        ):
+            raise ValueError(
+                "communication.open_webui_artifacts.public_base_url must be an absolute HTTP(S) URL without credentials, query, or fragment"
+            )
+        if parsed_artifact_url.scheme != "https" and not loopback:
+            raise ValueError(
+                "communication.open_webui_artifacts.public_base_url must use HTTPS unless it is loopback"
+            )
+        if not artifact_serving.signing_secret_env.strip():
+            raise ValueError(
+                "communication.open_webui_artifacts.signing_secret_env is required when enabled"
+            )
+        _validate_positive(
+            "communication.open_webui_artifacts.ttl_seconds",
+            artifact_serving.ttl_seconds,
+        )
+    for route_name, route_url in communication.model_routes.items():
+        if not route_name.strip():
+            raise ValueError("communication.model_routes names must not be empty")
+        parsed_route = urlparse(route_url)
+        if parsed_route.scheme not in {"http", "https"} or not parsed_route.netloc:
+            raise ValueError(
+                f"communication.model_routes.{route_name} must be an absolute HTTP(S) URL"
+            )
     if mcp.transport not in {"stdio", "streamable_http", "both"}:
         raise ValueError(
             "mcp.transport must be stdio, streamable_http, or both"
@@ -767,8 +1022,15 @@ def _coerce_config(data: dict[str, Any]) -> AgentConfig:
             raise ValueError("mcp.authorization.introspection_url must be an absolute HTTP(S) URI")
         if not mcp.authorization.introspection_client_id:
             raise ValueError("mcp.authorization.introspection_client_id is required when enabled")
+        if not mcp.authorization.introspection_client_secret_env:
+            raise ValueError(
+                "mcp.authorization.introspection_client_secret_env is required when enabled"
+            )
         if not mcp.authorization.introspection_client_secret:
-            raise ValueError("mcp.authorization.introspection_client_secret is required when enabled")
+            raise ValueError(
+                "MCP introspection client secret is required when enabled; set environment variable "
+                + mcp.authorization.introspection_client_secret_env
+            )
     for server_name, server in external_tools.mcp_servers.items():
         if not server_name.strip():
             raise ValueError("external_tools.mcp_servers names must not be empty")
@@ -821,14 +1083,72 @@ def _coerce_config(data: dict[str, Any]) -> AgentConfig:
             raise ValueError(
                 "a2a.authorization.public_base_url must be an absolute HTTPS URL without credentials, query, or fragment when enabled"
             )
+        if not a2a_authorization.bearer_token_env:
+            raise ValueError(
+                "a2a.authorization.bearer_token_env is required when enabled"
+            )
         if not a2a_authorization.bearer_token:
-            raise ValueError("a2a.authorization.bearer_token is required when enabled")
+            raise ValueError(
+                "A2A bearer credential is required when enabled; set environment variable "
+                + a2a_authorization.bearer_token_env
+            )
+
+    if a2a_push.enabled:
+        if not a2a_authorization.enabled:
+            raise ValueError("a2a.push.enabled requires a2a.authorization.enabled")
+        if not a2a_push.credential_key_env.strip():
+            raise ValueError("a2a.push.credential_key_env is required when enabled")
+        hosts = [item.strip().casefold() for item in a2a_push.allowed_hosts if item.strip()]
+        if not hosts or len(hosts) != len(set(hosts)):
+            raise ValueError("a2a.push.allowed_hosts must contain unique non-empty hostnames")
+        for host in hosts:
+            if host in {"localhost", "127.0.0.1", "::1"}:
+                raise ValueError("a2a.push.allowed_hosts may not contain loopback hosts")
+        _validate_positive("a2a.push.timeout_seconds", a2a_push.timeout_seconds)
+        if a2a_push.max_attempts < 1:
+            raise ValueError("a2a.push.max_attempts must be at least 1")
+        _validate_positive("a2a.push.retry_base_seconds", a2a_push.retry_base_seconds)
+    if a2a_extended_card.enabled and not a2a_authorization.enabled:
+        raise ValueError("a2a.extended_card.enabled requires a2a.authorization.enabled")
+    if logging_cfg.level.upper() not in {"DEBUG", "INFO", "WARNING", "ERROR", "CRITICAL"}:
+        raise ValueError("logging.level must be DEBUG, INFO, WARNING, ERROR, or CRITICAL")
+    _validate_positive("logging.queue_capacity", logging_cfg.queue_capacity)
+    _validate_positive("logging.max_bytes", logging_cfg.max_bytes)
+    _validate_non_negative("logging.backup_count", logging_cfg.backup_count)
+
+    if agent_data.sandbox_backend != "bwrap":
+        raise ValueError("agent_data.sandbox_backend currently supports only 'bwrap'")
+    if not str(agent_data.root):
+        raise ValueError("agent_data.root must not be empty")
+    if not agent_data.python_executable.strip():
+        raise ValueError("agent_data.python_executable must not be empty")
+    _validate_positive(
+        "agent_data.command_timeout_seconds", agent_data.command_timeout_seconds
+    )
+    _validate_positive("agent_data.max_capture_chars", agent_data.max_capture_chars)
+
+    if a2a_card_signing.enabled:
+        if not a2a_card_signing.private_key_env.strip():
+            raise ValueError("a2a.card_signing.private_key_env is required when enabled")
+        if not a2a_card_signing.key_id.strip():
+            raise ValueError("a2a.card_signing.key_id is required when enabled")
+        if a2a_card_signing.jwks_url:
+            jwks = urlparse(a2a_card_signing.jwks_url)
+            if (
+                jwks.scheme != "https"
+                or not jwks.netloc
+                or jwks.username is not None
+                or jwks.password is not None
+                or jwks.fragment
+            ):
+                raise ValueError("a2a.card_signing.jwks_url must be an absolute HTTPS URL")
 
     return AgentConfig(
         model=model,
         context=context,
         runtime=runtime,
         sessions=sessions,
+        agent_data=agent_data,
         environment=environment,
         tools=tools,
         prompts=prompts,
@@ -845,31 +1165,275 @@ def _coerce_config(data: dict[str, Any]) -> AgentConfig:
         mcp=mcp,
         external_tools=external_tools,
         a2a_authorization=a2a_authorization,
+        a2a_push=a2a_push,
+        a2a_extended_card=a2a_extended_card,
+        a2a_card_signing=a2a_card_signing,
         communication=communication,
         budget_policy=budget_policy,
         external_benchmarks=external_benchmarks,
         raw=data,
+        sources=dict(sources or {}),
     )
 
 
-def load_config(config_paths: list[str | Path] | None = None, env: dict[str, str] | None = None) -> AgentConfig:
+def _dotted_value(value: dict[str, Any], dotted: str) -> Any:
+    current: Any = value
+    for part in dotted.split("."):
+        if not isinstance(current, dict):
+            return None
+        current = current.get(part)
+    return current
+
+
+def _parameter_unit(key: str) -> str | None:
+    lowered = key.casefold()
+    if lowered.endswith("_seconds"):
+        return "seconds"
+    if lowered.endswith("_bytes"):
+        return "bytes"
+    if lowered.endswith("_tokens") or lowered == "context_limit":
+        return "tokens"
+    if lowered.endswith("_chars"):
+        return "characters"
+    if lowered.endswith("_ratio") or "ratio" in lowered:
+        return "ratio"
+    if lowered == "port" or lowered.endswith("_port"):
+        return "tcp-port"
+    return None
+
+
+def _parameter_semantics(
+    dotted: str,
+    *,
+    key: str,
+    group: str,
+    security_sensitive: bool,
+    resource_sensitive: bool,
+) -> tuple[str, str]:
+    exact: dict[str, tuple[str, str]] = {
+        "model.base_url": (
+            "llama.cpp/OpenAI-compatible endpoint used for model inference.",
+            "Changing it changes the backend/model identity and can change capacity, latency, output behavior, and cache validity.",
+        ),
+        "model.context_limit": (
+            "Offline/configured fallback context capacity in tokens; live backends are discovered and take precedence where supported.",
+            "Too small causes unnecessary reduction; too large is unsafe unless the backend actually supports it.",
+        ),
+        "model.remote_context_limit_fallback": (
+            "Explicit fallback context capacity for a remote backend when live capacity discovery is unavailable.",
+            "A wrong value can either reject valid requests or send requests the remote backend cannot admit.",
+        ),
+        "context.reserved_response_tokens": (
+            "Maximum response headroom reserved by context planning for ordinary calls.",
+            "Increasing it reduces available input context; decreasing it raises output-starvation/retry risk.",
+        ),
+        "context.reserved_summary_tokens": (
+            "Response headroom reserved for history-summary/compaction calls.",
+            "Changing it trades source capacity against room for a faithful semantic reduction response.",
+        ),
+        "context.safety_margin_tokens": (
+            "Additional token margin kept below the discovered model context boundary.",
+            "Too small risks backend rejection from serialization/tokenizer drift; too large wastes usable context.",
+        ),
+        "context.max_compaction_rounds": (
+            "Maximum remeasure-and-reduce rounds for one context-admission attempt.",
+            "Higher values can recover more oversized contexts at additional model cost; lower values fail closed sooner.",
+        ),
+        "context.semantic_reduction_max_input_tokens": (
+            "Resource-safety ceiling for the input working set of semantic reduction subcalls only.",
+            "Lower values create more hierarchical fragments; higher values can increase latency/memory pressure or model-server OOM risk.",
+        ),
+        "context.semantic_reduction_max_calls": (
+            "Hard ceiling on semantic calls within one hierarchical reduction tree.",
+            "It bounds worst-case inference work; reducing it may make legitimately large evidence fail closed before convergence.",
+        ),
+        "sessions.root": (
+            "Persistent root for durable session histories, inference state, communication state, and related runtime databases.",
+            "Changing it changes the durability namespace; pointing at the wrong root makes existing sessions appear missing.",
+        ),
+        "agent_data.root": (
+            "Persistent private root for agent-owned scratch data, notes, experiments, and the isolated Python environment.",
+            "Changing it moves private agent state and must not overlap user project roots unless that exposure is intentional.",
+        ),
+        "agent_data.sandbox_backend": (
+            "OS sandbox implementation used by the private agent workspace.",
+            "Changing or disabling it changes filesystem/network isolation guarantees for scratch Python/shell work.",
+        ),
+        "tools.read_roots": (
+            "Filesystem roots that project-facing read tools are allowed to inspect.",
+            "Broadening this increases data exposure; narrowing it can make required project evidence inaccessible.",
+        ),
+        "tools.allow_stateful_tools": (
+            "Global gate for tools that persist or mutate agent/runtime state without being classified as external side effects.",
+            "Disabling it blocks stateful workflows; enabling it expands what the model can persist/control.",
+        ),
+        "tools.allow_side_effect_tools": (
+            "Global gate for tools classified as external/project side effects.",
+            "Enabling it permits destructive/external actions allowed by individual tool policies; disabling it fails those actions closed.",
+        ),
+        "editor.allow_writes": (
+            "Master gate for project file editing/writing capabilities.",
+            "Disabling it makes project writes fail closed; enabling it permits writes only within the configured editor/tool boundaries.",
+        ),
+        "logging.file_path": (
+            "Structured operations JSONL destination.",
+            "Changing it changes where startup/shutdown/errors/operational evidence is retained and must preserve writable permissions.",
+        ),
+        "logging.queue_capacity": (
+            "Bounded in-memory operations-log queue depth.",
+            "Too small increases explicit overflow/drop fallback events; too large increases memory retained during slow disk writes.",
+        ),
+        "logging.max_bytes": (
+            "Maximum active operations-log file size before rotation.",
+            "Lower values rotate more often; higher values increase disk use and single-file scan cost.",
+        ),
+        "logging.backup_count": (
+            "Number of rotated operations-log files retained locally.",
+            "Increasing it retains more historical operational evidence at greater disk cost; zero removes rotated history.",
+        ),
+        "mcp.authorization.introspection_client_secret_env": (
+            "Environment-variable name containing the MCP introspection client secret; the secret itself is not stored in ordinary config.",
+            "Changing it changes which deployment secret is read; a missing/wrong value makes protected introspection fail closed.",
+        ),
+        "a2a.authorization.bearer_token_env": (
+            "Environment-variable name containing the A2A bearer credential; literal bearer secrets are rejected from config.",
+            "Changing it changes the credential used to protect enabled A2A routes; a missing value prevents authenticated startup/use.",
+        ),
+        "a2a.push.allowed_hosts": (
+            "Exact HTTPS callback hosts allowed for A2A push delivery.",
+            "Broadening it expands outbound callback trust; narrowing it causes non-allowlisted callbacks to fail closed.",
+        ),
+        "communication.enabled": (
+            "Enables the long-running user-facing communication/task protocol service.",
+            "Turning it on exposes the configured loopback interfaces; turning it off removes task/protocol/status service availability.",
+        ),
+        "communication.model_base_url": (
+            "Optional separate model endpoint for user-facing communication/status work; empty reuses the main model.",
+            "A distinct endpoint avoids preempting the main worker; reusing the main endpoint requires control-priority preemption/replay.",
+        ),
+        "communication.status_max_output_tokens": (
+            "Initial 192-token-scale response budget for one concise communication/status interpretation call.",
+            "Lower values improve control-plane responsiveness but may trigger output-starvation recovery; higher values let status calls occupy a shared model slot longer before replaying worker inference.",
+        ),
+        "communication.host": (
+            "Bind host for the raw communication listener.",
+            "The service requires a loopback bind; changing exposure changes the network trust boundary and non-loopback binds fail closed.",
+        ),
+        "communication.port": (
+            "TCP port for the loopback communication/protocol listener.",
+            "Changing it changes all local client/proxy connection targets and can conflict with another listener.",
+        ),
+        "communication.open_webui_artifacts.public_base_url": (
+            "External HTTPS base advertised for signed Open WebUI artifact links.",
+            "A wrong origin produces unusable or unsafe links; non-loopback publication requires HTTPS and valid signing configuration.",
+        ),
+        "communication.open_webui_artifacts.signing_secret_env": (
+            "Environment-variable name containing the HMAC secret for signed Open WebUI artifact URLs; the secret itself is not stored in ordinary config.",
+            "Changing/rotating it invalidates previously signed links; a missing secret prevents enabled signed serving.",
+        ),
+    }
+    if dotted in exact:
+        return exact[dotted]
+    lowered = key.casefold()
+    words = key.replace("_", " ")
+    if lowered.endswith("_timeout_seconds") or lowered == "timeout_seconds":
+        return (
+            f"Timeout in seconds for {group} {words.removesuffix(' timeout seconds').strip() or 'operations'}.",
+            "Shorter timeouts fail slow operations sooner; longer timeouts increase blocking/wait time before failure is surfaced.",
+        )
+    if lowered == "enabled" or lowered.endswith("_enabled"):
+        return (
+            f"Enables or disables the {group} {words.removesuffix(' enabled').strip()} capability.",
+            f"Changing it changes whether that {group} capability participates in runtime behavior.",
+        )
+    if security_sensitive:
+        return (
+            f"Security/trust-boundary setting for {dotted}.",
+            "Changing it can alter credential use, authorization, or exposure boundaries and therefore requires deployment review.",
+        )
+    if resource_sensitive:
+        return (
+            f"Resource/capacity setting for {dotted}.",
+            "Changing it can alter latency, capacity, memory/disk use, retry behavior, or fail-closed thresholds.",
+        )
+    return (
+        f"Behavioral setting `{words}` in the {group} subsystem.",
+        f"Changing it changes {group} behavior and should be validated against the affected workflow.",
+    )
+
+
+def _parameter_range(key: str, value: Any) -> str | None:
+    lowered = key.casefold()
+    if isinstance(value, bool):
+        return "true|false"
+    if lowered.endswith("_seconds") or lowered.endswith("_bytes") or lowered.endswith("_tokens"):
+        return ">= 0 unless a stricter cross-setting validation applies"
+    if lowered == "context_limit":
+        return "> 0"
+    if lowered == "port" or lowered.endswith("_port"):
+        return "1..65535"
+    if "ratio" in lowered:
+        return "usually 0..1; exact cross-setting validation applies"
+    return None
+
+
+def _leaf_paths(value: Any, prefix: tuple[str, ...] = ()) -> list[str]:
+    if isinstance(value, dict):
+        result: list[str] = []
+        for key, child in value.items():
+            result.extend(_leaf_paths(child, (*prefix, str(key))))
+        return result
+    return [".".join(prefix)] if prefix else []
+
+
+def _mark_sources(
+    ledger: dict[str, str], override: dict[str, Any], source: str
+) -> None:
+    for path in _leaf_paths(override):
+        ledger[path] = source
+
+
+def _env_override_sources(env: dict[str, str]) -> dict[str, str]:
+    result: dict[str, str] = {}
+    prefix = "SWAAG__"
+    for key in env:
+        if not key.startswith(prefix):
+            continue
+        dotted = ".".join(key[len(prefix):].lower().split("__"))
+        result[dotted] = f"environment:{key}"
+    return result
+
+
+def load_config(
+    config_paths: list[str | Path] | None = None,
+    env: dict[str, str] | None = None,
+) -> AgentConfig:
     env = dict(os.environ if env is None else env)
     merged = _load_packaged_defaults()
+    sources = {path: "packaged_defaults" for path in _leaf_paths(merged)}
 
-    search_paths: list[Path] = []
-    if config_paths:
-        search_paths.extend(Path(path) for path in config_paths)
-    env_path = env.get("SWAAG_CONFIG")
-    if env_path:
-        search_paths.append(Path(env_path))
+    # Documented precedence, lowest to highest after packaged defaults:
+    # local project config, explicit config_paths in caller order, SWAAG_CONFIG,
+    # and finally SWAAG__SECTION__KEY environment overrides.
+    search_paths: list[tuple[Path, str]] = []
     local_default = Path.cwd() / "config/local.toml"
     if local_default.exists():
-        search_paths.append(local_default)
+        search_paths.append((local_default, f"local_config:{local_default}"))
+    if config_paths:
+        for path in config_paths:
+            resolved = Path(path)
+            search_paths.append((resolved, f"explicit_config:{resolved}"))
+    env_path = env.get("SWAAG_CONFIG")
+    if env_path:
+        resolved = Path(env_path)
+        search_paths.append((resolved, f"SWAAG_CONFIG:{resolved}"))
 
-    for path in search_paths:
+    for path, source in search_paths:
         if not path.exists():
             raise FileNotFoundError(f"Config file not found: {path}")
-        merged = _deep_merge(merged, _migrate_config_aliases(_load_toml_file(path)))
+        payload = _migrate_config_aliases(_load_toml_file(path))
+        merged = _deep_merge(merged, payload)
+        _mark_sources(sources, payload, source)
 
     env = dict(env)
     legacy_env = "SWAAG__RUNTIME__MAX_REPEATED_ACTION_OCCURRENCES"
@@ -878,4 +1442,5 @@ def load_config(config_paths: list[str | Path] | None = None, env: dict[str, str
         env[new_env] = env[legacy_env]
     env.pop(legacy_env, None)
     merged = _apply_env_overrides(merged, env)
-    return _coerce_config(merged)
+    sources.update(_env_override_sources(env))
+    return _coerce_config(merged, sources=sources, secret_env=env)

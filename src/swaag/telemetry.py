@@ -179,6 +179,8 @@ class TelemetryOperation:
         self._recorded_error: tuple[str, str] | None = None
         self._retry_count = 0
         self._preemption_count = 0
+        self._preempted_input_tokens = 0
+        self._preempted_output_tokens = 0
 
     def __enter__(self) -> TelemetryOperation:
         self._context_token = context.attach(trace.set_span_in_context(self.span))
@@ -195,19 +197,41 @@ class TelemetryOperation:
             input_tokens = budget_report.input_tokens
         output_tokens = completion.completion_tokens
         if input_tokens is not None:
-            self.span.set_attribute("gen_ai.usage.input_tokens", int(input_tokens))
+            self.span.set_attribute(
+                "gen_ai.usage.input_tokens",
+                int(input_tokens) + self._preempted_input_tokens,
+            )
             if self._token_histogram is not None:
                 self._token_histogram.record(
                     int(input_tokens),
-                    {**self._metric_attributes, "gen_ai.token.type": "input"},
+                    {
+                        **self._metric_attributes,
+                        "gen_ai.token.type": "input",
+                        "swaag.model.usage.phase": "completed_attempt",
+                    },
                 )
+        elif self._preempted_input_tokens:
+            self.span.set_attribute(
+                "gen_ai.usage.input_tokens", self._preempted_input_tokens
+            )
         if output_tokens is not None:
-            self.span.set_attribute("gen_ai.usage.output_tokens", int(output_tokens))
+            self.span.set_attribute(
+                "gen_ai.usage.output_tokens",
+                int(output_tokens) + self._preempted_output_tokens,
+            )
             if self._token_histogram is not None:
                 self._token_histogram.record(
                     int(output_tokens),
-                    {**self._metric_attributes, "gen_ai.token.type": "output"},
+                    {
+                        **self._metric_attributes,
+                        "gen_ai.token.type": "output",
+                        "swaag.model.usage.phase": "completed_attempt",
+                    },
                 )
+        elif self._preempted_output_tokens:
+            self.span.set_attribute(
+                "gen_ai.usage.output_tokens", self._preempted_output_tokens
+            )
         if completion.finish_reason:
             self.span.set_attribute(
                 "gen_ai.response.finish_reasons", [completion.finish_reason]
@@ -217,6 +241,47 @@ class TelemetryOperation:
                 "swaag.model.first_token_seconds",
                 float(completion.first_token_seconds),
             )
+
+    def record_partial_model_usage(
+        self,
+        *,
+        input_tokens: int | None,
+        output_tokens: int | None,
+        reason: str,
+    ) -> None:
+        """Record only backend-reported usage from an interrupted attempt."""
+        event_attributes: dict[str, Any] = {
+            "swaag.model.usage.phase": "preempted_attempt",
+            "swaag.model.usage.reason": str(reason),
+        }
+        if input_tokens is not None:
+            value = max(0, int(input_tokens))
+            self._preempted_input_tokens += value
+            event_attributes["gen_ai.usage.input_tokens"] = value
+            if self._token_histogram is not None:
+                self._token_histogram.record(
+                    value,
+                    {
+                        **self._metric_attributes,
+                        "gen_ai.token.type": "input",
+                        "swaag.model.usage.phase": "preempted_attempt",
+                    },
+                )
+        if output_tokens is not None:
+            value = max(0, int(output_tokens))
+            self._preempted_output_tokens += value
+            event_attributes["gen_ai.usage.output_tokens"] = value
+            if self._token_histogram is not None:
+                self._token_histogram.record(
+                    value,
+                    {
+                        **self._metric_attributes,
+                        "gen_ai.token.type": "output",
+                        "swaag.model.usage.phase": "preempted_attempt",
+                    },
+                )
+        if len(event_attributes) > 2:
+            self.span.add_event("swaag.model.partial_usage", event_attributes)
 
     def record_error(self, error_type: str, description: str = "") -> None:
         self._recorded_error = (str(error_type), str(description))

@@ -1,6 +1,8 @@
 from __future__ import annotations
 
 import json
+
+import pytest
 from typing import Any, Callable
 
 from swaag.model import CompletionRequestPolicy
@@ -149,15 +151,33 @@ class CharacterCountSummaryClient(FakeModelClient):
         del timeout_seconds, progress_callback
         self.requests.append(payload)
         if payload.get("contract") == "history_compaction_selection":
+            prompt = str(payload.get("prompt", ""))
+            projection = self.marker if self.marker in prompt else ""
             response = json.dumps(
-                {"criticality": "compressible", "reason": "test history can be summarized"}
+                {
+                    "criticality": "compressible",
+                    "reason_code": "redundant_progress",
+                    "projection": projection,
+                }
             )
-        else:
-            assert payload.get("contract") == "summary"
+        elif payload.get("contract") == "history_verbatim_selection":
+            selected = [
+                line.split()[0]
+                for line in str(payload.get("prompt", "")).splitlines()
+                if line.startswith("M") and self.marker in line
+            ]
+            response = json.dumps(
+                {"selected_line_ids": selected, "reason": "preserve exact marker fragments"}
+            )
+        elif payload.get("contract") == "summary":
             summary = self.marker if self.marker in str(payload["prompt"]) else "fragment retained"
             response = json.dumps(
                 {"summary": summary, "preserve_recent_messages": 0, "verbatim_spans": []}
             )
+        else:
+            assert payload.get("contract") == "evidence_projection"
+            projection = self.marker if self.marker in str(payload["prompt"]) else "fragment retained"
+            response = json.dumps({"projection": projection})
         return CompletionResult(
             text=response,
             raw_request=payload,
@@ -220,7 +240,7 @@ def test_direct_answer_is_one_constrained_model_call_with_all_tools(make_config)
     for tool_name in runtime.tools.tool_names(runtime.config):
         assert f"- name: {tool_name}\n" in prompt
     schema = client.requests[0]["json_schema"]
-    assert set(schema["properties"]) == {"assistant_message", "tool_calls", "continue_loop", "silent_completion", "status", "questions"}
+    assert set(schema["properties"]) == {"assistant_message", "tool_calls", "continue_loop", "silent_completion", "status", "questions", "response_constraints"}
     events = runtime.history.read_history(result.session_id)
     assert not any(event.event_type in {"plan_created", "plan_updated"} for event in events)
     assert not any(event.event_type.startswith("plan_") for event in events)
@@ -289,7 +309,9 @@ def test_history_compaction_creates_replayable_summary_with_exact_sources(
     config = make_config(model__context_limit=32_000)
     def compaction_response(payload: dict[str, Any]) -> str:
         if payload["contract"] == "history_compaction_selection":
-            return json.dumps({"criticality": "compressible", "reason": "routine test window"})
+            return json.dumps({"criticality": "compressible", "reason_code": "redundant_progress", "projection": ""})
+        if payload["contract"] == "history_verbatim_selection":
+            return json.dumps({"selected_line_ids": [], "reason": "synthetic summary path"})
         assert payload["contract"] == "summary"
         return json.dumps({"summary": 'Earlier facts summarized.', "preserve_recent_messages": 0, "verbatim_spans": []})
 
@@ -353,7 +375,7 @@ def test_history_compaction_skips_output_exhausted_candidate_without_mutating_hi
     def selector(payload: dict[str, Any]) -> str:
         assert payload["contract"] == "history_compaction_selection"
         return json.dumps(
-            {"criticality": "compressible", "reason": "candidate is routine"}
+            {"criticality": "ordinary", "reason_code": "current_direction", "projection": ""}
         )
 
     client = _AlwaysLimitedSummaryClient([selector for _ in range(256)])
@@ -400,8 +422,9 @@ def test_summary_structured_output_reserve_accounts_for_exact_spans() -> None:
     ) == 484
 
 
+@pytest.mark.parametrize("direct_projection", [False, True])
 def test_history_compaction_refines_semantic_summary_with_frozen_exact_spans(
-    make_config,
+    make_config, direct_projection,
 ) -> None:
     marker = "exact-preserved-marker-991"
 
@@ -409,8 +432,16 @@ def test_history_compaction_refines_semantic_summary_with_frozen_exact_spans(
         contract = payload["contract"]
         if contract == "history_compaction_selection":
             return json.dumps(
-                {"criticality": "compressible", "reason": "routine test window"}
+                {"criticality": "compressible" if direct_projection else "ordinary",
+                 "reason_code": "redundant_progress" if direct_projection else "current_direction",
+                 "projection": "verbose " * 3_000 if direct_projection else ""}
             )
+        if contract == "history_verbatim_selection":
+            selected = [
+                line.split()[0] for line in str(payload["prompt"]).splitlines()
+                if line.startswith("M") and marker in line
+            ]
+            return json.dumps({"selected_line_ids": selected, "reason": "exact fact"})
         if contract == "summary":
             return json.dumps(
                 {
@@ -442,7 +473,7 @@ def test_history_compaction_refines_semantic_summary_with_frozen_exact_spans(
     assert runtime._compact_once(state) is True
 
     contracts = [request["contract"] for request in client.requests]
-    assert "summary" in contracts
+    assert ("summary" in contracts) is (not direct_projection)
     assert "summary_refinement" in contracts
     refinement = next(
         request for request in client.requests if request["contract"] == "summary_refinement"
@@ -467,7 +498,9 @@ def test_action_reexpands_authoritative_history_when_exact_messages_fit(
     marker = "authoritative-history-marker-413"
     def compaction_response(payload: dict[str, Any]) -> str:
         if payload["contract"] == "history_compaction_selection":
-            return json.dumps({"criticality": "compressible", "reason": "routine test window"})
+            return json.dumps({"criticality": "compressible", "reason_code": "redundant_progress", "projection": ""})
+        if payload["contract"] == "history_verbatim_selection":
+            return json.dumps({"selected_line_ids": [], "reason": "synthetic summary path"})
         assert payload["contract"] == "summary"
         return json.dumps({"summary": 'Derived summary only.', "preserve_recent_messages": 0, "verbatim_spans": []})
 
@@ -520,24 +553,23 @@ def test_action_uses_derived_history_only_after_measured_raw_overflow(
     make_config,
 ) -> None:
     marker = "oversized-authoritative-marker-739"
-    summary_calls = 0
+    selector_calls = 0
 
     def context_reduction_response(payload: dict[str, Any]) -> str:
-        nonlocal summary_calls
-        if payload["contract"] == "history_compaction_selection":
-            return json.dumps(
-                {"criticality": "compressible", "reason": "routine test window"}
-            )
-        assert payload["contract"] == "summary"
-        summary_calls += 1
+        nonlocal selector_calls
+        if payload["contract"] == "history_verbatim_selection":
+            return json.dumps({"selected_line_ids": [], "reason": "synthetic direct projection"})
+        assert payload["contract"] == "history_compaction_selection"
+        selector_calls += 1
         return json.dumps(
             {
-                "summary": (
+                "criticality": "compressible",
+                "reason_code": "redundant_progress",
+                "projection": (
                     "Compact derived view."
-                    if summary_calls == 1
+                    if selector_calls == 1
                     else "Fresh projection for this action."
                 ),
-                "preserve_recent_messages": 0,
             }
         )
 
@@ -612,7 +644,15 @@ def test_history_summary_recompiles_after_output_starvation(make_config) -> None
     )
     def compaction_response(payload: dict[str, Any]) -> str:
         if payload["contract"] == "history_compaction_selection":
-            return json.dumps({"criticality": "compressible", "reason": "routine test window"})
+            return json.dumps(
+                {
+                    "criticality": "ordinary",
+                    "reason_code": "current_direction",
+                    "projection": "",
+                }
+            )
+        if payload["contract"] == "history_verbatim_selection":
+            return json.dumps({"selected_line_ids": [], "reason": "synthetic summary starvation path"})
         assert payload["contract"] == "summary"
         return json.dumps({"summary": 'Earlier facts retained.', "preserve_recent_messages": 0, "verbatim_spans": []})
 
@@ -685,7 +725,7 @@ def test_oversized_single_history_message_is_hierarchically_summarized(
     runtime = AgentRuntime(config, model_client=client)
     state = runtime.create_or_load_session()
     for role, content in (
-        ("user", "A" * 8_000 + marker),
+        ("user", "A" * 4_000 + marker),
         ("assistant", "second"),
         ("user", "third"),
         ("assistant", "fourth"),
@@ -1648,8 +1688,8 @@ def test_single_responsibility_tool_contract_contains_only_tool_calls(make_confi
 def test_single_responsibility_terminal_contract_contains_only_response_fields():
     from swaag.grammar import agent_terminal_response_contract
     schema = agent_terminal_response_contract().json_schema
-    assert set(schema["properties"]) == {"assistant_message", "silent_completion"}
-    assert schema["required"] == ["assistant_message", "silent_completion"]
+    assert set(schema["properties"]) == {"assistant_message", "silent_completion", "response_constraints"}
+    assert schema["required"] == ["assistant_message", "silent_completion", "response_constraints"]
 
 
 def test_single_responsibility_mode_uses_tool_only_then_terminal_calls(make_config):
@@ -1672,6 +1712,43 @@ def test_single_responsibility_mode_uses_tool_only_then_terminal_calls(make_conf
     ]
     assert set(client.requests[0]["json_schema"]["properties"]) == {"tool_calls"}
     assert "continue_loop" not in client.requests[0]["json_schema"]["properties"]
+
+
+def test_single_responsibility_terminal_exact_word_count_retries_until_mechanical_match(make_config):
+    config = make_config(
+        model__max_semantic_responsibilities_per_call=1,
+        tools__staged_discovery=False,
+        runtime__tool_call_budget=0,
+        model__context_limit=32_000,
+    )
+    forty_three = " ".join(f"w{i}" for i in range(43))
+    repair_payload = {
+        f"word_{index:03d}": f"fixed{index}"
+        for index in range(1, 46)
+    }
+    client = FakeModelClient([
+        json.dumps({
+            "assistant_message": forty_three,
+            "silent_completion": False,
+            "response_constraints": {"exact_word_count": 45},
+        }),
+        json.dumps(repair_payload),
+    ])
+    runtime = AgentRuntime(config, model_client=client)
+    state = runtime.create_or_load_session()
+    result = runtime.run_turn_in_session(state, "Answer in exactly 45 words.")
+    assert len(result.assistant_text.split()) == 45
+    assert result.assistant_text == " ".join(f"fixed{index}" for index in range(1, 46))
+    assert [request["contract"] for request in client.requests] == [
+        "agent_terminal_response",
+        "exact_word_sequence_45",
+    ]
+    events = runtime.history.read_history(state.session_id)
+    repaired = [event for event in events if event.event_type == "response_constraint_repaired"]
+    assert len(repaired) == 1
+    assert repaired[0].payload["target_word_count"] == 45
+    assert repaired[0].payload["source_word_count"] == 43
+    assert repaired[0].payload["contract"] == "exact_word_sequence_45"
 
 
 def test_fused_mode_keeps_legacy_action_contract(make_config):
@@ -1870,3 +1947,292 @@ def test_core_runtime_does_not_name_concrete_model_client() -> None:
     assert "LlamaCppClient" not in text
     assert "ModelClient" in text
     assert "build_model_client" in text
+
+def test_history_compaction_target_allows_partial_progress_when_deficit_exceeds_span_capacity(make_config, tmp_path):
+    config = make_config(
+        sessions__root=tmp_path / "sessions",
+        context__reserved_summary_tokens=64,
+    )
+    runtime = AgentRuntime(config, model_client=FakeModelClient([]))
+    state = runtime.create_or_load_session()
+    messages = [
+        Message(role="user", content="bulk " * 500, created_at="t"),
+    ]
+    source_tokens = runtime._counter(state).count_text(
+        runtime.prompts.render_messages(messages)
+    ).tokens
+    target = runtime._history_compaction_target(
+        state,
+        messages,
+        required_recovery_tokens=source_tokens * 10,
+    )
+    assert target is not None
+    target_tokens, estimated_source_tokens = target
+    assert estimated_source_tokens == source_tokens
+    assert 1 <= target_tokens < source_tokens
+
+
+def test_oversized_history_summary_fragments_after_output_budget_exhaustion(
+    make_config, monkeypatch
+):
+    from swaag.runtime import OutputBudgetExhaustedError
+
+    config = make_config(
+        model__context_limit=2_000,
+        model__max_retries=0,
+        context__reserved_summary_tokens=64,
+    )
+    runtime = AgentRuntime(config, model_client=FakeModelClient([]))
+    state = runtime.create_or_load_session()
+    message = Message(
+        role="assistant",
+        content=("repetitive evidence block " * 300) + "EXACT-END-MARKER",
+        created_at="t",
+        metadata={"source_event_references": [{"sequence": 7, "event_hash": "abc"}]},
+    )
+    seen_lengths: list[int] = []
+
+    def fake_execute(_state, prepared, **_kwargs):
+        source = next(
+            component.text
+            for component in prepared.assembly.components
+            if component.category == "history"
+        )
+        seen_lengths.append(len(source))
+        if len(source) > 2_500:
+            raise OutputBudgetExhaustedError(
+                "length", prepared.report.reserved_response_tokens
+            )
+        return (
+            {"projection": "compact fragment"},
+            prepared,
+        )
+
+    monkeypatch.setattr(runtime, "_execute_with_output_recovery", fake_execute)
+    summary, report = runtime._summarize_oversized_message(
+        state,
+        message,
+        target_summary_tokens=128,
+        context_limit_resolution=(2_000, "test"),
+        remaining_calls=[32],
+    )
+
+    assert summary
+    assert report.fits is True
+    assert len(seen_lengths) >= 3
+    assert seen_lengths[0] > max(seen_lengths[1:])
+
+
+def test_oversized_history_summary_fragments_after_empty_semantic_summary(
+    make_config, monkeypatch
+):
+    config = make_config(
+        model__context_limit=2_000,
+        model__max_retries=0,
+        context__reserved_summary_tokens=64,
+    )
+    runtime = AgentRuntime(config, model_client=FakeModelClient([]))
+    state = runtime.create_or_load_session()
+    message = Message(
+        role="assistant",
+        content=("repetitive evidence block " * 300) + "EXACT-END-MARKER",
+        created_at="t",
+        metadata={"source_event_references": [{"sequence": 8, "event_hash": "def"}]},
+    )
+    seen_lengths: list[int] = []
+
+    def fake_execute(_state, prepared, **_kwargs):
+        source = next(
+            component.text
+            for component in prepared.assembly.components
+            if component.category == "history"
+        )
+        seen_lengths.append(len(source))
+        if len(source) > 2_500:
+            return ({"projection": ""}, prepared)
+        return (
+            {"projection": "compact fragment"},
+            prepared,
+        )
+
+    monkeypatch.setattr(runtime, "_execute_with_output_recovery", fake_execute)
+    summary, report = runtime._summarize_oversized_message(
+        state,
+        message,
+        target_summary_tokens=128,
+        context_limit_resolution=(2_000, "test"),
+        remaining_calls=[64],
+    )
+    assert summary
+    assert report.fits is True
+    assert len(seen_lengths) >= 3
+    assert seen_lengths[0] > max(seen_lengths[1:])
+
+
+def test_history_compaction_uses_selector_authored_projection_without_second_summary_call(make_config):
+    config = make_config(model__context_limit=32_000)
+    calls: list[str] = []
+
+    def respond(payload: dict[str, Any]) -> str:
+        calls.append(payload["contract"])
+        if payload["contract"] == "history_compaction_selection":
+            return json.dumps(
+                {
+                    "criticality": "compressible",
+                    "reason_code": "redundant_progress",
+                    "projection": "Routine progress; no unresolved constraints.",
+                }
+            )
+        if payload["contract"] == "history_verbatim_selection":
+            return json.dumps({"selected_line_ids": [], "reason": "routine progress only"})
+        raise AssertionError("selector-authored projection should avoid a summary call")
+
+    client = FakeModelClient([respond for _ in range(64)])
+    runtime = AgentRuntime(config, model_client=client)
+    state = runtime.create_or_load_session()
+    for role, content in (
+        ("user", "routine filler " * 250),
+        ("assistant", "routine acknowledgement " * 200),
+        ("user", "current request stays exact"),
+    ):
+        runtime._record_message(
+            state, Message(role=role, content=content, created_at="t")
+        )
+    assert runtime._compact_once(state, required_recovery_tokens=64) is True
+    assert "summary" not in calls
+    events = runtime.history.read_history(state.session_id)
+    compressed = next(
+        event for event in reversed(events) if event.event_type == "history_compressed"
+    )
+    direct_content = compressed.payload["summary_message"]["content"]
+    assert direct_content
+    assert all(
+        line == "Routine progress; no unresolved constraints."
+        for line in direct_content.splitlines()
+    )
+    assert compressed.payload["summary_budget_report"]["direct_selector_projection"] is True
+
+
+def test_history_compaction_carries_model_selected_verbatim_lines_exactly(make_config) -> None:
+    exact = "the checksum failed because the upstream export omitted row 73"
+
+    def respond(payload: dict[str, Any]) -> str:
+        if payload["contract"] == "history_compaction_selection":
+            return json.dumps(
+                {
+                    "criticality": "compressible",
+                    "reason_code": "redundant_progress",
+                    "projection": "compact progress",
+                }
+            )
+        if payload["contract"] == "history_verbatim_selection":
+            prompt = str(payload["prompt"])
+            line_id = next(
+                line.split()[0]
+                for line in prompt.splitlines()
+                if exact in line
+            )
+            return json.dumps(
+                {"selected_line_ids": [line_id], "reason": "exact causal fact"}
+            )
+        raise AssertionError(payload["contract"])
+
+    config = make_config(model__context_limit=32_000)
+    runtime = AgentRuntime(config, model_client=FakeModelClient([respond for _ in range(128)]))
+    state = runtime.create_or_load_session()
+    runtime._record_message(
+        state,
+        Message(role="user", content=f"causality: {exact}", created_at="t"),
+    )
+    runtime._record_message(
+        state, Message(role="assistant", content="routine progress " * 200, created_at="t")
+    )
+    runtime._record_message(
+        state, Message(role="user", content="routine follow-up " * 200, created_at="t")
+    )
+    assert runtime._compact_once(state, required_recovery_tokens=1) is True
+    retained = "\n".join(message.content for message in state.messages)
+    assert exact in retained
+    event = next(
+        event for event in reversed(runtime.history.read_history(state.session_id))
+        if event.event_type == "history_compressed"
+    )
+    assert event.payload["verbatim_line_count"] >= 1
+    assert event.payload["verbatim_selection_semantic"] is True
+
+
+def test_tiny_context_history_anchor_uses_bounded_exact_neighborhood(make_config) -> None:
+    marker = "SMALLCTX-HISTORY-AUTH-731"
+
+    def respond(payload: dict[str, Any]) -> str:
+        assert payload["contract"] == "history_best_anchor"
+        return json.dumps({"anchor": marker})
+
+    config = make_config(model__context_limit=2_048)
+    runtime = AgentRuntime(
+        config,
+        model_client=FakeModelClient([respond for _ in range(16)]),
+    )
+    state = runtime.create_or_load_session()
+    message = Message(
+        role="user",
+        content=(
+            f"Authoritative early fact {marker}. Keep this exact marker. "
+            + "authoritative evidence " * 350
+        ),
+        created_at="t",
+    )
+    spans = runtime._select_history_anchor_spans(
+        state,
+        messages=[message],
+        current_direction=f"Continue while preserving exact marker {marker}.",
+        target_tokens=600,
+    )
+    assert len(spans) == 1
+    assert marker in spans[0]
+    assert len(spans[0]) < len(message.content)
+    block = (
+        "[MODEL-SELECTED EXACT HISTORY UNIT; raw history remains authoritative]\n"
+        + spans[0]
+    )
+    assert runtime._counter(state).count_text(block).tokens <= 600
+
+
+def test_neutral_redundant_history_projection_skips_verbatim_selector(make_config) -> None:
+    calls: list[str] = []
+
+    def respond(payload: dict[str, Any]) -> str:
+        calls.append(payload["contract"])
+        if payload["contract"] == "history_compaction_selection":
+            return json.dumps(
+                {
+                    "criticality": "compressible",
+                    "reason_code": "redundant_progress",
+                    "projection": "",
+                }
+            )
+        raise AssertionError(f"unexpected second semantic preservation pass: {payload['contract']}")
+
+    config = make_config(model__context_limit=2_048)
+    runtime = AgentRuntime(
+        config,
+        model_client=FakeModelClient([respond for _ in range(64)]),
+    )
+    state = runtime.create_or_load_session()
+    for role, content in (
+        ("user", "routine filler " * 220),
+        ("assistant", "routine acknowledgement " * 220),
+        ("user", "current request stays exact"),
+    ):
+        runtime._record_message(state, Message(role=role, content=content, created_at="t"))
+    assert runtime._compact_once(state, required_recovery_tokens=64) is True
+    assert "history_verbatim_selection" not in calls
+    assert "history_best_anchor" not in calls
+    compressed = next(
+        event
+        for event in reversed(runtime.history.read_history(state.session_id))
+        if event.event_type == "history_compressed"
+    )
+    content = compressed.payload["summary_message"]["content"]
+    assert "redundant progress omitted" in content
+    assert compressed.payload["verbatim_line_count"] == 0

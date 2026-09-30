@@ -739,11 +739,18 @@ def _seed_scenario_history(runtime: AgentRuntime, state, history_messages: Seque
     for message in history_messages:
         runtime._record_message(state, message)
 
-def _run_turn_with_communication_probe(runtime: AgentRuntime, state: SessionState, scenario) -> Any:
+def _run_turn_with_communication_probe(
+    runtime: AgentRuntime,
+    state: SessionState,
+    scenario,
+    *,
+    resume_timeout_seconds: float | None = None,
+) -> Any:
     question = str(getattr(scenario, "communication_probe_question", "") or "").strip()
     if not question:
         return runtime.run_turn_in_session(state, scenario.prompt)
 
+    probe_started = time.monotonic()
     holder: dict[str, Any] = {}
     failure: dict[str, BaseException] = {}
 
@@ -772,9 +779,18 @@ def _run_turn_with_communication_probe(runtime: AgentRuntime, state: SessionStat
         raise RuntimeError("communication probe could not observe an active main-model request before the main turn completed")
 
     CommunicationService(runtime).answer_status_question(state.session_id, question)
-    worker.join(timeout=wait_seconds)
+    if resume_timeout_seconds is None:
+        resume_wait_seconds = max(60.0, wait_seconds)
+    else:
+        resume_wait_seconds = max(
+            0.1,
+            float(resume_timeout_seconds) - (time.monotonic() - probe_started),
+        )
+    worker.join(timeout=resume_wait_seconds)
     if worker.is_alive():
-        raise TimeoutError("main turn did not resume after communication preemption")
+        raise TimeoutError(
+            "main turn did not finish within the configured task deadline after communication preemption"
+        )
     if failure:
         raise failure["error"]
     return holder["turn"]
@@ -1212,7 +1228,12 @@ def run_benchmarks(
                         max_tool_calls=task.benchmark_tool_call_budget,
                         max_consecutive_identical_tool_calls=task_loop_limit,
                     ) as loop_info:
-                        turn = _run_turn_with_communication_probe(runtime, state, scenario)
+                        turn = _run_turn_with_communication_probe(
+                            runtime,
+                            state,
+                            scenario,
+                            resume_timeout_seconds=effective_task_timeout,
+                        )
                 assistant_text = turn.assistant_text
             except BenchmarkSeedTimeout as exc:
                 runtime_error = TimeoutError(str(exc))
@@ -1576,6 +1597,62 @@ def _build_parser() -> argparse.ArgumentParser:
     constraint_decoding_parser.set_defaults(resume=True)
     constraint_decoding_parser.add_argument("--json", action="store_true", help="Print the full JSON report.")
 
+    orchestration_live_matrix_parser = subparsers.add_parser(
+        "orchestration-live-matrix",
+        help="Run real-worker live orchestration state-transition cases.",
+    )
+    orchestration_live_matrix_parser.add_argument(
+        "--output", default="orchestration_live_matrix_output"
+    )
+    orchestration_live_matrix_parser.add_argument(
+        "--base-url", default="http://127.0.0.1:14829"
+    )
+    orchestration_live_matrix_parser.add_argument(
+        "--timeout-seconds", type=float, default=1800.0
+    )
+    orchestration_live_matrix_parser.add_argument(
+        "--case", action="append", default=[]
+    )
+    orchestration_live_matrix_parser.add_argument("--clean", action="store_true")
+    orchestration_live_matrix_parser.add_argument("--json", action="store_true")
+
+    orchestration_live_parser = subparsers.add_parser(
+        "orchestration-live",
+        help="Run the real model-driven user-facing orchestration path end to end.",
+    )
+    orchestration_live_parser.add_argument(
+        "--output", default="orchestration_live_output", help="Artifact directory."
+    )
+    orchestration_live_parser.add_argument(
+        "--base-url", default="http://127.0.0.1:14829", help="Live model endpoint."
+    )
+    orchestration_live_parser.add_argument(
+        "--timeout-seconds", type=float, default=1800.0, help="Completion deadline."
+    )
+    orchestration_live_parser.add_argument(
+        "--clean", action="store_true", help="Replace an existing artifact directory."
+    )
+    orchestration_live_parser.add_argument(
+        "--json", action="store_true", help="Print the full JSON report."
+    )
+
+    orchestration_scheduler_parser = subparsers.add_parser(
+        "orchestration-scheduler",
+        help="Run deterministic orchestration graph and inference-scheduler contract cases.",
+    )
+    orchestration_scheduler_parser.add_argument(
+        "--output", default="orchestration_scheduler_output", help="Artifact directory."
+    )
+    orchestration_scheduler_parser.add_argument(
+        "--case", action="append", default=[], help="Run only the named orchestration-scheduler case."
+    )
+    orchestration_scheduler_parser.add_argument(
+        "--clean", action="store_true", help="Replace an existing artifact directory."
+    )
+    orchestration_scheduler_parser.add_argument(
+        "--json", action="store_true", help="Print the full JSON report."
+    )
+
     tool_strategy_parser = subparsers.add_parser(
         "tool-strategy",
         help="Compare generic shell use with bespoke structured tools on identical live tasks.",
@@ -1643,6 +1720,17 @@ def _build_parser() -> argparse.ArgumentParser:
     context_engineering_parser.add_argument(
         "--json", action="store_true", help="Print the full JSON report."
     )
+
+    long_task_restart_parser = subparsers.add_parser(
+        "long-task-restart",
+        help="Stress delayed relevance and durable compaction across a runtime restart.",
+    )
+    long_task_restart_parser.add_argument("--output", default="long_task_restart_output")
+    long_task_restart_parser.add_argument("--unrelated-turn-pairs", type=int, default=12)
+    long_task_restart_parser.add_argument("--model-base-url")
+    long_task_restart_parser.add_argument("--timeout-seconds", type=int)
+    long_task_restart_parser.add_argument("--clean", action="store_true")
+    long_task_restart_parser.add_argument("--json", action="store_true")
 
     long_horizon_parser = subparsers.add_parser(
         "long-horizon-context",
@@ -1717,6 +1805,40 @@ def _build_parser() -> argparse.ArgumentParser:
     cross_source_parser.add_argument("--timeout-seconds", type=int)
     cross_source_parser.add_argument("--clean", action="store_true")
     cross_source_parser.add_argument("--json", action="store_true")
+
+    small_context_parser = subparsers.add_parser(
+        "small-context-stress",
+        help="Stress exact context boundaries and oversized sources against a real small-context backend.",
+    )
+    small_context_parser.add_argument("--output", default="small_context_stress_output")
+    small_context_parser.add_argument("--base-url", required=True)
+    small_context_parser.add_argument("--expected-context-limit", type=int, default=2048)
+    small_context_parser.add_argument("--case", action="append", default=[])
+    small_context_parser.add_argument("--clean", action="store_true")
+    small_context_parser.add_argument("--json", action="store_true")
+
+    completion_evaluation_parser = subparsers.add_parser(
+        "completion-evaluation",
+        help="Run held-out live independent completion-evaluation evidence cases.",
+    )
+    completion_evaluation_parser.add_argument(
+        "--output", default="completion_evaluation_output", help="Checkpointed artifact directory."
+    )
+    completion_evaluation_parser.add_argument(
+        "--case", action="append", default=[], help="Run only the named completion-evaluation case."
+    )
+    completion_evaluation_parser.add_argument(
+        "--model-base-url", help="Optional live model endpoint override."
+    )
+    completion_evaluation_parser.add_argument(
+        "--timeout-seconds", type=int, help="Override the no-token timeout for this live experiment."
+    )
+    completion_evaluation_parser.add_argument(
+        "--clean", action="store_true", help="Replace an existing artifact directory."
+    )
+    completion_evaluation_parser.add_argument(
+        "--json", action="store_true", help="Print the full JSON report."
+    )
 
     response_presentation_parser = subparsers.add_parser(
         "response-presentation",
@@ -2128,6 +2250,70 @@ def main(argv: Sequence[str] | None = None) -> int:
             print(f"output={args.output}")
         return 0 if report["complete"] and report["structurally_valid"] == report["planned_calls"] else 1
 
+    if args.command == "orchestration-live-matrix":
+        from swaag.benchmark.orchestration_live_matrix import run_live_orchestration_matrix
+
+        report = run_live_orchestration_matrix(
+            output_dir=Path(args.output),
+            base_url=str(args.base_url),
+            timeout_seconds=float(args.timeout_seconds),
+            case_ids=list(args.case),
+            clean=bool(args.clean),
+        )
+        if args.json:
+            print(stable_json_dumps(report, indent=2))
+        else:
+            print(f"passed={report['passed']}/{report['total']}")
+            for result in report["results"]:
+                print(f"{result['case_id']}={'passed' if result['passed'] else 'failed'}")
+            print(f"output={Path(args.output) / 'orchestration_live_matrix_results.json'}")
+        return 0 if report["complete"] and report["passed"] == report["total"] else 1
+
+    if args.command == "orchestration-live":
+        from swaag.benchmark.orchestration_live import run_live_orchestration_benchmark
+
+        report = run_live_orchestration_benchmark(
+            output_dir=Path(args.output),
+            base_url=str(args.base_url),
+            timeout_seconds=float(args.timeout_seconds),
+            clean=bool(args.clean),
+        )
+        if args.json:
+            print(stable_json_dumps(report, indent=2))
+        else:
+            print(f"passed={report['passed']}")
+            print(f"elapsed_seconds={report['elapsed_seconds']:.3f}")
+            if report["error"]:
+                print(f"error={report['error']}")
+            print(
+                f"output={Path(args.output) / 'orchestration_live_results.json'}"
+            )
+        return 0 if report["passed"] else 1
+
+    if args.command == "orchestration-scheduler":
+        from swaag.benchmark.orchestration_scheduler import (
+            run_orchestration_scheduler_benchmark,
+        )
+
+        report = run_orchestration_scheduler_benchmark(
+            output_dir=Path(args.output),
+            case_ids=list(args.case),
+            clean=bool(args.clean),
+        )
+        if args.json:
+            print(stable_json_dumps(report, indent=2))
+        else:
+            print(f"passed={report['passed']}/{report['total']}")
+            for result in report["results"]:
+                print(
+                    f"{result['case_id']}="
+                    f"{'passed' if result['passed'] else 'failed'}"
+                )
+            print(
+                f"output={Path(args.output) / 'orchestration_scheduler_results.json'}"
+            )
+        return 0 if report["complete"] and report["all_passed"] else 1
+
     if args.command == "tool-strategy":
         from swaag.benchmark.tool_strategy import run_tool_strategy_benchmark
 
@@ -2224,6 +2410,26 @@ def main(argv: Sequence[str] | None = None) -> int:
                 f"output={Path(args.output) / 'context_engineering_results.json'}"
             )
         return 0 if report["complete"] and report["passed"] == report["total"] else 1
+    if args.command == "long-task-restart":
+        from swaag.benchmark.long_task_restart import run_long_task_restart_benchmark
+
+        config = _live_experiment_config(
+            model_base_url=args.model_base_url,
+            timeout_seconds=args.timeout_seconds,
+        )
+        report = run_long_task_restart_benchmark(
+            output_dir=Path(args.output),
+            config=config,
+            unrelated_turn_pairs=int(args.unrelated_turn_pairs),
+            clean=bool(args.clean),
+        )
+        if args.json:
+            print(stable_json_dumps(report, indent=2))
+        else:
+            print(f"passed={report['passed']} unrelated_turn_pairs={report['unrelated_turn_pairs']}")
+            print(f"output={Path(args.output) / 'long_task_restart_results.json'}")
+        return 0 if report["passed"] else 1
+
     if args.command == "long-horizon-context":
         from swaag.benchmark.long_horizon_context import run_long_horizon_context_benchmark
 
@@ -2322,6 +2528,50 @@ def main(argv: Sequence[str] | None = None) -> int:
         if args.json: print(stable_json_dumps(report, indent=2))
         else: print(f"passed={report['passed']}")
         return 0 if report["passed"] else 1
+
+    if args.command == "small-context-stress":
+        from swaag.benchmark.small_context_stress import run_small_context_stress_benchmark
+
+        report = run_small_context_stress_benchmark(
+            output_dir=Path(args.output),
+            base_url=str(args.base_url),
+            expected_context_limit=int(args.expected_context_limit),
+            case_ids=list(args.case),
+            clean=bool(args.clean),
+        )
+        if args.json:
+            print(stable_json_dumps(report, indent=2))
+        else:
+            print(f"passed={report['passed']}/{report['total']} context={report['actual_context_limit']}")
+            for result in report["results"]:
+                print(f"{result['case_id']}={'passed' if result['passed'] else 'failed'}")
+            print(f"output={Path(args.output) / 'small_context_stress_results.json'}")
+        return 0 if report["complete"] and report["passed"] == report["total"] else 1
+
+    if args.command == "completion-evaluation":
+        from swaag.benchmark.completion_evaluation import (
+            run_completion_evaluation_benchmark,
+        )
+
+        config = _live_experiment_config(
+            model_base_url=args.model_base_url,
+            timeout_seconds=args.timeout_seconds,
+        )
+        report = run_completion_evaluation_benchmark(
+            output_dir=Path(args.output),
+            config=config,
+            case_ids=list(args.case),
+            clean=bool(args.clean),
+        )
+        if args.json:
+            print(stable_json_dumps(report, indent=2))
+        else:
+            print(f"passed={report['passed']}/{report['total']}")
+            for result in report["results"]:
+                print(f"{result['case_id']}={'passed' if result['passed'] else 'failed'}")
+            print(f"output={Path(args.output) / 'completion_evaluation_results.json'}")
+        return 0 if report["complete"] and report["passed"] == report["total"] else 1
+
 
     if args.command == "response-presentation":
         from swaag.benchmark.response_presentation import (

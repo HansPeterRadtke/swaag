@@ -161,3 +161,20 @@ def test_response_presentation_benchmark_resumes_complete_checkpoint(
 
     assert resumed["results"] == first["results"]
     assert resumed["model_identity"] == first["model_identity"]
+
+
+def test_presentation_verifier_accepts_semantically_equivalent_not_deployed_wording():
+    from swaag.benchmark.response_presentation import verify_presentation
+
+    text = (
+        "The implementation is complete. Forty-two tests passed. Deployment did not complete "
+        "because systemd start requires interactive polkit authentication. The localhost service "
+        "port is 13401 and it is not listening until deployment succeeds."
+    )
+    verification = verify_presentation(
+        "staged_audio",
+        text,
+        {"acceptable": True},
+    )
+    assert verification["passed"] is True
+    assert verification["checks"]["required_information"] is True

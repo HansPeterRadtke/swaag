@@ -28,6 +28,14 @@ LENGTH_CASES: dict[str, dict[str, Any]] = {
         "maximum_words": 45,
         "instruction_kind": "exact_words",
     },
+    "exact_words_45_mechanical": {
+        "instruction": "Answer in exactly 45 words.",
+        "target_words": 45,
+        "minimum_words": 45,
+        "maximum_words": 45,
+        "instruction_kind": "exact_words_mechanical",
+        "execution_mode": "agent_turn",
+    },
     "short": {
         "instruction": "Give a short answer.",
         "target_words": None,
@@ -77,6 +85,9 @@ def select_cases(names: Iterable[str] = ()) -> list[str]:
 def _case_config(base: AgentConfig, *, sessions_root: Path) -> AgentConfig:
     config = copy.deepcopy(base)
     config.sessions.root = sessions_root
+    workspace = sessions_root.parent / "workspace"
+    workspace.mkdir(parents=True, exist_ok=True)
+    config.tools.read_roots = [workspace]
     config.model.cache_enabled = False
     config.tools.enabled = []
     config.tools.allow_stateful_tools = False
@@ -131,39 +142,52 @@ def run_response_length_benchmark(
         if any(item.get("case") == case_name for item in results):
             continue
         case = LENGTH_CASES[case_name]
-        runtime = runtime_factory(
-            _case_config(base, sessions_root=output_dir / "runs" / f"{index:02d}-{case_name}" / "sessions")
+        case_config = _case_config(
+            base,
+            sessions_root=output_dir / "runs" / f"{index:02d}-{case_name}" / "sessions",
         )
+        if case.get("execution_mode") == "agent_turn":
+            case_config.model.max_semantic_responsibilities_per_call = 1
+            case_config.runtime.tool_call_budget = 0
+        runtime = runtime_factory(case_config)
         current_identity = _model_identity(runtime)
         if model_identity is None:
             model_identity = current_identity
         elif current_identity != model_identity:
             raise ValueError("Response-length runtime model identity changed")
         state = runtime.create_or_load_session()
-        assembly = runtime.prompts.build_semantic_operation_prompt(
-            kind="response_length_measurement",
-            system_instruction=_RESPONSE_LENGTH_SYSTEM,
-            components=[
-                PromptComponent(
-                    name="response_length_task",
-                    category="turn_context",
-                    text=(
-                        "Task:\n"
-                        + CASE_TEXT
-                        + "\n\nResponse-size instruction:\n"
-                        + str(case["instruction"])
-                    ),
-                )
-            ],
-        )
         started = time.monotonic()
-        payload = runtime._execute_compiled_presentation_call(
-            state,
-            assembly,
-            response_length_contract(),
-            validator=lambda value: value if isinstance(value.get("answer"), str) and value["answer"].strip() else (_ for _ in ()).throw(ValueError("answer must be a non-empty string")),
-        )
-        answer = str(payload["answer"]).strip()
+        execution_mode = str(case.get("execution_mode", "semantic_probe"))
+        if execution_mode == "agent_turn":
+            turn = runtime.run_turn_in_session(
+                state,
+                CASE_TEXT + "\n\n" + str(case["instruction"]),
+            )
+            answer = turn.assistant_text.strip()
+        else:
+            assembly = runtime.prompts.build_semantic_operation_prompt(
+                kind="response_length_measurement",
+                system_instruction=_RESPONSE_LENGTH_SYSTEM,
+                components=[
+                    PromptComponent(
+                        name="response_length_task",
+                        category="turn_context",
+                        text=(
+                            "Task:\n"
+                            + CASE_TEXT
+                            + "\n\nResponse-size instruction:\n"
+                            + str(case["instruction"])
+                        ),
+                    )
+                ],
+            )
+            payload = runtime._execute_compiled_presentation_call(
+                state,
+                assembly,
+                response_length_contract(),
+                validator=lambda value: value if isinstance(value.get("answer"), str) and value["answer"].strip() else (_ for _ in ()).throw(ValueError("answer must be a non-empty string")),
+            )
+            answer = str(payload["answer"]).strip()
         words = _word_count(answer)
         minimum = int(case["minimum_words"])
         maximum = int(case["maximum_words"])
@@ -172,6 +196,7 @@ def run_response_length_benchmark(
             {
                 "case": case_name,
                 "instruction_kind": case["instruction_kind"],
+                "execution_mode": execution_mode,
                 "instruction": case["instruction"],
                 "answer": answer,
                 "word_count": words,

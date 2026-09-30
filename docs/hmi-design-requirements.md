@@ -6,7 +6,7 @@ native toolkit. It turns the GUI recordings into testable requirements so a
 future adapter does not replace complete durable state with an attractive but
 incomplete display.
 
-The recording evidence includes every GUI transcript through 2026-08-27. The
+The recording evidence includes every GUI/UI transcript through 2026-09-16, including the voice-interface recording that broadens this scope from graphical UI to user interfaces generally. The
 meaningful opening of `Recording 2026-08-27 18-49-13-262` explicitly requires
 readable control text and physical, real-world size research; its remaining
 repeated "I don't know" text is an STT hallucination and is not design input.
@@ -179,3 +179,23 @@ WCAG 2.2 is the baseline web standard, not proof that every user need is met:
 <https://www.w3.org/TR/WCAG22/>. Platform guidance and actual user/device tests
 may justify stricter requirements; any exception must preserve information and
 be documented with measured evidence.
+
+## Voice-interface requirements
+
+These requirements are conditional on a SWAAG client actually offering voice/audio interaction; they are not a requirement that the core agent runtime itself ship a microphone UI. When a voice-capable client is in scope, the September 16 recording and current Infra `gui/voice_interfaces.md` make the following behaviors mandatory:
+
+- Preserve a manual fallback. Automatic transcription, turn detection and automatic sending must be disableable; the user can type from scratch, explicitly transcribe buffered audio, edit the resulting text and manually send it.
+- Treat user edits as high-confidence transcription evidence. Track the final edit delta rather than raw keystrokes, preserve typed exact spellings such as paths/model names, and keep any later vocabulary-learning analysis semantic rather than deterministic.
+- Show the current unsent transcript in a clearly editable text field and distinguish it from received agent messages. Received agent answers are not editable by default.
+- Show operational state the user needs to judge whether interaction will work: microphone activity, server reachability, speech-to-text/model availability, and clear failure state. Manual text entry/sending remains usable when speech-to-text fails.
+- Do not send partial transcription accidentally. A voice UI is an intermediate control layer that determines when captured speech/text is ready for the working agent.
+- Spoken-response interruption is semantic. Voice activity alone does not prove interruption intent; acknowledgements, laughter, coughs, background voices and short commands differ. Retain explicit player controls as the reliable fallback.
+- Every exposed audio recording/player supports play/pause/resume, stop, seeking/timeline, configurable short jumps, and replay of both received audio and the user's own unsent recording. Show total duration, current position and remaining time in stable positions, updating duration as streaming media grows.
+- Voice automation is progressively degradable: fully manual record/transcribe/edit/send, live transcription with manual send, automatic voice-activity transcription with configurable send, then continuous conversational mode. Wake-word detection is separate and optional.
+- Re-research current STT/TTS/audio-LLM capabilities before implementation. Benchmark vocabulary/hotword prompting, speaker handling, edit-derived adaptation and interruption-intent classification on the actual target devices and environments.
+
+A native/browser/mobile/watch voice UI is not currently part of the core SWAAG daemon. Therefore these requirements are an acceptance contract for future or external clients, not evidence that the current core runtime is missing agent semantics.
+
+## Domain-specific guideline scope
+
+Trading/finance recordings are conditional domain authority. They do not require the general SWAAG harness to implement trading. If a SWAAG product later claims that capability, its client/worker package must additionally satisfy the current Infra trading rules for point-in-time data, leakage prevention, train/validation/test separation, fees/costs, formal claim evaluation and domain-specific evidence. The benchmark discipline in those recordings remains useful generically, but their market semantics are not core-agent requirements.

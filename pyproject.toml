@@ -15,11 +15,13 @@ classifiers = [
   "Operating System :: OS Independent",
 ]
 dependencies = [
+  "cryptography>=43,<47",
   "jsonpatch>=1.33,<2",
   "opentelemetry-api>=1.44,<2",
   "opentelemetry-exporter-otlp-proto-http>=1.44,<2",
   "opentelemetry-sdk>=1.44,<2",
   "requests>=2.31,<3",
+  "rfc8785>=0.1,<1",
   "websocket-client>=1.8,<2",
 ]
 
@@ -69,6 +71,13 @@ where = ["src"]
   "assets/prompts/*.txt",
   "benchmark/fixtures/**/*",
   "benchmark/terminal_tasks/**/*"
+]
+
+[tool.setuptools.exclude-package-data]
+"swaag" = [
+  "**/__pycache__/*",
+  "**/*.pyc",
+  "**/*.pyo"
 ]
 
 [tool.pytest.ini_options]

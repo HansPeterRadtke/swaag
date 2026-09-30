@@ -524,8 +524,13 @@ def test_oversized_external_mcp_result_uses_generic_projection_and_exact_history
 
         def send_completion(self, payload, **_kwargs):
             self.requests.append(payload)
-            projection = marker if marker in payload["prompt"] else "irrelevant bulk"
-            response = json.dumps({"projection": projection})
+            if payload["contract"] == "tool_result_best_anchor":
+                response = json.dumps({"anchor": ""})
+            elif payload["contract"] == "tool_result_verbatim_selection":
+                response = json.dumps({"has": False, "ids": []})
+            else:
+                projection = marker if marker in payload["prompt"] else "irrelevant bulk"
+                response = json.dumps({"projection": projection})
             return CompletionResult(
                 text=response,
                 raw_request=payload,

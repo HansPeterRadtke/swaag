@@ -246,6 +246,12 @@ def test_same_model_communication_preempts_and_exactly_replays_main_request(make
     assert len(preempted) == 1
     assert len(replayed) == 1
     assert preempted[0].payload["request_sha256"] == replayed[0].payload["request_sha256"]
+    assert preempted[0].payload["usage_evidence"] == {
+        "backend_prompt_tokens": None,
+        "backend_completion_tokens": None,
+        "prompt_tokens_source": None,
+        "completion_tokens_source": None,
+    }
     assert replayed[0].payload["request"] == client.requests[0]
     inference = runtime.inference.list(session_id=state.session_id)
     assert any(item.status == "completed" and item.attempt_count == 2 for item in inference)
@@ -502,3 +508,188 @@ def test_benchmark_communication_probe_exercises_exact_replay(make_config, tmp_p
     )
     assert report.passed is True
     assert report.checks["exact_preemption_replay"] is True
+
+
+def test_orchestrator_preempts_named_route_worker_on_shared_backend(make_config) -> None:
+    main = AgentRuntime(
+        make_config(
+            model__base_url="http://127.0.0.1:19001",
+            model__context_limit=32_000,
+        ),
+        model_client=_ImmediateClient("main"),
+    )
+    route_client = _PreemptReplayClient()
+    route = AgentRuntime(
+        make_config(
+            model__base_url="http://127.0.0.1:19002",
+            model__context_limit=32_000,
+        ),
+        model_client=route_client,
+    )
+    orchestrator = AgentRuntime(
+        make_config(
+            model__base_url="http://127.0.0.1:19002",
+            model__context_limit=32_000,
+            tools__enabled=["orchestration_control"],
+            tools__allow_stateful_tools=True,
+            tools__allow_side_effect_tools=True,
+        ),
+        model_client=_ImmediateClient("orchestrator reply"),
+    )
+    service = CommunicationService(
+        main,
+        orchestrator_runtime=orchestrator,
+        worker_model_runtimes={"strong": route},
+    )
+    plan_id = service.orchestration_api.execute(
+        "create", {"objective": "route preemption"}
+    )["plan"]["plan_id"]
+    service.orchestration_api.execute(
+        "node.add",
+        {
+            "plan_id": plan_id,
+            "objective": "long routed worker",
+            "model_key": "strong",
+        },
+    )
+    started = service.orchestration_api.execute(
+        "start", {"plan_id": plan_id}
+    )["started_worker_ids"]
+    assert len(started) == 1
+    assert route_client.main_started.wait(timeout=10)
+
+    answer = service.orchestrator_message("Give me the current orchestration status.")
+
+    assert answer["answer"] == "orchestrator reply"
+    finished = service.worker_model_managers["strong"].wait(
+        started[0], timeout_seconds=10
+    )
+    assert finished.status == "completed"
+    assert route_client.replay_verified is True
+    assert finished.model_key == "strong"
+    events = route.history.read_history(finished.session_id)
+    assert any(event.event_type == "model_call_preempted" for event in events)
+    assert any(event.event_type == "model_call_replayed" for event in events)
+
+
+class _UsagePreemptReplayClient(_PreemptReplayClient):
+    def send_completion(
+        self,
+        payload: dict[str, Any],
+        *,
+        timeout_seconds: int | None = None,
+        progress_callback=None,
+        cancel_check=None,
+    ) -> CompletionResult:
+        copied = json.loads(stable_json_dumps(payload, indent=None))
+        self.requests.append(copied)
+        if payload.get("contract") == "communication_status":
+            return self._result(payload, _status("The main agent is still working."))
+        if self.first_main_request is None:
+            self.first_main_request = copied
+            self.main_started.set()
+            if progress_callback is not None:
+                progress_callback(
+                    {
+                        "completion_tokens": 17,
+                        "backend_prompt_tokens": 321,
+                        "backend_completion_tokens": 17,
+                        "prompt_tokens_source": "tokens_evaluated",
+                        "completion_tokens_source": "tokens_predicted",
+                        "elapsed_seconds": 0.25,
+                        "tokens_per_second": 68.0,
+                        "first_token_seconds": 0.1,
+                        "token_timeout_seconds": 30,
+                    }
+                )
+            deadline = time.monotonic() + 5
+            while time.monotonic() < deadline:
+                if cancel_check is not None and cancel_check():
+                    raise ModelCallPreempted("usage-aware test preemption")
+                time.sleep(0.005)
+            raise AssertionError("main request was not preempted")
+        assert copied == self.first_main_request
+        self.replay_verified = True
+        return self._result(payload, _action("main finished"))
+
+
+def test_preemption_preserves_backend_reported_partial_usage(make_config) -> None:
+    config = make_config(model__context_limit=32_000)
+    client = _UsagePreemptReplayClient()
+    runtime = AgentRuntime(config, model_client=client)
+    state = runtime.create_or_load_session()
+    service = CommunicationService(runtime)
+    holder: dict[str, Any] = {}
+
+    thread = threading.Thread(
+        target=lambda: holder.setdefault(
+            "result", runtime.run_turn_in_session(state, "Do the long main task.")
+        ),
+        daemon=True,
+    )
+    thread.start()
+    assert client.main_started.wait(timeout=10)
+    assert (
+        service.answer_status_question(
+            state.session_id, "What is happening right now?"
+        )
+        == "The main agent is still working."
+    )
+    thread.join(timeout=5)
+
+    assert not thread.is_alive()
+    assert client.replay_verified is True
+    events = runtime.history.read_history(state.session_id)
+    preempted = [event for event in events if event.event_type == "model_call_preempted"]
+    replayed = [event for event in events if event.event_type == "model_call_replayed"]
+    assert len(preempted) == 1
+    assert len(replayed) == 1
+    usage = preempted[0].payload["usage_evidence"]
+    assert usage == {
+        "backend_prompt_tokens": 321,
+        "backend_completion_tokens": 17,
+        "prompt_tokens_source": "tokens_evaluated",
+        "completion_tokens_source": "tokens_predicted",
+    }
+    assert replayed[0].payload["preempted_usage_evidence"] == usage
+
+def test_benchmark_communication_probe_uses_task_deadline_for_replayed_turn(make_config, tmp_path) -> None:
+    from swaag.benchmark.benchmark_runner import _run_turn_with_communication_probe
+    from swaag.benchmark.task_definitions import BenchmarkVerificationContract, TaskScenario
+
+    class _DelayedReplayClient(_PreemptReplayClient):
+        def __init__(self) -> None:
+            super().__init__()
+            self.main_attempts = 0
+
+        def send_completion(self, payload, **kwargs):
+            contract = payload.get("contract")
+            if contract == "agent_action":
+                self.main_attempts += 1
+                if self.main_attempts >= 2:
+                    time.sleep(2.5)
+            return super().send_completion(payload, **kwargs)
+
+    config = make_config(model__context_limit=32_000)
+    client = _DelayedReplayClient()
+    runtime = AgentRuntime(config, model_client=client)
+    state = runtime.create_or_load_session()
+    scenario = TaskScenario(
+        prompt="Do the benchmark main task.",
+        workspace=tmp_path,
+        model_client=client,
+        communication_probe_question="Benchmark status?",
+        communication_probe_wait_seconds=2.0,
+        verification_contract=BenchmarkVerificationContract(task_type="multi_step"),
+    )
+    turn = _run_turn_with_communication_probe(
+        runtime,
+        state,
+        scenario,
+        resume_timeout_seconds=15.0,
+    )
+    assert turn.assistant_text == "main finished"
+    assert client.main_attempts >= 2
+    event_types = [event.event_type for event in runtime.history.read_history(state.session_id)]
+    assert "model_call_preempted" in event_types
+    assert "model_call_replayed" in event_types

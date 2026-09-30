@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import os
 import re
+import subprocess
 from pathlib import Path
 from typing import Iterator
 
@@ -62,6 +63,126 @@ class FilesystemManager:
     def relative_path(self, path: Path) -> str:
         return str(path.resolve().relative_to(self.workspace_root))
 
+    def _safe_workspace_file(self, path: Path) -> bool:
+        """Return whether path is a readable workspace file without escaping/crashing.
+
+        Workspace discovery is advisory context construction. An unreadable, broken,
+        or out-of-workspace symlink must not make the entire agent turn fail; explicit
+        reads of a requested path still surface their own errors normally.
+        """
+        try:
+            if not self.is_within_workspace(path):
+                return False
+            return path.is_file()
+        except (OSError, RuntimeError, ValueError):
+            return False
+
+    _CONTEXT_MANIFEST_EXCLUDED_DIRS = frozenset(
+        {".git", ".venv", ".pytest_cache", ".swaag", "__pycache__", "build", "dist"}
+    )
+
+    def context_manifest(self) -> dict[str, object]:
+        """Return the automatic project-file manifest used in model context.
+
+        In a Git worktree, the project-declared tracked + nonignored-untracked view is
+        authoritative for automatic manifest construction. This excludes VCS internals,
+        ignored virtualenv/build/cache content, and other ignored artifacts without a
+        model or hard-coded semantic relevance decision. Explicit filesystem tools keep
+        their broader behavior and can recover omitted paths on demand.
+        """
+        git_files = self._git_context_manifest_files()
+        if git_files is not None:
+            return {
+                "workspace_root": str(self.workspace_root),
+                "scope": "git_tracked_and_untracked_nonignored",
+                "files": git_files,
+                "count": len(git_files),
+                "recovery": "Explicit list_files/read/search tools retain broader workspace access.",
+            }
+        files = self._structural_context_manifest_files()
+        return {
+            "workspace_root": str(self.workspace_root),
+            "scope": "filesystem_structural_fallback",
+            "structurally_excluded_directories": sorted(self._CONTEXT_MANIFEST_EXCLUDED_DIRS),
+            "files": files,
+            "count": len(files),
+            "recovery": "Explicit list_files/read/search tools retain broader workspace access.",
+        }
+
+    def _git_context_manifest_files(self) -> list[str] | None:
+        try:
+            probe = subprocess.run(
+                ["git", "-C", str(self.workspace_root), "rev-parse", "--is-inside-work-tree"],
+                check=False,
+                capture_output=True,
+                text=True,
+                timeout=5,
+            )
+        except (OSError, subprocess.SubprocessError):
+            return None
+        if probe.returncode != 0 or probe.stdout.strip() != "true":
+            return None
+        try:
+            result = subprocess.run(
+                [
+                    "git",
+                    "-C",
+                    str(self.workspace_root),
+                    "ls-files",
+                    "-co",
+                    "--exclude-standard",
+                    "-z",
+                    "--",
+                    ".",
+                ],
+                check=False,
+                capture_output=True,
+                timeout=10,
+            )
+        except (OSError, subprocess.SubprocessError):
+            return None
+        if result.returncode != 0:
+            return None
+        entries: list[str] = []
+        for raw in result.stdout.split(b"\0"):
+            if not raw:
+                continue
+            try:
+                relative = raw.decode("utf-8", errors="strict")
+            except UnicodeDecodeError:
+                continue
+            item = self.workspace_root / relative
+            if not self._safe_workspace_file(item):
+                continue
+            try:
+                if self._is_runtime_owned_snapshot_path(item):
+                    continue
+                entries.append(self.relative_path(item))
+            except (OSError, RuntimeError, ValueError):
+                continue
+        return sorted(dict.fromkeys(entries))
+
+    def _structural_context_manifest_files(self) -> list[str]:
+        entries: list[str] = []
+        for dirpath, dirnames, filenames in os.walk(self.workspace_root, followlinks=False):
+            dirnames[:] = sorted(
+                name
+                for name in dirnames
+                if name not in self._CONTEXT_MANIFEST_EXCLUDED_DIRS
+                and not name.endswith(".egg-info")
+            )
+            for filename in sorted(filenames):
+                item = Path(dirpath) / filename
+                if not self._safe_workspace_file(item):
+                    continue
+                try:
+                    if self._is_runtime_owned_snapshot_path(item):
+                        continue
+                    entries.append(self.relative_path(item))
+                except (OSError, RuntimeError, ValueError):
+                    continue
+        return entries
+
     def list_files(self, path_text: str = ".", *, cwd: str | None = None) -> list[str]:
         root = self.resolve_path(path_text, cwd=cwd)
         if root.is_file():
@@ -69,14 +190,21 @@ class FilesystemManager:
         if not root.exists():
             raise FilesystemError(f"Path does not exist: {root}")
         items: list[str] = []
-        for item in sorted(root.rglob("*")):
-            if (
-                item.is_file()
-                and "__pycache__" not in item.parts
-                and self.is_within_workspace(item)
-                and not self._is_runtime_owned_snapshot_path(item)
-            ):
+        try:
+            discovered = sorted(root.rglob("*"))
+        except OSError as exc:
+            raise FilesystemError(f"Could not enumerate workspace path {root}: {exc}") from exc
+        for item in discovered:
+            if "__pycache__" in item.parts:
+                continue
+            if not self._safe_workspace_file(item):
+                continue
+            try:
+                if self._is_runtime_owned_snapshot_path(item):
+                    continue
                 items.append(self.relative_path(item))
+            except (OSError, RuntimeError, ValueError):
+                continue
         return items
 
 
@@ -93,9 +221,14 @@ class FilesystemManager:
             dirnames[:] = sorted(name for name in dirnames if name != "__pycache__")
             for filename in sorted(filenames):
                 item = Path(dirpath) / filename
-                if self._is_runtime_owned_snapshot_path(item):
+                if not self._safe_workspace_file(item):
                     continue
-                entries.append(self.relative_path(item))
+                try:
+                    if self._is_runtime_owned_snapshot_path(item):
+                        continue
+                    entries.append(self.relative_path(item))
+                except (OSError, RuntimeError, ValueError):
+                    continue
                 if len(entries) > max_entries:
                     return entries[:max_entries], True
         return entries, False
@@ -218,15 +351,20 @@ class FilesystemManager:
         snapshot: dict[str, str] = {}
         if not self.workspace_root.exists():
             return snapshot
-        for item in sorted(self.workspace_root.rglob("*")):
-            if not item.is_file() or "__pycache__" in item.parts:
+        try:
+            discovered = sorted(self.workspace_root.rglob("*"))
+        except OSError:
+            return snapshot
+        for item in discovered:
+            if "__pycache__" in item.parts or not self._safe_workspace_file(item):
                 continue
-            if not self.is_within_workspace(item):
+            try:
+                if self._is_runtime_owned_snapshot_path(item):
+                    continue
+                raw = item.read_bytes()
+                rel = self.relative_path(item)
+            except (OSError, RuntimeError, ValueError):
                 continue
-            if self._is_runtime_owned_snapshot_path(item):
-                continue
-            raw = item.read_bytes()
-            rel = self.relative_path(item)
             try:
                 snapshot[rel] = raw.decode("utf-8")
             except UnicodeDecodeError:

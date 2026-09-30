@@ -218,3 +218,72 @@ def test_open_webui_pipe_preserves_raw_images_files_and_remote_references(
     assert references == ["https://example.test/image.png"]
     assert files[0]["content_base64"] == "ZXhhY3QgZmlsZSBieXRlcw=="
     assert file_references == ["remote.pdf: s3://private-bucket/remote.pdf"]
+
+
+def test_open_webui_pipe_emits_persistent_files_events(monkeypatch) -> None:
+    module = _load_pipe_module(monkeypatch)
+
+    class FakeClient:
+        def __init__(self, *_args):
+            pass
+
+        async def request(self, operation, _params):
+            if operation == "open_webui.send":
+                return {
+                    "return": "done",
+                    "events": [],
+                    "metadata": {"worker_id": "worker-1", "status": "completed"},
+                    "next_sequence": 2,
+                }
+            if operation == "open_webui.get":
+                return {
+                    "return": "done",
+                    "events": [
+                        {
+                            "type": "files",
+                            "data": {
+                                "files": [
+                                    {
+                                        "name": "artifact.txt",
+                                        "type": "text/plain",
+                                        "url": "https://files.example.test/signed",
+                                    }
+                                ]
+                            },
+                        }
+                    ],
+                    "metadata": {"worker_id": "worker-1", "status": "completed"},
+                    "next_sequence": 3,
+                    "has_more": False,
+                }
+            raise AssertionError(operation)
+
+    monkeypatch.setattr(module, "_JsonLineClient", FakeClient)
+    emitted: list[dict] = []
+
+    async def emit(event):
+        emitted.append(event)
+
+    result = asyncio.run(
+        module.Pipe().pipe(
+            {"messages": [{"role": "user", "content": "Return the artifact."}]},
+            __metadata__={"chat_id": "chat-1", "message_id": "request-1"},
+            __event_emitter__=emit,
+        )
+    )
+
+    assert result == "done"
+    assert emitted == [
+        {
+            "type": "files",
+            "data": {
+                "files": [
+                    {
+                        "name": "artifact.txt",
+                        "type": "text/plain",
+                        "url": "https://files.example.test/signed",
+                    }
+                ]
+            },
+        }
+    ]

@@ -875,6 +875,8 @@ class LlamaCppClient:
         last_body: dict[str, Any] = {}
         completion_events = 0
         reported_tokens = 0
+        backend_prompt_tokens: int | None = None
+        backend_completion_tokens: int | None = None
         first_token_seconds: float | None = None
         try:
             for raw_line in response.iter_lines(decode_unicode=True):
@@ -908,10 +910,18 @@ class LlamaCppClient:
                     if first_token_seconds is None:
                         first_token_seconds = round(time.monotonic() - started, 3)
                     token_count_changed = True
+                raw_evaluated = item.get("tokens_evaluated")
+                if isinstance(raw_evaluated, int) and raw_evaluated >= 0:
+                    if backend_prompt_tokens != raw_evaluated:
+                        backend_prompt_tokens = raw_evaluated
+                        token_count_changed = True
                 raw_predicted = item.get("tokens_predicted")
-                if isinstance(raw_predicted, int) and raw_predicted >= reported_tokens:
-                    reported_tokens = raw_predicted
-                    token_count_changed = True
+                if isinstance(raw_predicted, int) and raw_predicted >= 0:
+                    if backend_completion_tokens != raw_predicted:
+                        backend_completion_tokens = raw_predicted
+                        token_count_changed = True
+                    if raw_predicted >= reported_tokens:
+                        reported_tokens = raw_predicted
                 elif completion_events > reported_tokens:
                     reported_tokens = completion_events
                 if token_count_changed and progress_callback is not None:
@@ -919,6 +929,18 @@ class LlamaCppClient:
                     progress_callback(
                         {
                             "completion_tokens": reported_tokens,
+                            "backend_prompt_tokens": backend_prompt_tokens,
+                            "backend_completion_tokens": backend_completion_tokens,
+                            "completion_tokens_source": (
+                                "tokens_predicted"
+                                if backend_completion_tokens is not None
+                                else "stream_event_count"
+                            ),
+                            "prompt_tokens_source": (
+                                "tokens_evaluated"
+                                if backend_prompt_tokens is not None
+                                else None
+                            ),
                             "elapsed_seconds": round(elapsed, 3),
                             "tokens_per_second": round(reported_tokens / elapsed, 3),
                             "first_token_seconds": first_token_seconds,

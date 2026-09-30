@@ -178,11 +178,15 @@ class RawAttachmentEvidenceProvider:
         try:
             row["text"] = data.decode("utf-8")
         except UnicodeDecodeError as exc:
+            row["requires_specialist_analysis"] = True
+            row["specialist_reason"] = "non_utf8_attachment"
             row["read_error"] = (
                 "The exact raw bytes are not UTF-8 text; a selected specialist "
                 f"reader is required ({exc})."
             )
             row["text"] = ""
+        else:
+            row["requires_specialist_analysis"] = False
         return row
 
 

@@ -181,7 +181,7 @@ def test_status_uses_full_fidelity_when_exact_snapshot_fits(make_config) -> None
     assert [request["contract"] for request in client.requests] == [
         "communication_status"
     ]
-    assert client.requests[0]["n_predict"] == 5_000
+    assert client.requests[0]["n_predict"] == 192
     assert marker in client.requests[0]["prompt"]
     assert runtime.history.read_history(target.session_id) == events_before
     assert runtime.resolve_session_ref(None, latest_if_none=True) == target.session_id
@@ -280,3 +280,209 @@ def test_failed_status_operation_does_not_replace_target_heartbeat(make_config) 
     assert stable_json_dumps(
         runtime.history.read_active_run(target.session_id), indent=None
     ) == before
+
+
+def test_status_evidence_mechanically_references_oversized_event_values(make_config) -> None:
+    from swaag.types import HistoryEvent
+    from swaag.utils import sha256_text
+
+    huge_prompt = "GIANT-PROMPT-MARKER " * 4_000
+    huge_components = [
+        {"name": f"component-{index}", "text": "x" * 500}
+        for index in range(32)
+    ]
+    event = HistoryEvent(
+        id="event-big",
+        sequence=42,
+        session_id="session_target",
+        timestamp="now",
+        type="prompt_built",
+        version=1,
+        payload={
+            "kind": "action",
+            "prompt": huge_prompt,
+            "components": huge_components,
+            "prompt_sha256": sha256_text(huge_prompt),
+        },
+        hash="event-hash-42",
+    )
+    row = AgentRuntime._communication_status_evidence_row(event)
+    encoded_payload = stable_json_dumps(event.payload, indent=None)
+    payload_ref = row["payload"]["exact_payload_reference"]
+    assert payload_ref == {
+        "chars": len(encoded_payload),
+        "sha256": sha256_text(encoded_payload),
+    }
+    assert row["payload"]["kind"] == "action"
+    assert row["payload"]["payload_view"] == "reference_only_operational_event"
+    serialized = stable_json_dumps(row, indent=None)
+    assert "GIANT-PROMPT-MARKER" not in serialized
+    assert len(serialized) < 2_000
+
+
+def test_status_large_operational_events_fit_via_mechanical_references_without_semantic_projection(make_config) -> None:
+    from swaag.types import HistoryEvent
+
+    marker = "small-status-semantic-marker"
+    config = make_config(model__context_limit=32_768)
+    client = _CharacterStatusClient(markers=[marker])
+    runtime = AgentRuntime(config, model_client=client)
+    target = runtime.create_or_load_session()
+    huge_prompt = "very large serialized prompt " * 6_000
+    huge_request = {
+        "prompt": huge_prompt,
+        "json_schema": {"type": "object", "properties": {str(i): {"type": "string"} for i in range(400)}},
+        "components": [{"name": str(i), "text": "z" * 400} for i in range(40)],
+    }
+    events = [
+        HistoryEvent(
+            id="e40",
+            sequence=40,
+            session_id=target.session_id,
+            timestamp="now",
+            type="context_compiled",
+            version=1,
+            payload={"kind": "action", "accounting": {"input_tokens": 5_000, "fits": True}},
+            hash="hash40",
+        ),
+        HistoryEvent(
+            id="e42",
+            sequence=42,
+            session_id=target.session_id,
+            timestamp="now",
+            type="prompt_built",
+            version=1,
+            payload={"kind": "action", "prompt": huge_prompt, "components": huge_request["components"]},
+            hash="hash42",
+        ),
+        HistoryEvent(
+            id="e45",
+            sequence=45,
+            session_id=target.session_id,
+            timestamp="now",
+            type="model_request_sent",
+            version=1,
+            payload={"kind": "action", "request": huge_request, "call_id": "model_call_test"},
+            hash="hash45",
+        ),
+        HistoryEvent(
+            id="e46",
+            sequence=46,
+            session_id=target.session_id,
+            timestamp="now",
+            type="model_call_preempted",
+            version=1,
+            payload={
+                "kind": "action",
+                "request_sha256": "request-hash",
+                "preemption_id": "preemption-test",
+                "reason": marker,
+            },
+            hash="hash46",
+        ),
+    ]
+    client.cited_sequence = 46
+    result = runtime.generate_communication_status(
+        target_session_id=target.session_id,
+        question="What is the main agent doing right now?",
+        mechanical_status=runtime.session_status_payload(target),
+        source_events=events,
+    )
+    contracts = [request["contract"] for request in client.requests]
+    assert contracts == ["communication_status"]
+    assert result["evidence_projected"] is False
+    assert marker in result["answer"]
+    prompt = client.requests[0]["prompt"]
+    assert "GIANT-PROMPT-MARKER" not in prompt
+    assert "exact_payload_reference" in prompt
+    assert len(prompt) < 32_000
+
+
+def test_status_groups_repetitive_mechanical_events_but_keeps_semantic_events_individual() -> None:
+    from swaag.types import HistoryEvent
+
+    events = []
+    for sequence in range(1, 41):
+        events.append(
+            HistoryEvent(
+                id=f"tok-{sequence}",
+                sequence=sequence,
+                session_id="session_target",
+                timestamp=f"t{sequence}",
+                type=(
+                    "model_tokenize_requested"
+                    if sequence % 2
+                    else "model_tokenize_result"
+                ),
+                version=1,
+                payload={"chars": sequence * 100, "tokens": sequence},
+                hash=f"hash-{sequence}",
+            )
+        )
+    events.append(
+        HistoryEvent(
+            id="msg-41",
+            sequence=41,
+            session_id="session_target",
+            timestamp="t41",
+            type="message_added",
+            version=1,
+            payload={"message": {"role": "user", "content": "keep this semantic marker"}},
+            hash="hash-41",
+        )
+    )
+    rows = AgentRuntime._communication_evidence_rows(events)
+    assert len(rows) == 2
+    assert [row["event_type"] for row in rows] == [
+        "mechanical_event_index",
+        "message_added",
+    ]
+    grouped = rows[0]["payload"]
+    assert grouped["total_count"] == 40
+    assert grouped["first_sequence"] == 1
+    assert grouped["last_sequence"] == 40
+    assert grouped["counts_by_event_type"] == {
+        "model_tokenize_requested": 20,
+        "model_tokenize_result": 20,
+    }
+    assert len(grouped["sequence_hash_index_sha256"]) == 64
+    assert rows[-1]["payload"]["message"]["content"] == "keep this semantic marker"
+
+
+def test_status_operational_payloads_keep_accounting_and_exact_reference_without_prompt_body() -> None:
+    from swaag.types import HistoryEvent
+    from swaag.utils import sha256_text, stable_json_dumps
+
+    request = {
+        "prompt": "GIANT-OPERATIONAL-PROMPT " * 5000,
+        "n_predict": 768,
+        "stream": True,
+        "json_schema": {"type": "object", "properties": {str(i): {"type": "string"} for i in range(300)}},
+    }
+    event = HistoryEvent(
+        id="request-event",
+        sequence=45,
+        session_id="session_target",
+        timestamp="now",
+        type="model_request_sent",
+        version=1,
+        payload={
+            "kind": "action",
+            "call_id": "model-call-1",
+            "request_sha256": "request-sha",
+            "request": request,
+        },
+        hash="event-hash",
+    )
+    row = AgentRuntime._communication_status_evidence_row(event)
+    encoded_payload = stable_json_dumps(event.payload, indent=None)
+    assert row["payload"]["exact_payload_reference"] == {
+        "chars": len(encoded_payload),
+        "sha256": sha256_text(encoded_payload),
+    }
+    assert row["payload"]["kind"] == "action"
+    assert row["payload"]["call_id"] == "model-call-1"
+    assert row["payload"]["payload_view"] == "reference_only_operational_event"
+    serialized = stable_json_dumps(row, indent=None)
+    assert "GIANT-OPERATIONAL-PROMPT" not in serialized
+    assert len(serialized) < 1600

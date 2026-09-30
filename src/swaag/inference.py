@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import os
+import math
 import sqlite3
 import time
 from datetime import datetime, timezone
@@ -52,6 +53,18 @@ _INFERENCE_STORE_MIGRATIONS = (
         ON inference_requests(session_id, queued_epoch, request_id)
         """,
     ),
+    (
+        "ALTER TABLE inference_requests ADD COLUMN fair_weight REAL NOT NULL DEFAULT 1.0",
+        """
+        CREATE TABLE IF NOT EXISTS inference_fair_state (
+            backend_key TEXT NOT NULL,
+            source TEXT NOT NULL,
+            virtual_service REAL NOT NULL DEFAULT 0.0,
+            updated_at TEXT NOT NULL,
+            PRIMARY KEY(backend_key, source)
+        )
+        """,
+    ),
 )
 
 
@@ -78,6 +91,7 @@ class InferenceRequest:
     queue_wait_seconds: float | None
     cancellation_requested_at: str | None
     error: str | None
+    fair_weight: float = 1.0
 
 
 class InferenceRequestCoordinator:
@@ -135,7 +149,16 @@ class InferenceRequestCoordinator:
         call_kind: str,
         priority: int,
         source: str,
+        fair_weight: float = 1.0,
     ) -> InferenceRequest:
+        if (
+            isinstance(fair_weight, bool)
+            or not isinstance(fair_weight, (int, float))
+            or not math.isfinite(fair_weight)
+            or fair_weight <= 0
+        ):
+            raise ValueError("inference fair_weight must be finite and positive")
+        fair_weight = float(fair_weight)
         now = utc_now_iso()
         queued_epoch = time.time()
         request_id = new_id("inference_request")
@@ -145,8 +168,8 @@ class InferenceRequestCoordinator:
                 INSERT INTO inference_requests(
                     request_id, backend_key, session_id, run_id, call_id,
                     call_kind, source, priority, status, owner_pid,
-                    queued_at, queued_epoch, updated_at
-                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, 'queued', ?, ?, ?, ?)
+                    queued_at, queued_epoch, updated_at, fair_weight
+                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, 'queued', ?, ?, ?, ?, ?)
                 """,
                 (
                     request_id,
@@ -161,8 +184,27 @@ class InferenceRequestCoordinator:
                     now,
                     queued_epoch,
                     now,
+                    fair_weight,
                 ),
             )
+            existing_fair = connection.execute(
+                "SELECT 1 FROM inference_fair_state WHERE backend_key=? AND source=?",
+                (self.backend_key, str(source)),
+            ).fetchone()
+            if existing_fair is None:
+                minimum = connection.execute(
+                    "SELECT MIN(virtual_service) FROM inference_fair_state WHERE backend_key=?",
+                    (self.backend_key,),
+                ).fetchone()[0]
+                connection.execute(
+                    "INSERT INTO inference_fair_state(backend_key,source,virtual_service,updated_at) VALUES(?,?,?,?)",
+                    (
+                        self.backend_key,
+                        str(source),
+                        0.0 if minimum is None else float(minimum),
+                        now,
+                    ),
+                )
         item = self.get(request_id)
         if item is None:
             raise RuntimeError("failed to persist inference request")
@@ -205,6 +247,45 @@ class InferenceRequestCoordinator:
         with self._connect() as connection:
             rows = connection.execute(sql, params).fetchall()
         return [item for row in rows if (item := self._record(row)) is not None]
+
+    def _fair_candidate(
+        self, connection: sqlite3.Connection, *, now_epoch: float
+    ) -> str | None:
+        rows = connection.execute(
+            """
+            SELECT r.request_id, r.source, r.priority, r.queued_epoch,
+                   r.fair_weight, COALESCE(f.virtual_service, 0.0) AS virtual_service
+            FROM inference_requests AS r
+            LEFT JOIN inference_fair_state AS f
+              ON f.backend_key=r.backend_key AND f.source=r.source
+            WHERE r.backend_key=? AND r.status='queued'
+            """,
+            (self.backend_key,),
+        ).fetchall()
+        if not rows:
+            return None
+        effective = [
+            (
+                int(row["priority"])
+                + int(
+                    max(0.0, now_epoch - float(row["queued_epoch"]))
+                    / self.aging_seconds_per_priority
+                ),
+                row,
+            )
+            for row in rows
+        ]
+        highest = max(score for score, _row in effective)
+        eligible = [row for score, row in effective if score == highest]
+        chosen = min(
+            eligible,
+            key=lambda row: (
+                float(row["virtual_service"]),
+                float(row["queued_epoch"]),
+                str(row["request_id"]),
+            ),
+        )
+        return str(chosen["request_id"])
 
     def acquire(
         self,
@@ -250,23 +331,10 @@ class InferenceRequestCoordinator:
                         (self.backend_key,),
                     ).fetchone()[0]
                 )
-                candidate = connection.execute(
-                    """
-                    SELECT request_id FROM inference_requests
-                    WHERE backend_key=? AND status='queued'
-                    ORDER BY
-                        priority + CAST((? - queued_epoch) / ? AS INTEGER) DESC,
-                        queued_epoch,
-                        request_id
-                    LIMIT 1
-                    """,
-                    (
-                        self.backend_key,
-                        now_epoch,
-                        self.aging_seconds_per_priority,
-                    ),
-                ).fetchone()
-                if active_count < capacity and candidate is not None and candidate[0] == request_id:
+                candidate_id = self._fair_candidate(
+                    connection, now_epoch=now_epoch
+                )
+                if active_count < capacity and candidate_id == request_id:
                     queue_wait = max(0.0, now_epoch - float(item.queued_epoch))
                     connection.execute(
                         """
@@ -283,6 +351,19 @@ class InferenceRequestCoordinator:
                             capacity_source,
                             queue_wait,
                             request_id,
+                        ),
+                    )
+                    connection.execute(
+                        """
+                        UPDATE inference_fair_state
+                        SET virtual_service=virtual_service + ?, updated_at=?
+                        WHERE backend_key=? AND source=?
+                        """,
+                        (
+                            1.0 / max(0.000001, float(item.fair_weight)),
+                            now,
+                            self.backend_key,
+                            item.source,
                         ),
                     )
                     connection.commit()
@@ -382,6 +463,22 @@ class InferenceRequestCoordinator:
                 ).fetchone()[0]
             )
 
+    def touch_running(self, request_id: str) -> InferenceRequest | None:
+        """Refresh durable liveness for a running request without changing its state."""
+        now = utc_now_iso()
+        with self._connect() as connection:
+            cursor = connection.execute(
+                """
+                UPDATE inference_requests
+                SET updated_at=?
+                WHERE request_id=? AND status='running'
+                """,
+                (now, request_id),
+            )
+        if cursor.rowcount != 1:
+            return self.get(request_id)
+        return self.get(request_id)
+
     def reconcile_orphans(self) -> list[InferenceRequest]:
         reconciled: list[InferenceRequest] = []
         with self._connect() as connection:
@@ -398,17 +495,17 @@ class InferenceRequestCoordinator:
             if item is None:
                 continue
             owner_alive = _pid_is_alive(item.owner_pid)
+            heartbeat_epoch = _iso_epoch(item.updated_at)
             stale_running = (
                 item.status == "running"
                 and self.max_running_seconds is not None
-                and item.started_at is not None
-                and _iso_epoch(item.started_at) is not None
-                and now_epoch - float(_iso_epoch(item.started_at)) > self.max_running_seconds
+                and heartbeat_epoch is not None
+                and now_epoch - float(heartbeat_epoch) > self.max_running_seconds
             )
             if owner_alive and not stale_running:
                 continue
             error = (
-                f"inference running lease exceeded {self.max_running_seconds:.1f}s"
+                f"inference liveness heartbeat stale for more than {self.max_running_seconds:.1f}s"
                 if stale_running
                 else "inference owner process ended before terminal state"
             )

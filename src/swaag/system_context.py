@@ -78,19 +78,12 @@ def runtime_system_context_sources(
 
     if _tool_enabled(config, "list_files"):
         filesystem = AgentEnvironment(config, state).filesystem
-        files = filesystem.list_files(".")
+        manifest = filesystem.context_manifest()
         sources.append(
             SystemContextSource(
                 name="workspace_file_manifest",
                 category="environment",
-                text=stable_json_dumps(
-                    {
-                        "workspace_root": state.environment.workspace.root,
-                        "files": files,
-                        "count": len(files),
-                    },
-                    indent=2,
-                ),
+                text=stable_json_dumps(manifest, indent=2),
                 introduction=(
                     "Workspace file manifest. Use the configured filesystem capability to recover "
                     "the exact current listing when needed:\n"

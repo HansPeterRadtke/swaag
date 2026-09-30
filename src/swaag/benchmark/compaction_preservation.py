@@ -155,6 +155,17 @@ def _fact_message() -> str:
     return "\n".join(rows)
 
 
+def _routine_progress_message(cycle: int, *, role: str) -> str:
+    # Deliberately redundant non-authoritative text. The live benchmark must provide
+    # a span whose semantic compression actually recovers tokens; otherwise a
+    # correct runtime should refuse a size-increasing "compaction".
+    sentence = (
+        f"Routine cycle {cycle} {role} progress contains no new task facts, constraints, "
+        "identifiers, paths, decisions, promises, blockers, or completion evidence. "
+    )
+    return sentence * 28
+
+
 def _model_identity(runtime: AgentRuntime) -> Any:
     identity = getattr(runtime.client, "cache_identity", None)
     value = identity() if callable(identity) else type(runtime.client).__name__
@@ -258,13 +269,17 @@ def run_compaction_preservation_benchmark(
             state,
             Message(
                 role="user",
-                content="Continue carefully; ordinary progress text must not displace exact facts.",
+                content=_routine_progress_message(1, role="user"),
                 created_at=utc_now_iso(),
             ),
         )
         runtime._record_message(
             state,
-            Message(role="assistant", content="Investigation is ongoing.", created_at=utc_now_iso()),
+            Message(
+                role="assistant",
+                content=_routine_progress_message(1, role="assistant"),
+                created_at=utc_now_iso(),
+            ),
         )
 
     for cycle in range(len(results) + 1, cycles + 1):
@@ -303,8 +318,10 @@ def run_compaction_preservation_benchmark(
         compilation_event = next(
             event
             for event in reversed(events)
-            if event.event_type == "context_compiled"
-            and event.payload.get("kind") == "summary"
+            if event.sequence < summary_event.sequence
+            and event.event_type == "context_compiled"
+            and event.payload.get("kind")
+            in {"summary", "history_compaction_selection"}
         )
         decoy_values_preserved = [
             value for value in ADVERSARIAL_DECOYS.values() if value in retained_text

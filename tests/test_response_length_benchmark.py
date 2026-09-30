@@ -51,7 +51,14 @@ class _LengthClient:
         else:
             count = 220
         answer = " ".join(f"word{i}" for i in range(count))
-        text = json.dumps({"answer": answer})
+        if payload.get("contract") == "agent_terminal_response":
+            text = json.dumps({
+                "assistant_message": answer,
+                "silent_completion": False,
+                "response_constraints": {"exact_word_count": 45},
+            })
+        else:
+            text = json.dumps({"answer": answer})
         return CompletionResult(
             text=text,
             raw_request=payload,
@@ -72,10 +79,22 @@ def test_response_length_benchmark_measures_exact_and_qualitative_instructions(
         runtime_factory=lambda config: AgentRuntime(config, model_client=_LengthClient()),
     )
     assert report["complete"] is True
-    assert report["passed"] == report["total"] == 4
+    assert report["passed"] == report["total"] == 5
     rows = {item["case"]: item for item in report["results"]}
     assert rows["exact_words_45"]["word_count"] == 45
     assert rows["exact_words_45"]["absolute_target_error_words"] == 0
+    assert rows["exact_words_45_mechanical"]["word_count"] == 45
+    assert rows["exact_words_45_mechanical"]["absolute_target_error_words"] == 0
+    assert rows["exact_words_45_mechanical"]["execution_mode"] == "agent_turn"
     assert rows["short"]["instruction_kind"] == "qualitative"
     assert rows["medium"]["word_count"] > rows["short"]["word_count"]
     assert rows["detailed"]["word_count"] > rows["medium"]["word_count"]
+
+
+def test_response_length_case_config_isolates_workspace(make_config, tmp_path):
+    from swaag.benchmark.response_length import _case_config
+
+    sessions = tmp_path / "runs" / "case" / "sessions"
+    config = _case_config(make_config(), sessions_root=sessions)
+    assert config.tools.read_roots == [sessions.parent / "workspace"]
+    assert config.tools.read_roots[0].is_dir()

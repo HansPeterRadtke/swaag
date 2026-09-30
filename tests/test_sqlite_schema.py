@@ -11,6 +11,7 @@ from swaag.embedding_index import DerivedEmbeddingIndex
 from swaag.history import HistoryStore
 from swaag.history_archive import HistoryArchiveStore
 from swaag.inference import InferenceRequestCoordinator
+from swaag.orchestration import OrchestrationStore
 from swaag.preemption import ModelPreemptionCoordinator
 from swaag.prompt_instruction_store import PromptInstructionStore
 from swaag.shared_state import SharedStateConflictError
@@ -102,16 +103,18 @@ def test_all_runtime_sqlite_stores_record_explicit_schema_versions(
     embeddings = DerivedEmbeddingIndex(sessions, _Embeddings())
     prompt_instructions = PromptInstructionStore(sessions, make_config())
     delegated_tools = DelegatedToolStore(sessions)
+    orchestration = OrchestrationStore(sessions)
 
-    assert _version(communication.path) == 5
-    assert _version(workers.path) == 4
+    assert _version(communication.path) == 6
+    assert _version(workers.path) == 6
     assert _version(history.sqlite_history_path()) == 1
     assert _version(archives.catalog_path) == 1
-    assert _version(inference.path) == 1
+    assert _version(inference.path) == 2
     assert _version(preemption.path) == 1
     assert _version(embeddings.path) == 1
     assert _version(prompt_instructions.path) == 1
     assert _version(delegated_tools.path) == 1
+    assert _version(orchestration.path) == 4
 
 
 def test_communication_stream_bounds_migration_preserves_protocol_mappings(
@@ -137,7 +140,7 @@ def test_communication_stream_bounds_migration_preserves_protocol_mappings(
 
     store = CommunicationStore(sessions)
 
-    assert _version(path) == 5
+    assert _version(path) == 6
     assert store.protocol_message_bounds("open_webui", "message-1") == (
         "chat-1",
         "worker-1",
@@ -325,7 +328,7 @@ def test_shared_state_migration_preserves_existing_client_snapshot(tmp_path) -> 
     store = CommunicationStore(sessions)
     snapshot = store.latest_protocol_state("ag_ui", "thread-1")
 
-    assert _version(path) == 5
+    assert _version(path) == 6
     assert snapshot is not None
     assert snapshot.source_kind == "client_snapshot"
     assert snapshot.source_id == "run-1"
@@ -367,7 +370,9 @@ def test_worker_lifecycle_option_migrations_preserve_existing_rows(tmp_path) -> 
     store = WorkerStore(sessions)
     record = store.get("worker_old")
 
-    assert _version(store.path) == 4
+    assert _version(store.path) == 6
     assert record.objective == "preserved"
     assert record.completion_mode == "natural"
     assert record.presentation_modes == []
+    assert record.inference_weight == 1.0
+    assert record.model_key == "default"

@@ -12,6 +12,7 @@ from typing import Sequence
 from swaag.config import load_config
 from swaag.communication import CommunicationService
 from swaag.mcp import McpAdapter
+from swaag.operations_log import configure_operations_log
 from swaag.runtime import AgentRuntime, BudgetExceededError
 from swaag.utils import stable_json_dumps
 
@@ -460,6 +461,9 @@ def main(argv: Sequence[str] | None = None) -> int:
         otlp_export_runtime = configure_otlp_export_from_environment()
 
     config = load_config(args.config)
+    operations_log = configure_operations_log(
+        config, component=f"cli:{args.command}"
+    )
     runtime = AgentRuntime(config)
 
     try:
@@ -512,15 +516,35 @@ def main(argv: Sequence[str] | None = None) -> int:
                 if otlp_export_runtime is not None:
                     otlp_export_runtime.shutdown()
     except BudgetExceededError as exc:
+        operations_log.event(
+            "process_error",
+            severity="ERROR",
+            error_type=type(exc).__name__,
+            error=str(exc),
+        )
         print(str(exc), file=sys.stderr)
         if exc.report is not None:
             print(stable_json_dumps(asdict(exc.report), indent=2), file=sys.stderr)
         return 2
     except (FileNotFoundError, ValueError) as exc:
+        operations_log.event(
+            "process_error",
+            severity="ERROR",
+            error_type=type(exc).__name__,
+            error=str(exc),
+        )
         print(f"ERROR: {exc}", file=sys.stderr)
         return 1
     except Exception as exc:
+        operations_log.event(
+            "process_error",
+            severity="ERROR",
+            error_type=type(exc).__name__,
+            error=str(exc),
+        )
         print(f"ERROR: {exc}", file=sys.stderr)
         return 1
+    finally:
+        operations_log.shutdown(reason="cli_exit")
 
     raise SystemExit(f"Unhandled command: {args.command}")

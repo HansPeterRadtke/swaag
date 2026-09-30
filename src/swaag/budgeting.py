@@ -136,5 +136,11 @@ def structured_output_token_floor(
             ),
         )
         bounded_tokens = int(round(instance_tokens * factor))
-        return max(int(config.budget_policy.structured_output_json_floor_tokens), bounded_tokens)
+        floor = int(
+            config.budget_policy.structured_output_json_floor_by_contract.get(
+                contract.name,
+                config.budget_policy.structured_output_json_floor_tokens,
+            )
+        )
+        return max(floor, bounded_tokens)
     return 0

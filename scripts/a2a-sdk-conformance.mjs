@@ -6,6 +6,7 @@ import { pathToFileURL } from "node:url";
 
 const [sdkRoot, baseUrl, ...options] = process.argv.slice(2);
 const exerciseNewTasks = options.includes("--exercise-new-tasks");
+const exercisePush = options.includes("--exercise-push");
 const transportOptions = options.filter((item) => item.startsWith("--transport="));
 if (transportOptions.length > 1) {
   throw new Error("at most one --transport option may be provided");
@@ -17,6 +18,7 @@ if (!new Set(["jsonrpc", "http-json"]).has(transport)) {
 const unknownOptions = options.filter(
   (item) => item.startsWith("--") &&
     item !== "--exercise-new-tasks" &&
+    item !== "--exercise-push" &&
     !item.startsWith("--transport="),
 );
 if (unknownOptions.length) {
@@ -30,7 +32,7 @@ const [expectedTaskId] = taskIds;
 if (!sdkRoot || !baseUrl) {
   throw new Error(
     "usage: a2a-sdk-conformance.mjs SDK_ROOT BASE_URL [EXPECTED_TASK_ID] " +
-      "[--exercise-new-tasks] [--transport=jsonrpc|http-json]",
+      "[--exercise-new-tasks] [--exercise-push] [--transport=jsonrpc|http-json]",
   );
 }
 
@@ -188,6 +190,88 @@ if (exerciseNewTasks) {
   };
 }
 
+let push;
+if (exercisePush) {
+  const pushTaskId = expectedTaskId ?? newTasks?.unary?.id;
+  if (!pushTaskId) {
+    throw new Error("--exercise-push requires an existing or newly created task");
+  }
+  const extendedCard = await client.getAgentCard();
+  if (extendedCard.capabilities?.extendedAgentCard !== true) {
+    throw new Error("official client did not decode extended Agent Card capability");
+  }
+  if (extendedCard.capabilities?.pushNotifications !== true) {
+    throw new Error("official client did not decode pushNotifications capability");
+  }
+  const config = {
+    tenant: "",
+    id: "official-push-config",
+    taskId: pushTaskId,
+    url: "https://callback.example.test/a2a",
+    token: "official-legacy-token",
+    authentication: {
+      scheme: "Bearer",
+      credentials: "official-modern-token",
+    },
+  };
+  const created = await client.createTaskPushNotificationConfig(config);
+  if (created.id !== config.id || created.taskId !== pushTaskId) {
+    throw new Error("official client did not decode created push config");
+  }
+  if (
+    created.authentication?.scheme !== "Bearer" ||
+    created.authentication?.credentials !== "official-modern-token"
+  ) {
+    throw new Error("official client did not preserve push authentication fields");
+  }
+  const fetched = await client.getTaskPushNotificationConfig({
+    tenant: "",
+    taskId: pushTaskId,
+    id: config.id,
+  });
+  if (fetched.url !== config.url || fetched.token !== config.token) {
+    throw new Error("official client did not decode fetched push config");
+  }
+  const listedPush = await client.listTaskPushNotificationConfig({
+    tenant: "",
+    taskId: pushTaskId,
+    pageSize: 10,
+    pageToken: "",
+  });
+  if (!listedPush.configs?.some((item) => item.id === config.id)) {
+    throw new Error("official client did not list the created push config");
+  }
+  await client.deleteTaskPushNotificationConfig({
+    tenant: "",
+    taskId: pushTaskId,
+    id: config.id,
+  });
+  const afterDelete = await client.listTaskPushNotificationConfig({
+    tenant: "",
+    taskId: pushTaskId,
+    pageSize: 10,
+    pageToken: "",
+  });
+  if (afterDelete.configs?.some((item) => item.id === config.id)) {
+    throw new Error("official client still listed deleted push config");
+  }
+  push = {
+    taskId: pushTaskId,
+    created: {
+      id: created.id,
+      url: created.url,
+      authScheme: created.authentication?.scheme ?? "",
+    },
+    listedCount: listedPush.configs?.length ?? 0,
+    afterDeleteCount: afterDelete.configs?.length ?? 0,
+    extendedCard: {
+      pushNotifications: extendedCard.capabilities?.pushNotifications ?? false,
+      extendedAgentCard: extendedCard.capabilities?.extendedAgentCard ?? false,
+      skillCount: extendedCard.skills?.length ?? 0,
+    },
+  };
+}
+
 console.log(
   JSON.stringify(
     {
@@ -218,6 +302,7 @@ console.log(
         : null,
       stream: stream ?? null,
       newTasks: newTasks ?? null,
+      push: push ?? null,
     },
     null,
     2,

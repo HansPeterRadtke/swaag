@@ -59,16 +59,26 @@ class _ProjectionClient:
         self, payload: dict[str, Any], **_kwargs
     ) -> CompletionResult:
         self.requests.append(payload)
-        assert payload["contract"] == "tool_result_projection"
         prompt = str(payload["prompt"])
-        preserved = [fact for fact in REQUIRED_FACTS if fact in prompt]
-        projection = (
-            "\n".join(preserved)
-            if preserved
-            else "This exact fragment contains only routine healthy-record noise."
-        )
-        assert not any(marker in projection for marker in DISTRACTOR_MARKERS)
-        text = json.dumps({"projection": projection})
+        if payload["contract"] == "tool_result_verbatim_selection":
+            selected = [
+                line.split()[0]
+                for line in prompt.splitlines()
+                if line.startswith("L")
+                and any(fact in line for fact in REQUIRED_FACTS)
+                and not any(marker in line for marker in DISTRACTOR_MARKERS)
+            ]
+            text = json.dumps({"has": bool(selected), "ids": selected})
+        else:
+            assert payload["contract"] == "tool_result_projection"
+            preserved = [fact for fact in REQUIRED_FACTS if fact in prompt]
+            projection = (
+                "\n".join(preserved)
+                if preserved
+                else "This exact fragment contains only routine healthy-record noise."
+            )
+            assert not any(marker in projection for marker in DISTRACTOR_MARKERS)
+            text = json.dumps({"projection": projection})
         return CompletionResult(
             text=text,
             raw_request=payload,
@@ -77,6 +87,7 @@ class _ProjectionClient:
             completion_tokens=None,
             finish_reason="stop",
         )
+
 
 
 def test_context_engineering_benchmark_exercises_fit_and_overflow_paths(
@@ -132,8 +143,23 @@ def test_semantic_reduction_working_set_cap_fragments_before_inference(
     clients: list[_ProjectionClient] = []
     runtimes: list[AgentRuntime] = []
 
+    class _NoExactProjectionClient(_ProjectionClient):
+        def send_completion(self, payload: dict[str, Any], **_kwargs) -> CompletionResult:
+            if payload["contract"] == "tool_result_verbatim_selection":
+                self.requests.append(payload)
+                text = json.dumps({"has": False, "ids": []})
+                return CompletionResult(
+                    text=text,
+                    raw_request=payload,
+                    raw_response={"content": text},
+                    prompt_tokens=None,
+                    completion_tokens=None,
+                    finish_reason="stop",
+                )
+            return super().send_completion(payload, **_kwargs)
+
     def runtime_factory(config):
-        client = _ProjectionClient()
+        client = _NoExactProjectionClient()
         runtime = AgentRuntime(config, model_client=client)
         clients.append(client)
         runtimes.append(runtime)
@@ -175,6 +201,8 @@ def test_context_engineering_verifier_preserves_semantic_fact_with_formatting_ch
 ) -> None:
     class _FormattingProjectionClient(_ProjectionClient):
         def send_completion(self, payload: dict[str, Any], **_kwargs) -> CompletionResult:
+            if payload["contract"] == "tool_result_verbatim_selection":
+                return super().send_completion(payload, **_kwargs)
             self.requests.append(payload)
             prompt = str(payload["prompt"])
             if any(fact in prompt for fact in REQUIRED_FACTS):
@@ -353,3 +381,168 @@ def test_context_engineering_raw_endpoint_connection_error_is_resumable_interrup
     assert resumed["complete"] is True
     assert resumed["completed"] == resumed["passed"] == 1
     assert len(resumed["interrupted_attempts"]) == 1
+
+
+def test_projection_prompts_require_verbatim_objective_facts_and_omit_decoys():
+    from pathlib import Path
+
+    root = Path("src/swaag/assets/prompts")
+    system = (root / "tool_result_projection_system.txt").read_text()
+    user = (root / "tool_result_projection_user.txt").read_text()
+    assert "Copy relevant source wording verbatim" in system
+    assert "negative condition" in system
+    assert "causal claim" in system
+    assert "Omit irrelevant bulk and decoy labels entirely" in system
+    assert "Preserve relevant source phrases verbatim" in user
+    assert "Do not insert punctuation inside retained phrases" in user
+    assert "Omit irrelevant or decoy labels" in user
+
+
+def test_semantic_reduction_output_exhaustion_fragments_deeper(make_config, tmp_path) -> None:
+    class _OutputExhaustingProjectionClient(_ProjectionClient):
+        def send_completion(self, payload: dict[str, Any], **_kwargs) -> CompletionResult:
+            self.requests.append(payload)
+            if payload["contract"] == "tool_result_verbatim_selection":
+                text = json.dumps({"has": False, "ids": []})
+                return CompletionResult(
+                    text=text,
+                    raw_request=payload,
+                    raw_response={"content": text},
+                    prompt_tokens=None,
+                    completion_tokens=None,
+                    finish_reason="stop",
+                )
+            assert payload["contract"] == "tool_result_projection"
+            prompt = str(payload["prompt"])
+            if len(prompt.split()) > 700:
+                text = json.dumps({"projection": "incomplete projection"})
+                return CompletionResult(
+                    text=text,
+                    raw_request=payload,
+                    raw_response={"content": text},
+                    prompt_tokens=None,
+                    completion_tokens=int(payload.get("n_predict", 1)),
+                    finish_reason="length",
+                )
+            preserved = [fact for fact in REQUIRED_FACTS if fact in prompt]
+            projection = "\n".join(preserved) if preserved else "Routine noise omitted."
+            text = json.dumps({"projection": projection})
+            return CompletionResult(
+                text=text,
+                raw_request=payload,
+                raw_response={"content": text},
+                prompt_tokens=None,
+                completion_tokens=None,
+                finish_reason="stop",
+            )
+
+    runtimes: list[AgentRuntime] = []
+
+    def runtime_factory(config):
+        runtime = AgentRuntime(config, model_client=_OutputExhaustingProjectionClient())
+        runtimes.append(runtime)
+        return runtime
+
+    report = run_context_engineering_benchmark(
+        output_dir=tmp_path / "output-exhaustion-fragmentation",
+        config=make_config(
+            model__context_limit=4096,
+            context__semantic_reduction_max_input_tokens=1800,
+        ),
+        case_ids=["measured_overflow_projection"],
+        runtime_factory=runtime_factory,
+    )
+
+    assert report["complete"] is True
+    assert report["passed"] == 1
+    result = report["results"][0]
+    assert result["verification"]["checks"]["required_facts_preserved"] is True
+    events = runtimes[0].history.read_history(result["session_id"])
+    exhausted = [
+        event
+        for event in events
+        if event.event_type == "semantic_reduction_output_exhausted"
+    ]
+    assert exhausted
+    assert all(event.payload["finish_reason"] == "length" for event in exhausted)
+    assert any(event.payload["hierarchical_depth"] >= 1 for event in exhausted)
+
+
+def test_semantic_reduction_call_budget_scales_with_source_and_is_hard_capped(make_config):
+    from swaag.runtime import AgentRuntime
+
+    config = make_config(
+        model__context_limit=2048,
+        context__semantic_reduction_max_input_tokens=8192,
+        context__semantic_reduction_max_calls=256,
+    )
+    runtime = AgentRuntime(config, model_client=object())
+    state = runtime.create_or_load_session()
+    small = runtime._semantic_reduction_call_budget(
+        state, source_tokens=1000, context_limit_resolution=(2048, "test")
+    )
+    medium = runtime._semantic_reduction_call_budget(
+        state, source_tokens=18_000, context_limit_resolution=(2048, "test")
+    )
+    huge = runtime._semantic_reduction_call_budget(
+        state, source_tokens=1_000_000, context_limit_resolution=(2048, "test")
+    )
+    assert small == 16
+    assert 64 < medium <= 256
+    assert huge == 256
+
+
+def test_tiny_evidence_reduction_uses_target_aware_response_budget(make_config, monkeypatch):
+    from swaag.grammar import evidence_projection_contract
+    from swaag.runtime import AgentRuntime
+    from swaag.tokens import ExactTokenCounter
+
+    class _Client:
+        @staticmethod
+        def tokenize(text: str) -> int:
+            return len(text.split()) if text.strip() else 0
+
+        @staticmethod
+        def cache_identity():
+            return {"status": "test"}
+
+    config = make_config(
+        model__context_limit=2048,
+        runtime__completion_evaluation_enabled=False,
+    )
+    runtime = AgentRuntime(
+        config,
+        model_client=_Client(),
+        token_counter=ExactTokenCounter(_Client.tokenize),
+    )
+    state = runtime.create_or_load_session()
+    observed = {}
+
+    def fake_execute(_state, prepared, **kwargs):
+        observed["reserve"] = prepared.report.reserved_response_tokens
+        observed["minimum"] = kwargs["minimum_output_tokens"]
+        observed["desired"] = kwargs["desired_output_tokens"]
+        return ({"projection": "key fact"}, prepared)
+
+    monkeypatch.setattr(runtime, "_execute_with_output_recovery", fake_execute)
+    projection, report = runtime._reduce_text_hierarchically(
+        state,
+        source_text="small evidence with one key fact",
+        source_label="test evidence",
+        target_tokens=64,
+        contract=evidence_projection_contract(),
+        output_key="projection",
+        build_assembly=lambda text, label, target: runtime.prompts.build_evidence_projection_prompt(
+            purpose="retain the key fact",
+            source_label=label,
+            raw_evidence=text,
+            target_tokens=target,
+        ),
+        remaining_calls=[16],
+        context_limit_resolution=(2048, "test"),
+    )
+    assert projection == "key fact"
+    assert report.fits is True
+    assert observed["minimum"] == 32
+    assert observed["desired"] == 88
+    assert observed["reserve"] == 88

@@ -1,6 +1,9 @@
 from __future__ import annotations
 
 import ast
+import json
+import os
+import shutil
 import re
 import sys
 import time
@@ -8,6 +11,8 @@ from dataclasses import asdict, replace
 from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any
+from urllib.parse import urlparse
+from urllib.request import urlopen
 
 from swaag.config import AgentConfig
 from swaag.editing import EditError, TextEditor
@@ -120,6 +125,203 @@ class TimeNowTool(Tool):
             "timezone": str(now_local.tzinfo),
         }
         return ToolExecutionResult(tool_name=self.name, output=output, display_text=tool_result_display(self.name, output))
+
+
+class SystemResourcesTool(Tool):
+    name = "system_resources"
+    description = (
+        "Return deterministic current host resource facts for orchestration: memory, "
+        "swap, CPU/load, filesystem capacity, accelerator-memory model, and local model-backend "
+        "health/slot/context facts. This reports facts only; semantic "
+        "resource allocation decisions remain with the orchestrator."
+    )
+    kind = "pure"
+    output_schema = {
+        "type": "object",
+        "properties": {
+            "hostname": {"type": "string"},
+            "cpu_count": {"type": "integer", "minimum": 0},
+            "load_1m": {"type": "number"},
+            "load_5m": {"type": "number"},
+            "load_15m": {"type": "number"},
+            "memory_total_bytes": {"type": "integer", "minimum": 0},
+            "memory_available_bytes": {"type": "integer", "minimum": 0},
+            "swap_total_bytes": {"type": "integer", "minimum": 0},
+            "swap_free_bytes": {"type": "integer", "minimum": 0},
+            "disk_path": {"type": "string"},
+            "disk_total_bytes": {"type": "integer", "minimum": 0},
+            "disk_used_bytes": {"type": "integer", "minimum": 0},
+            "disk_free_bytes": {"type": "integer", "minimum": 0},
+            "accelerator_memory_kind": {"type": "string"},
+            "accelerator_memory_shared_with_system": {"type": "boolean"},
+            "model_backend_url": {"type": "string"},
+            "model_backend_local": {"type": "boolean"},
+            "model_backend_reachable": {"type": "boolean"},
+            "model_backend_health": {"type": "string"},
+            "model_context_tokens": {"type": "integer", "minimum": 0},
+            "model_slots_total": {"type": "integer", "minimum": 0},
+            "model_slots_processing": {"type": "integer", "minimum": 0},
+            "configured_model_routes": {
+                "type": "array",
+                "items": {"type": "string"},
+            },
+        },
+        "required": [
+            "hostname",
+            "cpu_count",
+            "load_1m",
+            "load_5m",
+            "load_15m",
+            "memory_total_bytes",
+            "memory_available_bytes",
+            "swap_total_bytes",
+            "swap_free_bytes",
+            "disk_path",
+            "disk_total_bytes",
+            "disk_used_bytes",
+            "disk_free_bytes",
+            "accelerator_memory_kind",
+            "accelerator_memory_shared_with_system",
+            "model_backend_url",
+            "model_backend_local",
+            "model_backend_reachable",
+            "model_backend_health",
+            "model_context_tokens",
+            "model_slots_total",
+            "model_slots_processing",
+            "configured_model_routes",
+        ],
+        "additionalProperties": False,
+    }
+    input_schema = _closed_input({"path": _string_or_null()})
+
+    def validate(self, raw_input: dict[str, Any]) -> dict[str, Any]:
+        path = raw_input.get("path")
+        if path is not None and not isinstance(path, str):
+            raise ToolValidationError("system_resources.path must be a string or null")
+        return {"path": path.strip() if isinstance(path, str) and path.strip() else None}
+
+    @staticmethod
+    def _memory() -> dict[str, int]:
+        values: dict[str, int] = {}
+        try:
+            for line in Path("/proc/meminfo").read_text(encoding="utf-8").splitlines():
+                name, _, raw = line.partition(":")
+                parts = raw.strip().split()
+                if not parts:
+                    continue
+                value = int(parts[0])
+                if len(parts) > 1 and parts[1].lower() == "kb":
+                    value *= 1024
+                values[name] = value
+        except (OSError, ValueError):
+            pass
+        return {
+            "memory_total_bytes": max(0, int(values.get("MemTotal", 0))),
+            "memory_available_bytes": max(
+                0, int(values.get("MemAvailable", values.get("MemFree", 0)))
+            ),
+            "swap_total_bytes": max(0, int(values.get("SwapTotal", 0))),
+            "swap_free_bytes": max(0, int(values.get("SwapFree", 0))),
+        }
+
+    @staticmethod
+    def _accelerator_memory() -> tuple[str, bool]:
+        if Path("/etc/nv_tegra_release").exists():
+            return "unified_system_memory", True
+        if shutil.which("nvidia-smi"):
+            return "driver_managed", False
+        return "unknown", False
+
+    @staticmethod
+    def _safe_backend_label(base_url: str) -> tuple[str, bool, str]:
+        parsed = urlparse(str(base_url))
+        host = (parsed.hostname or "").casefold()
+        local = host in {"localhost", "127.0.0.1", "::1"}
+        if not parsed.scheme or not parsed.netloc:
+            return str(base_url), False, ""
+        port = f":{parsed.port}" if parsed.port is not None else ""
+        display_host = f"[{parsed.hostname}]" if ":" in (parsed.hostname or "") else (parsed.hostname or "")
+        return f"{parsed.scheme}://{display_host}{port}", local, f"{parsed.scheme}://{parsed.netloc}"
+
+    @staticmethod
+    def _local_backend_facts(base_url: str) -> dict[str, Any]:
+        label, local, origin = SystemResourcesTool._safe_backend_label(base_url)
+        facts: dict[str, Any] = {
+            "model_backend_url": label,
+            "model_backend_local": local,
+            "model_backend_reachable": False,
+            "model_backend_health": "not_probed_remote" if not local else "unreachable",
+            "model_context_tokens": 0,
+            "model_slots_total": 0,
+            "model_slots_processing": 0,
+        }
+        if not local or not origin:
+            return facts
+        try:
+            with urlopen(origin + "/health", timeout=0.75) as response:
+                payload = json.loads(response.read().decode("utf-8"))
+            facts["model_backend_reachable"] = True
+            facts["model_backend_health"] = str(payload.get("status", "reachable"))
+        except Exception:
+            return facts
+        try:
+            with urlopen(origin + "/props", timeout=0.75) as response:
+                props = json.loads(response.read().decode("utf-8"))
+            facts["model_context_tokens"] = max(0, int(props.get("n_ctx") or 0))
+            facts["model_slots_total"] = max(0, int(props.get("total_slots") or 0))
+        except Exception:
+            pass
+        try:
+            with urlopen(origin + "/slots", timeout=0.75) as response:
+                slots = json.loads(response.read().decode("utf-8"))
+            if isinstance(slots, list):
+                if facts["model_slots_total"] <= 0:
+                    facts["model_slots_total"] = len(slots)
+                facts["model_slots_processing"] = sum(
+                    bool(item.get("is_processing"))
+                    for item in slots
+                    if isinstance(item, dict)
+                )
+        except Exception:
+            pass
+        return facts
+
+    def execute(
+        self, validated_input: dict[str, Any], context: ToolContext
+    ) -> ToolExecutionResult:
+        requested = validated_input["path"]
+        disk_path = Path(requested).expanduser() if requested else Path("/data")
+        if not disk_path.exists():
+            raise FileNotFoundError(f"system_resources path does not exist: {disk_path}")
+        usage = shutil.disk_usage(disk_path)
+        try:
+            load_1m, load_5m, load_15m = os.getloadavg()
+        except (AttributeError, OSError):
+            load_1m = load_5m = load_15m = 0.0
+        accelerator_kind, accelerator_shared = self._accelerator_memory()
+        backend_facts = self._local_backend_facts(context.config.model.base_url)
+        output = {
+            "hostname": os.uname().nodename if hasattr(os, "uname") else "",
+            "cpu_count": int(os.cpu_count() or 0),
+            "load_1m": float(load_1m),
+            "load_5m": float(load_5m),
+            "load_15m": float(load_15m),
+            **self._memory(),
+            "disk_path": str(disk_path.resolve()),
+            "disk_total_bytes": int(usage.total),
+            "disk_used_bytes": int(usage.used),
+            "disk_free_bytes": int(usage.free),
+            "accelerator_memory_kind": accelerator_kind,
+            "accelerator_memory_shared_with_system": accelerator_shared,
+            **backend_facts,
+            "configured_model_routes": sorted(context.config.communication.model_routes),
+        }
+        return ToolExecutionResult(
+            tool_name=self.name,
+            output=output,
+            display_text=tool_result_display(self.name, output),
+        )
 
 
 class CalculatorTool(Tool):
@@ -662,6 +864,7 @@ class EditTextTool(Tool):
     name = "edit_text"
     description = "Preview or apply a bounded text edit to a local UTF-8 text file."
     usage_guidance = (
+        "Before adding new project structure, inspect the repository layout and relevant project instructions; edits should follow the existing source-of-truth location rather than creating a competing copy. Scratch experiments belong in agent_workspace. "
         "Return one concrete edit with path, operation, dry_run, and null for inapplicable nullable fields. "
         "dry_run=false applies the edit; do not add write_file just to persist it. "
         "Prefer replace_exact when you have observed the exact current text to replace: set old_text to the current literal text and new_text to the desired replacement; it requires exactly one match and fails closed on zero or multiple matches. "
@@ -1049,6 +1252,7 @@ class WriteFileTool(Tool):
     name = "write_file"
     description = "Write full UTF-8 file contents through the persistent environment."
     usage_guidance = (
+        "Before creating a new official project file or directory, inspect the repository layout and relevant project instructions/README/config conventions; do not invent a parallel folder structure when an established location exists. Scratch experiments and internal notes belong in agent_workspace instead. "
         "Return path, complete final file content, and create as a boolean. "
         "Use this only when replacing or creating the whole file is the intended action with concrete content. "
         "Do not pass artifact placeholders; use observed file text or choose a narrower edit tool when appropriate. "
@@ -1236,6 +1440,7 @@ class ShellCommandTool(Tool):
     name = "shell_command"
     description = "Run a shell command in the persistent session workspace. Use run_tests when structured pass/fail verification evidence is useful, but ordinary test commands remain valid shell commands."
     usage_guidance = (
+        "For nontrivial algorithm/search/optimization work, first define the objective/error and constraints; establish a simple correct reference when feasible; compare plausible candidates on representative and adversarial inputs; and measure solution quality, runtime, memory, convergence/failure behavior, and parameter/initialization sensitivity before choosing or optimizing an implementation. "
         "Return one non-interactive shell command directly executable in the current workspace. "
         "Prefer run_tests for test-suite verification when its structured passed/exit_code/stdout/stderr result is useful; shell_command remains a general execution primitive and may run the same commands when appropriate. "
         "Do not return only an interpreter name. Set background to true only for work that should continue after the call returns."
@@ -1303,6 +1508,7 @@ class RunTestsTool(Tool):
     )
     description = "Run a test command inside the persistent workspace and capture structured results."
     usage_guidance = (
+        "For nontrivial algorithm/search/optimization work, first define the objective/error and constraints; establish a simple correct reference when feasible; compare plausible candidates on representative and adversarial inputs; and measure solution quality, runtime, memory, convergence/failure behavior, and parameter/initialization sensitivity before choosing or optimizing an implementation. "
         "Use an argv array and boolean background. For required checks, require tool_result_success. For diagnostics where failure is acceptable, inspect passed, exit_code, stdout, and stderr before deciding the next action."
     )
     kind = "stateful"
@@ -1599,6 +1805,7 @@ class CancelWakeupTool(Tool):
 BUILTIN_TOOLS = [
     EchoTool(),
     TimeNowTool(),
+    SystemResourcesTool(),
     CalculatorTool(),
     ListFilesTool(),
     ReadFileTool(),

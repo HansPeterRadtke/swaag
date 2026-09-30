@@ -13,6 +13,7 @@ ModelCallKind = Literal[
     "action_tool_call",
     "action_capability_selection",
     "action_terminal_response",
+    "exact_word_count_repair",
     "summary",
     "history_compaction_selection",
     "tool_result_projection",

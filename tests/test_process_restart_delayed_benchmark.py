@@ -47,7 +47,7 @@ class _CompactionClient:
 
     def send_completion(self, payload: dict[str, Any], **_kwargs) -> CompletionResult:
         if payload["contract"] == "history_compaction_selection":
-            text = json.dumps({"criticality": "compressible", "reason": "routine window"})
+            text = json.dumps({"criticality": "compressible", "reason_code": "redundant_progress", "projection": ""})
         elif payload["contract"] == "summary_refinement":
             text = json.dumps({"summary": "Routine progress compressed."})
         else:

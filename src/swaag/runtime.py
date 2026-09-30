@@ -46,7 +46,12 @@ from swaag.grammar import (
     completion_evaluation_contract,
     completion_verdict_contract,
     evidence_projection_contract,
+    exact_word_sequence_contract,
+    history_best_anchor_contract,
     history_compaction_selection_contract,
+    history_verbatim_selection_contract,
+    tool_result_best_anchor_contract,
+    tool_result_verbatim_selection_contract,
     presentation_evaluation_contract,
     response_relevance_contract,
     summary_contract,
@@ -330,9 +335,15 @@ class AgentRuntime:
         priority: int,
         *,
         source: str,
+        weight: float = 1.0,
     ) -> Iterator[None]:
+        resolved_weight = float(weight)
+        if resolved_weight <= 0:
+            raise ValueError("inference scheduling weight must be positive")
         previous = getattr(self._inference_context, "value", None)
-        self._inference_context.value = (int(priority), str(source))
+        self._inference_context.value = (
+            int(priority), str(source), resolved_weight
+        )
         try:
             yield
         finally:
@@ -344,11 +355,13 @@ class AgentRuntime:
             else:
                 self._inference_context.value = previous
 
-    def _current_inference_priority(self) -> tuple[int, str]:
+    def _current_inference_priority(self) -> tuple[int, str, float]:
         value = getattr(self._inference_context, "value", None)
+        if isinstance(value, tuple) and len(value) == 3:
+            return int(value[0]), str(value[1]), float(value[2])
         if isinstance(value, tuple) and len(value) == 2:
-            return int(value[0]), str(value[1])
-        return 0, "worker"
+            return int(value[0]), str(value[1]), 1.0
+        return 0, "worker", 1.0
 
     def bind_tool_runtime_capability(
         self,
@@ -702,6 +715,7 @@ class AgentRuntime:
         active_id: str,
         operation_kind: str = "",
         interval_seconds: float = 5.0,
+        on_pulse: Callable[[], None] | None = None,
     ) -> Iterator[None]:
         """Keep mechanical liveness current during a blocking runtime operation."""
         stop = threading.Event()
@@ -717,6 +731,13 @@ class AgentRuntime:
                     active_id=active_id,
                     operation_kind=operation_kind,
                 )
+                if on_pulse is not None:
+                    try:
+                        on_pulse()
+                    except Exception:
+                        # Liveness refresh is best effort; the model call remains the
+                        # authoritative operation and ordinary error handling still applies.
+                        pass
 
         thread = threading.Thread(
             target=pulse,
@@ -937,6 +958,11 @@ class AgentRuntime:
                 budget_reports.append(prepared.report)
 
                 def validate(payload: dict[str, Any]) -> AgentAction:
+                    payload = self._repair_declared_response_constraints(
+                        state,
+                        original_request=original_request,
+                        payload=payload,
+                    )
                     action = action_from_payload(payload, enabled_tool_names=tool_names)
                     if action.silent_completion and not allow_silent_completion:
                         raise ActionValidationError(
@@ -1717,6 +1743,114 @@ class AgentRuntime:
             state, prepared, validator=validate, seed_offset=seed_offset
         )
 
+    def _repair_exact_word_count(
+        self,
+        state: SessionState,
+        *,
+        original_request: str,
+        draft: str,
+        target_word_count: int,
+    ) -> str:
+        target = int(target_word_count)
+        source_words = draft.split()
+        if target <= 0:
+            raise ActionValidationError("exact word count must be positive")
+        if len(source_words) == target:
+            return draft
+        # A dynamic object with one required string field per word gives the
+        # deterministic layer a mechanically countable shape. The context compiler
+        # remains authoritative for rejecting requests whose schema/output cannot fit.
+        contract = exact_word_sequence_contract(target)
+        width = max(3, len(str(target)))
+        expected_keys = [f"word_{index:0{width}d}" for index in range(1, target + 1)]
+        assembly = self.prompts.build_semantic_operation_prompt(
+            kind="exact_word_count_repair",
+            system_instruction=(
+                f"Rewrite the draft into exactly {target} whitespace-delimited words while preserving its meaning, facts, caveats, numbers, and requested style. "
+                "Return one required JSON field per output word. Every field value must contain exactly one non-empty word and no whitespace. Do not add unsupported facts."
+            ),
+            components=[
+                PromptComponent(
+                    name="exact_word_count_original_request",
+                    category="current_user",
+                    text="Original request, authoritative:\n" + original_request,
+                ),
+                PromptComponent(
+                    name="exact_word_count_draft",
+                    category="turn_context",
+                    text="Draft to repair:\n" + draft,
+                ),
+            ],
+        )
+
+        def validate_words(payload: dict[str, Any]) -> dict[str, Any]:
+            if set(payload) != set(expected_keys):
+                raise ValueError("exact word repair returned the wrong field set")
+            words: list[str] = []
+            for key in expected_keys:
+                value = payload.get(key)
+                if not isinstance(value, str):
+                    raise ValueError(f"{key} must be a string")
+                word = value.strip()
+                if not word or len(word.split()) != 1 or word != value:
+                    raise ValueError(f"{key} must contain exactly one whitespace-free word")
+                words.append(word)
+            text = " ".join(words)
+            if len(text.split()) != target:
+                raise ValueError("exact word repair did not produce the target count")
+            return {"text": text}
+
+        payload = self._execute_compiled_presentation_call(
+            state,
+            assembly,
+            contract,
+            validator=validate_words,
+        )
+        repaired = str(payload["text"])
+        self.history.record_event(
+            state,
+            "response_constraint_repaired",
+            {
+                "constraint": "exact_word_count",
+                "target_word_count": target,
+                "source_word_count": len(source_words),
+                "source_sha256": sha256_text(draft),
+                "repaired_sha256": sha256_text(repaired),
+                "contract": contract.name,
+            },
+        )
+        return repaired
+
+    def _repair_declared_response_constraints(
+        self,
+        state: SessionState,
+        *,
+        original_request: str,
+        payload: dict[str, Any],
+    ) -> dict[str, Any]:
+        constraints = payload.get("response_constraints")
+        if not isinstance(constraints, dict):
+            return payload
+        exact = constraints.get("exact_word_count")
+        message = payload.get("assistant_message")
+        if (
+            isinstance(exact, int)
+            and not isinstance(exact, bool)
+            and exact > 0
+            and isinstance(message, str)
+            and message.strip()
+            and len(message.split()) != exact
+        ):
+            repaired = self._repair_exact_word_count(
+                state,
+                original_request=original_request,
+                draft=message,
+                target_word_count=exact,
+            )
+            payload = copy.deepcopy(payload)
+            payload["assistant_message"] = repaired
+        return payload
+
     def _single_responsibility_terminal_action(
         self,
         state: SessionState,
@@ -1746,8 +1880,16 @@ class AgentRuntime:
         )
 
         def validate(payload: dict[str, Any]) -> AgentAction:
+            payload = self._repair_declared_response_constraints(
+                state,
+                original_request=original_request,
+                payload=payload,
+            )
             message = payload.get("assistant_message")
             silent = payload.get("silent_completion", False)
+            response_constraints = payload.get(
+                "response_constraints", {"exact_word_count": None}
+            )
             if not isinstance(message, str) or not isinstance(silent, bool):
                 raise ActionValidationError("terminal response fields have invalid types")
             if silent and not allow_silent_completion:
@@ -1767,6 +1909,7 @@ class AgentRuntime:
                         "importance": "normal",
                     },
                     "questions": [],
+                    "response_constraints": response_constraints,
                 },
                 enabled_tool_names=[],
             )
@@ -1802,6 +1945,7 @@ class AgentRuntime:
             authoritative_messages if has_derived_history else projected_messages
         )
         history_source = "authoritative_message_events"
+        prompt_mode = "standard"
         # System-owned context contributors begin at full fidelity. Semantic
         # contributor reduction is attempted only after measured overflow.
         system_context_state: dict[str, object] = {}
@@ -1815,13 +1959,15 @@ class AgentRuntime:
         def build_action_assembly(
             messages: list[Message],
             components: list[PromptComponent],
+            *,
+            mode: str,
         ) -> PromptAssembly:
             return self.prompts.build_agent_action_prompt(
                 messages,
                 tool_specs,
                 original_request=original_request,
                 pending_user_messages=pending_messages,
-                prompt_mode="standard",
+                prompt_mode=mode,
                 context_components=components,
                 capability_index=capability_index,
                 tool_result_projections=tool_result_projections,
@@ -1833,6 +1979,7 @@ class AgentRuntime:
             *,
             history_source: str,
             candidate_only: bool,
+            mode: str,
         ) -> None:
             report = compilation.report
             self.history.record_event(
@@ -1840,7 +1987,7 @@ class AgentRuntime:
                 "context_compiled",
                 {
                     "kind": "action",
-                    "prompt_mode": "standard",
+                    "prompt_mode": mode,
                     "accounting": compilation.accounting(),
                     "cap_error": "" if report.fits else "context_limit_exceeded",
                     "history_source": history_source,
@@ -1854,7 +2001,7 @@ class AgentRuntime:
                 "budget_checked",
                 {
                     "kind": "action",
-                    "prompt_mode": "standard",
+                    "prompt_mode": mode,
                     "budget_report": asdict(report),
                     "cap_error": "" if report.fits else "context_limit_exceeded",
                     "history_source": history_source,
@@ -1870,7 +2017,9 @@ class AgentRuntime:
                 projections=runtime_context_projections,
                 context_state=system_context_state,
             )
-            assembly = build_action_assembly(history_messages, context_components)
+            assembly = build_action_assembly(
+                history_messages, context_components, mode=prompt_mode
+            )
             compilation = self._compile_context(
                 state,
                 assembly,
@@ -1883,15 +2032,57 @@ class AgentRuntime:
                 compilation,
                 history_source=history_source,
                 candidate_only=not report.fits,
+                mode=prompt_mode,
             )
             if report.fits:
                 self._record_prompt_built(state, assembly, contract, report)
                 return PreparedCall(
                     assembly=assembly,
                     report=report,
-                    prompt_mode="standard",
+                    prompt_mode=prompt_mode,
                     contract=contract,
                 )
+            if prompt_mode == "standard":
+                lean_assembly = build_action_assembly(
+                    history_messages, context_components, mode="lean"
+                )
+                lean_compilation = self._compile_context(
+                    state,
+                    lean_assembly,
+                    contract,
+                    minimum_output_tokens=effective_minimum,
+                )
+                lean_report = lean_compilation.report
+                record_action_compilation(
+                    lean_compilation,
+                    history_source=history_source,
+                    candidate_only=not lean_report.fits,
+                    mode="lean",
+                )
+                self.history.record_event(
+                    state,
+                    "action_prompt_mode_fallback",
+                    {
+                        "from_prompt_mode": "standard",
+                        "to_prompt_mode": "lean",
+                        "reason": "measured_context_overflow",
+                        "standard_budget_report": asdict(report),
+                        "lean_budget_report": asdict(lean_report),
+                    },
+                )
+                prompt_mode = "lean"
+                assembly = lean_assembly
+                compilation = lean_compilation
+                report = lean_report
+                last_report = lean_report
+                if report.fits:
+                    self._record_prompt_built(state, assembly, contract, report)
+                    return PreparedCall(
+                        assembly=assembly,
+                        report=report,
+                        prompt_mode=prompt_mode,
+                        contract=contract,
+                    )
             if not self.config.context.compact_on_overflow or compaction_round >= max_rounds:
                 break
             if reduce_system_context_for_overflow(
@@ -1958,7 +2149,7 @@ class AgentRuntime:
                 "context_compiled",
                 {
                     "kind": "action",
-                    "prompt_mode": "standard",
+                    "prompt_mode": prompt_mode,
                     "accounting": recovered.accounting(),
                     "cap_error": "",
                     "prompt_instruction_projection": True,
@@ -1973,7 +2164,7 @@ class AgentRuntime:
                 "budget_checked",
                 {
                     "kind": "action",
-                    "prompt_mode": "standard",
+                    "prompt_mode": prompt_mode,
                     "budget_report": asdict(recovered.report),
                     "cap_error": "",
                     "prompt_instruction_projection": True,
@@ -1990,7 +2181,7 @@ class AgentRuntime:
             return PreparedCall(
                 assembly=assembly,
                 report=recovered.report,
-                prompt_mode="standard",
+                prompt_mode=prompt_mode,
                 contract=contract,
             )
 
@@ -2062,10 +2253,14 @@ class AgentRuntime:
         historical_evidence_projection = ""
         historical_projection_target_tokens: int | None = None
         historical_projection_budget_report: dict[str, Any] | None = None
-        remaining_historical_projection_calls = [
-            max(16, int(self.config.context.max_compaction_rounds) * 16)
-        ]
         context_limit_resolution = self._resolve_context_limit(state)
+        remaining_historical_projection_calls = [
+            self._semantic_reduction_call_budget(
+                state,
+                source_tokens=max(1, historical_evidence_tokens),
+                context_limit_resolution=context_limit_resolution,
+            )
+        ]
         projections: dict[int, str] = {}
         reexpanded_evidence: dict[str, dict[str, Any]] = {}
         reexpanded_evidence_projections: dict[str, str] = {}
@@ -2244,6 +2439,8 @@ class AgentRuntime:
                                 state,
                                 source=source,
                                 purpose=str(request.get("purpose", "")).strip(),
+                                request=request,
+                                context_limit_resolution=context_limit_resolution,
                             )
                             reexpanded_evidence[source_key] = expanded
                             self.history.record_event(
@@ -2263,8 +2460,49 @@ class AgentRuntime:
                                     ),
                                 },
                             )
+                            if expanded.get("literal_search_excerpt"):
+                                self.history.record_event(
+                                    state,
+                                    "completion_evidence_searched",
+                                    {
+                                        "source_kind": str(expanded.get("source_kind", "")),
+                                        "source_id": str(expanded.get("source_id", "")),
+                                        "source_sha256": str(expanded.get("sha256", "")),
+                                        "source_event_references": expanded.get(
+                                            "source_event_references", []
+                                        ),
+                                        "queries": expanded.get("literal_search_queries", []),
+                                        "matched_queries": expanded.get(
+                                            "literal_search_matched_queries", []
+                                        ),
+                                        "match_ranges": expanded.get(
+                                            "literal_search_ranges", []
+                                        ),
+                                        "excerpt_tokens": int(
+                                            expanded.get("literal_search_excerpt_tokens", 0)
+                                        ),
+                                        "source_chars": int(
+                                            expanded.get("literal_search_source_chars", 0)
+                                        ),
+                                    },
+                                )
                         continue
+                    specialist_rows = [
+                        row
+                        for row in reexpanded_evidence.values()
+                        if row.get("requires_specialist_analysis") is True
+                    ]
                     complete = bool(payload.get("complete", False))
+                    specialist_remaining = [
+                        (
+                            "Analyze the exact non-text attachment evidence with an appropriate "
+                            "specialist capability, then retain derived evidence with provenance "
+                            f"to {row.get('source_kind')}:{row.get('source_id')} before completion."
+                        )
+                        for row in specialist_rows
+                    ]
+                    if specialist_rows:
+                        complete = False
                     result = {
                         "complete": complete,
                         "reason": (
@@ -2275,7 +2513,9 @@ class AgentRuntime:
                             else str(payload.get("reason", "")).strip()
                         ),
                         "remaining_work": (
-                            []
+                            specialist_remaining
+                            if specialist_rows
+                            else []
                             if single_verdict
                             else [
                                 str(item)
@@ -2303,6 +2543,7 @@ class AgentRuntime:
                             historical_projection_budget_report
                         ),
                         "projected_source_event_sequences": sorted(projections),
+                        "specialist_evidence_required": bool(specialist_rows),
                         "reexpanded_evidence_sources": [
                             {
                                 key: value
@@ -2311,7 +2552,10 @@ class AgentRuntime:
                             }
                             | {
                                 "projected": source_key
-                                in reexpanded_evidence_projections
+                                in reexpanded_evidence_projections,
+                                "exact_search_excerpted": bool(
+                                    row.get("literal_search_excerpt")
+                                ),
                             }
                             for source_key, row in reexpanded_evidence.items()
                         ],
@@ -2493,7 +2737,45 @@ class AgentRuntime:
         }
 
     @staticmethod
+    def _communication_compact_exact_value(value: Any) -> Any:
+        """Bound exact operational payload size without making semantic choices.
+
+        Large values remain durably recoverable through their owning history event;
+        the communication prompt carries only deterministic type/size/hash evidence.
+        """
+        jsonable = to_jsonable(value)
+        if isinstance(jsonable, str):
+            if len(jsonable) <= 1024:
+                return jsonable
+            return {
+                "exact_value_reference": {
+                    "kind": "string",
+                    "chars": len(jsonable),
+                    "sha256": sha256_text(jsonable),
+                }
+            }
+        if isinstance(jsonable, list):
+            encoded = stable_json_dumps(jsonable, indent=None)
+            if len(jsonable) > 16 or len(encoded) > 4096:
+                return {
+                    "exact_value_reference": {
+                        "kind": "array",
+                        "items": len(jsonable),
+                        "chars": len(encoded),
+                        "sha256": sha256_text(encoded),
+                    }
+                }
+            return [AgentRuntime._communication_compact_exact_value(item) for item in jsonable]
+        if isinstance(jsonable, dict):
+            return {
+                str(key): AgentRuntime._communication_compact_exact_value(item)
+                for key, item in jsonable.items()
+            }
+        return jsonable
+
+    @staticmethod
     def _communication_evidence_row(event: HistoryEvent) -> dict[str, Any]:
+        """Exact durable event row used by semantic evidence paths."""
         return {
             "session_id": event.session_id,
             "sequence": event.sequence,
@@ -2503,6 +2785,147 @@ class AgentRuntime:
             "payload": to_jsonable(event.payload),
             "metadata": to_jsonable(event.metadata),
         }
+
+    @staticmethod
+    def _communication_status_semantic_event_type(event_type: str) -> bool:
+        return str(event_type) in {
+            "message_added",
+            "agent_action_selected",
+            "agent_status",
+            "tool_result",
+            "tool_failed",
+            "error",
+            "model_call_preempted",
+            "model_call_replayed",
+            "model_call_replay_invalidated",
+            "completion_evaluated",
+            "completion_evaluation",
+            "worker_status_changed",
+            "worker_message_added",
+            "worker_notification",
+            "communication_status_generated",
+            "communication_status_unavailable",
+            "input_required",
+            "control_message_enqueued",
+            "control_message_processed",
+            "orchestration_notification",
+            "orchestration_event",
+        }
+
+    @staticmethod
+    def _communication_status_payload_view(event: HistoryEvent) -> dict[str, Any]:
+        """Deterministic status view keyed only by event schema/type.
+
+        Semantic-bearing event types retain mechanically bounded payloads. Runtime
+        lifecycle/accounting events carry only exact payload size/hash references;
+        full append-only history remains authoritative and recoverable by event
+        sequence/hash. This is schema selection, not a semantic relevance guess.
+        """
+        payload = to_jsonable(event.payload)
+        encoded = stable_json_dumps(payload, indent=None)
+        exact_ref = {
+            "chars": len(encoded),
+            "sha256": sha256_text(encoded),
+        }
+        if not AgentRuntime._communication_status_semantic_event_type(event.event_type):
+            compact: dict[str, Any] = {
+                "exact_payload_reference": exact_ref,
+                "payload_view": "reference_only_operational_event",
+            }
+            if isinstance(payload, dict):
+                for key in (
+                    "kind",
+                    "call_id",
+                    "request_id",
+                    "request_sha256",
+                    "status",
+                    "source",
+                    "priority",
+                    "phase",
+                    "substate",
+                ):
+                    value = payload.get(key)
+                    if isinstance(value, (str, int, float, bool)):
+                        compact[key] = value
+            return compact
+        compact_payload = AgentRuntime._communication_compact_exact_value(payload)
+        if isinstance(compact_payload, dict):
+            compact_payload = dict(compact_payload)
+            compact_payload["exact_payload_reference"] = exact_ref
+        return compact_payload
+
+    @staticmethod
+    def _communication_status_evidence_row(event: HistoryEvent) -> dict[str, Any]:
+        """Mechanically bounded status-only view; exact history remains authoritative."""
+        return {
+            "session_id": event.session_id,
+            "sequence": event.sequence,
+            "hash": event.hash,
+            "event_type": event.event_type,
+            "timestamp": event.timestamp,
+            "payload": AgentRuntime._communication_status_payload_view(event),
+            "metadata": AgentRuntime._communication_compact_exact_value(event.metadata),
+        }
+
+    @staticmethod
+    def _communication_evidence_rows(
+        events: list[HistoryEvent],
+    ) -> list[dict[str, Any]]:
+        """Create a compact, reversible status view of durable worker evidence.
+
+        Semantic-bearing event schemas remain individual. All runtime/accounting
+        schemas are grouped mechanically by event type into one index row containing
+        counts, sequence ranges, latest hashes, and a checksum over the exact
+        sequence/hash inventory. The full append-only history remains authoritative.
+        """
+        semantic_rows: list[dict[str, Any]] = []
+        groups: dict[str, list[HistoryEvent]] = {}
+        for event in events:
+            if AgentRuntime._communication_status_semantic_event_type(event.event_type):
+                semantic_rows.append(AgentRuntime._communication_status_evidence_row(event))
+            else:
+                groups.setdefault(event.event_type, []).append(event)
+        if not groups:
+            return sorted(semantic_rows, key=lambda row: int(row["sequence"]))
+        latest = max(
+            (item for items in groups.values() for item in items),
+            key=lambda item: item.sequence,
+        )
+        all_operational = sorted(
+            (item for items in groups.values() for item in items),
+            key=lambda item: item.sequence,
+        )
+        identity = [
+            {"sequence": item.sequence, "hash": item.hash}
+            for item in all_operational
+        ]
+        identity_json = stable_json_dumps(identity, indent=None)
+        counts_by_type = {
+            event_type: len(items)
+            for event_type, items in sorted(groups.items())
+        }
+        mechanical_row = {
+            "session_id": latest.session_id,
+            "sequence": latest.sequence,
+            "hash": latest.hash,
+            "event_type": "mechanical_event_index",
+            "timestamp": latest.timestamp,
+            "payload": {
+                "total_count": len(all_operational),
+                "first_sequence": all_operational[0].sequence,
+                "last_sequence": all_operational[-1].sequence,
+                "counts_by_event_type": counts_by_type,
+                "sequence_hash_index_sha256": sha256_text(identity_json),
+                "exact_history_recovery": {
+                    "session_id": latest.session_id,
+                    "source": "append_only_history",
+                    "sequence_start": all_operational[0].sequence,
+                    "sequence_end": all_operational[-1].sequence,
+                },
+            },
+            "metadata": {"grouped_mechanical_events": True},
+        }
+        return sorted([*semantic_rows, mechanical_row], key=lambda row: int(row["sequence"]))
 
     @staticmethod
     def _communication_evidence_reference(event: HistoryEvent) -> dict[str, Any]:
@@ -2662,9 +3085,7 @@ class AgentRuntime:
         source_events: list[HistoryEvent],
     ) -> dict[str, Any]:
         contract = communication_status_contract()
-        evidence_rows = [
-            self._communication_evidence_row(event) for event in source_events
-        ]
+        evidence_rows = self._communication_evidence_rows(source_events)
         prompt_mechanical_status, runtime_semantic_evidence = (
             self._communication_status_prompt_state(mechanical_status)
         )
@@ -2687,7 +3108,9 @@ class AgentRuntime:
         # starve reasoning-capable backends before they emit the JSON object;
         # the desired reserve still yields to full-fidelity input in the
         # context compiler.
-        desired_output_tokens = None
+        desired_output_tokens = int(
+            self.config.communication.status_max_output_tokens
+        )
         evidence_projection = ""
         evidence_projected = False
         projection_target_tokens: int | None = None
@@ -3676,12 +4099,79 @@ class AgentRuntime:
             key=lambda item: (str(item["source_kind"]), str(item["source_id"])),
         )
 
+    @staticmethod
+    def _completion_evidence_literal_queries(request: dict[str, Any]) -> tuple[str, ...]:
+        value = str(request.get("literal_query", "")).strip()
+        if (
+            not value
+            or len(value) > 256
+            or value.casefold() in {"literal_query", "query", "search_query"}
+        ):
+            return ()
+        return (value,)
+
+    def _completion_evidence_literal_search_view(
+        self,
+        state: SessionState,
+        *,
+        text: str,
+        queries: tuple[str, ...],
+        context_limit_resolution: tuple[int, str] | None = None,
+    ) -> dict[str, Any] | None:
+        if not text or not queries:
+            return None
+        if context_limit_resolution is None:
+            context_limit_resolution = self._resolve_context_limit(state)
+        context_limit = max(1, int(context_limit_resolution[0]))
+        max_excerpt_tokens = max(96, min(512, context_limit // 4))
+        matches: list[tuple[int, int, str]] = []
+        for query in queries:
+            start = 0
+            per_query = 0
+            while per_query < 4:
+                index = text.find(query, start)
+                if index < 0:
+                    break
+                matches.append((index, index + len(query), query))
+                start = index + max(1, len(query))
+                per_query += 1
+        if not matches:
+            return None
+        matches.sort(key=lambda item: (item[0], item[1], item[2]))
+        for radius in (512, 256, 128, 64, 32, 0):
+            ranges: list[tuple[int, int]] = []
+            for start, end, _query in matches:
+                candidate = (max(0, start - radius), min(len(text), end + radius))
+                if ranges and candidate[0] <= ranges[-1][1]:
+                    ranges[-1] = (ranges[-1][0], max(ranges[-1][1], candidate[1]))
+                else:
+                    ranges.append(candidate)
+            excerpt = "\n\n".join(
+                f"[EXACT SOURCE CHARS {start}:{end}]\n{text[start:end]}"
+                for start, end in ranges
+            )
+            tokens = self._counter(state).count_text(excerpt).tokens
+            if excerpt and tokens <= max_excerpt_tokens:
+                return {
+                    "literal_search_queries": list(queries),
+                    "literal_search_matched_queries": sorted({q for _s, _e, q in matches}),
+                    "literal_search_ranges": [
+                        {"start_char": start, "end_char": end} for start, end in ranges
+                    ],
+                    "literal_search_excerpt": excerpt,
+                    "literal_search_excerpt_tokens": tokens,
+                    "literal_search_source_chars": len(text),
+                }
+        return None
+
     def _reexpand_completion_evidence_source(
         self,
         state: SessionState,
         *,
         source: dict[str, Any],
         purpose: str,
+        request: dict[str, Any] | None = None,
+        context_limit_resolution: tuple[int, str] | None = None,
     ) -> dict[str, Any]:
         source_kind = str(source["source_kind"])
         provider = next(
@@ -3696,6 +4186,16 @@ class AgentRuntime:
             raise ValueError(f"Unsupported completion evidence source: {source_kind}")
         row = provider.reexpand(config=self.config, state=state, source=source)
         row["requested_purpose"] = purpose
+        text = str(row.get("text", ""))
+        if text:
+            view = self._completion_evidence_literal_search_view(
+                state,
+                text=text,
+                queries=self._completion_evidence_literal_queries(request or {}),
+                context_limit_resolution=context_limit_resolution,
+            )
+            if view is not None:
+                row.update(view)
         return row
 
     def _project_completion_evidence_source_for_overflow(
@@ -3741,7 +4241,13 @@ class AgentRuntime:
                 )
             ),
             remaining_calls=[
-                max(16, int(self.config.context.max_compaction_rounds) * 16)
+                self._semantic_reduction_call_budget(
+                    state,
+                    source_tokens=max(
+                        1, self._counter(state).count_text(raw_text).tokens
+                    ),
+                    context_limit_resolution=context_limit_resolution,
+                )
             ],
             context_limit_resolution=context_limit_resolution,
         )
@@ -3877,6 +4383,36 @@ class AgentRuntime:
                 return event.sequence, projection, projected_tokens
         return None
 
+    def _semantic_reduction_call_budget(
+        self,
+        state: SessionState,
+        *,
+        source_tokens: int,
+        context_limit_resolution: tuple[int, str] | None = None,
+    ) -> int:
+        if context_limit_resolution is None:
+            context_limit_resolution = self._resolve_context_limit(state)
+        context_limit = max(1, int(context_limit_resolution[0]))
+        working_set = context_limit
+        configured_input_cap = max(
+            0, int(self.config.context.semantic_reduction_max_input_tokens)
+        )
+        if configured_input_cap > 0:
+            working_set = min(working_set, configured_input_cap)
+        # Reserve substantial room for the semantic operation's fixed prompt,
+        # schema, provenance framing, and response budget. A quarter-window exact
+        # source payload is conservative across the currently supported reducers.
+        payload_per_leaf = max(64, working_set // 4)
+        leaves = max(
+            1,
+            (max(1, int(source_tokens)) + payload_per_leaf - 1)
+            // payload_per_leaf,
+        )
+        power_of_two_leaves = 1 << max(0, (leaves - 1).bit_length())
+        tree_calls = (2 * power_of_two_leaves) - 1
+        derived = max(16, 2 * tree_calls)
+        return min(int(self.config.context.semantic_reduction_max_calls), derived)
+
     def _reduce_text_hierarchically(
         self,
         state: SessionState,
@@ -3892,18 +4428,43 @@ class AgentRuntime:
         include_prompt_instructions: bool = True,
         depth: int = 0,
     ) -> tuple[str, BudgetReport]:
+        reduction_cap = max(
+            0, int(self.config.context.semantic_reduction_max_input_tokens)
+        )
+        # A semantic-reduction call must not ask one model invocation to emit a
+        # projection larger than half of its bounded input working set. This only
+        # applies after measured overflow has already selected semantic reduction;
+        # authoritative source material remains durable and recoverable outside the
+        # prompt. A disabled input cap (0) preserves the legacy behavior exactly.
+        effective_target_tokens = int(target_tokens)
+        if reduction_cap > 0:
+            effective_target_tokens = min(
+                effective_target_tokens,
+                max(256, reduction_cap // 2),
+            )
+        # Semantic target size is the desired projection content, not a minimum
+        # generation allowance. Keep a small structural minimum and modest JSON/
+        # framing slack so tiny reductions cannot inherit a 128/192-token floor
+        # merely because the target itself is 64 tokens. Contract-specific schema
+        # floors in _compile_context still protect richer structured outputs.
         minimum_output_tokens = min(
-            target_tokens + 64,
+            max(16, min(32, int(effective_target_tokens))),
             self.config.context.reserved_response_tokens,
         )
-        assembly = build_assembly(source_text, source_label, target_tokens)
+        desired_output_tokens = min(
+            int(self.config.context.reserved_response_tokens),
+            max(minimum_output_tokens, int(effective_target_tokens) + 24),
+        )
+        assembly = build_assembly(
+            source_text, source_label, effective_target_tokens
+        )
         compilation = self._compile_context(
             state,
             assembly,
             contract,
             minimum_output_tokens=minimum_output_tokens,
             context_limit_resolution=context_limit_resolution,
-            desired_output_tokens=target_tokens + 64,
+            desired_output_tokens=desired_output_tokens,
             include_prompt_instructions=include_prompt_instructions,
         )
         prompt_instruction_projected = False
@@ -3919,13 +4480,12 @@ class AgentRuntime:
                 contract,
                 compilation,
                 minimum_output_tokens=minimum_output_tokens,
-                desired_output_tokens=target_tokens + 64,
+                desired_output_tokens=desired_output_tokens,
                 context_limit_resolution=context_limit_resolution,
             )
             if recovered is not None:
                 compilation = recovered
                 prompt_instruction_projected = True
-        reduction_cap = max(0, int(self.config.context.semantic_reduction_max_input_tokens))
         exceeds_reduction_working_set = (
             reduction_cap > 0 and compilation.report.input_tokens > reduction_cap
         )
@@ -3938,7 +4498,7 @@ class AgentRuntime:
             remaining_calls[0] -= 1
             self.telemetry.record_semantic_reduction(
                 call_kind=assembly.kind,
-                target_tokens=target_tokens,
+                target_tokens=effective_target_tokens,
                 hierarchical_depth=depth,
             )
             self.history.record_event(
@@ -3980,13 +4540,28 @@ class AgentRuntime:
                         contract,
                     ),
                     minimum_output_tokens=minimum_output_tokens,
-                    desired_output_tokens=target_tokens + 64,
+                    desired_output_tokens=desired_output_tokens,
                     validator=validate_reduction,
                     context_limit_resolution=context_limit_resolution,
                     include_prompt_instructions=include_prompt_instructions,
                 )
             except _OutputRecoveryContextOverflow:
                 pass
+            except OutputBudgetExhaustedError as exc:
+                self.history.record_event(
+                    state,
+                    "semantic_reduction_output_exhausted",
+                    {
+                        "kind": assembly.kind,
+                        "hierarchical_depth": depth,
+                        "input_tokens": compilation.report.input_tokens,
+                        "reserved_response_tokens": exc.reserved_tokens,
+                        "finish_reason": exc.finish_reason,
+                    },
+                )
+                # A fit input can still be semantically too broad for the model to
+                # omit irrelevant bulk within its bounded response. Fall through to
+                # exact-source subdivision instead of abandoning projection.
             else:
                 reduced = str(payload.get(output_key, "")).strip()
                 if not reduced:
@@ -4010,7 +4585,7 @@ class AgentRuntime:
                 compilation.report,
             )
         midpoint = len(source_text) // 2
-        child_target = max(64, (target_tokens + 1) // 2)
+        child_target = max(64, (effective_target_tokens + 1) // 2)
         fragments = []
         for index, fragment_text in enumerate(
             (source_text[:midpoint], source_text[midpoint:]),
@@ -4039,7 +4614,7 @@ class AgentRuntime:
                 + fragments[1]
             ),
             source_label=f"{source_label} semantic fragment projections",
-            target_tokens=target_tokens,
+            target_tokens=effective_target_tokens,
             contract=contract,
             output_key=output_key,
             build_assembly=build_assembly,
@@ -4048,6 +4623,432 @@ class AgentRuntime:
             include_prompt_instructions=include_prompt_instructions,
             depth=depth + 1,
         )
+
+    def _bounded_exact_anchor_neighborhood(
+        self,
+        state: SessionState,
+        *,
+        source_text: str,
+        anchor_text: str,
+        target_tokens: int,
+        header: str,
+    ) -> list[str]:
+        if not anchor_text or anchor_text not in source_text or target_tokens <= 0:
+            return []
+        anchor_index = source_text.find(anchor_text)
+        for radius in (512, 384, 256, 192, 128, 96, 64, 32, 0):
+            start = max(0, anchor_index - radius)
+            end = min(len(source_text), anchor_index + len(anchor_text) + radius)
+            span = source_text[start:end]
+            exact_block = header + "\n" + span
+            tokens = self._counter(state).count_text(exact_block).tokens
+            if tokens <= int(target_tokens):
+                return [span]
+        return []
+
+    def _select_tool_result_anchor_spans(
+        self,
+        state: SessionState,
+        *,
+        original_request: str,
+        tool_name: str,
+        source_text: str,
+        target_tokens: int,
+    ) -> list[str]:
+        """Use one model-owned literal anchor to recover exact structured source spans.
+
+        The model sees only a deterministic stratified sample and chooses one exact
+        objective-relevant literal anchor. Deterministic code validates that anchor is
+        copied from the sample/source and may expand only a repeated structural prefix
+        (text before the first colon) or the exact containing line. No semantic label
+        meaning is inferred. If the resulting exact view is not smaller and within the
+        measured target, this optimization declines and normal exact-fragment selection
+        remains the fallback.
+        """
+        if not source_text.strip() or target_tokens <= 0:
+            return []
+        raw_lines = source_text.splitlines()
+        sample_rows: list[str] = []
+        if len(raw_lines) >= 4:
+            indices: set[int] = set()
+            points = min(33, len(raw_lines))
+            for point in range(points):
+                index = (
+                    round(point * (len(raw_lines) - 1) / (points - 1))
+                    if points > 1
+                    else 0
+                )
+                for candidate in (index - 1, index, index + 1):
+                    if 0 <= candidate < len(raw_lines):
+                        indices.add(candidate)
+            # Preserve bounded structural coverage mechanically. A colon is treated
+            # only as a formatting delimiter; no label meaning is inferred here.
+            structural = [
+                index for index, line in enumerate(raw_lines) if ":" in line
+            ]
+            if len(structural) > 64:
+                structural = [
+                    structural[
+                        round(point * (len(structural) - 1) / 63)
+                    ]
+                    for point in range(64)
+                ]
+            indices.update(structural)
+            sample_rows = [
+                f"S{index:05d} {raw_lines[index]}"
+                for index in sorted(indices)
+            ]
+        else:
+            # Large single-line/non-line-oriented sources still get deterministic
+            # coverage through bounded character windows.
+            window = 256
+            points = 17
+            max_start = max(0, len(source_text) - window)
+            starts = sorted(
+                {
+                    round(point * max_start / (points - 1)) if points > 1 else 0
+                    for point in range(points)
+                }
+            )
+            sample_rows = [
+                f"S{index:05d} {source_text[start:start + window]}"
+                for index, start in enumerate(starts)
+            ]
+        if not sample_rows:
+            return []
+        system_instruction = (
+            "Choose exactly one strongest objective-relevant literal substring copied from the sampled "
+            "tool-result text. It must locate a fact required by the user objective. Never choose text "
+            "from a line explicitly labeled irrelevant, decoy, untrusted, or non-authoritative. Prefer "
+            "a full labeled fact line or exact identifier/value when present. Copy source text exactly, "
+            "not a question or paraphrase. Return an empty anchor if no sampled text is relevant."
+        )
+        reduction_cap = max(0, int(self.config.context.semantic_reduction_max_input_tokens))
+        request: SemanticCallRequest | None = None
+        sample_text = ""
+        while sample_rows:
+            sample_text = "\n".join(sample_rows)
+            request = SemanticCallRequest(
+                kind="tool_result_best_anchor",
+                system_instruction=system_instruction,
+                components=[
+                    PromptComponent(
+                        name="objective",
+                        category="current_user",
+                        text=original_request + "\nTool: " + tool_name,
+                    ),
+                    PromptComponent(
+                        name="sample",
+                        category="tool_result",
+                        text=sample_text,
+                    ),
+                ],
+                contract=tool_result_best_anchor_contract(),
+                minimum_output_tokens=16,
+                desired_output_tokens=64,
+                include_prompt_instructions=False,
+            )
+            probe_assembly = self.prompts.build_semantic_operation_prompt(
+                kind=request.kind,
+                system_instruction=request.system_instruction,
+                components=request.components,
+                prompt_mode=request.prompt_mode,
+                template_names=request.prompt_template_names,
+            )
+            probe = self._compile_context(
+                state,
+                probe_assembly,
+                request.contract,
+                minimum_output_tokens=request.minimum_output_tokens,
+                desired_output_tokens=request.desired_output_tokens,
+                include_prompt_instructions=request.include_prompt_instructions,
+            )
+            within_working_set = reduction_cap <= 0 or probe.report.input_tokens <= reduction_cap
+            if probe.report.fits and within_working_set:
+                break
+            if len(sample_rows) <= 1:
+                return []
+            if not within_working_set:
+                self.history.record_event(
+                    state,
+                    "semantic_reduction_working_set_exceeded",
+                    {
+                        "kind": request.kind,
+                        "hierarchical_depth": 0,
+                        "input_tokens": probe.report.input_tokens,
+                        "working_set_limit_tokens": reduction_cap,
+                    },
+                )
+            if len(sample_rows) == 2:
+                sample_rows = [sample_rows[-1]]
+            else:
+                interior = sample_rows[1:-1:2]
+                sample_rows = [sample_rows[0], *interior, sample_rows[-1]]
+        if request is None:
+            return []
+        try:
+            payload = self._execute_tool_semantic_call(state, request)
+        except (ModelCallStateChanged, RunCancellationRequested):
+            raise
+        except (SemanticCallContextOverflow, BudgetExceededError, OutputBudgetExhaustedError):
+            return []
+        except ModelClientError as exc:
+            if str(exc) == "model_unavailable":
+                raise
+            return []
+        except Exception:
+            return []
+        anchor_text = str(payload.get("anchor", "")).strip()
+        if (
+            not anchor_text
+            or len(anchor_text) > 512
+            or anchor_text not in sample_text
+            or anchor_text not in source_text
+        ):
+            return []
+        if raw_lines:
+            containing = next(
+                (line for line in raw_lines if anchor_text in line),
+                "",
+            )
+        else:
+            containing = ""
+        selected: list[str] = []
+        if containing and ":" in containing:
+            prefix = containing.split(":", 1)[0].strip() + ":"
+            prefixed = [line for line in raw_lines if line.startswith(prefix)]
+            if len(prefixed) >= 2:
+                selected = prefixed
+        if not selected and containing:
+            containing_block = (
+                "[MODEL-SELECTED STRUCTURAL EXACT TOOL-RESULT UNITS; raw source remains authoritative]\n"
+                + containing
+            )
+            if self._counter(state).count_text(containing_block).tokens <= int(target_tokens):
+                selected = [containing]
+            else:
+                selected = self._bounded_exact_anchor_neighborhood(
+                    state,
+                    source_text=source_text,
+                    anchor_text=anchor_text,
+                    target_tokens=target_tokens,
+                    header="[MODEL-SELECTED STRUCTURAL EXACT TOOL-RESULT UNITS; raw source remains authoritative]",
+                )
+        if not selected:
+            selected = self._bounded_exact_anchor_neighborhood(
+                state,
+                source_text=source_text,
+                anchor_text=anchor_text,
+                target_tokens=target_tokens,
+                header="[MODEL-SELECTED STRUCTURAL EXACT TOOL-RESULT UNITS; raw source remains authoritative]",
+            )
+        if not selected:
+            return []
+        exact_block = (
+            "[MODEL-SELECTED STRUCTURAL EXACT TOOL-RESULT UNITS; raw source remains authoritative]\n"
+            + "\n".join(selected)
+        )
+        exact_tokens = self._counter(state).count_text(exact_block).tokens
+        source_tokens = self._counter(state).count_text(source_text).tokens
+        if exact_tokens <= 0 or exact_tokens > int(target_tokens) or exact_tokens >= source_tokens:
+            return []
+        return selected
+
+    def _select_tool_result_verbatim_fragments(
+        self,
+        state: SessionState,
+        *,
+        original_request: str,
+        tool_name: str,
+        source_text: str,
+    ) -> tuple[list[str], bool]:
+        """Semantically select exact tool-result spans that must survive projection.
+
+        The model owns relevance selection. Deterministic code presents bounded exact
+        source windows, maps selected IDs back to source byte/character ranges, merges
+        overlapping/adjacent selected ranges, and copies those exact spans. Large
+        single lines use non-overlapping base windows plus boundary bridge windows so
+        short facts/identifiers crossing a chunk boundary still appear whole in at
+        least one candidate without doubling every window. Selector overflow splits
+        candidate batches recursively; other failures preserve the affected batch.
+        """
+        candidates: list[tuple[str, str, int, int]] = []
+        window_chars = 384
+        bridge_radius = 128
+        cursor = 0
+        line_number = 0
+        for raw_line in source_text.splitlines(keepends=True) or [source_text]:
+            line_number += 1
+            line_start = cursor
+            cursor += len(raw_line)
+            if not raw_line.strip():
+                continue
+            line_len = len(raw_line)
+            if line_len <= window_chars:
+                candidates.append(
+                    (f"L{line_number:05d}", raw_line, line_start, line_start + line_len)
+                )
+                continue
+            base_ranges: list[tuple[int, int, str]] = []
+            for chunk_index, offset in enumerate(range(0, line_len, window_chars), start=1):
+                end = min(line_len, offset + window_chars)
+                base_ranges.append((offset, end, f"L{line_number:05d}C{chunk_index:04d}"))
+            bridge_ranges: list[tuple[int, int, str]] = []
+            for bridge_index, boundary in enumerate(range(window_chars, line_len, window_chars), start=1):
+                start_offset = max(0, boundary - bridge_radius)
+                end_offset = min(line_len, boundary + bridge_radius)
+                bridge_ranges.append(
+                    (start_offset, end_offset, f"L{line_number:05d}B{bridge_index:04d}")
+                )
+            for start_offset, end_offset, fragment_id in [*base_ranges, *bridge_ranges]:
+                candidates.append(
+                    (
+                        fragment_id,
+                        raw_line[start_offset:end_offset],
+                        line_start + start_offset,
+                        line_start + end_offset,
+                    )
+                )
+        if not candidates:
+            return [], True
+
+        selected_ids: list[str] = []
+        semantic_ok = True
+        pending: list[tuple[list[tuple[str, str, int, int]], int]] = [
+            (candidates[offset : offset + 256], 0)
+            for offset in range(0, len(candidates), 256)
+        ]
+        while pending:
+            chunk, depth = pending.pop(0)
+            ids = [fragment_id for fragment_id, _fragment, _start, _end in chunk]
+            rows = "\n".join(
+                f"{fragment_id} {fragment}"
+                for fragment_id, fragment, _start, _end in chunk
+            )
+            request = SemanticCallRequest(
+                kind="tool_result_verbatim_selection",
+                system_instruction=(
+                    "Keep exact units needed for the user objective: requested facts, constraints, IDs, "
+                    "paths, errors, causal claims, hashes, values, or exact wording. Drop routine/healthy "
+                    "filler and explicit decoy/untrusted noise. Set has=false with ids=[] when none matter; "
+                    "otherwise has=true and return only IDs that must survive."
+                ),
+                components=[
+                    PromptComponent(
+                        name="tool_result_verbatim_objective",
+                        category="current_user",
+                        text=(
+                            "Authoritative user objective:\n"
+                            + original_request
+                            + "\n\nTool name: "
+                            + tool_name
+                        ),
+                    ),
+                    PromptComponent(
+                        name="tool_result_verbatim_candidates",
+                        category="tool_result",
+                        text=(
+                            "Exact source units. Selecting an ID causes deterministic byte-exact "
+                            "copying into the derived projection; raw tool output remains authoritative.\n\n"
+                            + rows
+                        ),
+                    ),
+                ],
+                contract=tool_result_verbatim_selection_contract(ids),
+                minimum_output_tokens=24,
+                desired_output_tokens=64,
+                include_prompt_instructions=False,
+            )
+            reduction_cap = max(
+                0, int(self.config.context.semantic_reduction_max_input_tokens)
+            )
+            if reduction_cap > 0:
+                probe_assembly = self.prompts.build_semantic_operation_prompt(
+                    kind=request.kind,
+                    system_instruction=request.system_instruction,
+                    components=request.components,
+                    prompt_mode=request.prompt_mode,
+                    template_names=request.prompt_template_names,
+                )
+                probe = self._compile_context(
+                    state,
+                    probe_assembly,
+                    request.contract,
+                    minimum_output_tokens=request.minimum_output_tokens,
+                    desired_output_tokens=request.desired_output_tokens,
+                    include_prompt_instructions=request.include_prompt_instructions,
+                )
+                if probe.report.input_tokens > reduction_cap:
+                    self.history.record_event(
+                        state,
+                        "semantic_reduction_working_set_exceeded",
+                        {
+                            "kind": request.kind,
+                            "hierarchical_depth": depth,
+                            "input_tokens": probe.report.input_tokens,
+                            "working_set_limit_tokens": reduction_cap,
+                        },
+                    )
+                    if len(chunk) > 1:
+                        midpoint = len(chunk) // 2
+                        pending[0:0] = [
+                            (chunk[:midpoint], depth + 1),
+                            (chunk[midpoint:], depth + 1),
+                        ]
+                        continue
+                    semantic_ok = False
+                    selected_ids.extend(
+                        fragment_id
+                        for fragment_id in ids
+                        if fragment_id not in selected_ids
+                    )
+                    continue
+            try:
+                payload = self._execute_tool_semantic_call(state, request)
+                if bool(payload.get("has")):
+                    for raw_id in payload.get("ids", []):
+                        fragment_id = str(raw_id)
+                        if fragment_id in ids and fragment_id not in selected_ids:
+                            selected_ids.append(fragment_id)
+            except (ModelCallStateChanged, RunCancellationRequested):
+                raise
+            except ModelClientError as exc:
+                if str(exc) == "model_unavailable":
+                    raise
+                semantic_ok = False
+                selected_ids.extend(
+                    fragment_id for fragment_id in ids if fragment_id not in selected_ids
+                )
+            except SemanticCallContextOverflow:
+                if len(chunk) > 1:
+                    midpoint = len(chunk) // 2
+                    pending[0:0] = [
+                        (chunk[:midpoint], depth + 1),
+                        (chunk[midpoint:], depth + 1),
+                    ]
+                    continue
+                semantic_ok = False
+                selected_ids.extend(
+                    fragment_id for fragment_id in ids if fragment_id not in selected_ids
+                )
+            except Exception:
+                semantic_ok = False
+                selected_ids.extend(
+                    fragment_id for fragment_id in ids if fragment_id not in selected_ids
+                )
+
+        by_id = {
+            fragment_id: (start_offset, end_offset)
+            for fragment_id, _fragment, start_offset, end_offset in candidates
+        }
+        ranges = sorted(by_id[fragment_id] for fragment_id in selected_ids)
+        merged: list[list[int]] = []
+        for start_offset, end_offset in ranges:
+            if merged and start_offset <= merged[-1][1]:
+                merged[-1][1] = max(merged[-1][1], end_offset)
+            else:
+                merged.append([start_offset, end_offset])
+        return [source_text[start:end] for start, end in merged], semantic_ok
 
     def _project_tool_result_text_hierarchically(
         self,
@@ -4095,6 +5096,118 @@ class AgentRuntime:
         source_hash = str(message.metadata.get("source_event_hash", ""))
         if not isinstance(sequence, int):
             return ""
+
+        # Semantic exact-unit selection is the first reduction pass. When those
+        # model-selected exact spans already satisfy the measured target, use them
+        # directly rather than asking a second free-form summarizer to paraphrase
+        # the same evidence. Raw tool output remains durable and authoritative.
+        anchor_spans = self._select_tool_result_anchor_spans(
+            state,
+            original_request=original_request,
+            tool_name=message.name or "tool",
+            source_text=message.content,
+            target_tokens=target_tokens,
+        )
+        if anchor_spans:
+            verbatim_fragments = anchor_spans
+            verbatim_selection_semantic = True
+            selection_source = "tool_result_best_anchor"
+        else:
+            verbatim_fragments, verbatim_selection_semantic = (
+                self._select_tool_result_verbatim_fragments(
+                    state,
+                    original_request=original_request,
+                    tool_name=message.name or "tool",
+                    source_text=message.content,
+                )
+            )
+            selection_source = "tool_result_verbatim_selection"
+        if not verbatim_selection_semantic:
+            self.history.record_event(
+                state,
+                "tool_result_projection_skipped",
+                {
+                    "source_event_sequence": sequence,
+                    "source_event_hash": source_hash,
+                    "reason": "exact semantic selector failed; preserve authoritative raw tool result",
+                    "target_tokens": target_tokens,
+                    "original_tokens": original_tokens,
+                    "overflow_tokens": overflow_tokens,
+                    "budget_report": None,
+                },
+            )
+            return ""
+
+        exact_block = ""
+        if verbatim_fragments:
+            exact_block = (
+                "[MODEL-SELECTED VERBATIM TOOL-RESULT UNITS; raw source remains authoritative]\n"
+                + "\n".join(verbatim_fragments)
+            )
+            exact_tokens = self._counter(state).count_text(exact_block).tokens
+            if exact_tokens >= int(original_tokens):
+                self.history.record_event(
+                    state,
+                    "tool_result_projection_skipped",
+                    {
+                        "source_event_sequence": sequence,
+                        "source_event_hash": source_hash,
+                        "reason": "model-selected exact evidence did not reduce the source",
+                        "target_tokens": target_tokens,
+                        "original_tokens": original_tokens,
+                        "overflow_tokens": overflow_tokens,
+                        "projected_tokens": exact_tokens,
+                        "budget_report": None,
+                    },
+                )
+                return ""
+            if exact_tokens > int(target_tokens):
+                self.history.record_event(
+                    state,
+                    "tool_result_projection_skipped",
+                    {
+                        "source_event_sequence": sequence,
+                        "source_event_hash": source_hash,
+                        "reason": "model-selected exact evidence exceeds the measured projection target",
+                        "target_tokens": target_tokens,
+                        "original_tokens": original_tokens,
+                        "overflow_tokens": overflow_tokens,
+                        "projected_tokens": exact_tokens,
+                        "budget_report": None,
+                    },
+                )
+                return ""
+            self.history.record_event(
+                state,
+                "tool_result_projected",
+                {
+                    "source_event_sequence": sequence,
+                    "source_event_hash": source_hash,
+                    "source_event_references": message.metadata.get(
+                        "source_event_references", []
+                    ),
+                    "tool_name": message.name or "tool",
+                    "target_tokens": target_tokens,
+                    "original_tokens": original_tokens,
+                    "projected_tokens": exact_tokens,
+                    "overflow_tokens": overflow_tokens,
+                    "projection_budget_report": {
+                        "source": selection_source,
+                        "direct_exact_projection": True,
+                    },
+                    "verbatim_fragment_count": len(verbatim_fragments),
+                    "verbatim_fragments_sha256": sha256_text(
+                        "\n".join(verbatim_fragments)
+                    ),
+                    "verbatim_selection_semantic": True,
+                    "projection": exact_block,
+                },
+            )
+            return exact_block
+
+        # If the model explicitly found no exact units that must survive, retain the
+        # existing free-form semantic reducer as a fallback for paraphrasable
+        # objective-relevant content. This path is still bounded and provenance-linked.
         try:
             projection, final_report = self._project_tool_result_text_hierarchically(
                 state,
@@ -4105,7 +5218,10 @@ class AgentRuntime:
                 source_event_hash=source_hash,
                 target_tokens=target_tokens,
                 remaining_calls=[
-                    max(16, int(self.config.context.max_compaction_rounds) * 16)
+                    self._semantic_reduction_call_budget(
+                        state,
+                        source_tokens=max(1, int(original_tokens)),
+                    )
                 ],
             )
         except (BudgetExceededError, OutputBudgetExhaustedError) as exc:
@@ -4129,6 +5245,22 @@ class AgentRuntime:
             )
             return ""
         projected_tokens = self._counter(state).count_text(projection).tokens
+        if projected_tokens >= int(original_tokens):
+            self.history.record_event(
+                state,
+                "tool_result_projection_skipped",
+                {
+                    "source_event_sequence": sequence,
+                    "source_event_hash": source_hash,
+                    "reason": "semantic projection did not reduce the source",
+                    "target_tokens": target_tokens,
+                    "original_tokens": original_tokens,
+                    "overflow_tokens": overflow_tokens,
+                    "projected_tokens": projected_tokens,
+                    "budget_report": asdict(final_report),
+                },
+            )
+            return ""
         self.history.record_event(
             state,
             "tool_result_projected",
@@ -4144,6 +5276,9 @@ class AgentRuntime:
                 "projected_tokens": projected_tokens,
                 "overflow_tokens": overflow_tokens,
                 "projection_budget_report": asdict(final_report),
+                "verbatim_fragment_count": 0,
+                "verbatim_fragments_sha256": sha256_text(""),
+                "verbatim_selection_semantic": True,
                 "projection": projection,
             },
         )
@@ -4932,28 +6067,36 @@ class AgentRuntime:
         remaining_calls: list[int],
         depth: int = 0,
     ) -> tuple[str, BudgetReport]:
-        contract = summary_contract()
+        # Oversized single-message fragments do not need the adaptive
+        # preserve_recent_messages decision used by top-level multi-message
+        # compaction. Use the smaller one-field evidence projection contract so
+        # tiny-context models spend their budget on semantic evidence rather than
+        # contract overhead. The exact source remains durable and referenced by
+        # the resulting history_compressed event.
+        contract = evidence_projection_contract()
         minimum_output_tokens = min(
             int(self.config.context.reserved_summary_tokens),
-            max(64, int(target_summary_tokens) + 64),
+            max(32, int(target_summary_tokens) + 32),
         )
-        assembly = self.prompts.build_summary_prompt(
-            [message],
-            prompt_mode="lean",
-            maximum_preserve_recent_messages=0,
-            target_summary_tokens=target_summary_tokens,
-        )
-        source_tokens = self._counter(state).count_text(message.content).tokens
-        desired_summary_output_tokens = self._summary_structured_output_reserve(
-            target_summary_tokens=target_summary_tokens,
-            source_tokens=source_tokens,
+        assembly = self.prompts.build_evidence_projection_prompt(
+            purpose=(
+                "Compress this exact historical source for faithful future "
+                "continuation. Preserve goals, constraints, decisions, unresolved "
+                "work, errors, paths, exact identifiers/values, and wording that "
+                "can affect correctness. Omit irrelevant repetition."
+            ),
+            source_label=(
+                f"history fragment role={message.role} depth={depth}"
+            ),
+            raw_evidence=message.content,
+            target_tokens=target_summary_tokens,
         )
         compilation = self._compile_context(
             state,
             assembly,
             contract,
             minimum_output_tokens=minimum_output_tokens,
-            desired_output_tokens=desired_summary_output_tokens,
+            desired_output_tokens=target_summary_tokens + 32,
             context_limit_resolution=context_limit_resolution,
         )
         prompt_instruction_projected = False
@@ -4968,7 +6111,7 @@ class AgentRuntime:
                 contract,
                 compilation,
                 minimum_output_tokens=minimum_output_tokens,
-                desired_output_tokens=desired_summary_output_tokens,
+                desired_output_tokens=target_summary_tokens + 32,
                 context_limit_resolution=context_limit_resolution,
             )
             if recovered is not None:
@@ -4994,9 +6137,8 @@ class AgentRuntime:
                     "prompt_mode": "lean",
                     "accounting": compilation.accounting(),
                     "hierarchical_depth": depth,
-                    "prompt_instruction_projection": (
-                        prompt_instruction_projected
-                    ),
+                    "semantic_contract": contract.name,
+                    "prompt_instruction_projection": prompt_instruction_projected,
                 },
             )
             self._record_prompt_built(
@@ -5015,22 +6157,17 @@ class AgentRuntime:
                         contract,
                     ),
                     minimum_output_tokens=minimum_output_tokens,
-                    desired_output_tokens=target_summary_tokens + 64,
+                    desired_output_tokens=target_summary_tokens + 32,
                     context_limit_resolution=context_limit_resolution,
                 )
-            except _OutputRecoveryContextOverflow:
+            except (_OutputRecoveryContextOverflow, OutputBudgetExhaustedError):
                 pass
             else:
-                summary_text = str(payload.get("summary", "")).strip()
-                if not summary_text:
-                    raise ValueError("hierarchical summary must not be empty")
-                verbatim_spans = self._validated_verbatim_spans(
-                    payload.get("verbatim_spans", []), source_text=message.content
-                )
-                summary_text = self._merge_summary_verbatim_spans(
-                    summary_text, verbatim_spans
-                )
-                return summary_text, final_prepared.report
+                projection = str(payload.get("projection", "")).strip()
+                if projection:
+                    return projection, final_prepared.report
+                # A valid but empty projection made no progress. Preserve the exact
+                # source and subdivide it rather than silently dropping evidence.
 
         if depth >= 16 or len(message.content) < 2:
             raise BudgetExceededError(
@@ -5038,7 +6175,7 @@ class AgentRuntime:
                 compilation.report,
             )
         midpoint = len(message.content) // 2
-        child_target = max(64, (int(target_summary_tokens) + 1) // 2)
+        child_target = max(32, (int(target_summary_tokens) + 1) // 2)
         fragments = []
         for index, content in enumerate(
             (message.content[:midpoint], message.content[midpoint:]),
@@ -5110,10 +6247,24 @@ class AgentRuntime:
         replacement_overhead = counter.count_text(
             self.prompts.render_messages([empty_summary])
         ).tokens
+        max_recoverable = max(
+            0,
+            int(source_tokens) - int(replacement_overhead) - 1,
+        )
+        if max_recoverable <= 0:
+            return None
+        # Preserve the historical behavior when one span can recover the measured
+        # deficit exactly. If the deficit is larger than this span can yield, make
+        # the maximum safe partial progress and let the bounded compaction loop
+        # remeasure the next exact action prompt before selecting another span.
+        recovery_goal = min(
+            max(1, int(required_recovery_tokens)),
+            max_recoverable,
+        )
         target = (
             int(source_tokens)
             - int(replacement_overhead)
-            - max(1, int(required_recovery_tokens))
+            - int(recovery_goal)
         )
         if target < 1:
             return None
@@ -5182,6 +6333,7 @@ class AgentRuntime:
             window = messages[source_start:source_end]
             rendered = self.prompts.render_messages(window)
             references = message_source_event_references(window)
+            selector_hierarchical = False
             request = SemanticCallRequest(
                 kind="history_compaction_selection",
                 system_instruction=(
@@ -5190,7 +6342,14 @@ class AgentRuntime:
                     "non-negotiable constraints, unresolved work, promises/commitments, causal facts, "
                     "identifiers, paths/references, exact tool outcomes, and information whose wording "
                     "may matter. Mark a window compressible only when semantic summarization can safely "
-                    "replace its exact text while raw source events remain recoverable."
+                    "replace its exact text while raw source events remain recoverable. If and only if "
+                    "criticality is compressible, return a concise replacement in projection preserving "
+                    "all currently relevant facts, constraints, identifiers, and exact wording that can "
+                    "affect correctness; otherwise projection must be empty. Use reason_code=redundant_progress "
+                    "only for repetitive filler/progress with no currently relevant fact; this is the only "
+                    "reason_code compatible with criticality=compressible. Constraints, unresolved work, "
+                    "commitments, causal facts, identifiers/paths, tool outcomes, or exact wording must not "
+                    "be marked compressible. Do not copy source text into reason metadata."
                 ),
                 components=[
                     PromptComponent(
@@ -5211,7 +6370,27 @@ class AgentRuntime:
             try:
                 payload = self._execute_tool_semantic_call(state, request)
                 criticality = str(payload["criticality"])
-                reason = str(payload["reason"])
+                reason_code_value = payload.get("reason_code")
+                if reason_code_value is None:
+                    reason_code = ""
+                    reason = str(payload.get("reason", "semantic selector judgment"))
+                    projection = ""
+                else:
+                    reason_code = str(reason_code_value)
+                    reason = f"semantic selector reason_code={reason_code}"
+                    projection = str(payload.get("projection", "")).strip()
+                    if criticality == "compressible" and reason_code != "redundant_progress":
+                        criticality = "protect"
+                        reason += "; inconsistent compressible judgment failed closed to protect"
+                        projection = ""
+                if criticality == "compressible":
+                    if projection.casefold() in {"", "empty", "none", "null", "n/a", "na"}:
+                        projection = (
+                            "[Model-selected redundant progress omitted from this prompt; "
+                            "exact source history remains recoverable.]"
+                        )
+                else:
+                    projection = ""
             except SemanticCallContextOverflow:
                 if source_end - source_start > 1:
                     split = source_start + ((source_end - source_start) // 2)
@@ -5221,9 +6400,10 @@ class AgentRuntime:
                 # because one selector prompt cannot hold it. Mechanically split the
                 # exact text, evaluate every fragment, then aggregate the worst
                 # criticality back to the original message.
+                selector_hierarchical = True
                 original = window[0]
                 fragments: list[tuple[str, int]] = [(original.content, 0)]
-                fragment_results: list[tuple[str, str]] = []
+                fragment_results: list[tuple[str, str, str, str]] = []
                 while fragments:
                     content, depth = fragments.pop(0)
                     fragment = Message(
@@ -5246,7 +6426,10 @@ class AgentRuntime:
                             "promises/commitments, causal facts, identifiers, paths/references, exact "
                             "tool outcomes, or wording whose exact form may matter. Mark compressible "
                             "only if semantic summarization can safely replace this fragment while the "
-                            "raw source event remains recoverable."
+                            "raw source event remains recoverable. Use reason_code=redundant_progress only "
+                            "for repetitive filler with no currently relevant fact; this is the only "
+                            "reason_code compatible with criticality=compressible. If compressible, return "
+                            "a concise exact-fact-preserving projection; otherwise projection must be empty."
                         ),
                         components=[
                             PromptComponent(
@@ -5275,6 +6458,8 @@ class AgentRuntime:
                                 (
                                     "protect",
                                     "Exact fragment cannot be segmented enough to fit selector context.",
+                                    "selector_failed",
+                                    "",
                                 )
                             )
                             continue
@@ -5286,12 +6471,53 @@ class AgentRuntime:
                         continue
                     except (ModelCallStateChanged, RunCancellationRequested):
                         raise
-                    except Exception:
-                        return []
+                    except Exception as exc:
+                        fragment_results.append(
+                            (
+                                "protect",
+                                "Selector unavailable for this exact fragment; protect it. "
+                                f"{type(exc).__name__}: {exc}",
+                                "selector_failed",
+                                "",
+                            )
+                        )
+                        continue
+                    fragment_criticality = str(fragment_payload["criticality"])
+                    fragment_reason_code_value = fragment_payload.get("reason_code")
+                    fragment_reason_code = (
+                        "" if fragment_reason_code_value is None else str(fragment_reason_code_value)
+                    )
+                    if (
+                        fragment_criticality == "compressible"
+                        and fragment_reason_code
+                        and fragment_reason_code != "redundant_progress"
+                    ):
+                        fragment_criticality = "protect"
+                    fragment_projection = str(fragment_payload.get("projection", "")).strip()
+                    if fragment_criticality != "compressible":
+                        fragment_projection = ""
+                    elif fragment_projection.casefold() in {
+                        "",
+                        "empty",
+                        "none",
+                        "null",
+                        "n/a",
+                        "na",
+                    }:
+                        fragment_projection = (
+                            "[Model-selected redundant progress omitted from this prompt; "
+                            "exact source history remains recoverable.]"
+                        )
                     fragment_results.append(
                         (
-                            str(fragment_payload["criticality"]),
-                            str(fragment_payload["reason"]),
+                            fragment_criticality,
+                            (
+                                f"semantic selector reason_code={fragment_reason_code}"
+                                if fragment_reason_code
+                                else str(fragment_payload.get("reason", "semantic selector judgment"))
+                            ),
+                            (fragment_reason_code or "legacy_reason"),
+                            fragment_projection,
                         )
                     )
                 if not fragment_results:
@@ -5304,19 +6530,48 @@ class AgentRuntime:
                     "Aggregated oversized-message fragment judgments: "
                     + " | ".join(
                         f"{level}: {fragment_reason}"
-                        for level, fragment_reason in fragment_results
+                        for level, fragment_reason, _reason_code, _projection in fragment_results
                     )
+                )
+                projection = (
+                    "\n".join(
+                        dict.fromkeys(
+                            fragment_projection
+                            for level, _reason, reason_code, fragment_projection in fragment_results
+                            if level == "compressible"
+                            and reason_code == "redundant_progress"
+                            and fragment_projection
+                        )
+                    )
+                    if criticality == "compressible"
+                    and all(
+                        level == "compressible"
+                        and reason_code == "redundant_progress"
+                        and bool(fragment_projection)
+                        for level, _reason, reason_code, fragment_projection in fragment_results
+                    )
+                    else ""
                 )
             except (ModelCallStateChanged, RunCancellationRequested):
                 raise
-            except Exception:
-                return []
+            except Exception as exc:
+                # A single selector failure must not erase successful semantic
+                # judgments for unrelated windows. Fail closed for this local
+                # window and continue evaluating/composing the rest.
+                criticality = "protect"
+                reason = (
+                    "Selector unavailable for this exact window; protect it. "
+                    f"{type(exc).__name__}: {exc}"
+                )
+                projection = ""
             evaluated.append(
                 {
                     "source_message_start": source_start,
                     "source_message_count": source_end - source_start,
                     "criticality": criticality,
                     "reason": reason,
+                    "projection": projection,
+                    "hierarchical": selector_hierarchical,
                     "source_tokens": int(self._counter(state).count_text(rendered).tokens),
                     "source_sha256": sha256_text(rendered),
                     "source_event_references": references,
@@ -5335,12 +6590,16 @@ class AgentRuntime:
                 continue
             worst_rank = -1
             reasons: list[str] = []
+            projections: list[str] = []
+            hierarchical_parts: list[bool] = []
             for right in range(left, len(evaluated)):
                 item = evaluated[right]
                 if item["criticality"] == "protect":
                     break
                 worst_rank = max(worst_rank, criticality_rank[str(item["criticality"])])
                 reasons.append(str(item["reason"]))
+                projections.append(str(item.get("projection", "")).strip())
+                hierarchical_parts.append(bool(item.get("hierarchical", False)))
                 if right == left:
                     continue
                 source_start = int(evaluated[left]["source_message_start"])
@@ -5356,6 +6615,13 @@ class AgentRuntime:
                         "source_message_count": source_count,
                         "criticality": criticality_by_rank[worst_rank],
                         "reason": "Composite of semantically evaluated adjacent windows: " + " | ".join(reasons),
+                        "hierarchical": any(hierarchical_parts),
+                        "projection": (
+                            "\n".join(dict.fromkeys(projections))
+                            if criticality_by_rank[worst_rank] == "compressible"
+                            and all(projections)
+                            else ""
+                        ),
                         "source_tokens": int(self._counter(state).count_text(rendered).tokens),
                         "source_sha256": sha256_text(rendered),
                         "source_event_references": message_source_event_references(source_messages),
@@ -5433,6 +6699,244 @@ class AgentRuntime:
         exact_allowance = min(source, max(256, target * 2))
         return target + exact_allowance + 128
 
+    def _select_history_anchor_spans(
+        self,
+        state: SessionState,
+        *,
+        messages: list[Message],
+        current_direction: str,
+        target_tokens: int,
+    ) -> list[str]:
+        """Tiny-context fast path: model chooses one exact history anchor.
+
+        This path is resource-gated, not semantic-policy-gated. It is only attempted
+        when the discovered model context is very small. The model owns the semantic
+        anchor choice; deterministic code validates literal membership and copies a
+        bounded exact neighborhood. Full verbatim selection remains the fallback.
+        """
+        if not messages or not current_direction.strip() or target_tokens <= 0:
+            return []
+        context_limit, _source = self._resolve_context_limit(state)
+        if int(context_limit) > 4_096:
+            return []
+        rows: list[str] = []
+        sample_budget_chars = 6_000
+        for message_index, message in enumerate(messages, start=1):
+            text = message.content
+            if not text.strip():
+                continue
+            if len(text) <= 640:
+                windows = [(0, text)]
+            else:
+                starts = sorted({0, max(0, len(text)//2 - 160), max(0, len(text)-320)})
+                windows = [(start, text[start:start+320]) for start in starts]
+            for window_index, (_start, window) in enumerate(windows, start=1):
+                rows.append(f"M{message_index:03d}W{window_index:02d} [{message.role}] {window}")
+        while rows and sum(len(row)+1 for row in rows) > sample_budget_chars:
+            if len(rows) == 2:
+                rows = [rows[-1]]
+            elif len(rows) > 2:
+                rows = [rows[0], *rows[1:-1:2], rows[-1]]
+            else:
+                break
+        if not rows:
+            return []
+        system_instruction = (
+            "Choose exactly one strongest literal substring copied from the sampled history that must "
+            "remain exact for the current user direction. Prefer requested identifiers, exact markers, "
+            "constraints, dates, paths, causal facts, promises, or tool outcomes. Never choose routine "
+            "progress or explicit decoy/untrusted noise. Copy actual sampled text exactly; return an empty "
+            "anchor if no sampled text needs exact preservation."
+        )
+        reduction_cap = max(0, int(self.config.context.semantic_reduction_max_input_tokens))
+        request: SemanticCallRequest | None = None
+        sample_text = ""
+        while rows:
+            sample_text = "\n".join(rows)
+            request = SemanticCallRequest(
+                kind="history_best_anchor",
+                system_instruction=system_instruction,
+                components=[
+                    PromptComponent(name="current_direction", category="current_user", text=current_direction),
+                    PromptComponent(name="history_sample", category="history", text=sample_text),
+                ],
+                contract=history_best_anchor_contract(),
+                minimum_output_tokens=16,
+                desired_output_tokens=64,
+                include_prompt_instructions=False,
+            )
+            probe_assembly = self.prompts.build_semantic_operation_prompt(
+                kind=request.kind,
+                system_instruction=request.system_instruction,
+                components=request.components,
+                prompt_mode=request.prompt_mode,
+                template_names=request.prompt_template_names,
+            )
+            probe = self._compile_context(
+                state,
+                probe_assembly,
+                request.contract,
+                minimum_output_tokens=request.minimum_output_tokens,
+                desired_output_tokens=request.desired_output_tokens,
+                include_prompt_instructions=request.include_prompt_instructions,
+            )
+            within_working_set = reduction_cap <= 0 or probe.report.input_tokens <= reduction_cap
+            if probe.report.fits and within_working_set:
+                break
+            if len(rows) <= 1:
+                return []
+            if not within_working_set:
+                self.history.record_event(
+                    state,
+                    "semantic_reduction_working_set_exceeded",
+                    {
+                        "kind": request.kind,
+                        "hierarchical_depth": 0,
+                        "input_tokens": probe.report.input_tokens,
+                        "working_set_limit_tokens": reduction_cap,
+                    },
+                )
+            if len(rows) == 2:
+                rows = [rows[-1]]
+            else:
+                rows = [rows[0], *rows[1:-1:2], rows[-1]]
+        if request is None:
+            return []
+        try:
+            payload = self._execute_tool_semantic_call(state, request)
+        except (ModelCallStateChanged, RunCancellationRequested):
+            raise
+        except ModelClientError as exc:
+            if str(exc) == "model_unavailable":
+                raise
+            return []
+        except Exception:
+            return []
+        anchor_text = str(payload.get("anchor", "")).strip()
+        if (
+            not anchor_text
+            or len(anchor_text) > 512
+            or anchor_text not in sample_text
+        ):
+            return []
+        for message in messages:
+            if anchor_text not in message.content:
+                continue
+            header = "[MODEL-SELECTED EXACT HISTORY UNIT; raw history remains authoritative]"
+            whole_block = header + "\n" + message.content
+            if self._counter(state).count_text(whole_block).tokens <= int(target_tokens):
+                return [message.content]
+            return self._bounded_exact_anchor_neighborhood(
+                state,
+                source_text=message.content,
+                anchor_text=anchor_text,
+                target_tokens=target_tokens,
+                header=header,
+            )
+        return []
+
+    def _select_history_verbatim_lines(
+        self,
+        state: SessionState,
+        messages: list[Message],
+    ) -> tuple[list[str], bool]:
+        """Semantically choose exact source units that must survive compaction.
+
+        Normal lines stay intact. Very large individual lines are split into bounded
+        byte-exact fragments before semantic selection so the preservation decision
+        itself cannot overflow a small model. Candidate batches recursively split on
+        measured semantic-call overflow. The model owns relevance selection;
+        deterministic code only maps selected IDs back to exact source bytes.
+        Any non-capacity failure fails closed for the affected batch by preserving it.
+        """
+        candidates: list[tuple[str, str, str]] = []
+        max_fragment_chars = 384
+        for message_index, message in enumerate(messages, start=1):
+            raw_lines = message.content.splitlines() or [message.content]
+            for line_index, line in enumerate(raw_lines, start=1):
+                if not line.strip():
+                    continue
+                fragments = [
+                    line[offset : offset + max_fragment_chars]
+                    for offset in range(0, len(line), max_fragment_chars)
+                ] or [line]
+                for fragment_index, fragment in enumerate(fragments, start=1):
+                    line_id = (
+                        f"M{message_index:03d}L{line_index:04d}"
+                        if len(fragments) == 1
+                        else f"M{message_index:03d}L{line_index:04d}F{fragment_index:04d}"
+                    )
+                    candidates.append((line_id, message.role, fragment))
+        if not candidates:
+            return [], True
+
+        selected_ids: list[str] = []
+        semantic_ok = True
+        pending: list[list[tuple[str, str, str]]] = [
+            candidates[offset : offset + 16]
+            for offset in range(0, len(candidates), 16)
+        ]
+        while pending:
+            chunk = pending.pop(0)
+            ids = [line_id for line_id, _role, _line in chunk]
+            rows = "\n".join(
+                f"{line_id} [{role}] {line}"
+                for line_id, role, line in chunk
+            )
+            request = SemanticCallRequest(
+                kind="history_verbatim_selection",
+                system_instruction=(
+                    "Select every exact source unit whose literal wording or value must survive "
+                    "history compaction for faithful future continuation. Preserve trusted task facts, "
+                    "user constraints, negative instructions, identifiers, dates, paths, causal claims, "
+                    "unresolved questions, promises/commitments, exact tool outcomes, completion criteria, "
+                    "and wording where paraphrase could change correctness. Do not select routine progress "
+                    "or values explicitly labeled untrusted, decoy, contradictory noise, or non-authoritative "
+                    "unless the warning itself is needed. Do not use recency as relevance. Return only IDs "
+                    "from the constrained schema."
+                ),
+                components=[
+                    PromptComponent(
+                        name="history_verbatim_candidates",
+                        category="history",
+                        text=(
+                            "Exact source units. Selecting an ID causes deterministic byte-exact "
+                            "copying into the derived prompt projection; raw history remains authoritative.\n\n"
+                            + rows
+                        ),
+                    )
+                ],
+                contract=history_verbatim_selection_contract(ids),
+                minimum_output_tokens=48,
+                desired_output_tokens=192,
+                include_prompt_instructions=False,
+            )
+            try:
+                payload = self._execute_tool_semantic_call(state, request)
+                for raw_id in payload.get("selected_line_ids", []):
+                    line_id = str(raw_id)
+                    if line_id in ids and line_id not in selected_ids:
+                        selected_ids.append(line_id)
+            except (ModelCallStateChanged, RunCancellationRequested):
+                raise
+            except SemanticCallContextOverflow:
+                if len(chunk) > 1:
+                    midpoint = len(chunk) // 2
+                    pending[0:0] = [chunk[:midpoint], chunk[midpoint:]]
+                    continue
+                semantic_ok = False
+                selected_ids.extend(
+                    line_id for line_id in ids if line_id not in selected_ids
+                )
+            except Exception:
+                semantic_ok = False
+                selected_ids.extend(
+                    line_id for line_id in ids if line_id not in selected_ids
+                )
+
+        by_id = {line_id: text for line_id, _role, text in candidates}
+        return [by_id[line_id] for line_id in selected_ids], semantic_ok
+
     def _compact_once(
         self,
         state: SessionState,
@@ -5474,28 +6978,59 @@ class AgentRuntime:
             if target is None:
                 continue
             target_summary_tokens, estimated_source_tokens = target
+            selector_projection = str(candidate.get("projection", "")).strip()
+            direct_selector_projection = bool(selector_projection)
+            neutral_omission = selector_projection == (
+                "[Model-selected redundant progress omitted from this prompt; "
+                "exact source history remains recoverable.]"
+            )
+            direct_verbatim_lines: list[str] = []
+            direct_verbatim_semantic = True
+            if direct_selector_projection and not neutral_omission:
+                current_direction = next(
+                    (message.content for message in reversed(complete_source_messages)
+                     if message.role == "user" and message.content.strip()),
+                    "",
+                )
+                direct_verbatim_lines = self._select_history_anchor_spans(
+                    state,
+                    messages=source_messages,
+                    current_direction=current_direction,
+                    target_tokens=target_summary_tokens,
+                )
+                if not direct_verbatim_lines:
+                    direct_verbatim_lines, direct_verbatim_semantic = (
+                        self._select_history_verbatim_lines(state, source_messages)
+                    )
             desired_summary_output_tokens = self._summary_structured_output_reserve(
                 target_summary_tokens=target_summary_tokens,
                 source_tokens=estimated_source_tokens,
             )
             adaptive_cap = max(0, source_count - 1)
-            assembly = self.prompts.build_summary_prompt(
-                source_messages,
-                prompt_mode="lean",
-                maximum_preserve_recent_messages=adaptive_cap,
-                target_summary_tokens=target_summary_tokens,
-            )
-            compilation = self._compile_context(
-                state,
-                assembly,
-                contract,
-                minimum_output_tokens=minimum_summary_tokens,
-                desired_output_tokens=target_summary_tokens + 64,
-                context_limit_resolution=context_limit_resolution,
-            )
-            report = compilation.report
             summary_refinement_used = False
-            if not report.fits:
+            verbatim_spans: list[str] = []
+            report: BudgetReport | None = None
+            if direct_selector_projection:
+                summary_text = selector_projection
+                preserve_recent = 0
+                hierarchical = bool(candidate.get("hierarchical", False))
+            else:
+                assembly = self.prompts.build_summary_prompt(
+                    source_messages,
+                    prompt_mode="lean",
+                    maximum_preserve_recent_messages=adaptive_cap,
+                    target_summary_tokens=target_summary_tokens,
+                )
+                compilation = self._compile_context(
+                    state,
+                    assembly,
+                    contract,
+                    minimum_output_tokens=minimum_summary_tokens,
+                    desired_output_tokens=desired_summary_output_tokens,
+                    context_limit_resolution=context_limit_resolution,
+                )
+                report = compilation.report
+            if not direct_selector_projection and report is not None and not report.fits:
                 # The relevance boundary has already been chosen semantically.
                 # If that selected region is too large for one summary call, render
                 # it as one synthetic exact transcript and hierarchically reduce it
@@ -5511,12 +7046,16 @@ class AgentRuntime:
                     target_summary_tokens=target_summary_tokens,
                     context_limit_resolution=context_limit_resolution,
                     remaining_calls=[
-                        max(16, int(self.config.context.max_compaction_rounds) * 16)
+                        self._semantic_reduction_call_budget(
+                            state,
+                            source_tokens=max(1, int(estimated_source_tokens)),
+                            context_limit_resolution=context_limit_resolution,
+                        )
                     ],
                 )
                 preserve_recent = 0
                 hierarchical = True
-            else:
+            elif not direct_selector_projection:
                 self.history.record_event(
                     state,
                     "context_compiled",
@@ -5538,7 +7077,7 @@ class AgentRuntime:
                         state,
                         PreparedCall(assembly, report, "lean", contract),
                         minimum_output_tokens=minimum_summary_tokens,
-                        desired_output_tokens=target_summary_tokens + 64,
+                        desired_output_tokens=desired_summary_output_tokens,
                         context_limit_resolution=context_limit_resolution,
                     )
                 except _OutputRecoveryContextOverflow as exc:
@@ -5566,6 +7105,15 @@ class AgentRuntime:
                     maximum=adaptive_cap,
                 )
                 hierarchical = False
+
+            if direct_verbatim_lines:
+                summary_text += (
+                    "\n[MODEL-SELECTED VERBATIM SOURCE LINES; raw history remains authoritative]\n"
+                    + "\n".join(direct_verbatim_lines)
+                )
+                # Refinement must freeze these exact facts too; otherwise its
+                # recovery path could discard the direct selector's evidence.
+                verbatim_spans = list(direct_verbatim_lines)
 
             effective_source_count = source_count - preserve_recent
             if effective_source_count <= 0:
@@ -5655,7 +7203,14 @@ class AgentRuntime:
                 "source_event_references": source_event_references,
                 "source_event_ranges": summary_payload["metadata"]["source_event_ranges"],
                 "summary_message": summary_payload,
-                "summary_budget_report": asdict(report),
+                "summary_budget_report": (
+                    asdict(report)
+                    if report is not None
+                    else {
+                        "source": "history_compaction_selection",
+                        "direct_selector_projection": True,
+                    }
+                ),
                 "adaptive_preserve_recent_messages": preserve_recent,
                 "candidate_source_message_count": source_count,
                 "hierarchical": hierarchical,
@@ -5666,6 +7221,12 @@ class AgentRuntime:
                 "actual_source_tokens": actual_source_tokens,
                 "actual_replacement_tokens": replacement_tokens,
                 "actual_recovered_tokens": recovered_tokens,
+                "verbatim_span_count": len(verbatim_spans),
+                "verbatim_spans_sha256": sha256_text("\n".join(verbatim_spans)),
+                "verbatim_line_count": len(direct_verbatim_lines),
+                "verbatim_lines_sha256": sha256_text("\n".join(direct_verbatim_lines)),
+                "verbatim_selection_semantic": direct_verbatim_semantic,
+                "direct_selector_projection": direct_selector_projection,
             }
             self._record_history_reduction(
                 state,
@@ -6149,7 +7710,18 @@ class AgentRuntime:
         attempt: int,
         policy: Any,
         frozen_request: dict[str, Any],
+        usage_evidence: dict[str, Any] | None = None,
     ) -> None:
+        usage = {
+            "backend_prompt_tokens": None,
+            "backend_completion_tokens": None,
+            "prompt_tokens_source": None,
+            "completion_tokens_source": None,
+        }
+        if isinstance(usage_evidence, dict):
+            for key in tuple(usage):
+                if key in usage_evidence:
+                    usage[key] = usage_evidence[key]
         if self._run_cancellation_requested(state):
             run_id = self._active_run_id(state)
             cancellation = self.preemption.run_cancellation(state.session_id, run_id)
@@ -6163,6 +7735,7 @@ class AgentRuntime:
                     "preemption_id": f"run_cancellation:{run_id}",
                     "request_sha256": active_call.request_sha256,
                     "reason": "run_cancellation_requested",
+                    "usage_evidence": usage,
                 },
             )
             self._finish_inference(
@@ -6195,6 +7768,7 @@ class AgentRuntime:
                 "call_id": call_id,
                 "preemption_id": pending.preemption_id,
                 "request_sha256": active_call.request_sha256,
+                "usage_evidence": usage,
             },
         )
         current = self.inference.get(inference_request_id)
@@ -6272,6 +7846,7 @@ class AgentRuntime:
                 "call_id": call_id,
                 "preemption_id": pending.preemption_id,
                 "request_sha256": active_call.request_sha256,
+                "preempted_usage_evidence": usage,
                 "request": frozen_request,
             },
         )
@@ -6385,7 +7960,9 @@ class AgentRuntime:
             request,
         )
         frozen_request = active_call.request
-        inference_priority, inference_source = self._current_inference_priority()
+        inference_priority, inference_source, inference_weight = (
+            self._current_inference_priority()
+        )
         inference_request = self.inference.enqueue(
             session_id=state.session_id,
             run_id=self._active_run_id(state),
@@ -6393,6 +7970,7 @@ class AgentRuntime:
             call_kind=prepared.assembly.kind,
             priority=inference_priority,
             source=inference_source,
+            fair_weight=inference_weight,
         )
         self.telemetry.record_inference_queued(
             call_kind=inference_request.call_kind,
@@ -6409,6 +7987,7 @@ class AgentRuntime:
                 "kind": inference_request.call_kind,
                 "source": inference_request.source,
                 "priority": inference_request.priority,
+                "fair_weight": inference_request.fair_weight,
                 "backend_key": inference_request.backend_key,
                 "context_provenance": context_provenance,
             },
@@ -6483,9 +8062,19 @@ class AgentRuntime:
             started = time.monotonic()
             last_progress_log = started
             last_progress_tokens = 0
+            latest_usage_evidence: dict[str, Any] = {
+                "backend_prompt_tokens": None,
+                "backend_completion_tokens": None,
+                "prompt_tokens_source": None,
+                "completion_tokens_source": None,
+            }
 
             def progress_callback(progress: dict[str, Any]) -> None:
                 nonlocal last_progress_log, last_progress_tokens
+                for key in tuple(latest_usage_evidence):
+                    if key in progress:
+                        latest_usage_evidence[key] = progress.get(key)
+                self.inference.touch_running(inference_request.request_id)
                 now = time.monotonic()
                 tokens = int(progress.get("completion_tokens", 0) or 0)
                 if (
@@ -6515,6 +8104,10 @@ class AgentRuntime:
                         "attempt": total_attempt,
                         "elapsed_seconds": float(progress.get("elapsed_seconds", now - started)),
                         "completion_tokens": tokens,
+                        "backend_prompt_tokens": progress.get("backend_prompt_tokens"),
+                        "backend_completion_tokens": progress.get("backend_completion_tokens"),
+                        "prompt_tokens_source": progress.get("prompt_tokens_source"),
+                        "completion_tokens_source": progress.get("completion_tokens_source"),
                         "tokens_per_second": float(progress.get("tokens_per_second", 0.0) or 0.0),
                         "first_token_seconds": progress.get("first_token_seconds"),
                         "token_timeout_seconds": progress.get(
@@ -6558,10 +8151,30 @@ class AgentRuntime:
                     active_id=call_id,
                     operation_kind=prepared.assembly.kind,
                     interval_seconds=heartbeat_interval,
+                    on_pulse=lambda: self.inference.touch_running(
+                        inference_request.request_id
+                    ),
                 ):
                     completion = send(frozen_request, **kwargs)
             except ModelCallPreempted:
                 telemetry_operation.record_preemption()
+                telemetry_operation.record_partial_model_usage(
+                    input_tokens=(
+                        int(latest_usage_evidence["backend_prompt_tokens"])
+                        if isinstance(
+                            latest_usage_evidence.get("backend_prompt_tokens"), int
+                        )
+                        else None
+                    ),
+                    output_tokens=(
+                        int(latest_usage_evidence["backend_completion_tokens"])
+                        if isinstance(
+                            latest_usage_evidence.get("backend_completion_tokens"), int
+                        )
+                        else None
+                    ),
+                    reason="preempted",
+                )
                 self._handle_model_preemption(
                     state,
                     prepared,
@@ -6572,6 +8185,7 @@ class AgentRuntime:
                     attempt=total_attempt,
                     policy=policy,
                     frozen_request=frozen_request,
+                    usage_evidence=latest_usage_evidence,
                 )
                 continue
             except Exception as exc:

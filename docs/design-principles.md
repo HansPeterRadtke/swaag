@@ -1,3 +1,7 @@
+## Authority scope
+
+Infra agent, general programming/testing, configuration, security, logging and reliability guidance applies directly to the SWAAG harness. GUI/HMI guidance applies to protocol clients and shipped user interfaces; the current September voice-interface rules are therefore conditional acceptance requirements for a voice-capable client rather than a requirement that the core daemon own microphone/STT/TTS UI. Trading/finance guidance is likewise domain-conditional unless SWAAG explicitly claims that capability. Domain recordings may still contribute generic benchmark/evidence methodology, but they do not silently expand the core product scope. Raw current recordings remain authority when the consolidated recording-coverage appendix lags newly added material.
+
 # Swaag design principles
 
 Swaag is an LLM harness. Its central responsibility is constructing the right bounded context for every LLM call. The LLM is the semantic engine; deterministic code surrounds it with exact resource accounting, execution, persistence, and verification.
@@ -48,11 +52,19 @@ Research is normal agent work. When information is missing, stale, or uncertain,
 
 The objective is not the earliest plausible answer. The worker should normally inspect its result, validate it, try alternatives after recoverable failures, research missing information, test its work, and improve deficiencies. Some tasks may intentionally continue until interrupted.
 
-Not every ambiguity should stop work. An LLM should distinguish genuinely blocking questions from questions where a provisional assumption is reasonable. Noncritical questions may be exposed while work continues; critical uncertainty can require immediate input. Semantic criticality belongs to an LLM; hard safety, permission, and resource constraints remain deterministic.
+Not every ambiguity should stop work. An LLM should judge the consequences and confidence of a wrong assumption, not merely whether information is missing. A blocking question carries no provisional assumption and can require durable input before work continues. An optional question carries a concrete provisional assumption; the exact question and assumption are disclosed in the user-facing message while useful work may continue. Before asking, the model should use reliable repository/environment inspection, research, documentation, existing workers, or tools when those can resolve the uncertainty. Semantic criticality belongs to the LLM; hard safety, permission, authorization, and resource constraints remain deterministic.
 
 Completion is semantic. Do not declare completion because a model emitted a final-looking response. Evaluate against the user's objective, requirements, evidence, deterministic tests, and remaining deficiencies. For substantial tasks, an independent LLM evaluation call may be preferable to asking the producing context to grade itself. Supply deterministic evidence such as tests, exit status, file state, schema validation, and measured values.
 
 Persistence and stopping need dedicated benchmarks. Final-answer correctness alone does not measure premature stopping or pointless continued work.
+
+## Configuration, private agent state, and operations evidence
+
+Configuration is layered deterministically: packaged defaults, project-local config, explicit caller config files in order, `SWAAG_CONFIG`, then per-key `SWAAG__...` environment overrides. The effective config records the winning source for every leaf plus parameter metadata such as units/range, criticality, expected change frequency, and consequences. Secrets are referenced by environment-variable names rather than stored as ordinary literal configuration when a secret-bearing option is enabled.
+
+Agent-owned experiments and reusable internal state are separate from user repositories. The configurable private data root hosts the `agent_workspace` sandbox, private Python environment, notes and scratch artifacts. Bubblewrap isolates ordinary Python/shell work from host/project files and networking; explicit package installation is separately side-effect gated. Project artifacts are created only through project-facing capabilities after inspecting repository structure and instructions.
+
+Operations evidence is structured JSONL rather than unbounded ad-hoc stdout. Each process records startup with redacted effective configuration/source metadata and shutdown with loss counters. Logging uses a bounded asynchronous queue with explicit overflow fallback, file-size rotation and retention. Service readiness/stopping and push retry/failure/delivery transitions enter the same operations channel; semantic prompt/tool content remains excluded unless a purpose-specific durable history record already owns it.
 
 ## Workers, communication, and inference
 
@@ -111,7 +123,7 @@ Operational telemetry should map onto OpenTelemetry GenAI conventions where appl
 
 Swaag keeps a sequential inner model/tool loop but now surrounds it with independently addressable durable workers, a transport-neutral task/event API, backend-neutral inference admission, ordered control and cancellation, worker-aware wakeup dispatch, and a supervised communication service. Every current production semantic operation uses central full-fidelity-first context compilation. Raw event history and artifacts remain authoritative while overflow projections retain exact lineage. Independent completion evaluation, staged semantic tool discovery, caller-defined output, response-presentation stages, protocol adapters, and OpenTelemetry instrumentation are implemented and covered by deterministic tests.
 
-This is still not the completed target. Live model experiments and replay catalogs remain required for context layout, compaction, tool strategy, research, autonomy, prompt instructions, presentation, cancellation, and long-horizon behavior. Communication model routing lacks a genuinely distinct small/strong deployment comparison. AG-UI, A2A, MCP, and Open WebUI adapters still have the conformance and exposure gaps recorded in `TODO.md`; external-tool integration coverage and the host Collector/live telemetry path remain partial. Do not promote those partial areas to complete based only on unit tests or interface shape.
+This is still not the completed target. Live model experiments and replay catalogs remain required for context layout, compaction, tool strategy, research, autonomy, prompt instructions, presentation, cancellation, and long-horizon behavior. Communication model routing now has genuinely distinct small/strong comparisons, but both tested small candidates failed the semantic/routing quality bar and therefore are not promoted. AG-UI current SSE scope is accepted; A2A, MCP, and Open WebUI retain only the conformance/exposure gaps recorded in `TODO.md`. The root-owned Collector/live telemetry path is verified and retained; broader external-tool/provider acceptance remains partial. Do not promote those partial areas to complete based only on unit tests or interface shape.
 
 ## Benchmark/runtime separation
 
@@ -130,3 +142,9 @@ Durable semantic memory has an explicit trust boundary. Model-authored rules are
 ## Context reduction requires measured need and executable headroom
 
 Exact context that fits should be admitted before semantic reduction. Durable notes are therefore included exactly on the first measured action candidate; semantic note selection is an overflow-recovery step, not a mandatory pre-filter. History compression likewise must not select material merely because it is old: semantic span selection determines what may be reduced, while deterministic code only enforces measured budgets, provenance, replay, and protected-span boundaries. For local backends, advertised context capacity is not proof that a near-limit reduction request is executable; an explicit semantic-reduction working-set cap may force hierarchical source fragmentation before inference without shrinking the ordinary agent context window.
+
+## User-facing orchestration
+
+The ordinary user-facing control plane is a persistent orchestrator, not a worker. It semantically translates the user's overall objective into a durable worker graph, chooses sequencing versus parallelism, dependencies, model routes, priorities, finish/abort criteria, resource requests, branch decisions, and reporting policy, and may revise that plan while work runs. Deterministic orchestration code does not infer task meaning: it validates explicit graph/resource/model facts, rejects cycles and impossible plans, releases mechanically runnable nodes, persists exact revisions and notifications, and enforces the chosen scheduling policy. Worker results are untrusted evidence when transferred downstream, never instructions. A user-facing orchestrator interaction has control priority over background work; shared-backend interruption is cancellation plus exact replay, not claimed suspend/resume.
+
+The inference coordinator separates control priority from worker fairness. Among equal effective priorities, durable per-source virtual service implements weighted sharing from worker priorities; queue aging prevents starvation. Model route ownership is persisted on each worker. Host capacity is exposed as mechanical facts through `system_resources`, while semantic resource planning stays with the LLM. Notifications are durable, policy-filtered, cursor-addressable, acknowledgeable, and available over an SSE stream; critical failures bypass ordinary suppression.

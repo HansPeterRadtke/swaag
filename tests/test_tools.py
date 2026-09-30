@@ -16,7 +16,7 @@ from swaag.tools.base import (
     ToolValidationError,
     _validate_schema_value,
 )
-from swaag.tools.builtin import EditTextTool, ReadFileTool, ReadTextTool, RunTestsTool, ShellCommandTool, WriteFileTool
+from swaag.tools.builtin import EditTextTool, ReadFileTool, ReadTextTool, RunTestsTool, ShellCommandTool, SystemResourcesTool, WriteFileTool
 from swaag.tools.registry import ToolRegistry
 from swaag.types import SessionState, ToolExecutionResult
 
@@ -1350,3 +1350,226 @@ def test_real_noop_edit_and_write_are_rejected_as_no_progress(make_config, tmp_p
         context,
     )
     assert preview.output["changed"] is False
+
+
+def test_system_resources_reports_mechanical_capacity(make_config) -> None:
+    registry = ToolRegistry()
+    config = make_config(tools__enabled=["system_resources"])
+    invocation, result = registry.dispatch(
+        "system_resources", {"path": "/data"}, config, _empty_state()
+    )
+    assert invocation.validated_input == {"path": "/data"}
+    output = result.output
+    assert output["cpu_count"] >= 1
+    assert output["memory_total_bytes"] > 0
+    assert 0 <= output["memory_available_bytes"] <= output["memory_total_bytes"]
+    assert output["disk_total_bytes"] > 0
+    assert output["disk_free_bytes"] >= 0
+    assert Path(output["disk_path"]) == Path("/data").resolve()
+
+
+def test_system_resources_rejects_missing_path(make_config) -> None:
+    registry = ToolRegistry()
+    config = make_config(tools__enabled=["system_resources"])
+    with pytest.raises(FileNotFoundError):
+        registry.dispatch(
+            "system_resources",
+            {"path": "/definitely/not/a/real/swaag/path"},
+            config,
+            _empty_state(),
+        )
+
+
+def test_system_resources_reports_local_backend_capacity(make_config, monkeypatch) -> None:
+    class _Response:
+        def __init__(self, payload):
+            import json as _json
+
+            self._body = _json.dumps(payload).encode()
+
+        def __enter__(self):
+            return self
+
+        def __exit__(self, *_args):
+            return False
+
+        def read(self):
+            return self._body
+
+    def fake_urlopen(url, timeout):
+        assert timeout == 0.75
+        if url.endswith("/health"):
+            return _Response({"status": "ok"})
+        if url.endswith("/props"):
+            return _Response({"n_ctx": 32768, "total_slots": 3})
+        if url.endswith("/slots"):
+            return _Response(
+                [
+                    {"id": 0, "is_processing": True},
+                    {"id": 1, "is_processing": False},
+                    {"id": 2, "is_processing": False},
+                ]
+            )
+        raise AssertionError(url)
+
+    monkeypatch.setattr("swaag.tools.builtin.urlopen", fake_urlopen)
+    registry = ToolRegistry()
+    config = make_config(
+        tools__enabled=["system_resources"],
+        model__base_url="http://127.0.0.1:19999/v1",
+    )
+    config.communication.model_routes = {
+        "strong": "https://remote.example/v1",
+        "small": "http://127.0.0.1:18888",
+    }
+    _invocation, result = registry.dispatch(
+        "system_resources", {"path": "/data"}, config, _empty_state()
+    )
+    output = result.output
+    assert output["model_backend_url"] == "http://127.0.0.1:19999"
+    assert output["model_backend_local"] is True
+    assert output["model_backend_reachable"] is True
+    assert output["model_backend_health"] == "ok"
+    assert output["model_context_tokens"] == 32768
+    assert output["model_slots_total"] == 3
+    assert output["model_slots_processing"] == 1
+    assert output["configured_model_routes"] == ["small", "strong"]
+
+
+def test_system_resources_does_not_probe_remote_model_endpoint(make_config, monkeypatch) -> None:
+    def forbidden(*_args, **_kwargs):
+        raise AssertionError("remote model endpoint was probed")
+
+    monkeypatch.setattr("swaag.tools.builtin.urlopen", forbidden)
+    registry = ToolRegistry()
+    config = make_config(
+        tools__enabled=["system_resources"],
+        model__base_url="https://api.example.test/v1",
+    )
+    _invocation, result = registry.dispatch(
+        "system_resources", {"path": "/data"}, config, _empty_state()
+    )
+    output = result.output
+    assert output["model_backend_url"] == "https://api.example.test"
+    assert output["model_backend_local"] is False
+    assert output["model_backend_reachable"] is False
+    assert output["model_backend_health"] == "not_probed_remote"
+    assert output["model_context_tokens"] == 0
+    assert output["model_slots_total"] == 0
+    assert output["model_slots_processing"] == 0
+
+
+def test_agent_workspace_is_private_persistent_and_project_invisible(make_config, tmp_path) -> None:
+    registry = ToolRegistry()
+    private_root = tmp_path / "private-agent-data"
+    project_secret = tmp_path / "project-secret.txt"
+    project_secret.write_text("must stay outside sandbox", encoding="utf-8")
+    config = make_config(agent_data__root=private_root)
+
+    _invocation, shell = registry.dispatch(
+        "agent_workspace",
+        {
+            "operation": "shell",
+            "code": None,
+            "command": "pwd; test ! -e /etc/passwd; test ! -e '" + str(project_secret) + "'; printf private > kept.txt",
+            "path": None,
+            "text": None,
+            "packages": None,
+            "max_chars": 2000,
+        },
+        config,
+        _empty_state(),
+    )
+    assert shell.output["return_code"] == 0
+    assert shell.output["stdout"].splitlines()[0] == "/agent/workspace"
+    assert shell.output["network_enabled"] is False
+    assert (private_root / "workspace/kept.txt").read_text() == "private"
+
+    _invocation, read = registry.dispatch(
+        "agent_workspace",
+        {
+            "operation": "read_text",
+            "code": None,
+            "command": None,
+            "path": "kept.txt",
+            "text": None,
+            "packages": None,
+            "max_chars": None,
+        },
+        config,
+        _empty_state(),
+    )
+    assert read.output["text"] == "private"
+
+
+def test_agent_workspace_python_has_private_venv_and_no_host_etc(make_config, tmp_path) -> None:
+    registry = ToolRegistry()
+    private_root = tmp_path / "agent-data"
+    config = make_config(agent_data__root=private_root, agent_data__command_timeout_seconds=60)
+
+    _invocation, result = registry.dispatch(
+        "agent_workspace",
+        {
+            "operation": "python",
+            "code": "from pathlib import Path; print(Path('/etc/passwd').exists()); Path('python.txt').write_text('42'); print(Path('python.txt').read_text())",
+            "command": None,
+            "path": None,
+            "text": None,
+            "packages": None,
+            "max_chars": 2000,
+        },
+        config,
+        _empty_state(),
+    )
+    assert result.output["return_code"] == 0
+    assert result.output["stdout"].splitlines() == ["False", "42"]
+    assert (private_root / "workspace/python.txt").read_text() == "42"
+    assert (private_root / "python-venv/bin/python").exists()
+
+
+def test_agent_workspace_rejects_path_escape_and_gates_package_install(make_config, tmp_path) -> None:
+    registry = ToolRegistry()
+    config = make_config(agent_data__root=tmp_path / "agent-data")
+    with pytest.raises(ToolValidationError, match="escapes"):
+        registry.dispatch(
+            "agent_workspace",
+            {
+                "operation": "write_text",
+                "code": None,
+                "command": None,
+                "path": "../escape.txt",
+                "text": "no",
+                "packages": None,
+                "max_chars": None,
+            },
+            config,
+            _empty_state(),
+        )
+    with pytest.raises(PermissionError, match="disabled by policy"):
+        registry.dispatch(
+            "agent_workspace",
+            {
+                "operation": "pip_install",
+                "code": None,
+                "command": None,
+                "path": None,
+                "text": None,
+                "packages": ["numpy"],
+                "max_chars": None,
+            },
+            config,
+            _empty_state(),
+        )
+
+
+def test_project_write_tools_require_repository_layout_discovery_guidance():
+    from swaag.tools.builtin import EditTextTool, WriteFileTool
+
+    write = WriteFileTool().usage_guidance
+    edit = EditTextTool().usage_guidance
+    assert "inspect the repository layout" in write
+    assert "project instructions" in write
+    assert "Scratch experiments and internal notes belong in agent_workspace" in write
+    assert "inspect the repository layout" in edit
+    assert "source-of-truth location" in edit
+    assert "agent_workspace" in edit

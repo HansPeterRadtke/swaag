@@ -47,10 +47,24 @@ class _CharacterCountProjectionClient:
 
     def send_completion(self, payload, **_kwargs):
         self.requests.append(payload)
-        projection = " ".join(
-            marker for marker in self.markers if marker in payload["prompt"]
-        ) or "fragment retained"
-        response = json.dumps({"projection": projection})
+        if payload["contract"] == "tool_result_verbatim_selection":
+            selected = [
+                line.split()[0]
+                for line in str(payload["prompt"]).splitlines()
+                if line.startswith("L")
+                and any(marker in line for marker in self.markers)
+            ]
+            response = json.dumps(
+                {
+                    "has": bool(selected),
+                    "ids": selected,
+                }
+            )
+        else:
+            projection = " ".join(
+                marker for marker in self.markers if marker in payload["prompt"]
+            ) or "fragment retained"
+            response = json.dumps({"projection": projection})
         return CompletionResult(
             text=response,
             raw_request=payload,
@@ -190,13 +204,18 @@ def test_oversized_tool_result_projection_preserves_every_fragment(make_config) 
         state,
         original_request="Find the critical marker without losing exact source data.",
         message=message,
-        target_tokens=256,
+        target_tokens=1_800,
         original_tokens=8_000,
         overflow_tokens=4_000,
     )
 
-    assert projection == " ".join(markers)
+    assert all(marker in projection for marker in markers)
+    assert runtime._counter(state).count_text(projection).tokens < 8_000
     assert len(client.requests) > 1
+    assert any(
+        request["contract"] == "tool_result_verbatim_selection"
+        for request in client.requests
+    )
     projected = [
         event
         for event in runtime.history.read_history(state.session_id)
@@ -204,3 +223,108 @@ def test_oversized_tool_result_projection_preserves_every_fragment(make_config) 
     ][-1]
     assert projected.payload["source_event_sequence"] == source.sequence
     assert projected.payload["source_event_hash"] == source.hash
+
+
+def test_tool_result_verbatim_selector_preserves_marker_crossing_fragment_boundary(make_config) -> None:
+    marker = "BOUNDARY-CRITICAL-MARKER-XYZ"
+    source_text = ("A" * 185) + marker + ("B" * 500)
+    config = make_config(model__context_limit=4_000)
+    client = _CharacterCountProjectionClient([marker])
+    runtime = AgentRuntime(config, model_client=client)
+    state = runtime.create_or_load_session()
+    selected, semantic_ok = runtime._select_tool_result_verbatim_fragments(
+        state,
+        original_request=f"Preserve {marker} exactly.",
+        tool_name="reader",
+        source_text=source_text,
+    )
+    assert semantic_ok is True
+    assert marker in "\n".join(selected)
+
+
+def test_tool_result_anchor_path_expands_repeated_structural_prefix_exactly(make_config) -> None:
+    required = [
+        "FACT: ticket CHG-7419-Z",
+        "FACT: deadline 2042-06-19T15:40:00Z",
+        "FACT: never delete the source archive",
+        "FACT: checksum failed because source row 812 was absent",
+    ]
+    source = "\n".join(
+        ["routine healthy record"] * 40
+        + [required[0], "DECOY: blue"]
+        + ["routine healthy record"] * 40
+        + [required[1], "DECOY: amber"]
+        + ["routine healthy record"] * 40
+        + [required[2], "DECOY: olive"]
+        + ["routine healthy record"] * 40
+        + [required[3], "DECOY: scarlet"]
+    )
+
+    class _AnchorClient(_CharacterCountProjectionClient):
+        def send_completion(self, payload, **kwargs):
+            if payload["contract"] == "tool_result_best_anchor":
+                self.requests.append(payload)
+                text = json.dumps({"anchor": "CHG-7419-Z"})
+                return CompletionResult(
+                    text=text,
+                    raw_request=payload,
+                    raw_response={"content": text},
+                    prompt_tokens=None,
+                    completion_tokens=None,
+                    finish_reason="stop",
+                )
+            return super().send_completion(payload, **kwargs)
+
+    config = make_config(model__context_limit=8_192)
+    client = _AnchorClient(required)
+    runtime = AgentRuntime(config, model_client=client)
+    state = runtime.create_or_load_session()
+    spans = runtime._select_tool_result_anchor_spans(
+        state,
+        original_request="Use the exact ticket, deadline, negative constraint, and checksum cause.",
+        tool_name="reader",
+        source_text=source,
+        target_tokens=512,
+    )
+    assert spans == required
+    assert not any("DECOY" in span for span in spans)
+
+
+def test_tool_result_anchor_path_uses_bounded_neighborhood_for_oversized_single_line(make_config) -> None:
+    marker = "SMALLCTX-TOOL-RESULT-947"
+    source = ("irrelevant tool bulk " * 2500) + marker
+
+    class _SingleLineAnchorClient(_CharacterCountProjectionClient):
+        def send_completion(self, payload, **kwargs):
+            if payload["contract"] == "tool_result_best_anchor":
+                self.requests.append(payload)
+                text = json.dumps({"anchor": marker})
+                return CompletionResult(
+                    text=text,
+                    raw_request=payload,
+                    raw_response={"content": text},
+                    prompt_tokens=None,
+                    completion_tokens=None,
+                    finish_reason="stop",
+                )
+            return super().send_completion(payload, **kwargs)
+
+    config = make_config(model__context_limit=2_048)
+    client = _SingleLineAnchorClient([marker])
+    runtime = AgentRuntime(config, model_client=client)
+    state = runtime.create_or_load_session()
+    spans = runtime._select_tool_result_anchor_spans(
+        state,
+        original_request=f"Use the exact tool evidence and preserve marker {marker}.",
+        tool_name="generic_reader",
+        source_text=source,
+        target_tokens=600,
+    )
+    assert len(spans) == 1
+    assert marker in spans[0]
+    assert len(spans[0]) < len(source)
+    block = (
+        "[MODEL-SELECTED STRUCTURAL EXACT TOOL-RESULT UNITS; raw source remains authoritative]\n"
+        + spans[0]
+    )
+    assert runtime._counter(state).count_text(block).tokens <= 600

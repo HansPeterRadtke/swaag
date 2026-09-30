@@ -303,7 +303,9 @@ def test_action_preflight_selects_notes_only_after_measured_overflow(make_config
         nonlocal action_compiles
         if assembly.kind == "action":
             action_compiles += 1
-            if action_compiles == 1:
+            if action_compiles <= 2:
+                # Standard and measured full-fidelity lean admission must both
+                # overflow before semantic note selection is allowed.
                 kwargs["context_limit_resolution"] = (220, "test_measured_overflow")
         return original_compile(state_arg, assembly, contract, **kwargs)
 

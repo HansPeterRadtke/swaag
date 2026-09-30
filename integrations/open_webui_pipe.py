@@ -13,13 +13,13 @@ import base64
 import json
 import mimetypes
 from pathlib import Path
-from typing import Any, Awaitable, Callable
+from typing import Any, Awaitable, Callable, Dict
 from urllib.parse import unquote_to_bytes
 
 from pydantic import BaseModel, Field
 
 
-EventEmitter = Callable[[dict[str, Any]], Awaitable[None]]
+EventEmitter = Callable[[Dict[str, Any]], Awaitable[None]]
 _PIPE_TERMINAL_STATES = {"completed", "failed", "canceled", "input_required"}
 
 

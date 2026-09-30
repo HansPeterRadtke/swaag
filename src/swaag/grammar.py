@@ -33,6 +33,21 @@ def _contract(name: str, schema: dict[str, Any]) -> ContractSpec:
     return ContractSpec(name=name, mode="json_schema", json_schema=schema)
 
 
+def exact_word_sequence_contract(word_count: int) -> ContractSpec:
+    count = int(word_count)
+    if count <= 0:
+        raise ValueError("word_count must be positive")
+    width = max(3, len(str(count)))
+    properties = {
+        f"word_{index:0{width}d}": _string()
+        for index in range(1, count + 1)
+    }
+    return _contract(
+        f"exact_word_sequence_{count}",
+        _closed_object(properties),
+    )
+
+
 def yes_no_contract() -> ContractSpec:
     return _contract(
         "yes_no",
@@ -69,7 +84,68 @@ def history_compaction_selection_contract() -> ContractSpec:
                     "type": "string",
                     "enum": ["protect", "important", "ordinary", "compressible"],
                 },
+                "reason_code": {
+                    "type": "string",
+                    "enum": [
+                        "redundant_progress",
+                        "current_direction",
+                        "constraint",
+                        "unresolved_work",
+                        "commitment",
+                        "causal_fact",
+                        "identifier_or_path",
+                        "tool_outcome",
+                        "exact_wording",
+                        "other_important",
+                    ],
+                },
+                "projection": _string(),
+            }
+        ),
+    )
+
+
+def history_best_anchor_contract() -> ContractSpec:
+    return _contract(
+        "history_best_anchor",
+        _closed_object({"anchor": _string()}),
+    )
+
+
+def history_verbatim_selection_contract(line_ids: Iterable[str]) -> ContractSpec:
+    identifiers = [str(item) for item in line_ids]
+    if not identifiers:
+        raise ValueError("history verbatim selection requires at least one line id")
+    return _contract(
+        "history_verbatim_selection",
+        _closed_object(
+            {
+                "selected_line_ids": _array(
+                    {"type": "string", "enum": identifiers}
+                ),
                 "reason": _string(),
+            }
+        ),
+    )
+
+
+def tool_result_best_anchor_contract() -> ContractSpec:
+    return _contract(
+        "tool_result_best_anchor",
+        _closed_object({"anchor": _string()}),
+    )
+
+
+def tool_result_verbatim_selection_contract(fragment_ids: Iterable[str]) -> ContractSpec:
+    identifiers = [str(item) for item in fragment_ids]
+    if not identifiers:
+        raise ValueError("tool-result verbatim selection requires at least one fragment id")
+    return _contract(
+        "tool_result_verbatim_selection",
+        _closed_object(
+            {
+                "has": {"type": "boolean"},
+                "ids": _array({"type": "string", "enum": identifiers}),
             }
         ),
     )
@@ -233,6 +309,7 @@ def completion_evaluation_contract(
                 "source_kind": {"type": "string", "enum": [source_kind]},
                 "source_id": {"type": "string", "enum": [source_id]},
                 "purpose": _string(),
+                "literal_query": _string(),
             }
         )
         for source_kind, source_id in evidence_sources
@@ -307,6 +384,16 @@ def agent_terminal_response_contract(*, allow_silent_completion: bool = False) -
                     if allow_silent_completion
                     else {"type": "boolean", "enum": [False]}
                 ),
+                "response_constraints": _closed_object(
+                    {
+                        "exact_word_count": {
+                            "anyOf": [
+                                {"type": "integer"},
+                                {"type": "null"},
+                            ]
+                        }
+                    }
+                ),
             }
         ),
     )
@@ -346,6 +433,16 @@ def agent_action_contract(tool_specs: Iterable[tuple], *, allow_silent_completio
                 "tool_calls": _array(tool_call_schema),
                 "continue_loop": _boolean(),
                 "silent_completion": _boolean() if allow_silent_completion else {"type": "boolean", "enum": [False]},
+                "response_constraints": _closed_object(
+                    {
+                        "exact_word_count": {
+                            "anyOf": [
+                                {"type": "integer"},
+                                {"type": "null"},
+                            ]
+                        }
+                    }
+                ),
                 "status": _closed_object(
                     {
                         "situation": _string(),

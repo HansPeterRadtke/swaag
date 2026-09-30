@@ -149,6 +149,12 @@ def test_a2a_sdk_conformance_assets_are_pinned_and_parse() -> None:
     assert "client.cancelTask" in probe_source
     assert "client.sendMessage(" in probe_source
     assert ".sendMessageStream(" in probe_source
+    assert "client.getAgentCard" in probe_source
+    assert "client.createTaskPushNotificationConfig" in probe_source
+    assert "client.getTaskPushNotificationConfig" in probe_source
+    assert "client.listTaskPushNotificationConfig" in probe_source
+    assert "client.deleteTaskPushNotificationConfig" in probe_source
+    assert '"--exercise-push"' in runner_source
     assert "model_client=no_inference" in runner_source
     assert "queue_without_executor" in runner_source
     assert 'choices=("jsonrpc", "http-json")' in runner_source
@@ -225,3 +231,27 @@ def test_ag_ui_sdk_conformance_assets_are_pinned_and_parse() -> None:
     assert "_NoInferenceClient" in client_tool_runner_source
     assert "model_client=no_inference" in client_tool_runner_source
     assert '"inference_allowed": False' in client_tool_runner_source
+
+
+def test_live_deployment_verifier_asset_covers_required_evidence():
+    source = Path("scripts/verify-live-deployment.py").read_text()
+    assert "source_matches_installed" in source
+    assert "root_owned_0644" in source
+    assert "zero_restarts" in source
+    assert "repo_matches_deployed" in source
+    assert "collector_health" in source
+    assert "traces.json" in source and "metrics.json" in source
+    assert "operations:lifecycle_evidence" in source
+    assert "communication_schema_current" in source
+    assert "dirty_identity_sha256" in source
+
+
+def test_live_agent_workspace_and_operations_log_verifier_assets_exist():
+    workspace = Path("scripts/verify-agent-workspace.py").read_text()
+    ops = Path("scripts/verify-operations-log.py").read_text()
+    assert "sandbox_filesystem_isolation" in workspace
+    assert "ordinary_python_has_no_network" in workspace
+    assert "package_install_side_effect_gated" in workspace
+    assert "queue_overflow_observed" in ops
+    assert "rotation_observed" in ops
+    assert "shutdown_flushed" in ops

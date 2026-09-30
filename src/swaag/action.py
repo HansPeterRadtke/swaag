@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from typing import Any, Iterable
 
 
@@ -35,6 +35,11 @@ class AgentStatus:
 
 
 @dataclass(slots=True, frozen=True)
+class AgentResponseConstraints:
+    exact_word_count: int | None = None
+
+
+@dataclass(slots=True, frozen=True)
 class AgentAction:
     assistant_message: str
     tool_calls: list[AgentToolCall]
@@ -42,6 +47,9 @@ class AgentAction:
     silent_completion: bool
     status: AgentStatus
     questions: list[AgentQuestion]
+    response_constraints: AgentResponseConstraints = field(
+        default_factory=AgentResponseConstraints
+    )
 
     @property
     def calls_tools(self) -> bool:
@@ -58,6 +66,9 @@ def action_from_payload(payload: dict[str, Any], *, enabled_tool_names: Iterable
     silent_completion = payload.get("silent_completion", False)
     status_payload = payload.get("status")
     questions_payload = payload.get("questions", [])
+    response_constraints_payload = payload.get(
+        "response_constraints", {"exact_word_count": None}
+    )
     if status_payload is None:
         # Backward compatibility for pre-status stored actions and test fixtures.
         status_payload = {"situation": "", "action": "", "reason": "", "importance": "normal"}
@@ -88,6 +99,25 @@ def action_from_payload(payload: dict[str, Any], *, enabled_tool_names: Iterable
         importance=importance,
     )
 
+    if not isinstance(response_constraints_payload, dict):
+        raise ActionValidationError("response_constraints must be an object")
+    if set(response_constraints_payload) != {"exact_word_count"}:
+        raise ActionValidationError(
+            "response_constraints must contain exactly exact_word_count"
+        )
+    exact_word_count = response_constraints_payload.get("exact_word_count")
+    if exact_word_count is not None and (
+        isinstance(exact_word_count, bool)
+        or not isinstance(exact_word_count, int)
+        or exact_word_count <= 0
+    ):
+        raise ActionValidationError(
+            "response_constraints.exact_word_count must be a positive integer or null"
+        )
+    response_constraints = AgentResponseConstraints(
+        exact_word_count=exact_word_count
+    )
+
     if not isinstance(questions_payload, list):
         raise ActionValidationError("questions must be an array")
     questions: list[AgentQuestion] = []
@@ -102,9 +132,30 @@ def action_from_payload(payload: dict[str, Any], *, enabled_tool_names: Iterable
         for key in ("question", "reason", "assumption_if_unanswered"):
             if not isinstance(item.get(key), str):
                 raise ActionValidationError(f"questions[{index}].{key} must be a string")
-        questions.append(AgentQuestion(
-            question=item["question"], criticality=item["criticality"], reason=item["reason"], assumption_if_unanswered=item["assumption_if_unanswered"]
-        ))
+        question = item["question"].strip()
+        reason = item["reason"].strip()
+        assumption = item["assumption_if_unanswered"].strip()
+        criticality = item["criticality"]
+        if not question:
+            raise ActionValidationError(f"questions[{index}].question must not be empty")
+        if not reason:
+            raise ActionValidationError(f"questions[{index}].reason must not be empty")
+        if criticality == "optional" and not assumption:
+            raise ActionValidationError(
+                f"questions[{index}].assumption_if_unanswered must state the provisional assumption for an optional question"
+            )
+        if criticality == "blocking" and assumption:
+            raise ActionValidationError(
+                f"questions[{index}].assumption_if_unanswered must be empty for a blocking question"
+            )
+        questions.append(
+            AgentQuestion(
+                question=question,
+                criticality=criticality,
+                reason=reason,
+                assumption_if_unanswered=assumption,
+            )
+        )
 
     enabled = set(enabled_tool_names)
     tool_calls: list[AgentToolCall] = []
@@ -118,6 +169,34 @@ def action_from_payload(payload: dict[str, Any], *, enabled_tool_names: Iterable
         if not isinstance(arguments, dict):
             raise ActionValidationError(f"tool_calls[{index}].arguments must be an object")
         tool_calls.append(AgentToolCall(tool_name=tool_name, arguments=arguments))
+
+    if any(question.criticality == "blocking" for question in questions) and tool_calls:
+        raise ActionValidationError(
+            "blocking questions cannot accompany tool calls in the same action; gather safe evidence first, then emit the blocking question as the next step"
+        )
+
+    for index, question in enumerate(questions):
+        if question.question not in assistant_message:
+            raise ActionValidationError(
+                f"assistant_message must disclose questions[{index}].question verbatim"
+            )
+        if (
+            question.criticality == "optional"
+            and question.assumption_if_unanswered not in assistant_message
+        ):
+            raise ActionValidationError(
+                f"assistant_message must disclose questions[{index}].assumption_if_unanswered verbatim"
+            )
+
+    if response_constraints.exact_word_count is not None:
+        actual_word_count = len(assistant_message.split())
+        if actual_word_count != response_constraints.exact_word_count:
+            raise ActionValidationError(
+                "assistant_message has "
+                f"{actual_word_count} whitespace-delimited words but "
+                "response_constraints.exact_word_count requires "
+                f"{response_constraints.exact_word_count}"
+            )
 
     if tool_calls and not continue_loop:
         raise ActionValidationError(
@@ -140,4 +219,5 @@ def action_from_payload(payload: dict[str, Any], *, enabled_tool_names: Iterable
         silent_completion=silent_completion,
         status=status,
         questions=questions,
+        response_constraints=response_constraints,
     )

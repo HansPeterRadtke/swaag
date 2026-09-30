@@ -28,6 +28,7 @@ def test_completion_contract_exposes_only_real_evidence_source_identities():
     request_item = schema["properties"]["evidence_requests"]["items"]["anyOf"][0]
     assert request_item["properties"]["source_kind"]["enum"] == ["history_event"]
     assert request_item["properties"]["source_id"]["enum"] == ["session:7"]
+    assert "literal_query" in request_item["required"]
 
 
 def test_completion_prompt_contains_goal_candidate_and_evidence(make_config):
@@ -245,6 +246,7 @@ class _EvidenceRequestClient(_CompletionClient):
                             "source_kind": self.source_kind,
                             "source_id": self.source_id,
                             "purpose": "Verify the hidden completion fact.",
+                            "literal_query": self.marker,
                         }
                     ],
                 }
@@ -372,6 +374,15 @@ def test_completion_evaluator_semantically_reexpands_exact_artifact(
     )
     assert reexpansion_event.payload["sha256"] == artifact.sha256
     assert reexpansion_event.payload["exact_chars"] == artifact.size_chars
+    searched = next(
+        event
+        for event in runtime.history.read_history(state.session_id)
+        if event.event_type == "completion_evidence_searched"
+    )
+    assert searched.payload["matched_queries"] == [marker]
+    assert searched.payload["excerpt_tokens"] > 0
+    assert expanded[0]["exact_search_excerpted"] is True
+    assert marker in expanded[0]["literal_search_excerpt"]
 
 
 def test_completion_evaluator_reexpands_exact_raw_attachment(
@@ -489,21 +500,25 @@ def test_reexpanded_completion_evidence_projects_only_after_overflow(
     )
 
     assert result["complete"] is True
-    assert result["reexpanded_evidence_sources"][0]["projected"] is True
+    source_view = result["reexpanded_evidence_sources"][0]
+    assert source_view["projected"] is False
+    assert source_view["exact_search_excerpted"] is True
     contracts = [request["contract"] for request in client.requests]
-    assert contracts[0] == "completion_evaluation"
-    assert "evidence_projection" in contracts
+    assert contracts == ["completion_evaluation", "completion_evaluation"]
     assert contracts[-1] == "completion_evaluation"
     final_prompt = client.requests[-1]["prompt"]
-    assert "semantic_projection" in final_prompt
+    assert "exact_literal_search_neighborhoods" in final_prompt
+    assert marker in final_prompt
     assert raw not in final_prompt
-    projection_event = next(
+    search_event = next(
         event
         for event in runtime.history.read_history(state.session_id)
-        if event.event_type == "completion_evidence_projected"
+        if event.event_type == "completion_evidence_searched"
     )
-    assert projection_event.payload["source_id"] == artifact.artifact_id
-    assert projection_event.payload["source_sha256"] == artifact.sha256
+    assert search_event.payload["source_id"] == artifact.artifact_id
+    assert search_event.payload["source_sha256"] == artifact.sha256
+    assert search_event.payload["matched_queries"] == [marker]
+    assert search_event.payload["excerpt_tokens"] > 0
 
 
 def test_completion_evaluation_keeps_prior_turn_history_exact_when_it_fits(
@@ -678,11 +693,36 @@ def test_completion_evaluation_semantically_projects_only_after_measured_overflo
 ) -> None:
     config = make_config(model__context_limit=900, context__max_compaction_rounds=3)
     config.sessions.root = tmp_path / "sessions"
-    oversized_projection = "still-too-large " * 700
-    client = _CompletionClient(
+    compact_projection = "Tests passed with exact verifier evidence."
+    class _ProjectionFallbackCompletionClient(_CompletionClient):
+        def send_completion(self, payload: dict, **kwargs) -> CompletionResult:
+            if payload["contract"] == "tool_result_best_anchor":
+                self.requests.append(payload)
+                response = json.dumps({"anchor": ""})
+                return CompletionResult(
+                    text=response,
+                    raw_request=payload,
+                    raw_response={"content": response},
+                    prompt_tokens=None,
+                    completion_tokens=None,
+                    finish_reason="stop",
+                )
+            if payload["contract"] == "tool_result_verbatim_selection":
+                self.requests.append(payload)
+                response = json.dumps({"has": False, "ids": []})
+                return CompletionResult(
+                    text=response,
+                    raw_request=payload,
+                    raw_response={"content": response},
+                    prompt_tokens=None,
+                    completion_tokens=None,
+                    finish_reason="stop",
+                )
+            return super().send_completion(payload, **kwargs)
+
+    client = _ProjectionFallbackCompletionClient(
         [
-            json.dumps({"projection": oversized_projection}),
-            json.dumps({"projection": "Tests passed with exact verifier evidence."}),
+            json.dumps({"projection": compact_projection}),
             json.dumps(
                 {
                     "complete": True,
@@ -741,15 +781,21 @@ def test_completion_evaluation_semantically_projects_only_after_measured_overflo
 
     assert result["complete"] is True
     assert result["projected_source_event_sequences"] == [source.sequence]
-    assert [request["contract"] for request in client.requests] == [
-        "tool_result_projection",
-        "tool_result_projection",
-        "completion_evaluation",
+    contracts = [request["contract"] for request in client.requests]
+    assert "tool_result_best_anchor" in contracts
+    assert "tool_result_verbatim_selection" in contracts
+    projection_requests = [
+        request for request in client.requests
+        if request["contract"] == "tool_result_projection"
     ]
-    assert raw.strip() in client.requests[0]["prompt"]
-    assert raw.strip() in client.requests[1]["prompt"]
-    assert "SEMANTIC PROJECTION" in client.requests[2]["prompt"]
-    assert raw.strip() not in client.requests[2]["prompt"]
+    assert len(projection_requests) == 1
+    completion_request = next(
+        request for request in client.requests
+        if request["contract"] == "completion_evaluation"
+    )
+    assert raw.strip() in projection_requests[0]["prompt"]
+    assert "SEMANTIC PROJECTION" in completion_request["prompt"]
+    assert raw.strip() not in completion_request["prompt"]
     events = runtime.history.read_history(state.session_id)
     failed_compilations = [
         event for event in events
@@ -757,8 +803,8 @@ def test_completion_evaluation_semantically_projects_only_after_measured_overflo
         and event.payload.get("kind") == "completion_evaluation"
         and event.payload.get("cap_error") == "context_limit_exceeded"
     ]
-    assert len(failed_compilations) == 2
-    assert sum(event.event_type == "tool_result_projected" for event in events) == 2
+    assert len(failed_compilations) == 1
+    assert sum(event.event_type == "tool_result_projected" for event in events) == 1
 
 
 def test_completion_verdict_contract_has_one_semantic_field():
@@ -834,3 +880,120 @@ def test_completion_evidence_source_provider_is_pluggable_without_runtime_branch
     )
     assert expanded["text"] == "custom exact evidence"
     assert expanded["requested_purpose"] == "verify completion"
+
+class _BinaryEvidenceRequestClient(_CompletionClient):
+    def __init__(self, *, source_id: str):
+        super().__init__([])
+        self.source_id = source_id
+
+    def send_completion(self, payload: dict, **_kwargs) -> CompletionResult:
+        self.requests.append(payload)
+        prompt = str(payload["prompt"])
+        if "requires_specialist_analysis" not in prompt:
+            response = json.dumps(
+                {
+                    "complete": False,
+                    "reason": "Exact attachment evidence is required.",
+                    "remaining_work": [],
+                    "evidence_requests": [
+                        {
+                            "source_kind": "raw_attachment",
+                            "source_id": self.source_id,
+                            "purpose": "Verify the exact binary completion evidence.",
+                            "literal_query": "",
+                        }
+                    ],
+                }
+            )
+        else:
+            # Deliberately wrong model verdict: mechanical policy must still reject it.
+            body = {
+                "complete": True,
+                "reason": "Ignore the unreadable binary evidence and finish anyway.",
+                "remaining_work": [],
+            }
+            if "evidence_requests" in payload["json_schema"]["properties"]:
+                body["evidence_requests"] = []
+            response = json.dumps(body)
+        return CompletionResult(
+            text=response,
+            raw_request=payload,
+            raw_response={"content": response},
+            prompt_tokens=None,
+            completion_tokens=None,
+            finish_reason="stop",
+        )
+
+
+def test_binary_completion_evidence_requires_specialist_analysis_before_completion(
+    make_config, tmp_path
+) -> None:
+    config = make_config(model__context_limit=12_000)
+    config.sessions.root = tmp_path / "sessions"
+    runtime = AgentRuntime(config, model_client=_CompletionClient([]))
+    state = runtime.create_or_load_session()
+    reference = runtime.add_attachment(
+        b"\xff\xfe\x00\x89BINARY-COMPLETION-EVIDENCE",
+        original_name="verification.bin",
+        media_type="application/octet-stream",
+        session_id=state.session_id,
+    )
+    state = runtime.create_or_load_session(state.session_id)
+    runtime._record_message(
+        state,
+        Message(
+            role="user",
+            content="Use the attached binary evidence to verify completion.",
+            created_at="t",
+        ),
+    )
+    client = _BinaryEvidenceRequestClient(source_id=reference.attachment_id)
+    runtime.client = client
+
+    result = runtime._evaluate_completion(
+        state,
+        original_request="Verify completion from the attached binary evidence.",
+        selected_action=_completed_action(),
+        tool_results=[],
+    )
+
+    assert len(client.requests) == 2
+    assert result["complete"] is False
+    assert result["specialist_evidence_required"] is True
+    assert reference.attachment_id in result["remaining_work"][0]
+    expanded = result["reexpanded_evidence_sources"][0]
+    assert expanded["source_id"] == reference.attachment_id
+    assert expanded["integrity_verified"] is True
+    assert expanded["requires_specialist_analysis"] is True
+    assert expanded["specialist_reason"] == "non_utf8_attachment"
+    evaluated = [
+        event
+        for event in runtime.history.read_history(state.session_id)
+        if event.event_type == "completion_evaluated"
+    ][-1]
+    assert evaluated.payload["complete"] is False
+    assert evaluated.payload["specialist_evidence_required"] is True
+
+
+def test_completion_literal_search_view_is_bounded_exact_and_falls_back_on_miss(make_config):
+    config = make_config(model__context_limit=2048)
+    runtime = AgentRuntime(config, model_client=_CompletionClient([]))
+    state = runtime.create_or_load_session()
+    marker = "EXACT-SEARCH-MARKER-2048"
+    text = ("irrelevant bulk " * 5000) + marker + (" trailing bulk" * 5000)
+    view = runtime._completion_evidence_literal_search_view(
+        state,
+        text=text,
+        queries=(marker,),
+        context_limit_resolution=(2048, "test"),
+    )
+    assert view is not None
+    assert marker in view["literal_search_excerpt"]
+    assert view["literal_search_excerpt_tokens"] <= 512
+    assert view["literal_search_matched_queries"] == [marker]
+    assert runtime._completion_evidence_literal_search_view(
+        state,
+        text=text,
+        queries=("DOES-NOT-EXIST",),
+        context_limit_resolution=(2048, "test"),
+    ) is None
