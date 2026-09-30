@@ -4,7 +4,7 @@ This is the gap list between the current repository and the intended architectur
 
 ## Current integration status — 2026-09-30
 
-The full authored Infra reading and applicability mapping now supersede the earlier selected-guideline review; see [the complete audit](complete-infra-audit-2026-09-30.md). The new candidate implements durable question resolution, authorized idle backlog, bounded queues/caches, deterministic SQLite connection cleanup, exact UTF-8 streaming, and shared model-start safety. Focused verification passed; the seven-check question trajectory and both instruction-category holdouts passed, and the final full gate passed 999 tests with three optional external-tool skips. Production currently remains on the earlier September 30 verified release. Earlier Pipe/runtime and deployment evidence remains historical until explicitly replaced. Cold interactive latency, actual browser/client acceptance, external protected protocols and broader semantic/long-horizon evaluation remain open.
+The full authored Infra reading and applicability mapping supersede the earlier selected-guideline review; see [the complete audit](complete-infra-audit-2026-09-30.md). The new release is committed, pushed and installed on Jetson. It implements durable question resolution, authorized idle backlog, bounded queues/caches, deterministic SQLite connection cleanup, exact UTF-8 streaming and shared model-start safety. The final suite passed 999 tests with three optional external-tool skips; the seven-check question trajectory, both instruction-category holdouts, actual-endpoint Unicode probe, 16-check production verifier and six-check backlog/migration probe passed. Automatic background dispatch remains disabled. The model and Collector were not restarted. Earlier Pipe/runtime results remain historical. Cold interactive latency, actual browser/client acceptance, external protected protocols and broader semantic/long-horizon evaluation remain open.
 
 ## Full Infra follow-up
 
@@ -13,7 +13,7 @@ The full authored Infra reading and applicability mapping now supersede the earl
 - [x] Persist explicitly authorized unstarted plans with revision holds, bounded admission, idle deferral and restart recovery; keep automatic dispatch disabled by default.
 - [x] Bound active execution queues, token-count memo, model cassettes and request-lock files without discarding accepted work or replay evidence.
 - [x] Close owned SQLite connections on success, rollback and setup failure; preserve existing plans through the backlog migration.
-- [ ] Complete the frozen full release gate, real-model question/category checks and current candidate deployment verification.
+- [x] Complete the frozen full release gate, real-model question/category checks and current candidate deployment verification.
 - [ ] Complete broader authorization/authority-conflict and long-horizon semantic holdouts; local mechanical success alone does not close these gates.
 
 
