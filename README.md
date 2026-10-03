@@ -111,3 +111,5 @@ Question lifecycle and explicitly authorized idle work are documented in [questi
 ## Staged source discovery
 
 With the default `tools.staged_discovery=true`, a new action receives an explicit workspace source reference, not a recursively collected file inventory. The model decides whether to call `list_files`, read a known path, search, or answer from the supplied evidence. Tool discovery exposes exact identities and descriptions; usage guidance and schemas accompany selected tools. Required source contents and observed tool results remain exact when they fit, even for a one-word answer. No input is removed based on the expected answer length. Set staged discovery to false only when the caller deliberately wants all tool schemas and the automatic full inventory.
+
+Independent backend/orchestrator supervision and explicit finite/continuous progress are documented in [supervision-and-progress.md](docs/supervision-and-progress.md). The orchestrator receives a complete, revisable cross-worker question inventory; these capabilities run inside the foreground program.

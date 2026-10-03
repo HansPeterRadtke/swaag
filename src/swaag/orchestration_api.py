@@ -7,6 +7,9 @@ from dataclasses import asdict
 from typing import Any
 
 from swaag.orchestration import OrchestrationManager
+from swaag.questions import question_inventory, validate_revision
+from swaag.progress import plan_progress
+from swaag.utils import stable_json_dumps
 
 
 class OrchestrationApi:
@@ -14,12 +17,42 @@ class OrchestrationApi:
 
     version = "swaag.orchestration.v1"
 
-    def __init__(self, manager: OrchestrationManager, *, background_work=None):
+    def __init__(self, manager: OrchestrationManager, *, background_work=None, supervisor=None):
         self.manager = manager
         self.background_work = background_work
+        self.supervisor = supervisor
 
     def execute(self, operation: str, payload: dict[str, Any] | None = None) -> dict[str, Any]:
         args = dict(payload or {})
+        if operation == "questions.list":
+            return {"version": self.version, "inventory": question_inventory(self.manager)}
+        if operation == "questions.revise":
+            worker_id = _required_text(args, "worker_id")
+            revision = validate_revision(args.get("revision"))
+            owner = None
+            for manager in self.manager.worker_managers.values():
+                try:
+                    worker = manager.store.get(worker_id)
+                    owner = self.manager.worker_managers.get(worker.model_key, manager)
+                    break
+                except FileNotFoundError:
+                    continue
+            if owner is None:
+                raise FileNotFoundError(worker_id)
+            control = owner.runtime.history.enqueue_control_message(worker.session_id,
+                stable_json_dumps({"revision": revision, "actor": args.get("actor") or {"role": "orchestration_api"}}),
+                source="question_revision", control_id=args.get("control_id"))
+            owner.runtime.apply_question_revisions_if_idle(worker.session_id)
+            pending = any(item["control_id"] == control["control_id"]
+                          for item in owner.runtime.history.list_pending_control_messages(worker.session_id))
+            outcome = next(({"event_type": event.event_type, **event.payload}
+                for event in owner.runtime.history.iter_history_reverse(worker.session_id,
+                    event_types=("agent_question_revised", "agent_question_revision_rejected"))
+                if event.payload.get("control_id") == control["control_id"]), None)
+            return {"version": self.version, "control_id": control["control_id"], "pending": pending, "outcome": outcome,
+                    "inventory": question_inventory(self.manager)}
+        if operation == "supervision":
+            return {"version": self.version, "supervision": self.supervisor.snapshot() if self.supervisor else None}
         if operation.startswith("backlog."):
             if self.background_work is None:
                 raise ValueError("background-work service is unavailable")
@@ -103,6 +136,7 @@ class OrchestrationApi:
                 finish_criteria=_optional_text(args, "finish_criteria"),
                 abort_criteria=_optional_text(args, "abort_criteria"),
                 resources=resources,
+                completion_mode=_optional_text(args, "completion_mode") or "natural",
             )
             return {"version": self.version, "node_id": node_id}
         if operation == "node.revise":
@@ -240,6 +274,7 @@ class OrchestrationApi:
             "nodes": snapshot["nodes"],
             "edges": snapshot["edges"],
             "events": snapshot["events"],
+            "progress": plan_progress(snapshot["nodes"]),
         }
 
 

@@ -114,7 +114,7 @@ def test_all_runtime_sqlite_stores_record_explicit_schema_versions(
     assert _version(embeddings.path) == 1
     assert _version(prompt_instructions.path) == 1
     assert _version(delegated_tools.path) == 1
-    assert _version(orchestration.path) == 5
+    assert _version(orchestration.path) == 6
 
 
 def test_communication_stream_bounds_migration_preserves_protocol_mappings(
@@ -453,6 +453,27 @@ def test_background_backlog_migration_preserves_existing_plan(tmp_path):
         before = dict(connection.execute('SELECT * FROM orchestration_plans').fetchone())
     store = OrchestrationStore(tmp_path)
     with store._connect() as connection:
-        assert connection.execute('PRAGMA user_version').fetchone()[0] == 5
+        assert connection.execute('PRAGMA user_version').fetchone()[0] == 6
         assert dict(connection.execute('SELECT * FROM orchestration_plans').fetchone()) == before
         assert connection.execute('SELECT COUNT(*) FROM orchestration_backlog').fetchone()[0] == 0
+
+
+def test_continuous_node_migration_preserves_legacy_node_and_default_mode(tmp_path):
+    from swaag.orchestration import _ORCHESTRATION_MIGRATIONS
+    from swaag.sqlite_schema import managed_sqlite_connection
+    path = tmp_path / 'orchestration.sqlite3'
+    with managed_sqlite_connection(path) as connection:
+        apply_sqlite_migrations(connection, store_name='orchestration', migrations=_ORCHESTRATION_MIGRATIONS[:5])
+        connection.execute('''INSERT INTO orchestration_plans
+            (plan_id,objective,status,created_at,updated_at,revision)
+            VALUES ('legacy','preserve','draft','before','before',9)''')
+        connection.execute('''INSERT INTO orchestration_nodes VALUES
+            ('legacy','node-existing',NULL,'Existing finite job','pending',2.0,NULL,NULL,NULL,'before','before')''')
+        original = dict(connection.execute('SELECT * FROM orchestration_nodes').fetchone())
+    store = OrchestrationStore(tmp_path)
+    with store._connect() as connection:
+        migrated = dict(connection.execute('SELECT * FROM orchestration_nodes').fetchone())
+        assert connection.execute('PRAGMA user_version').fetchone()[0] == 6
+    assert migrated.pop('completion_mode') == 'natural'
+    assert migrated == original
+    assert store.get_plan('legacy').revision == 9

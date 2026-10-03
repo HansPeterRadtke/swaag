@@ -13,7 +13,8 @@ from pathlib import Path
 from typing import Any, Callable, Iterable, Iterator
 
 
-from swaag.questions import validate_question_capacity
+from swaag.questions import validate_question_capacity, apply_revision_controls
+from swaag.session_lock import exclusive_session_turn, session_execution_lock
 from swaag.redaction import configured_secret_values
 from swaag.action import ActionValidationError, AgentAction, action_from_payload
 from swaag.attachments import AttachmentStore
@@ -243,6 +244,7 @@ class AgentRuntime:
         telemetry: OperationalTelemetry | None = None,
     ):
         self.config = config
+        self.supervisor = None
         self.context_compiler = ContextCompiler(config)
         self.client = model_client or build_model_client(
             config,
@@ -516,6 +518,7 @@ class AgentRuntime:
             allow_silent_completion=allow_silent_completion,
         )
 
+    @exclusive_session_turn
     def run_turn_in_session(
         self,
         state: SessionState,
@@ -572,7 +575,10 @@ class AgentRuntime:
                 raise
             finally:
                 self.history.clear_active_run(state.session_id, run_id=run_id)
+                if self.supervisor is not None:
+                    self.supervisor.finish_session(state.session_id)
 
+    @exclusive_session_turn
     def resume_turn_in_session(self, state: SessionState, original_request: str) -> TurnResult:
         """Resume an interrupted durable task without duplicating its user request."""
         self._refresh_state_from_history(state)
@@ -622,10 +628,14 @@ class AgentRuntime:
                 raise
             finally:
                 self.history.clear_active_run(state.session_id, run_id=run_id)
+                if self.supervisor is not None:
+                    self.supervisor.finish_session(state.session_id)
 
+    @exclusive_session_turn
     def run_pending_controls_in_session(self, state: SessionState) -> TurnResult | None:
         self._refresh_state_from_history(state)
         self._deliver_due_wakeups(state)
+        apply_revision_controls(self, state)
         if not self.history.list_pending_control_messages(state.session_id):
             return None
         original_request = next((message.content for message in reversed(state.messages) if message.role == "user" and message.content.strip()), "")
@@ -670,6 +680,16 @@ class AgentRuntime:
                 raise
             finally:
                 self.history.clear_active_run(state.session_id, run_id=run_id)
+                if self.supervisor is not None:
+                    self.supervisor.finish_session(state.session_id)
+
+    def apply_question_revisions_if_idle(self, session_id: str) -> bool:
+        with session_execution_lock(self.history, session_id, blocking=False) as acquired:
+            if not acquired:
+                return False
+            state = self.history.rebuild_from_history(session_id)
+            apply_revision_controls(self, state)
+            return True
 
     def _heartbeat(
         self,
@@ -691,6 +711,8 @@ class AgentRuntime:
             active_id=active_id,
             operation_kind=operation_kind,
         )
+        if self.supervisor is not None:
+            self.supervisor.observe_runtime(self, state.session_id, payload)
         self.history.update_active_run(
             state.session_id,
             run_id=run_id,
@@ -823,6 +845,15 @@ class AgentRuntime:
 
         for mechanical_attempt in range(1, max_mechanical_attempts + 1):
             self._raise_if_run_cancelled(state)
+            blocking_edits = apply_revision_controls(self, state)
+            if blocking_edits:
+                text = "\n".join(item["question"] + " " + item["reason"] for item in blocking_edits)
+                return self._finish_turn(state, text, tool_results, budget_reports)
+            orchestration = self.tool_runtime_capabilities(state.session_id).get("orchestration")
+            if orchestration is not None:
+                inventory = orchestration.execute("questions.list")["inventory"]
+                if inventory != state.worker_question_inventory:
+                    self.history.record_event(state, "worker_question_inventory", inventory)
             if accepted_actions >= self.config.runtime.max_total_actions:
                 break
             delegated_catalog = self.delegated_tools.latest_catalog(state.session_id)
@@ -869,7 +900,7 @@ class AgentRuntime:
             pending_messages = [
                 str(item.get("message", "")).strip()
                 for item in authoritative_control_payloads
-                if str(item.get("message", "")).strip()
+                if str(item.get("message", "")).strip() and item.get("source") != "question_revision"
             ]
             validation_feedback = recovery_feedback
             recovery_feedback = ""
@@ -1131,6 +1162,7 @@ class AgentRuntime:
                         "action_index": action_index,
                         "question": question.question,
                         "criticality": question.criticality,
+                        "importance": question.importance,
                         "reason": question.reason,
                         "assumption_if_unanswered": question.assumption_if_unanswered,
                     },
@@ -2258,6 +2290,13 @@ class AgentRuntime:
             if current_user_sequence is not None
             else []
         )
+        # These canonical observations can arrive during the current turn without
+        # a tool message. The independent checker needs the same exact evidence
+        # as the action model, including all worker questions and their revisions.
+        historical_events.extend(event for event in history_snapshot
+            if current_user_sequence is not None and event.sequence >= current_user_sequence
+            and event.event_type in {"worker_question_inventory", "agent_question",
+                "agent_question_revised", "agent_question_resolved", "agent_progress"})
         historical_rows = [
             self._communication_evidence_row(event) for event in historical_events
         ]
@@ -8092,6 +8131,7 @@ class AgentRuntime:
             started = time.monotonic()
             last_progress_log = started
             last_progress_tokens = 0
+            last_backend_observation = 0.0
             latest_usage_evidence: dict[str, Any] = {
                 "backend_prompt_tokens": None,
                 "backend_completion_tokens": None,
@@ -8100,7 +8140,19 @@ class AgentRuntime:
             }
 
             def progress_callback(progress: dict[str, Any]) -> None:
-                nonlocal last_progress_log, last_progress_tokens
+                nonlocal last_progress_log, last_progress_tokens, last_backend_observation
+                backend_activity = progress.get("backend_activity")
+                if isinstance(backend_activity, dict):
+                    now = time.monotonic()
+                    if now - last_backend_observation >= float(policy.progress_poll_seconds):
+                        last_backend_observation = now
+                        guard.record("model_backend_activity", {
+                            "kind": prepared.assembly.kind, "call_id": call_id,
+                            "elapsed_seconds": float(progress.get("elapsed_seconds", now - started)),
+                            "backend_activity": backend_activity,
+                            "timeout_policy": progress.get("timeout_policy", "unknown"),
+                        })
+                    return
                 for key in tuple(latest_usage_evidence):
                     if key in progress:
                         latest_usage_evidence[key] = progress.get(key)
@@ -9167,15 +9219,17 @@ class AgentRuntime:
         session_id: str | None = None,
     ) -> ToolRunResult:
         state = self.create_or_load_session(session_id)
-        result, error = self._execute_tool_with_error(
-            state,
-            ToolDecision(
-                action="call_tool",
-                response="",
-                tool_name=tool_name,
-                tool_input=raw_input,
-            ),
-        )
+        with session_execution_lock(self.history, state.session_id):
+            self._refresh_state_from_history(state)
+            result, error = self._execute_tool_with_error(
+                state,
+                ToolDecision(
+                    action="call_tool",
+                    response="",
+                    tool_name=tool_name,
+                    tool_input=raw_input,
+                ),
+            )
         return ToolRunResult(session_id=state.session_id, tool_result=result, error=error)
 
     def _finish_turn(
@@ -9353,6 +9407,7 @@ class AgentRuntime:
         ]
         return {
             "status_kind": "mechanical",
+            "supervision": self.supervisor.snapshot() if self.supervisor is not None else None,
             "session_id": state.session_id,
             "session_name": state.session_name,
             "active_goal": latest_user,

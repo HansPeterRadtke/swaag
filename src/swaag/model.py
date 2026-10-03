@@ -11,6 +11,8 @@ from typing import Any, Callable, Protocol
 
 import requests
 
+from swaag.supervision import BackendActivityMonitor, llama_slot_activity
+from swaag.stream_transport import NativeCompletionResponse
 from swaag.config import AgentConfig
 from swaag.schema_portability import PortableSchemaError, assert_portable_json_schema
 from swaag.preemption import ModelCallPreempted
@@ -165,6 +167,25 @@ def stable_openai_model_metadata(model: dict[str, Any]) -> dict[str, Any]:
 class LlamaCppClient:
     config: AgentConfig
     _remote_prompt_tokens: dict[str, int] = field(default_factory=dict, init=False)
+    _backend_monitor: BackendActivityMonitor | None = field(default=None, init=False)
+    _backend_monitor_lock: Any = field(default_factory=threading.Lock, init=False)
+
+    def backend_activity(self) -> dict[str, Any]:
+        if self._uses_chat_transport:
+            return {"supported": False, "state": "unavailable", "source": "provider_without_activity_adapter"}
+        response = requests.get(f"{self._base}/slots", timeout=(2.0, 2.0), **self._request_headers_kwargs())
+        try:
+            response.raise_for_status()
+            return llama_slot_activity(response.json())
+        finally:
+            response.close()
+
+    def activity_monitor(self) -> BackendActivityMonitor:
+        with self._backend_monitor_lock:
+            if self._backend_monitor is None:
+                self._backend_monitor = BackendActivityMonitor(self.backend_activity)
+            return self._backend_monitor
+
 
     @property
     def _base(self) -> str:
@@ -807,6 +828,20 @@ class LlamaCppClient:
         return max(1.0, value)
 
     def send_completion(
+        self, payload: dict[str, Any], *, timeout_seconds: int | None = None,
+        progress_callback: Callable[[dict[str, Any]], None] | None = None,
+        cancel_check: Callable[[], bool] | None = None, cancel_poll_seconds: float = 0.05,
+    ) -> CompletionResult:
+        with self.activity_monitor().observing() as monitor:
+            monitor.wait_for_sample(2.1)
+            observation = monitor.snapshot()
+            verified_backend = bool(observation.get("supported") and not observation.get("stale"))
+            return self._send_completion(payload, timeout_seconds=timeout_seconds,
+                progress_callback=progress_callback, cancel_check=cancel_check,
+                cancel_poll_seconds=cancel_poll_seconds,
+                backend_monitor=monitor if verified_backend else None)
+
+    def _send_completion(
         self,
         payload: dict[str, Any],
         *,
@@ -814,7 +849,13 @@ class LlamaCppClient:
         progress_callback: Callable[[dict[str, Any]], None] | None = None,
         cancel_check: Callable[[], bool] | None = None,
         cancel_poll_seconds: float = 0.05,
+        backend_monitor: BackendActivityMonitor | None = None,
     ) -> CompletionResult:
+        progress_lock = threading.RLock()
+        def publish_progress(payload):
+            if progress_callback is not None:
+                with progress_lock:
+                    progress_callback(payload)
         token_timeout_seconds = self._token_timeout_seconds(timeout_seconds)
         stream_payload = dict(payload)
         stream_payload["stream"] = True
@@ -828,39 +869,69 @@ class LlamaCppClient:
             "stream": True,
         }
         request_kwargs.update(self._request_headers_kwargs())
-        response = requests.post(
-            completion_url(self.config.model.base_url, self.config.model.completion_endpoint),
-            **request_kwargs,
-        )
+        url = completion_url(self.config.model.base_url, self.config.model.completion_endpoint)
+        if backend_monitor is not None:
+            response = NativeCompletionResponse(url, stream_payload,
+                headers=request_kwargs.get("headers"), connect_timeout=self.config.model.connect_timeout_seconds)
+        else:
+            # Providers without verified activity telemetry retain the bounded
+            # transport fallback. Native inference uses observed activity instead.
+            response = requests.post(url, **request_kwargs)
         cancel_observed = threading.Event()
         stop_watcher = threading.Event()
         watcher: threading.Thread | None = None
-        if cancel_check is not None:
+        if cancel_check is not None or (backend_monitor is not None and progress_callback is not None):
             def watch_for_cancel() -> None:
+                last_observation = 0.0
                 while not stop_watcher.wait(max(0.005, float(cancel_poll_seconds))):
                     try:
-                        should_cancel = bool(cancel_check())
+                        should_cancel = bool(cancel_check()) if cancel_check is not None else False
                     except Exception:
                         should_cancel = False
                     if should_cancel:
                         cancel_observed.set()
+                        shutdown = getattr(getattr(response, "raw", None), "shutdown", None)
+                        if callable(shutdown):
+                            try:
+                                shutdown()
+                                return
+                            except (OSError, RuntimeError, ValueError):
+                                pass
                         close = getattr(response, "close", None)
                         if callable(close):
                             close()
                         return
-            watcher = threading.Thread(target=watch_for_cancel, name="swaag-model-cancel", daemon=True)
+                    if backend_monitor is not None and progress_callback is not None and time.monotonic() - last_observation >= 1.0:
+                        last_observation = time.monotonic()
+                        try:
+                            publish_progress({"backend_activity": backend_monitor.snapshot(),
+                                "elapsed_seconds": time.monotonic() - started,
+                                "timeout_policy": "observed_local_activity_no_speculative_deadline"})
+                        except Exception:
+                            pass
+            watcher = threading.Thread(target=watch_for_cancel, name="swaag-model-observer", daemon=True)
             watcher.start()
         try:
+            if isinstance(response, NativeCompletionResponse):
+                response.open()
             response.raise_for_status()
         except requests.HTTPError as exc:
-            stop_watcher.set()
-            if watcher is not None:
-                watcher.join(timeout=1.0)
-            response_body = response.text
-            detail = _http_error_detail(response, text=response_body)
-            close = getattr(response, "close", None)
-            if callable(close):
-                close()
+            try:
+                response_body = response.text
+                detail = _http_error_detail(response, text=response_body)
+            except Exception as body_error:
+                if cancel_observed.is_set():
+                    raise ModelCallPreempted("model call preempted while reading error response") from body_error
+                raise
+            finally:
+                stop_watcher.set()
+                if watcher is not None:
+                    watcher.join()
+                close = getattr(response, "close", None)
+                if callable(close):
+                    close()
+            if cancel_observed.is_set():
+                raise ModelCallPreempted("model call preempted while reading error response") from exc
             raise ModelHTTPError(
                 f"{exc} :: {detail}",
                 response_body=response_body,
@@ -871,6 +942,16 @@ class LlamaCppClient:
                 ),
                 response=(exc.response if exc.response is not None else response),
             ) from exc
+        except Exception as exc:
+            stop_watcher.set()
+            response.close()
+            if watcher is not None:
+                watcher.join()
+            if cancel_observed.is_set():
+                raise ModelCallPreempted("model call preempted before streamed headers") from exc
+            if isinstance(exc, (OSError, TimeoutError)):
+                raise requests.ConnectionError(str(exc)) from exc
+            raise
         content_parts: list[str] = []
         last_body: dict[str, Any] = {}
         completion_events = 0
@@ -930,7 +1011,7 @@ class LlamaCppClient:
                     reported_tokens = completion_events
                 if token_count_changed and progress_callback is not None:
                     elapsed = max(time.monotonic() - started, 1e-9)
-                    progress_callback(
+                    publish_progress(
                         {
                             "completion_tokens": reported_tokens,
                             "backend_prompt_tokens": backend_prompt_tokens,
@@ -971,7 +1052,7 @@ class LlamaCppClient:
         finally:
             stop_watcher.set()
             if watcher is not None:
-                watcher.join(timeout=1.0)
+                watcher.join()
             close = getattr(response, "close", None)
             if callable(close):
                 close()
@@ -984,6 +1065,10 @@ class LlamaCppClient:
         body["content"] = "".join(content_parts) or _chat_content(last_body)
         body["stream"] = True
         body["token_timeout_seconds"] = token_timeout_seconds
+        body["timeout_policy"] = ("observed_local_activity_no_speculative_deadline" if backend_monitor is not None
+                                  else "provider_transport_timeout")
+        if backend_monitor is not None:
+            body["backend_activity"] = backend_monitor.snapshot()
         completion_tokens = body.get("tokens_predicted")
         if not isinstance(completion_tokens, int):
             completion_tokens = reported_tokens

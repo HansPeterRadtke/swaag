@@ -15,6 +15,8 @@ from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any, Iterable
 
+from swaag.progress import worker_progress
+from swaag.session_lock import session_execution_lock
 from swaag.capacity import positive_capacity, require_capacity
 from swaag.delegated_tools import DelegatedToolInputRequired
 from swaag.preemption import ModelCallStateChanged, RunCancellationRequested
@@ -47,6 +49,9 @@ WORKER_STREAM_EVENT_TYPES = frozenset(
     {
         "agent_question",
         "agent_question_resolved",
+        "agent_question_revised",
+        "agent_question_revision_rejected",
+        "agent_progress",
         "agent_status",
         "assistant_progress",
         "artifact_created",
@@ -920,6 +925,8 @@ class WorkerManager:
         )
         return {
             **asdict(record),
+            "open_questions": state.open_questions,
+            "progress": worker_progress(record, state),
             "active_run": active_run,
             "execution_diagnostics": execution_diagnostics,
             "inference_requests": [asdict(item) for item in inference_requests],
@@ -1367,6 +1374,11 @@ class WorkerManager:
             )
 
     def _run_worker(self, worker_id: str) -> None:
+        record = self.store.get(worker_id)
+        with session_execution_lock(self.runtime.history, record.session_id):
+            self._run_worker_locked(worker_id)
+
+    def _run_worker_locked(self, worker_id: str) -> None:
         queued = self.store.get(worker_id)
         if queued.status == "cancellation_requested":
             self.store.transition(
@@ -1463,7 +1475,7 @@ class WorkerManager:
                     working = continued
                     continue
                 blocking = any(
-                    event.event_type == "agent_question"
+                    event.event_type in {"agent_question", "agent_question_revised"}
                     and event.payload.get("criticality") == "blocking"
                     for event in self.runtime.history.iter_history(
                         working.session_id, start_sequence=first_sequence

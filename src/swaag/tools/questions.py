@@ -98,3 +98,85 @@ class QuestionsTool(Tool):
 
 
 QUESTION_TOOLS = [QuestionsTool()]
+
+
+from swaag.questions import REVISION_FIELDS, IMPORTANCE_RANK, validate_revision, revision_event
+
+REVISION_SCHEMA = {
+    'type': 'object', 'additionalProperties': False,
+    'properties': {**{key: {'type': 'string'} for key in REVISION_FIELDS
+                     if key not in ('expected_revision', 'criticality', 'importance')},
+                   'expected_revision': {'type': 'integer'},
+                   'criticality': {'type': 'string', 'enum': ['optional', 'blocking']},
+                   'importance': {'type': 'string', 'enum': list(IMPORTANCE_RANK)}},
+    'required': list(REVISION_FIELDS),
+}
+
+
+class ReviseQuestionTool(Tool):
+    name = 'revise_question'
+    description = 'Revise an unanswered question, its importance, or whether it blocks this worker.'
+    usage_guidance = ('Read questions first and use its current revision. Check applicable guidelines and available evidence before asking the user. '
+                      'Keep the same question ID. Revision is not resolution: assumptions remain provisional. '
+                      'Use questions.resolve for actual evidence-supported resolution.')
+    kind = 'stateful'
+    input_schema = REVISION_SCHEMA
+
+    def validate(self, raw_input):
+        try:
+            return validate_revision(raw_input)
+        except ValueError as exc:
+            raise ToolValidationError(str(exc)) from exc
+
+    def required_generated_event_types(self, validated_input):
+        return {'agent_question_revised'}
+
+    def execute(self, validated_input, context):
+        try:
+            payload = revision_event(context.session_state, validated_input, context.config,
+                                     actor={'role': 'owner', 'session_id': context.session_state.session_id})
+        except ValueError as exc:
+            raise ToolValidationError(str(exc)) from exc
+        output = {'revised': True, **payload}
+        return ToolExecutionResult(self.name, output, stable_json_dumps(output),
+            generated_events=[ToolGeneratedEvent('agent_question_revised', payload)])
+
+
+class WorkerQuestionsTool(Tool):
+    name = 'worker_questions'
+    description = 'Read every outstanding worker question or revise an unanswered question across workers.'
+    usage_guidance = ('List returns the full exact inventory, blocking and most important questions first, including pending edits. '
+        'Read every question before summarizing. Check guidelines and existing evidence before asking the user. '
+        'Present a short inventory directly; group a large inventory only after reviewing all of it, preserving critical questions and access to exact records. '
+        'Revision is applied at a safe worker boundary and may be pending or rejected if its expected revision is stale; inspect afterward. '
+        'Never turn an unanswered question or assumption into an answer.')
+    required_runtime_capability = 'orchestration'
+    kind = 'stateful'
+    input_schema = {'type': 'object', 'additionalProperties': False,
+        'properties': {'operation': {'type': 'string', 'enum': ['list', 'revise']},
+                       'worker_id': nullable({'type': 'string'}), 'revision': nullable(REVISION_SCHEMA)},
+        'required': ['operation', 'worker_id', 'revision']}
+
+    def effective_kind(self, validated_input):
+        return 'pure' if validated_input['operation'] == 'list' else 'stateful'
+
+    def validate(self, raw_input):
+        if not isinstance(raw_input, dict) or set(raw_input) != set(self.input_schema['required']):
+            raise ToolValidationError('worker_questions requires exactly its declared fields')
+        if raw_input['operation'] == 'list' and raw_input['worker_id'] is None and raw_input['revision'] is None:
+            return dict(raw_input)
+        if raw_input['operation'] != 'revise' or not isinstance(raw_input['worker_id'], str) or not raw_input['worker_id'].strip():
+            raise ToolValidationError('worker_questions.revise requires worker_id and revision; list requires null arguments')
+        try:
+            return {**raw_input, 'revision': validate_revision(raw_input['revision'])}
+        except ValueError as exc:
+            raise ToolValidationError(str(exc)) from exc
+
+    def execute(self, validated_input, context):
+        api = context.runtime_capabilities['orchestration']
+        output = api.execute('questions.' + validated_input['operation'],
+            {**validated_input, 'actor': {'role': 'orchestrator', 'session_id': context.session_state.session_id}})
+        return ToolExecutionResult(self.name, output, stable_json_dumps(output))
+
+
+QUESTION_TOOLS.extend([ReviseQuestionTool(), WorkerQuestionsTool()])

@@ -11,7 +11,7 @@ from pathlib import Path
 from typing import Any, Callable, Iterable, Iterator
 
 from swaag.capacity import positive_capacity, require_capacity
-from swaag.questions import question_record
+from swaag.questions import question_record, normalize_question, QUESTION_FIELDS
 from swaag.redaction import redact_for_persistence
 from swaag.environment.state import EnvironmentState, ProcessRecord, ShellSessionState, WorkspaceState
 from swaag.heartbeat import validate_worker_phase, validate_worker_substate
@@ -60,6 +60,9 @@ _STATEFUL_REBUILD_EVENT_TYPES = frozenset(
     {
         "agent_question",
         "agent_question_resolved",
+        "agent_question_revised",
+        "agent_progress",
+        "worker_question_inventory",
         "session_created",
         "session_renamed",
         "message_added",
@@ -1574,6 +1577,18 @@ class HistoryStore:
         if event.event_type == "agent_question":
             state.open_questions.append(question_record(event))
             return
+        if event.event_type == "agent_question_revised":
+            for item in state.open_questions:
+                if item["question_id"] == payload["question_id"]:
+                    item.update({key: payload[key] for key in QUESTION_FIELDS})
+                    item.update(revision=payload["revision"], updated_at=event.timestamp)
+            return
+        if event.event_type == "agent_progress":
+            state.progress = {**payload, "updated_at": event.timestamp, "source_event_sequence": event.sequence}
+            return
+        if event.event_type == "worker_question_inventory":
+            state.worker_question_inventory = dict(payload)
+            return
         if event.event_type == "agent_question_resolved":
             state.open_questions = [item for item in state.open_questions
                                     if item["question_id"] != payload["question_id"]]
@@ -2025,7 +2040,9 @@ def _state_from_payload(payload: dict[str, Any]) -> SessionState:
         session_name_source=str(payload.get("session_name_source", "placeholder")),
         messages=[Message(**item) for item in payload.get("messages", [])],
         notes=[Note(**item) for item in payload.get("notes", [])],
-        open_questions=[dict(item) for item in payload.get("open_questions", [])],
+        open_questions=[normalize_question(item) for item in payload.get("open_questions", [])],
+        progress=dict(payload.get("progress", {})),
+        worker_question_inventory=dict(payload.get("worker_question_inventory", {})),
         prompt_instructions=[
             PromptInstruction(**item)
             for item in payload.get("prompt_instructions", [])

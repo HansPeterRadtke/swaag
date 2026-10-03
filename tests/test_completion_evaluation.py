@@ -997,3 +997,25 @@ def test_completion_literal_search_view_is_bounded_exact_and_falls_back_on_miss(
         queries=("DOES-NOT-EXIST",),
         context_limit_resolution=(2048, "test"),
     ) is None
+
+
+def test_completion_receives_current_turn_worker_inventory_without_tool_call(make_config):
+    client = _CompletionClient([json.dumps({'complete': True, 'reason': 'Inventory verified', 'remaining_work': []})])
+    runtime = AgentRuntime(make_config(model__context_limit=12000), model_client=client)
+    state = runtime.create_or_load_session()
+    runtime._record_message(state, Message(role='user', content='Report every outstanding question', created_at='t'))
+    inventory = runtime.history.record_event(state, 'worker_question_inventory', {
+        'complete': True, 'scope': 'all configured workers', 'questions': [
+            {'question_id': 'q-one', 'question': 'Which critical deployment target?', 'criticality': 'blocking'},
+            {'question_id': 'q-two', 'question': 'Which optional accent color?', 'criticality': 'optional'}],
+        'pending_revisions': [], 'workers': []})
+    action = AgentAction(assistant_message='Which critical deployment target? Which optional accent color?',
+        tool_calls=[], continue_loop=False, silent_completion=False,
+        status=AgentStatus('Observed', 'Report', 'Exact inventory supplied', 'normal'), questions=[])
+    result = runtime._evaluate_completion(state, original_request='Report every outstanding question',
+        selected_action=action, tool_results=[])
+    assert result['complete']
+    prompt = client.requests[-1]['prompt']
+    assert 'q-one' in prompt and 'q-two' in prompt
+    assert any(ref['sequence'] == inventory.sequence and ref['hash'] == inventory.hash
+               for ref in result['evidence_source_references'])

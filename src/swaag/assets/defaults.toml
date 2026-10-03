@@ -100,7 +100,7 @@ background_poll_seconds = 0.1
 # allow_side_effect_tools: set true only if destructive writes are intended.
 # -----------------------------------------------------------
 [tools]
-enabled = ["echo", "time_now", "calculator", "agent_workspace", "list_files", "read_file", "read_text", "search_in_file", "search_repo", "history_search", "history_window", "history_analyze", "read_artifact", "list_attachments", "read_attachment", "terminal", "notes", "prompt_instructions", "questions", "shared_state", "edit_text", "write_file", "run_tests", "shell_command", "poll_process", "kill_process", "wait_seconds", "schedule_wakeup", "list_wakeups", "cancel_wakeup"]
+enabled = ["echo", "time_now", "calculator", "agent_workspace", "list_files", "read_file", "read_text", "search_in_file", "search_repo", "history_search", "history_window", "history_analyze", "read_artifact", "list_attachments", "read_attachment", "terminal", "notes", "prompt_instructions", "questions", "revise_question", "report_progress", "shared_state", "edit_text", "write_file", "run_tests", "shell_command", "poll_process", "kill_process", "wait_seconds", "schedule_wakeup", "list_wakeups", "cancel_wakeup"]
 read_roots = ["."]
 allow_stateful_tools = true
 allow_side_effect_tools = false
@@ -466,7 +466,7 @@ max_pending_requests = 128
 # Initial status/control response cap. Output-recovery may grow this only when
 # constrained generation actually exhausts the cap.
 status_max_output_tokens = 192
-enabled_tools = ["time_now", "system_resources", "calculator", "history_search", "history_window", "agent_status_lookup", "agent_control", "orchestration_control", "background_work", "questions"]
+enabled_tools = ["agent_workspace", "list_files", "read_file", "read_text", "search_in_file", "search_repo", "read_artifact", "time_now", "system_resources", "calculator", "history_search", "history_window", "agent_status_lookup", "agent_control", "orchestration_control", "background_work", "questions", "revise_question", "worker_questions", "report_progress"]
 host = "127.0.0.1"
 port = 8765
 poll_seconds = 0.2

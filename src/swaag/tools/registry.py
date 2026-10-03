@@ -16,6 +16,7 @@ from swaag.tools.history import HISTORY_TOOLS
 from swaag.tools.prompt_instructions import PROMPT_INSTRUCTION_TOOLS
 from swaag.tools.background_work import BACKGROUND_WORK_TOOLS
 from swaag.tools.questions import QUESTION_TOOLS
+from swaag.tools.progress import PROGRESS_TOOLS
 from swaag.tools.shared_state import SHARED_STATE_TOOLS
 from swaag.tools.terminal import TERMINAL_TOOLS
 from swaag.tools.control import CONTROL_TOOLS
@@ -99,6 +100,7 @@ class ToolRegistry:
             *HISTORY_TOOLS,
             *PROMPT_INSTRUCTION_TOOLS,
             *QUESTION_TOOLS,
+            *PROGRESS_TOOLS,
             *BACKGROUND_WORK_TOOLS,
             *SHARED_STATE_TOOLS,
             *ARTIFACT_TOOLS,

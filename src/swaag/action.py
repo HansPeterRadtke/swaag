@@ -20,6 +20,7 @@ class AgentQuestion:
     criticality: str
     reason: str
     assumption_if_unanswered: str
+    importance: str = "normal"
 
 
 @dataclass(slots=True, frozen=True)
@@ -125,7 +126,7 @@ def action_from_payload(payload: dict[str, Any], *, enabled_tool_names: Iterable
         if not isinstance(item, dict):
             raise ActionValidationError(f"questions[{index}] must be an object")
         required_question = {"question", "criticality", "reason", "assumption_if_unanswered"}
-        if set(item) != required_question:
+        if set(item) not in (required_question, required_question | {"importance"}):
             raise ActionValidationError(f"questions[{index}] must contain exactly question, criticality, reason, assumption_if_unanswered")
         if item.get("criticality") not in {"optional", "blocking"}:
             raise ActionValidationError(f"questions[{index}].criticality must be optional or blocking")
@@ -148,12 +149,16 @@ def action_from_payload(payload: dict[str, Any], *, enabled_tool_names: Iterable
             raise ActionValidationError(
                 f"questions[{index}].assumption_if_unanswered must be empty for a blocking question"
             )
+        importance = item.get("importance", "critical" if criticality == "blocking" else "normal")
+        if importance not in {"minor", "normal", "major", "critical"}:
+            raise ActionValidationError("question importance is invalid")
         questions.append(
             AgentQuestion(
                 question=question,
                 criticality=criticality,
                 reason=reason,
                 assumption_if_unanswered=assumption,
+                importance=importance,
             )
         )
 

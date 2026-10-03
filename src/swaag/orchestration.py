@@ -65,6 +65,8 @@ _ORCHESTRATION_MIGRATIONS = ((
         authorization_session_id TEXT NOT NULL, authorization_event_sequence INTEGER NOT NULL,
         authorization_event_hash TEXT NOT NULL, created_at TEXT NOT NULL, updated_at TEXT NOT NULL
     )""",
+), (
+    "ALTER TABLE orchestration_nodes ADD COLUMN completion_mode TEXT NOT NULL DEFAULT 'natural'",
 ))
 
 @dataclass(slots=True, frozen=True)
@@ -320,16 +322,19 @@ class OrchestrationStore:
 
     def add_node(self, plan_id: str, objective: str, *, worker_id: str | None = None,
                  priority: float = 1.0, model_key: str | None = None,
-                 finish_criteria: str | None = None, abort_criteria: str | None = None) -> str:
+                 finish_criteria: str | None = None, abort_criteria: str | None = None,
+                 completion_mode: str = "natural") -> str:
         self.get_plan(plan_id)
         objective = objective.strip()
         priority = self._validate_priority(priority)
         if not objective:
             raise ValueError('node objective must be non-empty')
+        if completion_mode not in {'natural', 'continuous'}:
+            raise ValueError('completion_mode must be natural or continuous')
         node_id, now = new_id('node'), utc_now_iso()
         with self._connect() as c:
-            c.execute('''INSERT INTO orchestration_nodes VALUES(?,?,?,?,?,?,?,?,?,?,?)''',
-                      (plan_id,node_id,worker_id,objective,'pending',float(priority),model_key,finish_criteria,abort_criteria,now,now))
+            c.execute('''INSERT INTO orchestration_nodes VALUES(?,?,?,?,?,?,?,?,?,?,?,?)''',
+                      (plan_id,node_id,worker_id,objective,'pending',float(priority),model_key,finish_criteria,abort_criteria,now,now,completion_mode))
             self._bump(c, plan_id)
             self._event(c, plan_id, 'node_added', {'node_id': node_id, 'worker_id': worker_id, 'objective': objective, 'priority': float(priority), 'model_key': model_key})
         return node_id
@@ -806,9 +811,13 @@ class OrchestrationManager:
                     raise ValueError(
                         f"orchestration node {key!r} resource {name!r} exceeds plan limit"
                     )
+            completion_mode = raw.get("completion_mode", "natural")
+            if completion_mode not in {"natural", "continuous"}:
+                raise ValueError("completion_mode must be natural or continuous")
             normalized_nodes.append(
                 {
                     "key": key,
+                    "completion_mode": completion_mode,
                     "objective": node_objective,
                     "priority": float(priority),
                     "model_key": None if model_key == "default" else model_key,
@@ -886,6 +895,7 @@ class OrchestrationManager:
                 finish_criteria=node["finish_criteria"],
                 abort_criteria=node["abort_criteria"],
                 resources=node["resources"],
+                completion_mode=node["completion_mode"],
             )
         for edge in normalized_edges:
             self.add_dependency(
@@ -919,6 +929,7 @@ class OrchestrationManager:
         finish_criteria: str | None = None,
         abort_criteria: str | None = None,
         resources: dict[str, Any] | None = None,
+        completion_mode: str = "natural",
     ) -> str:
         node_id = self.store.add_node(
             plan_id,
@@ -927,6 +938,7 @@ class OrchestrationManager:
             model_key=model_key,
             finish_criteria=finish_criteria,
             abort_criteria=abort_criteria,
+            completion_mode=completion_mode,
         )
         if resources:
             self.store.set_node_resources(plan_id, node_id, resources)
@@ -1201,6 +1213,7 @@ class OrchestrationManager:
                     objective,
                     name=f"plan:{plan_id}:{node['node_id']}",
                     inference_weight=float(node["priority"]),
+                    **({"completion_mode": "continuous"} if node.get("completion_mode") == "continuous" else {}),
                 )
                 worker_id = worker.worker_id
                 self.store.set_node_state(

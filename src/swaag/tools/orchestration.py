@@ -17,6 +17,7 @@ _PLAN_NODE_SCHEMA = {
     "type": "object",
     "properties": {
         "key": {"type": "string"},
+        "completion_mode": {"type": "string", "enum": ["natural", "continuous"]},
         "objective": {"type": "string"},
         "priority": {"type": "number"},
         "model_key": _nullable({"type": "string"}),
@@ -26,6 +27,7 @@ _PLAN_NODE_SCHEMA = {
     },
     "required": [
         "key",
+        "completion_mode",
         "objective",
         "priority",
         "model_key",
@@ -143,10 +145,14 @@ def _validate_plan_spec(raw: Any) -> dict[str, Any] | None:
     normalized_nodes: list[dict[str, Any]] = []
     node_expected = set(_PLAN_NODE_SCHEMA["required"])
     for index, node in enumerate(nodes):
+        if isinstance(node, dict):
+            node = {"completion_mode": "natural", **node}
         if not isinstance(node, dict) or set(node) != node_expected:
             raise ToolValidationError(
                 f"orchestration_control.plan_spec.nodes[{index}] must use the exact node schema"
             )
+        if node["completion_mode"] not in {"natural", "continuous"}:
+            raise ToolValidationError("Invalid completion_mode")
         key = node["key"]
         node_objective = node["objective"]
         priority = node["priority"]
@@ -165,6 +171,7 @@ def _validate_plan_spec(raw: Any) -> dict[str, Any] | None:
         normalized_nodes.append(
             {
                 "key": key.strip(),
+                "completion_mode": node["completion_mode"],
                 "objective": node_objective.strip(),
                 "priority": float(priority),
                 "model_key": node["model_key"].strip() if isinstance(node["model_key"], str) and node["model_key"].strip() else None,
@@ -250,6 +257,7 @@ class OrchestrationControlTool(Tool):
             "operation": {
                 "type": "string",
                 "enum": [
+                    "supervision",
                     "plan.apply",
                     "create",
                     "configure",
@@ -271,6 +279,7 @@ class OrchestrationControlTool(Tool):
                     "notification.ack",
                 ],
             },
+            "completion_mode": _nullable({"type": "string", "enum": ["natural", "continuous"]}),
             "plan_id": _nullable({"type": "string"}),
             "plan_spec": _nullable(_PLAN_SPEC_SCHEMA),
             "objective": _nullable({"type": "string"}),
@@ -303,6 +312,7 @@ class OrchestrationControlTool(Tool):
         },
         "required": [
             "operation",
+            "completion_mode",
             "plan_id",
             "plan_spec",
             "objective",
@@ -338,6 +348,7 @@ class OrchestrationControlTool(Tool):
     def effective_kind(self, validated_input: dict[str, Any]) -> ToolKind:
         operation = validated_input["operation"]
         if operation in {
+            "supervision",
             "list",
             "get",
             "validate",
@@ -356,6 +367,9 @@ class OrchestrationControlTool(Tool):
     def validate(self, raw_input: dict[str, Any]) -> dict[str, Any]:
         if not isinstance(raw_input, dict):
             raise ToolValidationError("orchestration_control input must be an object")
+        raw_input = {"completion_mode": None, **raw_input}
+        if raw_input["completion_mode"] not in (None, "natural", "continuous"):
+            raise ToolValidationError("Invalid completion_mode")
         expected = set(self.input_schema["required"])
         if set(raw_input) != expected:
             raise ToolValidationError(
@@ -472,6 +486,10 @@ class OrchestrationControlTool(Tool):
         api = cast(OrchestrationApi, capability)
         operation = validated_input["operation"]
         payload: dict[str, Any] = {}
+        if validated_input.get("completion_mode") is not None:
+            if operation != "node.add":
+                raise ToolValidationError("completion_mode is only for node.add; set it in plan_spec nodes for plan.apply")
+            payload["completion_mode"] = validated_input["completion_mode"]
         for key in (
             "plan_id",
             "objective",

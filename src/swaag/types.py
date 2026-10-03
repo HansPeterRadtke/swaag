@@ -307,6 +307,8 @@ class SessionState:
     notes: list[Note] = field(default_factory=list)
     prompt_instructions: list[PromptInstruction] = field(default_factory=list)
     open_questions: list[dict[str, Any]] = field(default_factory=list)
+    progress: dict[str, Any] = field(default_factory=dict)
+    worker_question_inventory: dict[str, Any] = field(default_factory=dict)
     reader_states: dict[str, ReaderState] = field(default_factory=dict)
     file_views: dict[str, FileView] = field(default_factory=dict)
     pending_file_writes: dict[str, str] = field(default_factory=dict)

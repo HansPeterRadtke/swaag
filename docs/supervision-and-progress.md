@@ -1,0 +1,21 @@
+# Supervision and progress
+
+The foreground program owns the orchestrator, worker managers, backend-keyed inference scheduler, and an independent deterministic supervisor. The same components can be embedded through `CommunicationService`; call `close()` when finished. An explicitly launched `communication serve` process exposes them to network clients. None of this requires enabling a boot service.
+
+`orchestration.supervision` returns cached supervisor and runtime heartbeats plus observations from each configured native llama.cpp backend. The model-facing `orchestration_control` operation is `supervision`. Probes run outside the central loop, with one shared observer per backend URL within the service. A slow or unavailable backend does not block another backend's observer or the central loop. Orchestrator calls are supervised just like worker calls.
+
+The evidence distinguishes a harness heartbeat, a busy slot, advancing prompt/decode counters, and streaming output. Native `/slots` reports the slot/task, prompt counts, decoded count, and observed phase. Samples expose their age, staleness, and last observed counter advancement. Slot observations describe backend activity, not exclusive attribution to a particular SWAAG request; other clients can use the same server. Worker inspection independently exposes queued/running/suspended inference requests and operation identities. No activity flag is a semantic correctness judgment.
+
+A native backend with verified activity telemetry uses a cancelable HTTP stream without a guessed inference read deadline. Connection setup and transmission still have transport limits. Explicit cancellation interrupts waiting for response headers as well as a silent response body. An HTTP error body remains bounded by the transport deadline. API transports without an activity adapter retain their configured transport timeout; this release does not claim native vLLM telemetry support. Loss of telemetry is reported as unavailable/stale, not silently interpreted as proof that a model is stuck. Automatic semantic loop detection, cancellation, and restart are deliberately absent, as requested in the October third recording.
+
+## Finite and continuous work
+
+The pre-existing `completion_mode=continuous` worker mode is now available in orchestration `node.add` and each `plan.apply` node. Default/legacy nodes remain `natural`. The migration preserves existing plans. Continuous workers keep producing provisional cycles until explicit cancellation or a blocking question; they never imply a terminal overall percentage.
+
+`report_progress` records explicit model-assessed steps, states, relative weights, and a reason in canonical history. A finite worker's rough percentage is the completed step weight divided by total weight; unknown progress stays null. A completed finite worker reports one hundred percent. Continuous work exposes cycle progress separately and leaves overall progress and overall remaining time null. Reports have timestamps and exact source sequences; they are assessments, not measured wall-clock completion. Revising scope can legitimately change a percentage.
+
+Time estimates are optional. A non-null remaining-time estimate requires explicit conditions, with tool and action guidance requiring model, input scale, machine, and load assumptions. The software validates the shape; the model judges whether the estimate is supported. No token count or generic command category is converted into a fabricated duration.
+
+Plan snapshots also report completed finite-node counts and their fraction, explicitly labeled as equally weighted node completion rather than effort or elapsed time. A plan containing continuous work has no overall completion percentage. The complete worker-question inventory includes worker objectives, current lifecycle state, and reported progress so the orchestrator can explain what each worker is doing.
+
+Empirical duration calibration and autonomous semantic intervention are separate future work. Authorized background work continues to use the existing durable backlog and remains opt-in.
