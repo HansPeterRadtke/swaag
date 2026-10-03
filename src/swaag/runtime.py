@@ -47,7 +47,7 @@ from swaag.grammar import (
     completion_evaluation_contract,
     completion_verdict_contract,
     evidence_projection_contract,
-    exact_word_sequence_contract,
+    response_word_count_repair_contract,
     history_best_anchor_contract,
     history_compaction_selection_contract,
     history_verbatim_selection_contract,
@@ -1760,26 +1760,38 @@ class AgentRuntime:
         original_request: str,
         draft: str,
         target_word_count: int,
-    ) -> str:
+    ) -> tuple[str, int | None]:
         target = int(target_word_count)
         source_words = draft.split()
         if target <= 0:
             raise ActionValidationError("exact word count must be positive")
         if len(source_words) == target:
-            return draft
-        # A dynamic object with one required string field per word gives the
-        # deterministic layer a mechanically countable shape. The context compiler
-        # remains authoritative for rejecting requests whose schema/output cannot fit.
-        contract = exact_word_sequence_contract(target)
+            return draft, target
+        # The action model's declared count is a proposal, not user authority.
+        # The repair model can reject it; a confirmed count still gets one required
+        # field per word. No deterministic interpretation of user meaning is used.
+        contract = response_word_count_repair_contract(target)
         width = max(3, len(str(target)))
         expected_keys = [f"word_{index:0{width}d}" for index in range(1, target + 1)]
         assembly = self.prompts.build_semantic_operation_prompt(
             kind="exact_word_count_repair",
             system_instruction=(
-                f"Rewrite the draft into exactly {target} whitespace-delimited words while preserving its meaning, facts, caveats, numbers, and requested style. "
-                "Return one required JSON field per output word. Every field value must contain exactly one non-empty word and no whitespace. Do not add unsupported facts."
+                f"Resolve a proposed exact-word-count constraint of {target}. The count came from a prior model response; "
+                "it is not an authoritative user requirement. First consult the exact user request, conversation and "
+                "trusted runtime context below. If they do not require exactly this numeric count of whitespace-delimited "
+                "words, return words=null and explain why; the runtime will preserve the original draft unchanged and "
+                "remove the unsupported constraint. An exact string, identifier or quotation is not a numeric word-count "
+                "requirement. Never invent a count from its punctuation or add filler to satisfy an invented count. "
+                "Only if that numeric count is actually required, return words as the required word-field object, "
+                "rewriting the draft while preserving facts, caveats and style. Each value must be one nonempty "
+                "whitespace-free word. Do not add unsupported facts. The reason explains which requirement governs."
             ),
             components=[
+                *self.prompts.message_prompt_components(
+                    list(state.messages), prefix="response_constraint_history", category="history",
+                    header="Exact conversation and tool evidence for the response constraint:",
+                ),
+                *self._runtime_context_components(state, self._counter(state)),
                 PromptComponent(
                     name="exact_word_count_original_request",
                     category="current_user",
@@ -1794,11 +1806,16 @@ class AgentRuntime:
         )
 
         def validate_words(payload: dict[str, Any]) -> dict[str, Any]:
-            if set(payload) != set(expected_keys):
+            if set(payload) != {"reason", "words"} or not isinstance(payload["reason"], str) or not payload["reason"].strip():
+                raise ValueError("word-count repair requires words and a nonempty reason")
+            proposed_words = payload["words"]
+            if proposed_words is None:
+                return {"text": draft, "exact_word_count": None, "reason": payload["reason"]}
+            if not isinstance(proposed_words, dict) or set(proposed_words) != set(expected_keys):
                 raise ValueError("exact word repair returned the wrong field set")
             words: list[str] = []
             for key in expected_keys:
-                value = payload.get(key)
+                value = proposed_words.get(key)
                 if not isinstance(value, str):
                     raise ValueError(f"{key} must be a string")
                 word = value.strip()
@@ -1808,7 +1825,7 @@ class AgentRuntime:
             text = " ".join(words)
             if len(text.split()) != target:
                 raise ValueError("exact word repair did not produce the target count")
-            return {"text": text}
+            return {"text": text, "exact_word_count": target, "reason": payload["reason"]}
 
         payload = self._execute_compiled_presentation_call(
             state,
@@ -1827,9 +1844,11 @@ class AgentRuntime:
                 "source_sha256": sha256_text(draft),
                 "repaired_sha256": sha256_text(repaired),
                 "contract": contract.name,
+                "constraint_required": payload["exact_word_count"] is not None,
+                "reason": payload["reason"],
             },
         )
-        return repaired
+        return repaired, payload["exact_word_count"]
 
     def _repair_declared_response_constraints(
         self,
@@ -1851,7 +1870,7 @@ class AgentRuntime:
             and message.strip()
             and len(message.split()) != exact
         ):
-            repaired = self._repair_exact_word_count(
+            repaired, confirmed_count = self._repair_exact_word_count(
                 state,
                 original_request=original_request,
                 draft=message,
@@ -1859,6 +1878,7 @@ class AgentRuntime:
             )
             payload = copy.deepcopy(payload)
             payload["assistant_message"] = repaired
+            payload["response_constraints"]["exact_word_count"] = confirmed_count
         return payload
 
     def _single_responsibility_terminal_action(

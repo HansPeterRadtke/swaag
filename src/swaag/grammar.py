@@ -48,6 +48,19 @@ def exact_word_sequence_contract(word_count: int) -> ContractSpec:
     )
 
 
+
+def response_word_count_repair_contract(word_count: int) -> ContractSpec:
+    """Permit rejecting a model-invented constraint before enforcing its shape."""
+    sequence = exact_word_sequence_contract(word_count)
+    return _contract(
+        f"response_word_count_repair_{word_count}",
+        _closed_object({
+            "reason": _string(),
+            "words": {"anyOf": [sequence.json_schema, {"type": "null"}]},
+        }),
+    )
+
+
 def yes_no_contract() -> ContractSpec:
     return _contract(
         "yes_no",

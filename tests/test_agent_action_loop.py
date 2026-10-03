@@ -1732,7 +1732,7 @@ def test_single_responsibility_terminal_exact_word_count_retries_until_mechanica
             "silent_completion": False,
             "response_constraints": {"exact_word_count": 45},
         }),
-        json.dumps(repair_payload),
+        json.dumps({"reason": "The user explicitly requires forty-five words.", "words": repair_payload}),
     ])
     runtime = AgentRuntime(config, model_client=client)
     state = runtime.create_or_load_session()
@@ -1741,14 +1741,14 @@ def test_single_responsibility_terminal_exact_word_count_retries_until_mechanica
     assert result.assistant_text == " ".join(f"fixed{index}" for index in range(1, 46))
     assert [request["contract"] for request in client.requests] == [
         "agent_terminal_response",
-        "exact_word_sequence_45",
+        "response_word_count_repair_45",
     ]
     events = runtime.history.read_history(state.session_id)
     repaired = [event for event in events if event.event_type == "response_constraint_repaired"]
     assert len(repaired) == 1
     assert repaired[0].payload["target_word_count"] == 45
     assert repaired[0].payload["source_word_count"] == 43
-    assert repaired[0].payload["contract"] == "exact_word_sequence_45"
+    assert repaired[0].payload["contract"] == "response_word_count_repair_45"
 
 
 def test_fused_mode_keeps_legacy_action_contract(make_config):
@@ -2294,3 +2294,29 @@ def test_discovery_defers_usage_guidance_until_exact_schema_is_loaded(make_confi
         ('example', 'Discoverable purpose.', {'type': 'object'}, 'Exact execution instruction.')
     ])
     assert 'Exact execution instruction.' in loaded
+
+
+@pytest.mark.parametrize("responsibilities", [1, 6])
+def test_invented_word_count_is_rejected_without_rewriting_exact_answer(make_config, responsibilities):
+    config = make_config(model__max_semantic_responsibilities_per_call=responsibilities,
+                         runtime__tool_call_budget=0, model__context_limit=32_000)
+    answer = "EXACT-RESPONSE-IDENTIFIER"
+    payload = json.loads(_action(message=answer, continue_loop=False))
+    payload["response_constraints"] = {"exact_word_count": 2}
+    if responsibilities == 1:
+        payload = {key: payload[key] for key in ["assistant_message", "silent_completion", "response_constraints"]}
+    client = FakeModelClient([json.dumps(payload), json.dumps({
+        "reason": "The authoritative request requires an exact identifier, not two words.", "words": None})])
+    runtime = AgentRuntime(config, model_client=client)
+    state = runtime.create_or_load_session()
+    runtime._record_message(state, Message(role="user", content="Keep the final identifier exact; do not add a word count.", created_at="2026-10-03T00:00:00Z"))
+    result = runtime.run_turn_in_session(state, "Reply exactly " + answer)
+    assert result.assistant_text == answer
+    assert len(client.requests) == 2
+    repair = client.requests[-1]
+    assert "Keep the final identifier exact" in repair["prompt"]
+    assert repair["contract"] == "response_word_count_repair_2"
+    events = runtime.history.read_history(state.session_id)
+    repaired = [event for event in events if event.event_type == "response_constraint_repaired"]
+    assert repaired[-1].payload["constraint_required"] is False
+    assert repaired[-1].payload["source_sha256"] == repaired[-1].payload["repaired_sha256"]
