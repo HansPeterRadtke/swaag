@@ -1,6 +1,6 @@
 # Context, execution mode and inference follow-up - October 3, 2026
 
-This follows the user's challenge to the service deployment, unnecessary context and nineteen-minute production call. It does not certify universal agent correctness. The September 30 full Infra audit remains the reading-coverage record: all 139 original recordings were covered; vendor/binary/credential inspections were separately identified. The current fetched agent recordings contain no new agent requirements relative to that snapshot. Original recordings remain unchanged.
+This follows the user's challenge to the service deployment, unnecessary context and nineteen-minute production call. It does not certify universal agent correctness. The September 30 full Infra audit remains the reading-coverage record: all 139 original recordings were covered; vendor/binary/credential inspections were separately identified. A later fetch during this follow-up found the October 3 agent-supervision recording, added in Infra commit cb5d97f. Its complete source and normalized agent/architecture/reliability changes have now been read; the previous 139-recording coverage plus this recording totals 140. The new requirements are mapped below, and are not silently treated as implemented.
 
 ## What the recordings require
 
@@ -39,3 +39,20 @@ The launcher now sends explicit `--flash-attn off` for disabled settings, suppor
 ## Acceptance boundaries
 
 Final deployment and live required-source evidence are pending this working report's final update. Browser upload/download/control acceptance, protected external MCP/A2A provider deployments, broad authorization-conflict trajectories and long-horizon semantic evaluation remain separate open acceptance work. A native GUI or voice frontend is not provided by the core foreground program. Existing scheduler, durable history, notes, questions, authorized backlog, tool execution and control mechanisms are described in the full audit; neither these changes nor a passing local suite imply that every future semantic context choice is correct.
+
+
+## Newly received October 3 recording: implementation gaps
+
+The source is Infra `docs/guidlines/original-recordings/agents/Recording 2026-10-03 15-13-24-878.txt`, SHA-256 `da00cf277198c9f3edf159c54eca9f9d214bec2c199d16a74426bfdd4319ec5e`. It prefers a single centrally scheduled program with one user-facing orchestrator and workers, while retaining alternative execution mechanisms and parallel independent model backends. It does not mandate a boot daemon. Automatic semantic interruption for apparent worker loops is explicitly deferred; necessary user control remains required.
+
+Existing foundations include durable worker states and operation identities, independent periodic runtime heartbeats, streaming token telemetry, process-liveness inspection, backend-keyed inference coordination, worker controls and authorized durable backlog. These do not yet satisfy every new requirement:
+
+- `model.py` streams tokens but has no independent per-backend activity monitor for prefill/queued/idle state. A transport read timeout is not evidence that a local model is stuck. `runtime.py` heartbeat pulses prove the harness is alive, not that the backend is calculating. A responsive central supervisor must combine these different signals, supervise the orchestrator too, and never terminate observably active inference based on a rough estimate.
+- `orchestration.py` and the worker/plan contracts have finite lifecycle states but no explicit intentionally endless-work state or plan-based progress/estimate contract. Existing background backlog does not by itself meet that requirement. Empirical duration calibration must retain input/model/machine/load conditions; it is an improvement possibility, not permission to invent progress.
+- `tools/questions.py` supports only `list` and evidence-backed `resolve` for the owning session. It does not support revision of unanswered content/criticality or orchestrator-wide revision. Criticality currently has only optional/blocking classes. A complete cross-worker inventory, review of every question, criticality-first summary, guideline cross-checking, and controlled revision require implementation and trajectory validation. Existing exact status inspection is not proof of those semantics.
+
+These are concrete open implementation points, separate from browser/protected-provider/long-horizon acceptance. Therefore the project is not fully compliant with the newest recording. No unsupported automatic worker correction or speculative kill-timeout has been added as a substitute.
+
+## Follow-up exact-response defect
+
+The first actual turn on the Flash Attention candidate returned the correct string, but the action model also declared an unsupported two-word constraint. The repair call appended extra text, the independent completion check rejected it, and a second action restored the correct string. Total elapsed time was 320.581 seconds. This trace is preserved as `live-fa-result.json`; main prompt evaluation was 39.665 tokens/second with the original 32,768-token window. Prompt instructions now explicitly distinguish an exact string from an explicitly requested numeric whitespace-word count, without deterministically parsing the user's meaning. The portable output schema remains unchanged. Sixteen focused regressions passed after the prompt update; live production validation is recorded below when complete.

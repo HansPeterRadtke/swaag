@@ -2,6 +2,15 @@
 
 The user clarified that necessary input, not output length or maximum context occupancy, governs context construction. Staged discovery now defers filesystem inventory to model-selected tools and execution guidance to selected schemas. Explicitly required and retrieved source content remains exact when it fits. Foreground CLI use is primary; the optional Jetson communication service is no longer enabled at boot. The previous deployment report below is historical. Validation evidence for this follow-up is recorded separately; unresolved live or external acceptance is not implied complete.
 
+## October third supervision recording — not yet complete
+
+The recording arrived in Infra during this follow-up. Full source and applicable normalized changes were read. Existing heartbeats, streaming, worker lifecycle and backlog are foundations, not full acceptance of the new specification. See `context-and-launch-audit-2026-10-03.md` for exact implementation evidence.
+
+- [ ] Add responsive central supervision of worker, orchestrator and actual local backend activity, including prefill/queued/idle evidence and activity-aware timeout decisions.
+- [ ] Represent intentionally endless work explicitly; expose meaningful finite-plan progress and qualified duration estimates without fabricating percentages.
+- [ ] Add revision of unanswered questions and criticality, orchestrator-wide question ownership/review, complete criticality-first reporting and guideline cross-checking.
+- [ ] Validate these behaviors with independent stalled/working backend, endless-work and multi-worker question trajectories. Automatic semantic loop correction remains explicitly deferred by the recording.
+
 # Swaag implementation TODO
 
 This is the gap list between the current repository and the intended architecture in `docs/design-principles.md` and `docs/context-management.md`. It is an implementation checklist, not a list of ideas. Items marked **partial** already have useful foundations in the repository but still differ materially from the target semantics.

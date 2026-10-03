@@ -592,7 +592,10 @@ class PromptBuilder:
                 "request/history/tool evidence. This call has one semantic responsibility: final response generation. "
                 "Do not choose tools, plan another action, emit status, or judge completion. Always return "
                 "response_constraints.exact_word_count: use a positive integer only when this terminal message is explicitly required "
-                "to contain exactly that many whitespace-delimited words, otherwise null. Exact counts are mechanically validated. "
+                "to contain an explicitly specified numeric count of whitespace-delimited words, otherwise null. "
+                "Repeating an exact string, token, identifier, or quotation does not imply a word-count constraint; "
+                "use null and preserve that text exactly. Never infer a count from punctuation or hyphens. "
+                "Exact counts are mechanically validated. "
                 "The message must be non-empty "
                 + ("unless the enclosing protocol explicitly requires silence; set silent_completion accordingly."
                    if allow_silent_completion else "and silent_completion must be false.")
