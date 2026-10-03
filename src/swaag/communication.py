@@ -5013,6 +5013,10 @@ class CommunicationService:
                 if not isinstance(params, dict):
                     raise ValueError("orchestration operation params must be an object")
                 orchestration_operation = op.removeprefix("orchestration.")
+                if orchestration_operation == "supervision":
+                    # Cached mechanical observation must remain available even
+                    # when every semantic request slot is occupied.
+                    return self.orchestration_api.execute("supervision")
                 async with self._semaphore:
                     return await asyncio.to_thread(
                         self.orchestration_api.execute, orchestration_operation, params

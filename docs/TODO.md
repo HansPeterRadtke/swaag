@@ -9,7 +9,7 @@ The recording arrived in Infra during this follow-up. Full source and applicable
 - [x] Add responsive central supervision of worker, orchestrator and actual local backend activity, including prefill/queued/idle evidence and activity-aware timeout decisions.
 - [x] Represent intentionally endless work explicitly; expose meaningful finite-plan progress and qualified duration estimates without fabricating percentages.
 - [x] Add revision of unanswered questions and criticality, orchestrator-wide question ownership/review, complete criticality-first reporting and guideline cross-checking.
-- [ ] Validate these behaviors with independent stalled/working backend, endless-work and multi-worker question trajectories. Automatic semantic loop correction remains explicitly deferred by the recording.
+- [x] Validate these behaviors with independent stalled/working backend, endless-work and multi-worker question trajectories. The corrected live inventory trajectory passes fourteen checks; the final focused software release checks pass. Automatic semantic loop correction remains explicitly deferred by the recording.
 
 # Swaag implementation TODO
 

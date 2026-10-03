@@ -174,3 +174,22 @@ def test_continuous_mode_reaches_worker_creation(make_config):
         assert response['progress']['overall_percent'] is None
     finally:
         workers.shutdown()
+
+
+def test_supervision_transport_bypasses_occupied_semantic_request_slots(make_config):
+    import asyncio
+    from swaag.communication import CommunicationService
+    runtime = AgentRuntime(make_config(), model_client=object())
+    service = CommunicationService(runtime, max_concurrency=1)
+    async def verify():
+        await service._semaphore.acquire()
+        try:
+            result = await asyncio.wait_for(service._dispatch_json_line_request(
+                {'op': 'orchestration.supervision'}), timeout=.5)
+            assert result['supervision']['automatic_semantic_intervention'] is False
+        finally:
+            service._semaphore.release()
+    try:
+        asyncio.run(verify())
+    finally:
+        service.close()
