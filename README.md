@@ -1,12 +1,12 @@
 # SWAAG
 
-SWAAG is a local-first autonomous agent runtime for llama.cpp and OpenAI-compatible model servers. The current architecture is a single constrained action loop: the model chooses one structured action at a time, Python validates it mechanically, tools execute in an isolated workspace, observations are appended to authoritative history, and the loop continues until the model returns a verified final response or a hard runtime limit stops it.
+SWAAG is a local-first Python agent program for llama.cpp and OpenAI-compatible model servers. Run `swaag ask` for one foreground request or `swaag chat` for a foreground conversation. `swaag communication serve` is an explicit optional network interface; installing SWAAG does not require a daemon or boot service. The current architecture is a single constrained action loop: the model chooses one structured action at a time, Python validates it mechanically, tools execute in an isolated workspace, observations are appended to authoritative history, and the loop continues until the model returns a verified final response or a hard runtime limit stops it.
 
 The model owns semantic choices. Python owns schemas, constrained decoding, path and permission policy, exact context accounting, tool execution, persistence, replay, retries, and deterministic verification. The runtime never silently repairs semantic output with hard-coded planner logic.
 
 ## Runtime environment
 
-Swaag is a standard `pyproject.toml` package. Development environments may live in the checkout, but long-running services use a reproducible runtime environment under `/data/var/swaag` so service execution never depends on a user's home directory. `uv.lock` pins the resolved dependency graph, and `scripts/install-runtime-env.sh` installs the required Python under `/data/var/swaag/python`, creates `/data/var/swaag/venv`, and synchronizes only the base runtime dependencies unless extras are explicitly requested.
+Swaag is a standard `pyproject.toml` package. Development environments may live in the checkout, but installed programs and optional services use a reproducible runtime environment under `/data/var/swaag` so service execution never depends on a user's home directory. `uv.lock` pins the resolved dependency graph, and `scripts/install-runtime-env.sh` installs the required Python under `/data/var/swaag/python`, creates `/data/var/swaag/venv`, and synchronizes only the base runtime dependencies unless extras are explicitly requested.
 
 ## Design documentation
 
@@ -107,3 +107,7 @@ Durable prompt records include the exact rendered-prompt hash and SHA-256 versio
 Protocol conformance dependencies remain outside the Python runtime. Repo-backed probes exercise pinned MCP 2026-07-28 discovery/list/call over stdio and stateless Streamable HTTP, official A2A 1.0 card/list/get/cancel/subscription decoding, and the official AG-UI `HttpAgent` POST/SSE lifecycle. Their exact SDKs install under `/data/var/swaag/protocol-conformance`; none become Python runtime dependencies. MCP remains a replaceable capability boundary rather than Swaag's task protocol. Its HTTP binding is disabled by default; `mcp.enabled=true` plus `mcp.transport="streamable_http"` or `"both"` exposes `/mcp` only through the loopback-only communication service.
 
 Question lifecycle and explicitly authorized idle work are documented in [questions-and-background-work.md](docs/questions-and-background-work.md). Background dispatch is disabled by default.
+
+## Staged source discovery
+
+With the default `tools.staged_discovery=true`, a new action receives an explicit workspace source reference, not a recursively collected file inventory. The model decides whether to call `list_files`, read a known path, search, or answer from the supplied evidence. Tool discovery exposes exact identities and descriptions; usage guidance and schemas accompany selected tools. Required source contents and observed tool results remain exact when they fit, even for a one-word answer. No input is removed based on the expected answer length. Set staged discovery to false only when the caller deliberately wants all tool schemas and the automatic full inventory.

@@ -91,10 +91,36 @@ def runtime_system_context_sources(
         ))
 
     if _tool_enabled(config, "list_files"):
-        filesystem = AgentEnvironment(config, state).filesystem
-        manifest = filesystem.context_manifest()
-        sources.append(
-            SystemContextSource(
+        locator = {
+            "authoritative_source": "live_filesystem",
+            "workspace_root": state.environment.workspace.root,
+            "recovery_tool": "list_files",
+            "recovery_arguments": {"path": state.environment.workspace.root},
+        }
+        if config.tools.staged_discovery:
+            # Discovery is a model-owned action, just like loading a tool schema.
+            # Do not scan/inject the whole repository before that choice. This is
+            # an explicit source reference, not a truncated or summarized listing.
+            sources.append(SystemContextSource(
+                name="workspace_source_reference",
+                category="environment",
+                text=stable_json_dumps(locator, indent=2),
+                introduction=(
+                    "Workspace files have not been listed for this call. If their names or "
+                    "contents are needed, discover them with list_files and read the relevant "
+                    "sources; do not infer an empty workspace or guess its contents. "
+                    "A request to inspect all files requires complete discovery and reading.\n"
+                ),
+                locator=locator,
+                projection_source_label="workspace source reference",
+                projection_header="",
+                optional=False,
+                projectable=False,
+            ))
+        else:
+            filesystem = AgentEnvironment(config, state).filesystem
+            manifest = filesystem.context_manifest()
+            sources.append(SystemContextSource(
                 name="workspace_file_manifest",
                 category="environment",
                 text=stable_json_dumps(manifest, indent=2),
@@ -102,18 +128,10 @@ def runtime_system_context_sources(
                     "Workspace file manifest. Use the configured filesystem capability to recover "
                     "the exact current listing when needed:\n"
                 ),
-                locator={
-                    "authoritative_source": "live_filesystem",
-                    "workspace_root": state.environment.workspace.root,
-                    "recovery_tool": "list_files",
-                    "recovery_arguments": {"path": state.environment.workspace.root},
-                },
+                locator=locator,
                 projection_source_label="complete current workspace file manifest",
-                projection_header=(
-                    "[SEMANTIC PROJECTION; the live filesystem remains authoritative]\n"
-                ),
-            )
-        )
+                projection_header="[SEMANTIC PROJECTION; the live filesystem remains authoritative]\n",
+            ))
 
     if _tool_enabled(config, "notes"):
         note_text = render_notes(_selected_notes(state, context_state))

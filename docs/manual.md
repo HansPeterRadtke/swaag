@@ -2,6 +2,10 @@
 
 SWAAG is a local-first autonomous agent runtime. Append-only session history and durable worker/event stores are authoritative; user interfaces and protocol adapters are projections over that state.
 
+## Foreground execution and optional serving
+
+SWAAG is a program. `swaag ask "your request"` runs one foreground turn; `swaag chat` runs a foreground conversation. These do not need the communication listener or a systemd service. `swaag communication serve` explicitly runs the network interface until stopped. A supervisor is an optional deployment choice, not an agent-recording requirement or a prerequisite for background workers. Jetson no longer enables the communication service at boot by default.
+
 ## Architecture
 
 SWAAG has three capability layers. Layer 1 is the agent harness: model calls, exact context compilation, durable history, inference admission, cancellation/replay, worker lifecycle, completion evaluation, and transport-independent task state. Layer 2 contains repository-owned system capabilities such as history, notes, prompt instructions, filesystem/workspace access, shell/process control, attachments, artifacts, wakeups, and shared state. Layer 3 is open-ended external capability such as MCP servers, browser automation, OCR, databases, proprietary APIs, and document converters. Layer 3 is optional and never becomes core merely because it is useful.

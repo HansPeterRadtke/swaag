@@ -104,6 +104,8 @@ enabled = ["echo", "time_now", "calculator", "agent_workspace", "list_files", "r
 read_roots = ["."]
 allow_stateful_tools = true
 allow_side_effect_tools = false
+# Stage tool schemas/guidance and filesystem discovery behind model-selected calls.
+# False exposes all schemas and the full automatic workspace inventory.
 staged_discovery = true
 
 # -----------------------------------------------------------

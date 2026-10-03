@@ -95,10 +95,10 @@ class PromptBuilder:
 
     def render_capability_index(self, capabilities: Iterable[tuple[str, str, str]]) -> str:
         lines: list[str] = []
-        for name, description, guidance in capabilities:
+        for name, description, _guidance in capabilities:
+            # Discovery needs capability identity/purpose. Exact execution guidance
+            # accompanies the selected tool schema in render_tool_catalog.
             lines.append(f"- {name}: {description}")
-            if str(guidance).strip():
-                lines.append(f"  guidance: {str(guidance).strip()}")
         return "\n".join(lines)
 
     def render_messages(self, messages: list[Message]) -> str:

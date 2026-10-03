@@ -2236,3 +2236,61 @@ def test_neutral_redundant_history_projection_skips_verbatim_selector(make_confi
     content = compressed.payload["summary_message"]["content"]
     assert "redundant progress omitted" in content
     assert compressed.payload["verbatim_line_count"] == 0
+
+
+def test_staged_answer_does_not_scan_unrequested_workspace(make_config, tmp_path, monkeypatch):
+    from swaag.environment.filesystem import FilesystemManager
+    workspace = tmp_path / 'project'
+    workspace.mkdir()
+    (workspace / 'unrelated-corpus.txt').write_text('irrelevant data ' * 10000)
+    config = make_config(model__context_limit=32000, tools__staged_discovery=True)
+    config.tools.read_roots = [workspace]
+    client = FakeModelClient([_action(message='READY')])
+    runtime = AgentRuntime(config, model_client=client)
+    def forbidden_scan(*args, **kwargs):
+        raise AssertionError('No model selected filesystem discovery')
+    monkeypatch.setattr(FilesystemManager, 'context_manifest', forbidden_scan)
+    result = runtime.run_turn('Reply exactly READY without using tools.')
+    assert result.assistant_text == 'READY'
+    assert len(client.requests) == 1
+    assert 'unrelated-corpus.txt' not in client.requests[0]['prompt']
+    assert 'Workspace files have not been listed' in client.requests[0]['prompt']
+
+
+def test_staged_model_can_discover_and_read_complete_required_source(make_config, tmp_path):
+    workspace = tmp_path / 'project'
+    workspace.mkdir()
+    source = 'This evidence is necessary.\n' * 800 + 'The recorded answer is VIOLET.\n'
+    (workspace / 'evidence.txt').write_text(source)
+    config = make_config(model__context_limit=32000, tools__staged_discovery=True,
+                         tools__enabled=['list_files', 'read_file'])
+    config.tools.read_roots = [workspace]
+    def grounded_answer(payload):
+        assert 'evidence.txt' in payload['prompt']
+        assert source in payload['prompt'] or json.dumps(source)[1:-1] in payload['prompt']
+        return _action(message='VIOLET')
+    client = FakeModelClient([
+        _action(tool_calls=[('load_tools', {'tool_names': ['list_files', 'read_file']})], continue_loop=True),
+        _action(tool_calls=[('list_files', {'path': '.'})], continue_loop=True),
+        _action(tool_calls=[('read_file', {'path': 'evidence.txt'})], continue_loop=True),
+        grounded_answer,
+    ])
+    runtime = AgentRuntime(config, model_client=client)
+    result = runtime.run_turn('Read the complete evidence file in this workspace and return its recorded answer.')
+    assert result.assistant_text == 'VIOLET'
+    assert len(client.requests) == 4
+    assert 'evidence.txt' not in client.requests[0]['prompt']
+    events = runtime.history.read_history(result.session_id)
+    assert any(e.event_type == 'filesystem_read' for e in events)
+
+
+def test_discovery_defers_usage_guidance_until_exact_schema_is_loaded(make_config):
+    runtime = AgentRuntime(make_config())
+    capabilities = [('example', 'Discoverable purpose.', 'Exact execution instruction.')]
+    index = runtime.prompts.render_capability_index(capabilities)
+    assert 'Discoverable purpose.' in index
+    assert 'Exact execution instruction.' not in index
+    loaded = runtime.prompts.render_tool_catalog([
+        ('example', 'Discoverable purpose.', {'type': 'object'}, 'Exact execution instruction.')
+    ])
+    assert 'Exact execution instruction.' in loaded
