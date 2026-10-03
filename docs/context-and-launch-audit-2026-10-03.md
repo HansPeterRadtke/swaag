@@ -92,3 +92,10 @@ Native llama.cpp telemetry is implemented and live-tested. API backends without 
 
 
 Final focused release validation passed 149 tests in 156.77 seconds, including every failure path from the broad run and a legacy-node preservation test across the new migration. A final transport check additionally verifies that cached supervision remains readable when all semantic request slots are occupied; it bypasses that semaphore without invoking a model, network probe, or database operation. These are a broad run plus focused verification after fixes, not a claim of one entirely green final full-suite run. The live trajectory remains the fourteen-check result above.
+
+
+## Installed release verification
+
+Source commit `56996893691fa08a0c30a1ce33d3d485da3909f1` is installed on Jetson. The wheel SHA-256 is `5c7d47af5c93466f5e1c317d51a4d2fcc23520a7bcfa7f3625e61a401e2a6364`; all 189 package files match the frozen source and the installed package byte for byte. The final transport/supervision batch passed sixteen tests in 8.20 seconds. Ten additional checks against the installed package passed: CLI imports, question revision, unanswered-state preservation, progress reporting, continuous plans, guideline-reading tools, actual backend observation, supervision under occupied request capacity, no unintended inference/start, and clean supervisor shutdown. The installed check used isolated histories and did not start any worker or model request.
+
+The native model service remained active with the same process and zero restarts. SWAAG communication remained disabled and inactive. Existing Whisper jobs, other machines, the full 32,768-token model window, and the four-GiB reserve were not changed. See `installed-final-verified.json`, `installed-smoke.json`, `release-targeted.log`, and `transport-release-tests.log` in the evidence directory.
