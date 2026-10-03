@@ -1,6 +1,6 @@
 # Current follow-up — October 3, 2026
 
-The user clarified that necessary input, not output length or maximum context occupancy, governs context construction. Staged discovery now defers filesystem inventory to model-selected tools and execution guidance to selected schemas. Explicitly required and retrieved source content remains exact when it fits. Foreground CLI use is primary; the optional Jetson communication service is no longer enabled at boot. The previous deployment report below is historical. Validation evidence for this follow-up is recorded separately; unresolved live or external acceptance is not implied complete.
+The user clarified that necessary input, not output length or maximum context occupancy, governs context construction. Staged discovery now defers filesystem inventory to model-selected tools and execution guidance to selected schemas. Explicitly required and retrieved source content remains exact when it fits. Foreground CLI use is primary; the optional Jetson communication service is no longer enabled at boot. The context/backend/launch repair is published and installed. The original uncached production request now passed in 165.317 seconds with the original 32,768-token window and no repeated action/completion loop; the complete-source test also passed. The newly received supervision recording still has the explicit implementation gaps below. The previous deployment report remains historical; external and long-horizon acceptance is not implied complete.
 
 ## October third supervision recording — not yet complete
 
