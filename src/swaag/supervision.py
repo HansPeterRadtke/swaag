@@ -14,6 +14,82 @@ from typing import Any, Callable
 from swaag.utils import utc_now_iso
 
 
+def _prometheus_metric_totals(text: str) -> dict[str, float]:
+    """Aggregate the small documented vLLM metric set we consume.
+
+    Prometheus labels are deliberately ignored because supervision is backend-level
+    evidence.  We do not claim that a running request belongs to SWAAG.
+    """
+    wanted = {
+        "vllm:num_requests_running",
+        "vllm:num_requests_waiting",
+        "vllm:num_requests_swapped",
+        "vllm:prompt_tokens_total",
+        "vllm:generation_tokens_total",
+    }
+    totals = {name: 0.0 for name in wanted}
+    seen: set[str] = set()
+    for raw in text.splitlines():
+        line = raw.strip()
+        if not line or line.startswith("#"):
+            continue
+        metric, separator, remainder = line.partition("{")
+        if separator:
+            closing = remainder.find("}")
+            if closing < 0:
+                continue
+            value_fields = remainder[closing + 1:].strip().split()
+            name = metric
+        else:
+            fields = line.split()
+            if len(fields) < 2:
+                continue
+            name, value_fields = fields[0], fields[1:]
+        if name not in wanted or not value_fields:
+            continue
+        try:
+            value = float(value_fields[0])
+        except ValueError:
+            continue
+        if value != value or value in {float("inf"), float("-inf")}:
+            continue
+        totals[name] += value
+        seen.add(name)
+    if "vllm:num_requests_running" not in seen:
+        raise ValueError("vLLM metrics did not expose num_requests_running")
+    return {name: totals[name] for name in seen}
+
+
+def vllm_metrics_activity(text: str) -> dict[str, Any]:
+    metrics = _prometheus_metric_totals(text)
+    running = metrics.get("vllm:num_requests_running", 0.0)
+    waiting = metrics.get("vllm:num_requests_waiting", 0.0)
+    swapped = metrics.get("vllm:num_requests_swapped", 0.0)
+    prompt = metrics.get("vllm:prompt_tokens_total")
+    generation = metrics.get("vllm:generation_tokens_total")
+    if running > 0:
+        state = "processing"
+    elif waiting > 0 or swapped > 0:
+        state = "queued"
+    else:
+        state = "idle"
+    counters = {}
+    if prompt is not None:
+        counters["prompt_tokens_total"] = prompt
+    if generation is not None:
+        counters["generation_tokens_total"] = generation
+    return {
+        "supported": True,
+        "source": "vllm:/metrics",
+        "state": state,
+        "running_requests": running,
+        "waiting_requests": waiting,
+        "swapped_requests": swapped,
+        "progress_counters": counters,
+        "request_attribution": "backend_only",
+    }
+
+
 def llama_slot_activity(slots: Any) -> dict[str, Any]:
     if not isinstance(slots, list) or not slots:
         raise ValueError("backend did not expose a nonempty slot inventory")
@@ -104,13 +180,23 @@ class BackendActivityMonitor:
                 # Errors describe observation failure, never a proved hung model.
                 sample = {"supported": False, "state": "unavailable", "error_type": type(exc).__name__}
             observed = utc_now_iso()
-            counters = {(row.get("id"), row.get("id_task")):
+            counters = {("llama_slot", row.get("id"), row.get("id_task")):
                         (row.get("n_prompt_tokens_processed"), row.get("n_decoded"))
                         for row in sample.get("slots", []) if row.get("is_processing")}
+            if isinstance(sample.get("progress_counters"), dict):
+                counters[("backend",)] = tuple(
+                    sample["progress_counters"].get(name)
+                    for name in sorted(sample["progress_counters"])
+                )
             with self._condition:
-                advancing = any(isinstance(value, int) and not isinstance(value, bool) and value > (previous if isinstance(previous, int) else 0)
+                advancing = sample.get("state") == "processing" and any(
+                    key in self._last_counters
+                    and isinstance(value, (int, float)) and not isinstance(value, bool)
+                    and isinstance(previous, (int, float)) and not isinstance(previous, bool)
+                    and value > previous
                     for key, values in counters.items()
-                    for value, previous in zip(values, self._last_counters.get(key, (0, 0))))
+                    for value, previous in zip(values, self._last_counters.get(key, ()))
+                )
                 if advancing:
                     self._progress_time = time.monotonic()
                     self._progress_at = observed

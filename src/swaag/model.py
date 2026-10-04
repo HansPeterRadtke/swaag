@@ -11,7 +11,7 @@ from typing import Any, Callable, Protocol
 
 import requests
 
-from swaag.supervision import BackendActivityMonitor, llama_slot_activity
+from swaag.supervision import BackendActivityMonitor, llama_slot_activity, vllm_metrics_activity
 from swaag.stream_transport import NativeCompletionResponse
 from swaag.config import AgentConfig
 from swaag.schema_portability import PortableSchemaError, assert_portable_json_schema
@@ -171,8 +171,19 @@ class LlamaCppClient:
     _backend_monitor_lock: Any = field(default_factory=threading.Lock, init=False)
 
     def backend_activity(self) -> dict[str, Any]:
+        provider = self.config.model.provider_name.strip().lower()
         if self._uses_chat_transport:
-            return {"supported": False, "state": "unavailable", "source": "provider_without_activity_adapter"}
+            parsed = urlparse(self._base)
+            local = parsed.hostname in {"127.0.0.1", "localhost", "::1"}
+            if provider not in {"vllm", "vllm-openai", "vllm_openai"} or not local:
+                return {"supported": False, "state": "unavailable", "source": "provider_without_activity_adapter"}
+            metrics_url = f"{parsed.scheme}://{parsed.netloc}/metrics"
+            response = requests.get(metrics_url, timeout=(2.0, 2.0), **self._request_headers_kwargs())
+            try:
+                response.raise_for_status()
+                return vllm_metrics_activity(response.text)
+            finally:
+                response.close()
         response = requests.get(f"{self._base}/slots", timeout=(2.0, 2.0), **self._request_headers_kwargs())
         try:
             response.raise_for_status()
