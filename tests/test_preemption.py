@@ -882,3 +882,75 @@ def test_benchmark_communication_probe_allows_context_preparation_past_probe_win
     ]
     assert "model_call_preempted" in event_types
     assert "model_call_replayed" in event_types
+
+class _ConcurrentOrchestratorClient(_ImmediateClient):
+    def __init__(self) -> None:
+        super().__init__("unused")
+        self.first_started = threading.Event()
+        self.release_first = threading.Event()
+        self._orchestrator_calls = 0
+        self._orchestrator_lock = threading.Lock()
+
+    def send_completion(self, payload: dict[str, Any], **kwargs) -> CompletionResult:
+        if payload.get("contract") != "orchestrator_interaction":
+            return super().send_completion(payload, **kwargs)
+        with self._orchestrator_lock:
+            self._orchestrator_calls += 1
+            call_index = self._orchestrator_calls
+        self.requests.append(json.loads(stable_json_dumps(payload, indent=None)))
+        if call_index == 1:
+            self.first_started.set()
+            assert self.release_first.wait(timeout=5)
+            answer = "first reply"
+        else:
+            answer = "second reply"
+        return self._result(payload, _orchestrator_interaction(answer))
+
+
+def test_concurrent_orchestrator_messages_preserve_order_and_history(make_config) -> None:
+    config = make_config(
+        model__context_limit=32_000,
+        tools__enabled=["orchestration_control"],
+        tools__allow_stateful_tools=True,
+        tools__allow_side_effect_tools=True,
+    )
+    client = _ConcurrentOrchestratorClient()
+    runtime = AgentRuntime(config, model_client=client)
+    service = CommunicationService(runtime, orchestrator_runtime=runtime)
+    results: dict[str, dict[str, str]] = {}
+    errors: dict[str, Exception] = {}
+
+    def call(key: str, message: str) -> None:
+        try:
+            results[key] = service.orchestrator_message(message)
+        except Exception as exc:
+            errors[key] = exc
+
+    first = threading.Thread(target=call, args=("first", "first user"), daemon=True)
+    second = threading.Thread(target=call, args=("second", "second user"), daemon=True)
+    first.start()
+    assert client.first_started.wait(timeout=5)
+    second.start()
+    second.join(timeout=0.2)
+    assert second.is_alive(), "second orchestrator message overtook the active turn"
+    client.release_first.set()
+    first.join(timeout=5)
+    second.join(timeout=5)
+
+    assert not errors
+    assert not first.is_alive() and not second.is_alive()
+    assert results["first"]["answer"] == "first reply"
+    assert results["second"]["answer"] == "second reply"
+    state = runtime.create_or_load_user_session("SWAAG Orchestrator")
+    visible = [
+        message.content
+        for message in state.messages
+        if message.role in {"user", "assistant"}
+        and not message.metadata.get("internal_action")
+    ]
+    assert visible[-4:] == [
+        "first user",
+        "first reply",
+        "second user",
+        "second reply",
+    ]

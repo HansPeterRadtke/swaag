@@ -52,6 +52,7 @@ from swaag.protocol_adapters import (
     OpenWebUiProjectionAdapter,
 )
 from swaag.runtime import AgentRuntime
+from swaag.session_lock import session_execution_lock
 from swaag.shared_state import (
     SharedStateChannel,
     SharedStateConflictError,
@@ -1560,111 +1561,117 @@ class CommunicationService:
         text = str(message).strip()
         if not text:
             raise ValueError("orchestrator message must not be empty")
-        self.supervisor.start()
-        self.orchestration.advance_active_plans()
-        state = self._orchestrator_state()
-        fast_runtime_snapshot = {
-            "active_workers": [
-                asdict(worker)
-                for worker in self.workers.list()
-                if worker.status not in WORKER_TERMINAL_STATES
-            ],
-            "active_plans": [
-                asdict(plan)
-                for plan in self.orchestration.store.list_plans()
-                if plan.status not in {"completed", "canceled"}
-            ],
-            "worker_question_inventory": (lambda inventory: {
-                "questions": inventory.get("questions", []),
-                "pending_revisions": inventory.get("pending_revisions", []),
-            })(self.orchestration_api.execute("questions.list")["inventory"]),
-            "supervision": self.orchestration_api.execute("supervision")[
-                "supervision"
-            ],
-        }
-        preemptions: list[tuple[AgentRuntime, object]] = []
-        orchestrator_backend = self.orchestrator_runtime.config.model.base_url.rstrip("/")
-        managers = {"default": self.workers, **self.worker_model_managers}
-        for worker in self.workers.list():
-            if worker.status != "working":
-                continue
-            manager = managers.get(worker.model_key)
-            if manager is None:
-                continue
-            runtime = manager.runtime
-            if runtime.config.model.base_url.rstrip("/") != orchestrator_backend:
-                continue
-            request = self._preempt_runtime_call(
-                runtime,
-                worker.session_id,
-                "orchestrator priority interaction",
-                source="user_orchestrator",
-            )
-            if request is not None:
-                preemptions.append((runtime, request))
-        try:
-            with self.orchestrator_runtime.inference_priority(
-                1000, source="user_orchestrator"
-            ):
-                try:
-                    routed = self.orchestrator_runtime.generate_orchestrator_interaction(
-                        message=text,
-                        conversation_messages=list(state.messages),
-                        runtime_snapshot=fast_runtime_snapshot,
-                    )
-                except SemanticCallContextOverflow:
-                    routed = {
-                        "route": "orchestrate",
-                        "answer": "",
-                        "reason": (
-                            "The exact orchestrator conversation does not fit the small "
-                            "interaction call; use the full context-managed orchestrator."
-                        ),
-                    }
-                if routed["route"] == "respond":
-                    self.orchestrator_runtime.history.record_event(
-                        state,
-                        "turn_started",
-                        {
-                            "turn_index": state.turn_count + 1,
-                            "user_text": text,
-                            "execution_loop": "orchestrator_direct_interaction",
-                        },
-                    )
-                    self.orchestrator_runtime._record_message(
-                        state,
-                        Message(
-                            role="user",
-                            content=text,
-                            created_at=utc_now_iso(),
-                        ),
-                    )
-                    result = self.orchestrator_runtime._finish_turn(
-                        state,
-                        routed["answer"],
-                        [],
-                        [],
-                    )
-                else:
-                    result = self.orchestrator_runtime.run_turn_in_session(
-                        state, text
-                    )
+        orchestrator_state = self.orchestrator_runtime.create_or_load_user_session(
+            "SWAAG Orchestrator"
+        )
+        with session_execution_lock(
+            self.orchestrator_runtime.history, orchestrator_state.session_id
+        ):
+            self.supervisor.start()
             self.orchestration.advance_active_plans()
-            for runtime, request in preemptions:
-                self._complete_runtime_preemption(
-                    runtime,
-                    request,
-                    target_changed=False,
-                    reply=result.assistant_text,
-                )
-            return {
-                "session_id": state.session_id,
-                "answer": result.assistant_text,
+            state = self._orchestrator_state()
+            fast_runtime_snapshot = {
+                "active_workers": [
+                    asdict(worker)
+                    for worker in self.workers.list()
+                    if worker.status not in WORKER_TERMINAL_STATES
+                ],
+                "active_plans": [
+                    asdict(plan)
+                    for plan in self.orchestration.store.list_plans()
+                    if plan.status not in {"completed", "canceled"}
+                ],
+                "worker_question_inventory": (lambda inventory: {
+                    "questions": inventory.get("questions", []),
+                    "pending_revisions": inventory.get("pending_revisions", []),
+                })(self.orchestration_api.execute("questions.list")["inventory"]),
+                "supervision": self.orchestration_api.execute("supervision")[
+                    "supervision"
+                ],
             }
-        except Exception as exc:
-            for runtime, request in preemptions:
-                self._fail_runtime_preemption(runtime, request, exc)
-            raise
+            preemptions: list[tuple[AgentRuntime, object]] = []
+            orchestrator_backend = self.orchestrator_runtime.config.model.base_url.rstrip("/")
+            managers = {"default": self.workers, **self.worker_model_managers}
+            for worker in self.workers.list():
+                if worker.status != "working":
+                    continue
+                manager = managers.get(worker.model_key)
+                if manager is None:
+                    continue
+                runtime = manager.runtime
+                if runtime.config.model.base_url.rstrip("/") != orchestrator_backend:
+                    continue
+                request = self._preempt_runtime_call(
+                    runtime,
+                    worker.session_id,
+                    "orchestrator priority interaction",
+                    source="user_orchestrator",
+                )
+                if request is not None:
+                    preemptions.append((runtime, request))
+            try:
+                with self.orchestrator_runtime.inference_priority(
+                    1000, source="user_orchestrator"
+                ):
+                    try:
+                        routed = self.orchestrator_runtime.generate_orchestrator_interaction(
+                            message=text,
+                            conversation_messages=list(state.messages),
+                            runtime_snapshot=fast_runtime_snapshot,
+                        )
+                    except SemanticCallContextOverflow:
+                        routed = {
+                            "route": "orchestrate",
+                            "answer": "",
+                            "reason": (
+                                "The exact orchestrator conversation does not fit the small "
+                                "interaction call; use the full context-managed orchestrator."
+                            ),
+                        }
+                    if routed["route"] == "respond":
+                        self.orchestrator_runtime.history.record_event(
+                            state,
+                            "turn_started",
+                            {
+                                "turn_index": state.turn_count + 1,
+                                "user_text": text,
+                                "execution_loop": "orchestrator_direct_interaction",
+                            },
+                        )
+                        self.orchestrator_runtime._record_message(
+                            state,
+                            Message(
+                                role="user",
+                                content=text,
+                                created_at=utc_now_iso(),
+                            ),
+                        )
+                        result = self.orchestrator_runtime._finish_turn(
+                            state,
+                            routed["answer"],
+                            [],
+                            [],
+                        )
+                    else:
+                        result = self.orchestrator_runtime.run_turn_in_session(
+                            state, text
+                        )
+                self.orchestration.advance_active_plans()
+                for runtime, request in preemptions:
+                    self._complete_runtime_preemption(
+                        runtime,
+                        request,
+                        target_changed=False,
+                        reply=result.assistant_text,
+                    )
+                return {
+                    "session_id": state.session_id,
+                    "answer": result.assistant_text,
+                }
+            except Exception as exc:
+                for runtime, request in preemptions:
+                    self._fail_runtime_preemption(runtime, request, exc)
+                raise
 
     def submit(self, session_ref: str | None, message: str, *, source: str = "communication") -> CommunicationRequest:
         session_id = self.runtime.resolve_session_ref(session_ref, latest_if_none=True)
