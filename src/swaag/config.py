@@ -304,6 +304,9 @@ class OpenWebUiArtifactServingConfig:
 class CommunicationConfig:
     enabled: bool
     model_base_url: str
+    model_profile_name: str
+    model_identity: str
+    remote_context_limit_fallback: int
     max_concurrent_requests: int
     status_max_output_tokens: int
     enabled_tools: list[str]
@@ -746,6 +749,9 @@ def _coerce_config(
     communication = CommunicationConfig(
         enabled=bool(data["communication"]["enabled"]),
         model_base_url=str(data["communication"]["model_base_url"]),
+        model_profile_name=str(data["communication"].get("model_profile_name", "")),
+        model_identity=str(data["communication"].get("model_identity", "")),
+        remote_context_limit_fallback=int(data["communication"].get("remote_context_limit_fallback", 0)),
         max_concurrent_requests=int(data["communication"]["max_concurrent_requests"]),
         status_max_output_tokens=int(data["communication"].get("status_max_output_tokens", 192)),
         enabled_tools=[str(item) for item in data["communication"]["enabled_tools"]],

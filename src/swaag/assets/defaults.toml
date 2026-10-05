@@ -447,6 +447,11 @@ jwks_url = ""
 [communication]
 enabled = false
 model_base_url = ""
+# Required when the communication endpoint advertises a different model ID than [model].
+model_profile_name = ""
+model_identity = ""
+# Set only when the remote communication endpoint does not advertise context capacity.
+remote_context_limit_fallback = 0
 max_concurrent_requests = 4
 # Positive counts, separate from execution concurrency. Reject rather than grow unbounded.
 max_active_workers = 128

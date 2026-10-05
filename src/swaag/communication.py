@@ -1469,6 +1469,9 @@ class CommunicationService:
         orchestrator_config = copy.deepcopy(config)
         if config.communication.model_base_url:
             orchestrator_config.model.base_url = config.communication.model_base_url
+            if config.communication.model_profile_name: orchestrator_config.model.profile_name = config.communication.model_profile_name
+            if config.communication.model_identity: orchestrator_config.model.model_identity = config.communication.model_identity
+            if config.communication.remote_context_limit_fallback: orchestrator_config.model.remote_context_limit_fallback = config.communication.remote_context_limit_fallback
         orchestrator_config.tools.enabled = list(config.communication.enabled_tools)
         orchestrator_config.tools.allow_stateful_tools = True
         orchestrator_config.tools.allow_side_effect_tools = True
@@ -1478,6 +1481,9 @@ class CommunicationService:
             if config.communication.model_base_url:
                 assistant_config = copy.deepcopy(config)
                 assistant_config.model.base_url = config.communication.model_base_url
+                if config.communication.model_profile_name: assistant_config.model.profile_name = config.communication.model_profile_name
+                if config.communication.model_identity: assistant_config.model.model_identity = config.communication.model_identity
+                if config.communication.remote_context_limit_fallback: assistant_config.model.remote_context_limit_fallback = config.communication.remote_context_limit_fallback
                 assistant_config.tools.enabled = list(config.communication.enabled_tools)
                 assistant_config.tools.allow_stateful_tools = False
                 assistant_config.tools.allow_side_effect_tools = False

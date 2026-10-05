@@ -2370,3 +2370,14 @@ def test_a2a_agent_card_signature_verifies(make_config, monkeypatch):
     der = encode_dss_signature(int.from_bytes(raw[:32], "big"), int.from_bytes(raw[32:], "big"))
     key.public_key().verify(der, signed_bytes, _ec.ECDSA(_hashes.SHA256()))
     service.workers.shutdown()
+
+
+def test_communication_endpoint_uses_its_own_model_identity(make_config) -> None:
+    config = make_config(); config.communication.enabled = True
+    config.model.profile_name = "main-27b"; config.model.model_identity = "main-27b"; config.model.remote_context_limit_fallback = 8192
+    config.communication.model_base_url = "http://127.0.0.1:14832/v1"; config.communication.model_profile_name = "fast-model"; config.communication.model_identity = "fast-model"; config.communication.remote_context_limit_fallback = 32768
+    service = CommunicationService.from_runtime(AgentRuntime(config, model_client=object()))
+    try:
+        model = service.orchestrator_runtime.config.model
+        assert (model.base_url, model.profile_name, model.model_identity, model.remote_context_limit_fallback) == ("http://127.0.0.1:14832/v1", "fast-model", "fast-model", 32768)
+    finally: service.workers.shutdown()
