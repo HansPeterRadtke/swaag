@@ -1574,9 +1574,10 @@ class CommunicationService:
                 for plan in self.orchestration.store.list_plans()
                 if plan.status not in {"completed", "canceled"}
             ],
-            "worker_question_inventory": self.orchestration_api.execute(
-                "questions.list"
-            )["inventory"],
+            "worker_question_inventory": (lambda inventory: {
+                "questions": inventory.get("questions", []),
+                "pending_revisions": inventory.get("pending_revisions", []),
+            })(self.orchestration_api.execute("questions.list")["inventory"]),
             "supervision": self.orchestration_api.execute("supervision")[
                 "supervision"
             ],
