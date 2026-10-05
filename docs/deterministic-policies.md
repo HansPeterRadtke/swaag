@@ -50,9 +50,7 @@ why they stay mechanical.
 - Tool availability is a measured capability fact. The LLM selects capabilities
   semantically from the compact index; Python does not route by keywords, MIME
   type, task ID, or fixture shape.
-- Action/tool-call totals and repeated-identical-action limits prevent runaway
-  resource consumption. Hitting a limit is an explicit failure, never evidence
-  that the task is complete.
+- Production work has no arbitrary total action/tool-call or repeated-identical-action cutoff. Legitimate long or continuous work remains cancelable and observable. Finite action/tool/repetition limits belong to benchmark/evaluation guards that own a finite task boundary; mechanically bounded queues, schemas, single-operation timeouts where justified, and validation-recovery limits remain production resource/protocol controls.
 - Exit codes, persisted file hashes, diffs, schema validation, and executable
   tests are evidence. They constrain independent semantic completion evaluation
   but do not synthesize a final answer.

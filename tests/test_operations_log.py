@@ -217,3 +217,22 @@ def test_operations_log_redacts_configured_secret_values_and_sensitive_key_famil
     ):
         assert secret not in text
     assert "[REDACTED]:sha256=" in text
+
+
+def test_operations_log_level_filters_routine_events_but_keeps_lifecycle(make_config, tmp_path) -> None:
+    path = tmp_path / "level-operations.jsonl"
+    config = make_config(
+        logging__file_path=path,
+        logging__level="WARNING",
+    )
+    runtime = OperationsLog(config, component="level-test")
+    runtime.event("routine_info", severity="INFO", value=1)
+    runtime.event("warning_event", severity="WARNING", value=2)
+    runtime.shutdown(reason="done")
+
+    rows = _read_json_lines([path])
+    assert [row["event"] for row in rows] == [
+        "startup",
+        "warning_event",
+        "shutdown",
+    ]

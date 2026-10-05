@@ -36,6 +36,9 @@ ALLOWED_EVENT_TYPES = frozenset(
         "caller_structured_output_created",
         "communication_status_requested",
         "communication_status_generated",
+        "orchestrator_interaction_requested",
+        "orchestrator_interaction_generated",
+        "orchestrator_interaction_unavailable",
         "communication_status_rejected",
         "communication_status_unavailable",
         "communication_status_escalation_requested",
@@ -393,6 +396,15 @@ REQUIRED_PAYLOAD_KEYS: dict[str, frozenset[str]] = {
     ),
     "caller_structured_output_created": frozenset(
         {"schema", "semantic_output", "evidence_source_references"}
+    ),
+    "orchestrator_interaction_requested": frozenset(
+        {"message"}
+    ),
+    "orchestrator_interaction_generated": frozenset(
+        {"route", "answer", "reason"}
+    ),
+    "orchestrator_interaction_unavailable": frozenset(
+        {"message", "error", "error_type"}
     ),
     "communication_status_requested": frozenset(
         {

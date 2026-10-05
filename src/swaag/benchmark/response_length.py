@@ -148,7 +148,7 @@ def run_response_length_benchmark(
         )
         if case.get("execution_mode") == "agent_turn":
             case_config.model.max_semantic_responsibilities_per_call = 1
-            case_config.runtime.tool_call_budget = 0
+            case_config.tools.enabled = []
         runtime = runtime_factory(case_config)
         current_identity = _model_identity(runtime)
         if model_identity is None:

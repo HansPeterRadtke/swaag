@@ -21,6 +21,14 @@ from swaag.redaction import (
 _ACTIVE: "OperationsLog | None" = None
 _ACTIVE_LOCK = threading.Lock()
 
+_SEVERITY_RANK = {
+    "DEBUG": 10,
+    "INFO": 20,
+    "WARNING": 30,
+    "ERROR": 40,
+    "CRITICAL": 50,
+}
+
 
 def _now() -> str:
     return datetime.now(timezone.utc).isoformat()
@@ -65,6 +73,9 @@ class OperationsLog:
         )
         self._closed = False
         self._dropped = 0
+        self._minimum_severity = _SEVERITY_RANK[
+            str(config.logging.level).strip().upper()
+        ]
         self._thread = threading.Thread(
             target=self._writer_loop,
             name="swaag-operations-log",
@@ -90,9 +101,17 @@ class OperationsLog:
     def event(self, event: str, *, severity: str = "INFO", **attributes: Any) -> None:
         if self._closed:
             return
+        normalized_severity = str(severity).strip().upper()
+        if normalized_severity not in _SEVERITY_RANK:
+            raise ValueError(f"Unknown log severity: {severity}")
+        if (
+            event != "startup"
+            and _SEVERITY_RANK[normalized_severity] < self._minimum_severity
+        ):
+            return
         payload = {
             "timestamp": _now(),
-            "severity": severity.upper(),
+            "severity": normalized_severity,
             "component": self.component,
             "event": str(event),
             "attributes": _redact(

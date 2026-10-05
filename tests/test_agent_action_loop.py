@@ -1155,13 +1155,13 @@ def test_summary_prompt_exposes_retention_cap(tmp_path) -> None:
     assert "preserve_recent_messages" in prompt.prompt_text
 
 
-def test_runtime_model_unavailable_retries_are_unbounded_by_default(tmp_path) -> None:
+def test_runtime_model_unavailable_retries_use_configured_retry_budget(tmp_path) -> None:
     from swaag.config import load_config
     from swaag.runtime import AgentRuntime
 
     config = load_config(env={"SWAAG__SESSIONS__ROOT": str(tmp_path / "sessions")})
     runtime = AgentRuntime(config, model_client=object())
-    assert runtime._max_model_unavailable_attempts is None
+    assert runtime._max_model_unavailable_attempts == config.model.max_retries
 
 
 def test_context_limit_discovery_retries_transient_model_unavailability(tmp_path) -> None:
@@ -1341,8 +1341,9 @@ def test_failed_run_tests_is_evidence_not_permanent_completion_gate(make_config)
     assert len(client.requests) == 2
 
 
-def test_zero_tool_budget_removes_tools_from_action_schema_and_prompt(make_config) -> None:
-    config = make_config(runtime__tool_call_budget=0, runtime__max_total_actions=1, model__context_limit=8192)
+def test_no_enabled_domain_tools_exposes_only_staged_discovery_loader(make_config) -> None:
+    config = make_config(model__context_limit=8192)
+    config.tools.enabled = []
     seen = {}
 
     def capture(payload):
@@ -1352,22 +1353,19 @@ def test_zero_tool_budget_removes_tools_from_action_schema_and_prompt(make_confi
 
     client = FakeModelClient([capture])
     runtime = AgentRuntime(config, model_client=client)
-    result = runtime.run_turn("Answer from the supplied context without tools.")
+    result = runtime.run_turn("Answer from the supplied context without domain tools.")
     assert result.assistant_text == "done"
     assert "'enum': []" not in str(seen["schema"])
     assert '"enum": []' not in str(seen["schema"])
     tool_item = seen["schema"]["properties"]["tool_calls"]["items"]
-    assert tool_item == {
-        "type": "object",
-        "properties": {},
-        "required": [],
-        "additionalProperties": False,
-    }
-    assert "If no tools are listed" in seen["prompt"]
+    variants = tool_item["anyOf"]
+    assert len(variants) == 1
+    assert variants[0]["properties"]["tool_name"]["enum"] == ["load_tools"]
+    assert runtime.tools.capability_index(config) == []
 
 
 def test_immediate_duplicate_action_is_allowed_to_execute_again(make_config, tmp_path) -> None:
-    config = make_config(runtime__tool_call_budget=4, runtime__max_total_actions=3, model__context_limit=32_000)
+    config = make_config(model__context_limit=32_000)
     config.sessions.root = tmp_path / "sessions"
     config.tools.read_roots = [tmp_path]
     (tmp_path / "a.txt").write_text("alpha\n", encoding="utf-8")
@@ -1441,7 +1439,7 @@ def test_action_parser_allows_explicit_silent_terminal_completion() -> None:
 
 
 def test_runtime_can_finish_empty_after_successful_tool_result(make_config, tmp_path) -> None:
-    config = make_config(runtime__tool_call_budget=2, runtime__max_total_actions=2, model__context_limit=32_000)
+    config = make_config(model__context_limit=32_000)
     config.sessions.root = tmp_path / "sessions"
     config.tools.read_roots = [tmp_path]
     (tmp_path / "a.txt").write_text("alpha\n", encoding="utf-8")
@@ -1604,7 +1602,7 @@ def test_action_seed_schedule_is_deterministic_for_same_base_seed(make_config) -
 
 
 def test_duplicate_tool_action_with_cosmetic_status_changes_is_allowed(make_config, tmp_path) -> None:
-    config = make_config(runtime__tool_call_budget=4, runtime__max_total_actions=3, model__context_limit=32_000)
+    config = make_config(model__context_limit=32_000)
     config.sessions.root = tmp_path / "sessions"
     config.tools.read_roots = [tmp_path]
     (tmp_path / "a.txt").write_text("alpha\n", encoding="utf-8")
@@ -1664,9 +1662,10 @@ def test_environment_state_exposes_authoritative_active_session(make_config) -> 
 
 
 def test_validation_retry_exhaustion_retries_same_semantic_action(make_config) -> None:
-    config = make_config(runtime__tool_call_budget=0, runtime__max_total_actions=1, model__context_limit=32_000)
+    config = make_config(model__context_limit=32_000)
     bad = '{"assistant_message":'
     finish = _action(message="recovered", continue_loop=False)
+    config.tools.enabled = []
     client = FakeModelClient([bad, bad, bad, finish])
     runtime = AgentRuntime(config, model_client=client)
     result = runtime.run_turn("Answer directly.")
@@ -1718,7 +1717,6 @@ def test_single_responsibility_terminal_exact_word_count_retries_until_mechanica
     config = make_config(
         model__max_semantic_responsibilities_per_call=1,
         tools__staged_discovery=False,
-        runtime__tool_call_budget=0,
         model__context_limit=32_000,
     )
     forty_three = " ".join(f"w{i}" for i in range(43))
@@ -1726,6 +1724,7 @@ def test_single_responsibility_terminal_exact_word_count_retries_until_mechanica
         f"word_{index:03d}": f"fixed{index}"
         for index in range(1, 46)
     }
+    config.tools.enabled = []
     client = FakeModelClient([
         json.dumps({
             "assistant_message": forty_three,
@@ -2299,7 +2298,8 @@ def test_discovery_defers_usage_guidance_until_exact_schema_is_loaded(make_confi
 @pytest.mark.parametrize("responsibilities", [1, 6])
 def test_invented_word_count_is_rejected_without_rewriting_exact_answer(make_config, responsibilities):
     config = make_config(model__max_semantic_responsibilities_per_call=responsibilities,
-                         runtime__tool_call_budget=0, model__context_limit=32_000)
+                         model__context_limit=32_000)
+    config.tools.enabled = []
     answer = "EXACT-RESPONSE-IDENTIFIER"
     payload = json.loads(_action(message=answer, continue_loop=False))
     payload["response_constraints"] = {"exact_word_count": 2}
@@ -2320,3 +2320,38 @@ def test_invented_word_count_is_rejected_without_rewriting_exact_answer(make_con
     repaired = [event for event in events if event.event_type == "response_constraint_repaired"]
     assert repaired[-1].payload["constraint_required"] is False
     assert repaired[-1].payload["source_sha256"] == repaired[-1].payload["repaired_sha256"]
+
+
+def test_production_action_can_exceed_historical_tool_cap(make_config) -> None:
+    config = make_config(model__context_limit=32_000)
+    config.tools.enabled = ["calculator"]
+    config.tools.staged_discovery = False
+    many_calls = _action(
+        tool_calls=[
+            ("calculator", {"expression": f"{index} + 1"})
+            for index in range(17)
+        ],
+        continue_loop=True,
+    )
+    finish = _action(message="completed after seventeen tool calls", continue_loop=False)
+    client = FakeModelClient([many_calls, finish])
+    runtime = AgentRuntime(config, model_client=client)
+
+    result = runtime.run_turn("Perform all seventeen requested calculations and then finish.")
+
+    assert result.assistant_text == "completed after seventeen tool calls"
+    events = runtime.history.read_history(result.session_id)
+    called = [event for event in events if event.event_type == "tool_called"]
+    assert len(called) == 17
+
+
+def test_production_runtime_has_no_accepted_action_or_tool_quota() -> None:
+    import inspect
+    from swaag.config import RuntimeConfig
+    from swaag.runtime import AgentRuntime
+
+    assert "max_total_actions" not in RuntimeConfig.__dataclass_fields__
+    assert "tool_call_budget" not in RuntimeConfig.__dataclass_fields__
+    source = inspect.getsource(AgentRuntime.run_turn_in_session)
+    assert "max_total_actions" not in source
+    assert "tool_call_budget" not in source

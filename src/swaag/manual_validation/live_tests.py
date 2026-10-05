@@ -109,8 +109,6 @@ def _make_runtime(
         config.model.seed = int(seed)
     config.tools.allow_side_effect_tools = allow_side_effect_tools
     config.tools.allow_stateful_tools = True
-    config.runtime.max_total_actions = max(config.runtime.max_total_actions, 14)
-    config.runtime.tool_call_budget = max(config.runtime.tool_call_budget, 10)
     runtime = AgentRuntime(config)
     state = runtime.create_or_load_session()
     return runtime, state, config

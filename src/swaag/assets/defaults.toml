@@ -74,12 +74,7 @@ stop = []
 # Adjust these first when tuning agent behavior for a new task scope.
 # -----------------------------------------------------------
 [runtime]
-tool_call_budget = 16
-max_total_actions = 36
-verification_confidence_threshold = 0.7
-capture_model_io = true
 lean_on_overflow = true
-strict_budget = true
 max_validation_recovery_cycles = 2
 completion_evaluation_enabled = true
 # Durable unresolved-question capacity: reject additions, never silently discard.
@@ -91,7 +86,6 @@ max_pending_inference = 256
 max_open_questions = 128
 max_open_question_chars = 65536
 tool_timeout_seconds = 10
-background_poll_seconds = 0.1
 
 # -----------------------------------------------------------
 # [tools] — TOOL EXPOSURE  (most user-tunable)
@@ -143,7 +137,7 @@ write_projections = true
 # -----------------------------------------------------------
 # [environment] — SHELL / WORKSPACE SETTINGS
 # shell_executable: shell used for shell_command tool.
-# command_timeout_seconds: hard timeout per shell command.
+# Shell/process timeout is runtime.tool_timeout_seconds, the single source of truth.
 # -----------------------------------------------------------
 [agent_data]
 # Agent-owned persistent workspace for general calculations, experiments, notes,
@@ -157,7 +151,6 @@ max_capture_chars = 12000
 
 [environment]
 shell_executable = "bash"
-command_timeout_seconds = 30
 max_capture_chars = 4000
 track_shell_file_changes = true
 
@@ -266,6 +259,7 @@ prompt_instruction_projection = "medium"
 completion_evaluation = "small"
 caller_structured_output = "small"
 communication_status = "small"
+orchestrator_interaction = "small"
 response_relevance = "small"
 audio_rendering = "small"
 presentation_evaluation = "small"
@@ -298,6 +292,7 @@ prompt_instruction_projection = 0.14
 completion_evaluation = 0.10
 caller_structured_output = 0.12
 communication_status = 0.10
+orchestrator_interaction = 0.08
 response_relevance = 0.12
 audio_rendering = 0.12
 presentation_evaluation = 0.08
@@ -317,6 +312,7 @@ prompt_instruction_projection = 0.08
 completion_evaluation = 0.06
 caller_structured_output = 0.06
 communication_status = 0.06
+orchestrator_interaction = 0.04
 response_relevance = 0.06
 audio_rendering = 0.06
 presentation_evaluation = 0.04
@@ -329,6 +325,7 @@ benchmark_quality_judge = 0.08
 # action/completion contracts retain the conservative global default.
 evidence_projection = 32
 communication_status = 96
+orchestrator_interaction = 48
 tool_result_verbatim_selection = 32
 tool_result_best_anchor = 32
 history_best_anchor = 32
@@ -344,6 +341,7 @@ prompt_instruction_projection = 1.10
 completion_evaluation = 1.10
 caller_structured_output = 1.10
 communication_status = 1.10
+orchestrator_interaction = 1.10
 response_relevance = 1.10
 audio_rendering = 1.10
 presentation_evaluation = 1.10
@@ -377,16 +375,6 @@ model = ""
 timeout_seconds = 30.0
 fields = ["situation", "action", "reason"]
 max_results = 8
-
-# -----------------------------------------------------------
-# [archive] — IMMUTABLE HISTORY ARCHIVE SHARDS
-# Archiving copies exact events into read-only SQLite shards. Removal is opt-in.
-# -----------------------------------------------------------
-[archive]
-enabled = true
-remove_active_after_archive = false
-min_age_days = 30
-min_event_count = 100
 
 # Raw bytes are content-addressed outside disposable session projections.
 # Extraction is opt-in through a model-selected tool and never runs on upload.

@@ -272,6 +272,22 @@ def communication_status_contract() -> ContractSpec:
     )
 
 
+def orchestrator_interaction_contract() -> ContractSpec:
+    return _contract(
+        "orchestrator_interaction",
+        _closed_object(
+            {
+                "route": {
+                    "type": "string",
+                    "enum": ["respond", "orchestrate"],
+                },
+                "answer": _string(),
+                "reason": _string(),
+            }
+        ),
+    )
+
+
 def response_relevance_contract() -> ContractSpec:
     return _contract(
         "response_relevance",

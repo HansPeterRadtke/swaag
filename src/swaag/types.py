@@ -21,6 +21,7 @@ ModelCallKind = Literal[
     "completion_evaluation",
     "caller_structured_output",
     "communication_status",
+    "orchestrator_interaction",
     "response_relevance",
     "audio_rendering",
     "presentation_evaluation",
@@ -251,8 +252,6 @@ class SessionMetrics:
     reserved_response_tokens: int = 0
     successful_turns: int = 0
     failed_turns: int = 0
-    tool_call_budget_hits: int = 0
-    max_iteration_stops: int = 0
     model_request_progress_events: int = 0
     model_retry_events: int = 0
     unconstrained_contract_violations: int = 0

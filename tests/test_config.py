@@ -351,3 +351,35 @@ def test_openwebui_signing_secret_parameter_metadata_uses_real_config_key(tmp_pa
     assert dotted in metadata
     assert "HMAC secret" in metadata[dotted]["description"]
     assert "signing_key_env" not in metadata
+
+
+@pytest.mark.parametrize(
+    "key,value",
+    [
+        ("tool_call_budget", "8"),
+        ("max_total_actions", "8"),
+        ("verification_confidence_threshold", "0.5"),
+        ("capture_model_io", "true"),
+        ("strict_budget", "true"),
+        ("background_poll_seconds", "0.1"),
+    ],
+)
+def test_obsolete_runtime_pseudo_controls_fail_explicitly(tmp_path: Path, key: str, value: str) -> None:
+    path = tmp_path / "obsolete.toml"
+    path.write_text(f"[runtime]\n{key} = {value}\n", encoding="utf-8")
+    with pytest.raises(ValueError, match=rf"runtime\.{key} is obsolete"):
+        load_config(config_paths=[path])
+
+
+def test_obsolete_environment_timeout_fails_explicitly(tmp_path: Path) -> None:
+    path = tmp_path / "obsolete-environment.toml"
+    path.write_text("[environment]\ncommand_timeout_seconds = 30\n", encoding="utf-8")
+    with pytest.raises(ValueError, match="environment.command_timeout_seconds is obsolete"):
+        load_config(config_paths=[path])
+
+
+def test_obsolete_archive_policy_fails_explicitly(tmp_path: Path) -> None:
+    path = tmp_path / "obsolete-archive.toml"
+    path.write_text("[archive]\nenabled = true\n", encoding="utf-8")
+    with pytest.raises(ValueError, match="archive configuration is obsolete"):
+        load_config(config_paths=[path])

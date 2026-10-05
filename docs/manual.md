@@ -4,7 +4,7 @@ SWAAG is a local-first autonomous agent runtime. Append-only session history and
 
 ## Foreground execution and optional serving
 
-SWAAG is a program. `swaag ask "your request"` runs one foreground turn; `swaag chat` runs a foreground conversation. These do not need the communication listener or a systemd service. `swaag communication serve` explicitly runs the network interface until stopped. A supervisor is an optional deployment choice, not an agent-recording requirement or a prerequisite for background workers. Jetson no longer enables the communication service at boot by default.
+SWAAG is a program. The persistent user-facing orchestrator is the intended human conversation endpoint. The communication serve command exposes it as orchestrator.message for local clients such as a voice gateway; the listener is an explicitly started foreground or network interface, not a required boot daemon. Lower-level direct worker operations remain available for development and programmatic control. A supervisor is an optional deployment choice, not a prerequisite for in-process workers.
 
 ## Architecture
 
@@ -34,6 +34,14 @@ External tools are configured separately. MCP and other external catalogs are sc
 
 `python -m swaag ask` runs one agent turn and `python -m swaag chat` provides an interactive shell. Sessions are durable and can be inspected with the session, state, history, notes, and reader commands. Controls sent to active work are appended durably and reconciled semantically by the next model call rather than interpreted by keyword rules.
 
+## Official user-facing interface
+
+The single canonical human/user conversation interface is orchestrator.message on the communication service. A voice gateway, chat UI, or other normal user-facing client sends every finalized ordinary user message there. The persistent orchestrator is the only component that decides whether a message needs a worker.
+
+Task API create/start/message/cancel, direct worker controls, AG-UI worker runs, A2A task operations, MCP calls, and similar surfaces are developer/integration-level interfaces. They exist for explicit task automation, protocol adapters, debugging and operations, and integrations that intentionally manipulate known task or worker state. They are not alternative ordinary user conversation interfaces.
+
+A user-facing integration MUST NOT implement its own rule for deciding that speech should become a worker task. It sends the text to orchestrator.message. The orchestrator either answers directly or performs orchestration.
+
 ## Durable workers and Task API
 
 `TaskApi` is the transport-neutral programmatic worker boundary. Clients can create/start a worker, inspect it, send a message or redirect, cancel it, resume an input-required worker, archive terminal work, add/list attachments, and consume durable events with bounded cursors. The worker `result` remains the universal conversational output. Structured output and response presentations are optional augmentations.
@@ -60,13 +68,13 @@ The communication service is disabled by default. Enable `[communication].enable
 
 Voice is a client/communication layer, not another SWAAG core. Keep microphone capture, VAD, speech-to-text, wake-word or push-to-talk behavior, text-to-speech, playback, and immediate local barge-in in the Android application or another external voice service.
 
-Send finalized recognized utterances to SWAAG as authoritative user text. Do not continuously append unstable partial STT hypotheses to durable history. Keep one durable worker/session identity and event cursor across reconnects. Status questions can use the separate communication model while the main worker continues background work. Task-changing speech must be forwarded as a durable worker message/control. A literal stop request should use cancellation.
+Send finalized recognized utterances to orchestrator.message as authoritative user text. Do not continuously append unstable partial STT hypotheses to durable history. Keep the persistent orchestrator conversation identity across reconnects. Lightweight conversation is answered directly by the orchestrator; substantive requests are delegated only when the orchestrator decides work is actually required. Retain plan and worker identities after delegation for progress and results. Explicit worker control and cancellation APIs remain available for lower-level clients.
 
 When the user starts speaking over TTS, stop playback immediately on the device; do not wait for a server round trip. Once STT finalizes the utterance, send it to SWAAG. SWAAG already supports inference preemption, stale-action invalidation, exact context reconstruction/replay, and durable continuation.
 
 For final spoken answers, request `presentation_modes=["audio"]` and send the verified audio text to TTS. Ordinary heartbeat, tool execution, queue state, and internal progress should normally stay visual or silent. Speak blocking questions, important failures, requested status answers, and final user-facing answers.
 
-The worker/Task API already exposes terminal presentations. The simpler communication submit/status path is primarily control/status and returns ordinary communication text; it is not the presentation-aware task response surface. A production voice gateway can therefore use Task API or AG-UI for durable task turns and event streaming while using the communication model for concurrent status conversation.
+The worker or Task API exposes durable delegated-task lifecycle and terminal presentations. Ordinary voice and chat turns use orchestrator.message; after delegation, Task API or AG-UI can carry worker events, cancellation, and final presentations. The specialized communication-status path remains for targeted evidence-grounded worker status questions.
 
 ## Interruption, cancellation, and status
 

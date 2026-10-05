@@ -33,6 +33,21 @@ def _action(message: str) -> str:
     )
 
 
+def _orchestrator_interaction(
+    answer: str = "",
+    *,
+    route: str = "respond",
+    reason: str = "This interaction does not require delegated work.",
+) -> str:
+    return json.dumps(
+        {
+            "route": route,
+            "answer": answer,
+            "reason": reason,
+        }
+    )
+
+
 def _status(
     message: str,
     *,
@@ -120,6 +135,11 @@ class _PreemptReplayClient(_BaseClient):
         self.requests.append(copied)
         if payload.get("contract") == "communication_status":
             return self._result(payload, _status("The main agent is still working."))
+        if payload.get("contract") == "orchestrator_interaction":
+            return self._result(
+                payload,
+                _orchestrator_interaction("Yes, I can hear you."),
+            )
         if self.first_main_request is None:
             self.first_main_request = copied
             self.main_started.set()
@@ -178,11 +198,12 @@ class _ImmediateClient(_BaseClient):
 
     def send_completion(self, payload: dict[str, Any], *, timeout_seconds: int | None = None, progress_callback=None, cancel_check=None) -> CompletionResult:
         self.requests.append(json.loads(stable_json_dumps(payload, indent=None)))
-        response = (
-            _status(self.answer)
-            if payload.get("contract") == "communication_status"
-            else _action(self.answer)
-        )
+        if payload.get("contract") == "communication_status":
+            response = _status(self.answer)
+        elif payload.get("contract") == "orchestrator_interaction":
+            response = _orchestrator_interaction(self.answer)
+        else:
+            response = _action(self.answer)
         return self._result(payload, response)
 
 
@@ -585,6 +606,11 @@ class _UsagePreemptReplayClient(_PreemptReplayClient):
         self.requests.append(copied)
         if payload.get("contract") == "communication_status":
             return self._result(payload, _status("The main agent is still working."))
+        if payload.get("contract") == "orchestrator_interaction":
+            return self._result(
+                payload,
+                _orchestrator_interaction("Yes, I can hear you."),
+            )
         if self.first_main_request is None:
             self.first_main_request = copied
             self.main_started.set()
@@ -691,5 +717,168 @@ def test_benchmark_communication_probe_uses_task_deadline_for_replayed_turn(make
     assert turn.assistant_text == "main finished"
     assert client.main_attempts >= 2
     event_types = [event.event_type for event in runtime.history.read_history(state.session_id)]
+    assert "model_call_preempted" in event_types
+    assert "model_call_replayed" in event_types
+
+
+def test_orchestrator_lightweight_interaction_is_one_model_call_and_starts_no_worker(make_config) -> None:
+    config = make_config(
+        model__context_limit=32_000,
+        tools__enabled=["orchestration_control"],
+        tools__allow_stateful_tools=True,
+        tools__allow_side_effect_tools=True,
+    )
+    client = _ImmediateClient("Yes, I can hear you.")
+    orchestrator = AgentRuntime(config, model_client=client)
+    service = CommunicationService(orchestrator, orchestrator_runtime=orchestrator)
+
+    before_workers = service.workers.list()
+    answer = service.orchestrator_message("Hello, can you hear me?")
+    after_workers = service.workers.list()
+
+    assert answer["answer"] == "Yes, I can hear you."
+    assert before_workers == []
+    assert after_workers == []
+    assert [request["contract"] for request in client.requests] == [
+        "orchestrator_interaction"
+    ]
+    state = orchestrator.create_or_load_user_session("SWAAG Orchestrator")
+    visible = [
+        message
+        for message in state.messages
+        if message.role in {"user", "assistant"}
+        and not message.metadata.get("internal_action")
+    ]
+    assert [message.content for message in visible[-2:]] == [
+        "Hello, can you hear me?",
+        "Yes, I can hear you.",
+    ]
+
+
+class _RouteToPlannerClient(_ImmediateClient):
+    def send_completion(self, payload: dict[str, Any], **kwargs) -> CompletionResult:
+        self.requests.append(json.loads(stable_json_dumps(payload, indent=None)))
+        if payload.get("contract") == "orchestrator_interaction":
+            return self._result(
+                payload,
+                _orchestrator_interaction(
+                    route="orchestrate",
+                    reason="The user requested substantive delegated work.",
+                ),
+            )
+        return self._result(payload, _action("planner handled the substantive request"))
+
+
+def test_orchestrator_substantive_command_enters_full_planner_after_gate(make_config) -> None:
+    config = make_config(
+        model__context_limit=32_000,
+        tools__enabled=["orchestration_control"],
+        tools__allow_stateful_tools=True,
+        tools__allow_side_effect_tools=True,
+        runtime__completion_evaluation_enabled=False,
+    )
+    client = _RouteToPlannerClient("unused")
+    orchestrator = AgentRuntime(config, model_client=client)
+    service = CommunicationService(orchestrator, orchestrator_runtime=orchestrator)
+
+    answer = service.orchestrator_message(
+        "Start a new worker project and build the requested large program."
+    )
+
+    assert answer["answer"] == "planner handled the substantive request"
+    assert [request["contract"] for request in client.requests] == [
+        "orchestrator_interaction",
+        "agent_action",
+    ]
+
+def test_orchestrator_fast_interaction_receives_exact_prior_conversation(make_config) -> None:
+    config = make_config(
+        model__context_limit=32_000,
+        tools__enabled=["orchestration_control"],
+        tools__allow_stateful_tools=True,
+        tools__allow_side_effect_tools=True,
+    )
+    client = _ImmediateClient("Yes.")
+    orchestrator = AgentRuntime(config, model_client=client)
+    service = CommunicationService(orchestrator, orchestrator_runtime=orchestrator)
+
+    first = service.orchestrator_message("Remember the phrase blue lantern.")
+    second = service.orchestrator_message("What phrase did I just say?")
+
+    assert first["answer"] == "Yes."
+    assert second["answer"] == "Yes."
+    assert [request["contract"] for request in client.requests] == [
+        "orchestrator_interaction",
+        "orchestrator_interaction",
+    ]
+    assert "Remember the phrase blue lantern." in client.requests[1]["prompt"]
+    assert "What phrase did I just say?" in client.requests[1]["prompt"]
+
+def test_orchestrator_fast_status_call_receives_current_worker_snapshot(make_config) -> None:
+    config = make_config(
+        model__context_limit=32_000,
+        tools__enabled=["orchestration_control"],
+        tools__allow_stateful_tools=True,
+        tools__allow_side_effect_tools=True,
+    )
+    client = _ImmediateClient("One worker is currently prepared.")
+    orchestrator = AgentRuntime(config, model_client=client)
+    service = CommunicationService(orchestrator, orchestrator_runtime=orchestrator)
+    created = service.task_api.execute(
+        "create",
+        {"objective": "inspect the blue lantern file", "start": False},
+    )
+
+    answer = service.orchestrator_message("What is currently running?")
+
+    assert answer["answer"] == "One worker is currently prepared."
+    assert [request["contract"] for request in client.requests] == [
+        "orchestrator_interaction"
+    ]
+    prompt = client.requests[0]["prompt"]
+    assert created["worker"]["worker_id"] in prompt
+    assert "inspect the blue lantern file" in prompt
+    assert '"status":"created"' in prompt.replace(" ", "").replace("\n", "")
+
+
+def test_benchmark_communication_probe_allows_context_preparation_past_probe_window(make_config, tmp_path) -> None:
+    from swaag.benchmark.benchmark_runner import _run_turn_with_communication_probe
+    from swaag.benchmark.task_definitions import BenchmarkVerificationContract, TaskScenario
+
+    class _SlowPreparationClient(_PreemptReplayClient):
+        def __init__(self) -> None:
+            super().__init__()
+            self.delayed = False
+
+        def context_limit_resolution(self):
+            if not self.delayed:
+                self.delayed = True
+                time.sleep(0.25)
+            return 32_000, "test:slow-preparation"
+
+    config = make_config(model__context_limit=32_000)
+    client = _SlowPreparationClient()
+    runtime = AgentRuntime(config, model_client=client)
+    state = runtime.create_or_load_session()
+    scenario = TaskScenario(
+        prompt="Do the benchmark main task after context preparation.",
+        workspace=tmp_path,
+        model_client=client,
+        communication_probe_question="Benchmark status?",
+        communication_probe_wait_seconds=0.05,
+        verification_contract=BenchmarkVerificationContract(task_type="multi_step"),
+    )
+
+    turn = _run_turn_with_communication_probe(
+        runtime,
+        state,
+        scenario,
+        resume_timeout_seconds=8.0,
+    )
+
+    assert turn.assistant_text == "main finished"
+    event_types = [
+        event.event_type for event in runtime.history.read_history(state.session_id)
+    ]
     assert "model_call_preempted" in event_types
     assert "model_call_replayed" in event_types

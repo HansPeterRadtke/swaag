@@ -88,8 +88,6 @@ def _case_config(
     config.tools.allow_side_effect_tools = False
     config.tools.staged_discovery = False
     config.runtime.completion_evaluation_enabled = False
-    config.runtime.tool_call_budget = max(4, config.runtime.tool_call_budget)
-    config.runtime.max_total_actions = max(8, config.runtime.max_total_actions)
     return config
 
 

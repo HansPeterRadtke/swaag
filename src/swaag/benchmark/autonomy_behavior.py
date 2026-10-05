@@ -308,8 +308,6 @@ def _case_config(
     ]
     config.model.cache_enabled = False
     config.runtime.completion_evaluation_enabled = case.completion_evaluation
-    config.runtime.tool_call_budget = max(8, int(config.runtime.tool_call_budget))
-    config.runtime.max_total_actions = max(16, int(config.runtime.max_total_actions))
     return config
 
 

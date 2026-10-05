@@ -762,10 +762,28 @@ def _run_turn_with_communication_probe(
 
     worker = threading.Thread(target=run_main_turn, name="swaag-benchmark-main-turn", daemon=True)
     worker.start()
-    wait_seconds = max(0.1, float(getattr(scenario, "communication_probe_wait_seconds", 10.0)))
-    deadline = time.monotonic() + wait_seconds
+    wait_seconds = max(
+        0.1,
+        float(getattr(scenario, "communication_probe_wait_seconds", 10.0)),
+    )
+    # The probe-specific wait is a desired observation window, not a second
+    # independent task timeout. Context compilation can legitimately take longer
+    # under host contention before the first model request becomes preemptible.
+    # When the benchmark runner supplied its task deadline, use that same absolute
+    # deadline for both reaching the active model call and completing its exact
+    # replay. This avoids a race where a healthy turn is failed merely because
+    # Python scheduling/context preparation consumed the shorter probe window.
+    total_deadline = (
+        probe_started + max(0.1, float(resume_timeout_seconds))
+        if resume_timeout_seconds is not None
+        else probe_started + max(60.0, wait_seconds)
+    )
+    observation_deadline = max(
+        probe_started + wait_seconds,
+        total_deadline if resume_timeout_seconds is not None else probe_started + wait_seconds,
+    )
     active = None
-    while time.monotonic() < deadline:
+    while time.monotonic() < observation_deadline:
         active = runtime.preemption.active_call(state.session_id)
         if active is not None:
             break
@@ -776,16 +794,18 @@ def _run_turn_with_communication_probe(
         worker.join(timeout=0.1)
         if failure:
             raise failure["error"]
-        raise RuntimeError("communication probe could not observe an active main-model request before the main turn completed")
+        if worker.is_alive():
+            raise TimeoutError(
+                "communication probe did not reach an active main-model request "
+                "within the configured task deadline"
+            )
+        raise RuntimeError(
+            "communication probe could not observe an active main-model request "
+            "before the main turn completed"
+        )
 
     CommunicationService(runtime).answer_status_question(state.session_id, question)
-    if resume_timeout_seconds is None:
-        resume_wait_seconds = max(60.0, wait_seconds)
-    else:
-        resume_wait_seconds = max(
-            0.1,
-            float(resume_timeout_seconds) - (time.monotonic() - probe_started),
-        )
+    resume_wait_seconds = max(0.1, total_deadline - time.monotonic())
     worker.join(timeout=resume_wait_seconds)
     if worker.is_alive():
         raise TimeoutError(

@@ -1,6 +1,15 @@
 # SWAAG
 
-SWAAG is a local-first Python agent program for llama.cpp and OpenAI-compatible model servers. Run `swaag ask` for one foreground request or `swaag chat` for a foreground conversation. `swaag communication serve` is an explicit optional network interface; installing SWAAG does not require a daemon or boot service. The current architecture is a single constrained action loop: the model chooses one structured action at a time, Python validates it mechanically, tools execute in an isolated workspace, observations are appended to authoritative history, and the loop continues until the model returns a verified final response or a hard runtime limit stops it.
+SWAAG has one canonical human/user conversation entry point: orchestrator.message on the explicitly started communication interface. Voice clients, chat frontends, and other ordinary user-facing integrations MUST send finalized user messages there. The persistent orchestrator answers lightweight conversation itself and decides when substantive work requires workers. Task API, worker message/control operations, AG-UI worker runs, A2A task operations, MCP, and similar lower-level surfaces are developer/integration APIs; they are not alternative ordinary user conversation ports and MUST NOT be used by a voice/chat frontend to decide or create workers on the user's behalf. The ask/chat CLI commands remain lower-level foreground/development interfaces to the agent runtime, not the canonical integration boundary.
+
+## Canonical user entry point
+
+**Use orchestrator.message for every ordinary human message.** This is the official user-facing SWAAG port.
+
+The required topology is: user or STT text -> orchestrator.message -> persistent orchestrator -> optional workers chosen by the orchestrator.
+
+Do not connect a normal voice/chat client directly to Task API create/message/start, AG-UI worker submission, A2A task submission, or a worker session. Those interfaces exist for SWAAG internals, explicit developer tooling, protocol interoperability, automation, and advanced integrations that intentionally address task/worker state. They bypass the ordinary user-entry contract.
+
 
 The model owns semantic choices. Python owns schemas, constrained decoding, path and permission policy, exact context accounting, tool execution, persistence, replay, retries, and deterministic verification. The runtime never silently repairs semantic output with hard-coded planner logic.
 
@@ -33,7 +42,7 @@ Repository-owned system tools are registered centrally and exposed with closed J
 
 Task callers may opt into separately compiled `visual` and `audio` response presentations. The raw verified worker result remains authoritative; relevance selection and listenable rendering are distinct semantic calls, and independent constrained evaluation rejects information loss or operational spam before a variant is exposed. No extra presentation call runs by default. For voice clients, use the verified `audio` presentation as TTS input rather than speaking the raw worker result.
 
-A second communication model may run alongside the main worker model. Configure `[communication].model_base_url` to a separate fast endpoint and enable the communication service. Status/history questions can then be answered from separately budgeted durable worker evidence without making the busy worker service the conversation synchronously; semantic escalation can send unchanged evidence to the main model when stronger reasoning is needed. The main worker remains the task owner, and task-changing user speech is forwarded as durable worker control rather than executed by a competing communication agent. See `docs/voice-and-communication.md`.
+A second communication or orchestrator model may run alongside the main worker model. Configure communication.model_base_url to a separate fast endpoint and enable the communication service. Ordinary user conversation goes to orchestrator.message: one small constrained semantic call answers lightweight interaction directly with no worker or routes substantive work into the full orchestration planner. Targeted worker status or history interpretation remains separately available, and delegated workers keep their own task state. See docs/voice-and-communication.md.
 
 ## Installation
 

@@ -45,6 +45,7 @@ from swaag.grammar import (
     agent_terminal_response_contract,
     audio_rendering_contract,
     communication_status_contract,
+    orchestrator_interaction_contract,
     completion_evaluation_contract,
     completion_verdict_contract,
     evidence_projection_contract,
@@ -306,7 +307,12 @@ class AgentRuntime:
         self._token_count_cache: dict[str, CountResult] = {}
         self._token_count_cache_lock = threading.Lock()
         self._sleep = time.sleep
-        self._max_model_unavailable_attempts: int | None = None
+        # A backend that is actually unavailable is not an active long-running
+        # inference. Reuse the configured model retry budget so connection failure
+        # eventually becomes an explicit error instead of an immortal retry loop.
+        self._max_model_unavailable_attempts: int | None = int(
+            config.model.max_retries
+        )
 
     @classmethod
     def from_config_paths(cls, config_paths: list[str] | None = None) -> AgentRuntime:
@@ -834,16 +840,13 @@ class AgentRuntime:
         tool_results: list[ToolExecutionResult] = []
         budget_reports: list[BudgetReport] = []
         validation_failure_counts: dict[str, int] = {}
-        tool_calls_used = 0
         recovery_feedback = ""
         action_minimum_output_tokens = int(self.config.context.reserved_response_tokens)
         accepted_actions = 0
-        max_mechanical_attempts = max(
-            self.config.runtime.max_total_actions * 3,
-            self.config.runtime.max_total_actions + 8,
-        )
+        mechanical_attempt = 0
 
-        for mechanical_attempt in range(1, max_mechanical_attempts + 1):
+        while True:
+            mechanical_attempt += 1
             self._raise_if_run_cancelled(state)
             blocking_edits = apply_revision_controls(self, state)
             if blocking_edits:
@@ -854,8 +857,6 @@ class AgentRuntime:
                 inventory = orchestration.execute("questions.list")["inventory"]
                 if inventory != state.worker_question_inventory:
                     self.history.record_event(state, "worker_question_inventory", inventory)
-            if accepted_actions >= self.config.runtime.max_total_actions:
-                break
             delegated_catalog = self.delegated_tools.latest_catalog(state.session_id)
             runtime_capabilities = self.tool_runtime_capabilities(state.session_id)
             client_delegated_specs = (
@@ -908,13 +909,9 @@ class AgentRuntime:
             state_changed_during_call = False
 
             for validation_attempt in range(1, 4):
-                remaining_tool_calls = self.config.runtime.tool_call_budget - tool_calls_used
-                tool_specs = (
-                    self.tools.staged_prompt_tuples(
-                        self.config, loaded_tool_names, delegated_specs,
-                        runtime_capabilities=runtime_capabilities,
-                    )
-                    if remaining_tool_calls > 0 else []
+                tool_specs = self.tools.staged_prompt_tuples(
+                    self.config, loaded_tool_names, delegated_specs,
+                    runtime_capabilities=runtime_capabilities,
                 )
                 tool_names = [str(item[0]) for item in tool_specs]
                 if self._single_responsibility_mode():
@@ -926,18 +923,17 @@ class AgentRuntime:
                         # First give the model the concrete schemas it has already loaded.
                         # Discovery is only another semantic responsibility when the focused
                         # tool-call decision declines all currently loaded tools.
-                        if concrete_tool_specs and remaining_tool_calls > 0:
+                        if concrete_tool_specs:
                             selected_action = self._single_responsibility_tool_action(
                                 state,
                                 original_request=original_request,
                                 pending_messages=pending_messages,
                                 tool_specs=concrete_tool_specs,
                                 capability_index=[],
-                                remaining_tool_calls=remaining_tool_calls,
                                 validation_feedback=validation_feedback,
                                 seed_offset=(mechanical_attempt - 1) * 7 + validation_attempt,
                             )
-                        if (selected_action is None or not selected_action.tool_calls) and self.config.tools.staged_discovery and remaining_tool_calls > 0:
+                        if (selected_action is None or not selected_action.tool_calls) and self.config.tools.staged_discovery:
                             discovery_action = self._single_responsibility_capability_action(
                                 state,
                                 original_request=original_request,
@@ -986,7 +982,7 @@ class AgentRuntime:
                 )
                 prepared = self._prepare_action_call(
                     state, original_request=original_request, pending_messages=pending_messages,
-                    tool_specs=tool_specs, capability_index=capability_index if remaining_tool_calls > 0 else [],
+                    tool_specs=tool_specs, capability_index=capability_index,
                     contract=contract, validation_feedback=validation_feedback,
                     minimum_output_tokens=action_minimum_output_tokens,
                 )
@@ -1002,10 +998,6 @@ class AgentRuntime:
                     if action.silent_completion and not allow_silent_completion:
                         raise ActionValidationError(
                             "silent_completion is not permitted for this turn; return the complete user-facing result in assistant_message"
-                        )
-                    if len(action.tool_calls) > remaining_tool_calls:
-                        raise ActionValidationError(
-                            f"tool_calls contains {len(action.tool_calls)} calls but only {remaining_tool_calls} remain in the mechanical budget"
                         )
                     client_delegated_calls = [
                         call for call in action.tool_calls if call.tool_name in client_delegated_by_name
@@ -1243,7 +1235,6 @@ class AgentRuntime:
                             spec=runtime_external_spec,
                             arguments=tool_call.arguments,
                         )
-                        tool_calls_used += 1
                         if result is not None:
                             tool_results.append(result)
                         self.history.record_event(
@@ -1306,7 +1297,6 @@ class AgentRuntime:
                             pending_payloads=pending_during_action,
                         )
                         break
-                    tool_calls_used += 1
                     if result is None and self._single_responsibility_mode() and tool_call.tool_name != "load_tools":
                         recovery_feedback = (
                             f"The concrete invocation of {tool_call.tool_name!r} failed mechanically. "
@@ -1461,13 +1451,6 @@ class AgentRuntime:
                 tool_results,
                 budget_reports,
             )
-
-        return self._finish_turn(
-            state,
-            "I stopped because the configured accepted-action or mechanical-retry limit was reached before completion.",
-            tool_results,
-            budget_reports,
-        )
 
     @staticmethod
     def _visible_observation_signatures(state: SessionState) -> set[str]:
@@ -1689,7 +1672,6 @@ class AgentRuntime:
         pending_messages: list[str],
         tool_specs: list[tuple[str, str, dict, str]],
         capability_index: list[tuple[str, str, str]],
-        remaining_tool_calls: int,
         validation_feedback: str,
         seed_offset: int,
     ) -> AgentAction | None:
@@ -1721,10 +1703,6 @@ class AgentRuntime:
             calls_payload = payload.get("tool_calls")
             if not isinstance(calls_payload, list):
                 raise ActionValidationError("tool_calls must be an array")
-            if len(calls_payload) > remaining_tool_calls:
-                raise ActionValidationError(
-                    f"tool_calls contains {len(calls_payload)} calls but only {remaining_tool_calls} remain in the mechanical budget"
-                )
             calls = []
             for index, item in enumerate(calls_payload):
                 if not isinstance(item, dict):
@@ -2104,7 +2082,7 @@ class AgentRuntime:
                     prompt_mode=prompt_mode,
                     contract=contract,
                 )
-            if prompt_mode == "standard":
+            if prompt_mode == "standard" and self.config.runtime.lean_on_overflow:
                 lean_assembly = build_action_assembly(
                     history_messages, context_components, mode="lean"
                 )
@@ -3032,6 +3010,174 @@ class AgentRuntime:
                     "sha256": sha256_text(run_text),
                 }
         return compact, semantic
+
+    def generate_orchestrator_interaction(
+        self,
+        *,
+        message: str,
+        conversation_messages: list[Message] | None = None,
+        runtime_snapshot: dict[str, Any] | None = None,
+    ) -> dict[str, Any]:
+        """One-call semantic gate for the persistent user-facing orchestrator.
+
+        This call exists specifically so ordinary conversation does not enter the
+        generic multi-stage worker/action loop. The model owns the semantic
+        distinction between an immediate orchestrator reply and substantive work
+        that needs the full orchestration planner.
+        """
+        text = str(message).strip()
+        if not text:
+            raise ValueError("orchestrator interaction message must not be empty")
+
+        operation_state = self.create_or_load_session(
+            new_id("operation_orchestrator_interaction")
+        )
+        run_id = f"{operation_state.session_id}:{new_id('run')}"
+        self.history.set_active_run(
+            operation_state.session_id,
+            run_id=run_id,
+            user_text=text,
+        )
+        self.history.record_event(
+            operation_state,
+            "orchestrator_interaction_requested",
+            {"message": text},
+        )
+        self._heartbeat(
+            operation_state,
+            run_id=run_id,
+            phase="orchestrator_interaction",
+            substate="routing",
+            detail="deciding direct reply versus full orchestration",
+            active_kind="orchestrator_interaction",
+            operation_kind="orchestrator_interaction",
+        )
+        contract = orchestrator_interaction_contract()
+        request = SemanticCallRequest(
+            kind="orchestrator_interaction",
+            system_instruction=(
+                "You are the user's persistent SWAAG orchestrator and the immediate "
+                "conversation endpoint. Decide whether this exact utterance needs full "
+                "task orchestration. Use route=respond when you can answer the user "
+                "yourself now without launching a worker, mutating task/worker state, "
+                "using external tools, or doing substantial delegated work. Greetings, "
+                "acknowledgements, can-you-hear-me checks, ordinary conversational "
+                "questions answerable directly, and similarly lightweight interaction "
+                "belong here. Never launch or imply a worker for such interaction. "
+                "If the exact current runtime snapshot supplied below is sufficient "
+                "to answer an ordinary status question, use route=respond and answer it "
+                "directly. Use route=orchestrate only when the user actually asks to start, "
+                "continue, change, cancel, reprioritize, or perform substantive work, "
+                "or when answering correctly requires additional live inspection, a state "
+                "change, external/tool work, or substantive delegated execution. This is "
+                "a semantic decision; do not classify by "
+                "keywords. For route=respond, put the complete immediate user-facing "
+                "answer in answer using concise natural spoken prose. For "
+                "route=orchestrate, answer must be empty because the full orchestrator "
+                "will handle the request. Give a short reason for the routing decision."
+            ),
+            components=[
+                *self.prompts.message_prompt_components(
+                    list(conversation_messages or []),
+                    prefix="orchestrator_conversation",
+                    category="history",
+                    header="Exact persistent orchestrator conversation before this utterance:",
+                    optional=False,
+                ),
+                PromptComponent(
+                    name="orchestrator_runtime_snapshot",
+                    category="runtime",
+                    text=(
+                        "Exact current orchestration/runtime snapshot; mechanical facts only:\n"
+                        + stable_json_dumps(runtime_snapshot or {}, indent=2)
+                    ),
+                    optional=False,
+                ),
+                PromptComponent(
+                    name="orchestrator_user_utterance",
+                    category="current_user",
+                    text="Current user utterance, verbatim and authoritative:\n" + text,
+                ),
+            ],
+            contract=contract,
+            minimum_output_tokens=48,
+            desired_output_tokens=min(
+                192,
+                int(self.config.communication.status_max_output_tokens),
+            ),
+            prompt_mode="lean",
+            include_prompt_instructions=True,
+            allow_prompt_instruction_projection=True,
+        )
+
+        def validate(payload: dict[str, Any]) -> dict[str, Any]:
+            if contract.json_schema is not None:
+                _validate_schema_value(
+                    payload, contract.json_schema, path="orchestrator_interaction"
+                )
+            route = str(payload.get("route", "")).strip()
+            answer = str(payload.get("answer", "")).strip()
+            reason = str(payload.get("reason", "")).strip()
+            if route == "respond" and not answer:
+                raise ValueError(
+                    "orchestrator_interaction.answer must be non-empty for route=respond"
+                )
+            if route == "orchestrate" and answer:
+                raise ValueError(
+                    "orchestrator_interaction.answer must be empty for route=orchestrate"
+                )
+            if not reason:
+                raise ValueError(
+                    "orchestrator_interaction.reason must not be empty"
+                )
+            return {"route": route, "answer": answer, "reason": reason}
+
+        try:
+            with self.telemetry.agent_invocation(
+                session_id=operation_state.session_id,
+                run_id=run_id,
+                model_name=self.config.model.model_identity,
+            ):
+                result = self._execute_tool_semantic_call(
+                    operation_state, request
+                )
+                result = validate(result)
+            self.history.record_event(
+                operation_state,
+                "orchestrator_interaction_generated",
+                result,
+            )
+            self._heartbeat(
+                operation_state,
+                run_id=run_id,
+                phase="completed",
+                detail="orchestrator interaction routing completed",
+            )
+            return {
+                **result,
+                "operation_session_id": operation_state.session_id,
+            }
+        except Exception as exc:
+            self.history.record_event(
+                operation_state,
+                "orchestrator_interaction_unavailable",
+                {
+                    "message": text,
+                    "error": str(exc),
+                    "error_type": type(exc).__name__,
+                },
+            )
+            self._heartbeat(
+                operation_state,
+                run_id=run_id,
+                phase="failed",
+                detail=f"{type(exc).__name__}: {exc}",
+            )
+            raise
+        finally:
+            self.history.clear_active_run(
+                operation_state.session_id, run_id=run_id
+            )
 
     def generate_communication_status(
         self,

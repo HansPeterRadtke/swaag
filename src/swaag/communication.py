@@ -64,6 +64,8 @@ from swaag.orchestration import OrchestrationManager
 from swaag.orchestration_api import OrchestrationApi
 from swaag.telemetry import record_http_response_status, record_protocol_correlation
 from swaag.utils import new_id, stable_json_dumps, utc_now_iso
+from swaag.types import Message
+from swaag.tools.base import SemanticCallContextOverflow
 from swaag.supervision import RuntimeSupervisor
 from swaag.workers import WORKER_TERMINAL_STATES, WorkerManager, WorkerRecord
 
@@ -1507,7 +1509,9 @@ class CommunicationService:
                 content=(
                     "Act as the user's central SWAAG orchestrator and team leader. Manage "
                     "background workers through orchestration_control instead of doing their "
-                    "substantial task work yourself. The plan objective must describe the user's "
+                    "substantial task work yourself. Ordinary conversation is your own job: "
+                    "never start a worker merely for a greeting, acknowledgement, can-you-hear-me "
+                    "check, or another lightweight interaction you can answer directly. The plan objective must describe the user's "
                     "overall requested outcome, never merely copy one worker's local objective. "
                     "Maintain an explicit durable plan with "
                     "dependencies, priorities, finish/abort criteria, and output-to-input flow. "
@@ -1553,6 +1557,24 @@ class CommunicationService:
         self.supervisor.start()
         self.orchestration.advance_active_plans()
         state = self._orchestrator_state()
+        fast_runtime_snapshot = {
+            "active_workers": [
+                asdict(worker)
+                for worker in self.workers.list()
+                if worker.status not in WORKER_TERMINAL_STATES
+            ],
+            "active_plans": [
+                asdict(plan)
+                for plan in self.orchestration.store.list_plans()
+                if plan.status not in {"completed", "canceled"}
+            ],
+            "worker_question_inventory": self.orchestration_api.execute(
+                "questions.list"
+            )["inventory"],
+            "supervision": self.orchestration_api.execute("supervision")[
+                "supervision"
+            ],
+        }
         preemptions: list[tuple[AgentRuntime, object]] = []
         orchestrator_backend = self.orchestrator_runtime.config.model.base_url.rstrip("/")
         managers = {"default": self.workers, **self.worker_model_managers}
@@ -1577,7 +1599,49 @@ class CommunicationService:
             with self.orchestrator_runtime.inference_priority(
                 1000, source="user_orchestrator"
             ):
-                result = self.orchestrator_runtime.run_turn_in_session(state, text)
+                try:
+                    routed = self.orchestrator_runtime.generate_orchestrator_interaction(
+                        message=text,
+                        conversation_messages=list(state.messages),
+                        runtime_snapshot=fast_runtime_snapshot,
+                    )
+                except SemanticCallContextOverflow:
+                    routed = {
+                        "route": "orchestrate",
+                        "answer": "",
+                        "reason": (
+                            "The exact orchestrator conversation does not fit the small "
+                            "interaction call; use the full context-managed orchestrator."
+                        ),
+                    }
+                if routed["route"] == "respond":
+                    self.orchestrator_runtime.history.record_event(
+                        state,
+                        "turn_started",
+                        {
+                            "turn_index": state.turn_count + 1,
+                            "user_text": text,
+                            "execution_loop": "orchestrator_direct_interaction",
+                        },
+                    )
+                    self.orchestrator_runtime._record_message(
+                        state,
+                        Message(
+                            role="user",
+                            content=text,
+                            created_at=utc_now_iso(),
+                        ),
+                    )
+                    result = self.orchestrator_runtime._finish_turn(
+                        state,
+                        routed["answer"],
+                        [],
+                        [],
+                    )
+                else:
+                    result = self.orchestrator_runtime.run_turn_in_session(
+                        state, text
+                    )
             self.orchestration.advance_active_plans()
             for runtime, request in preemptions:
                 self._complete_runtime_preemption(
@@ -3452,9 +3516,6 @@ class CommunicationService:
                     "pdf": True,
                     "file": True,
                 }
-            },
-            "execution": {
-                "maxIterations": int(self.runtime.config.runtime.max_total_actions)
             },
             "humanInTheLoop": {
                 "supported": True,

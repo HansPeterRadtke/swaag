@@ -154,3 +154,53 @@ def test_action_preparation_falls_back_to_full_fidelity_lean_before_reduction(ma
         e.event_type in {"history_compressed", "history_reprojected"}
         for e in events
     )
+
+
+def test_lean_overflow_fallback_obeys_runtime_setting(make_config):
+    import pytest
+    from swaag.runtime import BudgetExceededError
+    from swaag.grammar import agent_action_contract
+    from swaag.runtime import AgentRuntime
+    from swaag.tokens import ExactTokenCounter
+
+    class _Client:
+        @staticmethod
+        def tokenize(text: str) -> int:
+            return len(text.split()) if text.strip() else 0
+
+        @staticmethod
+        def context_limit_resolution():
+            return 1500, "test:configured"
+
+        @staticmethod
+        def cache_identity():
+            return {"status": "test"}
+
+    config = make_config(
+        model__context_limit=1500,
+        tools__staged_discovery=False,
+        context__compact_on_overflow=False,
+        runtime__lean_on_overflow=False,
+    )
+    runtime = AgentRuntime(
+        config,
+        model_client=_Client(),
+        token_counter=ExactTokenCounter(_Client.tokenize),
+    )
+    state = runtime.create_or_load_session()
+    contract = agent_action_contract([])
+
+    with pytest.raises(BudgetExceededError):
+        runtime._prepare_action_call(
+            state,
+            original_request="Explain the current state briefly.",
+            pending_messages=[],
+            tool_specs=[],
+            capability_index=[],
+            contract=contract,
+            validation_feedback="",
+            minimum_output_tokens=64,
+        )
+
+    events = runtime.history.read_history(state.session_id)
+    assert not any(event.event_type == "action_prompt_mode_fallback" for event in events)

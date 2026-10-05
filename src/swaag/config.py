@@ -61,13 +61,7 @@ class ContextConfig:
 @dataclass(slots=True)
 class RuntimeConfig:
     tool_timeout_seconds: int
-    background_poll_seconds: float
-    tool_call_budget: int
-    max_total_actions: int
-    verification_confidence_threshold: float
-    capture_model_io: bool
     lean_on_overflow: bool
-    strict_budget: bool
     max_validation_recovery_cycles: int
     completion_evaluation_enabled: bool
     max_pending_controls: int = 256
@@ -94,7 +88,6 @@ class AgentDataConfig:
 @dataclass(slots=True)
 class EnvironmentConfig:
     shell_executable: str
-    command_timeout_seconds: int
     max_capture_chars: int
     track_shell_file_changes: bool = True
 
@@ -221,14 +214,6 @@ class EmbeddingIndexConfig:
     timeout_seconds: float
     fields: list[str]
     max_results: int
-
-
-@dataclass(slots=True)
-class ArchiveConfig:
-    enabled: bool
-    remove_active_after_archive: bool
-    min_age_days: int
-    min_event_count: int
 
 
 @dataclass(slots=True)
@@ -409,7 +394,6 @@ class AgentConfig:
     compression: CompressionConfig
     history_search: HistorySearchConfig
     embedding_index: EmbeddingIndexConfig
-    archive: ArchiveConfig
     attachments: AttachmentConfig
     mcp: McpConfig
     external_tools: ExternalToolsConfig
@@ -557,6 +541,31 @@ def _coerce_config(
     secret_env: dict[str, str] | None = None,
 ) -> AgentConfig:
     data = expand_env_in_value(data)
+    removed_runtime = {
+        "tool_call_budget": "benchmark-only tool limits belong in the benchmark execution guard; production work remains cancelable and unbounded",
+        "max_total_actions": "benchmark-only action limits belong in the benchmark execution guard; production work remains cancelable and unbounded",
+        "verification_confidence_threshold": "semantic verification is model-owned and is not decided by a deterministic confidence threshold",
+        "capture_model_io": "canonical execution evidence is retained by the runtime and cannot be disabled by a pseudo-toggle",
+        "strict_budget": "the model context boundary is a mandatory invariant and cannot be disabled",
+        "background_poll_seconds": "background dispatch uses communication.poll_seconds; this duplicate setting had no runtime effect",
+    }
+    runtime_input = data.get("runtime", {})
+    if isinstance(runtime_input, dict):
+        for key, reason in removed_runtime.items():
+            if key in runtime_input:
+                raise ValueError(f"runtime.{key} is obsolete: {reason}")
+    if "archive" in data:
+        raise ValueError(
+            "archive configuration is obsolete: SWAAG has explicit worker/artifact archive "
+            "operations, but no automatic age/count archive policy; do not expose settings "
+            "that have no runtime effect"
+        )
+    environment_input = data.get("environment", {})
+    if isinstance(environment_input, dict) and "command_timeout_seconds" in environment_input:
+        raise ValueError(
+            "environment.command_timeout_seconds is obsolete: shell/process execution uses "
+            "runtime.tool_timeout_seconds as the single source of truth"
+        )
     model = ModelConfig(**data["model"])
     context_data = dict(data["context"])
     context_data.pop("max_recent_messages", None)
@@ -635,12 +644,6 @@ def _coerce_config(
         timeout_seconds=float(data["embedding_index"]["timeout_seconds"]),
         fields=[str(item) for item in data["embedding_index"]["fields"]],
         max_results=int(data["embedding_index"]["max_results"]),
-    )
-    archive = ArchiveConfig(
-        enabled=bool(data["archive"]["enabled"]),
-        remove_active_after_archive=bool(data["archive"]["remove_active_after_archive"]),
-        min_age_days=int(data["archive"]["min_age_days"]),
-        min_event_count=int(data["archive"]["min_event_count"]),
     )
     attachments = AttachmentConfig(
         max_upload_bytes=int(data["attachments"]["max_upload_bytes"]),
@@ -869,15 +872,8 @@ def _coerce_config(
         "context.semantic_reduction_max_calls",
         context.semantic_reduction_max_calls,
     )
-    _validate_positive("environment.command_timeout_seconds", environment.command_timeout_seconds)
     _validate_positive("environment.max_capture_chars", environment.max_capture_chars)
     _validate_positive("runtime.tool_timeout_seconds", runtime.tool_timeout_seconds)
-    if runtime.background_poll_seconds < 0:
-        raise ValueError("runtime.background_poll_seconds must be non-negative")
-    _validate_positive("runtime.tool_call_budget", runtime.tool_call_budget)
-    _validate_positive("runtime.max_total_actions", runtime.max_total_actions)
-    if not 0.0 <= runtime.verification_confidence_threshold <= 1.0:
-        raise ValueError("runtime.verification_confidence_threshold must be between 0.0 and 1.0")
     _validate_positive("runtime.max_validation_recovery_cycles", runtime.max_validation_recovery_cycles)
     from swaag.capacity import positive_capacity
     for capacity_name, capacity_value in (
@@ -983,8 +979,6 @@ def _coerce_config(
     _validate_positive("embedding_index.max_results", embedding_index.max_results)
     if embedding_index.enabled and (not embedding_index.base_url or not embedding_index.model):
         raise ValueError("embedding_index.base_url and embedding_index.model are required when embeddings are enabled")
-    _validate_non_negative("archive.min_age_days", archive.min_age_days)
-    _validate_non_negative("archive.min_event_count", archive.min_event_count)
     _validate_positive("attachments.max_upload_bytes", attachments.max_upload_bytes)
     _validate_positive("attachments.preview_chars", attachments.preview_chars)
     if communication.idle_work_mode not in {"finish_only", "authorized_backlog"}:
@@ -1193,7 +1187,6 @@ def _coerce_config(
         compression=compression,
         history_search=history_search,
         embedding_index=embedding_index,
-        archive=archive,
         attachments=attachments,
         mcp=mcp,
         external_tools=external_tools,
