@@ -742,6 +742,9 @@ def test_orchestrator_lightweight_interaction_is_one_model_call_and_starts_no_wo
     assert [request["contract"] for request in client.requests] == [
         "orchestrator_interaction"
     ]
+    prompt = client.requests[0]["prompt"]
+    assert "Do not mention backend URLs" in prompt
+    assert "Never substitute runtime-status commentary" in prompt
     state = orchestrator.create_or_load_user_session("SWAAG Orchestrator")
     visible = [
         message
