@@ -197,7 +197,7 @@ class ModelPreemptionCoordinator:
                     END,
                     updated_at=excluded.updated_at
                 """,
-                (session_id, run_id, reason.strip(), now, now),
+                (session_id, run_id, reason, now, now),
             )
         item = self.run_cancellation(session_id, run_id)
         if item is None:

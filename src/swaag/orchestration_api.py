@@ -84,7 +84,7 @@ class OrchestrationApi:
             maximum = _nonnegative_int(args, "max_parallel", default=0)
             reporting_mode = _optional_text(args, "reporting_mode") or "important"
             plan = self.manager.create_plan(
-                _required_text(args, "objective"),
+                _required_content_text(args, "objective"),
                 scheduling_mode=mode,
                 max_parallel=maximum,
                 reporting_mode=reporting_mode,
@@ -130,11 +130,11 @@ class OrchestrationApi:
                 raise ValueError("resources must be an object or null")
             node_id = self.manager.add_worker(
                 _required_text(args, "plan_id"),
-                _required_text(args, "objective"),
+                _required_content_text(args, "objective"),
                 priority=_positive_float(args, "priority", default=1.0),
                 model_key=_optional_text(args, "model_key"),
-                finish_criteria=_optional_text(args, "finish_criteria"),
-                abort_criteria=_optional_text(args, "abort_criteria"),
+                finish_criteria=_optional_content_text(args, "finish_criteria"),
+                abort_criteria=_optional_content_text(args, "abort_criteria"),
                 resources=resources,
                 completion_mode=_optional_text(args, "completion_mode") or "natural",
             )
@@ -146,11 +146,11 @@ class OrchestrationApi:
             self.manager.revise_node(
                 _required_text(args, "plan_id"),
                 _required_text(args, "node_id"),
-                objective=_optional_text(args, "objective"),
+                objective=_optional_content_text(args, "objective"),
                 priority=(None if args.get("priority") is None else _positive_float(args, "priority", default=1.0)),
                 model_key=_optional_text(args, "model_key"),
-                finish_criteria=_optional_text(args, "finish_criteria"),
-                abort_criteria=_optional_text(args, "abort_criteria"),
+                finish_criteria=_optional_content_text(args, "finish_criteria"),
+                abort_criteria=_optional_content_text(args, "abort_criteria"),
                 replace_worker=replace_worker,
             )
             return {"version": self.version, **self._snapshot(_required_text(args, "plan_id"))}
@@ -163,7 +163,7 @@ class OrchestrationApi:
                 plan_id,
                 _required_text(args, "edge_id"),
                 satisfied=satisfied,
-                decision=_required_text(args, "decision"),
+                decision=_required_content_text(args, "decision"),
             )
             return {"version": self.version, **self._snapshot(plan_id)}
         if operation == "dependency.remove":
@@ -203,7 +203,7 @@ class OrchestrationApi:
             plan_id = _required_text(args, "plan_id")
             self.manager.cancel_plan(
                 plan_id,
-                reason=_optional_text(args, "reason") or "orchestration API cancellation",
+                reason=_optional_content_text(args, "reason") or "orchestration API cancellation",
             )
             return {"version": self.version, **self._snapshot(plan_id)}
         if operation in {"notifications", "notifications.wait"}:
@@ -276,6 +276,22 @@ class OrchestrationApi:
             "events": snapshot["events"],
             "progress": plan_progress(snapshot["nodes"]),
         }
+
+
+def _required_content_text(payload: dict[str, Any], key: str) -> str:
+    value = payload.get(key)
+    if not isinstance(value, str) or not value.strip():
+        raise ValueError(f"{key} must be a non-empty string")
+    return value
+
+
+def _optional_content_text(payload: dict[str, Any], key: str) -> str | None:
+    value = payload.get(key)
+    if value is None:
+        return None
+    if not isinstance(value, str):
+        raise ValueError(f"{key} must be a string or null")
+    return value if value.strip() else None
 
 
 def _required_text(payload: dict[str, Any], key: str) -> str:

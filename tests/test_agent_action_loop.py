@@ -259,6 +259,63 @@ def test_direct_answer_is_one_constrained_model_call_with_all_tools(make_config)
     }
 
 
+def test_current_user_request_preserves_leading_and_trailing_whitespace_verbatim(make_config) -> None:
+    request = "\n  exact outer whitespace matters  \n"
+    runtime, client = _runtime(make_config, [_action(message="done")])
+
+    result = runtime.run_turn(request)
+
+    prompt = str(client.requests[0]["prompt"])
+    assert "Original user request, verbatim and authoritative:\n" + request in prompt
+    assert "Current user message, verbatim:\n" + request in prompt
+    events = runtime.history.read_history(result.session_id)
+    started = next(event for event in events if event.event_type == "turn_started")
+    assert started.payload["user_text"] == request
+    rebuilt = runtime.history.rebuild_from_history(result.session_id)
+    user_messages = [message.content for message in rebuilt.messages if message.role == "user"]
+    assert user_messages[-1] == request
+
+
+def test_terminal_assistant_text_preserves_outer_whitespace_verbatim(make_config) -> None:
+    exact = "\n  exact assistant formatting  \n"
+    runtime, _client = _runtime(make_config, [_action(message=exact)])
+
+    result = runtime.run_turn("Return the requested exact format.")
+
+    assert result.assistant_text == exact
+    state = runtime.history.rebuild_from_history(result.session_id)
+    assert state.messages[-1].role == "assistant"
+    assert state.messages[-1].content == exact
+    finished = [
+        event for event in runtime.history.read_history(result.session_id)
+        if event.event_type == "turn_finished"
+    ][-1]
+    assert finished.payload["assistant_text"] == exact
+
+
+def test_pending_control_replay_preserves_outer_whitespace_verbatim(make_config) -> None:
+    control = "\n  preserve this redirected instruction exactly  \n"
+    observed: dict[str, str] = {}
+
+    def finish(payload: dict[str, Any]) -> str:
+        observed["prompt"] = str(payload["prompt"])
+        return _action(message="done")
+
+    runtime, _client = _runtime(make_config, [finish])
+    state = runtime.create_or_load_session()
+    runtime.history.enqueue_control_message(state.session_id, control, source="test")
+
+    runtime.run_turn_in_session(state, "Continue the task.")
+
+    assert control in observed["prompt"]
+    processed = [
+        event.payload["message"]
+        for event in runtime.history.read_history(state.session_id)
+        if event.event_type == "control_message_processed"
+    ]
+    assert processed == [control]
+
+
 def test_request_provenance_is_not_limited_to_a_fixed_recent_window(make_config) -> None:
     runtime, _client = _runtime(make_config, [_action(message="done")])
     record_prompt_built = runtime._record_prompt_built
@@ -2355,3 +2412,17 @@ def test_production_runtime_has_no_accepted_action_or_tool_quota() -> None:
     source = inspect.getsource(AgentRuntime.run_turn_in_session)
     assert "max_total_actions" not in source
     assert "tool_call_budget" not in source
+
+
+def test_wakeup_preserves_semantic_reason_whitespace_verbatim(tmp_path) -> None:
+    from datetime import datetime, timezone
+    from swaag.scheduler import WakeupStore
+
+    reason = "\n  preserve wakeup reason exactly  \n"
+    item = WakeupStore(tmp_path).schedule(
+        session_id="s",
+        reason=reason,
+        duration="2 hours",
+        now=datetime(2026, 8, 6, 12, 0, tzinfo=timezone.utc),
+    )
+    assert item.reason == reason

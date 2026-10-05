@@ -588,8 +588,8 @@ class AgentRuntime:
     def resume_turn_in_session(self, state: SessionState, original_request: str) -> TurnResult:
         """Resume an interrupted durable task without duplicating its user request."""
         self._refresh_state_from_history(state)
-        objective = original_request.strip()
-        if not objective:
+        objective = original_request
+        if not objective.strip():
             raise ValueError("original_request must not be empty")
         run_id = f"{state.session_id}:{new_id('run')}"
         self.history.set_active_run(state.session_id, run_id=run_id, user_text=objective)
@@ -796,8 +796,8 @@ class AgentRuntime:
         record_user_message: bool = True,
         allow_silent_completion: bool = False,
     ) -> TurnResult:
-        original_request = user_text.strip()
-        if not original_request:
+        original_request = user_text
+        if not original_request.strip():
             raise ValueError("user_text must not be empty")
 
         if record_user_message:
@@ -899,7 +899,7 @@ class AgentRuntime:
                 self.history.list_authoritative_control_messages(state.session_id)
             )
             pending_messages = [
-                str(item.get("message", "")).strip()
+                str(item.get("message", ""))
                 for item in authoritative_control_payloads
                 if str(item.get("message", "")).strip() and item.get("source") != "question_revision"
             ]
@@ -1188,7 +1188,7 @@ class AgentRuntime:
                         "assistant_progress",
                         {
                             "action_index": action_index,
-                            "assistant_text": selected_action.assistant_message.strip(),
+                            "assistant_text": selected_action.assistant_message,
                         },
                     )
 
@@ -1447,7 +1447,7 @@ class AgentRuntime:
             )
             return self._finish_turn(
                 state,
-                selected_action.assistant_message.strip(),
+                selected_action.assistant_message,
                 tool_results,
                 budget_reports,
             )
@@ -1509,8 +1509,8 @@ class AgentRuntime:
     ) -> None:
         for payload in pending_payloads:
             control_id = str(payload.get("control_id", ""))
-            message = str(payload.get("message", "")).strip()
-            if not control_id or not message:
+            message = str(payload.get("message", ""))
+            if not control_id or not message.strip():
                 continue
             # Controls are not user messages. They are injected through the dedicated
             # pending-control prompt channel and preserved exactly in this event.
@@ -3025,8 +3025,8 @@ class AgentRuntime:
         distinction between an immediate orchestrator reply and substantive work
         that needs the full orchestration planner.
         """
-        text = str(message).strip()
-        if not text:
+        text = str(message)
+        if not text.strip():
             raise ValueError("orchestrator interaction message must not be empty")
 
         operation_state = self.create_or_load_session(
@@ -3079,7 +3079,17 @@ class AgentRuntime:
                 "keywords. For route=respond, put the complete immediate user-facing "
                 "answer in answer using concise natural spoken prose. For "
                 "route=orchestrate, answer must be empty because the full orchestrator "
-                "will handle the request. Give a short reason for the routing decision."
+                "will handle the request. For route=respond, the answer is an ordinary "
+                "user-facing chat response and therefore must use audio style by default: "
+                "continuous spoken prose without headings, lists, tables, code blocks, "
+                "unnecessary line breaks, or machine-noise identifiers, with spoken or "
+                "rounded numbers by default. Do not add apologies, reassurance, praise, "
+                "social filler, or commentary on the user's anger, frustration, mood, or "
+                "other feelings unless those feelings are themselves the subject. Talk about "
+                "the actual content and save the user's time. An explicit user request for exact, visual, "
+                "code, or machine-readable formatting overrides that presentation default; "
+                "preserve the requested exact content and format. Give a short reason for "
+                "the routing decision."
             ),
             components=[
                 *self.prompts.message_prompt_components(
@@ -3121,13 +3131,13 @@ class AgentRuntime:
                     payload, contract.json_schema, path="orchestrator_interaction"
                 )
             route = str(payload.get("route", "")).strip()
-            answer = str(payload.get("answer", "")).strip()
+            answer = str(payload.get("answer", ""))
             reason = str(payload.get("reason", "")).strip()
-            if route == "respond" and not answer:
+            if route == "respond" and not answer.strip():
                 raise ValueError(
                     "orchestrator_interaction.answer must be non-empty for route=respond"
                 )
-            if route == "orchestrate" and answer:
+            if route == "orchestrate" and answer.strip():
                 raise ValueError(
                     "orchestrator_interaction.answer must be empty for route=orchestrate"
                 )
@@ -3193,8 +3203,8 @@ class AgentRuntime:
         source_events: list[HistoryEvent],
     ) -> dict[str, Any]:
         """Interpret a worker snapshot in an independent, separately budgeted call."""
-        status_question = question.strip()
-        if not status_question:
+        status_question = question
+        if not status_question.strip():
             raise ValueError("status question must not be empty")
         operation_state = self.create_or_load_session(
             new_id("operation_communication_status")
@@ -9390,7 +9400,7 @@ class AgentRuntime:
         tool_results: list[ToolExecutionResult],
         budget_reports: list[BudgetReport],
     ) -> TurnResult:
-        text = assistant_text.strip()
+        text = assistant_text
         self._record_message(
             state,
             Message(role="assistant", content=text, created_at=utc_now_iso()),

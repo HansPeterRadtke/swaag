@@ -85,6 +85,19 @@ def test_task_api_is_transport_neutral_and_cursor_based(make_config) -> None:
     assert canceled["worker"]["status"] == "canceled"
 
 
+def test_task_api_preserves_semantic_objective_whitespace_verbatim(make_config) -> None:
+    manager = WorkerManager(AgentRuntime(make_config(), model_client=object()))
+    api = TaskApi(manager)
+    objective = "\n  exact external task objective  \n"
+    try:
+        created = api.execute("create", {"objective": objective})
+        worker_id = created["worker"]["worker_id"]
+        assert created["worker"]["objective"] == objective
+        assert manager.store.get(worker_id).objective == objective
+    finally:
+        manager.shutdown()
+
+
 def test_task_api_event_wait_is_resumable_and_reports_timeout_or_terminal(make_config) -> None:
     manager = WorkerManager(AgentRuntime(make_config(), model_client=object()))
     api = TaskApi(manager)
@@ -183,6 +196,20 @@ def test_a2a_projects_durable_status_and_artifact_updates() -> None:
     ]
     assert updates[2]["statusUpdate"]["status"]["state"] == "TASK_STATE_COMPLETED"
     assert "final" not in updates[2]["statusUpdate"]
+
+
+def test_a2a_user_message_preserves_text_part_whitespace_verbatim() -> None:
+    source = "\n  exact A2A task wording  \n"
+    message = A2AProjectionAdapter().user_message(
+        {
+            "message": {
+                "role": "ROLE_USER",
+                "messageId": "message-1",
+                "parts": [{"text": source}],
+            }
+        }
+    )
+    assert message.text == source
 
 
 def test_a2a_message_parser_preserves_text_data_and_raw_attachments() -> None:
@@ -645,6 +672,26 @@ def test_ag_ui_preserves_shared_state_and_parses_portable_client_tools() -> None
         except ValueError:
             continue
         raise AssertionError("unsupported AG-UI input was silently ignored")
+
+
+def test_ag_ui_user_content_preserves_outer_whitespace_verbatim() -> None:
+    exact = "\n  exact AG-UI user wording  \n"
+    parsed = AgUiProjectionAdapter().user_run(
+        {
+            "threadId": "thread-1",
+            "runId": "run-1",
+            "messages": [
+                {
+                    "id": "user-1",
+                    "role": "user",
+                    "content": [{"type": "text", "text": exact}],
+                }
+            ],
+            "tools": [],
+            "context": [],
+        }
+    )
+    assert parsed.text == exact
 
 
 def test_ag_ui_projection_can_use_client_owned_thread_and_run_ids() -> None:

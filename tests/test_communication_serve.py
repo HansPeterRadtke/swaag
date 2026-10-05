@@ -1655,6 +1655,74 @@ def test_ag_ui_resume_validates_and_resolves_the_durable_interrupt(
     assert first_bounds is not None and first_bounds[3] == second_start
 
 
+def test_ag_ui_resume_preserves_string_payload_outer_whitespace(make_config, monkeypatch) -> None:
+    service = CommunicationService(AgentRuntime(make_config(), model_client=object()))
+
+    def require_input(worker_id: str):
+        service.workers.store.transition(
+            worker_id, "queued", expected={"created"}, event_type="worker_queued"
+        )
+        service.workers.store.transition(
+            worker_id, "working", expected={"queued"}, event_type="worker_started"
+        )
+        return service.workers.store.transition(
+            worker_id,
+            "input_required",
+            expected={"working"},
+            result="Provide exact text.",
+            event_type="worker_input_required",
+        )
+
+    monkeypatch.setattr(service.workers, "start", require_input)
+    first, *_ = service._ag_ui_begin(
+        AgUiProjectionAdapter().user_run(_ag_ui_input())
+    )
+    interrupt = next(
+        item for item in reversed(service.workers.store.events(first.worker_id))
+        if item.event_type == "worker_input_required"
+    )
+    interrupt_id = f"{first.worker_id}-input-{interrupt.sequence}"
+    observed = {}
+
+    def resolve(worker_id: str, message: str, *, source: str, **_):
+        observed["message"] = message
+        observed["source"] = source
+        service.workers.store.transition(
+            worker_id, "queued", expected={"input_required"}, event_type="worker_resumed"
+        )
+        service.workers.store.transition(
+            worker_id, "working", expected={"queued"}, event_type="worker_started"
+        )
+        return service.workers.store.transition(
+            worker_id,
+            "completed",
+            expected={"working"},
+            result="done",
+            event_type="worker_completed",
+        )
+
+    monkeypatch.setattr(service.workers, "message", resolve)
+    exact = "\n  exact interrupt answer  \n"
+    service._ag_ui_begin(
+        AgUiProjectionAdapter().user_run(
+            _ag_ui_input(
+                run_id="run-exact-resume",
+                resume=[
+                    {
+                        "interruptId": interrupt_id,
+                        "status": "resolved",
+                        "payload": exact,
+                    }
+                ],
+            )
+        )
+    )
+    service.workers.shutdown()
+
+    assert observed["source"] == "ag_ui:run-exact-resume"
+    assert observed["message"].startswith("AG-UI interrupt response:\n" + exact)
+
+
 def test_ag_ui_new_run_supersedes_old_stream_without_misattributing_events(
     make_config, monkeypatch
 ) -> None:

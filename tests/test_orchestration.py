@@ -193,3 +193,137 @@ def test_nonfinite_resource_limits_cannot_replace_valid_limits(tmp_path, value):
     with pytest.raises(ValueError, match="finite and non-negative"):
         store.set_resource_limits(plan.plan_id, {"gpu": value})
     assert store.snapshot(plan.plan_id) == before
+
+
+def test_orchestration_semantic_text_preserves_outer_whitespace_verbatim(tmp_path):
+    store = OrchestrationStore(tmp_path)
+    plan_objective = "\n  preserve plan objective exactly  \n"
+    node_objective = "\n  preserve node objective exactly  \n"
+    finish = "  exact finish criterion  \n"
+    abort = "\n  exact abort criterion  "
+    semantic_question = "\n  exact semantic question?  \n"
+
+    plan = store.create_plan(plan_objective)
+    source = store.add_node(
+        plan.plan_id,
+        node_objective,
+        finish_criteria=finish,
+        abort_criteria=abort,
+    )
+    target = store.add_node(plan.plan_id, "target")
+    store.add_dependency(
+        plan.plan_id,
+        source,
+        target,
+        condition={"when": "semantic", "question": semantic_question},
+    )
+
+    snap = store.snapshot(plan.plan_id)
+    source_node = next(item for item in snap["nodes"] if item["node_id"] == source)
+    assert snap["plan"].objective == plan_objective
+    assert source_node["objective"] == node_objective
+    assert source_node["finish_criteria"] == finish
+    assert source_node["abort_criteria"] == abort
+    assert snap["edges"][0]["condition"]["question"] == semantic_question
+
+    revised = "\n  revised exact objective  \n"
+    revised_finish = "\n revised finish  "
+    revised_abort = "  revised abort \n"
+    store.update_node(
+        plan.plan_id,
+        source,
+        objective=revised,
+        finish_criteria=revised_finish,
+        abort_criteria=revised_abort,
+    )
+    source_node = next(
+        item for item in store.snapshot(plan.plan_id)["nodes"]
+        if item["node_id"] == source
+    )
+    assert source_node["objective"] == revised
+    assert source_node["finish_criteria"] == revised_finish
+    assert source_node["abort_criteria"] == revised_abort
+
+
+def test_orchestration_tool_plan_validation_preserves_semantic_text():
+    from swaag.tools.orchestration import OrchestrationControlTool
+
+    tool = OrchestrationControlTool()
+    payload = {key: None for key in tool.input_schema["required"]}
+    payload.update(
+        {
+            "operation": "plan.apply",
+            "plan_spec": {
+                "objective": "\n plan objective \n",
+                "scheduling_mode": "parallel",
+                "max_parallel": 0,
+                "reporting_mode": "important",
+                "resource_limits_json": None,
+                "nodes": [
+                    {
+                        "key": " node-key ",
+                        "completion_mode": "natural",
+                        "objective": "\n node objective \n",
+                        "priority": 1.0,
+                        "model_key": " default ",
+                        "finish_criteria": " finish exactly \n",
+                        "abort_criteria": "\n abort exactly ",
+                        "resources_json": None,
+                    }
+                ],
+                "edges": [
+                    {
+                        "source": " node-key ",
+                        "target": " target-key ",
+                        "when": "semantic",
+                        "semantic_question": "\n semantic question exactly? \n",
+                        "input_mapping_json": None,
+                    }
+                ],
+                "start": False,
+            },
+        }
+    )
+    # Validation is independent of graph endpoint existence; materialization checks that.
+    validated = tool.validate(payload)
+    spec = validated["plan_spec"]
+    assert spec["objective"] == "\n plan objective \n"
+    assert spec["nodes"][0]["key"] == "node-key"
+    assert spec["nodes"][0]["objective"] == "\n node objective \n"
+    assert spec["nodes"][0]["model_key"] == "default"
+    assert spec["nodes"][0]["finish_criteria"] == " finish exactly \n"
+    assert spec["nodes"][0]["abort_criteria"] == "\n abort exactly "
+    assert spec["edges"][0]["source"] == "node-key"
+    assert spec["edges"][0]["target"] == "target-key"
+    assert spec["edges"][0]["condition"]["question"] == "\n semantic question exactly? \n"
+
+
+def test_orchestration_tool_preserves_direct_semantic_fields_and_normalizes_ids():
+    from swaag.tools.orchestration import OrchestrationControlTool
+
+    tool = OrchestrationControlTool()
+    payload = {key: None for key in tool.input_schema["required"]}
+    payload.update(
+        {
+            "operation": "node.revise",
+            "plan_id": " plan-id ",
+            "node_id": " node-id ",
+            "objective": "\n exact objective \n",
+            "decision": " exact decision \n",
+            "model_key": " strong ",
+            "finish_criteria": "\n exact finish ",
+            "abort_criteria": " exact abort \n",
+            "reason": "\n exact reason \n",
+        }
+    )
+
+    validated = tool.validate(payload)
+
+    assert validated["plan_id"] == "plan-id"
+    assert validated["node_id"] == "node-id"
+    assert validated["model_key"] == "strong"
+    assert validated["objective"] == "\n exact objective \n"
+    assert validated["decision"] == " exact decision \n"
+    assert validated["finish_criteria"] == "\n exact finish "
+    assert validated["abort_criteria"] == " exact abort \n"
+    assert validated["reason"] == "\n exact reason \n"

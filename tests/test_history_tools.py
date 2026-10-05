@@ -710,3 +710,14 @@ def test_history_search_excludes_its_entire_current_action(make_config, tmp_path
     assert match["sequence"] == marker_sequence
     assert match["sequence"] < action_sequence
     assert "cobalt-history-fts-531" in match["preview"]
+
+def test_control_message_preserves_exact_nonempty_text(make_config) -> None:
+    runtime = AgentRuntime(make_config(model__context_limit=32_000), model_client=None)
+    state = runtime.create_or_load_session()
+    message = "\n  exact redirected instruction  \n"
+
+    queued = runtime.history.enqueue_control_message(state.session_id, message, source="test")
+
+    assert queued["message"] == message
+    pending = runtime.history.list_pending_control_messages(state.session_id)
+    assert pending[-1]["message"] == message

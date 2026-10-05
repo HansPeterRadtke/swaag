@@ -103,8 +103,7 @@ class OrchestrationStore:
         max_parallel: int = 0,
         reporting_mode: str = "important",
     ) -> OrchestrationPlan:
-        objective = objective.strip()
-        if not objective:
+        if not objective.strip():
             raise ValueError('orchestration objective must not be empty')
         scheduling_mode, max_parallel = self._validate_plan_policy(
             scheduling_mode, max_parallel
@@ -325,9 +324,8 @@ class OrchestrationStore:
                  finish_criteria: str | None = None, abort_criteria: str | None = None,
                  completion_mode: str = "natural") -> str:
         self.get_plan(plan_id)
-        objective = objective.strip()
         priority = self._validate_priority(priority)
-        if not objective:
+        if not objective.strip():
             raise ValueError('node objective must be non-empty')
         if completion_mode not in {'natural', 'continuous'}:
             raise ValueError('completion_mode must be natural or continuous')
@@ -361,8 +359,7 @@ class OrchestrationStore:
                 raise FileNotFoundError(f"Unknown orchestration node: {node_id}")
             values = dict(row)
             if objective is not None:
-                objective = objective.strip()
-                if not objective:
+                if not objective.strip():
                     raise ValueError("node objective must not be empty")
                 values["objective"] = objective
             if priority is not None:
@@ -370,9 +367,9 @@ class OrchestrationStore:
             if model_key is not None:
                 values["model_key"] = model_key.strip() or None
             if finish_criteria is not None:
-                values["finish_criteria"] = finish_criteria.strip() or None
+                values["finish_criteria"] = finish_criteria if finish_criteria.strip() else None
             if abort_criteria is not None:
-                values["abort_criteria"] = abort_criteria.strip() or None
+                values["abort_criteria"] = abort_criteria if abort_criteria.strip() else None
             if clear_worker:
                 values["worker_id"] = None
             if state is not None:
@@ -404,8 +401,8 @@ class OrchestrationStore:
     ) -> None:
         if not isinstance(satisfied, bool):
             raise ValueError("dependency satisfied must be boolean")
-        decision = str(decision).strip()
-        if not decision:
+        decision = str(decision)
+        if not decision.strip():
             raise ValueError("dependency resolution decision must not be empty")
         with self._connect() as c:
             row = c.execute(
@@ -758,8 +755,8 @@ class OrchestrationManager:
         unknown = sorted(set(spec) - allowed)
         if unknown:
             raise ValueError("unknown orchestration plan spec fields: " + ", ".join(unknown))
-        objective = str(spec.get("objective") or "").strip()
-        if not objective:
+        objective = str(spec.get("objective") or "")
+        if not objective.strip():
             raise ValueError("orchestration plan spec objective must not be empty")
         scheduling_mode = str(spec.get("scheduling_mode") or "parallel").strip()
         max_parallel = spec.get("max_parallel", 0)
@@ -785,10 +782,10 @@ class OrchestrationManager:
             if not isinstance(raw, dict):
                 raise ValueError(f"orchestration node {index} must be an object")
             key = str(raw.get("key") or "").strip()
-            node_objective = str(raw.get("objective") or "").strip()
+            node_objective = str(raw.get("objective") or "")
             if not key or key in keys:
                 raise ValueError("orchestration node keys must be unique and non-empty")
-            if not node_objective:
+            if not node_objective.strip():
                 raise ValueError(f"orchestration node {key!r} objective must not be empty")
             priority = raw.get("priority", 1.0)
             priority = self.store._validate_priority(priority)
@@ -822,13 +819,15 @@ class OrchestrationManager:
                     "priority": float(priority),
                     "model_key": None if model_key == "default" else model_key,
                     "finish_criteria": (
-                        str(raw.get("finish_criteria")).strip()
+                        str(raw.get("finish_criteria"))
                         if raw.get("finish_criteria") is not None
+                        and str(raw.get("finish_criteria")).strip()
                         else None
                     ),
                     "abort_criteria": (
-                        str(raw.get("abort_criteria")).strip()
+                        str(raw.get("abort_criteria"))
                         if raw.get("abort_criteria") is not None
+                        and str(raw.get("abort_criteria")).strip()
                         else None
                     ),
                     "resources": resources,
@@ -1309,7 +1308,7 @@ class OrchestrationManager:
             if worker.status in {"queued", "working", "input_required"}:
                 manager.message(
                     worker_id,
-                    "Orchestration plan revision for this worker:\n" + objective.strip(),
+                    "Orchestration plan revision for this worker:\n" + objective,
                     source="orchestrator_plan_revision",
                     resume_if_idle=True,
                 )

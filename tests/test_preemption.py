@@ -758,6 +758,52 @@ def test_orchestrator_lightweight_interaction_is_one_model_call_and_starts_no_wo
     ]
 
 
+def test_orchestrator_preserves_user_facing_answer_whitespace_verbatim(make_config) -> None:
+    config = make_config(
+        model__context_limit=32_000,
+        tools__enabled=["orchestration_control"],
+        tools__allow_stateful_tools=True,
+        tools__allow_side_effect_tools=True,
+    )
+    exact_answer = "\n  exact answer payload  \n"
+    client = _ImmediateClient(exact_answer)
+    orchestrator = AgentRuntime(config, model_client=client)
+    service = CommunicationService(orchestrator, orchestrator_runtime=orchestrator)
+
+    answer = service.orchestrator_message("Return the exact payload.")
+
+    assert answer["answer"] == exact_answer
+    state = orchestrator.create_or_load_user_session("SWAAG Orchestrator")
+    visible = [
+        message.content
+        for message in state.messages
+        if message.role == "assistant" and not message.metadata.get("internal_action")
+    ]
+    assert visible[-1] == exact_answer
+
+
+def test_orchestrator_preserves_current_user_whitespace_verbatim(make_config) -> None:
+    config = make_config(
+        model__context_limit=32_000,
+        tools__enabled=["orchestration_control"],
+        tools__allow_stateful_tools=True,
+        tools__allow_side_effect_tools=True,
+    )
+    client = _ImmediateClient("preserved")
+    orchestrator = AgentRuntime(config, model_client=client)
+    service = CommunicationService(orchestrator, orchestrator_runtime=orchestrator)
+    message = "\n  preserve this exact utterance  \n"
+
+    answer = service.orchestrator_message(message)
+
+    assert answer["answer"] == "preserved"
+    prompt = str(client.requests[0]["prompt"])
+    assert "Current user utterance, verbatim and authoritative:\n" + message in prompt
+    state = orchestrator.create_or_load_user_session("SWAAG Orchestrator")
+    visible = [item.content for item in state.messages if item.role == "user"]
+    assert visible[-1] == message
+
+
 class _RouteToPlannerClient(_ImmediateClient):
     def send_completion(self, payload: dict[str, Any], **kwargs) -> CompletionResult:
         self.requests.append(json.loads(stable_json_dumps(payload, indent=None)))
@@ -957,3 +1003,11 @@ def test_concurrent_orchestrator_messages_preserve_order_and_history(make_config
         "second user",
         "second reply",
     ]
+
+def test_run_cancellation_preserves_reason_whitespace_verbatim(make_config) -> None:
+    from swaag.preemption import ModelPreemptionCoordinator
+
+    store = ModelPreemptionCoordinator(make_config().sessions.root)
+    reason = "\n  preserve cancellation reason exactly  \n"
+    item = store.request_run_cancellation("session-x", "run-x", reason=reason)
+    assert item.reason == reason

@@ -2,7 +2,7 @@
 
 > Developer/integration API, not the ordinary user conversation port.
 >
-> The canonical human/user entry point is orchestrator.message. Voice and chat frontends send ordinary finalized user messages there. Task API and the protocol adapters documented below are for explicit task/worker lifecycle integration, automation, interoperability, debugging, and advanced clients that intentionally address task state. They MUST NOT be treated as equivalent user-facing entrances or used by a normal voice frontend to decide when to create a worker.
+> The canonical human/user semantic layer is the persistent orchestrator. Foreground `swaag ask` and `swaag chat` reach it directly in-process by default; connected voice and chat frontends send ordinary finalized user messages to `orchestrator.message`. Task API and the protocol adapters documented below are for explicit task/worker lifecycle integration, automation, interoperability, debugging, and advanced clients that intentionally address task state. They MUST NOT be treated as equivalent ordinary user-facing entrances or used by a normal voice frontend to decide when to create a worker.
 
 
 `TaskApi` is the internal command/query boundary used by the communication service and protocol adapters. Worker state and events remain authoritative; transports do not own task lifecycle semantics.

@@ -601,3 +601,51 @@ def test_invalid_revision_cannot_change_or_cancel_bound_worker(tmp_path):
         assert manager.store.snapshot(plan.plan_id) == before
         assert workers.store.get(bound) == original
         assert workers.canceled == []
+
+
+def test_orchestration_api_preserves_semantic_text_outer_whitespace(tmp_path):
+    workers = _Workers()
+    manager = OrchestrationManager(workers, store=OrchestrationStore(tmp_path))
+    api = OrchestrationApi(manager)
+
+    plan_objective = "\n  exact API plan objective  \n"
+    created = api.execute("create", {"objective": plan_objective})
+    plan_id = created["plan"]["plan_id"]
+    assert created["plan"]["objective"] == plan_objective
+
+    node_objective = "\n  exact API node objective  \n"
+    finish = "  exact API finish  \n"
+    abort = "\n  exact API abort  "
+    node_id = api.execute(
+        "node.add",
+        {
+            "plan_id": plan_id,
+            "objective": node_objective,
+            "finish_criteria": finish,
+            "abort_criteria": abort,
+        },
+    )["node_id"]
+    snapshot = api.execute("get", {"plan_id": plan_id})
+    node = next(item for item in snapshot["nodes"] if item["node_id"] == node_id)
+    assert node["objective"] == node_objective
+    assert node["finish_criteria"] == finish
+    assert node["abort_criteria"] == abort
+
+    revised = "\n  revised API objective  \n"
+    api.execute(
+        "node.revise",
+        {
+            "plan_id": plan_id,
+            "node_id": node_id,
+            "objective": revised,
+            "finish_criteria": "\n revised finish  ",
+            "abort_criteria": " revised abort \n",
+        },
+    )
+    node = next(
+        item for item in api.execute("get", {"plan_id": plan_id})["nodes"]
+        if item["node_id"] == node_id
+    )
+    assert node["objective"] == revised
+    assert node["finish_criteria"] == "\n revised finish  "
+    assert node["abort_criteria"] == " revised abort \n"

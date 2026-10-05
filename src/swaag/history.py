@@ -685,7 +685,9 @@ class HistoryStore:
 
     def enqueue_control_message(self, session_id: str, text: str, *, source: str = "cli", control_id: str | None = None) -> dict[str, Any]:
         control_id = control_id or new_id("control")
-        message = text.strip()
+        if not isinstance(text, str) or not text.strip():
+            raise ValueError("control message must not be empty")
+        message = text
         priority = 0
         payload = {
             "control_id": control_id,

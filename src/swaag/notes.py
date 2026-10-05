@@ -23,10 +23,11 @@ def validate_note_fields(
     categories: list[str] | None = None,
 ) -> tuple[str, str, list[str]]:
     title = title.strip()
-    content = content.strip()
+    if not isinstance(content, str):
+        raise NoteError("content must be a string")
     if not title:
         raise NoteError("note title must not be empty")
-    if not content:
+    if not content.strip():
         raise NoteError("note content must not be empty")
     if len(title) > 200:
         raise NoteError("note title exceeds the 200-character storage limit")

@@ -17,23 +17,23 @@ def test_latest_orchestration_authority_is_tracked_as_p0():
     assert not missing, f"untracked September 14 orchestration requirements: {missing}"
 
 
-def test_docs_define_one_canonical_human_entry_point_and_demote_worker_apis():
+def test_docs_define_one_canonical_human_semantic_layer_and_demote_worker_apis():
     readme = Path("README.md").read_text()
     manual = Path("docs/manual.md").read_text()
     task_api = Path("docs/task-api.md").read_text()
     voice = Path("docs/voice-and-communication.md").read_text()
     design = Path("docs/design-principles.md").read_text()
 
-    assert "one canonical human/user conversation entry point: orchestrator.message" in readme
-    assert "official user-facing SWAAG port" in readme
+    assert "one canonical semantic human/user conversation layer: the persistent orchestrator" in readme
+    assert "Foreground `swaag ask` and `swaag chat` use that orchestrator directly in-process" in readme
     assert "developer/integration APIs" in readme
 
-    assert "single canonical human/user conversation interface is orchestrator.message" in manual
-    assert "developer/integration-level interfaces" in manual
+    assert "single canonical human/user semantic layer is the persistent orchestrator" in manual
+    assert "Task API create/start/message/cancel" in manual
     assert "MUST NOT implement its own rule" in manual
 
     assert "Developer/integration API, not the ordinary user conversation port." in task_api
-    assert "canonical human/user entry point is orchestrator.message" in task_api
+    assert "canonical human/user semantic layer is the persistent orchestrator" in task_api
 
     assert "exactly one official SWAAG entry point for ordinary voice/chat user messages" in voice
     assert "must not send ordinary speech to Task API" in voice

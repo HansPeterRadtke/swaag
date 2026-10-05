@@ -8,6 +8,76 @@ from swaag.cli import main
 
 
 
+
+def test_cli_ask_uses_in_process_persistent_orchestrator_by_default(capsys, monkeypatch) -> None:
+    calls: list[str] = []
+
+    class _State:
+        session_id = "orchestrator-session"
+        session_name = "SWAAG Orchestrator"
+
+    class _OrchestratorRuntime:
+        def create_or_load_user_session(self, session_ref):
+            assert session_ref == "SWAAG Orchestrator"
+            return _State()
+
+    class _Service:
+        orchestrator_runtime = _OrchestratorRuntime()
+
+        def orchestrator_message(self, message):
+            calls.append(message)
+            return {"session_id": "orchestrator-session", "answer": "foreground answer"}
+
+        def close(self):
+            calls.append("closed")
+
+    monkeypatch.setattr(
+        "swaag.cli.CommunicationService.from_runtime",
+        lambda runtime: _Service(),
+    )
+
+    assert main(["ask", "  exact foreground wording  "]) == 0
+    captured = capsys.readouterr()
+    assert captured.out.strip() == "foreground answer"
+    assert calls == ["  exact foreground wording  ", "closed"]
+    assert "SWAAG Orchestrator" in captured.err
+
+
+def test_cli_chat_uses_in_process_persistent_orchestrator_by_default(capsys, monkeypatch) -> None:
+    calls: list[str] = []
+    lines = iter(["hello orchestrator", "/quit"])
+
+    class _State:
+        session_id = "orchestrator-session"
+        session_name = "SWAAG Orchestrator"
+
+    class _OrchestratorRuntime:
+        def create_or_load_user_session(self, session_ref):
+            assert session_ref == "SWAAG Orchestrator"
+            return _State()
+
+    class _Service:
+        orchestrator_runtime = _OrchestratorRuntime()
+
+        def orchestrator_message(self, message):
+            calls.append(message)
+            return {"session_id": "orchestrator-session", "answer": "chat answer"}
+
+        def close(self):
+            calls.append("closed")
+
+    monkeypatch.setattr(
+        "swaag.cli.CommunicationService.from_runtime",
+        lambda runtime: _Service(),
+    )
+    monkeypatch.setattr("builtins.input", lambda prompt: next(lines))
+
+    assert main(["chat"]) == 0
+    captured = capsys.readouterr()
+    assert "SWAAG Orchestrator" in captured.out
+    assert "chat answer" in captured.out
+    assert calls == ["hello orchestrator", "closed"]
+
 def test_cli_tools_command(capsys) -> None:
     rc = main(["tools"])
     out = capsys.readouterr().out

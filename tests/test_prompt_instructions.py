@@ -24,6 +24,17 @@ from swaag.tools.registry import ToolRegistry
 from swaag.types import CompletionResult, ContractSpec, PromptComponent
 
 
+def test_prompt_instruction_content_is_preserved_verbatim(make_config) -> None:
+    content = "\n  Preserve this remembered rule exactly.  \n"
+    instruction = make_prompt_instruction(
+        make_config(),
+        title="Exact rule",
+        content=content,
+        scopes=["all"],
+    )
+    assert instruction.content == content
+
+
 def _tool_input(
     action: str,
     *,

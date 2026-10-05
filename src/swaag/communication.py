@@ -299,8 +299,8 @@ class CommunicationStore:
         )
 
     def create(self, session_id: str, message: str, *, source: str = "communication") -> CommunicationRequest:
-        text = message.strip()
-        if not text:
+        text = message
+        if not text.strip():
             raise ValueError("communication message must not be empty")
         priority = 0
         request = CommunicationRequest(new_id("correlation"), session_id, text, source, priority, "queued", utc_now_iso())
@@ -1558,8 +1558,8 @@ class CommunicationService:
         return state
 
     def orchestrator_message(self, message: str) -> dict[str, str]:
-        text = str(message).strip()
-        if not text:
+        text = str(message)
+        if not text.strip():
             raise ValueError("orchestrator message must not be empty")
         orchestrator_state = self.orchestrator_runtime.create_or_load_user_session(
             "SWAAG Orchestrator"
@@ -2665,10 +2665,10 @@ class CommunicationService:
         if "payload" not in response or response["payload"] is None:
             raise ValueError("AG-UI resolved interrupt requires a payload")
         payload = response["payload"]
-        answer = payload.strip() if isinstance(payload, str) else stable_json_dumps(
+        answer = payload if isinstance(payload, str) else stable_json_dumps(
             payload, indent=None
         )
-        if not answer:
+        if not answer.strip():
             raise ValueError("AG-UI resolved interrupt payload must not be empty")
         message = (
             "AG-UI interrupt response:\n"

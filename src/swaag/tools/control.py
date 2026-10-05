@@ -81,7 +81,7 @@ class AgentControlTool(Tool):
             raise ToolValidationError("agent_control.session_ref must be a non-empty string")
         if not isinstance(message, str) or not message.strip():
             raise ToolValidationError("agent_control.message must be a non-empty string")
-        return {"session_ref": ref.strip(), "message": message.strip()}
+        return {"session_ref": ref.strip(), "message": message}
 
     def execute(self, validated_input: dict[str, Any], context: ToolContext) -> ToolExecutionResult:
         store = HistoryStore(context.config.sessions.root, write_projections=False)

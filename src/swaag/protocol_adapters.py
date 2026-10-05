@@ -102,7 +102,7 @@ class A2AProjectionAdapter:
             if len(content_fields) != 1:
                 raise ValueError("Every A2A message part must contain exactly one content field")
             if isinstance(part.get("text"), str) and str(part["text"]).strip():
-                text_parts.append(str(part["text"]).strip())
+                text_parts.append(str(part["text"]))
                 continue
             if "data" in part:
                 text_parts.append(stable_json_dumps(part["data"], indent=None))
@@ -124,8 +124,8 @@ class A2AProjectionAdapter:
                     "A2A URL parts require an authenticated fetch adapter and are not enabled"
                 )
             raise ValueError("Unsupported A2A message part")
-        text = "\n\n".join(text_parts).strip()
-        if not text:
+        text = "\n\n".join(text_parts)
+        if not text.strip():
             raise ValueError("A2A message must contain text or structured data")
         configuration = request.get("configuration") or {}
         if not isinstance(configuration, dict):
@@ -845,10 +845,10 @@ def _ag_ui_user_content(
             references.append(f"{content_type}: {value}")
         else:
             raise ValueError("AG-UI media source type is unsupported")
-    rendered = "\n\n".join(text).strip()
-    if not rendered and attachments:
+    rendered = "\n\n".join(text)
+    if not rendered.strip() and attachments:
         rendered = "Inspect the supplied raw inputs and complete the request."
-    if not rendered and not references:
+    if not rendered.strip() and not references:
         raise ValueError("AG-UI user message content must not be empty")
     return rendered, attachments, references
 
@@ -906,7 +906,7 @@ def _ag_ui_data_url(value: str) -> tuple[str, str]:
 
 
 def _with_raw_references(text: str, references: list[str]) -> str:
-    prefix = text.strip() or "Inspect the supplied raw inputs and complete the request."
+    prefix = text if text.strip() else "Inspect the supplied raw inputs and complete the request."
     return prefix + "\n\nRaw attachment references:\n" + "\n".join(
         f"- {item}" for item in references
     )

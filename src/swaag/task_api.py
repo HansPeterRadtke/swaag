@@ -20,7 +20,7 @@ class TaskApi:
     def execute(self, operation: str, payload: dict[str, Any] | None = None) -> dict[str, Any]:
         args = dict(payload or {})
         if operation == "create":
-            objective = _required_text(args, "objective")
+            objective = _required_content_text(args, "objective")
             completion_mode = args.get("completion_mode", "natural")
             if not isinstance(completion_mode, str):
                 raise ValueError("completion_mode must be a string")
@@ -85,7 +85,7 @@ class TaskApi:
         if operation == "message":
             record = self.workers.message(
                 _required_text(args, "worker_id"),
-                _required_text(args, "message"),
+                _required_content_text(args, "message"),
                 source=_optional_text(args, "source") or "task_api",
                 resume_if_idle=bool(args.get("resume_if_idle", True)),
             )
@@ -93,13 +93,13 @@ class TaskApi:
         if operation == "cancel":
             record = self.workers.cancel(
                 _required_text(args, "worker_id"),
-                reason=_optional_text(args, "reason") or "task API cancellation",
+                reason=_optional_content_text(args, "reason") or "task API cancellation",
             )
             return self._record(record)
         if operation == "resume":
             record = self.workers.resume(
                 _required_text(args, "worker_id"),
-                message=_optional_text(args, "message"),
+                message=_optional_content_text(args, "message"),
             )
             return self._record(record)
         if operation == "archive":
@@ -170,6 +170,22 @@ class TaskApi:
         payload["structured_output"] = self.workers.structured_output(record.worker_id)
         payload["presentations"] = self.workers.presentations(record.worker_id)
         return {"version": self.version, "worker": payload}
+
+
+def _required_content_text(payload: dict[str, Any], key: str) -> str:
+    value = payload.get(key)
+    if not isinstance(value, str) or not value.strip():
+        raise ValueError(f"{key} must be a non-empty string")
+    return value
+
+
+def _optional_content_text(payload: dict[str, Any], key: str) -> str | None:
+    value = payload.get(key)
+    if value is None:
+        return None
+    if not isinstance(value, str):
+        raise ValueError(f"{key} must be a string or null")
+    return value if value.strip() else None
 
 
 def _required_text(payload: dict[str, Any], key: str) -> str:

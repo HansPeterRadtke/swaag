@@ -224,8 +224,8 @@ class WorkerStore:
         inference_weight: float = 1.0,
         model_key: str = "default",
     ) -> WorkerRecord:
-        text = objective.strip()
-        if not text:
+        text = objective
+        if not text.strip():
             raise ValueError("worker objective must not be empty")
         mode = str(completion_mode).strip()
         if mode not in WORKER_COMPLETION_MODES:
@@ -728,7 +728,7 @@ class WorkerManager:
                     f"{pending_tool.call_id}"
                 )
             if message is not None and message.strip():
-                self._queue_message(current, message.strip(), source="worker_resume")
+                self._queue_message(current, message, source="worker_resume")
             queued = self.store.transition(
                 worker_id,
                 "queued",
@@ -1744,8 +1744,8 @@ class WorkerManager:
             )
 
     def _queue_message(self, current: WorkerRecord, message: str, *, source: str) -> None:
-        text = message.strip()
-        if not text:
+        text = message
+        if not text.strip():
             raise ValueError("worker message must not be empty")
         control = self.runtime.history.enqueue_control_message(
             current.session_id, text, source=source

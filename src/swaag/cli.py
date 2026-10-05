@@ -22,12 +22,12 @@ def _build_parser() -> argparse.ArgumentParser:
     parser.add_argument("--config", action="append", default=[], help="Path to a TOML config file. Can be passed multiple times.")
     subparsers = parser.add_subparsers(dest="command", required=True)
 
-    ask_parser = subparsers.add_parser("ask", help="Run one agent turn and print the final answer.")
+    ask_parser = subparsers.add_parser("ask", help="Run one foreground user turn through the persistent orchestrator.")
     ask_parser.add_argument("prompt", nargs="?", help="User prompt. If omitted, stdin is read.")
-    ask_parser.add_argument("--session", help="Session name or id to resume. Defaults to latest session.")
+    ask_parser.add_argument("--session", help="Explicit lower-level agent session to resume instead of the user orchestrator.")
 
-    chat_parser = subparsers.add_parser("chat", help="Interactive chat shell.")
-    chat_parser.add_argument("--session", help="Session name or id to resume. Defaults to latest session.")
+    chat_parser = subparsers.add_parser("chat", help="Interactive foreground chat with the persistent orchestrator.")
+    chat_parser.add_argument("--session", help="Explicit lower-level agent session to resume instead of the user orchestrator.")
 
     doctor_parser = subparsers.add_parser("doctor", help="Check local llama.cpp connectivity and structured output paths.")
     doctor_parser.add_argument("--session", help="Optional session name or id.")
@@ -168,43 +168,83 @@ def _resolve_session_id(runtime: AgentRuntime, session_ref: str | None, *, lates
 
 
 def _run_ask(runtime: AgentRuntime, prompt: str, session_ref: str | None) -> int:
-    state = runtime.create_or_load_user_session(session_ref)
-    effective_prompt = prompt.strip()
-    if not effective_prompt:
+    effective_prompt = prompt
+    if not effective_prompt.strip():
+        state = runtime.create_or_load_user_session(session_ref)
         deferred = runtime.pop_next_deferred_task(state, reason="ask_without_prompt")
         if deferred is None:
             raise SystemExit("No prompt provided and no deferred task queued")
         effective_prompt = deferred.text
-    result = runtime.run_turn_in_session(state, effective_prompt)
-    print(result.assistant_text)
-    print(f"\n[session={result.session_id} name={state.session_name}]", file=sys.stderr)
-    return 0
+        result = runtime.run_turn_in_session(state, effective_prompt)
+        print(result.assistant_text)
+        print(f"\n[session={result.session_id} name={state.session_name}]", file=sys.stderr)
+        return 0
+    if session_ref is not None:
+        state = runtime.create_or_load_user_session(session_ref)
+        result = runtime.run_turn_in_session(state, effective_prompt)
+        print(result.assistant_text)
+        print(f"\n[session={result.session_id} name={state.session_name}]", file=sys.stderr)
+        return 0
+    service = CommunicationService.from_runtime(runtime)
+    try:
+        response = service.orchestrator_message(effective_prompt)
+        print(response["answer"])
+        state = service.orchestrator_runtime.create_or_load_user_session("SWAAG Orchestrator")
+        print(f"\n[session={state.session_id} name={state.session_name}]", file=sys.stderr)
+        return 0
+    finally:
+        service.close()
 
 
 def _run_chat(runtime: AgentRuntime, session_ref: str | None) -> int:
-    state = runtime.create_or_load_user_session(session_ref)
-    print(f"session={state.session_id} name={state.session_name}")
-    print("Enter /exit or /quit to stop. /session shows current id. /deferred shows queued tasks.")
-    while True:
-        try:
-            line = input("> ")
-        except EOFError:
-            print()
-            break
-        if not line.strip():
-            continue
-        if line.strip() in {"/exit", "/quit"}:
-            break
-        if line.strip() == "/session":
-            print(f"{state.session_id} ({state.session_name})")
-            continue
-        if line.strip() == "/deferred":
-            for task in state.deferred_tasks:
-                print(f"  [{task.task_id}] {task.text}")
-            continue
-        result = runtime.run_turn_in_session(state, line)
-        print(result.assistant_text)
-    return 0
+    if session_ref is not None:
+        state = runtime.create_or_load_user_session(session_ref)
+        print(f"session={state.session_id} name={state.session_name}")
+        print("Enter /exit or /quit to stop. /session shows current id. /deferred shows queued tasks.")
+        while True:
+            try:
+                line = input("> ")
+            except EOFError:
+                print()
+                break
+            if not line.strip():
+                continue
+            if line.strip() in {"/exit", "/quit"}:
+                break
+            if line.strip() == "/session":
+                print(f"{state.session_id} ({state.session_name})")
+                continue
+            if line.strip() == "/deferred":
+                for task in state.deferred_tasks:
+                    print(f"  [{task.task_id}] {task.text}")
+                continue
+            result = runtime.run_turn_in_session(state, line)
+            print(result.assistant_text)
+        return 0
+
+    service = CommunicationService.from_runtime(runtime)
+    try:
+        state = service.orchestrator_runtime.create_or_load_user_session("SWAAG Orchestrator")
+        print(f"session={state.session_id} name={state.session_name}")
+        print("Enter /exit or /quit to stop. /session shows the persistent orchestrator session.")
+        while True:
+            try:
+                line = input("> ")
+            except EOFError:
+                print()
+                break
+            if not line.strip():
+                continue
+            if line.strip() in {"/exit", "/quit"}:
+                break
+            if line.strip() == "/session":
+                print(f"{state.session_id} ({state.session_name})")
+                continue
+            response = service.orchestrator_message(line)
+            print(response["answer"])
+        return 0
+    finally:
+        service.close()
 
 
 def _run_doctor(runtime: AgentRuntime, emit_json: bool, session_ref: str | None) -> int:

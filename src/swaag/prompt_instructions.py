@@ -68,10 +68,11 @@ def validate_prompt_instruction_fields(
     categories: list[str] | None = None,
 ) -> tuple[str, str, list[str], list[str]]:
     title = title.strip()
-    content = content.strip()
+    if not isinstance(content, str):
+        raise PromptInstructionError("content must be a string")
     if not title:
         raise PromptInstructionError("prompt instruction title must not be empty")
-    if not content:
+    if not content.strip():
         raise PromptInstructionError("prompt instruction content must not be empty")
     if len(title) > 200:
         raise PromptInstructionError(

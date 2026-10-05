@@ -110,7 +110,7 @@ class PromptBuilder:
             if message.name:
                 label = f"{label}:{message.name}"
             rendered.append(
-                f"[{label}]\n{summary_provenance_text(message)}{message.content.strip()}"
+                f"[{label}]\n{summary_provenance_text(message)}{message.content}"
             )
         return "\n\n".join(rendered)
 
@@ -149,7 +149,7 @@ class PromptBuilder:
             event_sequence = message.metadata.get("source_event_sequence")
             event_hash = message.metadata.get("source_event_hash")
             provenance = ""
-            body = message.content.strip()
+            body = message.content
             component_name = f"{prefix}_{index}"
             if message.role == "tool" and isinstance(event_sequence, int):
                 component_name = f"{prefix}_tool_event_{event_sequence}"

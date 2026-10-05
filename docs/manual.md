@@ -4,7 +4,7 @@ SWAAG is a local-first autonomous agent runtime. Append-only session history and
 
 ## Foreground execution and optional serving
 
-SWAAG is a program. The persistent user-facing orchestrator is the intended human conversation endpoint. The communication serve command exposes it as orchestrator.message for local clients such as a voice gateway; the listener is an explicitly started foreground or network interface, not a required boot daemon. Lower-level direct worker operations remain available for development and programmatic control. A supervisor is an optional deployment choice, not a prerequisite for in-process workers.
+SWAAG is a program. The persistent user-facing orchestrator is the intended human conversation layer. The foreground `ask` and `chat` commands use it directly in-process by default. The communication serve command exposes the same layer as orchestrator.message for local clients such as a voice gateway; the listener is an explicitly started foreground or network interface, not a required boot daemon. Supplying an explicit session to `ask` or `chat` selects a lower-level direct agent session for development, benchmarks, or advanced control. Other direct worker operations remain available for programmatic control. A supervisor is an optional deployment choice, not a prerequisite for in-process workers.
 
 ## Architecture
 
@@ -32,11 +32,11 @@ External tools are configured separately. MCP and other external catalogs are sc
 
 ## Conversation and sessions
 
-`python -m swaag ask` runs one agent turn and `python -m swaag chat` provides an interactive shell. Sessions are durable and can be inspected with the session, state, history, notes, and reader commands. Controls sent to active work are appended durably and reconciled semantically by the next model call rather than interpreted by keyword rules.
+`python -m swaag ask` runs one foreground user turn through the persistent orchestrator and `python -m swaag chat` provides an interactive foreground shell over that same orchestrator. No communication listener is required for either command. Supplying `--session` explicitly selects the lower-level direct agent-session path. Sessions are durable and can be inspected with the session, state, history, notes, and reader commands. Controls sent to active work are appended durably and reconciled semantically by the next model call rather than interpreted by keyword rules.
 
 ## Official user-facing interface
 
-The single canonical human/user conversation interface is orchestrator.message on the communication service. A voice gateway, chat UI, or other normal user-facing client sends every finalized ordinary user message there. The persistent orchestrator is the only component that decides whether a message needs a worker.
+The single canonical human/user semantic layer is the persistent orchestrator. Foreground users reach it directly with `ask` or `chat`; a voice gateway, chat UI, or other connected user-facing client sends every finalized ordinary user message to `orchestrator.message`. The persistent orchestrator is the only component that decides whether a message needs a worker.
 
 Task API create/start/message/cancel, direct worker controls, AG-UI worker runs, A2A task operations, MCP calls, and similar surfaces are developer/integration-level interfaces. They exist for explicit task automation, protocol adapters, debugging and operations, and integrations that intentionally manipulate known task or worker state. They are not alternative ordinary user conversation interfaces.
 

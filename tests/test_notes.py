@@ -20,6 +20,16 @@ from swaag.tokens import ExactTokenCounter
 from swaag.types import CompletionResult, ContractSpec, PromptComponent
 
 
+def test_note_content_is_preserved_verbatim(make_config) -> None:
+    content = "\n  Exact durable note content.  \n"
+    note = make_note(
+        make_config(),
+        title="Exact note",
+        content=content,
+    )
+    assert note.content == content
+
+
 class _NoteSelectionClient:
     is_deterministic_test_client = True
 

@@ -1,12 +1,12 @@
 # SWAAG
 
-SWAAG has one canonical human/user conversation entry point: orchestrator.message on the explicitly started communication interface. Voice clients, chat frontends, and other ordinary user-facing integrations MUST send finalized user messages there. The persistent orchestrator answers lightweight conversation itself and decides when substantive work requires workers. Task API, worker message/control operations, AG-UI worker runs, A2A task operations, MCP, and similar lower-level surfaces are developer/integration APIs; they are not alternative ordinary user conversation ports and MUST NOT be used by a voice/chat frontend to decide or create workers on the user's behalf. The ask/chat CLI commands remain lower-level foreground/development interfaces to the agent runtime, not the canonical integration boundary.
+SWAAG has one canonical semantic human/user conversation layer: the persistent orchestrator. Foreground `swaag ask` and `swaag chat` use that orchestrator directly in-process by default, with no listener or daemon required. The explicitly started communication interface exposes the same layer as `orchestrator.message` for voice clients, chat frontends, and other integrations, which MUST send finalized user messages there. The persistent orchestrator answers lightweight conversation itself and decides when substantive work requires workers. Task API, worker message/control operations, AG-UI worker runs, A2A task operations, MCP, and similar lower-level surfaces are developer/integration APIs; they are not alternative ordinary user conversation ports and MUST NOT be used by a voice/chat frontend to decide or create workers on the user's behalf. An explicit `--session` on `ask` or `chat` intentionally selects the lower-level direct-session path for development, benchmarks, or advanced control.
 
 ## Canonical user entry point
 
-**Use orchestrator.message for every ordinary human message.** This is the official user-facing SWAAG port.
+**Use the persistent orchestrator for every ordinary human message.** Use foreground `swaag ask`/`swaag chat` locally, or `orchestrator.message` when a client connects through the explicitly started communication interface.
 
-The required topology is: user or STT text -> orchestrator.message -> persistent orchestrator -> optional workers chosen by the orchestrator.
+The required semantic topology is: user text -> persistent orchestrator -> optional workers chosen by the orchestrator. A connected STT/chat client reaches it through `orchestrator.message`; the foreground CLI reaches it in-process.
 
 Do not connect a normal voice/chat client directly to Task API create/message/start, AG-UI worker submission, A2A task submission, or a worker session. Those interfaces exist for SWAAG internals, explicit developer tooling, protocol interoperability, automation, and advanced integrations that intentionally address task/worker state. They bypass the ordinary user-entry contract.
 

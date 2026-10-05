@@ -1744,7 +1744,7 @@ class ScheduleWakeupTool(Tool):
             raise ToolValidationError("schedule_wakeup.reason must be a non-empty string")
         if bool(duration and duration.strip()) == bool(wake_at and wake_at.strip()):
             raise ToolValidationError("schedule_wakeup requires exactly one of duration or wake_at")
-        return {"duration": duration.strip() if duration else None, "wake_at": wake_at.strip() if wake_at else None, "reason": reason.strip()}
+        return {"duration": duration.strip() if duration else None, "wake_at": wake_at.strip() if wake_at else None, "reason": reason}
 
     def required_generated_event_types(self, validated_input: dict[str, Any]) -> set[str]:
         return {"wakeup_scheduled"}

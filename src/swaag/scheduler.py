@@ -153,7 +153,7 @@ class WakeupStore:
         wakeup = Wakeup(
             wakeup_id=new_id("wakeup"),
             session_id=session_id,
-            reason=reason.strip() or "scheduled wakeup",
+            reason=reason if reason.strip() else "scheduled wakeup",
             created_at=_iso(current),
             wake_at=_iso(target),
         )

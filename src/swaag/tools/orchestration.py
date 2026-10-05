@@ -172,11 +172,11 @@ def _validate_plan_spec(raw: Any) -> dict[str, Any] | None:
             {
                 "key": key.strip(),
                 "completion_mode": node["completion_mode"],
-                "objective": node_objective.strip(),
+                "objective": node_objective,
                 "priority": float(priority),
                 "model_key": node["model_key"].strip() if isinstance(node["model_key"], str) and node["model_key"].strip() else None,
-                "finish_criteria": node["finish_criteria"].strip() if isinstance(node["finish_criteria"], str) and node["finish_criteria"].strip() else None,
-                "abort_criteria": node["abort_criteria"].strip() if isinstance(node["abort_criteria"], str) and node["abort_criteria"].strip() else None,
+                "finish_criteria": node["finish_criteria"] if isinstance(node["finish_criteria"], str) and node["finish_criteria"].strip() else None,
+                "abort_criteria": node["abort_criteria"] if isinstance(node["abort_criteria"], str) and node["abort_criteria"].strip() else None,
                 "resources": _decode_object_json(
                     node["resources_json"],
                     field=f"plan_spec.nodes[{index}].resources_json",
@@ -211,7 +211,7 @@ def _validate_plan_spec(raw: Any) -> dict[str, Any] | None:
             )
         condition: dict[str, Any] = {"when": when}
         if when == "semantic" and isinstance(question, str) and question.strip():
-            condition["question"] = question.strip()
+            condition["question"] = question
         normalized_edges.append(
             {
                 "source": source.strip(),
@@ -224,7 +224,7 @@ def _validate_plan_spec(raw: Any) -> dict[str, Any] | None:
             }
         )
     return {
-        "objective": objective.strip(),
+        "objective": objective,
         "scheduling_mode": scheduling_mode,
         "max_parallel": maximum,
         "reporting_mode": reporting_mode,
@@ -380,6 +380,13 @@ class OrchestrationControlTool(Tool):
         if operation not in allowed:
             raise ToolValidationError("orchestration_control.operation is invalid")
         result = dict(raw_input)
+        semantic_text_fields = {
+            "objective",
+            "decision",
+            "finish_criteria",
+            "abort_criteria",
+            "reason",
+        }
         for key in (
             "plan_id",
             "objective",
@@ -402,7 +409,10 @@ class OrchestrationControlTool(Tool):
             if value is not None and not isinstance(value, str):
                 raise ToolValidationError(f"orchestration_control.{key} must be string or null")
             if isinstance(value, str):
-                result[key] = value.strip() or None
+                result[key] = (
+                    value if key in semantic_text_fields and value.strip()
+                    else (value.strip() or None)
+                )
         after_sequence = result["after_sequence"]
         if after_sequence is not None and (
             isinstance(after_sequence, bool)
