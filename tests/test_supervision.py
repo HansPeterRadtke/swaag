@@ -78,6 +78,7 @@ def local_backend():
         "headers_first": False,
         "http_status": 200,
         "telemetry_available": True,
+        "stream_keepalives": False,
     }
     entered = threading.Event()
     release = threading.Event()
@@ -108,6 +109,9 @@ def local_backend():
                 started = time.monotonic()
                 while not release.wait(.02):
                     state["processed"] += 1
+                    if state["stream_keepalives"] and state["headers_first"]:
+                        self.wfile.write(b": keepalive\n\n")
+                        self.wfile.flush()
                     if state["delay"] and time.monotonic() - started >= state["delay"]:
                         break
                 if not state["headers_first"]:
@@ -152,6 +156,36 @@ def test_active_prefill_survives_estimated_read_deadline(make_config, local_back
     assert any(item.get("backend_activity", {}).get("state") == "processing" for item in progress)
 
 
+def test_native_fail_safe_ignores_transport_keepalives_without_model_progress(make_config, local_backend):
+    url, state, entered, release = local_backend
+    state.update(headers_first=True, stream_keepalives=True)
+    client = LlamaCppClient(make_config(
+        model__base_url=url,
+        model__timeout_seconds=1,
+        model__fail_safe_timeout_seconds=1,
+    ))
+    errors = []
+
+    def run():
+        try:
+            client.send_completion({"prompt": "x", "n_predict": 32})
+        except Exception as exc:
+            errors.append(exc)
+
+    thread = threading.Thread(target=run, daemon=True)
+    thread.start()
+    try:
+        assert entered.wait(1)
+        state["telemetry_available"] = False
+        thread.join(2.5)
+        assert not thread.is_alive(), "transport keepalives incorrectly defeated the native fail-safe"
+        assert len(errors) == 1 and isinstance(errors[0], requests.ReadTimeout)
+        assert "No trustworthy native backend or streamed model progress" in str(errors[0])
+    finally:
+        release.set()
+        thread.join(2)
+
+
 def test_native_fail_safe_backstop_activates_without_positive_activity(make_config, local_backend):
     url, state, entered, release = local_backend
     client = LlamaCppClient(make_config(
@@ -175,7 +209,7 @@ def test_native_fail_safe_backstop_activates_without_positive_activity(make_conf
         thread.join(2.5)
         assert not thread.is_alive(), "native request did not honor the no-activity fail-safe backstop"
         assert len(errors) == 1 and isinstance(errors[0], requests.ReadTimeout)
-        assert "No trustworthy native backend or stream activity" in str(errors[0])
+        assert "No trustworthy native backend or streamed model progress" in str(errors[0])
     finally:
         release.set()
         thread.join(2)

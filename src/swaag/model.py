@@ -998,7 +998,7 @@ class LlamaCppClient:
                 watcher.join()
             if fail_safe_observed.is_set():
                 raise requests.ReadTimeout(
-                    f"No trustworthy native backend or stream activity for {fail_safe_timeout_seconds:.1f} seconds"
+                    f"No trustworthy native backend or streamed model progress for {fail_safe_timeout_seconds:.1f} seconds"
                 ) from exc
             if cancel_observed.is_set():
                 raise ModelCallPreempted("model call preempted before streamed headers") from exc
@@ -1018,7 +1018,6 @@ class LlamaCppClient:
         response.encoding = "utf-8"
         try:
             for raw_line in response.iter_lines(decode_unicode=True):
-                last_model_activity[0] = time.monotonic()
                 if cancel_observed.is_set():
                     raise ModelCallPreempted("model call preempted for communication")
                 if not raw_line:
@@ -1063,6 +1062,11 @@ class LlamaCppClient:
                         reported_tokens = raw_predicted
                 elif completion_events > reported_tokens:
                     reported_tokens = completion_events
+                if token_count_changed:
+                    # Only semantic/model progress resets the native deadlock backstop.
+                    # SSE separators, comments, and transport keepalives prove that the
+                    # socket is alive, not that inference is advancing.
+                    last_model_activity[0] = time.monotonic()
                 if token_count_changed and progress_callback is not None:
                     elapsed = max(time.monotonic() - started, 1e-9)
                     publish_progress(
@@ -1091,7 +1095,7 @@ class LlamaCppClient:
         except requests.Timeout as exc:
             if fail_safe_observed.is_set():
                 raise requests.ReadTimeout(
-                    f"No trustworthy native backend or stream activity for {fail_safe_timeout_seconds:.1f} seconds"
+                    f"No trustworthy native backend or streamed model progress for {fail_safe_timeout_seconds:.1f} seconds"
                 ) from exc
             if cancel_observed.is_set():
                 raise ModelCallPreempted("model call preempted for communication") from exc
@@ -1099,7 +1103,7 @@ class LlamaCppClient:
         except (requests.RequestException, OSError, ValueError) as exc:
             if fail_safe_observed.is_set():
                 raise requests.ReadTimeout(
-                    f"No trustworthy native backend or stream activity for {fail_safe_timeout_seconds:.1f} seconds"
+                    f"No trustworthy native backend or streamed model progress for {fail_safe_timeout_seconds:.1f} seconds"
                 ) from exc
             if cancel_observed.is_set():
                 raise ModelCallPreempted("model call preempted for communication") from exc
@@ -1107,7 +1111,7 @@ class LlamaCppClient:
         except Exception as exc:
             if fail_safe_observed.is_set():
                 raise requests.ReadTimeout(
-                    f"No trustworthy native backend or stream activity for {fail_safe_timeout_seconds:.1f} seconds"
+                    f"No trustworthy native backend or streamed model progress for {fail_safe_timeout_seconds:.1f} seconds"
                 ) from exc
             # Closing a live urllib3 stream can surface transport-internal
             # exceptions outside requests' public hierarchy. Once cancellation
@@ -1124,7 +1128,7 @@ class LlamaCppClient:
                 close()
         if fail_safe_observed.is_set():
             raise requests.ReadTimeout(
-                f"No trustworthy native backend or stream activity for {fail_safe_timeout_seconds:.1f} seconds"
+                f"No trustworthy native backend or streamed model progress for {fail_safe_timeout_seconds:.1f} seconds"
             )
         if cancel_observed.is_set():
             raise ModelCallPreempted("model call preempted for communication")
