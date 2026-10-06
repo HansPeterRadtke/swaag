@@ -1563,13 +1563,23 @@ def test_agent_workspace_rejects_path_escape_and_gates_package_install(make_conf
 
 
 def test_project_write_tools_require_repository_layout_discovery_guidance():
+    from swaag.tools.agent_workspace import AgentWorkspaceTool
     from swaag.tools.builtin import EditTextTool, WriteFileTool
 
     write = WriteFileTool().usage_guidance
     edit = EditTextTool().usage_guidance
+    private = AgentWorkspaceTool().usage_guidance
     assert "inspect the repository layout" in write
     assert "project instructions" in write
-    assert "Scratch experiments and internal notes belong in agent_workspace" in write
+    assert "Project-specific editable notes" in write
+    assert "version-control structure" in write
+    assert "general agent-owned scratch" in write
     assert "inspect the repository layout" in edit
     assert "source-of-truth location" in edit
+    assert "project/version-control structure" in edit
     assert "agent_workspace" in edit
+    assert "Project-specific editable text" in private
+    assert "version-control structure" in private
+    assert "general agent-owned scratch" in private
+    assert "revisable and removable" in private
+    assert "append-only history" in private

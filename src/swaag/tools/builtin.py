@@ -864,7 +864,7 @@ class EditTextTool(Tool):
     name = "edit_text"
     description = "Preview or apply a bounded text edit to a local UTF-8 text file."
     usage_guidance = (
-        "Before adding new project structure, inspect the repository layout and relevant project instructions; edits should follow the existing source-of-truth location rather than creating a competing copy. Scratch experiments belong in agent_workspace. "
+        "Before adding new project structure, inspect the repository layout and relevant project instructions; edits should follow the existing source-of-truth location rather than creating a competing copy. Project-specific editable notes, configuration, source, and other trackable material should remain in the existing project/version-control structure when that fits; general agent-owned scratch and disposable experiments belong in agent_workspace. "
         "Return one concrete edit with path, operation, dry_run, and null for inapplicable nullable fields. "
         "dry_run=false applies the edit; do not add write_file just to persist it. "
         "Prefer replace_exact when you have observed the exact current text to replace: set old_text to the current literal text and new_text to the desired replacement; it requires exactly one match and fails closed on zero or multiple matches. "
@@ -1252,7 +1252,7 @@ class WriteFileTool(Tool):
     name = "write_file"
     description = "Write full UTF-8 file contents through the persistent environment."
     usage_guidance = (
-        "Before creating a new official project file or directory, inspect the repository layout and relevant project instructions/README/config conventions; do not invent a parallel folder structure when an established location exists. Scratch experiments and internal notes belong in agent_workspace instead. "
+        "Before creating a new project file or directory, inspect the repository layout and relevant project instructions/README/config conventions; do not invent a parallel folder structure when an established location exists. Project-specific editable notes, configuration, source, and other trackable material should remain in the existing project/version-control structure when that fits; general agent-owned scratch, reusable private notes, and disposable experiments belong in agent_workspace instead. "
         "Return path, complete final file content, and create as a boolean. "
         "Use this only when replacing or creating the whole file is the intended action with concrete content. "
         "Do not pass artifact placeholders; use observed file text or choose a narrower edit tool when appropriate. "

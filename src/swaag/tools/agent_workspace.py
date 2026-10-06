@@ -20,18 +20,21 @@ class AgentWorkspaceTool(Tool):
 
     name = "agent_workspace"
     description = (
-        "Use the agent-owned persistent sandbox for general calculations, Python experiments, "
-        "temporary research artifacts, internal notes, doability tests, and downloaded knowledge "
-        "that should not pollute the user's project repository. Ordinary python/shell operations "
-        "have no network and cannot see host/project files outside this configured agent-data root."
+        "Use the agent-owned persistent sandbox for general calculations, disposable Python experiments, "
+        "temporary research artifacts, reusable agent-owned notes/knowledge, doability tests, and other "
+        "private state that does not belong to one user project. Ordinary python/shell operations have no "
+        "network and cannot see host/project files outside this configured agent-data root."
     )
     usage_guidance = (
-        "Prefer this tool for scratch computation and internal experiments that do not belong in the "
-        "user's project. Paths are relative to the private workspace. Use python for calculations or "
-        "experiments, shell for sandboxed command-line work, and read/write/list for durable private "
-        "files. Package installation is an explicit side effect and must be requested separately. "
-        "Do not copy private workspace artifacts into a user repository unless the task actually "
-        "requires an official project artifact and the repository layout/policy has been inspected."
+        "Prefer this tool for general agent-owned scratch computation, reusable private notes/knowledge, "
+        "and disposable experiments that do not belong in one user project. Keep reusable private knowledge "
+        "revisable and removable rather than treating it as append-only history. Paths are relative to the "
+        "private workspace. Use python for calculations or experiments, shell for sandboxed command-line "
+        "work, and read/write/list for durable private files. Package installation is an explicit side "
+        "effect and must be requested separately. Project-specific editable text, notes, configuration, "
+        "source, and other trackable working material should stay in the project's existing version-control "
+        "structure when that fits; inspect the repository layout and policy before creating it. Do not copy "
+        "private workspace artifacts into a user repository unless they have genuinely become project material."
     )
     kind: ToolKind = "stateful"
     input_schema = {

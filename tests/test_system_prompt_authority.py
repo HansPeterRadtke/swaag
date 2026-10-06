@@ -25,8 +25,18 @@ def _assert_updated_infra_interaction_contract(text: str) -> None:
     assert "statement is not automatically a command" in text
     assert "current explicit instruction overrides these defaults" in text
     assert "Do not silently fill a source gap from pretrained memory" in text
+    assert "Do not trust retrieved research" in text
+    assert "source, context, recency, and internal consistency" in text
+    assert "contradicts authoritative user evidence" in text
     assert "reporting should save the user's time" in text
     assert "only as much numeric precision as the decision requires" in text
+    assert "maintenance-heavy artifacts that the task or project actually needs" in text
+    assert "readability and changeability are correctness concerns" in text
+    assert "preserve a recoverable version-control baseline" in text
+    assert "publish or push that checkpoint when the established repository workflow and authorization call for it" in text
+    assert "verify the actual rendered or played result" in text
+    assert "preserve media timing when synchronization matters" in text
+    assert "make important test states directly reproducible" in text
 
 
 def test_standard_system_prompt_contains_updated_infra_interaction_contract(tmp_path) -> None:
