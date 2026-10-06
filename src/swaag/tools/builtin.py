@@ -1724,7 +1724,11 @@ class WaitSecondsTool(Tool):
 class ScheduleWakeupTool(Tool):
     name = "schedule_wakeup"
     description = "Persist a wakeup for this session using either a human duration or an absolute ISO-8601 time. The wakeup survives process restarts."
-    usage_guidance = "Provide exactly one of duration or wake_at. Durations support milliseconds, seconds, minutes, hours, days, weeks, months, and years."
+    usage_guidance = (
+        "Provide exactly one of duration or wake_at. Durations support milliseconds, seconds, minutes, hours, "
+        "days, weeks, months, and years. Do not schedule a surprising multi-year wakeup unless that long wait "
+        "is deliberate policy or follows explicit user intent."
+    )
     kind = "stateful"
     input_schema = _closed_input({
         "duration": _string_or_null(),

@@ -30,6 +30,8 @@ def _assert_updated_infra_interaction_contract(text: str) -> None:
     assert "contradicts authoritative user evidence" in text
     assert "reporting should save the user's time" in text
     assert "only as much numeric precision as the decision requires" in text
+    assert "report the real root cause" in text
+    assert "Never claim successful compliance when the delivered behavior is different" in text
     assert "maintenance-heavy artifacts that the task or project actually needs" in text
     assert "readability and changeability are correctness concerns" in text
     assert "preserve a recoverable version-control baseline" in text

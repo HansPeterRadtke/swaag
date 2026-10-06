@@ -1140,6 +1140,9 @@ def test_schedule_wakeup_tools_are_registered_and_emit_events(tmp_path) -> None:
     registry = ToolRegistry()
 
     assert {"schedule_wakeup", "list_wakeups", "cancel_wakeup"} <= set(registry.tool_names(config))
+    schedule_tool = registry.get("schedule_wakeup")
+    assert "multi-year wakeup" in schedule_tool.usage_guidance
+    assert "explicit user intent" in schedule_tool.usage_guidance
     invocation, result = registry.dispatch(
         "schedule_wakeup",
         {"duration": "2 hours", "wake_at": None, "reason": "resume work"},
