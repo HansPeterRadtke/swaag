@@ -87,7 +87,7 @@ def main():
             'actual_backend_processing_observed': any(item.get('state') == 'processing' for item in backend_samples),
             'backend_progress_observed': any(item.get('progress_observed_at') for item in backend_samples),
             'no_speculative_inference_deadline': any(event.event_type == 'model_backend_activity' and
-                event.payload.get('timeout_policy') == 'observed_local_activity_no_speculative_deadline' for event in events),
+                event.payload.get('timeout_policy') == 'observed_local_activity_with_fail_safe_backstop' for event in events),
             'independent_completion_accepted': any(event.event_type == 'completion_evaluated' and event.payload.get('complete') is True for event in events),
             'no_repeated_action': sum(event.event_type == 'agent_action_selected' for event in events) == 1,
         }

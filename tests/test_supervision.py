@@ -7,6 +7,7 @@ from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from types import SimpleNamespace
 
 import pytest
+import requests
 
 from swaag.model import LlamaCppClient
 from swaag.preemption import ModelCallPreempted
@@ -70,13 +71,24 @@ def test_supervisor_stays_responsive_while_a_backend_probe_is_blocked():
 
 @pytest.fixture
 def local_backend():
-    state = {"processing": False, "processed": 0, "delay": 0, "headers_first": False, "http_status": 200}
+    state = {
+        "processing": False,
+        "processed": 0,
+        "delay": 0,
+        "headers_first": False,
+        "http_status": 200,
+        "telemetry_available": True,
+    }
     entered = threading.Event()
     release = threading.Event()
     class Handler(BaseHTTPRequestHandler):
         def log_message(self, *_args):
             pass
         def do_GET(self):
+            if not state["telemetry_available"]:
+                self.send_response(503)
+                self.end_headers()
+                return
             body = json.dumps(slots(state["processing"], state["processed"])).encode()
             self.send_response(200)
             self.send_header("Content-Type", "application/json")
@@ -125,14 +137,48 @@ def local_backend():
 @pytest.mark.parametrize("headers_first", [False, True])
 def test_active_prefill_survives_estimated_read_deadline(make_config, local_backend, headers_first):
     url, state, _, _ = local_backend
-    state.update(delay=1.3, headers_first=headers_first)
-    client = LlamaCppClient(make_config(model__base_url=url, model__timeout_seconds=1))
+    state.update(delay=3.4, headers_first=headers_first)
+    client = LlamaCppClient(make_config(
+        model__base_url=url,
+        model__timeout_seconds=1,
+        model__fail_safe_timeout_seconds=3,
+    ))
     progress = []
     result = client.send_completion({"prompt": "required input", "n_predict": 32}, progress_callback=progress.append)
     assert result.text == "Grüße"
-    assert result.elapsed_seconds >= 1.3
-    assert result.raw_response["timeout_policy"] == "observed_local_activity_no_speculative_deadline"
+    assert result.elapsed_seconds >= 3.4
+    assert result.raw_response["timeout_policy"] == "observed_local_activity_with_fail_safe_backstop"
+    assert result.raw_response["fail_safe_timeout_seconds"] == 3.0
     assert any(item.get("backend_activity", {}).get("state") == "processing" for item in progress)
+
+
+def test_native_fail_safe_backstop_activates_without_positive_activity(make_config, local_backend):
+    url, state, entered, release = local_backend
+    client = LlamaCppClient(make_config(
+        model__base_url=url,
+        model__timeout_seconds=1,
+        model__fail_safe_timeout_seconds=1,
+    ))
+    errors = []
+
+    def run():
+        try:
+            client.send_completion({"prompt": "x", "n_predict": 32})
+        except Exception as exc:
+            errors.append(exc)
+
+    thread = threading.Thread(target=run, daemon=True)
+    thread.start()
+    try:
+        assert entered.wait(1)
+        state["telemetry_available"] = False
+        thread.join(2.5)
+        assert not thread.is_alive(), "native request did not honor the no-activity fail-safe backstop"
+        assert len(errors) == 1 and isinstance(errors[0], requests.ReadTimeout)
+        assert "No trustworthy native backend or stream activity" in str(errors[0])
+    finally:
+        release.set()
+        thread.join(2)
 
 
 @pytest.mark.parametrize("headers_first", [False, True])
@@ -305,7 +351,7 @@ def test_vllm_activity_adapter_removes_speculative_read_deadline(make_config, lo
     )
     assert result.text == 'ok'
     assert result.elapsed_seconds >= 1.3
-    assert result.raw_response['timeout_policy'] == 'observed_local_activity_no_speculative_deadline'
+    assert result.raw_response['timeout_policy'] == 'observed_local_activity_with_fail_safe_backstop'
     assert result.raw_response['backend_activity']['source'] == 'vllm:/metrics'
     assert any(item.get('backend_activity', {}).get('progress_observed_at') for item in progress)
 

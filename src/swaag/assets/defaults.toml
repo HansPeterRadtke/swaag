@@ -56,6 +56,10 @@ simple_timeout_seconds = 60
 structured_timeout_seconds = 120
 verification_timeout_seconds = 150
 benchmark_timeout_seconds = 240
+# Native-local deadlock backstop used only while trustworthy backend progress and
+# streamed activity are both absent. It never acts as a normal inference deadline.
+# Four hours is deliberately far above retained multi-thousand-second live calls.
+fail_safe_timeout_seconds = 14400
 progress_poll_seconds = 5.0
 max_retries = 1
 temperature = 0.0

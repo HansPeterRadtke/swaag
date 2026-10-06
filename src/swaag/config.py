@@ -32,6 +32,7 @@ class ModelConfig:
     structured_timeout_seconds: int
     verification_timeout_seconds: int
     benchmark_timeout_seconds: int
+    fail_safe_timeout_seconds: int
     progress_poll_seconds: float
     max_retries: int
     temperature: float
@@ -859,6 +860,7 @@ def _coerce_config(
     _validate_positive("model.structured_timeout_seconds", model.structured_timeout_seconds)
     _validate_positive("model.verification_timeout_seconds", model.verification_timeout_seconds)
     _validate_positive("model.benchmark_timeout_seconds", model.benchmark_timeout_seconds)
+    _validate_positive("model.fail_safe_timeout_seconds", model.fail_safe_timeout_seconds)
     if model.progress_poll_seconds <= 0:
         raise ValueError("model.progress_poll_seconds must be positive")
     if model.structured_output_mode != "server_schema":

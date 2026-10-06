@@ -868,6 +868,9 @@ class LlamaCppClient:
                 with progress_lock:
                     progress_callback(payload)
         token_timeout_seconds = self._token_timeout_seconds(timeout_seconds)
+        fail_safe_timeout_seconds = max(
+            1.0, float(self.config.model.fail_safe_timeout_seconds)
+        )
         stream_payload = dict(payload)
         stream_payload["stream"] = True
         started = time.monotonic()
@@ -889,9 +892,11 @@ class LlamaCppClient:
             # transport fallback. Native inference uses observed activity instead.
             response = requests.post(url, **request_kwargs)
         cancel_observed = threading.Event()
+        fail_safe_observed = threading.Event()
         stop_watcher = threading.Event()
         watcher: threading.Thread | None = None
-        if cancel_check is not None or (backend_monitor is not None and progress_callback is not None):
+        last_model_activity = [started]
+        if cancel_check is not None or backend_monitor is not None:
             def watch_for_cancel() -> None:
                 last_observation = 0.0
                 while not stop_watcher.wait(max(0.005, float(cancel_poll_seconds))):
@@ -912,14 +917,47 @@ class LlamaCppClient:
                         if callable(close):
                             close()
                         return
-                    if backend_monitor is not None and progress_callback is not None and time.monotonic() - last_observation >= 1.0:
-                        last_observation = time.monotonic()
+                    if backend_monitor is not None:
+                        now = time.monotonic()
                         try:
-                            publish_progress({"backend_activity": backend_monitor.snapshot(),
-                                "elapsed_seconds": time.monotonic() - started,
-                                "timeout_policy": "observed_local_activity_no_speculative_deadline"})
+                            snapshot = backend_monitor.snapshot()
                         except Exception:
-                            pass
+                            snapshot = {"supported": False, "state": "unavailable", "stale": True}
+                        progress_age = snapshot.get("progress_age_seconds")
+                        if (
+                            snapshot.get("supported")
+                            and not snapshot.get("stale")
+                            and isinstance(progress_age, (int, float))
+                            and not isinstance(progress_age, bool)
+                            and progress_age >= 0
+                        ):
+                            last_model_activity[0] = max(
+                                last_model_activity[0], now - float(progress_age)
+                            )
+                        if now - last_model_activity[0] >= fail_safe_timeout_seconds:
+                            fail_safe_observed.set()
+                            shutdown = getattr(getattr(response, "raw", None), "shutdown", None)
+                            if callable(shutdown):
+                                try:
+                                    shutdown()
+                                except (OSError, RuntimeError, ValueError):
+                                    pass
+                            else:
+                                close = getattr(response, "close", None)
+                                if callable(close):
+                                    close()
+                            return
+                        if progress_callback is not None and now - last_observation >= 1.0:
+                            last_observation = now
+                            try:
+                                publish_progress({
+                                    "backend_activity": snapshot,
+                                    "elapsed_seconds": now - started,
+                                    "fail_safe_timeout_seconds": fail_safe_timeout_seconds,
+                                    "timeout_policy": "observed_local_activity_with_fail_safe_backstop",
+                                })
+                            except Exception:
+                                pass
             watcher = threading.Thread(target=watch_for_cancel, name="swaag-model-observer", daemon=True)
             watcher.start()
         try:
@@ -958,6 +996,10 @@ class LlamaCppClient:
             response.close()
             if watcher is not None:
                 watcher.join()
+            if fail_safe_observed.is_set():
+                raise requests.ReadTimeout(
+                    f"No trustworthy native backend or stream activity for {fail_safe_timeout_seconds:.1f} seconds"
+                ) from exc
             if cancel_observed.is_set():
                 raise ModelCallPreempted("model call preempted before streamed headers") from exc
             if isinstance(exc, (OSError, TimeoutError)):
@@ -976,6 +1018,7 @@ class LlamaCppClient:
         response.encoding = "utf-8"
         try:
             for raw_line in response.iter_lines(decode_unicode=True):
+                last_model_activity[0] = time.monotonic()
                 if cancel_observed.is_set():
                     raise ModelCallPreempted("model call preempted for communication")
                 if not raw_line:
@@ -1046,14 +1089,26 @@ class LlamaCppClient:
                 if item.get("stop") or _chat_finished(item):
                     break
         except requests.Timeout as exc:
+            if fail_safe_observed.is_set():
+                raise requests.ReadTimeout(
+                    f"No trustworthy native backend or stream activity for {fail_safe_timeout_seconds:.1f} seconds"
+                ) from exc
             if cancel_observed.is_set():
                 raise ModelCallPreempted("model call preempted for communication") from exc
             raise requests.ReadTimeout(f"No streamed model token/event for {token_timeout_seconds:.1f} seconds") from exc
         except (requests.RequestException, OSError, ValueError) as exc:
+            if fail_safe_observed.is_set():
+                raise requests.ReadTimeout(
+                    f"No trustworthy native backend or stream activity for {fail_safe_timeout_seconds:.1f} seconds"
+                ) from exc
             if cancel_observed.is_set():
                 raise ModelCallPreempted("model call preempted for communication") from exc
             raise
         except Exception as exc:
+            if fail_safe_observed.is_set():
+                raise requests.ReadTimeout(
+                    f"No trustworthy native backend or stream activity for {fail_safe_timeout_seconds:.1f} seconds"
+                ) from exc
             # Closing a live urllib3 stream can surface transport-internal
             # exceptions outside requests' public hierarchy. Once cancellation
             # is observed, the close-induced exception is a preemption outcome.
@@ -1067,6 +1122,10 @@ class LlamaCppClient:
             close = getattr(response, "close", None)
             if callable(close):
                 close()
+        if fail_safe_observed.is_set():
+            raise requests.ReadTimeout(
+                f"No trustworthy native backend or stream activity for {fail_safe_timeout_seconds:.1f} seconds"
+            )
         if cancel_observed.is_set():
             raise ModelCallPreempted("model call preempted for communication")
         if not content_parts and "content" not in last_body and not _chat_content(last_body):
@@ -1076,9 +1135,12 @@ class LlamaCppClient:
         body["content"] = "".join(content_parts) or _chat_content(last_body)
         body["stream"] = True
         body["token_timeout_seconds"] = token_timeout_seconds
-        body["timeout_policy"] = ("observed_local_activity_no_speculative_deadline" if backend_monitor is not None
-                                  else "provider_transport_timeout")
+        body["timeout_policy"] = (
+            "observed_local_activity_with_fail_safe_backstop"
+            if backend_monitor is not None else "provider_transport_timeout"
+        )
         if backend_monitor is not None:
+            body["fail_safe_timeout_seconds"] = fail_safe_timeout_seconds
             body["backend_activity"] = backend_monitor.snapshot()
         completion_tokens = body.get("tokens_predicted")
         if not isinstance(completion_tokens, int):

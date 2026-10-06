@@ -41,6 +41,7 @@ def test_model_profile_and_structured_output_env_overrides_are_loaded(tmp_path: 
         "SWAAG__MODEL__MAX_SEMANTIC_RESPONSIBILITIES_PER_CALL": "3",
         "SWAAG__MODEL__STRUCTURED_OUTPUT_MODE": "server_schema",
         "SWAAG__MODEL__PROGRESS_POLL_SECONDS": "2.5",
+        "SWAAG__MODEL__FAIL_SAFE_TIMEOUT_SECONDS": "21600",
     }
     config = load_config(env=env)
 
@@ -48,6 +49,15 @@ def test_model_profile_and_structured_output_env_overrides_are_loaded(tmp_path: 
     assert config.model.max_semantic_responsibilities_per_call == 3
     assert config.model.structured_output_mode == "server_schema"
     assert config.model.progress_poll_seconds == 2.5
+    assert config.model.fail_safe_timeout_seconds == 21600
+
+
+def test_model_fail_safe_timeout_must_be_positive(tmp_path: Path) -> None:
+    with pytest.raises(ValueError, match="fail_safe_timeout_seconds"):
+        load_config(env={
+            "SWAAG__SESSIONS__ROOT": str(tmp_path / "sessions"),
+            "SWAAG__MODEL__FAIL_SAFE_TIMEOUT_SECONDS": "0",
+        })
 
 
 def test_default_model_profile_and_mode_match_documented_live_profile(tmp_path: Path) -> None:
