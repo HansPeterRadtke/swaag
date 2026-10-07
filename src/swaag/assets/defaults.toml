@@ -377,7 +377,7 @@ base_url = ""
 endpoint = "/v1/embeddings"
 model = ""
 timeout_seconds = 30.0
-fields = ["situation", "action", "reason"]
+fields = ["just_happened", "situation", "action", "reason"]
 max_results = 8
 
 # Raw bytes are content-addressed outside disposable session projections.

@@ -39,6 +39,10 @@ def _assert_updated_infra_interaction_contract(text: str) -> None:
     assert "verify the actual rendered or played result" in text
     assert "preserve media timing when synchronization matters" in text
     assert "make important test states directly reproducible" in text
+    assert "meaningful automatic behavior disableable, pausable, or switchable to manual control" in text
+    assert "reusable framework/version" in text
+    assert "would otherwise need to be rediscovered" in text
+    assert "Do not turn every routine test run or raw log into permanent documentation" in text
 
 
 def test_standard_system_prompt_contains_updated_infra_interaction_contract(tmp_path) -> None:

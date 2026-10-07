@@ -193,6 +193,7 @@ def _action(
     message: str = "",
     tool_calls: list[tuple[str, dict[str, Any]]] | None = None,
     continue_loop: bool = False,
+    just_happened: str = "The current request was received or the previous step completed.",
     situation: str = "Working on the current request.",
     status_action: str = "Choose and execute the next useful action.",
     reason: str = "This advances the user's request using current evidence.",
@@ -209,6 +210,7 @@ def _action(
             "continue_loop": continue_loop,
             "silent_completion": silent_completion,
             "status": {
+                "just_happened": just_happened,
                 "situation": situation,
                 "action": status_action,
                 "reason": reason,
@@ -1472,9 +1474,36 @@ def test_action_schema_disallows_silent_completion_by_default() -> None:
     from swaag.grammar import agent_action_contract
     schema = agent_action_contract([]).json_schema
     assert schema["properties"]["silent_completion"]["enum"] == [False]
+    status_schema = schema["properties"]["status"]
+    assert "just_happened" in status_schema["required"]
+    assert "just_happened" in status_schema["properties"]
     allowed = agent_action_contract([], allow_silent_completion=True).json_schema
     assert "enum" not in allowed["properties"]["silent_completion"]
 
+
+
+def test_action_parser_accepts_legacy_four_field_status_for_replay() -> None:
+    from swaag.action import action_from_payload
+
+    action = action_from_payload(
+        {
+            "assistant_message": "done",
+            "tool_calls": [],
+            "continue_loop": False,
+            "silent_completion": False,
+            "status": {
+                "situation": "Legacy situation",
+                "action": "Legacy action",
+                "reason": "Legacy reason",
+                "importance": "normal",
+            },
+            "questions": [],
+            "response_constraints": {"exact_word_count": None},
+        },
+        enabled_tool_names=[],
+    )
+    assert action.status.just_happened == ""
+    assert action.status.situation == "Legacy situation"
 
 def test_action_parser_rejects_empty_terminal_message_without_explicit_silence() -> None:
     import pytest
@@ -1610,6 +1639,7 @@ def test_selected_action_persists_structured_status(make_config) -> None:
         make_config,
         [_action(
             message="done",
+            just_happened="The relevant evidence was verified.",
             situation="The requested fact is available in current evidence.",
             status_action="Return the grounded answer.",
             reason="No further tool work is required.",
@@ -1621,6 +1651,7 @@ def test_selected_action_persists_structured_status(make_config) -> None:
     status = next(event for event in events if event.event_type == "agent_status")
     assert status.payload == {
         "action_index": 1,
+        "just_happened": "The relevant evidence was verified.",
         "situation": "The requested fact is available in current evidence.",
         "action": "Return the grounded answer.",
         "reason": "No further tool work is required.",

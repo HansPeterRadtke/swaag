@@ -227,7 +227,7 @@ class A2AProjectionAdapter:
                 internal_status = "working"
                 text = " ".join(
                     str(payload.get(key, "")).strip()
-                    for key in ("situation", "action", "reason")
+                    for key in ("just_happened", "situation", "action", "reason")
                     if str(payload.get(key, "")).strip()
                 )
             if not isinstance(internal_status, str) or internal_status not in _A2A_STATES:

@@ -1139,6 +1139,7 @@ class AgentRuntime:
                 "agent_status",
                 {
                     "action_index": action_index,
+                    "just_happened": selected_action.status.just_happened,
                     "situation": selected_action.status.situation,
                     "action": selected_action.status.action,
                     "reason": selected_action.status.reason,

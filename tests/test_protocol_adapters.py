@@ -795,7 +795,13 @@ def test_ag_ui_projects_canonical_tool_and_status_history_events() -> None:
             linked(
                 "agent_status",
                 5,
-                {"situation": "Reading evidence", "importance": "normal"},
+                {
+                    "just_happened": "The file read completed.",
+                    "situation": "Reading evidence",
+                    "action": "Inspect the result",
+                    "reason": "The requested fact depends on it",
+                    "importance": "normal",
+                },
             ),
         ],
     )
@@ -811,6 +817,7 @@ def test_ag_ui_projects_canonical_tool_and_status_history_events() -> None:
     assert events[1]["delta"] == '{"path":"a.txt"}'
     assert events[3]["content"] == '{"text":"exact"}'
     assert events[4]["content"]["situation"] == "Reading evidence"
+    assert events[4]["content"]["just_happened"] == "The file read completed."
     assert events[4]["metadata"]["swaagHistoryHash"] == "hash_5"
 
 

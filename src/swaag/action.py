@@ -29,6 +29,7 @@ class AgentStatus:
     action: str
     reason: str
     importance: str
+    just_happened: str = ""
 
     @property
     def importance_rank(self) -> int:
@@ -72,7 +73,7 @@ def action_from_payload(payload: dict[str, Any], *, enabled_tool_names: Iterable
     )
     if status_payload is None:
         # Backward compatibility for pre-status stored actions and test fixtures.
-        status_payload = {"situation": "", "action": "", "reason": "", "importance": "normal"}
+        status_payload = {"situation": "", "action": "", "reason": "", "importance": "normal", "just_happened": ""}
 
     if not isinstance(assistant_message, str):
         raise ActionValidationError("assistant_message must be a string")
@@ -84,12 +85,17 @@ def action_from_payload(payload: dict[str, Any], *, enabled_tool_names: Iterable
         raise ActionValidationError("silent_completion must be a boolean")
     if not isinstance(status_payload, dict):
         raise ActionValidationError("status must be an object")
-    required_status = {"situation", "action", "reason", "importance"}
-    if set(status_payload) != required_status:
-        raise ActionValidationError("status must contain exactly situation, action, reason, importance")
+    legacy_status = {"situation", "action", "reason", "importance"}
+    required_status = legacy_status | {"just_happened"}
+    if set(status_payload) not in (legacy_status, required_status):
+        raise ActionValidationError(
+            "status must contain situation, action, reason, importance, and optionally just_happened for legacy replay"
+        )
     for key in ("situation", "action", "reason"):
         if not isinstance(status_payload.get(key), str):
             raise ActionValidationError(f"status.{key} must be a string")
+    if "just_happened" in status_payload and not isinstance(status_payload.get("just_happened"), str):
+        raise ActionValidationError("status.just_happened must be a string")
     importance = status_payload.get("importance")
     if importance not in {"minor", "normal", "major", "critical"}:
         raise ActionValidationError("status.importance must be one of minor, normal, major, critical")
@@ -98,6 +104,7 @@ def action_from_payload(payload: dict[str, Any], *, enabled_tool_names: Iterable
         action=status_payload["action"],
         reason=status_payload["reason"],
         importance=importance,
+        just_happened=str(status_payload.get("just_happened", "")),
     )
 
     if not isinstance(response_constraints_payload, dict):

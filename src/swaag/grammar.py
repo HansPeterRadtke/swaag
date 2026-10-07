@@ -474,6 +474,7 @@ def agent_action_contract(tool_specs: Iterable[tuple], *, allow_silent_completio
                 ),
                 "status": _closed_object(
                     {
+                        "just_happened": _string(),
                         "situation": _string(),
                         "action": _string(),
                         "reason": _string(),

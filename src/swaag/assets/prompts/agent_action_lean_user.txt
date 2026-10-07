@@ -1,6 +1,6 @@
 Choose the next action for the authoritative user request and observed evidence. Return the constrained action object.
 
-`status` is concise durable observability: situation, action, reason, and importance (`minor|normal|major|critical`). `questions` contains only genuine user questions. A `blocking` question has empty `assumption_if_unanswered`, appears verbatim in `assistant_message`, and has no tool calls. An `optional` question has a concrete assumption; both exact question and assumption appear in `assistant_message` while useful work may continue.
+`status` is concise durable observability: just_happened (what materially happened immediately before this step), situation, action (what is happening now), reason (why), and importance (`minor|normal|major|critical`). `questions` contains only genuine user questions. A `blocking` question has empty `assumption_if_unanswered`, appears verbatim in `assistant_message`, and has no tool calls. An `optional` question has a concrete assumption; both exact question and assumption appear in `assistant_message` while useful work may continue.
 
 Use only enabled tools and their exact schemas. If tool calls are nonempty, set `continue_loop=true`; calls are chosen before execution, so any call needing an earlier result belongs in the next action. Never claim an unobserved tool result. If a listed capability is not loaded, load it before use. Use `run_tests` for test suites.
 
