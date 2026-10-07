@@ -178,6 +178,58 @@ def _ensure_directory(path: Path) -> Path:
     return path
 
 
+def _bounded_search_preview(
+    text: str,
+    *,
+    query_phrase: str,
+    exact_terms: Iterable[str],
+    tokens: Iterable[str],
+    limit: int,
+) -> str:
+    """Return a bounded excerpt around the strongest lexical match.
+
+    A prefix-only preview can hide the very field that caused a history event to
+    match when large payload fields sort before it. Prefer the complete query
+    phrase, then quoted exact terms, then the rarest matching token.
+    """
+    limit = max(1, int(limit))
+    if len(text) <= limit:
+        return text
+    folded = text.casefold()
+    anchor_pos: int | None = None
+    anchor_len = 1
+    phrase = query_phrase.strip().casefold()
+    if phrase:
+        found = folded.find(phrase)
+        if found >= 0:
+            anchor_pos, anchor_len = found, len(phrase)
+    if anchor_pos is None:
+        for term in exact_terms:
+            candidate = str(term).strip().casefold()
+            if not candidate:
+                continue
+            found = folded.find(candidate)
+            if found >= 0:
+                anchor_pos, anchor_len = found, len(candidate)
+                break
+    if anchor_pos is None:
+        candidates: list[tuple[int, int, int, int]] = []
+        for order, term in enumerate(dict.fromkeys(str(item).strip().casefold() for item in tokens)):
+            if not term:
+                continue
+            found = folded.find(term)
+            if found >= 0:
+                candidates.append((folded.count(term), order, found, len(term)))
+        if candidates:
+            _, _, anchor_pos, anchor_len = min(candidates)
+    if anchor_pos is None:
+        return text[:limit]
+    midpoint = anchor_pos + anchor_len // 2
+    start = max(0, midpoint - limit // 2)
+    start = min(start, max(0, len(text) - limit))
+    return text[start:start + limit]
+
+
 
 class HistoryStore:
     def __init__(
@@ -1414,12 +1466,26 @@ class HistoryStore:
             hits = hits[:max_results]
             sequences = {int(item["sequence"]) for item in hits}
             events = {event.sequence: event for event in archive_store.read_events(session_id) if event.sequence in sequences}
+            archive_tokens = [
+                token for token in re.findall(r"[A-Za-z0-9_./:-]+", query.casefold())
+                if len(token) >= 2
+            ]
+            archive_quoted_groups = re.findall(r'"([^\"]+)"|\'([^\']+)\'', query)
+            archive_exact_terms = [
+                part.strip() for group in archive_quoted_groups for part in group if part.strip()
+            ]
             matches = []
             for hit in hits:
                 event = events.get(int(hit["sequence"]))
                 if event is None:
                     continue
-                preview = stable_json_dumps(event.payload)[:preview_chars]
+                preview = _bounded_search_preview(
+                    stable_json_dumps(event.payload),
+                    query_phrase=query,
+                    exact_terms=archive_exact_terms,
+                    tokens=archive_tokens,
+                    limit=preview_chars,
+                )
                 matches.append({
                     "sequence": event.sequence,
                     "hash": event.hash,
@@ -1521,8 +1587,14 @@ class HistoryStore:
                 score += type_bonus
             if score <= 0:
                 continue
-            preview = stable_json_dumps(event.payload)
-            ranked.append((score, event, preview[:preview_chars]))
+            preview = _bounded_search_preview(
+                stable_json_dumps(event.payload),
+                query_phrase=query,
+                exact_terms=exact_terms,
+                tokens=tokens,
+                limit=preview_chars,
+            )
+            ranked.append((score, event, preview))
         ranked.sort(key=lambda item: (item[0], item[1].sequence), reverse=True)
         result_limit_reached = candidate_limit_reached or len(ranked) > max_results
         matches = [
