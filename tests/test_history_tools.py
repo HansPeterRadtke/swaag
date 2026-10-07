@@ -71,6 +71,68 @@ def test_history_search_tool_finds_ranked_exact_history(make_config, tmp_path: P
     assert [event.event_type for event in result.generated_events] == ["history_retrieved"]
 
 
+def test_history_search_preview_centers_match_beyond_payload_prefix(make_config, tmp_path: Path) -> None:
+    config = make_config()
+    config.sessions.root = tmp_path / "sessions"
+    store = HistoryStore(config.sessions.root)
+    state = store.create(config_fingerprint=config.config_fingerprint(), model_base_url=config.model.base_url)
+    marker = "buried-history-marker-731"
+    store.record_event(
+        state,
+        "message_added",
+        {
+            "message": {
+                "role": "user",
+                "content": "ordinary message",
+                "created_at": utc_now_iso(),
+                "name": None,
+                "metadata": {"aaa_padding": "X" * 4000, "zzz_marker": marker},
+            }
+        },
+    )
+
+    details = store.query_history_details(state.session_id, marker, max_results=1, preview_chars=160)
+
+    assert details["search_backend"] == "sqlite_fts5"
+    assert details["match_count"] == 1
+    assert marker in details["matches"][0]["preview"]
+    assert len(details["matches"][0]["preview"]) <= 160
+
+
+def test_archived_history_search_preview_centers_match_beyond_payload_prefix(make_config, tmp_path: Path) -> None:
+    config = make_config()
+    config.sessions.root = tmp_path / "sessions"
+    store = HistoryStore(config.sessions.root)
+    state = store.create(
+        config_fingerprint=config.config_fingerprint(),
+        model_base_url=config.model.base_url,
+        session_name="buried-preview-archive",
+        session_name_source="explicit",
+    )
+    marker = "buried-archive-marker-419"
+    store.record_event(
+        state,
+        "message_added",
+        {
+            "message": {
+                "role": "user",
+                "content": "ordinary archived message",
+                "created_at": utc_now_iso(),
+                "name": None,
+                "metadata": {"aaa_padding": "Y" * 4000, "zzz_marker": marker},
+            }
+        },
+    )
+    store.archive_session(state.session_id, remove_active=True)
+
+    details = store.query_history_details("buried-preview-archive", marker, max_results=1, preview_chars=160)
+
+    assert details["search_backend"] == "archive_fts5"
+    assert details["match_count"] == 1
+    assert marker in details["matches"][0]["preview"]
+    assert len(details["matches"][0]["preview"]) <= 160
+
+
 def test_history_search_tool_defaults_to_current_session(make_config, tmp_path: Path) -> None:
     config = make_config()
     config.sessions.root = tmp_path / "sessions"
