@@ -288,6 +288,18 @@ def orchestrator_interaction_contract() -> ContractSpec:
     )
 
 
+def autonomous_work_idea_contract() -> ContractSpec:
+    return _contract(
+        "autonomous_work_idea",
+        _closed_object({
+            "create": _boolean(),
+            "objective": _string(),
+            "worker_objective": _string(),
+            "reason": _string(),
+        }),
+    )
+
+
 def response_relevance_contract() -> ContractSpec:
     return _contract(
         "response_relevance",

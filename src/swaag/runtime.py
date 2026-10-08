@@ -44,6 +44,7 @@ from swaag.grammar import (
     agent_tool_call_contract,
     agent_terminal_response_contract,
     audio_rendering_contract,
+    autonomous_work_idea_contract,
     communication_status_contract,
     orchestrator_interaction_contract,
     completion_evaluation_contract,
@@ -3034,6 +3035,67 @@ class AgentRuntime:
                 }
         return compact, semantic
 
+    def generate_autonomous_work_idea(
+        self,
+        *,
+        conversation_messages: list[Message] | None = None,
+        runtime_snapshot: dict[str, Any] | None = None,
+    ) -> dict[str, Any]:
+        """Propose at most one task for explicitly enabled autonomous continuation."""
+        state = self.create_or_load_session(new_id("operation_autonomous_work_idea"))
+        contract = autonomous_work_idea_contract()
+        request = SemanticCallRequest(
+            kind="orchestrator_interaction",
+            system_instruction=(
+                "You are selecting at most one useful task for an explicitly enabled autonomous "
+                "keep-working mode. Base any proposal on the user's durable conversation/history, "
+                "known projects, unresolved questions, or demonstrated goals supplied below. Do not "
+                "invent a task merely to stay busy. Do not propose destructive, irreversible, "
+                "security-sensitive, purchase or financial, publication, messaging, or other high-"
+                "impact work unless the supplied user history clearly authorizes that kind of "
+                "autonomous continuation. Respect explicit stops, pauses, and project boundaries. "
+                "Prefer concrete research, analysis, verification, cleanup, or improvement work whose "
+                "result is likely useful without another preference decision. If confidence is "
+                "insufficient, set create=false and leave objective and worker_objective empty. If "
+                "create=true, return one concise overall objective, one self-contained worker objective, "
+                "and the evidence-based reason it is likely useful. Never pretend the user explicitly "
+                "requested an autonomously generated task."
+            ),
+            components=[
+                *self.prompts.message_prompt_components(
+                    list(conversation_messages or []),
+                    prefix="autonomous_history",
+                    category="history",
+                    header="Durable user/orchestrator conversation evidence:",
+                    optional=False,
+                ),
+                PromptComponent(
+                    name="autonomous_runtime_snapshot",
+                    category="runtime",
+                    text="Current orchestration/runtime snapshot:\n" + stable_json_dumps(runtime_snapshot or {}, indent=2),
+                    optional=False,
+                ),
+            ],
+            contract=contract,
+            minimum_output_tokens=48,
+            desired_output_tokens=min(192, int(self.config.communication.status_max_output_tokens)),
+            prompt_mode="lean",
+            include_prompt_instructions=True,
+            allow_prompt_instruction_projection=True,
+        )
+        result = self._execute_tool_semantic_call(state, request)
+        if contract.json_schema is not None:
+            _validate_schema_value(result, contract.json_schema, path="autonomous_work_idea")
+        create = bool(result.get("create"))
+        objective = str(result.get("objective", "")).strip()
+        worker_objective = str(result.get("worker_objective", "")).strip()
+        reason = str(result.get("reason", "")).strip()
+        if create and (not objective or not worker_objective or not reason):
+            raise ValueError("autonomous work idea requires objective, worker_objective, and reason")
+        if not create and (objective or worker_objective):
+            raise ValueError("declined autonomous work idea must not include objectives")
+        return {"create": create, "objective": objective, "worker_objective": worker_objective, "reason": reason}
+
     def generate_orchestrator_interaction(
         self,
         *,
@@ -3080,7 +3142,16 @@ class AgentRuntime:
             kind="orchestrator_interaction",
             system_instruction=(
                 "You are the user's persistent SWAAG orchestrator and the immediate "
-                "conversation endpoint. Decide whether this exact utterance needs full "
+                "conversation endpoint. The user's exact current request and later corrections "
+                "are the semantic authority for this turn. Do not replace them with a different "
+                "objective, invent an answer to an important unknown, or claim evidence you do "
+                "not have. Use the exact prior conversation supplied below to resolve references "
+                "and implied context. If answering correctly requires live inspection, research, "
+                "tools, or substantial work, route to orchestration instead of guessing. For a "
+                "direct response, answer only the user's actual question, omit implementation "
+                "noise and machine identifiers unless explicitly requested, and state material "
+                "uncertainty or a blocker rather than hiding it. Decide whether this exact "
+                "utterance needs full "
                 "task orchestration. Use route=respond when you can answer the user "
                 "yourself now without launching a worker, mutating task/worker state, "
                 "using external tools, or doing substantial delegated work. Greetings, "

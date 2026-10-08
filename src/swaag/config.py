@@ -318,6 +318,7 @@ class CommunicationConfig:
     max_pending_requests: int = 128
     idle_work_mode: str = "finish_only"
     max_background_plans: int = 128
+    autonomous_idea_interval_seconds: float = 300.0
     model_routes: dict[str, str] = field(default_factory=dict)
     open_webui_artifacts: OpenWebUiArtifactServingConfig = field(
         default_factory=lambda: OpenWebUiArtifactServingConfig(False, "", "", 900)
@@ -763,6 +764,7 @@ def _coerce_config(
         max_pending_requests=data["communication"].get("max_pending_requests", 128),
         idle_work_mode=str(data["communication"].get("idle_work_mode", "finish_only")),
         max_background_plans=int(data["communication"].get("max_background_plans", 128)),
+        autonomous_idea_interval_seconds=float(data["communication"].get("autonomous_idea_interval_seconds", 300.0)),
         model_routes={
             str(name): str(url)
             for name, url in data["communication"].get("model_routes", {}).items()
@@ -989,9 +991,10 @@ def _coerce_config(
         raise ValueError("embedding_index.base_url and embedding_index.model are required when embeddings are enabled")
     _validate_positive("attachments.max_upload_bytes", attachments.max_upload_bytes)
     _validate_positive("attachments.preview_chars", attachments.preview_chars)
-    if communication.idle_work_mode not in {"finish_only", "authorized_backlog"}:
-        raise ValueError("communication.idle_work_mode must be finish_only or authorized_backlog")
+    if communication.idle_work_mode not in {"finish_only", "authorized_backlog", "autonomous_continue"}:
+        raise ValueError("communication.idle_work_mode must be finish_only, authorized_backlog, or autonomous_continue")
     _validate_positive("communication.max_background_plans", communication.max_background_plans)
+    _validate_positive("communication.autonomous_idea_interval_seconds", communication.autonomous_idea_interval_seconds)
     _validate_positive("communication.max_concurrent_requests", communication.max_concurrent_requests)
     _validate_positive(
         "communication.status_max_output_tokens",
@@ -1288,8 +1291,12 @@ def _parameter_semantics(
             "Higher limits consume more context; overflow requires resolving existing questions before adding more.",
         ),
         "communication.idle_work_mode": (
-            "Whether explicitly authorized backlog plans can start after foreground work finishes.",
-            "finish_only never dispatches backlog work; authorized_backlog opts into idle execution with recorded user provenance.",
+            "What SWAAG may do after foreground work finishes.",
+            "finish_only stops; authorized_backlog runs only explicitly authorized queued plans; autonomous_continue may also propose one history-grounded task at a time.",
+        ),
+        "communication.autonomous_idea_interval_seconds": (
+            "Minimum seconds between autonomous keep-working idea-generation attempts.",
+            "Higher values reduce idle model use; this setting has no effect unless idle_work_mode is autonomous_continue.",
         ),
         "communication.max_background_plans": (
             "Maximum pending or held authorized background plans.",
@@ -1449,7 +1456,7 @@ def _parameter_semantics(
 def _parameter_range(key: str, value: Any) -> str | None:
     lowered = key.casefold()
     if lowered == "idle_work_mode":
-        return "finish_only|authorized_backlog"
+        return "finish_only|authorized_backlog|autonomous_continue"
     if lowered in {"max_open_questions", "max_open_question_chars", "max_background_plans", "max_active_workers", "max_pending_controls", "max_pending_inference", "max_pending_requests", "cache_max_entries", "cache_lock_stripes", "max_token_count_cache_entries"}:
         return "integer > 0"
     if isinstance(value, bool):

@@ -393,3 +393,29 @@ def test_obsolete_archive_policy_fails_explicitly(tmp_path: Path) -> None:
     path.write_text("[archive]\nenabled = true\n", encoding="utf-8")
     with pytest.raises(ValueError, match="archive configuration is obsolete"):
         load_config(config_paths=[path])
+
+
+def test_autonomous_continue_mode_is_explicit_opt_in(tmp_path: Path) -> None:
+    config = load_config(env={
+        "SWAAG__SESSIONS__ROOT": str(tmp_path / "sessions"),
+        "SWAAG__COMMUNICATION__IDLE_WORK_MODE": "autonomous_continue",
+        "SWAAG__COMMUNICATION__AUTONOMOUS_IDEA_INTERVAL_SECONDS": "60",
+    })
+    assert config.communication.idle_work_mode == "autonomous_continue"
+    assert config.communication.autonomous_idea_interval_seconds == 60.0
+
+
+def test_invalid_idle_work_mode_is_rejected(tmp_path: Path) -> None:
+    with pytest.raises(ValueError, match="idle_work_mode"):
+        load_config(env={
+            "SWAAG__SESSIONS__ROOT": str(tmp_path / "sessions"),
+            "SWAAG__COMMUNICATION__IDLE_WORK_MODE": "invent_anything",
+        })
+
+
+def test_autonomous_idea_interval_must_be_positive(tmp_path: Path) -> None:
+    with pytest.raises(ValueError, match="autonomous_idea_interval_seconds"):
+        load_config(env={
+            "SWAAG__SESSIONS__ROOT": str(tmp_path / "sessions"),
+            "SWAAG__COMMUNICATION__AUTONOMOUS_IDEA_INTERVAL_SECONDS": "0",
+        })

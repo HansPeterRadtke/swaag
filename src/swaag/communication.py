@@ -1312,6 +1312,8 @@ class CommunicationService:
             self.orchestration, mode=runtime.config.communication.idle_work_mode,
             max_pending=runtime.config.communication.max_background_plans,
             foreground_busy=self._foreground_work_busy,
+            idea_generator=self._autonomous_background_idea,
+            autonomous_idea_interval_seconds=runtime.config.communication.autonomous_idea_interval_seconds,
         )
         self.supervisor = RuntimeSupervisor({
             "main": runtime, "orchestrator": self.orchestrator_runtime,
@@ -5243,6 +5245,19 @@ class CommunicationService:
                 return True
         # Covers direct CLI/runtime turns sharing this service's durable sessions.
         return any(self.runtime.config.sessions.root.glob("*/active_run.json"))
+
+    def _autonomous_background_idea(self) -> dict[str, Any]:
+        state = self.orchestrator_runtime.create_or_load_user_session("SWAAG Orchestrator")
+        snapshot = {
+            "recent_plans": [
+                {"objective": plan.objective, "status": plan.status, "updated_at": plan.updated_at}
+                for plan in self.orchestration.store.list_plans()[:20]
+            ],
+            "open_questions": self.orchestration_api.execute("questions.list")["inventory"],
+        }
+        return self.orchestrator_runtime.generate_autonomous_work_idea(
+            conversation_messages=list(state.messages), runtime_snapshot=snapshot
+        )
 
     def _advance_orchestration(self) -> None:
         self.orchestration.advance_active_plans()

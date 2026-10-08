@@ -469,9 +469,12 @@ port = 8765
 poll_seconds = 0.2
 # Explicit opt-in: finish_only does not dispatch queued background plans.
 # authorized_backlog starts user-authorized plans only when foreground work is idle.
+# autonomous_continue additionally permits one history-grounded model-proposed task at a time.
 idle_work_mode = "finish_only"
 # Pending/held plan count, positive; overflow rejects without deleting work.
 max_background_plans = 128
+# Used only by autonomous_continue; prevents idle semantic-call spin.
+autonomous_idea_interval_seconds = 300
 
 [communication.open_webui_artifacts]
 enabled = false

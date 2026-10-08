@@ -1,14 +1,17 @@
 """Explicitly authorized idle work on the existing durable orchestration graph."""
 from __future__ import annotations
 
+import time
+
 from swaag.history import HistoryStore
 from swaag.utils import utc_now_iso
 
 
 class BackgroundWork:
-    def __init__(self, manager, *, mode="finish_only", max_pending=128, foreground_busy=None):
-        if mode not in {"finish_only", "authorized_backlog"}:
-            raise ValueError("background work mode must be finish_only or authorized_backlog")
+    def __init__(self, manager, *, mode="finish_only", max_pending=128, foreground_busy=None,
+                 idea_generator=None, autonomous_idea_interval_seconds=300.0):
+        if mode not in {"finish_only", "authorized_backlog", "autonomous_continue"}:
+            raise ValueError("background work mode must be finish_only, authorized_backlog, or autonomous_continue")
         if isinstance(max_pending, bool) or not isinstance(max_pending, int) or max_pending < 1:
             raise ValueError("background work max_pending must be positive")
         self.manager = manager
@@ -16,6 +19,11 @@ class BackgroundWork:
         self.mode = mode
         self.max_pending = max_pending
         self.foreground_busy = foreground_busy or self._workers_busy
+        self.idea_generator = idea_generator
+        self.autonomous_idea_interval_seconds = float(autonomous_idea_interval_seconds)
+        if self.autonomous_idea_interval_seconds <= 0:
+            raise ValueError("autonomous idea interval must be positive")
+        self._next_autonomous_idea_time = 0.0
 
     def _workers_busy(self):
         return any(manager.store.list(statuses={"queued", "working", "cancellation_requested", "input_required"})
@@ -97,7 +105,7 @@ class BackgroundWork:
 
     def dispatch_once(self):
         pending=self.list()
-        if self.mode != "authorized_backlog" or not pending:
+        if self.mode == "finish_only":
             return None
         # Blocked foreground work still belongs to the foreground objective.
         if self.store.active_plans() or self.foreground_busy():
@@ -127,4 +135,27 @@ class BackgroundWork:
             # backlog never creates a second plan or repeats a completed plan.
             self.manager.advance(plan_id)
             return plan_id
-        return None
+        if self.mode != "autonomous_continue" or self.idea_generator is None:
+            return None
+        now = time.monotonic()
+        if now < self._next_autonomous_idea_time:
+            return None
+        self._next_autonomous_idea_time = now + self.autonomous_idea_interval_seconds
+        idea = self.idea_generator()
+        if not isinstance(idea, dict) or not idea.get("create"):
+            return None
+        objective = str(idea.get("objective") or "").strip()
+        worker_objective = str(idea.get("worker_objective") or "").strip()
+        reason = str(idea.get("reason") or "").strip()
+        if not objective or not worker_objective or not reason:
+            raise ValueError("autonomous idea generator returned an incomplete plan candidate")
+        plan = self.manager.create_plan(objective, reporting_mode="important")
+        self.manager.add_worker(plan.plan_id, worker_objective)
+        with self.store._connect() as connection:
+            connection.execute("BEGIN IMMEDIATE")
+            self.store._event(connection, plan.plan_id, "autonomous_work_generated", {
+                "reason": reason, "objective": objective, "worker_objective": worker_objective,
+            })
+        self.store.set_plan_status(plan.plan_id, "active", reason="autonomous keep-working mode")
+        self.manager.advance(plan.plan_id)
+        return plan.plan_id

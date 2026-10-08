@@ -209,3 +209,73 @@ def test_api_and_tool_are_explicit_about_mode_and_side_effects(tmp_path):
     assert tool.effective_kind(tool.validate({"operation":"list","plan_id":None,"authorization_event_sequence":None}))=="pure"
     assert tool.effective_kind(tool.validate({"operation":"enqueue","plan_id":plan_id,"authorization_event_sequence":event.sequence}))=="side_effect"
     assert set(tool.input_schema["required"])==set(tool.input_schema["properties"])
+
+
+def test_autonomous_mode_declines_and_throttles_idea_generation(tmp_path, monkeypatch):
+    workers,manager,_,_,_=setup(tmp_path)
+    calls=[]
+    backlog=BackgroundWork(
+        manager, mode="autonomous_continue", foreground_busy=lambda:False,
+        idea_generator=lambda: calls.append("called") or {
+            "create": False, "objective": "", "worker_objective": "", "reason": "No useful task."},
+        autonomous_idea_interval_seconds=60,
+    )
+    times=iter([100.0, 101.0])
+    monkeypatch.setattr("swaag.background_work.time.monotonic", lambda: next(times))
+    assert backlog.dispatch_once() is None
+    assert backlog.dispatch_once() is None
+    assert calls == ["called"]
+    assert workers.created == []
+
+
+def test_autonomous_mode_generates_one_auditable_plan(tmp_path, monkeypatch):
+    workers,manager,_,_,_=setup(tmp_path)
+    backlog=BackgroundWork(
+        manager, mode="autonomous_continue", foreground_busy=lambda:False,
+        idea_generator=lambda: {
+            "create": True,
+            "objective": "Improve repository verification",
+            "worker_objective": "Inspect verification failures and propose one evidence-backed improvement",
+            "reason": "Durable user history repeatedly prioritizes verification quality.",
+        },
+        autonomous_idea_interval_seconds=60,
+    )
+    monkeypatch.setattr("swaag.background_work.time.monotonic", lambda: 100.0)
+    plan_id=backlog.dispatch_once()
+    assert plan_id is not None
+    snapshot=manager.store.snapshot(plan_id)
+    assert snapshot["plan"].status == "active"
+    assert workers.created == ["Inspect verification failures and propose one evidence-backed improvement"]
+    generated=[event for event in snapshot["events"] if event["event_type"] == "autonomous_work_generated"]
+    assert len(generated) == 1
+    assert generated[0]["payload"]["reason"] == "Durable user history repeatedly prioritizes verification quality."
+    assert backlog.dispatch_once() is None
+    assert len(manager.store.list_plans()) == 1
+
+
+def test_authorized_backlog_precedes_autonomous_idea_generation(tmp_path):
+    workers,manager,_,state,event=setup(tmp_path)
+    calls=[]
+    backlog=BackgroundWork(
+        manager, mode="autonomous_continue", foreground_busy=lambda:False,
+        idea_generator=lambda: calls.append("called") or {
+            "create": True, "objective": "invented", "worker_objective": "invented", "reason": "invented"},
+    )
+    plan_id=plan(manager)
+    enqueue(backlog,plan_id,state,event)
+    assert backlog.dispatch_once() == plan_id
+    assert calls == []
+    assert workers.created == ["Inspect the repository"]
+
+
+def test_non_autonomous_modes_never_call_idea_generator(tmp_path):
+    for mode in ("finish_only", "authorized_backlog"):
+        workers,manager,_,_,_=setup(tmp_path)
+        calls=[]
+        backlog=BackgroundWork(
+            manager, mode=mode, foreground_busy=lambda:False,
+            idea_generator=lambda: calls.append("called") or {"create": False},
+        )
+        assert backlog.dispatch_once() is None
+        assert calls == []
+        assert workers.created == []

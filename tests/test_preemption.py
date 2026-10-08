@@ -745,6 +745,12 @@ def test_orchestrator_lightweight_interaction_is_one_model_call_and_starts_no_wo
     prompt = client.requests[0]["prompt"]
     assert "Do not mention backend URLs" in prompt
     assert "Never substitute runtime-status commentary" in prompt
+    assert "user's exact current request and later corrections" in prompt
+    assert "Do not replace them with a different objective" in prompt
+    assert "invent an answer to an important unknown" in prompt
+    assert "route to orchestration instead of guessing" in prompt
+    assert "omit implementation noise and machine identifiers" in prompt
+    assert "state material uncertainty or a blocker" in prompt
     state = orchestrator.create_or_load_user_session("SWAAG Orchestrator")
     visible = [
         message
@@ -1011,3 +1017,41 @@ def test_run_cancellation_preserves_reason_whitespace_verbatim(make_config) -> N
     reason = "\n  preserve cancellation reason exactly  \n"
     item = store.request_run_cancellation("session-x", "run-x", reason=reason)
     assert item.reason == reason
+
+
+class _AutonomousIdeaClient(_BaseClient):
+    def __init__(self, *, create: bool) -> None:
+        super().__init__()
+        self.create = create
+
+    def send_completion(self, payload: dict[str, Any], **kwargs) -> CompletionResult:
+        self.requests.append(json.loads(stable_json_dumps(payload, indent=None)))
+        assert payload.get("contract") == "autonomous_work_idea"
+        body = ({
+            "create": True,
+            "objective": "Improve repository verification",
+            "worker_objective": "Inspect prior verification failures and propose one evidence-backed improvement",
+            "reason": "The supplied history repeatedly prioritizes verification quality.",
+        } if self.create else {
+            "create": False, "objective": "", "worker_objective": "",
+            "reason": "No sufficiently grounded useful task is available.",
+        })
+        return self._result(payload, json.dumps(body))
+
+
+def test_autonomous_idea_semantic_call_is_history_grounded_and_can_decline(make_config) -> None:
+    config = make_config(model__context_limit=32_000)
+    for create in (True, False):
+        client = _AutonomousIdeaClient(create=create)
+        runtime = AgentRuntime(config, model_client=client)
+        result = runtime.generate_autonomous_work_idea(
+            conversation_messages=[Message(role="user", content="Verification quality matters most.", created_at=utc_now_iso())],
+            runtime_snapshot={"recent_plans": [], "open_questions": {"questions": []}},
+        )
+        assert result["create"] is create
+        prompt = client.requests[0]["prompt"]
+        assert "explicitly enabled autonomous keep-working mode" in prompt
+        assert "Verification quality matters most." in prompt
+        assert "Do not invent a task merely to stay busy" in prompt
+        assert "Never pretend the user explicitly requested" in prompt
+        assert result["objective"] == ("Improve repository verification" if create else "")
