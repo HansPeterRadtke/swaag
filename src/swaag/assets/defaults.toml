@@ -98,7 +98,7 @@ tool_timeout_seconds = 10
 # allow_side_effect_tools: set true only if destructive writes are intended.
 # -----------------------------------------------------------
 [tools]
-enabled = ["echo", "time_now", "calculator", "agent_workspace", "list_files", "read_file", "read_text", "search_in_file", "search_repo", "history_search", "history_window", "history_analyze", "read_artifact", "list_attachments", "read_attachment", "terminal", "notes", "prompt_instructions", "questions", "revise_question", "report_progress", "shared_state", "edit_text", "write_file", "run_tests", "shell_command", "poll_process", "kill_process", "wait_seconds", "schedule_wakeup", "list_wakeups", "cancel_wakeup"]
+enabled = ["echo", "time_now", "calculator", "agent_workspace", "list_files", "read_file", "read_text", "search_in_file", "search_repo", "history_search", "history_window", "history_analyze", "read_artifact", "list_attachments", "read_attachment", "inspect_image", "terminal", "notes", "prompt_instructions", "questions", "revise_question", "report_progress", "shared_state", "edit_text", "write_file", "run_tests", "shell_command", "poll_process", "kill_process", "wait_seconds", "schedule_wakeup", "list_wakeups", "cancel_wakeup"]
 read_roots = ["."]
 allow_stateful_tools = true
 allow_side_effect_tools = false
@@ -385,6 +385,18 @@ max_results = 8
 [attachments]
 max_upload_bytes = 104857600
 preview_chars = 12000
+
+# Local multimodal inspection is deliberately disabled by default. Enable it only
+# after the configured model/backend has been benchmarked for the target task.
+[perception]
+enabled = false
+base_url = "http://127.0.0.1:14920"
+endpoint = "/v1/chat/completions"
+model = "qwen3-vl-8b-hires"
+timeout_seconds = 30.0
+max_output_tokens = 256
+benchmark_profile = "unvalidated"
+trust_note = "Perceptual model output is evidence, not deterministic proof. Use source/DOM/geometry checks where available."
 
 # -----------------------------------------------------------
 # [mcp] — EXTERNAL INTEROPERABILITY BOUNDARY

@@ -141,3 +141,113 @@ ATTACHMENT_TOOLS = [
     ListAttachmentsTool(),
     ReadAttachmentTool(),
 ]
+
+class InspectImageTool(Tool):
+    name = "inspect_image"
+    description = (
+        "Inspect one exact image attachment with the configured local multimodal analyzer. "
+        "The result is perceptual evidence, not deterministic geometry proof."
+    )
+    usage_guidance = (
+        "Use only for image attachments and ask the narrow visual question needed by the task. "
+        "Prefer source/DOM/geometry checks for properties they can prove. The output includes the "
+        "configured benchmark profile and known trust limitation; do not promote it to certainty."
+    )
+    kind = "pure"
+    input_schema = {
+        "type": "object",
+        "properties": {
+            "attachment_id": {"type": "string"},
+            "prompt": {"type": "string"},
+        },
+        "required": ["attachment_id", "prompt"],
+        "additionalProperties": False,
+    }
+
+    def available(self, config) -> bool:
+        return bool(config.perception.enabled)
+
+    def validate(self, raw_input: dict) -> dict:
+        attachment_id = raw_input.get("attachment_id")
+        prompt = raw_input.get("prompt")
+        if not isinstance(attachment_id, str) or not attachment_id.strip():
+            raise ToolValidationError("inspect_image.attachment_id must be a non-empty string")
+        if not isinstance(prompt, str) or not prompt.strip():
+            raise ToolValidationError("inspect_image.prompt must be a non-empty string")
+        if len(prompt) > 8000:
+            raise ToolValidationError("inspect_image.prompt must be at most 8000 characters")
+        return {"attachment_id": attachment_id.strip(), "prompt": prompt.strip()}
+
+    def execute(self, validated_input: dict, context: ToolContext) -> ToolExecutionResult:
+        import base64
+        import json
+        import urllib.error
+        import urllib.request
+
+        from swaag.tools.base import ToolExecutionError
+
+        reference = _reference(context, validated_input["attachment_id"])
+        media_type = str(reference.media_type or "").lower()
+        if not media_type.startswith("image/"):
+            raise ToolValidationError(
+                f"inspect_image requires an image attachment, got {reference.media_type!r}"
+            )
+        data = _store(context).read_bytes(reference)
+        encoded = base64.b64encode(data).decode("ascii")
+        cfg = context.config.perception
+        request_payload = {
+            "model": cfg.model,
+            "messages": [
+                {
+                    "role": "user",
+                    "content": [
+                        {"type": "text", "text": validated_input["prompt"]},
+                        {
+                            "type": "image_url",
+                            "image_url": {
+                                "url": f"data:{reference.media_type};base64,{encoded}"
+                            },
+                        },
+                    ],
+                }
+            ],
+            "temperature": 0,
+            "max_tokens": int(cfg.max_output_tokens),
+        }
+        request = urllib.request.Request(
+            cfg.base_url + cfg.endpoint,
+            data=json.dumps(request_payload).encode("utf-8"),
+            headers={"Content-Type": "application/json"},
+            method="POST",
+        )
+        try:
+            with urllib.request.urlopen(request, timeout=float(cfg.timeout_seconds)) as response:
+                payload = json.loads(response.read().decode("utf-8"))
+            analysis = str(payload["choices"][0]["message"]["content"]).strip()
+        except (OSError, ValueError, KeyError, IndexError, TypeError, urllib.error.URLError) as exc:
+            raise ToolExecutionError(
+                f"configured perception analyzer failed: {type(exc).__name__}: {exc}",
+                evidence={
+                    "attachment_id": reference.attachment_id,
+                    "model": cfg.model,
+                    "base_url": cfg.base_url,
+                    "benchmark_profile": cfg.benchmark_profile,
+                },
+            ) from exc
+
+        output = {
+            "attachment_id": reference.attachment_id,
+            "original_name": reference.original_name,
+            "media_type": reference.media_type,
+            "sha256": reference.sha256,
+            "model": cfg.model,
+            "analysis": analysis,
+            "benchmark_profile": cfg.benchmark_profile,
+            "trust_note": cfg.trust_note,
+            "evidence_only": True,
+            "source_event_references": _source_references(reference),
+        }
+        return ToolExecutionResult(self.name, output, stable_json_dumps(output, indent=2))
+
+
+ATTACHMENT_TOOLS.append(InspectImageTool())

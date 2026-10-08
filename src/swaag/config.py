@@ -224,6 +224,18 @@ class AttachmentConfig:
 
 
 @dataclass(slots=True)
+class PerceptionConfig:
+    enabled: bool
+    base_url: str
+    endpoint: str
+    model: str
+    timeout_seconds: float
+    max_output_tokens: int
+    benchmark_profile: str
+    trust_note: str
+
+
+@dataclass(slots=True)
 class McpAuthorizationConfig:
     enabled: bool
     resource_uri: str
@@ -400,6 +412,7 @@ class AgentConfig:
     history_search: HistorySearchConfig
     embedding_index: EmbeddingIndexConfig
     attachments: AttachmentConfig
+    perception: PerceptionConfig
     mcp: McpConfig
     external_tools: ExternalToolsConfig
     a2a_authorization: A2AAuthorizationConfig
@@ -654,6 +667,25 @@ def _coerce_config(
         max_upload_bytes=int(data["attachments"]["max_upload_bytes"]),
         preview_chars=int(data["attachments"]["preview_chars"]),
     )
+    perception = PerceptionConfig(
+        enabled=bool(data["perception"]["enabled"]),
+        base_url=str(data["perception"]["base_url"]).rstrip("/"),
+        endpoint=str(data["perception"]["endpoint"]),
+        model=str(data["perception"]["model"]),
+        timeout_seconds=float(data["perception"]["timeout_seconds"]),
+        max_output_tokens=int(data["perception"]["max_output_tokens"]),
+        benchmark_profile=str(data["perception"]["benchmark_profile"]),
+        trust_note=str(data["perception"]["trust_note"]),
+    )
+    if perception.enabled:
+        if not perception.base_url.startswith(("http://", "https://")):
+            raise ValueError("perception.base_url must be an HTTP(S) URL when enabled")
+        if not perception.endpoint.startswith("/"):
+            raise ValueError("perception.endpoint must start with /")
+        if not perception.model.strip():
+            raise ValueError("perception.model is required when enabled")
+        _validate_positive("perception.timeout_seconds", perception.timeout_seconds)
+        _validate_positive("perception.max_output_tokens", perception.max_output_tokens)
     mcp_auth_data = data["mcp"].get("authorization", {})
     literal_mcp_secret = str(mcp_auth_data.get("introspection_client_secret", ""))
     if literal_mcp_secret:
@@ -1199,6 +1231,7 @@ def _coerce_config(
         history_search=history_search,
         embedding_index=embedding_index,
         attachments=attachments,
+        perception=perception,
         mcp=mcp,
         external_tools=external_tools,
         a2a_authorization=a2a_authorization,

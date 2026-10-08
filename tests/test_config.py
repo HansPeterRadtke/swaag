@@ -419,3 +419,18 @@ def test_autonomous_idea_interval_must_be_positive(tmp_path: Path) -> None:
             "SWAAG__SESSIONS__ROOT": str(tmp_path / "sessions"),
             "SWAAG__COMMUNICATION__AUTONOMOUS_IDEA_INTERVAL_SECONDS": "0",
         })
+
+
+def test_perception_is_disabled_by_default(tmp_path: Path) -> None:
+    config = load_config(env={"SWAAG__SESSIONS__ROOT": str(tmp_path / "sessions")})
+    assert config.perception.enabled is False
+    assert config.perception.model == "qwen3-vl-8b-hires"
+
+
+def test_enabled_perception_requires_valid_http_model_config(tmp_path: Path) -> None:
+    with pytest.raises(ValueError, match="perception.base_url"):
+        load_config(env={
+            "SWAAG__SESSIONS__ROOT": str(tmp_path / "sessions"),
+            "SWAAG__PERCEPTION__ENABLED": "true",
+            "SWAAG__PERCEPTION__BASE_URL": "not-a-url",
+        })
