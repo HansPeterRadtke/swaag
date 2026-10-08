@@ -102,6 +102,20 @@ def test_autonomy_behavior_catalog_covers_requested_dimensions() -> None:
     assert len({case.case_id for case in cases}) == len(cases)
 
 
+def test_autonomy_cases_enable_manifest_without_requiring_redundant_listing() -> None:
+    cases = {case.case_id: case for case in select_cases()}
+    for case_id in (
+        "local_evidence_before_external_tools",
+        "wrong_premise_corrected_from_evidence",
+        "recoverable_ambiguity_proceeds",
+        "inspect_all_before_answering",
+    ):
+        case = cases[case_id]
+        assert "list_files" in case.enabled_tools
+        assert "list_files" not in case.required_tools
+        assert "read_file" in case.required_tools
+    assert cases["inspect_all_before_answering"].min_tool_calls == 3
+
 def test_autonomy_behavior_verifier_checks_sources_questions_and_workspace() -> None:
     cases = {case.case_id: case for case in select_cases()}
     ambiguity_case = cases["blocking_destructive_ambiguity"]
@@ -130,6 +144,7 @@ def test_autonomy_behavior_benchmark_uses_production_loop_and_resumes(
     clients: list[_AutonomyClient] = []
 
     def runtime_factory(config):
+        assert config.tools.staged_discovery is False
         client = _AutonomyClient()
         clients.append(client)
         return AgentRuntime(config, model_client=client)

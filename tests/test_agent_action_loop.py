@@ -261,6 +261,45 @@ def test_direct_answer_is_one_constrained_model_call_with_all_tools(make_config)
     }
 
 
+def test_nonterminal_nonpositive_word_count_is_normalized_without_retry(make_config) -> None:
+    config = make_config(model__context_limit=32_000, tools__staged_discovery=False)
+    config.tools.enabled = ["calculator"]
+    first = json.loads(
+        _action(
+            tool_calls=[("calculator", {"expression": "6 * 7"})],
+            continue_loop=True,
+        )
+    )
+    first["response_constraints"] = {"exact_word_count": 0}
+    client = FakeModelClient([json.dumps(first), _action(message="42")])
+    runtime = AgentRuntime(config, model_client=client)
+
+    result = runtime.run_turn("Calculate 6 * 7 with the calculator.")
+
+    assert result.assistant_text == "42"
+    assert [item.tool_name for item in result.tool_results] == ["calculator"]
+    assert len(client.requests) == 2
+    events = runtime.history.read_history(result.session_id)
+    assert not any(event.event_type == "agent_action_rejected" for event in events)
+
+
+def test_terminal_nonpositive_word_count_still_retries(make_config) -> None:
+    config = make_config(model__context_limit=32_000, tools__staged_discovery=False)
+    config.tools.enabled = []
+    invalid = json.loads(_action(message="done", continue_loop=False))
+    invalid["response_constraints"] = {"exact_word_count": 0}
+    client = FakeModelClient([json.dumps(invalid), _action(message="done")])
+    runtime = AgentRuntime(config, model_client=client)
+
+    result = runtime.run_turn("Reply done.")
+
+    assert result.assistant_text == "done"
+    assert len(client.requests) == 2
+    events = runtime.history.read_history(result.session_id)
+    rejected = [event for event in events if event.event_type == "agent_action_rejected"]
+    assert len(rejected) == 1
+    assert "positive integer or null" in rejected[0].payload["reason"]
+
 def test_current_user_request_preserves_leading_and_trailing_whitespace_verbatim(make_config) -> None:
     request = "\n  exact outer whitespace matters  \n"
     runtime, client = _runtime(make_config, [_action(message="done")])
@@ -1404,7 +1443,7 @@ def test_failed_run_tests_is_evidence_not_permanent_completion_gate(make_config)
 
 
 def test_no_enabled_domain_tools_exposes_only_staged_discovery_loader(make_config) -> None:
-    config = make_config(model__context_limit=8192)
+    config = make_config(model__context_limit=8192, tools__staged_discovery=True)
     config.tools.enabled = []
     seen = {}
 
@@ -1852,6 +1891,13 @@ def test_fused_mode_keeps_legacy_action_contract(make_config):
     result = runtime.run_turn("Say done.")
     assert result.assistant_text == "done"
     assert client.requests[0]["contract"] == "agent_action"
+    prompt = str(client.requests[0]["prompt"])
+    schema = client.requests[0]["json_schema"]
+    assert "Capabilities that may be loaded when semantically relevant" not in prompt
+    assert "- name: load_tools" not in prompt
+    variants = schema["properties"]["tool_calls"]["items"]["anyOf"]
+    names = {variant["properties"]["tool_name"]["enum"][0] for variant in variants}
+    assert "load_tools" not in names
 
 
 def test_single_responsibility_staged_discovery_selects_capability_then_loads_it(make_config):

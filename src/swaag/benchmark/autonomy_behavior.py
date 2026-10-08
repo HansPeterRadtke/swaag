@@ -47,7 +47,7 @@ CASES = (
             "Do not call external tools because this task is explicitly about the supplied local state."
         ),
         fixture_files=(("status.txt", "deployment_marker=READY-LOCAL-731\n"),),
-        enabled_tools=("read_file",),
+        enabled_tools=("list_files", "read_file"),
         required_tools=("read_file",),
         forbidden_tools=(),
         required_fragments=("READY-LOCAL-731",),
@@ -72,7 +72,7 @@ CASES = (
         fixture_files=(
             ("rollout.txt", "approval=pending\ndeployment_started=false\nreason=change-review-open\n"),
         ),
-        enabled_tools=("read_file",),
+        enabled_tools=("list_files", "read_file"),
         required_tools=("read_file",),
         forbidden_tools=(),
         required_fragments=("pending", "not", "deployed"),
@@ -85,7 +85,7 @@ CASES = (
             "recipient name is unavailable but is nonessential; state a reasonable assumption and proceed."
         ),
         fixture_files=(("inventory.txt", "north=13\nsouth=18\n"),),
-        enabled_tools=("read_file", "calculator"),
+        enabled_tools=("list_files", "read_file", "calculator"),
         required_tools=("read_file",),
         required_fragments=("31",),
         question_policy="no_blocking",
@@ -233,7 +233,7 @@ CASES = (
             ("south.txt", "units=17\n"),
             ("west.txt", "units=23\n"),
         ),
-        enabled_tools=("read_file", "calculator"),
+        enabled_tools=("list_files", "read_file", "calculator"),
         required_tools=("read_file",),
         required_fragments=("51",),
         min_tool_calls=3,
@@ -301,7 +301,10 @@ def _case_config(
     config.tools.enabled = list(case.enabled_tools)
     config.tools.allow_stateful_tools = True
     config.tools.allow_side_effect_tools = bool(case.writable_paths)
-    config.tools.staged_discovery = True
+    # Autonomy cases intentionally use tiny, explicit tool sets. Keep every case
+    # schema available so the benchmark measures research/ambiguity/persistence
+    # behavior rather than the separate staged-capability-selection problem.
+    config.tools.staged_discovery = False
     config.editor.allow_writes = bool(case.writable_paths)
     config.editor.allowed_write_paths = [
         str((workspace / relative).resolve()) for relative in case.writable_paths

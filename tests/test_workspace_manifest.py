@@ -2,8 +2,10 @@ from __future__ import annotations
 
 from pathlib import Path
 
+import pytest
+
 from swaag.environment.environment import AgentEnvironment
-from swaag.environment.filesystem import FilesystemManager
+from swaag.environment.filesystem import FilesystemError, FilesystemManager
 from swaag.grammar import yes_no_contract
 from swaag.history import HistoryStore
 from swaag.runtime import AgentRuntime, RuntimeContextProjection
@@ -208,6 +210,18 @@ def test_workspace_manifest_is_absent_when_filesystem_capability_is_disabled(mak
     components = runtime._runtime_context_components(state, runtime._counter(state))
     assert all(component.name != "workspace_file_manifest" for component in components)
 
+
+def test_existing_directory_is_not_reported_as_missing_file(make_config, tmp_path: Path) -> None:
+    workspace = tmp_path / "workspace"
+    workspace.mkdir()
+    (workspace / "status.txt").write_text("ready\n", encoding="utf-8")
+    config = make_config(sessions__root=tmp_path / "sessions")
+    filesystem = FilesystemManager(config, workspace)
+
+    with pytest.raises(FilesystemError, match="Path is a directory, not a file"):
+        filesystem.resolve_existing_file_path(".")
+
+    assert filesystem.resolve_existing_file_path("status.txt") == workspace / "status.txt"
 
 def test_workspace_discovery_skips_outside_and_inaccessible_symlinks(make_config, tmp_path) -> None:
     workspace = tmp_path / "workspace"

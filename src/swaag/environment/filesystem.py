@@ -237,6 +237,11 @@ class FilesystemManager:
         path = self.resolve_path(path_text, cwd=cwd)
         if path.exists() and path.is_file():
             return path
+        if path.exists() and path.is_dir():
+            raise FilesystemError(
+                f"Path is a directory, not a file: {path}. "
+                "Use list_files on the directory to discover files before reading one."
+            )
         raise FilesystemError(f"File does not exist: {path}")
 
     def read_text(self, path_text: str, *, cwd: str | None = None) -> tuple[Path, str]:

@@ -174,8 +174,9 @@ class ToolRegistry:
         *,
         runtime_capabilities: Mapping[str, object] | None = None,
     ) -> list[Tool]:
+        loader = [self.get("load_tools")] if config.tools.staged_discovery else []
         return [
-            self.get("load_tools"),
+            *loader,
             *self.enabled_domain_tools(
                 config, runtime_capabilities=runtime_capabilities
             ),
@@ -204,8 +205,13 @@ class ToolRegistry:
         runtime_capabilities: Mapping[str, object] | None = None,
     ) -> list[tuple[str, str, dict, str]]:
         selected = set(selected_names)
+        loader = (
+            [self.get("load_tools").prompt_tuple()]
+            if config.tools.staged_discovery
+            else []
+        )
         return [
-            self.get("load_tools").prompt_tuple(),
+            *loader,
             *[
                 tool.prompt_tuple()
                 for tool in self.enabled_domain_tools(

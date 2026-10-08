@@ -22,6 +22,17 @@ def test_staged_tool_schemas_load_only_selected_enabled_tools(make_config):
     assert "shell_command" not in names
 
 
+def test_nonstaged_tool_schemas_include_enabled_tools_without_loader(make_config):
+    config = make_config(tools__staged_discovery=False)
+    registry = ToolRegistry()
+    enabled = {name for name, _, _ in registry.capability_index(config)}
+    specs = registry.staged_prompt_tuples(config, enabled)
+    names = [item[0] for item in specs]
+    assert "load_tools" not in names
+    assert "load_tools" not in registry.tool_names(config)
+    assert "load_tools" not in {tool.name for tool in registry.enabled_tools(config)}
+    assert set(names) == enabled
+
 def test_action_prompt_has_compact_index_without_unloaded_schema(make_config):
     config = make_config(tools__staged_discovery=True)
     registry = ToolRegistry()
