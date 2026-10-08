@@ -185,6 +185,7 @@ def test_mechanical_status_projects_pending_scheduled_wakeups(make_config):
             "session_id": state.session_id,
             "wake_at": wakeup.wake_at,
             "reason": "recheck deployment",
+            "long_term_authorized": False,
             "status": "scheduled",
             "created_at": wakeup.created_at,
             "claimed_at": None,

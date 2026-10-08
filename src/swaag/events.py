@@ -702,7 +702,7 @@ REQUIRED_PAYLOAD_KEYS: dict[str, frozenset[str]] = {
     "consistency_checked": frozenset({"working_memory_ok", "semantic_memory_ok", "recovered"}),
     "consistency_failed": frozenset({"component", "reason"}),
     "tool_execution_context": frozenset({"tool_name", "tool_kind", "isolated", "policy"}),
-    "wakeup_scheduled": frozenset({"wakeup_id", "wake_at", "reason"}),
+    "wakeup_scheduled": frozenset({"wakeup_id", "wake_at", "reason", "long_term_authorized"}),
     "wakeup_cancelled": frozenset({"wakeup_id", "cancelled_at"}),
     "wakeup_due": frozenset({"wakeup_id", "wake_at", "reason"}),
     "model_request_sent": frozenset({"kind", "prompt_mode", "attempt", "request", "budget_report"}),

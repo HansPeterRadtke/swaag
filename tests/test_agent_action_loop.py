@@ -1186,13 +1186,54 @@ def test_schedule_wakeup_tools_are_registered_and_emit_events(tmp_path) -> None:
     assert "explicit user intent" in schedule_tool.usage_guidance
     invocation, result = registry.dispatch(
         "schedule_wakeup",
-        {"duration": "2 hours", "wake_at": None, "reason": "resume work"},
+        {"duration": "2 hours", "wake_at": None, "reason": "resume work", "long_term_authorized": False},
         config,
         state,
     )
     assert invocation.validated_input["duration"] == "2 hours"
+    assert invocation.validated_input["long_term_authorized"] is False
+    assert result.output["long_term_authorized"] is False
+    assert result.generated_events[0].payload["long_term_authorized"] is False
     assert [event.event_type for event in result.generated_events] == ["wakeup_scheduled"]
 
+
+
+def test_schedule_wakeup_requires_explicit_authorization_beyond_one_year(tmp_path) -> None:
+    from datetime import datetime, timezone
+    import pytest
+    from swaag.scheduler import WakeupStore
+
+    now = datetime(2026, 8, 6, 12, 0, tzinfo=timezone.utc)
+    store = WakeupStore(tmp_path)
+    with pytest.raises(ValueError, match="explicit long-term authorization"):
+        store.schedule(session_id="s", reason="surprise later", duration="2 years", now=now)
+    wakeup = store.schedule(
+        session_id="s", reason="explicit long project", duration="2 years",
+        long_term_authorized=True, now=now,
+    )
+    assert wakeup.long_term_authorized is True
+    assert WakeupStore(tmp_path).list(session_id="s")[0].long_term_authorized is True
+
+
+def test_schedule_wakeup_tool_requires_boolean_long_term_authorization(tmp_path) -> None:
+    import pytest
+    from swaag.config import load_config
+    from swaag.history import HistoryStore
+    from swaag.tools.base import ToolValidationError
+    from swaag.tools.registry import ToolRegistry
+
+    config = load_config(env={
+        "SWAAG__SESSIONS__ROOT": str(tmp_path / "sessions"),
+        "SWAAG__TOOLS__ALLOW_STATEFUL_TOOLS": "true",
+    })
+    state = HistoryStore(config.sessions.root).create(config_fingerprint="cfg", model_base_url="http://model")
+    registry = ToolRegistry()
+    with pytest.raises(ToolValidationError, match="long_term_authorized"):
+        registry.dispatch(
+            "schedule_wakeup",
+            {"duration": "2 hours", "wake_at": None, "reason": "resume work", "long_term_authorized": None},
+            config, state,
+        )
 
 def test_runtime_delivers_due_wakeup_as_control_message_once(tmp_path) -> None:
     from datetime import datetime, timedelta, timezone

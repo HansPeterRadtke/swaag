@@ -1727,19 +1727,21 @@ class ScheduleWakeupTool(Tool):
     usage_guidance = (
         "Provide exactly one of duration or wake_at. Durations support milliseconds, seconds, minutes, hours, "
         "days, weeks, months, and years. Do not schedule a surprising multi-year wakeup unless that long wait "
-        "is deliberate policy or follows explicit user intent."
+        "is deliberate policy or follows explicit user intent. Set long_term_authorized=true only when that explicit authorization is actually present."
     )
     kind = "stateful"
     input_schema = _closed_input({
         "duration": _string_or_null(),
         "wake_at": _string_or_null(),
         "reason": {"type": "string"},
+        "long_term_authorized": {"type": "boolean"},
     })
 
     def validate(self, raw_input: dict[str, Any]) -> dict[str, Any]:
         duration = raw_input.get("duration")
         wake_at = raw_input.get("wake_at")
         reason = raw_input.get("reason")
+        long_term_authorized = raw_input.get("long_term_authorized")
         if duration is not None and not isinstance(duration, str):
             raise ToolValidationError("schedule_wakeup.duration must be a string or null")
         if wake_at is not None and not isinstance(wake_at, str):
@@ -1748,7 +1750,14 @@ class ScheduleWakeupTool(Tool):
             raise ToolValidationError("schedule_wakeup.reason must be a non-empty string")
         if bool(duration and duration.strip()) == bool(wake_at and wake_at.strip()):
             raise ToolValidationError("schedule_wakeup requires exactly one of duration or wake_at")
-        return {"duration": duration.strip() if duration else None, "wake_at": wake_at.strip() if wake_at else None, "reason": reason}
+        if not isinstance(long_term_authorized, bool):
+            raise ToolValidationError("schedule_wakeup.long_term_authorized must be a boolean")
+        return {
+            "duration": duration.strip() if duration else None,
+            "wake_at": wake_at.strip() if wake_at else None,
+            "reason": reason,
+            "long_term_authorized": long_term_authorized,
+        }
 
     def required_generated_event_types(self, validated_input: dict[str, Any]) -> set[str]:
         return {"wakeup_scheduled"}
@@ -1758,7 +1767,7 @@ class ScheduleWakeupTool(Tool):
             session_id=context.session_state.session_id, **validated_input
         )
         output = asdict(wakeup)
-        event = ToolGeneratedEvent("wakeup_scheduled", {"wakeup_id": wakeup.wakeup_id, "wake_at": wakeup.wake_at, "reason": wakeup.reason})
+        event = ToolGeneratedEvent("wakeup_scheduled", {"wakeup_id": wakeup.wakeup_id, "wake_at": wakeup.wake_at, "reason": wakeup.reason, "long_term_authorized": wakeup.long_term_authorized})
         return ToolExecutionResult(tool_name=self.name, output=output, display_text=tool_result_display(self.name, output), generated_events=[event])
 
 

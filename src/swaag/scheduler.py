@@ -51,6 +51,7 @@ class Wakeup:
     reason: str
     created_at: str
     wake_at: str
+    long_term_authorized: bool = False
     status: str = "scheduled"
     cancelled_at: str | None = None
     claimed_at: str | None = None
@@ -121,6 +122,7 @@ class WakeupStore:
                     reason=str(item["reason"]),
                     created_at=str(item["created_at"]),
                     wake_at=str(item["wake_at"]),
+                    long_term_authorized=bool(item.get("long_term_authorized", False)),
                     status=str(item.get("status", "scheduled")),
                     cancelled_at=item.get("cancelled_at"),
                     claimed_at=item.get("claimed_at"),
@@ -142,6 +144,7 @@ class WakeupStore:
         reason: str,
         duration: str | None = None,
         wake_at: str | None = None,
+        long_term_authorized: bool = False,
         now: datetime | None = None,
     ) -> Wakeup:
         if bool(duration) == bool(wake_at):
@@ -150,12 +153,15 @@ class WakeupStore:
         target = current + parse_duration(duration or "") if duration else parse_utc_datetime(wake_at or "")
         if target <= current:
             raise ValueError("wake time must be in the future")
+        if (target - current).total_seconds() > 31557600.0 and not long_term_authorized:
+            raise ValueError("wakeups more than one year in the future require explicit long-term authorization")
         wakeup = Wakeup(
             wakeup_id=new_id("wakeup"),
             session_id=session_id,
             reason=reason if reason.strip() else "scheduled wakeup",
             created_at=_iso(current),
             wake_at=_iso(target),
+            long_term_authorized=bool(long_term_authorized),
         )
         with self._locked():
             wakeups = self._load_unlocked()
