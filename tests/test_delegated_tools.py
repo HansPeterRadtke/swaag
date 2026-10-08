@@ -539,7 +539,7 @@ def test_generic_external_tools_are_schema_driven_and_staged(make_config) -> Non
             "metadata": {"example": True},
         }
     )
-    config = make_config()
+    config = make_config(tools__staged_discovery=True)
     registry = ToolRegistry()
     index = registry.capability_index(config, delegated_tools=(lookup, transform))
     assert (lookup.name, lookup.description, lookup.prompt_tuple()[3]) in index
