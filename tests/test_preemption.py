@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import json
 import threading
+from unittest.mock import patch
 import time
 from types import SimpleNamespace
 from typing import Any
@@ -781,6 +782,61 @@ def test_orchestrator_lightweight_interaction_is_one_model_call_and_starts_no_wo
         "Hello, can you hear me?",
         "Yes, I can hear you.",
     ]
+
+
+def test_serial_orchestrator_messages_reuse_verified_cached_state(make_config) -> None:
+    config = make_config(
+        model__context_limit=32_000,
+        tools__enabled=["orchestration_control"],
+        tools__allow_stateful_tools=True,
+        tools__allow_side_effect_tools=True,
+    )
+    client = _ImmediateClient("Yes, I can hear you.")
+    runtime = AgentRuntime(config, model_client=client)
+    service = CommunicationService(runtime, orchestrator_runtime=runtime)
+    with patch.object(runtime,"create_or_load_user_session",
+                      wraps=runtime.create_or_load_user_session) as load:
+        first = service.orchestrator_message("Hello, can you hear me?")
+        second = service.orchestrator_message("Can you still hear me?")
+    assert first["answer"] == "Yes, I can hear you."
+    assert second["answer"] == "Yes, I can hear you."
+    assert load.call_count == 1, "must not replay entire durable history per turn"
+    cached = service._orchestrator_cached_state
+    idx = json.loads(runtime.history.history_index_path(cached.session_id).read_text())
+    assert cached.event_count == idx["event_count"]
+    assert cached.last_event_hash == idx["last_event_hash"]
+
+    # An independent writer changing durable history must invalidate the
+    # in-memory cache rather than silently returning stale conversation state.
+    cached.last_event_hash = "stale_test_hash"
+    reloaded = service._load_orchestrator_state()
+    assert reloaded is not cached
+    assert reloaded.event_count == idx["event_count"]
+    assert reloaded.last_event_hash == idx["last_event_hash"]
+
+
+def test_startup_prewarm_verifies_existing_history_without_creating_a_session(make_config) -> None:
+    import asyncio
+    config = make_config(
+        model__context_limit=32_000,
+        tools__enabled=["orchestration_control"],
+        tools__allow_stateful_tools=True,
+        tools__allow_side_effect_tools=True,
+    )
+    runtime = AgentRuntime(config, model_client=_ImmediateClient("Yes."))
+    service = CommunicationService(runtime, orchestrator_runtime=runtime)
+    asyncio.run(service._prewarm_existing_orchestrator())
+    assert service._orchestrator_cached_state is None
+
+    service.orchestrator_message("Hello.")
+    service._orchestrator_cached_state = None
+    with patch.object(runtime,"create_or_load_user_session",
+                      wraps=runtime.create_or_load_user_session) as loader:
+        asyncio.run(service._prewarm_existing_orchestrator())
+        assert service._orchestrator_cached_state is not None
+        assert loader.call_count == 1
+        service.orchestrator_message("Another greeting.")
+        assert loader.call_count == 1
 
 
 def test_orchestrator_preserves_user_facing_answer_whitespace_verbatim(make_config) -> None:

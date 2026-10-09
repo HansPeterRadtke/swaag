@@ -1247,6 +1247,13 @@ class CommunicationService:
         self.runtime = runtime
         self.assistant_runtime = assistant_runtime
         self.orchestrator_runtime = orchestrator_runtime or runtime
+        # The user-facing orchestrator has a durable, serial conversation.
+        # A single replay currently reads a multi-hundred-MB append-only event
+        # journal. Replaying it twice per turn led to 60-second voice timeouts.
+        # Cache only inside this long-running service; any external write
+        # invalidates the cache using the persisted event count/hash.
+        self._orchestrator_cached_state = None
+        self._orchestrator_cache_lock = threading.Lock()
         artifact_cfg = runtime.config.communication.open_webui_artifacts
         self._open_webui_artifact_secret: bytes | None = None
         if artifact_cfg.enabled:
@@ -1511,9 +1518,31 @@ class CommunicationService:
             )
         return cls(main, orchestrator_runtime=orchestrator)
 
+    def _load_orchestrator_state(self):
+        runtime = self.orchestrator_runtime
+        with self._orchestrator_cache_lock:
+            cached = self._orchestrator_cached_state
+            if cached is not None:
+                try:
+                    meta = json.loads(
+                        runtime.history.history_index_path(cached.session_id)
+                        .read_text(encoding="utf-8")
+                    )
+                    if (
+                        meta.get("session_name") == "SWAAG Orchestrator"
+                        and int(meta.get("event_count", -1)) == cached.event_count
+                        and meta.get("last_event_hash") == cached.last_event_hash
+                    ):
+                        return cached
+                except (OSError, ValueError, TypeError, KeyError):
+                    pass
+            state = runtime.create_or_load_user_session("SWAAG Orchestrator")
+            self._orchestrator_cached_state = state
+            return state
+
     def _orchestrator_state(self):
         runtime = self.orchestrator_runtime
-        state = runtime.create_or_load_user_session("SWAAG Orchestrator")
+        state = self._load_orchestrator_state()
         instruction_id = "instruction_swaag_orchestrator_role_v2"
         if not any(
             item.instruction_id == instruction_id for item in state.prompt_instructions
@@ -1599,9 +1628,7 @@ class CommunicationService:
         text = str(message)
         if not text.strip():
             raise ValueError("orchestrator message must not be empty")
-        orchestrator_state = self.orchestrator_runtime.create_or_load_user_session(
-            "SWAAG Orchestrator"
-        )
+        orchestrator_state = self._load_orchestrator_state()
         with session_execution_lock(
             self.orchestrator_runtime.history, orchestrator_state.session_id
         ):
@@ -5300,7 +5327,7 @@ class CommunicationService:
         return any(self.runtime.config.sessions.root.glob("*/active_run.json"))
 
     def _autonomous_background_idea(self) -> dict[str, Any]:
-        state = self.orchestrator_runtime.create_or_load_user_session("SWAAG Orchestrator")
+        state = self._load_orchestrator_state()
         snapshot = {
             "recent_plans": [
                 {"objective": plan.objective, "status": plan.status, "updated_at": plan.updated_at}
@@ -5347,6 +5374,24 @@ class CommunicationService:
                 )
             await asyncio.sleep(1.0)
 
+    async def _prewarm_existing_orchestrator(self) -> None:
+        # If a durable user-facing conversation exists, verify its journal once
+        # at service startup and keep the replayed state in memory. Do not force
+        # the first phone turn to parse a multi-hundred-MB history. A missing
+        # session is not created just by starting the communication server.
+        try:
+            existing = await asyncio.to_thread(
+                self.orchestrator_runtime.history.resolve_session_ref,
+                "SWAAG Orchestrator",
+            )
+            if existing:
+                await asyncio.to_thread(self._load_orchestrator_state)
+        except Exception as exc:
+            print(
+                f"orchestrator session prewarm failed: {type(exc).__name__}: {exc}",
+                file=sys.stderr, flush=True,
+            )
+
     async def serve_tcp(self, host: str, port: int) -> None:
         host = require_loopback_bind_host(host)
         loop = asyncio.get_running_loop()
@@ -5389,6 +5434,10 @@ class CommunicationService:
                 port=bound_port,
             )
             background_tasks = [
+                asyncio.create_task(
+                    self._prewarm_existing_orchestrator(),
+                    name="swaag-orchestrator-history-prewarm",
+                ),
                 asyncio.create_task(
                     self._watchdog_loop(), name="swaag-systemd-watchdog"
                 ),
