@@ -734,7 +734,7 @@ def test_user_facing_orchestrator_exposes_core_tool_without_repeated_discovery(m
     service = CommunicationService.from_runtime(runtime)
     actual = service.orchestrator_runtime.config.tools
     assert actual.enabled == ["orchestration_control"]
-    assert actual.staged_discovery is False
+    assert actual.staged_discovery is True
     assert actual.allow_stateful_tools is True
     assert actual.allow_side_effect_tools is True
     assert runtime.config.tools.staged_discovery is True

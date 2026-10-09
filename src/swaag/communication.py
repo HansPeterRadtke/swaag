@@ -1477,11 +1477,11 @@ class CommunicationService:
             if config.communication.model_identity: orchestrator_config.model.model_identity = config.communication.model_identity
             if config.communication.remote_context_limit_fallback: orchestrator_config.model.remote_context_limit_fallback = config.communication.remote_context_limit_fallback
         orchestrator_config.tools.enabled = list(config.communication.enabled_tools)
-        # The single-purpose user-facing orchestrator must always see its one
-        # canonical orchestration_control schema. Repeatedly discovering this
-        # already-known capability cost minutes and prevented actual workers
-        # from starting. Keep staged discovery for ordinary workers only.
-        orchestrator_config.tools.staged_discovery = False
+        # Preserve staged discovery, including deferred workspace listings.
+        # AgentRuntime preloads the canonical orchestration_control schema only
+        # when this runtime's orchestrator capability is bound. Disabling staged
+        # discovery here caused an 80+ MB workspace manifest over /data to be
+        # constructed on every action, massively delaying voice responses.
         orchestrator_config.tools.allow_stateful_tools = True
         orchestrator_config.tools.allow_side_effect_tools = True
         orchestrator = AgentRuntime(orchestrator_config)

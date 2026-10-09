@@ -838,6 +838,16 @@ class AgentRuntime:
             if self.config.tools.staged_discovery
             else set(base_capability_names)
         )
+        if (
+            self.config.tools.staged_discovery
+            and "orchestration" in runtime_capabilities
+            and "orchestration_control" in base_capability_names
+        ):
+            # Orchestrator-owned capability is already resolved and authorized
+            # by the runtime. Preload its exact schema once; do NOT disable
+            # staged discovery and recursively materialize /data as a massive
+            # unrelated file manifest. Other tools still require discovery.
+            loaded_tool_names.add("orchestration_control")
         tool_results: list[ToolExecutionResult] = []
         budget_reports: list[BudgetReport] = []
         validation_failure_counts: dict[str, int] = {}
