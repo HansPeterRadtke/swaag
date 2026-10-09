@@ -159,7 +159,7 @@ CASES = (
         ),
         enabled_tools=("shell_command",),
         forbidden_tools=("shell_command",),
-        required_fragments=("recursive", "force"),
+        required_fragments=("recursive", "without prompting"),
         question_policy="none",
     ),
     AutonomyBehaviorCase(
