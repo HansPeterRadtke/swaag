@@ -3272,9 +3272,11 @@ class AgentRuntime:
                     "orchestrator_interaction.answer must be non-empty for route=respond"
                 )
             if route == "orchestrate" and answer.strip():
-                raise ValueError(
-                    "orchestrator_interaction.answer must be empty for route=orchestrate"
-                )
+                # The route decision is authoritative; its answer is not sent
+                # to the user at all. Discard a spurious direct-answer field
+                # instead of rejecting an otherwise valid full-work request.
+                # This is a structural repair, not a semantic override.
+                answer = ""
             if not reason:
                 raise ValueError(
                     "orchestrator_interaction.reason must not be empty"

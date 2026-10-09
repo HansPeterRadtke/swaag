@@ -38,6 +38,7 @@ ALLOWED_EVENT_TYPES = frozenset(
         "communication_status_generated",
         "orchestrator_interaction_requested",
         "orchestrator_interaction_generated",
+        "orchestrator_direct_reply_rejected",
         "orchestrator_interaction_unavailable",
         "communication_status_rejected",
         "communication_status_unavailable",
@@ -402,6 +403,9 @@ REQUIRED_PAYLOAD_KEYS: dict[str, frozenset[str]] = {
     ),
     "orchestrator_interaction_generated": frozenset(
         {"route", "answer", "reason"}
+    ),
+    "orchestrator_direct_reply_rejected": frozenset(
+        {"reason", "proposed_route", "actual_route"}
     ),
     "orchestrator_interaction_unavailable": frozenset(
         {"message", "error", "error_type"}

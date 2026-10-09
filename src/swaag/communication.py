@@ -11,6 +11,7 @@ import hmac
 import ipaddress
 import json
 import os
+import re
 import signal
 import sqlite3
 import sys
@@ -1559,6 +1560,36 @@ class CommunicationService:
         )
         return state
 
+    # Invariant for the fast chat-only route: without entering orchestration it
+    # has performed NO tools, created NO plans, and started NO workers. When the
+    # model promises a future tool action rather than answering the user, its
+    # proposed direct reply is invalid. The full SWAAG planner must decide and
+    # carry out the action. This is a rejection gate, not a keyword-based task
+    # router; it does not delegate or execute work by itself.
+    _UNEXECUTED_COMMITMENT = re.compile(
+        r"(?i)\b(?:I\s+will|I[’']ll|I\s+am\s+going\s+to|"
+        r"we\s+will|we[’']ll|let\s+me|"
+        r"I\s+can\s+confirm\s+that\s+I\s+will)\s+"
+        r"(?!(?:not|never|only|just|simply\s+explain)\b)"
+        r"(?:\w+[\s,]+){0,6}"
+        r"(?:write|create|start|launch|build|run|execute|implement|"
+        r"modify|install|deploy|edit|change|update|delete|send|"
+        r"schedule|begin|perform|work\s+on|do)\b"
+    )
+    _UNSUPPORTED_COMPLETION = re.compile(
+        r"(?i)\b(?:I(?:\s+have|[’']ve)\s+(?:just\s+)?"
+        r"(?:started|created|launched|written|built|deployed)|"
+        r"(?:starting|launching|creating)\s+(?:a\s+|the\s+)?"
+        r"(?:worker|task|program|process|project)\s+now)\b"
+    )
+
+    @classmethod
+    def _fast_reply_claims_unperformed_work(cls, answer: str) -> bool:
+        return bool(
+            cls._UNEXECUTED_COMMITMENT.search(str(answer))
+            or cls._UNSUPPORTED_COMPLETION.search(str(answer))
+        )
+
     def orchestrator_message(self, message: str) -> dict[str, str]:
         text = str(message)
         if not text.strip():
@@ -1629,6 +1660,23 @@ class CommunicationService:
                                 "The exact orchestrator conversation does not fit the small "
                                 "interaction call; use the full context-managed orchestrator."
                             ),
+                        }
+                    if routed["route"] == "respond" and self._fast_reply_claims_unperformed_work(
+                        routed["answer"]
+                    ):
+                        self.orchestrator_runtime.history.record_event(
+                            state,
+                            "orchestrator_direct_reply_rejected",
+                            {
+                                "reason": "fast_route_claims_unexecuted_work",
+                                "proposed_route": "respond",
+                                "actual_route": "orchestrate",
+                            },
+                        )
+                        routed = {
+                            "route": "orchestrate",
+                            "answer": "",
+                            "reason": "Fast direct response promised unexecuted work; the full SWAAG orchestrator must execute or report a blocker.",
                         }
                     if routed["route"] == "respond":
                         self.orchestrator_runtime.history.record_event(

@@ -824,6 +824,86 @@ class _RouteToPlannerClient(_ImmediateClient):
         return self._result(payload, _action("planner handled the substantive request"))
 
 
+class _BrokenFastRouterClient(_ImmediateClient):
+    def send_completion(self, payload: dict[str, Any], **kwargs) -> CompletionResult:
+        self.requests.append(json.loads(stable_json_dumps(payload, indent=None)))
+        if payload.get("contract") == "orchestrator_interaction":
+            return self._result(payload, _orchestrator_interaction(
+                answer="I'll write a Python program and create the requested file.",
+                route="respond",
+                reason="The user wants work; promise it without tools.",
+            ))
+        return self._result(payload, _action("The planner handled the requested work."))
+
+
+def test_false_fast_promise_routes_to_full_orchestrator(make_config) -> None:
+    config = make_config(
+        model__context_limit=32_000,
+        tools__enabled=["orchestration_control"],
+        tools__allow_stateful_tools=True,
+        tools__allow_side_effect_tools=True,
+        runtime__completion_evaluation_enabled=False,
+    )
+    client = _BrokenFastRouterClient("unused")
+    runtime = AgentRuntime(config, model_client=client)
+    service = CommunicationService(runtime, orchestrator_runtime=runtime)
+    answer = service.orchestrator_message(
+        "You shall do it now: let a worker write a Python program that creates a file."
+    )
+    assert answer["answer"] == "The planner handled the requested work."
+    assert [x["contract"] for x in client.requests] == [
+        "orchestrator_interaction", "agent_action",
+    ]
+    state = runtime.create_or_load_user_session("SWAAG Orchestrator")
+    event_types = [x.event_type for x in runtime.history.read_history(state.session_id)]
+    assert "orchestrator_direct_reply_rejected" in event_types
+    assert "I'll write" not in answer["answer"]
+
+
+def test_unexecuted_work_claim_guard_preserves_direct_noncommitments() -> None:
+    from swaag.communication import CommunicationService
+    yes = CommunicationService._fast_reply_claims_unperformed_work
+    assert yes("I'll write a Python program that creates a file.")
+    assert yes("I will write a Python program.")
+    assert yes("I can confirm that I will write a program.")
+    assert yes("I have started the worker.")
+    assert yes("Starting the worker now.")
+    assert not yes("No, I haven't started a worker.")
+    assert not yes("There are no workers running.")
+    assert not yes("Yes, I can hear you.")
+    assert not yes("I will not delete your files.")
+
+
+class _ExtraAnswerPlannerClient(_ImmediateClient):
+    def send_completion(self, payload: dict[str, Any], **kwargs) -> CompletionResult:
+        self.requests.append(json.loads(stable_json_dumps(payload, indent=None)))
+        if payload.get("contract") == "orchestrator_interaction":
+            return self._result(payload, _orchestrator_interaction(
+                route="orchestrate",
+                answer="I will write the file in the future.",
+                reason="Full work must be delegated.",
+            ))
+        return self._result(payload, _action("Full planner accepted the real request."))
+
+
+def test_fast_route_orchestrate_discards_invalid_extra_answer(make_config) -> None:
+    config = make_config(
+        model__context_limit=32_000,
+        tools__enabled=["orchestration_control"],
+        tools__allow_stateful_tools=True,
+        tools__allow_side_effect_tools=True,
+        runtime__completion_evaluation_enabled=False,
+    )
+    client = _ExtraAnswerPlannerClient("unused")
+    runtime = AgentRuntime(config, model_client=client)
+    service = CommunicationService(runtime, orchestrator_runtime=runtime)
+    answer = service.orchestrator_message("Start the requested worker now.")
+    assert answer["answer"] == "Full planner accepted the real request."
+    assert [item["contract"] for item in client.requests] == [
+        "orchestrator_interaction", "agent_action",
+    ]
+
+
 def test_orchestrator_substantive_command_enters_full_planner_after_gate(make_config) -> None:
     config = make_config(
         model__context_limit=32_000,
