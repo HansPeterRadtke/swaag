@@ -993,6 +993,7 @@ class AgentRuntime:
                 budget_reports.append(prepared.report)
 
                 def validate(payload: dict[str, Any]) -> AgentAction:
+                    payload = self._repair_question_disclosures(payload)
                     payload = self._repair_declared_response_constraints(
                         state,
                         original_request=original_request,
@@ -1864,6 +1865,45 @@ class AgentRuntime:
             },
         )
         return repaired, payload["exact_word_count"]
+
+    @staticmethod
+    def _repair_question_disclosures(payload: dict[str, Any]) -> dict[str, Any]:
+        """Mechanically expose model-authored structured questions in user-facing text.
+
+        The action contract requires exact disclosure so every transport that only
+        presents assistant_message still tells the user the durable question and,
+        for optional questions, the exact provisional assumption. The structured
+        fields are already model-authored semantic content; copying a missing exact
+        string into assistant_message does not infer or rewrite meaning.
+        """
+        message = payload.get("assistant_message")
+        questions = payload.get("questions")
+        if not isinstance(message, str) or not isinstance(questions, list):
+            return payload
+        additions: list[str] = []
+        visible = message
+        for item in questions:
+            if not isinstance(item, dict):
+                continue
+            question = item.get("question")
+            if isinstance(question, str):
+                question = question.strip()
+                if question and question not in visible:
+                    additions.append(question)
+                    visible += " " + question
+            if item.get("criticality") == "optional":
+                assumption = item.get("assumption_if_unanswered")
+                if isinstance(assumption, str):
+                    assumption = assumption.strip()
+                    if assumption and assumption not in visible:
+                        additions.append(assumption)
+                        visible += " " + assumption
+        if not additions:
+            return payload
+        repaired = copy.deepcopy(payload)
+        base = message.rstrip()
+        repaired["assistant_message"] = (base + (" " if base else "") + " ".join(additions))
+        return repaired
 
     def _repair_declared_response_constraints(
         self,

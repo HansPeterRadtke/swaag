@@ -261,6 +261,57 @@ def test_direct_answer_is_one_constrained_model_call_with_all_tools(make_config)
     }
 
 
+def test_blocking_question_disclosure_is_repaired_without_retry(make_config) -> None:
+    config = make_config(model__context_limit=32_000, tools__staged_discovery=False)
+    config.tools.enabled = []
+    payload = json.loads(_action(message="I need you to choose one target.", continue_loop=False))
+    payload["questions"] = [{
+        "question": "Which target should I use: alpha or beta?",
+        "criticality": "blocking",
+        "importance": "critical",
+        "reason": "The destructive target is ambiguous.",
+        "assumption_if_unanswered": "",
+    }]
+    client = FakeModelClient([json.dumps(payload)])
+    runtime = AgentRuntime(config, model_client=client)
+
+    result = runtime.run_turn("Delete the intended target, but do not guess.")
+
+    assert len(client.requests) == 1
+    assert "Which target should I use: alpha or beta?" in result.assistant_text
+    events = runtime.history.read_history(result.session_id)
+    assert not any(event.event_type == "agent_action_rejected" for event in events)
+    question = next(event for event in events if event.event_type == "agent_question")
+    assert question.payload["question"] == "Which target should I use: alpha or beta?"
+
+
+def test_optional_question_disclosure_appends_exact_assumption(make_config) -> None:
+    config = make_config(model__context_limit=32_000, tools__staged_discovery=False)
+    config.tools.enabled = ["calculator"]
+    payload = json.loads(_action(
+        message="I can continue while you decide.",
+        tool_calls=[("calculator", {"expression": "6 * 7"})],
+        continue_loop=True,
+    ))
+    payload["questions"] = [{
+        "question": "Do you prefer decimal or hexadecimal output?",
+        "criticality": "optional",
+        "importance": "normal",
+        "reason": "Presentation preference does not block the calculation.",
+        "assumption_if_unanswered": "Use decimal output.",
+    }]
+    client = FakeModelClient([json.dumps(payload), _action(message="42")])
+    runtime = AgentRuntime(config, model_client=client)
+
+    result = runtime.run_turn("Calculate 6 * 7; format is not critical.")
+
+    assert len(client.requests) == 2
+    first_action = next(event for event in runtime.history.read_history(result.session_id) if event.event_type == "agent_action_selected")
+    assert "Do you prefer decimal or hexadecimal output?" in first_action.payload["action"]["assistant_message"]
+    assert "Use decimal output." in first_action.payload["action"]["assistant_message"]
+    assert not any(event.event_type == "agent_action_rejected" for event in runtime.history.read_history(result.session_id))
+
+
 def test_nonterminal_nonpositive_word_count_is_normalized_without_retry(make_config) -> None:
     config = make_config(model__context_limit=32_000, tools__staged_discovery=False)
     config.tools.enabled = ["calculator"]
