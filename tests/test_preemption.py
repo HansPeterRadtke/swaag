@@ -721,6 +721,25 @@ def test_benchmark_communication_probe_uses_task_deadline_for_replayed_turn(make
     assert "model_call_replayed" in event_types
 
 
+def test_user_facing_orchestrator_exposes_core_tool_without_repeated_discovery(make_config) -> None:
+    config = make_config(
+        model__context_limit=32_000,
+        tools__staged_discovery=True,
+        communication__enabled=True,
+        communication__enabled_tools=["orchestration_control"],
+        tools__allow_stateful_tools=True,
+        tools__allow_side_effect_tools=True,
+    )
+    runtime = AgentRuntime(config, model_client=_ImmediateClient("unused"))
+    service = CommunicationService.from_runtime(runtime)
+    actual = service.orchestrator_runtime.config.tools
+    assert actual.enabled == ["orchestration_control"]
+    assert actual.staged_discovery is False
+    assert actual.allow_stateful_tools is True
+    assert actual.allow_side_effect_tools is True
+    assert runtime.config.tools.staged_discovery is True
+
+
 def test_orchestrator_lightweight_interaction_is_one_model_call_and_starts_no_worker(make_config) -> None:
     config = make_config(
         model__context_limit=32_000,
