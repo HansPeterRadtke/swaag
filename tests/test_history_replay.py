@@ -108,3 +108,51 @@ def test_history_compression_replays_selected_middle_span(make_config, tmp_path)
         "middle summary",
         "m3",
     ]
+
+def test_repeated_appends_do_not_rescan_same_large_verified_jsonl(make_config, tmp_path) -> None:
+    from unittest.mock import patch
+    from swaag.history import HistoryStore
+
+    config = make_config()
+    config.sessions.root = tmp_path / "sessions"
+    history = HistoryStore(config.sessions.root)
+    state = history.create(config_fingerprint="cfg", model_base_url="http://model")
+    with patch.object(history, "_iter_history_jsonl", wraps=history._iter_history_jsonl) as scan:
+        for n in range(15):
+            history.record_event(state, "error", {
+                "operation": "regression_test", "error": f"step_{n}", "error_type": "Test",
+            })
+        assert len(history.read_history(state.session_id)) == 16
+        assert scan.call_count == 0, "a validated append must not rehash full JSONL"
+
+        path = history.history_path(state.session_id)
+        path.write_text(path.read_text(encoding="utf-8") + "\n", encoding="utf-8")
+        history.record_event(state, "error", {
+            "operation": "post_external_change", "error": "still_valid", "error_type": "Test",
+        })
+        assert scan.call_count == 1, "an external file edit must trigger full verification"
+        history.record_event(state, "error", {
+            "operation": "later_append", "error": "still_fast", "error_type": "Test",
+        })
+        assert scan.call_count == 1
+    assert history.rebuild_from_history(state.session_id).event_count == state.event_count
+
+
+def test_external_history_tampering_is_still_detected_with_file_stat_cache(make_config, tmp_path) -> None:
+    import pytest
+    from swaag.history import HistoryStore
+    from swaag.history import HistoryCorruptionError
+
+    config = make_config()
+    config.sessions.root = tmp_path / "sessions"
+    history = HistoryStore(config.sessions.root)
+    state = history.create(config_fingerprint="cfg", model_base_url="http://model")
+    history.record_event(state, "error", {
+        "operation": "tamper_check", "error": "original_token", "error_type": "Test",
+    })
+    path = history.history_path(state.session_id)
+    source = path.read_text(encoding="utf-8")
+    assert "original_token" in source
+    path.write_text(source.replace("original_token", "modified_token", 1), encoding="utf-8")
+    with pytest.raises(HistoryCorruptionError):
+        list(history.iter_history(state.session_id))
