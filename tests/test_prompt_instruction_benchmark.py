@@ -185,6 +185,50 @@ def test_prompt_instruction_behavior_benchmark_uses_production_agent_loop(
 
 
 
+
+def test_selector_error_fallback_case_requires_conservative_inclusion() -> None:
+    case = next(
+        item for item in select_cases() if item.case_id == "selector_error_fallback"
+    )
+    now = "2026-10-09T00:00:00+00:00"
+    instructions = [
+        PromptInstruction(
+            instruction_id="instruction_alpha",
+            title="Selector fallback alpha",
+            content="Include exact token SELECTOR-FALLBACK-A-731 in the benchmark reply.",
+            scopes=["action"],
+            created_at=now,
+            updated_at=now,
+            categories=["programming"],
+        ),
+        PromptInstruction(
+            instruction_id="instruction_beta",
+            title="Selector fallback beta",
+            content="Include exact token SELECTOR-FALLBACK-B-731 in the benchmark reply.",
+            scopes=["action"],
+            created_at=now,
+            updated_at=now,
+            categories=["user-reporting"],
+        ),
+    ]
+    verification = _verify_case(
+        case,
+        seeded_ids=["instruction_alpha", "instruction_beta"],
+        user_instructions=instructions,
+        session_instructions=[],
+        store_actions=["add", "add"],
+        tool_actions=[],
+        assistant_text="SELECTOR-FALLBACK-A-731 SELECTOR-FALLBACK-B-731",
+        selection_events=[{
+            "kind": "action",
+            "instruction_ids": ["instruction_alpha", "instruction_beta"],
+            "semantic_selection": False,
+            "selection_fallback": True,
+        }],
+    )
+    assert verification["passed"] is True
+
+
 def test_trusted_authority_conflict_case_encodes_precedence_and_provenance(make_config, tmp_path) -> None:
     from swaag.benchmark.prompt_instruction_behavior import _seed_case
     from swaag.prompt_instruction_store import PromptInstructionStore

@@ -23,6 +23,31 @@ class PromptInstructionBehaviorCase:
     setup: str
 
 
+class _SelectorFailureProxy:
+    """Inject selector-only failure while delegating every other model operation."""
+
+    def __init__(self, delegate: Any):
+        self._delegate = delegate
+
+    def __getattr__(self, name: str) -> Any:
+        return getattr(self._delegate, name)
+
+    def build_completion_request(self, *args: Any, **kwargs: Any) -> dict[str, Any]:
+        contract = kwargs.get("contract")
+        payload = self._delegate.build_completion_request(*args, **kwargs)
+        if getattr(contract, "name", "") == "prompt_instruction_selection":
+            payload = dict(payload)
+            payload["__swaag_selector_failure_holdout"] = True
+        return payload
+
+    def send_completion(self, payload: dict[str, Any], *args: Any, **kwargs: Any):
+        if payload.get("__swaag_selector_failure_holdout") is True:
+            raise RuntimeError(
+                "Injected prompt-instruction selector failure for held-out fallback evaluation"
+            )
+        return self._delegate.send_completion(payload, *args, **kwargs)
+
+
 CASES = (
     PromptInstructionBehaviorCase(
         case_id="cross_session_scope",
@@ -131,6 +156,15 @@ CASES = (
         ),
     ),
     PromptInstructionBehaviorCase(
+        case_id="selector_error_fallback",
+        split="held_out",
+        prompt=(
+            "Do not modify durable instructions. Reply with the exact benchmark tokens "
+            "required by the governing durable instructions."
+        ),
+        setup="selector_error_fallback",
+    ),
+    PromptInstructionBehaviorCase(
         case_id="trusted_authority_conflict",
         split="held_out",
         prompt=(
@@ -223,6 +257,23 @@ def _seed_case(
             assert mutation.instruction is not None
             seeded.append(mutation.instruction.instruction_id)
         return seeded
+    if case.setup == "selector_error_fallback":
+        first = store.add(
+            title="Selector fallback alpha",
+            content="Include exact token SELECTOR-FALLBACK-A-731 in the benchmark reply.",
+            scopes=["action"],
+            categories=["programming"],
+            origin_session_id=state.session_id,
+        )
+        second = store.add(
+            title="Selector fallback beta",
+            content="Include exact token SELECTOR-FALLBACK-B-731 in the benchmark reply.",
+            scopes=["action"],
+            categories=["user-reporting"],
+            origin_session_id=state.session_id,
+        )
+        assert first.instruction is not None and second.instruction is not None
+        return [first.instruction.instruction_id, second.instruction.instruction_id]
     if case.setup == "trusted_authority_conflict":
         lower = store.add(
             title="Lower authority benchmark token",
@@ -531,6 +582,25 @@ def _verify_case(
             "removed_duplicate": "remove" in store_actions,
             "meaning_preserved": "meaningful evidence" in user_text,
         }
+    elif case.case_id == "selector_error_fallback":
+        action_rows = [
+            item for item in (selection_events or []) if item.get("kind") == "action"
+        ]
+        selected_both = any(
+            all(seed in item.get("instruction_ids", []) for seed in seeded_ids)
+            and item.get("selection_fallback") is True
+            and item.get("semantic_selection") is False
+            for item in action_rows
+        )
+        lowered_answer = assistant_text.casefold()
+        checks = {
+            "two_candidates_remain": len(user_instructions) == 2,
+            "store_unchanged": store_actions == ["add", "add"],
+            "fallback_selected_all": selected_both,
+            "alpha_preserved": "selector-fallback-a-731" in lowered_answer,
+            "beta_preserved": "selector-fallback-b-731" in lowered_answer,
+            "session_store_unchanged": not session_instructions,
+        }
     elif case.case_id == "trusted_authority_conflict":
         by_id = {item.instruction_id: item for item in user_instructions}
         lower_id = seeded_ids[0] if len(seeded_ids) == 2 else ""
@@ -635,6 +705,8 @@ def run_prompt_instruction_behavior_benchmark(
             model_identity = current_identity
         elif current_identity != model_identity:
             raise ValueError("Prompt-instruction runtime model identity changed")
+        if case.setup == "selector_error_fallback":
+            runtime.client = _SelectorFailureProxy(runtime.client)
         state = runtime.create_or_load_session()
         store = PromptInstructionStore(case_config.sessions.root, case_config)
         seeded_ids = _seed_case(case, store, state)
