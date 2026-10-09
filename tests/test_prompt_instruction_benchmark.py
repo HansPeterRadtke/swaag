@@ -184,6 +184,49 @@ def test_prompt_instruction_behavior_benchmark_uses_production_agent_loop(
     assert resumed["results"] == report["results"]
 
 
+
+def test_trusted_authority_conflict_case_encodes_precedence_and_provenance(make_config, tmp_path) -> None:
+    from swaag.benchmark.prompt_instruction_behavior import _seed_case
+    from swaag.prompt_instruction_store import PromptInstructionStore
+
+    case = next(
+        item for item in select_cases() if item.case_id == "trusted_authority_conflict"
+    )
+    config = make_config()
+    config.sessions.root = tmp_path / "sessions"
+    runtime = AgentRuntime(config, model_client=object())
+    state = runtime.create_or_load_session()
+    store = PromptInstructionStore(config.sessions.root, config)
+    seeded_ids = _seed_case(case, store, state)
+    instructions = store.list()
+
+    assert len(seeded_ids) == 2
+    assert [item.authority for item in instructions] == [
+        "learned_model",
+        "explicit_user_correction",
+    ]
+    trusted = instructions[1]
+    assert trusted.source_kind == "explicit_user_correction"
+    assert trusted.source_ref == "benchmark:trusted-authority-conflict"
+
+    verification = _verify_case(
+        case,
+        seeded_ids=seeded_ids,
+        user_instructions=instructions,
+        session_instructions=[],
+        store_actions=["add", "add"],
+        tool_actions=[],
+        assistant_text="HIGHER-AUTHORITY-731",
+        selection_events=[{
+            "kind": "action",
+            "instruction_ids": seeded_ids,
+            "semantic_selection": False,
+            "selection_fallback": False,
+        }],
+    )
+    assert verification["passed"] is True
+
+
 def test_distillation_case_accepts_semantic_category_split() -> None:
     case = next(
         item for item in select_cases() if item.case_id == "distill_messy_categories"

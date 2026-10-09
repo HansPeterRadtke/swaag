@@ -131,6 +131,15 @@ CASES = (
         ),
     ),
     PromptInstructionBehaviorCase(
+        case_id="trusted_authority_conflict",
+        split="held_out",
+        prompt=(
+            "Do not modify durable instructions. Reply exactly with the benchmark token "
+            "required by the governing durable instruction policy."
+        ),
+        setup="trusted_authority_conflict",
+    ),
+    PromptInstructionBehaviorCase(
         case_id="erase_obsolete_rule",
         split="held_out",
         setup="obsolete_user_rule",
@@ -214,6 +223,27 @@ def _seed_case(
             assert mutation.instruction is not None
             seeded.append(mutation.instruction.instruction_id)
         return seeded
+    if case.setup == "trusted_authority_conflict":
+        lower = store.add(
+            title="Lower authority benchmark token",
+            content="For this benchmark policy check, reply exactly LOWER-AUTHORITY-731.",
+            scopes=["action"],
+            origin_session_id=state.session_id,
+        )
+        trusted = store.add_trusted(
+            title="Explicit correction benchmark token",
+            content="For this benchmark policy check, reply exactly HIGHER-AUTHORITY-731.",
+            scopes=["action"],
+            authority="explicit_user_correction",
+            source_kind="explicit_user_correction",
+            source_ref="benchmark:trusted-authority-conflict",
+            origin_session_id=state.session_id,
+        )
+        assert lower.instruction is not None and trusted.instruction is not None
+        return [
+            lower.instruction.instruction_id,
+            trusted.instruction.instruction_id,
+        ]
     if case.setup == "obsolete_user_rule":
         mutation = store.add(
             title="Obsolete workaround",
@@ -500,6 +530,35 @@ def _verify_case(
             "no_new_entry": store_actions.count("add") == 2,
             "removed_duplicate": "remove" in store_actions,
             "meaning_preserved": "meaningful evidence" in user_text,
+        }
+    elif case.case_id == "trusted_authority_conflict":
+        by_id = {item.instruction_id: item for item in user_instructions}
+        lower_id = seeded_ids[0] if len(seeded_ids) == 2 else ""
+        trusted_id = seeded_ids[1] if len(seeded_ids) == 2 else ""
+        lower = by_id.get(lower_id)
+        trusted = by_id.get(trusted_id)
+        action_rows = [
+            item for item in (selection_events or [])
+            if item.get("kind") == "action"
+        ]
+        selected_both = any(
+            lower_id in item.get("instruction_ids", [])
+            and trusted_id in item.get("instruction_ids", [])
+            for item in action_rows
+        )
+        checks = {
+            "two_conflicting_instructions_remain": len(user_instructions) == 2,
+            "store_unchanged": store_actions == ["add", "add"],
+            "lower_is_learned": lower is not None and lower.authority == "learned_model",
+            "trusted_is_explicit_correction": trusted is not None
+            and trusted.authority == "explicit_user_correction",
+            "trusted_provenance_preserved": trusted is not None
+            and trusted.source_kind == "explicit_user_correction"
+            and trusted.source_ref == "benchmark:trusted-authority-conflict",
+            "both_injected_for_action": selected_both,
+            "trusted_answer_wins": assistant_text.strip() == "HIGHER-AUTHORITY-731",
+            "lower_answer_loses": "LOWER-AUTHORITY-731" not in assistant_text,
+            "session_store_unchanged": not session_instructions,
         }
     else:
         assert case.case_id == "erase_obsolete_rule"

@@ -225,6 +225,65 @@ def test_prompt_instruction_tool_crud_is_durable_and_scoped(make_config) -> None
     assert final.prompt_instructions == []
 
 
+
+def test_prompt_instruction_tool_normalizes_operation_unused_schema_fields(make_config) -> None:
+    config = make_config()
+    runtime = AgentRuntime(config, model_client=object())
+    state = runtime.create_or_load_session()
+    registry = ToolRegistry()
+
+    _, added = registry.dispatch(
+        "prompt_instructions",
+        _tool_input(
+            "add",
+            instruction_id="ignored-add-id",
+            title="Disposable",
+            content="Temporary rule.",
+            scopes=["action"],
+        ),
+        config,
+        state,
+    )
+    added_event = added.generated_events[0]
+    runtime.history.record_event(state, added_event.event_type, added_event.payload)
+    instruction_id = added.output["instruction_id"]
+    assert instruction_id != "ignored-add-id"
+
+    _, listed = registry.dispatch(
+        "prompt_instructions",
+        _tool_input(
+            "list",
+            instruction_id="ignored-list-id",
+            title="ignored",
+            content="ignored",
+            scopes=["action"],
+            categories=["ignored"],
+        ),
+        config,
+        state,
+    )
+    assert listed.output["instructions"]
+
+    _, removed = registry.dispatch(
+        "prompt_instructions",
+        _tool_input(
+            "remove",
+            instruction_id=instruction_id,
+            title="Obsolete workaround",
+            content="ignored by remove",
+            scopes=["all"],
+            categories=["ignored"],
+        ),
+        config,
+        state,
+    )
+    assert removed.output == {
+        "instruction_id": instruction_id,
+        "instruction_store": "session",
+        "removed": True,
+    }
+
+
 def test_prompt_instruction_tool_rejects_duplicate_capacity_without_mutation(
     make_config,
 ) -> None:

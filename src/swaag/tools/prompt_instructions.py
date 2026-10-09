@@ -137,16 +137,19 @@ class PromptInstructionsTool(Tool):
                 raise ToolValidationError(
                     f"prompt_instructions {action} requires a categories array"
                 )
-        elif any(
-            value is not None for value in (title, content, scopes, categories)
-        ):
-            raise ToolValidationError(
-                f"prompt_instructions {action} does not accept title, content, scopes, or categories"
-            )
-        if action in {"list", "add"} and instruction_id is not None:
-            raise ToolValidationError(
-                f"prompt_instructions {action} does not accept instruction_id"
-            )
+        # The portable schema has to expose every action field as required+nullable;
+        # it cannot express discriminator-dependent required/forbidden properties.
+        # Once the action is explicit, mechanically discard fields that the selected
+        # operation does not consume instead of spending another model call merely
+        # to turn harmless placeholders back into null. Meaningful fields for add/
+        # replace remain fully validated above.
+        if action == "list":
+            instruction_id = None
+            title = content = scopes = categories = None
+        elif action == "add":
+            instruction_id = None
+        elif action == "remove":
+            title = content = scopes = categories = None
         return {
             "action": action,
             "instruction_store": instruction_store,
