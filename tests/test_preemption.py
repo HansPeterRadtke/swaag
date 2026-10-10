@@ -935,9 +935,42 @@ def test_false_fast_promise_routes_to_full_orchestrator(make_config) -> None:
     assert "I'll write" not in answer["answer"]
 
 
+class _ReadyButDidNotStartClient(_ImmediateClient):
+    def send_completion(self, payload: dict[str, Any], **kwargs) -> CompletionResult:
+        self.requests.append(json.loads(stable_json_dumps(payload, indent=None)))
+        if payload.get("contract") == "orchestrator_interaction":
+            return self._result(payload, _orchestrator_interaction(
+                answer="I'm ready to start a worker for you now.",
+                route="respond",
+                reason="The user requested a worker, but I said I was ready.",
+            ))
+        return self._result(payload, _action("Real orchestration was invoked."))
+
+
+def test_recorded_real_phone_worker_request_cannot_end_in_readiness_promise(make_config) -> None:
+    config = make_config(
+        model__context_limit=32_000,
+        tools__enabled=["orchestration_control"],
+        tools__allow_stateful_tools=True,
+        tools__allow_side_effect_tools=True,
+        runtime__completion_evaluation_enabled=False,
+    )
+    client = _ReadyButDidNotStartClient("unused")
+    runtime = AgentRuntime(config, model_client=client)
+    service = CommunicationService(runtime, orchestrator_runtime=runtime)
+    answer = service.orchestrator_message("Fucking start a fucking worker.")
+    assert answer["answer"] == "Real orchestration was invoked."
+    assert [q["contract"] for q in client.requests] == [
+        "orchestrator_interaction", "agent_action",
+    ]
+
+
 def test_unexecuted_work_claim_guard_preserves_direct_noncommitments() -> None:
     from swaag.communication import CommunicationService
     yes = CommunicationService._fast_reply_claims_unperformed_work
+    assert yes("I'm ready to start a worker for you now.")
+    assert yes("I am prepared to launch your worker.")
+    assert yes("I can start the worker now.")
     assert yes("I'll write a Python program that creates a file.")
     assert yes("I will write a Python program.")
     assert yes("I can confirm that I will write a program.")

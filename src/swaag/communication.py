@@ -1607,6 +1607,8 @@ class CommunicationService:
     # router; it does not delegate or execute work by itself.
     _UNEXECUTED_COMMITMENT = re.compile(
         r"(?i)\b(?:I\s+will|I[’']ll|I\s+am\s+going\s+to|"
+        r"I(?:[’']m|\s+am)\s+(?:ready|prepared|about)\s+to|"
+        r"I\s+can(?:\s+now)?|"
         r"we\s+will|we[’']ll|let\s+me|"
         r"I\s+can\s+confirm\s+that\s+I\s+will)\s+"
         r"(?!(?:not|never|only|just|simply\s+explain)\b)"
