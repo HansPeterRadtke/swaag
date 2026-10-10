@@ -1247,6 +1247,11 @@ class CommunicationService:
         self.runtime = runtime
         self.assistant_runtime = assistant_runtime
         self.orchestrator_runtime = orchestrator_runtime or runtime
+        # One user utterance can require thousands of token-budget probes.
+        # Persisting two full journal/projection events per probe blocked the
+        # voice interface for over sixty seconds. Token counts still come from
+        # the same provider, and aggregate budget checks remain durably logged.
+        self.orchestrator_runtime._compact_tokenization_audit = True
         # The user-facing orchestrator has a durable, serial conversation.
         # A single replay currently reads a multi-hundred-MB append-only event
         # journal. Replaying it twice per turn led to 60-second voice timeouts.

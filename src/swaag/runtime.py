@@ -9594,6 +9594,29 @@ class AgentRuntime:
         with self._token_count_cache_lock:
             if text_hash in self._token_count_cache:
                 return self._token_count_cache[text_hash]
+        if getattr(self, "_compact_tokenization_audit", False):
+            # The user-facing orchestrator records its budget_checked events,
+            # not a pair of redundant durable events for every scalar count.
+            # Preserve the provider's actual count and all error handling.
+            def count_direct() -> CountResult:
+                provider = getattr(self.client, "count_text", None)
+                if callable(provider):
+                    result = provider(text)
+                    if not isinstance(result, CountResult):
+                        raise ModelClientError("Invalid provider token-count result")
+                    return result
+                return CountResult(
+                    tokens=int(self.client.tokenize(text)),
+                    exact=True, strategy="provider_tokenizer",
+                )
+            counted = self._retry_model_server_operation(count_direct, state=state)
+            if not counted.exact and not self.config.context.allow_estimate_fallback:
+                raise ModelClientError("Exact provider tokenization is unavailable and estimator fallback is disabled")
+            with self._token_count_cache_lock:
+                self._token_count_cache[text_hash] = counted
+                while len(self._token_count_cache) > self.config.context.max_token_count_cache_entries:
+                    self._token_count_cache.pop(next(iter(self._token_count_cache)))
+            return counted
         guard = self.history.guard(state, "tokenize")
         guard.record(
             "model_tokenize_requested",
