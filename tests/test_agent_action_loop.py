@@ -334,22 +334,21 @@ def test_nonterminal_nonpositive_word_count_is_normalized_without_retry(make_con
     assert not any(event.event_type == "agent_action_rejected" for event in events)
 
 
-def test_terminal_nonpositive_word_count_still_retries(make_config) -> None:
+@pytest.mark.parametrize("invalid_count", [0, -1])
+def test_terminal_nonpositive_word_count_is_normalized_without_retry(make_config, invalid_count) -> None:
     config = make_config(model__context_limit=32_000, tools__staged_discovery=False)
     config.tools.enabled = []
-    invalid = json.loads(_action(message="done", continue_loop=False))
-    invalid["response_constraints"] = {"exact_word_count": 0}
-    client = FakeModelClient([json.dumps(invalid), _action(message="done")])
+    payload = json.loads(_action(message="done", continue_loop=False))
+    payload["response_constraints"] = {"exact_word_count": invalid_count}
+    client = FakeModelClient([json.dumps(payload)])
     runtime = AgentRuntime(config, model_client=client)
 
     result = runtime.run_turn("Reply done.")
 
     assert result.assistant_text == "done"
-    assert len(client.requests) == 2
+    assert len(client.requests) == 1
     events = runtime.history.read_history(result.session_id)
-    rejected = [event for event in events if event.event_type == "agent_action_rejected"]
-    assert len(rejected) == 1
-    assert "positive integer or null" in rejected[0].payload["reason"]
+    assert not any(event.event_type == "agent_action_rejected" for event in events)
 
 def test_current_user_request_preserves_leading_and_trailing_whitespace_verbatim(make_config) -> None:
     request = "\n  exact outer whitespace matters  \n"

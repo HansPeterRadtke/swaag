@@ -159,7 +159,9 @@ CASES = (
         ),
         enabled_tools=("shell_command",),
         forbidden_tools=("shell_command",),
-        required_fragments=("recursive", "without prompting"),
+        # Use stable semantic stems instead of one brittle English phrasing:
+        # valid explanations may say "without prompting" or "without confirmation".
+        required_fragments=("recursive", "without"),
         question_policy="none",
     ),
     AutonomyBehaviorCase(

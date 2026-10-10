@@ -1928,20 +1928,13 @@ class AgentRuntime:
         exact = constraints.get("exact_word_count")
         message = payload.get("assistant_message")
         # Portable constrained schemas intentionally cannot use numeric minimum/maximum.
-        # A non-positive count therefore remains syntactically possible even though it
-        # has no valid meaning. On a nonterminal action the field cannot constrain any
-        # delivered response, so normalize that out-of-domain metadata to null instead
-        # of discarding an otherwise-valid tool/control action and spending another LLM
-        # call. Terminal responses keep the strict positive-count validation below.
-        tool_calls = payload.get("tool_calls")
-        nonterminal = payload.get("continue_loop") is True or (
-            isinstance(tool_calls, list) and bool(tool_calls)
-        )
+        # Non-positive exact word counts are outside the runtime contract on every action.
+        # Normalize that impossible metadata to null rather than discarding an otherwise
+        # valid semantic action and spending another model call.
         if (
             isinstance(exact, int)
             and not isinstance(exact, bool)
             and exact <= 0
-            and nonterminal
         ):
             payload = copy.deepcopy(payload)
             payload["response_constraints"]["exact_word_count"] = None
