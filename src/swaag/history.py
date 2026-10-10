@@ -252,7 +252,7 @@ class HistoryStore:
         # conversations previously spent minutes rescanning 300+ MB journals.
         # File identity includes mtime_ns, inode, size and device. External
         # edits invalidate this cache and trigger full integrity validation.
-        self._verified_jsonl_stats: dict[str, tuple[int, tuple[int, int, int, int]]] = {}
+        self._verified_jsonl_stats: dict[str, tuple[int, tuple[int, int, int, int, int]]] = {}
         _ensure_directory(self.root)
         self._init_sqlite_history()
 
@@ -324,9 +324,9 @@ class HistoryStore:
             return int(row[0]) if row is not None else 0
 
     @staticmethod
-    def _jsonl_file_stamp(path: Path) -> tuple[int, int, int, int]:
+    def _jsonl_file_stamp(path: Path) -> tuple[int, int, int, int, int]:
         stat = path.stat()
-        return (stat.st_dev, stat.st_ino, stat.st_size, stat.st_mtime_ns)
+        return (stat.st_dev, stat.st_ino, stat.st_size, stat.st_mtime_ns, stat.st_ctime_ns)
 
     def _ensure_session_indexed(self, session_id: str) -> None:
         path = self.history_path(session_id)

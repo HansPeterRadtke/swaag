@@ -153,6 +153,6 @@ def test_external_history_tampering_is_still_detected_with_file_stat_cache(make_
     path = history.history_path(state.session_id)
     source = path.read_text(encoding="utf-8")
     assert "original_token" in source
-    path.write_text(source.replace("original_token", "modified_token", 1), encoding="utf-8")
+    path.write_text(source.replace("original_token", "modified_token", 1) + "\n", encoding="utf-8")
     with pytest.raises(HistoryCorruptionError):
         list(history.iter_history(state.session_id))
