@@ -254,6 +254,7 @@ def test_compaction_benchmark_seeds_redundant_progress_that_can_recover_tokens(m
     state = runtime.create_or_load_session()
     text = _routine_progress_message(1, role="assistant")
     assert "no new task facts" in text
+    assert text == text.rstrip()
     # The source must be materially larger than a summary envelope; otherwise the
     # runtime is correct to refuse compaction and the benchmark would be invalid.
     assert runtime._counter(state).count_text(text).tokens > 250

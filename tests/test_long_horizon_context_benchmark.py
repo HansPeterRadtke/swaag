@@ -178,6 +178,8 @@ def _overflow_report() -> dict[str, Any]:
 
 
 def test_long_horizon_aggregate_keeps_dimensions_separate(monkeypatch, make_config, tmp_path):
+    captured_compaction_config = {}
+
     compaction = {
         "complete": True,
         "results": [
@@ -198,9 +200,13 @@ def test_long_horizon_aggregate_keeps_dimensions_separate(monkeypatch, make_conf
         ],
     }
     overflow_calls: list[str] = []
+    def fake_compaction(**kwargs):
+        captured_compaction_config["sessions_root"] = kwargs["config"].sessions.root
+        return compaction
+
     monkeypatch.setattr(
         "swaag.benchmark.long_horizon_context.run_compaction_preservation_benchmark",
-        lambda **_kwargs: compaction,
+        fake_compaction,
     )
     monkeypatch.setattr(
         "swaag.benchmark.long_horizon_context.run_context_engineering_benchmark",
@@ -227,6 +233,7 @@ def test_long_horizon_aggregate_keeps_dimensions_separate(monkeypatch, make_conf
         "measured_overflow_projection": {"passed": 3, "total": 3},
     }
     assert len(overflow_calls) == 3
+    assert captured_compaction_config["sessions_root"] == tmp_path / "long" / "sessions"
     checkpoint = json.loads((tmp_path / "long" / "long_horizon_context_results.json").read_text())
     assert checkpoint == report
 

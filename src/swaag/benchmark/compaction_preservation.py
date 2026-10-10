@@ -161,9 +161,13 @@ def _routine_progress_message(cycle: int, *, role: str) -> str:
     # correct runtime should refuse a size-increasing "compaction".
     sentence = (
         f"Routine cycle {cycle} {role} progress contains no new task facts, constraints, "
-        "identifiers, paths, decisions, promises, blockers, or completion evidence. "
+        "identifiers, paths, decisions, promises, blockers, or completion evidence."
     )
-    return sentence * 28
+    # Keep the redundant pressure large without ending the chat message in
+    # whitespace. The production Qwen chat template trims message-boundary
+    # whitespace; an artificial trailing space would therefore make exact prompt
+    # accounting fail closed before the semantic selector can evaluate the span.
+    return " ".join([sentence] * 28)
 
 
 def _model_identity(runtime: AgentRuntime) -> Any:

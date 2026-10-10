@@ -337,3 +337,13 @@ This is a regression spot-check after the subsequent autonomy/tool-discovery cle
 - Stop when complete: `/data/var/swaag-benchmarks/autonomy-20261010-stop/autonomy_behavior_results.json`, SHA-256 `8209d22041409a09cd2088327b44839ada6272c59754b74888cb841f9462827c`, passes 1/1 with the fully specified answer and zero tool calls.
 
 These are current-head confirmations, not a replacement for the broader retained October 8 fourteen-cell autonomy run. The remaining open scope is repeated variance, licensed external benchmark subsets, current-web/provider-failure behavior, and genuinely long-horizon trajectories.
+
+## Current-head long-horizon context acceptance - 2026-10-10
+
+A current-head long-horizon run was retained under `/data/var/swaag-benchmarks/long-horizon-20261010-current-fixed`. The benchmark-only session root is isolated inside that artifact tree, so the run does not populate the ordinary production session store. The compaction pressure messages also avoid artificial message-boundary trailing whitespace that the production Qwen chat template trims, preserving exact serialized-prompt accounting.
+
+- Repeated compaction: `/data/var/swaag-benchmarks/long-horizon-20261010-current-fixed/compaction_preservation.json`, SHA-256 `a79e4ab8f7aae81e79667f04a1a2745642ad59b5528ad5f655385f95cbdd4073`, passes 2/2 compaction cycles with exact authoritative fact preservation, adversarial-conflict resistance, semantic retrieval, and source-reference recovery.
+- Restart-delayed relevance: `/data/var/swaag-benchmarks/long-horizon-20261010-current-fixed/restart_delayed_relevance.json`, SHA-256 `5d95184cdac421244be206b4b1a6372860524fa47a722e562c4aaae267e19fe2`, passes.
+- Aggregate: `/data/var/swaag-benchmarks/long-horizon-20261010-current-fixed/long_horizon_context_results.json`, SHA-256 `f3b58cf8e475c3cb61762bd29d09677c1d91636ce23cc2a2c31f9c44a41d72cd`, reports `all_dimensions_passed=true`. The six separately scored dimensions all pass: exact preservation 2/2, semantic retrieval 2/2, adversarial conflict resistance 2/2, provenance recoverability 2/2, restart-delayed relevance 1/1, and measured overflow projection 1/1. The overflow trial uses the live local llama.cpp endpoint and records actual measured overflow plus semantic projection and exact lineage/recovery.
+
+Focused deterministic regression coverage for the compaction-preservation and long-horizon harnesses passes 12/12 after these fixes. The remaining broader scope is longer trajectories, more restart/source profiles, and additional model/backend profiles rather than a known failure in the current harness mechanics.

@@ -232,6 +232,11 @@ def run_long_horizon_context_benchmark(
 
         shutil.rmtree(output_dir)
     output_dir.mkdir(parents=True, exist_ok=True)
+    # Keep benchmark-only durable state inside the retained artifact tree. A live
+    # long-horizon run creates and mutates several sessions; those must not enter
+    # the ordinary production session root merely because the caller used the
+    # default deployment config. Sub-trials may choose narrower roots below this.
+    base.sessions.root = output_dir / "sessions"
     report_path = output_dir / "long_horizon_context_results.json"
 
     signature = {
