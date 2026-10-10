@@ -965,6 +965,31 @@ def test_recorded_real_phone_worker_request_cannot_end_in_readiness_promise(make
     ]
 
 
+def test_foreground_orchestrator_uses_live_tokenizer_without_rereading_cache(make_config) -> None:
+    from swaag.tokens import CountResult
+    calls = []
+    class Live:
+        def count_text(self, text):
+            calls.append(("provider", text))
+            return CountResult(tokens=9, exact=True, strategy="live_exact")
+    class Cassette:
+        mode = "record"
+        def __init__(self): self.delegate = Live()
+        def count_text(self, text):
+            raise AssertionError("Live orchestrator must not decode 120 MB cache per token")
+        def tokenize(self, text):
+            raise AssertionError("Use exact provider token count")
+    config = make_config()
+    runtime = AgentRuntime(config, model_client=Cassette())
+    runtime._compact_tokenization_audit = True
+    state = runtime.create_or_load_session()
+    result = runtime._tokenize_with_history(state, "actual voice query")
+    assert (result.tokens, result.exact) == (9, True)
+    assert calls == [("provider", "actual voice query")]
+    assert runtime._tokenize_with_history(state, "actual voice query") == result
+    assert len(calls) == 1
+
+
 def test_unexecuted_work_claim_guard_preserves_direct_noncommitments() -> None:
     from swaag.communication import CommunicationService
     yes = CommunicationService._fast_reply_claims_unperformed_work
