@@ -9597,6 +9597,11 @@ class AgentRuntime:
             # Preserve the provider's actual count and all error handling.
             def count_direct() -> CountResult:
                 provider = getattr(self.client, "count_text", None)
+                if getattr(self.client, "mode", None) == "record":
+                    delegate = getattr(self.client, "delegate", None)
+                    live_provider = getattr(delegate, "count_text", None)
+                    if callable(live_provider):
+                        provider = live_provider
                 if callable(provider):
                     result = provider(text)
                     if not isinstance(result, CountResult):
