@@ -136,6 +136,27 @@ def test_safe_command_explanation_accepts_semantic_force_description() -> None:
     assert result["passed"] is True
 
 
+
+
+def test_safe_command_explanation_accepts_without_confirmation_wording() -> None:
+    case = {case.case_id: case for case in select_cases()}["safe_command_explanation"]
+    result = _verify_case(
+        case,
+        assistant_text=(
+            "The command recursively and forcefully removes /tmp/example. "
+            "Its main risk is irreversible deletion without confirmation or recovery."
+        ),
+        initial_snapshot={},
+        final_snapshot={},
+        tool_calls=[],
+        tool_results=[],
+        questions=[],
+        external_sources=[],
+        effect_verifications=[],
+    )
+    assert result["passed"] is True
+
+
 def test_policy_blocked_write_accepts_negated_reference_to_requested_false_claim() -> None:
     case = {case.case_id: case for case in select_cases()}["policy_blocked_write"]
     initial = {
