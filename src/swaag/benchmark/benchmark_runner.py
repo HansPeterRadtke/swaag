@@ -1673,6 +1673,23 @@ def _build_parser() -> argparse.ArgumentParser:
         "--json", action="store_true", help="Print the full JSON report."
     )
 
+    backend_scheduling_parser = subparsers.add_parser(
+        "backend-scheduling",
+        help="Measure interactive-request latency while a long backend generation is active.",
+    )
+    backend_scheduling_parser.add_argument("--endpoint", required=True, help="OpenAI-compatible chat completions endpoint.")
+    backend_scheduling_parser.add_argument("--model", required=True, help="Served model name.")
+    backend_scheduling_parser.add_argument("--metrics-url", default="", help="Optional vLLM-compatible metrics endpoint.")
+    backend_scheduling_parser.add_argument("--output", default="backend_scheduling_output", help="Artifact directory.")
+    backend_scheduling_parser.add_argument("--long-prompt-repetitions", type=int, default=5000)
+    backend_scheduling_parser.add_argument("--long-max-tokens", type=int, default=256)
+    backend_scheduling_parser.add_argument("--short-max-tokens", type=int, default=32)
+    backend_scheduling_parser.add_argument("--short-submit-delay-seconds", type=float, default=1.0)
+    backend_scheduling_parser.add_argument("--scheduler-sample-delay-seconds", type=float, default=0.25)
+    backend_scheduling_parser.add_argument("--timeout-seconds", type=float, default=300.0)
+    backend_scheduling_parser.add_argument("--clean", action="store_true")
+    backend_scheduling_parser.add_argument("--json", action="store_true")
+
     tool_strategy_parser = subparsers.add_parser(
         "tool-strategy",
         help="Compare generic shell use with bespoke structured tools on identical live tasks.",
@@ -2333,6 +2350,33 @@ def main(argv: Sequence[str] | None = None) -> int:
                 f"output={Path(args.output) / 'orchestration_scheduler_results.json'}"
             )
         return 0 if report["complete"] and report["all_passed"] else 1
+
+    if args.command == "backend-scheduling":
+        from swaag.benchmark.backend_scheduling import run_backend_scheduling_benchmark
+
+        report = run_backend_scheduling_benchmark(
+            output_dir=Path(args.output),
+            endpoint=str(args.endpoint),
+            model=str(args.model),
+            metrics_url=str(args.metrics_url),
+            long_prompt_repetitions=int(args.long_prompt_repetitions),
+            long_max_tokens=int(args.long_max_tokens),
+            short_max_tokens=int(args.short_max_tokens),
+            short_submit_delay_seconds=float(args.short_submit_delay_seconds),
+            scheduler_sample_delay_seconds=float(args.scheduler_sample_delay_seconds),
+            timeout_seconds=float(args.timeout_seconds),
+            clean=bool(args.clean),
+        )
+        if args.json:
+            print(stable_json_dumps(report, indent=2))
+        else:
+            print(f"passed={report['passed']}")
+            print(f"long_ttft_seconds={report['long'].get('ttft_seconds')}")
+            print(f"short_ttft_seconds={report['short'].get('ttft_seconds')}")
+            print(f"short_finished_before_long={report['short_finished_before_long']}")
+            print(f"overlap_seconds={report['overlap_seconds']}")
+            print(f"output={Path(args.output) / 'backend_scheduling_results.json'}")
+        return 0 if report["passed"] else 1
 
     if args.command == "tool-strategy":
         from swaag.benchmark.tool_strategy import run_tool_strategy_benchmark
