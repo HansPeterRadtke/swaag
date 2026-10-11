@@ -61,6 +61,9 @@ def test_backend_scheduling_records_absolute_order_and_metrics(tmp_path: Path) -
                 time.sleep(0.16 if is_long else 0.02)
                 chunks = ["long-a", "long-b"] if is_long else ["short"]
                 lines = []
+                if is_long:
+                    item = {"choices": [{"delta": {"reasoning_content": "thinking"}, "finish_reason": None}]}
+                    lines.append("data: " + json.dumps(item) + "\n\n")
                 for content in chunks:
                     item = {"choices": [{"delta": {"content": content}, "finish_reason": None}]}
                     lines.append("data: " + json.dumps(item) + "\n\n")
@@ -101,6 +104,9 @@ def test_backend_scheduling_records_absolute_order_and_metrics(tmp_path: Path) -
     assert report["passed"] is True
     assert report["short_finished_before_long"] is True
     assert report["overlap_seconds"] > 0
+    assert report["long"]["ttft_seconds"] is not None
+    assert report["long"]["visible_ttft_seconds"] is not None
+    assert report["long"]["reasoning_chars"] == len("thinking")
     assert report["short"]["submitted_offset_seconds"] > report["long"]["submitted_offset_seconds"]
     assert report["short"]["finished_offset_seconds"] < report["long"]["finished_offset_seconds"]
     assert report["scheduler_during_overlap"]["metrics"]["num_requests_running"] == 2.0

@@ -62,7 +62,9 @@ def _stream_chat_call(
 ) -> dict[str, Any]:
     submitted = time.monotonic()
     first_token_at: float | None = None
+    first_visible_token_at: float | None = None
     chunks: list[str] = []
+    reasoning_chunks: list[str] = []
     usage: dict[str, Any] | None = None
     finish_reason: str | None = None
     payload = {
@@ -101,24 +103,42 @@ def _stream_chat_call(
         if choice.get("finish_reason") is not None:
             finish_reason = str(choice["finish_reason"])
         delta = choice.get("delta") if isinstance(choice.get("delta"), dict) else {}
+        reasoning = delta.get("reasoning_content")
+        if not isinstance(reasoning, str):
+            reasoning = delta.get("reasoning") if isinstance(delta.get("reasoning"), str) else ""
         content = delta.get("content")
         if not isinstance(content, str):
             content = choice.get("text") if isinstance(choice.get("text"), str) else ""
-        if content:
+        if reasoning or content:
+            now = time.monotonic()
             if first_token_at is None:
-                first_token_at = time.monotonic()
-            chunks.append(content)
+                first_token_at = now
+            if reasoning:
+                reasoning_chunks.append(reasoning)
+            if content:
+                if first_visible_token_at is None:
+                    first_visible_token_at = now
+                chunks.append(content)
     finished = time.monotonic()
     text = "".join(chunks)
+    reasoning_text = "".join(reasoning_chunks)
     return {
         "label": label,
         "submitted_offset_seconds": submitted - origin,
         "first_token_offset_seconds": None if first_token_at is None else first_token_at - origin,
+        "first_visible_token_offset_seconds": (
+            None if first_visible_token_at is None else first_visible_token_at - origin
+        ),
         "finished_offset_seconds": finished - origin,
         "ttft_seconds": None if first_token_at is None else first_token_at - submitted,
+        "visible_ttft_seconds": (
+            None if first_visible_token_at is None else first_visible_token_at - submitted
+        ),
         "elapsed_seconds": finished - submitted,
         "output_chars": len(text),
+        "reasoning_chars": len(reasoning_text),
         "output_head": text[:240],
+        "reasoning_head": reasoning_text[:240],
         "finish_reason": finish_reason,
         "usage": usage,
         "max_tokens": max_tokens,
