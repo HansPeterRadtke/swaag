@@ -2370,10 +2370,13 @@ def main(argv: Sequence[str] | None = None) -> int:
         if args.json:
             print(stable_json_dumps(report, indent=2))
         else:
-            print(f"passed={report['passed']}")
+            print(f"transport_succeeded={report['transport_succeeded']}")
             print(f"long_ttft_seconds={report['long'].get('ttft_seconds')}")
             print(f"short_ttft_seconds={report['short'].get('ttft_seconds')}")
             print(f"short_finished_before_long={report['short_finished_before_long']}")
+            print(f"short_first_token_before_long_finished={report['short_first_token_before_long_finished']}")
+            print(f"interactive_overlap_observed={report['interactive_overlap_observed']}")
+            print(f"short_serialized_behind_long={report['short_serialized_behind_long']}")
             print(f"overlap_seconds={report['overlap_seconds']}")
             print(f"output={Path(args.output) / 'backend_scheduling_results.json'}")
         return 0 if report["passed"] else 1

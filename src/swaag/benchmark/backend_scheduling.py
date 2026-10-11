@@ -248,17 +248,36 @@ def run_backend_scheduling_benchmark(
     successful = "error" not in long_result and "error" not in short_result
     short_finished_before_long: bool | None = None
     overlap_seconds: float | None = None
+    short_submitted_before_long_finished: bool | None = None
+    short_first_token_before_long_finished: bool | None = None
+    interactive_overlap_observed: bool | None = None
+    short_serialized_behind_long: bool | None = None
     if successful:
+        long_finished = float(long_result["finished_offset_seconds"])
+        short_submitted = float(short_result["submitted_offset_seconds"])
         short_finished_before_long = (
-            float(short_result["finished_offset_seconds"])
-            < float(long_result["finished_offset_seconds"])
+            float(short_result["finished_offset_seconds"]) < long_finished
+        )
+        short_submitted_before_long_finished = short_submitted < long_finished
+        short_first_token = short_result.get("first_token_offset_seconds")
+        short_first_token_before_long_finished = (
+            isinstance(short_first_token, (int, float))
+            and float(short_first_token) < long_finished
+        )
+        interactive_overlap_observed = bool(
+            short_submitted_before_long_finished
+            and short_first_token_before_long_finished
+        )
+        short_serialized_behind_long = bool(
+            short_submitted_before_long_finished
+            and not short_first_token_before_long_finished
         )
         overlap_start = max(
             float(long_result["submitted_offset_seconds"]),
-            float(short_result["submitted_offset_seconds"]),
+            short_submitted,
         )
         overlap_end = min(
-            float(long_result["finished_offset_seconds"]),
+            long_finished,
             float(short_result["finished_offset_seconds"]),
         )
         overlap_seconds = max(0.0, overlap_end - overlap_start)
@@ -282,7 +301,12 @@ def run_backend_scheduling_benchmark(
         "long": long_result,
         "short": short_result,
         "short_finished_before_long": short_finished_before_long,
+        "short_submitted_before_long_finished": short_submitted_before_long_finished,
+        "short_first_token_before_long_finished": short_first_token_before_long_finished,
+        "interactive_overlap_observed": interactive_overlap_observed,
+        "short_serialized_behind_long": short_serialized_behind_long,
         "overlap_seconds": overlap_seconds,
+        "transport_succeeded": successful,
         "passed": successful,
     }
     (output_dir / "backend_scheduling_results.json").write_text(
