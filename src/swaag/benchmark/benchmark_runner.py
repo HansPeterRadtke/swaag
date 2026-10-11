@@ -2377,6 +2377,9 @@ def main(argv: Sequence[str] | None = None) -> int:
             print(f"short_first_token_before_long_finished={report['short_first_token_before_long_finished']}")
             print(f"interactive_overlap_observed={report['interactive_overlap_observed']}")
             print(f"short_serialized_behind_long={report['short_serialized_behind_long']}")
+            print(f"scheduler_peak_running={report['scheduler_peak_running']}")
+            print(f"scheduler_peak_waiting={report['scheduler_peak_waiting']}")
+            print(f"scheduler_concurrency_observed={report['scheduler_concurrency_observed']}")
             print(f"overlap_seconds={report['overlap_seconds']}")
             print(f"output={Path(args.output) / 'backend_scheduling_results.json'}")
         return 0 if report["passed"] else 1

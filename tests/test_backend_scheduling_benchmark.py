@@ -115,6 +115,10 @@ def test_backend_scheduling_records_absolute_order_and_metrics(tmp_path: Path) -
     assert report["short"]["submitted_offset_seconds"] > report["long"]["submitted_offset_seconds"]
     assert report["short"]["finished_offset_seconds"] < report["long"]["finished_offset_seconds"]
     assert report["scheduler_during_overlap"]["metrics"]["num_requests_running"] == 2.0
+    assert report["scheduler_samples"]
+    assert report["scheduler_peak_running"] == 2.0
+    assert report["scheduler_peak_waiting"] == 0.0
+    assert report["scheduler_concurrency_observed"] is True
     assert (tmp_path / "run" / "backend_scheduling_results.json").exists()
 
 
@@ -173,6 +177,9 @@ def test_backend_scheduling_identifies_serialized_short_request(tmp_path: Path) 
     assert report["interactive_overlap_observed"] is False
     assert report["short_serialized_behind_long"] is True
     assert report["short_finished_before_long"] is False
+    assert report["scheduler_peak_running"] is None
+    assert report["scheduler_peak_waiting"] is None
+    assert report["scheduler_concurrency_observed"] is None
 
 def test_backend_scheduling_cli_arguments() -> None:
     args = _build_parser().parse_args(

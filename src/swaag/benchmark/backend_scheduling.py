@@ -237,6 +237,27 @@ def run_backend_scheduling_benchmark(
     short_thread.start()
     time.sleep(scheduler_sample_delay_seconds)
     during_overlap = _scheduler_snapshot(metrics_url, timeout_seconds=timeout_seconds)
+    scheduler_samples: list[dict[str, Any]] = [
+        {
+            "offset_seconds": time.monotonic() - origin,
+            **during_overlap,
+        }
+    ]
+    # A single early metrics scrape can miss a scheduler transition while the
+    # requests are still entering prefill. Sample for the actual period in which
+    # both HTTP streams remain live, bounded so metrics collection can never turn
+    # a latency experiment into an unbounded monitoring loop. Stream timestamps
+    # remain the primary scheduling evidence; these samples are backend corroboration.
+    while long_thread.is_alive() and short_thread.is_alive() and len(scheduler_samples) < 32:
+        if scheduler_sample_delay_seconds > 0:
+            time.sleep(scheduler_sample_delay_seconds)
+        sample = _scheduler_snapshot(metrics_url, timeout_seconds=timeout_seconds)
+        scheduler_samples.append(
+            {
+                "offset_seconds": time.monotonic() - origin,
+                **sample,
+            }
+        )
 
     short_thread.join(timeout=timeout_seconds + 5.0)
     long_thread.join(timeout=timeout_seconds + 5.0)
@@ -282,6 +303,26 @@ def run_backend_scheduling_benchmark(
         )
         overlap_seconds = max(0.0, overlap_end - overlap_start)
 
+    scheduler_running_values = [
+        float(sample["metrics"]["num_requests_running"])
+        for sample in scheduler_samples
+        if sample.get("supported")
+        and isinstance(sample.get("metrics"), dict)
+        and "num_requests_running" in sample["metrics"]
+    ]
+    scheduler_waiting_values = [
+        float(sample["metrics"]["num_requests_waiting"])
+        for sample in scheduler_samples
+        if sample.get("supported")
+        and isinstance(sample.get("metrics"), dict)
+        and "num_requests_waiting" in sample["metrics"]
+    ]
+    scheduler_peak_running = max(scheduler_running_values) if scheduler_running_values else None
+    scheduler_peak_waiting = max(scheduler_waiting_values) if scheduler_waiting_values else None
+    scheduler_concurrency_observed = (
+        None if scheduler_peak_running is None else scheduler_peak_running >= 2.0
+    )
+
     report = {
         "benchmark": "backend_scheduling_v1",
         "endpoint": endpoint,
@@ -298,6 +339,10 @@ def run_backend_scheduling_benchmark(
         "idle_scheduler": idle_snapshot,
         "scheduler_before_short": before_short,
         "scheduler_during_overlap": during_overlap,
+        "scheduler_samples": scheduler_samples,
+        "scheduler_peak_running": scheduler_peak_running,
+        "scheduler_peak_waiting": scheduler_peak_waiting,
+        "scheduler_concurrency_observed": scheduler_concurrency_observed,
         "long": long_result,
         "short": short_result,
         "short_finished_before_long": short_finished_before_long,
