@@ -745,10 +745,13 @@ def _run_turn_with_communication_probe(
     scenario,
     *,
     resume_timeout_seconds: float | None = None,
+    probe_metrics: dict[str, Any] | None = None,
 ) -> Any:
     question = str(getattr(scenario, "communication_probe_question", "") or "").strip()
     if not question:
         return runtime.run_turn_in_session(state, scenario.prompt)
+    metrics = probe_metrics if probe_metrics is not None else {}
+    metrics.clear()
 
     probe_started = time.monotonic()
     holder: dict[str, Any] = {}
@@ -804,7 +807,21 @@ def _run_turn_with_communication_probe(
             "before the main turn completed"
         )
 
-    CommunicationService(runtime).answer_status_question(state.session_id, question)
+    active_observed = time.monotonic()
+    metrics.update(
+        {
+            "question": question,
+            "active_call_observed_seconds": round(active_observed - probe_started, 6),
+        }
+    )
+    status_started = time.monotonic()
+    status_answer = CommunicationService(runtime).answer_status_question(
+        state.session_id, question
+    )
+    status_completed = time.monotonic()
+    metrics["status_response_seconds"] = round(status_completed - status_started, 6)
+    metrics["status_answer"] = status_answer
+    metrics["status_answer_chars"] = len(status_answer)
     resume_wait_seconds = max(0.1, total_deadline - time.monotonic())
     worker.join(timeout=resume_wait_seconds)
     if worker.is_alive():
@@ -813,6 +830,9 @@ def _run_turn_with_communication_probe(
         )
     if failure:
         raise failure["error"]
+    metrics["main_turn_resume_seconds"] = round(
+        time.monotonic() - status_completed, 6
+    )
     return holder["turn"]
 
 
@@ -1236,6 +1256,7 @@ def run_benchmarks(
             assistant_text = ""
             task_started = time.monotonic()
             loop_info: dict[str, Any] = {"triggered": False}
+            communication_probe_metrics: dict[str, Any] = {}
             task_loop_limit = task.benchmark_max_consecutive_identical_tool_calls
             if task_loop_limit is None:
                 task_loop_limit = max_consecutive_identical_tool_calls
@@ -1253,6 +1274,7 @@ def run_benchmarks(
                             state,
                             scenario,
                             resume_timeout_seconds=effective_task_timeout,
+                            probe_metrics=communication_probe_metrics,
                         )
                 assistant_text = turn.assistant_text
             except BenchmarkSeedTimeout as exc:
@@ -1372,6 +1394,7 @@ def run_benchmarks(
                     "verification_repair_rounds": repair_rounds_used,
                     "wall_clock_seconds": task_elapsed,
                     "replay_cache": replay_cache_info or {},
+                    "communication_probe": dict(communication_probe_metrics),
                     "runtime_error": (
                         None
                         if runtime_error is None
@@ -1427,6 +1450,11 @@ def run_benchmarks(
                     "cache_mode_summary": _actual_cache_mode(
                         seed_results,
                         cached=resolved_agent_behavior_mode == "cached",
+                    ),
+                    "communication_probe": (
+                        dict(seed_results[-1].get("communication_probe", {}))
+                        if len(seed_results) == 1
+                        else {}
                     ),
                     "execution_blocked": bool(aggregate_execution_blockers),
                     "execution_blockers": aggregate_execution_blockers,

@@ -823,8 +823,17 @@ def test_benchmark_communication_probe_exercises_exact_replay(make_config, tmp_p
             require_exact_preemption_replay=True,
         ),
     )
-    turn = _run_turn_with_communication_probe(runtime, state, scenario)
+    probe_metrics: dict[str, Any] = {}
+    turn = _run_turn_with_communication_probe(
+        runtime, state, scenario, probe_metrics=probe_metrics
+    )
     assert turn.assistant_text == "main finished"
+    assert probe_metrics["question"] == "Benchmark status?"
+    assert probe_metrics["active_call_observed_seconds"] >= 0
+    assert probe_metrics["status_response_seconds"] >= 0
+    assert isinstance(probe_metrics["status_answer"], str)
+    assert probe_metrics["status_answer_chars"] == len(probe_metrics["status_answer"])
+    assert probe_metrics["main_turn_resume_seconds"] >= 0
     rebuilt = runtime.history.rebuild_from_history(state.session_id)
     events = runtime.history.read_history(state.session_id)
     report = verify_benchmark_contract(
