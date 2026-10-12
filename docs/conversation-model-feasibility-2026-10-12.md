@@ -331,3 +331,23 @@ includes durable receipt before long conversation waits, superseded-action
 prevention through the ordinary entry point, authoritative state changes during
 generation, additional adversarial/state-conflict and stochastic holdouts,
 same-weight scheduling controls, and actual finalized-voice/TTS timing.
+
+### Final operational state
+
+The temporary 9B service was returned to its original inactive state after all
+experiments. Cleanup verified the exact process started by this study and an idle
+inference slot before stopping it. Thor then reported 18.8 GiB available. The
+pre-existing BF16, Q3 and vision-model process identities remained unchanged.
+The guarded start remains the required mechanism for any future load. Evidence:
+`temporary-model-cleanup.txt` and `existing-model-processes.json`.
+
+The Jetson default endpoint outage was traced, rather than assumed to be a
+model-performance defect. Its service had failed at 16:52 UTC, before this
+investigation, with exit status 75 because the admission guard calculated a
+16.5 GiB footprint plus 4.0 GiB reserve against only 18.4 GiB available, a
+2.1 GiB shortfall. It explicitly started no model and stopped nothing. Current
+Jetson headroom was still below that combined requirement. No guard was bypassed,
+no existing workload was evicted, and the unrelated host configuration was
+preserved. `jetson-backend-admission-failure.txt` retains the exact journal evidence.
+The installed-package verification is therefore not a claim that the default
+Jetson model endpoint has been restored.
