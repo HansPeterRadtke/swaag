@@ -1631,6 +1631,42 @@ class CommunicationService:
             or cls._UNSUPPORTED_COMPLETION.search(str(answer))
         )
 
+    def _orchestrator_runtime_snapshot(self) -> dict[str, Any]:
+        """Exact current records, collected after any backend preemption wait.
+
+        Sources are individually consistent reads, not a cross-store transaction.
+        Preserve completed results and history-derived progress: an active-only
+        view loses precisely the evidence needed to answer completion questions.
+        """
+        started_at = utc_now_iso()
+        workers = self.workers.list()
+        plans = self.orchestration.store.list_plans()
+        inventory = self.orchestration_api.execute("questions.list")["inventory"]
+        supervision = self.orchestration_api.execute("supervision")["supervision"]
+        return {
+            "collection_started_at": started_at,
+            "captured_at": utc_now_iso(),
+            "consistency": "per-source observations; workers may change during collection or generation",
+            "active_workers": [
+                asdict(worker) for worker in workers
+                if worker.status not in WORKER_TERMINAL_STATES
+            ],
+            "terminal_workers": [
+                asdict(worker) for worker in workers
+                if worker.status in WORKER_TERMINAL_STATES
+            ],
+            "active_plans": [
+                asdict(plan) for plan in plans
+                if plan.status not in {"completed", "canceled"}
+            ],
+            "terminal_plans": [
+                asdict(plan) for plan in plans
+                if plan.status in {"completed", "canceled"}
+            ],
+            "worker_question_inventory": inventory,
+            "supervision": supervision,
+        }
+
     def orchestrator_message(self, message: str) -> dict[str, str]:
         text = str(message)
         if not text.strip():
@@ -1642,25 +1678,6 @@ class CommunicationService:
             self.supervisor.start()
             self.orchestration.advance_active_plans()
             state = self._orchestrator_state()
-            fast_runtime_snapshot = {
-                "active_workers": [
-                    asdict(worker)
-                    for worker in self.workers.list()
-                    if worker.status not in WORKER_TERMINAL_STATES
-                ],
-                "active_plans": [
-                    asdict(plan)
-                    for plan in self.orchestration.store.list_plans()
-                    if plan.status not in {"completed", "canceled"}
-                ],
-                "worker_question_inventory": (lambda inventory: {
-                    "questions": inventory.get("questions", []),
-                    "pending_revisions": inventory.get("pending_revisions", []),
-                })(self.orchestration_api.execute("questions.list")["inventory"]),
-                "supervision": self.orchestration_api.execute("supervision")[
-                    "supervision"
-                ],
-            }
             preemptions: list[tuple[AgentRuntime, object]] = []
             orchestrator_backend = self.orchestrator_runtime.config.model.base_url.rstrip("/")
             managers = {"default": self.workers, **self.worker_model_managers}
@@ -1686,6 +1703,7 @@ class CommunicationService:
                     1000, source="user_orchestrator"
                 ):
                     try:
+                        fast_runtime_snapshot = self._orchestrator_runtime_snapshot()
                         routed = self.orchestrator_runtime.generate_orchestrator_interaction(
                             message=text,
                             conversation_messages=list(state.messages),
