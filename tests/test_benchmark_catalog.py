@@ -55,7 +55,7 @@ def test_benchmark_catalog_uses_programmatic_verification_and_anti_tamper_contra
             assert contract.expected_json_schema is not None
             assert contract.forbid_unexpected_workspace_changes is True
         elif task.task_type == "multi_step":
-            if contract.require_exact_preemption_replay:
+            if contract.require_exact_preemption_replay or contract.history_only_capability:
                 assert contract.required_history_events
                 assert contract.forbid_unexpected_workspace_changes is True
             else:
@@ -216,6 +216,13 @@ def test_final_architecture_capability_tasks_are_present_and_constrained(tmp_pat
     assert preemption.communication_probe_question
     assert preemption.verification_contract.require_exact_preemption_replay is True
     assert {"model_call_preempted", "model_call_replayed"}.issubset(set(preemption.verification_contract.required_history_events))
+    independent = tasks["capability_communication_independent_model"].create(tmp_path / "independent")
+    assert independent.communication_probe_question
+    assert independent.communication_probe_use_separate_assistant is True
+    assert independent.verification_contract.history_only_capability is True
+    assert {"model_call_preempted", "model_call_replayed"}.issubset(
+        set(independent.verification_contract.forbidden_history_events)
+    )
     analysis_contract = tasks["capability_grounded_history_analysis"].create(tmp_path / "analysis").verification_contract
     assert {"history_analyze", "history_window"}.issubset(set(analysis_contract.required_tools_used))
     assert {"history_analyzed", "history_window_read"}.issubset(set(analysis_contract.required_history_events))

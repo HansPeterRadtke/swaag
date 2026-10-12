@@ -67,6 +67,7 @@ class BenchmarkVerificationContract:
     allowed_modified_files: list[str] = field(default_factory=list)
     forbid_unexpected_workspace_changes: bool = False
     require_exact_preemption_replay: bool = False
+    history_only_capability: bool = False
 
 
 @dataclass(slots=True)
@@ -88,6 +89,7 @@ class TaskScenario:
     history_messages: list[Message] = field(default_factory=list)
     communication_probe_question: str | None = None
     communication_probe_wait_seconds: float = 10.0
+    communication_probe_use_separate_assistant: bool = False
 
     def __post_init__(self) -> None:
         if self.oracle is not None and self.model_client is not None:
@@ -2727,7 +2729,7 @@ def validate_benchmark_catalog(tasks: list[BenchmarkTaskDefinition]) -> None:
             if not contract.forbid_unexpected_workspace_changes:
                 raise ValueError(f"Reading task {task.task_id} must forbid unexpected workspace changes")
         if task.task_type == "multi_step":
-            history_only_capability = bool(contract.require_exact_preemption_replay)
+            history_only_capability = bool(contract.require_exact_preemption_replay or contract.history_only_capability)
             if not history_only_capability and (not contract.command or not (contract.expected_files or contract.expected_file_patterns)):
                 raise ValueError(f"Multi-step task {task.task_id} must verify written artifacts and execute a verifier command")
             if history_only_capability:

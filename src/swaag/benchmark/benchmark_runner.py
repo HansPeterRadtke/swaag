@@ -248,6 +248,8 @@ def _benchmark_checkpoint_signature(
     task_timeout_seconds: int | None,
     connect_timeout_seconds: int | None,
     max_consecutive_identical_tool_calls: int | None,
+    assistant_model_base_url: str | None = None,
+    assistant_model_profile: str | None = None,
 ) -> dict[str, Any]:
     task_policy = [
         {
@@ -273,6 +275,8 @@ def _benchmark_checkpoint_signature(
         "use_live_model": bool(use_live_model),
         "agent_behavior_mode": agent_behavior_mode or "",
         "model_base_url": model_base_url,
+        "assistant_model_base_url": assistant_model_base_url or "",
+        "assistant_model_profile": assistant_model_profile or "",
         "model_profile": model_profile or "",
         "structured_output_mode": structured_output_mode or "",
         "timeout_seconds": timeout_seconds,
@@ -746,6 +750,7 @@ def _run_turn_with_communication_probe(
     *,
     resume_timeout_seconds: float | None = None,
     probe_metrics: dict[str, Any] | None = None,
+    assistant_runtime: AgentRuntime | None = None,
 ) -> Any:
     question = str(getattr(scenario, "communication_probe_question", "") or "").strip()
     if not question:
@@ -814,10 +819,19 @@ def _run_turn_with_communication_probe(
             "active_call_observed_seconds": round(active_observed - probe_started, 6),
         }
     )
-    status_started = time.monotonic()
-    status_answer = CommunicationService(runtime).answer_status_question(
-        state.session_id, question
+    use_separate_assistant = bool(
+        getattr(scenario, "communication_probe_use_separate_assistant", False)
     )
+    if use_separate_assistant and assistant_runtime is None:
+        raise RuntimeError(
+            "communication probe requires a separately configured assistant model runtime"
+        )
+    metrics["separate_assistant_runtime"] = use_separate_assistant
+    status_started = time.monotonic()
+    status_answer = CommunicationService(
+        runtime,
+        assistant_runtime=assistant_runtime if use_separate_assistant else None,
+    ).answer_status_question(state.session_id, question)
     status_completed = time.monotonic()
     metrics["status_response_seconds"] = round(status_completed - status_started, 6)
     metrics["status_answer"] = status_answer
@@ -1098,6 +1112,8 @@ def run_benchmarks(
     live_subset: bool = False,
     use_live_model: bool = False,
     model_base_url: str | None = None,
+    assistant_model_base_url: str | None = None,
+    assistant_model_profile: str | None = None,
     timeout_seconds: int | None = None,
     connect_timeout_seconds: int | None = None,
     model_profile: str | None = None,
@@ -1159,6 +1175,8 @@ def run_benchmarks(
         use_live_model=use_live_model,
         agent_behavior_mode=resolved_agent_behavior_mode,
         model_base_url=effective_base_url,
+        assistant_model_base_url=assistant_model_base_url,
+        assistant_model_profile=assistant_model_profile,
         model_profile=effective_profile,
         structured_output_mode=effective_structured_output_mode,
         timeout_seconds=effective_timeout,
@@ -1249,6 +1267,32 @@ def run_benchmarks(
                 replay_cache_root=effective_replay_cache_root,
             )
             runtime = AgentRuntime(config, model_client=runtime_model_client)
+            communication_probe_assistant_runtime = None
+            if bool(
+                getattr(scenario, "communication_probe_use_separate_assistant", False)
+            ):
+                if not assistant_model_base_url:
+                    raise ValueError(
+                        "This benchmark task requires --assistant-model-base-url"
+                    )
+                assistant_config = _build_config(
+                    sessions_root=sessions_root / "communication-assistant",
+                    workspace=scenario.workspace,
+                    overrides={},
+                    base_url=str(assistant_model_base_url).rstrip("/"),
+                    connect_timeout_seconds=effective_connect_timeout,
+                    timeout_seconds=effective_timeout,
+                    profile_name=assistant_model_profile,
+                    structured_output_mode=effective_structured_output_mode,
+                    progress_poll_seconds=effective_progress_poll,
+                    seed=seed,
+                )
+                assistant_config.model.cache_enabled = False
+                assistant_config.tools.enabled = []
+                assistant_config.tools.allow_stateful_tools = False
+                assistant_config.tools.allow_side_effect_tools = False
+                assistant_config.runtime.completion_evaluation_enabled = False
+                communication_probe_assistant_runtime = AgentRuntime(assistant_config)
             state = runtime.create_or_load_session()
             if scenario.history_messages:
                 _seed_scenario_history(runtime, state, scenario.history_messages)
@@ -1275,6 +1319,7 @@ def run_benchmarks(
                             scenario,
                             resume_timeout_seconds=effective_task_timeout,
                             probe_metrics=communication_probe_metrics,
+                            assistant_runtime=communication_probe_assistant_runtime,
                         )
                 assistant_text = turn.assistant_text
             except BenchmarkSeedTimeout as exc:
@@ -1588,7 +1633,9 @@ def _build_parser() -> argparse.ArgumentParser:
     manual_parser.add_argument("--task", action="append", default=[], help="Run only the named validation task id. Can be passed multiple times.")
     manual_parser.add_argument("--validation-subset", dest="validation_subset", action="store_true", help="Run the shorter generated validation subset.")
     manual_parser.add_argument("--full-catalog", dest="validation_subset", action="store_false", help="Run the full benchmark catalog (default).")
-    manual_parser.add_argument("--model-base-url", help="Override the llama.cpp base URL for manual validation.")
+    manual_parser.add_argument("--model-base-url", help="Override the main-model base URL for manual validation.")
+    manual_parser.add_argument("--assistant-model-base-url", help="Optional independent communication-model endpoint used by capability cases that require it.")
+    manual_parser.add_argument("--assistant-model-profile", help="Model profile/id exposed by the independent communication-model endpoint.")
     manual_parser.add_argument("--timeout-seconds", type=int, help="Override the model read timeout.")
     manual_parser.add_argument("--task-timeout-seconds", type=int, help="Override the benchmark wall-clock timeout for one task seed.")
     manual_parser.add_argument("--connect-timeout-seconds", type=int, help="Override the model connect timeout.")
@@ -2224,6 +2271,8 @@ def main(argv: Sequence[str] | None = None) -> int:
             benchmark_task_ids=list(args.task) or None,
             validation_subset=bool(args.validation_subset),
             model_base_url=args.model_base_url,
+            assistant_model_base_url=args.assistant_model_base_url,
+            assistant_model_profile=args.assistant_model_profile,
             timeout_seconds=args.timeout_seconds,
             task_timeout_seconds=args.task_timeout_seconds,
             connect_timeout_seconds=args.connect_timeout_seconds,

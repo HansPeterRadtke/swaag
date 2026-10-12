@@ -257,6 +257,31 @@ def _communication_preemption_replay(workspace: Path) -> TaskScenario:
     )
 
 
+def _communication_independent_model(workspace: Path) -> TaskScenario:
+    return TaskScenario(
+        prompt=(
+            "Perform this main-agent reasoning turn normally and return a concise completion when done. "
+            "The benchmark harness will ask a concurrent user status question through a separately configured "
+            "communication-model endpoint while your first model request is active."
+        ),
+        workspace=workspace,
+        model_client=None,
+        communication_probe_question="What is the main agent doing right now?",
+        communication_probe_wait_seconds=20.0,
+        communication_probe_use_separate_assistant=True,
+        verification_contract=BenchmarkVerificationContract(
+            task_type="multi_step",
+            required_history_events=[
+                "agent_action_selected",
+                "model_response_received",
+                "turn_finished",
+            ],
+            forbidden_history_events=["model_call_preempted", "model_call_replayed"],
+            forbid_unexpected_workspace_changes=True,
+            history_only_capability=True,
+        ),
+    )
+
 def capability_benchmark_tasks() -> list[BenchmarkTaskDefinition]:
     common = {
         "task_type": "multi_step",
@@ -328,6 +353,14 @@ def capability_benchmark_tasks() -> list[BenchmarkTaskDefinition]:
             build=_communication_preemption_replay,
             build_live=_communication_preemption_replay,
             tags=["multi-step", "communication", "preemption", "responsiveness", "replay"],
+            **common,
+        ),
+        BenchmarkTaskDefinition(
+            task_id="capability_communication_independent_model",
+            description="Answer a concurrent status request on a separately configured communication model without preempting or replaying the active main-model request.",
+            build=_communication_independent_model,
+            build_live=_communication_independent_model,
+            tags=["multi-step", "communication", "responsiveness", "independent-model"],
             **common,
         ),
         BenchmarkTaskDefinition(
