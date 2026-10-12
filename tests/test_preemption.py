@@ -11,7 +11,7 @@ import pytest
 
 from swaag.communication import CommunicationService
 from swaag.model import CompletionRequestPolicy
-from swaag.preemption import ModelCallPreempted
+from swaag.preemption import ModelCallPreempted, ModelPreemptionCoordinator
 from swaag.runtime import AgentRuntime
 from swaag.types import CompletionResult, ContractSpec, Message
 from swaag.utils import stable_json_dumps, utc_now_iso
@@ -219,6 +219,217 @@ def test_multi_slot_backend_drain_barrier_does_not_use_global_activity(make_conf
     assert evidence["backend_capacity"] == 2
     assert client.activity_calls == 0
     runtime.inference.cancel(request.request_id, reason="test cleanup")
+
+
+class _AlwaysProgressingMonitor:
+    interval = 0.01
+
+    def observing(self):
+        class _Observation:
+            def __enter__(inner_self):
+                return self
+
+            def __exit__(inner_self, exc_type, exc, tb):
+                return False
+
+        return _Observation()
+
+    def snapshot(self) -> dict[str, Any]:
+        return {
+            "supported": True,
+            "state": "processing",
+            "stale": False,
+            "progress_age_seconds": 0.0,
+            "sample_age_seconds": 0.0,
+            "slots": [{"id": 0, "is_processing": True}],
+        }
+
+
+class _ProgressMonitorClient:
+    def __init__(self) -> None:
+        self.monitor = _AlwaysProgressingMonitor()
+
+    def activity_monitor(self):
+        return self.monitor
+
+
+class _MultiSlotProgressMonitor(_AlwaysProgressingMonitor):
+    def snapshot(self) -> dict[str, Any]:
+        result = super().snapshot()
+        result["slots"] = [
+            {"id": 0, "is_processing": True},
+            {"id": 1, "is_processing": True},
+        ]
+        return result
+
+
+class _MultiSlotProgressMonitorClient:
+    def __init__(self) -> None:
+        self.monitor = _MultiSlotProgressMonitor()
+
+    def activity_monitor(self):
+        return self.monitor
+
+
+class _DelayedPreemption:
+    def __init__(self, delay_seconds: float) -> None:
+        self.delay_seconds = delay_seconds
+        self.started: float | None = None
+        self.status = "requested"
+        self.marked_assistant_running = False
+
+    def request_preemption(self, session_id: str, message: str, *, source: str):
+        del session_id, message, source
+        self.started = time.monotonic()
+        return SimpleNamespace(preemption_id="preemption-progress")
+
+    def get(self, preemption_id: str):
+        assert preemption_id == "preemption-progress"
+        assert self.started is not None
+        if self.status == "requested" and time.monotonic() - self.started >= self.delay_seconds:
+            self.status = "interrupted"
+        return SimpleNamespace(
+            preemption_id=preemption_id,
+            status=self.status,
+            reply=None,
+        )
+
+    def fail_if_requested(self, preemption_id: str, reply: str):
+        assert preemption_id == "preemption-progress"
+        if self.status == "requested":
+            self.status = "failed"
+        return SimpleNamespace(
+            preemption_id=preemption_id,
+            status=self.status,
+            reply=reply,
+        )
+
+    def mark_assistant_running(self, preemption_id: str) -> None:
+        assert preemption_id == "preemption-progress"
+        self.marked_assistant_running = True
+        self.status = "assistant_running"
+
+
+def test_foreground_preemption_wait_extends_while_verified_backend_progresses(make_config) -> None:
+    config = make_config(
+        model__timeout_seconds=1,
+        model__structured_timeout_seconds=1,
+        model__fail_safe_timeout_seconds=10,
+    )
+    coordinator = _DelayedPreemption(delay_seconds=1.15)
+    runtime = SimpleNamespace(
+        config=config,
+        preemption=coordinator,
+        client=_ProgressMonitorClient(),
+    )
+
+    started = time.monotonic()
+    request = CommunicationService._preempt_runtime_call(
+        runtime,
+        "session-progress",
+        "foreground user interaction",
+        source="user_orchestrator",
+    )
+    elapsed = time.monotonic() - started
+
+    assert request.preemption_id == "preemption-progress"
+    assert elapsed >= 1.1
+    assert coordinator.marked_assistant_running is True
+
+
+def test_foreground_preemption_does_not_attribute_multi_slot_progress_to_target(make_config) -> None:
+    config = make_config(
+        model__timeout_seconds=1,
+        model__structured_timeout_seconds=1,
+        model__fail_safe_timeout_seconds=10,
+    )
+    coordinator = _DelayedPreemption(delay_seconds=1.15)
+    runtime = SimpleNamespace(
+        config=config,
+        preemption=coordinator,
+        client=_MultiSlotProgressMonitorClient(),
+    )
+
+    started = time.monotonic()
+    with pytest.raises(TimeoutError, match="Timed out waiting for model preemption"):
+        CommunicationService._preempt_runtime_call(
+            runtime,
+            "session-multislot-progress",
+            "foreground user interaction",
+            source="user_orchestrator",
+        )
+    elapsed = time.monotonic() - started
+
+    assert elapsed < 1.15
+    assert coordinator.marked_assistant_running is False
+    assert coordinator.status == "failed"
+
+
+def test_foreground_preemption_timeout_resolves_requested_record(make_config) -> None:
+    config = make_config(
+        model__timeout_seconds=1,
+        model__structured_timeout_seconds=1,
+        model__fail_safe_timeout_seconds=10,
+    )
+    coordinator = ModelPreemptionCoordinator(config.sessions.root)
+    coordinator.register_active(
+        "session-timeout",
+        "call-timeout",
+        "action",
+        {"prompt": "slow request"},
+    )
+    runtime = SimpleNamespace(
+        config=config,
+        preemption=coordinator,
+        client=SimpleNamespace(is_deterministic_test_client=True),
+    )
+
+    with pytest.raises(TimeoutError, match="Timed out waiting for model preemption"):
+        CommunicationService._preempt_runtime_call(
+            runtime,
+            "session-timeout",
+            "foreground user interaction",
+            source="user_orchestrator",
+        )
+
+    rows = coordinator.pending_for_call("session-timeout", "call-timeout")
+    assert rows is None
+    with coordinator._connect() as connection:
+        row = connection.execute(
+            "SELECT preemption_id FROM preemptions WHERE session_id=?",
+            ("session-timeout",),
+        ).fetchone()
+    assert row is not None
+    failed = coordinator.get(str(row["preemption_id"]))
+    assert failed is not None
+    assert failed.status == "failed"
+    assert failed.reply is not None
+    assert "TimeoutError" in failed.reply
+
+
+def test_fail_if_requested_does_not_clobber_concurrent_interruption(make_config) -> None:
+    coordinator = ModelPreemptionCoordinator(make_config().sessions.root)
+    coordinator.register_active(
+        "session-cas",
+        "call-cas",
+        "action",
+        {"prompt": "request"},
+    )
+    request = coordinator.request_preemption(
+        "session-cas",
+        "foreground message",
+        source="user_orchestrator",
+    )
+    assert request is not None
+    coordinator.mark_interrupted(request.preemption_id)
+
+    resolved = coordinator.fail_if_requested(
+        request.preemption_id,
+        "late timeout",
+    )
+
+    assert resolved.status == "interrupted"
+    assert resolved.reply is None
 
 
 class _PreemptReplayClient(_BaseClient):

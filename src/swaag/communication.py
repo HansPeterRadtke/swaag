@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from contextlib import AbstractContextManager
+from contextlib import AbstractContextManager, nullcontext
 
 import asyncio
 import base64
@@ -68,7 +68,7 @@ from swaag.telemetry import record_http_response_status, record_protocol_correla
 from swaag.utils import new_id, stable_json_dumps, utc_now_iso
 from swaag.types import Message
 from swaag.tools.base import SemanticCallContextOverflow
-from swaag.supervision import RuntimeSupervisor
+from swaag.supervision import RuntimeSupervisor, client_activity_monitor
 from swaag.workers import WORKER_TERMINAL_STATES, WorkerManager, WorkerRecord
 
 
@@ -1787,17 +1787,85 @@ class CommunicationService:
         )
         if request is None:
             return None
-        timeout = max(
+        normal_timeout = max(
             1.0,
             float(runtime.config.model.structured_timeout_seconds),
             float(runtime.config.model.timeout_seconds),
         )
-        interrupted = runtime.preemption.wait_for_status(
-            request.preemption_id,
-            {"interrupted", "failed"},
-            timeout_seconds=timeout,
-            poll_seconds=0.02,
+        fail_safe_timeout = max(
+            normal_timeout,
+            float(runtime.config.model.fail_safe_timeout_seconds),
         )
+        monitor = client_activity_monitor(runtime.client)
+        monitor_context = monitor.observing() if monitor is not None else nullcontext()
+        deadline = time.monotonic() + normal_timeout
+        release_grace_deadline: float | None = None
+        last_activity: dict[str, Any] | None = None
+        try:
+            with monitor_context:
+                while True:
+                    interrupted = runtime.preemption.get(request.preemption_id)
+                    if interrupted is None:
+                        raise FileNotFoundError(
+                            f"Unknown preemption id: {request.preemption_id}"
+                        )
+                    if interrupted.status in {"interrupted", "failed"}:
+                        break
+                    now = time.monotonic()
+                    if now >= deadline:
+                        extend_for_verified_progress = False
+                        if monitor is not None:
+                            last_activity = monitor.snapshot()
+                            progress_age = last_activity.get("progress_age_seconds")
+                            supported_fresh = bool(
+                                last_activity.get("supported")
+                                and not last_activity.get("stale")
+                            )
+                            slots = last_activity.get("slots")
+                            single_slot_attributable = bool(
+                                isinstance(slots, list) and len(slots) == 1
+                            )
+                            extend_for_verified_progress = bool(
+                                single_slot_attributable
+                                and supported_fresh
+                                and last_activity.get("state") == "processing"
+                                and isinstance(progress_age, (int, float))
+                                and not isinstance(progress_age, bool)
+                                and 0 <= float(progress_age) < fail_safe_timeout
+                            )
+                            if extend_for_verified_progress:
+                                release_grace_deadline = None
+                            elif (
+                                single_slot_attributable
+                                and supported_fresh
+                                and last_activity.get("state") != "processing"
+                            ):
+                                if release_grace_deadline is None:
+                                    release_grace_deadline = now + max(
+                                        1.0,
+                                        3.0 * float(getattr(monitor, "interval", 1.0)),
+                                    )
+                                extend_for_verified_progress = now < release_grace_deadline
+                        if not extend_for_verified_progress:
+                            detail = (
+                                f"; backend_activity={last_activity!r}"
+                                if last_activity is not None
+                                else ""
+                            )
+                            raise TimeoutError(
+                                "Timed out waiting for model preemption to release "
+                                f"the target call after {normal_timeout:.3f}s{detail}"
+                            )
+                    time.sleep(0.02)
+        except Exception as exc:
+            resolved = runtime.preemption.fail_if_requested(
+                request.preemption_id,
+                f"{type(exc).__name__}: {exc}",
+            )
+            if resolved.status == "interrupted":
+                interrupted = resolved
+            else:
+                raise
         if interrupted.status == "failed":
             raise RuntimeError(interrupted.reply or "model preemption failed")
         runtime.preemption.mark_assistant_running(request.preemption_id)
