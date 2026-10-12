@@ -33,6 +33,8 @@ from cryptography.hazmat.primitives.asymmetric import ec
 from cryptography.hazmat.primitives.asymmetric.utils import decode_dss_signature
 from cryptography.hazmat.primitives.ciphers.aead import AESGCM
 
+from swaag.preemption import RunCancellationRequested
+from swaag.orchestrator_operations import OrchestratorOperations, OperationCanceled
 from swaag.capacity import positive_capacity, require_capacity
 from swaag.background_work import BackgroundWork
 from swaag.config import AgentConfig
@@ -1298,6 +1300,9 @@ class CommunicationService:
                 raise RuntimeError("A2A Agent Card ES256 signing requires a P-256 EC private key")
             self._a2a_signing_key = key
         self.store = CommunicationStore(runtime.config.sessions.root, max_pending_requests=runtime.config.communication.max_pending_requests)
+        self.orchestrator_operations = OrchestratorOperations(runtime.config.sessions.root)
+        self._active_orchestrator_operation = ""
+        self._orchestrator_operation_lock = threading.Lock()
         self._protocol_send_lock = threading.Lock()
         self._semaphore = asyncio.Semaphore(max(1, int(max_concurrency)))
         self.workers = WorkerManager(
@@ -1631,7 +1636,45 @@ class CommunicationService:
             or cls._UNSUPPORTED_COMPLETION.search(str(answer))
         )
 
-    def orchestrator_message(self, message: str) -> dict[str, str]:
+    def orchestrator_message(self, message: str, operation_id: str = "") -> dict[str, str]:
+        if not operation_id:
+            return self._orchestrator_message_once(message)
+        claimed, operation = self.orchestrator_operations.claim(operation_id, message)
+        if not claimed:
+            if operation["status"] == "completed":
+                return {**operation["result"], "operation_id": operation_id, "duplicate": True}
+            raise RuntimeError("operation outcome requires status check: " + operation["status"])
+        try:
+            result = self._orchestrator_message_once(message, operation_id)
+            self.orchestrator_operations.finish(operation_id, "completed", result)
+            return {**result, "operation_id": operation_id}
+        except (OperationCanceled, RunCancellationRequested):
+            self.orchestrator_operations.finish(operation_id, "canceled")
+            raise
+        except Exception:
+            # A tool might already have committed before an exception. Keep the
+            # uncertain identity; the same key must never start those tools again.
+            self.orchestrator_operations.finish(operation_id, "outcome_unknown")
+            raise
+        finally:
+            with self._orchestrator_operation_lock:
+                if self._active_orchestrator_operation == operation_id:
+                    self._active_orchestrator_operation = ""
+
+    def cancel_orchestrator_operation(self, operation_id: str, reason: str) -> dict:
+        record = self.orchestrator_operations.cancel(operation_id)
+        if record is None:
+            return {"ok": False, "status": "not_found"}
+        with self._orchestrator_operation_lock:
+            if self._active_orchestrator_operation == operation_id and record["session_id"]:
+                active = self.orchestrator_runtime.history.read_active_run(record["session_id"])
+                if active is not None:
+                    self.orchestrator_runtime.preemption.request_run_cancellation(
+                        record["session_id"], str(active["run_id"]), reason=reason)
+        return {"ok": True, **record,
+                "cancellation_acknowledged": record["status"] == "canceled"}
+
+    def _orchestrator_message_once(self, message: str, operation_id: str = "") -> dict[str, str]:
         text = str(message)
         if not text.strip():
             raise ValueError("orchestrator message must not be empty")
@@ -1639,6 +1682,10 @@ class CommunicationService:
         with session_execution_lock(
             self.orchestrator_runtime.history, orchestrator_state.session_id
         ):
+            if operation_id:
+                self.orchestrator_operations.activate(operation_id, orchestrator_state.session_id)
+                with self._orchestrator_operation_lock:
+                    self._active_orchestrator_operation = operation_id
             self.supervisor.start()
             self.orchestration.advance_active_plans()
             state = self._orchestrator_state()
@@ -1700,6 +1747,8 @@ class CommunicationService:
                                 "interaction call; use the full context-managed orchestrator."
                             ),
                         }
+                    if operation_id:
+                        self.orchestrator_operations.check_cancellation(operation_id)
                     if routed["route"] == "respond" and self._fast_reply_claims_unperformed_work(
                         routed["answer"]
                     ):
@@ -5142,10 +5191,18 @@ class CommunicationService:
                     session_id=request.get("session_id")
                 )
                 return None if item is None else asdict(item)
+            if op == "orchestrator.operation_status":
+                params = request.get("params") or request
+                return self.orchestrator_operations.get(str(params.get("operation_id", ""))) or {"status": "not_found"}
+            if op == "orchestrator.interrupt":
+                params = request.get("params") or request
+                return await asyncio.to_thread(self.cancel_orchestrator_operation,
+                    str(params.get("operation_id", "")), str(params.get("reason", "user interruption")))
             if op == "orchestrator.message":
                 async with self._semaphore:
                     return await asyncio.to_thread(
-                        self.orchestrator_message, str(request.get("message", ""))
+                        self.orchestrator_message, str(request.get("message", "")),
+                        str(request.get("operation_id", ""))
                     )
             if op == "ask_status":
                 async with self._semaphore:
