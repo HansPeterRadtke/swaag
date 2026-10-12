@@ -62,6 +62,10 @@ Neither bounded matrix showed an accuracy reason to impose a new universal produ
 
 This validates cancellation and fresh admission for the deployed server/client pair. It does not claim transformer-state suspension, token accounting for discarded prefill, parallel-slot behavior, or vLLM equivalence.
 
+### One-slot post-preemption drain barrier - 2026-10-12
+
+A fresh current-head probe against the live one-slot Jetson llama.cpp endpoint reproduced the scheduler race that matters above the HTTP client layer. The model stream was canceled after six generated tokens and returned `ModelCallPreempted` after 2.331 seconds, while `/slots` still reported the physical slot as `processing`. The new one-slot drain barrier retained the logical inference reservation for a further 0.641 seconds (0.602 seconds inside the barrier, 11 activity samples) until `/slots` reported `idle`. Backend partial usage was preserved as 20 prompt tokens and 6 completion tokens. The retained artifact is `/data/var/swaag-benchmarks/preemption-drain-20261012/result.json`, SHA-256 `d3ecbc5dbe845829252a7f3dff2e3a1f7c02e9d93da9a0b836feed2eccfb454e`. This is evidence only for verified capacity=1 backends; multi-slot global activity is deliberately not used as request attribution.
+
 ## Historical external all2text capability experiment - 2026-08-28
 
 - Artifact: `/data/var/swaag/manual-tests/attachment-capabilities-20260828T023257`.

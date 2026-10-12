@@ -124,6 +124,103 @@ class _BaseClient:
         )
 
 
+class _BackendDrainProbeClient(_BaseClient):
+    is_deterministic_test_client = False
+
+    def __init__(self, states: list[str], *, slots: int = 1) -> None:
+        super().__init__()
+        self.states = list(states)
+        self.slots = int(slots)
+        self.activity_calls = 0
+
+    def server_slot_count(self) -> int:
+        return self.slots
+
+    def backend_activity(self) -> dict[str, Any]:
+        self.activity_calls += 1
+        state = self.states.pop(0) if self.states else "idle"
+        return {
+            "supported": True,
+            "source": "test:/slots",
+            "state": state,
+            "slots": [{"id": 0, "is_processing": state == "processing"}],
+        }
+
+
+def test_one_slot_backend_drain_keeps_inference_running_until_backend_idle(make_config) -> None:
+    client = _BackendDrainProbeClient(["processing", "processing", "idle"], slots=1)
+    runtime = AgentRuntime(make_config(model__context_limit=32_000), model_client=client)
+    state = runtime.create_or_load_session()
+    request = runtime.inference.enqueue(
+        session_id=state.session_id,
+        run_id="run-drain",
+        call_id="call-drain",
+        call_kind="agent_action",
+        priority=0,
+        source="test",
+    )
+    runtime.inference.acquire(request.request_id)
+    runtime._sleep = lambda _seconds: None
+    guard = runtime.history.guard(state, "test:backend_drain")
+
+    evidence = runtime._wait_for_single_slot_backend_drain(
+        state,
+        inference_request_id=request.request_id,
+        call_id="call-drain",
+        kind="agent_action",
+        guard=guard,
+    )
+
+    current = runtime.inference.get(request.request_id)
+    assert current is not None and current.status == "running"
+    assert evidence["released"] is True
+    assert evidence["samples"] == 3
+    assert evidence["first_activity"]["state"] == "processing"
+    assert evidence["final_activity"]["state"] == "idle"
+    assert client.activity_calls == 3
+    events = [
+        event
+        for event in runtime.history.read_history(state.session_id)
+        if event.event_type == "model_backend_activity"
+        and event.payload.get("timeout_policy") == "post_preemption_backend_drain"
+    ]
+    assert [event.payload["backend_activity"]["state"] for event in events] == [
+        "processing",
+        "idle",
+    ]
+    runtime.inference.cancel(request.request_id, reason="test cleanup")
+
+
+def test_multi_slot_backend_drain_barrier_does_not_use_global_activity(make_config) -> None:
+    client = _BackendDrainProbeClient(["processing"], slots=2)
+    runtime = AgentRuntime(make_config(model__context_limit=32_000), model_client=client)
+    state = runtime.create_or_load_session()
+    request = runtime.inference.enqueue(
+        session_id=state.session_id,
+        run_id="run-multislot",
+        call_id="call-multislot",
+        call_kind="agent_action",
+        priority=0,
+        source="test",
+    )
+    runtime.inference.acquire(request.request_id)
+    guard = runtime.history.guard(state, "test:backend_drain_multislot")
+
+    evidence = runtime._wait_for_single_slot_backend_drain(
+        state,
+        inference_request_id=request.request_id,
+        call_id="call-multislot",
+        kind="agent_action",
+        guard=guard,
+    )
+
+    assert evidence["waited"] is False
+    assert evidence["reason"] == "backend_not_attributable"
+    assert evidence["backend_capacity"] == 2
+    assert client.activity_calls == 0
+    runtime.inference.cancel(request.request_id, reason="test cleanup")
+
+
 class _PreemptReplayClient(_BaseClient):
     def __init__(self) -> None:
         super().__init__()

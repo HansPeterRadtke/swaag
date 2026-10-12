@@ -8071,6 +8071,117 @@ class AgentRuntime:
             },
         )
 
+    def _wait_for_single_slot_backend_drain(
+        self,
+        state: SessionState,
+        *,
+        inference_request_id: str,
+        call_id: str,
+        kind: str,
+        guard: Any,
+    ) -> dict[str, Any]:
+        """Keep one-slot scheduler capacity reserved until physical backend work drains.
+
+        Closing a local llama.cpp HTTP stream can return before the server finishes
+        the currently executing decode/prefill chunk. Releasing SWAAG's durable
+        inference slot at that moment would allow a new request to be admitted even
+        though the physical backend still has no capacity. Only a verified one-slot
+        backend is attributable enough for this global activity check.
+        """
+        current = self.inference.get(inference_request_id)
+        if current is None or current.status != "running":
+            return {"waited": False, "reason": "request_not_running"}
+        try:
+            capacity, capacity_source = self._inference_capacity()
+        except Exception as exc:  # noqa: BLE001 - inability to prove capacity means no drain claim.
+            return {
+                "waited": False,
+                "reason": "capacity_unavailable",
+                "error": f"{type(exc).__name__}: {exc}",
+            }
+        probe = getattr(self.client, "backend_activity", None)
+        if capacity != 1 or not callable(probe):
+            return {
+                "waited": False,
+                "reason": "backend_not_attributable",
+                "backend_capacity": capacity,
+                "capacity_source": capacity_source,
+            }
+
+        started = time.monotonic()
+        samples = 0
+        first_activity: dict[str, Any] | None = None
+        last_recorded_state: str | None = None
+        last_liveness_refresh = float("-inf")
+        while True:
+            try:
+                raw_activity = probe()
+                activity = dict(raw_activity) if isinstance(raw_activity, dict) else {
+                    "supported": False,
+                    "state": "unavailable",
+                    "reason": "backend_activity_not_mapping",
+                }
+            except Exception as exc:  # noqa: BLE001 - an unavailable backend cannot retain usable capacity.
+                activity = {
+                    "supported": False,
+                    "state": "unavailable",
+                    "error": f"{type(exc).__name__}: {exc}",
+                }
+            samples += 1
+            if first_activity is None:
+                first_activity = dict(activity)
+            observed_state = str(activity.get("state") or "unknown")
+            elapsed = time.monotonic() - started
+            if observed_state != last_recorded_state:
+                guard.record(
+                    "model_backend_activity",
+                    {
+                        "kind": kind,
+                        "call_id": call_id,
+                        "elapsed_seconds": elapsed,
+                        "backend_activity": activity,
+                        "timeout_policy": "post_preemption_backend_drain",
+                    },
+                )
+                last_recorded_state = observed_state
+            if not bool(activity.get("supported")):
+                return {
+                    "waited": elapsed > 0,
+                    "released": None,
+                    "reason": "backend_activity_unavailable",
+                    "elapsed_seconds": elapsed,
+                    "samples": samples,
+                    "backend_capacity": capacity,
+                    "capacity_source": capacity_source,
+                    "first_activity": first_activity,
+                    "final_activity": activity,
+                }
+            if observed_state != "processing":
+                return {
+                    "waited": elapsed > 0,
+                    "released": True,
+                    "reason": "backend_not_processing",
+                    "elapsed_seconds": elapsed,
+                    "samples": samples,
+                    "backend_capacity": capacity,
+                    "capacity_source": capacity_source,
+                    "first_activity": first_activity,
+                    "final_activity": activity,
+                }
+            if elapsed - last_liveness_refresh >= 1.0:
+                last_liveness_refresh = elapsed
+                self.inference.touch_running(inference_request_id)
+                self._heartbeat(
+                    state,
+                    phase="inference",
+                    substate="awaiting_result",
+                    detail=f"waiting for physical backend release after {kind} preemption",
+                    active_kind="model",
+                    active_id=call_id,
+                    operation_kind=kind,
+                )
+            self._sleep(0.05)
+
     def _handle_model_preemption(
         self,
         state: SessionState,
@@ -8111,6 +8222,13 @@ class AgentRuntime:
                     "usage_evidence": usage,
                 },
             )
+            self._wait_for_single_slot_backend_drain(
+                state,
+                inference_request_id=inference_request_id,
+                call_id=call_id,
+                kind=prepared.assembly.kind,
+                guard=guard,
+            )
             self._finish_inference(
                 state,
                 inference_request_id,
@@ -8124,6 +8242,13 @@ class AgentRuntime:
             raise RunCancellationRequested("worker run cancellation requested")
         pending = self.preemption.pending_for_call(state.session_id, call_id)
         if pending is None:
+            self._wait_for_single_slot_backend_drain(
+                state,
+                inference_request_id=inference_request_id,
+                call_id=call_id,
+                kind=prepared.assembly.kind,
+                guard=guard,
+            )
             self._finish_inference(
                 state,
                 inference_request_id,
@@ -8143,6 +8268,13 @@ class AgentRuntime:
                 "request_sha256": active_call.request_sha256,
                 "usage_evidence": usage,
             },
+        )
+        self._wait_for_single_slot_backend_drain(
+            state,
+            inference_request_id=inference_request_id,
+            call_id=call_id,
+            kind=prepared.assembly.kind,
+            guard=guard,
         )
         current = self.inference.get(inference_request_id)
         if current is not None and current.status == "running":
