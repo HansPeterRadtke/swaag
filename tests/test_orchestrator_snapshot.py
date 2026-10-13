@@ -162,3 +162,34 @@ def test_snapshot_ignores_bookkeeping_without_task_fact_changes(make_config, mon
         assert len(calls) == 1
     finally:
         service.close()
+
+
+def test_snapshot_includes_orchestrator_work_and_unprocessed_user_controls(make_config):
+    runtime = AgentRuntime(make_config(), model_client=_ImmediateClient('unused'))
+    service = CommunicationService(runtime, orchestrator_runtime=runtime)
+    try:
+        state = service._load_orchestrator_state()
+        original = 'Verify the exact archive Prüfbericht — Öl.zip before uploading.'
+        correction = 'Do not upload anything until I review the verification.'
+        runtime.history.set_active_run(state.session_id, run_id='run-current', user_text=original)
+        receipt = runtime.history.enqueue_control_message(state.session_id, correction, source='orchestrator_user')
+        snapshot = service._orchestrator_runtime_snapshot()
+        assert snapshot['active_workers'] == []
+        assert snapshot['orchestrator']['active_turn']['user_text'] == original
+        assert snapshot['orchestrator']['pending_user_messages'][0]['message'] == correction
+        assert snapshot['orchestrator']['pending_user_messages'][0]['control_id'] == receipt['control_id']
+        before = service._orchestrator_task_snapshot_fingerprint(snapshot)
+        runtime.history.update_active_run(state.session_id, run_id='run-current')
+        assert service._orchestrator_task_snapshot_fingerprint(service._orchestrator_runtime_snapshot()) == before
+        runtime.history.update_active_run(
+            state.session_id, run_id='run-current', phase='inference',
+            substate='awaiting_result', detail='waiting for action model stream',
+            operation_kind='action',
+        )
+        during_stream = service._orchestrator_runtime_snapshot()
+        assert during_stream['orchestrator']['active_turn']['substate'] == 'awaiting_result'
+        assert service._orchestrator_task_snapshot_fingerprint(during_stream) == before
+        runtime.history.clear_active_run(state.session_id, run_id='run-current')
+        assert service._orchestrator_task_snapshot_fingerprint(service._orchestrator_runtime_snapshot()) != before
+    finally:
+        service.close()

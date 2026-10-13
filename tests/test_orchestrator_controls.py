@@ -225,3 +225,104 @@ def test_completion_partition_stays_at_run_start_when_correction_becomes_user_me
     runtime._record_message(state,Message(role='user',content=first,created_at='2026-10-13T00:00:01Z'))
     runtime._record_message(state,Message(role='user',content=second,created_at='2026-10-13T00:00:02Z'))
     assert runtime._evaluate_completion(state,original_request=original,selected_action=_completed_action(),tool_results=[])['complete'] is True
+
+
+@pytest.mark.parametrize("executor_workers", [None, 1])
+def test_protocol_correction_is_received_before_request_semaphore(make_config, executor_workers):
+    import asyncio
+    entered, release = threading.Event(), threading.Event()
+    correction = 'Cancel the calculation before any tool runs.'
+    def stale(payload):
+        entered.set()
+        assert release.wait(8)
+        return _action(tool_calls=[('calculator', {'expression': '6 * 7'})], continue_loop=True)
+    def reconciled(payload):
+        assert correction in payload['prompt']
+        return _action(message='The calculation was canceled before execution.')
+    client = FakeModelClient([
+        _orchestrator_interaction(route='orchestrate'), stale, reconciled,
+    ])
+    runtime = AgentRuntime(make_config(model__context_limit=32000,
+        tools__enabled=['calculator'], runtime__completion_evaluation_enabled=False), model_client=client)
+    service = CommunicationService(runtime, orchestrator_runtime=runtime, max_concurrency=1)
+    async def exercise():
+        if executor_workers is not None:
+            from concurrent.futures import ThreadPoolExecutor
+            asyncio.get_running_loop().set_default_executor(ThreadPoolExecutor(max_workers=executor_workers))
+        first = asyncio.create_task(service._dispatch_json_line_request({
+            'op': 'orchestrator.message', 'message': 'Calculate six times seven.'}))
+        second = None
+        try:
+            started_deadline = time.monotonic() + 5
+            while not entered.is_set() and time.monotonic() < started_deadline:
+                await asyncio.sleep(.01)
+            assert entered.is_set()
+            second = asyncio.create_task(service._dispatch_json_line_request({
+                'op': 'orchestrator.message', 'message': correction}))
+            state = service._load_orchestrator_state()
+            deadline = time.monotonic() + 2
+            while time.monotonic() < deadline:
+                pending = runtime.history.list_pending_control_messages(state.session_id)
+                if any(item['message'] == correction for item in pending):
+                    break
+                await asyncio.sleep(.01)
+            assert any(item['message'] == correction for item in pending), (
+                'The protocol semaphore blocked finalized control receipt')
+            release.set()
+            results = await asyncio.wait_for(asyncio.gather(first, second), 8)
+            assert results[0]['answer'] == results[1]['answer'] == 'The calculation was canceled before execution.'
+            events = runtime.history.read_history(state.session_id)
+            assert not any(event.event_type == 'tool_called' for event in events)
+            assert any(event.event_type == 'agent_action_rejected' for event in events)
+            assert len(client.requests) == 3
+        finally:
+            release.set()
+            await asyncio.gather(first, *([second] if second is not None else []), return_exceptions=True)
+    try:
+        asyncio.run(exercise())
+    finally:
+        service.close()
+
+
+def test_canceled_transport_keeps_bounded_ingress_until_receipt_finishes(make_config, monkeypatch):
+    import asyncio
+    from swaag.capacity import QueueCapacityError
+    runtime = AgentRuntime(make_config(runtime__max_pending_controls=1), model_client=FakeModelClient([]))
+    service = CommunicationService(runtime, orchestrator_runtime=runtime)
+    entered, release = threading.Event(), threading.Event()
+    receive = service._receive_orchestrator_message
+    exact = 'Do not publish until I have reviewed the result.'
+    def blocked(message):
+        entered.set()
+        assert release.wait(8)
+        return receive(message)
+    monkeypatch.setattr(service, '_receive_orchestrator_message', blocked)
+    async def exercise():
+        request = asyncio.create_task(service._receive_protocol_orchestrator_message(exact))
+        try:
+            deadline = time.monotonic() + 3
+            while not entered.is_set() and time.monotonic() < deadline:
+                await asyncio.sleep(.01)
+            assert entered.is_set()
+            request.cancel()
+            with pytest.raises(asyncio.CancelledError):
+                await request
+            with pytest.raises(QueueCapacityError, match='ingress capacity'):
+                await service._receive_protocol_orchestrator_message('Another message')
+            release.set()
+            deadline = time.monotonic() + 3
+            while time.monotonic() < deadline:
+                state = service._load_orchestrator_state()
+                pending = runtime.history.list_pending_control_messages(state.session_id)
+                if pending:
+                    break
+                await asyncio.sleep(.01)
+            assert [item['message'] for item in pending] == [exact]
+            assert service._orchestrator_ingress_slots.acquire(blocking=False)
+            service._orchestrator_ingress_slots.release()
+        finally:
+            release.set()
+    try:
+        asyncio.run(exercise())
+    finally:
+        service.close()

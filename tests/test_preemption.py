@@ -1486,9 +1486,14 @@ class _ConcurrentOrchestratorClient(_ImmediateClient):
         if call_index == 1:
             self.first_started.set()
             assert self.release_first.wait(timeout=5)
-            answer = "first reply"
-        else:
-            answer = "second reply"
+        # A newly received message can invalidate a direct draft. Answer the
+        # actual current utterance on refresh, rather than treating call count
+        # as user-turn identity.
+        current = payload["prompt"].rsplit(
+            "Current user utterance, verbatim and authoritative:\n", 1
+        )[1].splitlines()[0]
+        assert current in {"first user", "second user"}
+        answer = "first reply" if current == "first user" else "second reply"
         return self._result(payload, _orchestrator_interaction(answer))
 
 
@@ -1513,32 +1518,53 @@ def test_concurrent_orchestrator_messages_preserve_order_and_history(make_config
 
     first = threading.Thread(target=call, args=("first", "first user"), daemon=True)
     second = threading.Thread(target=call, args=("second", "second user"), daemon=True)
-    first.start()
-    assert client.first_started.wait(timeout=5)
-    second.start()
-    second.join(timeout=0.2)
-    assert second.is_alive(), "second orchestrator message overtook the active turn"
-    client.release_first.set()
-    first.join(timeout=5)
-    second.join(timeout=5)
+    try:
+        first.start()
+        assert client.first_started.wait(timeout=5)
+        second.start()
+        receipt_deadline = time.monotonic() + 3
+        while time.monotonic() < receipt_deadline:
+            session = service._load_orchestrator_state().session_id
+            if any(item["message"] == "second user" for item in runtime.history.list_pending_control_messages(session)):
+                break
+            time.sleep(.01)
+        else:
+            pytest.fail("Second message was not durably received")
+        assert second.is_alive(), "second orchestrator message overtook the active turn"
+        client.release_first.set()
+        first.join(timeout=5)
+        second.join(timeout=5)
 
-    assert not errors
-    assert not first.is_alive() and not second.is_alive()
-    assert results["first"]["answer"] == "first reply"
-    assert results["second"]["answer"] == "second reply"
-    state = runtime.create_or_load_user_session("SWAAG Orchestrator")
-    visible = [
-        message.content
-        for message in state.messages
-        if message.role in {"user", "assistant"}
-        and not message.metadata.get("internal_action")
-    ]
-    assert visible[-4:] == [
-        "first user",
-        "first reply",
-        "second user",
-        "second reply",
-    ]
+        assert not errors
+        assert not first.is_alive() and not second.is_alive()
+        assert results["first"]["answer"] == "first reply"
+        assert results["second"]["answer"] == "second reply"
+        state = runtime.create_or_load_user_session("SWAAG Orchestrator")
+        visible = [
+            message.content
+            for message in state.messages
+            if message.role in {"user", "assistant"}
+            and not message.metadata.get("internal_action")
+        ]
+        assert visible[-4:] == [
+            "first user",
+            "first reply",
+            "second user",
+            "second reply",
+        ]
+        assert client._orchestrator_calls == 3
+        rejected = [event for event in runtime.history.read_history(state.session_id)
+                    if event.event_type == "orchestrator_direct_reply_rejected"]
+        assert len(rejected) == 1
+        assert rejected[0].payload["reason"] == "task_state_changed_during_generation"
+    finally:
+        client.release_first.set()
+        if first.ident:
+            first.join(timeout=10)
+        if second.ident:
+            second.join(timeout=10)
+        service.close()
+
 
 def test_run_cancellation_preserves_reason_whitespace_verbatim(make_config) -> None:
     from swaag.preemption import ModelPreemptionCoordinator

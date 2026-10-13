@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from contextlib import AbstractContextManager, nullcontext
+from concurrent.futures import ThreadPoolExecutor
 
 import asyncio
 import base64
@@ -33,7 +34,7 @@ from cryptography.hazmat.primitives.asymmetric import ec
 from cryptography.hazmat.primitives.asymmetric.utils import decode_dss_signature
 from cryptography.hazmat.primitives.ciphers.aead import AESGCM
 
-from swaag.capacity import positive_capacity, require_capacity
+from swaag.capacity import QueueCapacityError, positive_capacity, require_capacity
 from swaag.background_work import BackgroundWork
 from swaag.config import AgentConfig
 from swaag.delegated_tools import DelegatedToolCall, DelegatedToolResultInput
@@ -1299,7 +1300,14 @@ class CommunicationService:
             self._a2a_signing_key = key
         self.store = CommunicationStore(runtime.config.sessions.root, max_pending_requests=runtime.config.communication.max_pending_requests)
         self._protocol_send_lock = threading.Lock()
+        self._client_writers: set[asyncio.StreamWriter] = set()
         self._semaphore = asyncio.Semaphore(max(1, int(max_concurrency)))
+        self._orchestrator_ingress_executor = ThreadPoolExecutor(
+            max_workers=1, thread_name_prefix="swaag-orchestrator-ingress"
+        )
+        self._orchestrator_ingress_slots = threading.BoundedSemaphore(
+            runtime.history.max_pending_controls
+        )
         self.workers = WorkerManager(
             runtime, max_workers=max_concurrency, model_key="default"
         )
@@ -1343,6 +1351,9 @@ class CommunicationService:
         self._restore_ag_ui_shared_state_channels()
 
     def close(self, *, wait: bool = True) -> None:
+        # Already submitted finalized input must reach durable storage even if
+        # its transport disconnected; these jobs never wait for model execution.
+        self._orchestrator_ingress_executor.shutdown(wait=wait, cancel_futures=False)
         self.supervisor.close()
         self.workers.shutdown(wait=wait)
         for manager in self.worker_model_managers.values():
@@ -1643,10 +1654,27 @@ class CommunicationService:
         plans = self.orchestration.store.list_plans()
         inventory = self.orchestration_api.execute("questions.list")["inventory"]
         supervision = self.orchestration_api.execute("supervision")["supervision"]
+        state = self._load_orchestrator_state()
+        active_run = self.orchestrator_runtime.history.read_active_run(state.session_id)
+        # The planner can be busy before it has created any worker or plan.
+        # Preserve its exact objective and unprocessed corrections without
+        # presenting a volatile heartbeat as a new semantic task transition.
+        active_turn = None if active_run is None else {
+            key: active_run.get(key) for key in (
+                "run_id", "user_text", "started_at", "phase", "substate",
+                "detail", "operation_kind",
+            )
+        }
+        pending = self.orchestrator_runtime.history.list_pending_control_messages(state.session_id)
         return {
             "collection_started_at": started_at,
             "captured_at": utc_now_iso(),
             "consistency": "per-source observations; workers may change during collection or generation",
+            "orchestrator": {
+                "session_id": state.session_id,
+                "active_turn": active_turn,
+                "pending_user_messages": [item for item in pending if item.get("source") == "orchestrator_user"],
+            },
             "active_workers": [
                 asdict(worker) for worker in workers
                 if worker.status not in WORKER_TERMINAL_STATES
@@ -1682,6 +1710,16 @@ class CommunicationService:
             "active_workers", "terminal_workers", "active_plans", "terminal_plans",
         )}
         facts["worker_question_inventory"] = inventory
+        orchestrator = copy.deepcopy(snapshot.get("orchestrator"))
+        if orchestrator and orchestrator.get("active_turn"):
+            # Inference dispatch/streaming telemetry is sampled evidence, like
+            # supervision. Keep it in the prompt without invalidating an answer
+            # solely because the same task moved between inference substates.
+            turn = orchestrator["active_turn"]
+            orchestrator["active_turn"] = {
+                key: turn.get(key) for key in ("run_id", "user_text", "started_at")
+            }
+        facts["orchestrator"] = orchestrator
         return hashlib.sha256(stable_json_dumps(facts, indent=None).encode()).hexdigest()
 
     def _generate_current_orchestrator_interaction(self, state, text: str) -> dict[str, Any]:
@@ -1718,6 +1756,10 @@ class CommunicationService:
         )
 
     def orchestrator_message(self, message: str) -> dict[str, str]:
+        return self._process_orchestrator_receipt(self._receive_orchestrator_message(message))
+
+    def _receive_orchestrator_message(self, message: str) -> dict[str, Any]:
+        """Persist finalized authority before either request or session admission."""
         text = str(message)
         if not text.strip():
             raise ValueError("orchestrator message must not be empty")
@@ -1726,10 +1768,35 @@ class CommunicationService:
         # Only finalized ordinary messages reach this API. Persist receipt before
         # waiting for the planner's execution lock so in-flight actions can see
         # newer authority through the existing control-generation fence.
-        receipt = runtime.history.enqueue_control_message(
+        return runtime.history.enqueue_control_message(
             initial.session_id, text, source="orchestrator_user"
         )
-        with session_execution_lock(runtime.history, initial.session_id):
+
+    async def _receive_protocol_orchestrator_message(self, message: str) -> dict[str, Any]:
+        if not self._orchestrator_ingress_slots.acquire(blocking=False):
+            raise QueueCapacityError("Finalized-message ingress capacity reached; request not accepted")
+
+        def receive():
+            try:
+                return self._receive_orchestrator_message(message)
+            finally:
+                self._orchestrator_ingress_slots.release()
+
+        try:
+            future = asyncio.get_running_loop().run_in_executor(
+                self._orchestrator_ingress_executor, receive
+            )
+        except BaseException:
+            self._orchestrator_ingress_slots.release()
+            raise
+        # Retrieve an error even if the connection leaves before receipt finishes.
+        # Awaiters still receive that same error; no success is fabricated.
+        future.add_done_callback(lambda done: None if done.cancelled() else done.exception())
+        return await asyncio.shield(future)
+
+    def _process_orchestrator_receipt(self, receipt: dict[str, Any]) -> dict[str, str]:
+        runtime = self.orchestrator_runtime
+        with session_execution_lock(runtime.history, str(receipt["session_id"])):
             while True:
                 state = self._orchestrator_state()
                 pending = [item for item in runtime.history.list_pending_control_messages(state.session_id)
@@ -5320,10 +5387,14 @@ class CommunicationService:
                 )
                 return None if item is None else asdict(item)
             if op == "orchestrator.message":
+                # A saturated model/request pool must not hide a finalized
+                # correction from the planner's in-flight control fence.
+                # The durable inbox enforces its own bounded pending capacity.
+                receipt = await self._receive_protocol_orchestrator_message(
+                    str(request.get("message", ""))
+                )
                 async with self._semaphore:
-                    return await asyncio.to_thread(
-                        self.orchestrator_message, str(request.get("message", ""))
-                    )
+                    return await asyncio.to_thread(self._process_orchestrator_receipt, receipt)
             if op == "ask_status":
                 async with self._semaphore:
                     answer = await asyncio.to_thread(
@@ -5467,6 +5538,7 @@ class CommunicationService:
             await server.serve_forever()
 
     async def handle_client(self, reader: asyncio.StreamReader, writer: asyncio.StreamWriter) -> None:
+        self._client_writers.add(writer)
         try:
             line = await reader.readline()
             request_parts = line.rstrip(b"\r\n").split(b" ")
@@ -5491,8 +5563,11 @@ class CommunicationService:
                 await writer.drain()
                 line = await reader.readline()
         finally:
-            writer.close()
-            await writer.wait_closed()
+            try:
+                writer.close()
+                await writer.wait_closed()
+            finally:
+                self._client_writers.discard(writer)
 
     async def _watchdog_loop(self) -> None:
         interval = watchdog_interval_seconds(default_seconds=10.0)
@@ -5638,8 +5713,10 @@ class CommunicationService:
                         self._a2a_push_loop(), name="swaag-a2a-push-delivery"
                     )
                 )
-            async with server:
-                await server.serve_forever()
+            # start_server is already accepting. Own shutdown here: the
+            # standard serve_forever cancellation waits for clients before our
+            # cleanup can close them, deadlocking a persistent idle connection.
+            await loop.create_future()
         except asyncio.CancelledError:
             if not stop_requested:
                 raise
@@ -5648,6 +5725,13 @@ class CommunicationService:
                 loop.remove_signal_handler(signum)
             if server is not None:
                 server.close()
+                for writer in list(self._client_writers):
+                    writer.close()
+                # Python 3.13 also covers accepted transports whose handler has
+                # not started yet. Tracked writers retain 3.11/3.12 support.
+                close_clients = getattr(server, "close_clients", None)
+                if callable(close_clients):
+                    close_clients()
                 await server.wait_closed()
             for task in background_tasks:
                 task.cancel()
@@ -5656,6 +5740,7 @@ class CommunicationService:
                     await task
                 except asyncio.CancelledError:
                     pass
+            self._orchestrator_ingress_executor.shutdown(wait=True, cancel_futures=False)
             self.supervisor.close()
             self.workers.shutdown(wait=False)
             for manager in self.worker_model_managers.values():
