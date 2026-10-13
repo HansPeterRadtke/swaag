@@ -322,6 +322,8 @@ class LlamaCppClient:
                 "model": self.config.model.profile_name,
                 "messages": messages,
                 "add_generation_prompt": True,
+                **({"chat_template_kwargs": dict(self.config.model.chat_template_kwargs)}
+                   if self.config.model.chat_template_kwargs else {}),
             },
             timeout=(
                 self.config.model.connect_timeout_seconds,
@@ -416,6 +418,8 @@ class LlamaCppClient:
             "completion_endpoint": self.config.model.completion_endpoint,
             "profile_name": self.config.model.profile_name,
         }
+        if self.config.model.chat_template_kwargs:
+            identity["chat_template_kwargs"] = dict(self.config.model.chat_template_kwargs)
         if self._uses_chat_transport:
             try:
                 model = self._remote_model()
@@ -493,10 +497,14 @@ class LlamaCppClient:
         return int(n_ctx)
 
     def _prompt_protocol_identity(self) -> dict[str, str]:
+        template_identity = ({"chat_template_kwargs_sha256": sha256_text(
+            stable_json_dumps(self.config.model.chat_template_kwargs, indent=None))}
+            if self.config.model.chat_template_kwargs else {})
         if self._uses_chat_transport:
             model = self._remote_model()
             stable_model = stable_openai_model_metadata(model)
             return {
+                **template_identity,
                 "serialization": "provider_opaque_openai_chat_v1",
                 "model_metadata_sha256": sha256_text(
                     stable_json_dumps(stable_model, indent=None)
@@ -534,6 +542,7 @@ class LlamaCppClient:
         generation = props.get("default_generation_settings")
         n_ctx = generation.get("n_ctx") if isinstance(generation, dict) else None
         return {
+            **template_identity,
             "chat_template_sha256": sha256_text(template),
             "chat_template_caps_sha256": sha256_text(
                 stable_json_dumps(props.get("chat_template_caps"), indent=None)
@@ -595,7 +604,9 @@ class LlamaCppClient:
         before = self._prompt_protocol_identity()
         response = requests.post(
             f"{self._base}/apply-template",
-            json={"messages": messages},
+            json={"messages": messages,
+                  **({"chat_template_kwargs": dict(self.config.model.chat_template_kwargs)}
+                     if self.config.model.chat_template_kwargs else {})},
             timeout=(
                 self.config.model.connect_timeout_seconds,
                 min(self.config.model.timeout_seconds, 30),
@@ -811,6 +822,8 @@ class LlamaCppClient:
                     },
                 },
             }
+            if self.config.model.chat_template_kwargs:
+                request["chat_template_kwargs"] = dict(self.config.model.chat_template_kwargs)
             if self._is_openrouter:
                 request["provider"] = {"require_parameters": True}
             if self.config.model.stop:

@@ -1493,6 +1493,8 @@ class CommunicationService:
             if config.communication.model_profile_name: orchestrator_config.model.profile_name = config.communication.model_profile_name
             if config.communication.model_identity: orchestrator_config.model.model_identity = config.communication.model_identity
             if config.communication.remote_context_limit_fallback: orchestrator_config.model.remote_context_limit_fallback = config.communication.remote_context_limit_fallback
+        if config.communication.model_chat_template_kwargs:
+            orchestrator_config.model.chat_template_kwargs = copy.deepcopy(config.communication.model_chat_template_kwargs)
         orchestrator_config.tools.enabled = list(config.communication.enabled_tools)
         # Preserve staged discovery, including deferred workspace listings.
         # AgentRuntime preloads the canonical orchestration_control schema only
@@ -1510,6 +1512,8 @@ class CommunicationService:
                 if config.communication.model_profile_name: assistant_config.model.profile_name = config.communication.model_profile_name
                 if config.communication.model_identity: assistant_config.model.model_identity = config.communication.model_identity
                 if config.communication.remote_context_limit_fallback: assistant_config.model.remote_context_limit_fallback = config.communication.remote_context_limit_fallback
+                if config.communication.model_chat_template_kwargs:
+                    assistant_config.model.chat_template_kwargs = copy.deepcopy(config.communication.model_chat_template_kwargs)
                 assistant_config.tools.enabled = list(config.communication.enabled_tools)
                 assistant_config.tools.allow_stateful_tools = False
                 assistant_config.tools.allow_side_effect_tools = False

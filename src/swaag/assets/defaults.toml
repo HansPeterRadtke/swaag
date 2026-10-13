@@ -40,6 +40,9 @@ provider_name = "llama.cpp"
 # read only at request time and is never included in config fingerprints.
 api_key_env = ""
 structured_output_mode = "server_schema"
+# Explicit backend-supported chat template options; empty preserves provider defaults.
+# Applied to generation and token accounting, and included in cache identity.
+chat_template_kwargs = {}
 # Cache-first record mode is the normal runtime default. Set cache_enabled=false for an explicitly uncached live run.
 cache_enabled = true
 cache_mode = "record"
@@ -461,6 +464,10 @@ jwks_url = ""
 # Empty model_base_url reuses the main configured model endpoint.
 # -----------------------------------------------------------
 [communication]
+# Override template options only for communication runtimes, e.g.
+# model_chat_template_kwargs = { enable_thinking = false }
+# An empty table inherits the main model's options.
+model_chat_template_kwargs = {}
 enabled = false
 model_base_url = ""
 # Required when the communication endpoint advertises a different model ID than [model].

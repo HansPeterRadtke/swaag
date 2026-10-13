@@ -2443,9 +2443,13 @@ def test_a2a_agent_card_signature_verifies(make_config, monkeypatch):
 def test_communication_endpoint_uses_its_own_model_identity(make_config) -> None:
     config = make_config(); config.communication.enabled = True
     config.model.profile_name = "main-27b"; config.model.model_identity = "main-27b"; config.model.remote_context_limit_fallback = 8192
+    config.communication.model_chat_template_kwargs = {"enable_thinking": False}
     config.communication.model_base_url = "http://127.0.0.1:14832/v1"; config.communication.model_profile_name = "fast-model"; config.communication.model_identity = "fast-model"; config.communication.remote_context_limit_fallback = 32768
     service = CommunicationService.from_runtime(AgentRuntime(config, model_client=object()))
     try:
         model = service.orchestrator_runtime.config.model
         assert (model.base_url, model.profile_name, model.model_identity, model.remote_context_limit_fallback) == ("http://127.0.0.1:14832/v1", "fast-model", "fast-model", 32768)
+        assert model.chat_template_kwargs == {"enable_thinking": False}
+        assert service.assistant_runtime.config.model.chat_template_kwargs == {"enable_thinking": False}
+        assert config.model.chat_template_kwargs == {}
     finally: service.workers.shutdown()

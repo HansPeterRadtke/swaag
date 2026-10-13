@@ -44,6 +44,7 @@ class ModelConfig:
     cache_max_bytes: int = 134217728
     cache_max_entries: int = 16384
     cache_lock_stripes: int = 128
+    chat_template_kwargs: dict[str, Any] = field(default_factory=dict)
 
 
 @dataclass(slots=True)
@@ -332,6 +333,7 @@ class CommunicationConfig:
     max_background_plans: int = 128
     autonomous_idea_interval_seconds: float = 300.0
     model_routes: dict[str, str] = field(default_factory=dict)
+    model_chat_template_kwargs: dict[str, Any] = field(default_factory=dict)
     open_webui_artifacts: OpenWebUiArtifactServingConfig = field(
         default_factory=lambda: OpenWebUiArtifactServingConfig(False, "", "", 900)
     )
@@ -785,6 +787,7 @@ def _coerce_config(
         model_base_url=str(data["communication"]["model_base_url"]),
         model_profile_name=str(data["communication"].get("model_profile_name", "")),
         model_identity=str(data["communication"].get("model_identity", "")),
+        model_chat_template_kwargs=data["communication"].get("model_chat_template_kwargs", {}),
         remote_context_limit_fallback=int(data["communication"].get("remote_context_limit_fallback", 0)),
         max_concurrent_requests=int(data["communication"]["max_concurrent_requests"]),
         status_max_output_tokens=int(data["communication"].get("status_max_output_tokens", 192)),
@@ -879,6 +882,12 @@ def _coerce_config(
         },
     )
 
+    for name, options in (("model.chat_template_kwargs", model.chat_template_kwargs),
+                          ("communication.model_chat_template_kwargs", communication.model_chat_template_kwargs)):
+        if not isinstance(options, dict) or any(not isinstance(key, str) for key in options):
+            raise ValueError(name + " must be a table of template options")
+        if "enable_thinking" in options and not isinstance(options["enable_thinking"], bool):
+            raise ValueError(name + ".enable_thinking must be a boolean")
     _validate_positive("model.context_limit", model.context_limit)
     _validate_positive(
         "model.max_semantic_responsibilities_per_call",
