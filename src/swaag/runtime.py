@@ -332,14 +332,20 @@ class AgentRuntime:
             return 128, "deterministic_test_client"
         if getattr(self.client, "mode", "") == "replay":
             return 128, "recorded_replay"
+        resolution = getattr(self.client, "server_slot_resolution", None)
         resolver = getattr(self.client, "server_slot_count", None)
-        if callable(resolver):
-            try:
-                slots = int(resolver())
-                if slots > 0:
-                    return slots, "server_props:total_slots"
-            except Exception:
-                pass
+        try:
+            if callable(resolution):
+                count, source = resolution()
+            elif callable(resolver):
+                count, source = resolver(), "client:server_slot_count"
+            else:
+                return 1, "conservative_fallback"
+            slots = int(count)
+            if slots > 0:
+                return slots, source
+        except Exception:
+            pass
         return 1, "conservative_fallback"
 
     @contextmanager

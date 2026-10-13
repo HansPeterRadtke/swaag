@@ -88,6 +88,7 @@ def test_server_slot_count_comes_from_props(make_config, monkeypatch):
 
     monkeypatch.setattr("swaag.model.requests.get", lambda *args, **kwargs: Response())
     assert client.server_slot_count() == 3
+    assert client.server_slot_resolution() == (3, "server_props:total_slots")
 
 
 @pytest.mark.parametrize("value", [None, True, False, 0, -1, "3"])
@@ -544,3 +545,18 @@ def test_completion_request_only_sends_explicit_model_stop_sequences(
     assert with_stops.build_completion_request(
         "prompt", max_tokens=64, contract=yes_no_contract()
     )["stop"] == ["MODEL_STOP"]
+
+
+@pytest.mark.parametrize("cached", [False, True])
+def test_chat_inference_capacity_is_reported_as_fallback(make_config, monkeypatch, cached):
+    from swaag.runtime import AgentRuntime
+    config = make_config(
+        model__base_url="https://inference.example/v1",
+        model__completion_endpoint="/chat/completions",
+        model__cache_enabled=cached,
+    )
+    def unexpected(*args, **kwargs):
+        raise AssertionError("Capacity fallback must not be reported as fetched server properties")
+    monkeypatch.setattr("swaag.model.requests.get", unexpected)
+    runtime = AgentRuntime(config)
+    assert runtime._inference_capacity() == (1, "conservative_fallback:openai_transport")

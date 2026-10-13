@@ -629,6 +629,12 @@ class LlamaCppClient:
                 "Model or chat template changed after context compilation"
             )
 
+    def server_slot_resolution(self) -> tuple[int, str]:
+        if self._uses_chat_transport:
+            # The standard chat API does not advertise admission capacity.
+            return 1, "conservative_fallback:openai_transport"
+        return self.server_slot_count(), "server_props:total_slots"
+
     def server_slot_count(self) -> int:
         if self._uses_chat_transport:
             return 1

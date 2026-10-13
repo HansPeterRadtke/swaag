@@ -574,6 +574,17 @@ class RecordReplayModelClient:
             raise ValueError("Model client has no context-capacity resolver or configured fallback")
         return int(value), "configured"
 
+    def server_slot_resolution(self) -> tuple[int, str]:
+        if self.mode == "replay":
+            return 128, "recorded_replay"
+        resolver = getattr(self.delegate, "server_slot_resolution", None)
+        if callable(resolver):
+            return resolver()
+        resolver = getattr(self.delegate, "server_slot_count", None)
+        if callable(resolver):
+            return int(resolver()), "client:server_slot_count"
+        return 1, "conservative_fallback"
+
     def server_slot_count(self) -> int:
         if self.mode == "replay":
             return 128
