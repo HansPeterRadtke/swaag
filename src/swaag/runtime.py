@@ -3215,7 +3215,13 @@ class AgentRuntime:
                 "requested conversational answer. Use route=orchestrate only when the user actually asks to start, "
                 "continue, change, cancel, reprioritize, or perform substantive work, "
                 "or when answering correctly requires additional live inspection, a state "
-                "change, external/tool work, or substantive delegated execution. This is "
+                "change, external/tool work, or substantive delegated execution. Explicit "
+                "instructions to start, continue, change, cancel, or reprioritize work "
+                "must reach the full orchestrator even if the supplied snapshot shows "
+                "no matching work: the snapshot can be stale, and the full orchestrator "
+                "must verify current state before acting or reporting that no action "
+                "is needed. Questions about what such actions mean are not instructions "
+                "to perform them. This is "
                 "a semantic decision; do not classify by "
                 "keywords. For route=respond, put the complete immediate user-facing "
                 "answer in answer using concise natural spoken prose. For "
@@ -3229,8 +3235,9 @@ class AgentRuntime:
                 "other feelings unless those feelings are themselves the subject. Talk about "
                 "the actual content and save the user's time. An explicit user request for exact, visual, "
                 "code, or machine-readable formatting overrides that presentation default; "
-                "preserve the requested exact content and format. Give a short reason for "
-                "the routing decision."
+                "preserve the requested exact content and format. Give a concise routing "
+                "reason as a short phrase, normally two to six words. Do not restate "
+                "the user request or narrate your reasoning."
             ),
             components=[
                 *self.prompts.message_prompt_components(
