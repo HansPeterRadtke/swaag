@@ -66,3 +66,99 @@ def test_snapshot_is_collected_after_preemption_wait(make_config, monkeypatch):
         assert "COMPLETED_DURING_WAIT_937" in client.requests[0]["prompt"]
     finally:
         service.close()
+
+
+def test_direct_reply_is_regenerated_after_worker_completion(make_config, monkeypatch):
+    config = make_config(model__context_limit=32000)
+    runtime = AgentRuntime(config, model_client=_ImmediateClient('unused'))
+    service = CommunicationService(runtime, orchestrator_runtime=runtime)
+    snapshots = []
+    try:
+        worker = service.workers.create('Verification changes during generation')
+        service.workers.store.transition(worker.worker_id, 'working')
+        def generate(**kwargs):
+            snapshot = kwargs['runtime_snapshot']
+            snapshots.append(snapshot)
+            if len(snapshots) == 1:
+                service.workers.store.transition(worker.worker_id, 'completed', result='FRESH_COMPLETION_529')
+                return {'route': 'respond', 'answer': 'Verification is still running.', 'reason': 'snapshot'}
+            assert any(w.get('result') == 'FRESH_COMPLETION_529' for w in snapshot['terminal_workers'])
+            return {'route': 'respond', 'answer': 'Verification has completed.', 'reason': 'fresh snapshot'}
+        monkeypatch.setattr(runtime, 'generate_orchestrator_interaction', generate)
+        result = service.orchestrator_message('Has verification finished?')
+        assert result['answer'] == 'Verification has completed.'
+        assert len(snapshots) == 2
+        state = service._load_orchestrator_state()
+        assert not any(m.role == 'assistant' and m.content == 'Verification is still running.' for m in state.messages)
+    finally:
+        service.close()
+
+
+def test_continuously_changing_snapshot_does_not_publish_a_stale_reply(make_config, monkeypatch):
+    import pytest
+    config = make_config(model__context_limit=32000)
+    runtime = AgentRuntime(config, model_client=_ImmediateClient('unused'))
+    service = CommunicationService(runtime, orchestrator_runtime=runtime)
+    calls = []
+    try:
+        def generate(**kwargs):
+            calls.append(kwargs)
+            service.workers.create('New work observed during response ' + str(len(calls)))
+            return {'route': 'respond', 'answer': 'There is no new work.', 'reason': 'old snapshot'}
+        monkeypatch.setattr(runtime, 'generate_orchestrator_interaction', generate)
+        with pytest.raises(RuntimeError, match='Task state changed during both response attempts'):
+            service.orchestrator_message('What is running?')
+        assert len(calls) == 2
+        state = service._load_orchestrator_state()
+        assert not any(m.role == 'assistant' for m in state.messages)
+        rejected = [e for e in runtime.history.read_history(state.session_id) if e.event_type == 'orchestrator_direct_reply_rejected']
+        assert len(rejected) == 2
+    finally:
+        service.close()
+
+
+def test_snapshot_refresh_observes_progress_without_worker_transition(make_config, monkeypatch):
+    config = make_config(model__context_limit=32000)
+    runtime = AgentRuntime(config, model_client=_ImmediateClient('unused'))
+    service = CommunicationService(runtime, orchestrator_runtime=runtime)
+    calls = []
+    try:
+        worker = service.workers.create('Report a material progress change')
+        def generate(**kwargs):
+            calls.append(kwargs)
+            if len(calls) == 1:
+                state = runtime.history.rebuild_from_history(worker.session_id)
+                runtime.history.record_event(state, 'agent_progress', {
+                    'steps': [{'id':'done','label':'verified','state':'completed','weight':1},
+                              {'id':'pending','label':'remaining','state':'pending','weight':1}],
+                    'reason':'Verified one of two equal steps',
+                    'estimated_remaining_seconds':None, 'estimate_conditions':'',
+                })
+                return {'route':'respond','answer':'Progress is unknown.','reason':'old snapshot'}
+            progress = kwargs['runtime_snapshot']['worker_question_inventory']['workers'][0]['progress']
+            assert progress['overall_percent'] == 50
+            return {'route':'respond','answer':'Verification is half complete.','reason':'new progress'}
+        monkeypatch.setattr(runtime, 'generate_orchestrator_interaction', generate)
+        assert service.orchestrator_message('How far along?')['answer'] == 'Verification is half complete.'
+        assert len(calls) == 2
+    finally:
+        service.close()
+
+
+def test_snapshot_ignores_bookkeeping_without_task_fact_changes(make_config, monkeypatch):
+    config = make_config(model__context_limit=32000)
+    runtime = AgentRuntime(config, model_client=_ImmediateClient('unused'))
+    service = CommunicationService(runtime, orchestrator_runtime=runtime)
+    calls = []
+    try:
+        worker = service.workers.create('Stable queued work')
+        def generate(**kwargs):
+            calls.append(kwargs)
+            state = runtime.history.rebuild_from_history(worker.session_id)
+            runtime.history.record_event(state, 'state_rebuilt', {'session_id':state.session_id,'event_count':state.event_count})
+            return {'route':'respond','answer':'The work is queued.','reason':'snapshot'}
+        monkeypatch.setattr(runtime, 'generate_orchestrator_interaction', generate)
+        assert service.orchestrator_message('What is running?')['answer'] == 'The work is queued.'
+        assert len(calls) == 1
+    finally:
+        service.close()

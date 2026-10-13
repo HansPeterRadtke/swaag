@@ -1667,10 +1667,93 @@ class CommunicationService:
             "supervision": supervision,
         }
 
+    @staticmethod
+    def _orchestrator_task_snapshot_fingerprint(snapshot: dict[str, Any]) -> str:
+        """Compare durable task facts, not polling clocks or history bookkeeping.
+
+        Supervision is an explicitly timestamped observation. This fence covers
+        task status/results, plan revisions, questions and assessed progress; it
+        does not claim a transaction across stores or predict later transitions.
+        """
+        inventory = copy.deepcopy(snapshot["worker_question_inventory"])
+        for worker in inventory.get("workers", []):
+            worker.pop("through_sequence", None)
+        facts = {key: snapshot[key] for key in (
+            "active_workers", "terminal_workers", "active_plans", "terminal_plans",
+        )}
+        facts["worker_question_inventory"] = inventory
+        return hashlib.sha256(stable_json_dumps(facts, indent=None).encode()).hexdigest()
+
+    def _generate_current_orchestrator_interaction(self, state, text: str) -> dict[str, Any]:
+        snapshot = self._orchestrator_runtime_snapshot()
+        # One refresh repairs an observed transition without an unbounded model
+        # loop when workers continually change. Never publish a known-stale draft.
+        for attempt in range(2):
+            routed = self.orchestrator_runtime.generate_orchestrator_interaction(
+                message=text,
+                conversation_messages=list(state.messages),
+                runtime_snapshot=snapshot,
+            )
+            if routed["route"] != "respond":
+                return routed
+            current = self._orchestrator_runtime_snapshot()
+            if self._orchestrator_task_snapshot_fingerprint(snapshot) == self._orchestrator_task_snapshot_fingerprint(current):
+                return routed
+            self.orchestrator_runtime.history.record_event(
+                state,
+                "orchestrator_direct_reply_rejected",
+                {
+                    "reason": "task_state_changed_during_generation",
+                    "proposed_route": "respond",
+                    "actual_route": "refresh" if attempt == 0 else "reject",
+                    "attempt": attempt + 1,
+                    "snapshot_captured_at": snapshot["captured_at"],
+                    "rechecked_at": current["captured_at"],
+                    "operation_session_id": routed.get("operation_session_id"),
+                },
+            )
+            snapshot = current
+        raise RuntimeError(
+            "Task state changed during both response attempts; no current answer could be verified."
+        )
+
     def orchestrator_message(self, message: str) -> dict[str, str]:
         text = str(message)
         if not text.strip():
             raise ValueError("orchestrator message must not be empty")
+        runtime = self.orchestrator_runtime
+        initial = self._load_orchestrator_state()
+        # Only finalized ordinary messages reach this API. Persist receipt before
+        # waiting for the planner's execution lock so in-flight actions can see
+        # newer authority through the existing control-generation fence.
+        receipt = runtime.history.enqueue_control_message(
+            initial.session_id, text, source="orchestrator_user"
+        )
+        with session_execution_lock(runtime.history, initial.session_id):
+            while True:
+                state = self._orchestrator_state()
+                pending = [item for item in runtime.history.list_pending_control_messages(state.session_id)
+                           if item.get("source") == "orchestrator_user"]
+                if not any(item["control_id"] == receipt["control_id"] for item in pending):
+                    # The active planner may already have reconciled this exact
+                    # message. Reuse its committed answer; never execute it twice.
+                    seen = False
+                    for event in runtime.history.read_history(state.session_id):
+                        if event.event_type == "control_message_processed" and event.payload.get("control_id") == receipt["control_id"]:
+                            seen = True
+                        elif seen and event.event_type == "turn_started":
+                            break  # A later turn is not evidence this one completed.
+                        elif seen and event.event_type == "turn_finished":
+                            return {"session_id": state.session_id, "answer": str(event.payload["assistant_text"])}
+                    raise RuntimeError("The finalized message was processed, but no completed response is recorded.")
+                # File-lock acquisition is not FIFO. Drain durable receipt order,
+                # including requests left pending after a failed connection/run.
+                result = self._orchestrator_message_locked(pending[0])
+                if pending[0]["control_id"] == receipt["control_id"]:
+                    return result
+
+    def _orchestrator_message_locked(self, receipt: dict[str, Any]) -> dict[str, str]:
+        text = str(receipt["message"])
         orchestrator_state = self._load_orchestrator_state()
         with session_execution_lock(
             self.orchestrator_runtime.history, orchestrator_state.session_id
@@ -1703,12 +1786,7 @@ class CommunicationService:
                     1000, source="user_orchestrator"
                 ):
                     try:
-                        fast_runtime_snapshot = self._orchestrator_runtime_snapshot()
-                        routed = self.orchestrator_runtime.generate_orchestrator_interaction(
-                            message=text,
-                            conversation_messages=list(state.messages),
-                            runtime_snapshot=fast_runtime_snapshot,
-                        )
+                        routed = self._generate_current_orchestrator_interaction(state, text)
                     except SemanticCallContextOverflow:
                         routed = {
                             "route": "orchestrate",
@@ -1750,8 +1828,21 @@ class CommunicationService:
                             Message(
                                 role="user",
                                 content=text,
-                                created_at=utc_now_iso(),
+                                created_at=str(receipt["created_at"]),
+                                metadata={"orchestrator_control_id": receipt["control_id"]},
                             ),
+                        )
+                        self.orchestrator_runtime.history.record_event(
+                            state, "control_message_processed", {
+                                "control_id": receipt["control_id"],
+                                "session_id": state.session_id,
+                                "message": text,
+                                "decision": routed,
+                                "selected_action": routed,
+                            },
+                        )
+                        self.orchestrator_runtime.history.mark_control_message_processed(
+                            state.session_id, receipt["control_id"]
                         )
                         result = self.orchestrator_runtime._finish_turn(
                             state,
@@ -1761,7 +1852,7 @@ class CommunicationService:
                         )
                     else:
                         result = self.orchestrator_runtime.run_turn_in_session(
-                            state, text
+                            state, text, user_control_id=str(receipt["control_id"])
                         )
                 self.orchestration.advance_active_plans()
                 for runtime, request in preemptions:

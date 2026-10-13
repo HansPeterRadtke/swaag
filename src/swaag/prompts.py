@@ -607,6 +607,7 @@ class PromptBuilder:
         self,
         *,
         original_request: str,
+        authority_components: list[PromptComponent] | None = None,
         assistant_message: str,
         status_json: str,
         tool_evidence: str = "",
@@ -619,6 +620,7 @@ class PromptBuilder:
     ) -> PromptAssembly:
         base = self.build_completion_evaluation_prompt(
             original_request=original_request,
+            authority_components=authority_components,
             assistant_message=assistant_message,
             status_json=status_json,
             tool_evidence=tool_evidence,
@@ -666,6 +668,7 @@ class PromptBuilder:
         self,
         *,
         original_request: str,
+        authority_components: list[PromptComponent] | None = None,
         assistant_message: str,
         status_json: str,
         tool_evidence: str = "",
@@ -684,6 +687,7 @@ class PromptBuilder:
                 category="current_user",
                 text=f"Original user objective:\n{original_request}\n\n",
             ),
+            *(authority_components or []),
             PromptComponent(
                 name="completion_candidate",
                 category="turn_context",

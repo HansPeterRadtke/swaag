@@ -532,6 +532,7 @@ class AgentRuntime:
         user_text: str,
         *,
         allow_silent_completion: bool = False,
+        user_control_id: str | None = None,
     ) -> TurnResult:
         # Callers may hold a session object across durable out-of-band writes such
         # as attachment ingestion. Refresh from append-only history before opening
@@ -558,6 +559,7 @@ class AgentRuntime:
                     state,
                     user_text,
                     record_user_message=True,
+                    user_control_id=user_control_id,
                     allow_silent_completion=allow_silent_completion,
                 )
                 self._heartbeat(state, run_id=run_id, phase="completed", detail="turn completed")
@@ -796,16 +798,23 @@ class AgentRuntime:
         *,
         record_user_message: bool = True,
         allow_silent_completion: bool = False,
+        user_control_id: str | None = None,
     ) -> TurnResult:
         original_request = user_text
         if not original_request.strip():
             raise ValueError("user_text must not be empty")
 
-        if record_user_message:
+        if record_user_message and not (
+            user_control_id and any(
+                item.metadata.get("orchestrator_control_id") == user_control_id
+                for item in state.messages if item.role == "user"
+            )
+        ):
             self.history.ensure_human_readable_name(state, original_request)
             self._record_message(
                 state,
-                Message(role="user", content=original_request, created_at=utc_now_iso()),
+                Message(role="user", content=original_request, created_at=utc_now_iso(),
+                        metadata={"orchestrator_control_id": user_control_id} if user_control_id else {}),
             )
         self.history.record_event(
             state,
@@ -906,14 +915,7 @@ class AgentRuntime:
                 self._ensure_delegated_catalog_observed(state, delegated_catalog)
             action_index = accepted_actions + 1
             pending_payloads = self.history.list_pending_control_messages(state.session_id)
-            authoritative_control_payloads = (
-                self.history.list_authoritative_control_messages(state.session_id)
-            )
-            pending_messages = [
-                str(item.get("message", ""))
-                for item in authoritative_control_payloads
-                if str(item.get("message", "")).strip() and item.get("source") != "question_revision"
-            ]
+            pending_messages = self._authoritative_intervention_texts(state)
             validation_feedback = recovery_feedback
             recovery_feedback = ""
             selected_action: AgentAction | None = None
@@ -1516,6 +1518,36 @@ class AgentRuntime:
             },
         )
 
+    def _authoritative_intervention_texts(self, state: SessionState) -> list[str]:
+        represented = {message.metadata.get("orchestrator_control_id")
+                       for message in state.messages if message.role == "user"}
+        return [str(item["message"])
+                for item in self.history.list_authoritative_control_messages(state.session_id)
+                if str(item.get("message", "")).strip()
+                and item.get("source") != "question_revision"
+                and not (item.get("source") == "orchestrator_user"
+                         and (item.get("status") == "processed" or item.get("control_id") in represented))]
+
+    def _current_authority_components(self, state: SessionState, original_request: str) -> list[PromptComponent]:
+        """Repair/check calls must see the same current user authority as actions."""
+        components = []
+        latest = next((message for message in reversed(state.messages) if message.role == "user"), None)
+        if latest is not None and latest.content != original_request:
+            components.append(PromptComponent(
+                name="latest_authoritative_user_message", category="current_user",
+                text="Latest user message, verbatim; supersedes conflicting earlier instructions:\n" + latest.content + "\n\n",
+            ))
+        controls = self._authoritative_intervention_texts(state)
+        if controls:
+            components.append(PromptComponent(
+                name="authoritative_user_interventions", category="current_user",
+                text=("Later user interventions, verbatim and in delivery order. Later interventions "
+                      "supersede conflicting earlier instructions; other requirements remain in force.\n"
+                      + "\n\n".join(f"[USER INTERVENTION {i}]\n{text}" for i, text in enumerate(controls, 1))
+                      + "\n\n"),
+            ))
+        return components
+
     def _consume_pending_control_messages(
         self,
         state: SessionState,
@@ -1528,8 +1560,19 @@ class AgentRuntime:
             message = str(payload.get("message", ""))
             if not control_id or not message.strip():
                 continue
-            # Controls are not user messages. They are injected through the dedicated
-            # pending-control prompt channel and preserved exactly in this event.
+            # Finalized front-door messages are actual conversation turns. Place
+            # them in receipt order before committing the reconciled action. On
+            # later turns they belong in history, not in the "later intervention"
+            # channel where an old restriction could override a newer user turn.
+            # Other worker controls retain their existing separate authority lane.
+            if payload.get("source") == "orchestrator_user" and not any(
+                item.metadata.get("orchestrator_control_id") == control_id
+                for item in state.messages if item.role == "user"
+            ):
+                self._record_message(state, Message(
+                    role="user", content=message, created_at=str(payload["created_at"]),
+                    metadata={"orchestrator_control_id": control_id},
+                ))
             decision = asdict(selected_action)
             self.history.record_event(
                 state,
@@ -1823,6 +1866,7 @@ class AgentRuntime:
                     category="current_user",
                     text="Original request, authoritative:\n" + original_request,
                 ),
+                *self._current_authority_components(state, original_request),
                 PromptComponent(
                     name="exact_word_count_draft",
                     category="turn_context",
@@ -2315,16 +2359,26 @@ class AgentRuntime:
         )
         evidence_rows = self._completion_evidence_rows(state, tool_results)
         history_snapshot = self.history.read_history(state.session_id)
-        current_user_sequence = next(
-            (
-                event.sequence
-                for event in reversed(history_snapshot)
-                if event.event_type == "message_added"
-                and isinstance(event.payload.get("message"), dict)
-                and event.payload["message"].get("role") == "user"
-            ),
-            None,
+        current_run_sequence = next(
+            (event.sequence for event in reversed(history_snapshot)
+             if event.event_type == "turn_started"), None,
         )
+        current_user_sequence = current_run_sequence or next(
+            (event.sequence for event in reversed(history_snapshot)
+             if event.event_type == "message_added"
+             and isinstance(event.payload.get("message"), dict)
+             and event.payload["message"].get("role") == "user"), None,
+        )
+        # A finalized correction can add a user message inside the active run.
+        # Anchor evidence partitioning to the run, not that newest message: model
+        # requests/accounting from the interrupted action are not earlier-turn
+        # evidence and must not trigger recursive projection of our own prompts.
+        current_run_user_messages = [event.payload["message"]["content"]
+            for event in history_snapshot
+            if current_run_sequence is not None and event.sequence >= current_run_sequence
+            and event.event_type == "message_added"
+            and isinstance(event.payload.get("message"), dict)
+            and event.payload["message"].get("role") == "user"]
         historical_events = (
             [
                 event
@@ -2413,6 +2467,16 @@ class AgentRuntime:
             )
             prompt_kwargs = dict(
                 original_request=original_request,
+                authority_components=[
+                    *self._current_authority_components(state, original_request),
+                    *([PromptComponent(
+                        name="current_run_user_messages", category="current_user",
+                        text=("Finalized user messages received during this run, verbatim and in order. "
+                              "Later messages supersede conflicting earlier instructions; preserve other requirements.\n"
+                              + "\n\n".join(f"[USER TURN {i}]\n{text}" for i, text in enumerate(current_run_user_messages, 1))
+                              + "\n\n"),
+                    )] if current_run_user_messages else []),
+                ],
                 assistant_message=selected_action.assistant_message,
                 status_json=stable_json_dumps(asdict(selected_action.status), indent=None),
                 tool_evidence_rows=evidence_rows,
