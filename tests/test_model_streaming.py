@@ -8,7 +8,7 @@ import requests
 
 from swaag.environment.artifacts import TextArtifactStore
 from swaag.grammar import yes_no_contract
-from swaag.model import LlamaCppClient, ModelHTTPError
+from swaag.model import LlamaCppClient, ModelHTTPError, ModelClientError
 from swaag.preemption import ModelCallPreempted
 from swaag.runtime import AgentRuntime
 
@@ -286,3 +286,101 @@ def test_sse_preserves_utf8_with_split_bytes_and_inferred_encoding(
     assert result.text == expected
     assert result.raw_response["content"] == expected
     assert response.raw.closed
+
+
+class _ChatUsageResponse(_FakeResponse):
+    def __init__(self, events):
+        self.events = events
+
+    def iter_lines(self, *, decode_unicode):
+        for event in self.events:
+            yield "data: " + json.dumps(event)
+        yield "data: [DONE]"
+        raise AssertionError("The client must stop at the SSE terminator")
+
+
+def _chat_chunk(content="", *, finish=None):
+    return {"choices": [{"index": 0, "delta": {"content": content}, "finish_reason": finish}]}
+
+
+@pytest.mark.parametrize("finish", ["stop", "length"])
+def test_chat_stream_retains_trailing_usage_and_answer_finish_reason(
+    make_config, monkeypatch, finish
+):
+    client = LlamaCppClient(make_config(model__base_url="https://inference.example/v1"))
+    usage = {"prompt_tokens": 90, "completion_tokens": 11, "total_tokens": 101,
+             "prompt_tokens_details": {"cached_tokens": 32}}
+    response = _ChatUsageResponse([
+        _chat_chunk("several tokens in one event"),
+        _chat_chunk(finish=finish),
+        {"choices": [], "usage": usage},
+    ])
+    payloads = []
+    def post(url, **kwargs):
+        payloads.append(kwargs["json"])
+        return response
+    monkeypatch.setattr("swaag.model.requests.post", post)
+    progress = []
+    result = client._send_completion({"messages": [{"role": "user", "content": "x"}]},
+                                     progress_callback=progress.append)
+    assert payloads[0]["stream_options"]["include_usage"] is True
+    assert result.text == "several tokens in one event"
+    assert result.prompt_tokens == 90
+    assert result.completion_tokens == 11
+    assert result.finish_reason == finish
+    assert result.raw_response["usage"] == usage
+    assert result.raw_response["completion_tokens_source"] == "usage.completion_tokens"
+    assert progress[-1]["backend_prompt_tokens"] == 90
+    assert progress[-1]["backend_completion_tokens"] == 11
+    assert progress[-1]["prompt_tokens_source"] == "usage.prompt_tokens"
+    assert progress[-1]["completion_tokens_source"] == "usage.completion_tokens"
+
+
+@pytest.mark.parametrize("usage", [None, {}, {"prompt_tokens": True, "completion_tokens": False},
+                                   {"prompt_tokens": -1, "completion_tokens": "11"}])
+def test_chat_missing_or_invalid_usage_is_explicit_event_count_fallback(
+    make_config, monkeypatch, usage
+):
+    client = LlamaCppClient(make_config(model__base_url="https://inference.example/v1"))
+    response = _ChatUsageResponse([_chat_chunk("hello"), _chat_chunk(finish="stop"),
+                                   {"choices": [], "usage": usage}])
+    monkeypatch.setattr("swaag.model.requests.post", lambda *a, **kw: response)
+    result = client._send_completion({"messages": [{"role": "user", "content": "x"}]})
+    assert result.prompt_tokens is None
+    assert result.completion_tokens == 1
+    assert result.finish_reason == "stop"
+    assert result.raw_response["completion_tokens_source"] == "stream_event_count"
+
+
+def test_native_stream_does_not_request_chat_usage(make_config, monkeypatch):
+    payloads = []
+    def post(url, **kwargs):
+        payloads.append(kwargs["json"])
+        return _FakeResponse()
+    monkeypatch.setattr("swaag.model.requests.post", post)
+    result = LlamaCppClient(make_config())._send_completion({"prompt": "x", "n_predict": 4})
+    assert "stream_options" not in payloads[0]
+    assert result.completion_tokens == 2
+    assert result.raw_response["completion_tokens_source"] == "tokens_predicted"
+
+
+
+def test_chat_error_after_partial_content_is_not_a_success(make_config, monkeypatch):
+    client = LlamaCppClient(make_config(model__base_url="https://inference.example/v1"))
+    response = _ChatUsageResponse([_chat_chunk("partial"), {"error": {"message": "engine failed"}}])
+    monkeypatch.setattr("swaag.model.requests.post", lambda *a, **kw: response)
+    with pytest.raises(ModelClientError, match="engine failed"):
+        client._send_completion({"messages": [{"role": "user", "content": "x"}]})
+
+
+def test_chat_without_usage_trailer_or_done_can_finish_at_eof(make_config, monkeypatch):
+    class EOFResponse(_FakeResponse):
+        def iter_lines(self, *, decode_unicode):
+            yield "data: " + json.dumps(_chat_chunk("answer", finish="stop"))
+    client = LlamaCppClient(make_config(model__base_url="https://inference.example/v1"))
+    monkeypatch.setattr("swaag.model.requests.post", lambda *a, **kw: EOFResponse())
+    result = client._send_completion({"messages": [{"role": "user", "content": "x"}]})
+    assert result.text == "answer"
+    assert result.finish_reason == "stop"
+    assert result.prompt_tokens is None
+    assert result.raw_response["completion_tokens_source"] == "stream_event_count"

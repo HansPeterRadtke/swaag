@@ -879,6 +879,12 @@ class LlamaCppClient:
         )
         stream_payload = dict(payload)
         stream_payload["stream"] = True
+        if self._uses_chat_transport:
+            # Chat servers send aggregate usage after the final answer chunk.
+            stream_payload["stream_options"] = {
+                **stream_payload.get("stream_options", {}),
+                "include_usage": True,
+            }
         started = time.monotonic()
         request_kwargs: dict[str, Any] = {
             "json": stream_payload,
@@ -1018,6 +1024,10 @@ class LlamaCppClient:
         backend_prompt_tokens: int | None = None
         backend_completion_tokens: int | None = None
         first_token_seconds: float | None = None
+        prompt_tokens_source: str | None = None
+        completion_tokens_source = "stream_event_count"
+        finish_reason: str | None = None
+        chat_usage: dict[str, Any] | None = None
         # SSE is UTF-8 even when requests infers Latin-1 for text/event-stream.
         # Set the incremental decoder before consuming chunks so split multibyte
         # characters and providers without a charset retain their exact text.
@@ -1037,7 +1047,9 @@ class LlamaCppClient:
                     continue
                 if line.startswith("data:"):
                     line = line[5:].strip()
-                if not line or line == "[DONE]":
+                if line == "[DONE]":
+                    break
+                if not line:
                     continue
                 try:
                     item = json.loads(line)
@@ -1045,7 +1057,13 @@ class LlamaCppClient:
                     raise ModelClientError(f"Unexpected streamed completion line: {raw_line!r}") from exc
                 if not isinstance(item, dict):
                     raise ModelClientError(f"Unexpected streamed completion item: {item!r}")
+                if item.get("error"):
+                    raise ModelClientError(f"Streamed completion failed: {item['error']!r}")
                 last_body = item
+                finish_reason = _completion_finish_reason(item) or finish_reason
+                usage = item.get("usage")
+                if isinstance(usage, dict):
+                    chat_usage = usage
                 piece = _completion_piece(item)
                 token_count_changed = False
                 if piece:
@@ -1054,19 +1072,28 @@ class LlamaCppClient:
                     if first_token_seconds is None:
                         first_token_seconds = round(time.monotonic() - started, 3)
                     token_count_changed = True
-                raw_evaluated = item.get("tokens_evaluated")
-                if isinstance(raw_evaluated, int) and raw_evaluated >= 0:
+                raw_evaluated = _nonnegative_token_count(item.get("tokens_evaluated"))
+                evaluated_source = "tokens_evaluated"
+                if raw_evaluated is None and isinstance(usage, dict):
+                    raw_evaluated = _nonnegative_token_count(usage.get("prompt_tokens"))
+                    evaluated_source = "usage.prompt_tokens"
+                if raw_evaluated is not None:
                     if backend_prompt_tokens != raw_evaluated:
                         backend_prompt_tokens = raw_evaluated
                         token_count_changed = True
-                raw_predicted = item.get("tokens_predicted")
-                if isinstance(raw_predicted, int) and raw_predicted >= 0:
+                    prompt_tokens_source = evaluated_source
+                raw_predicted = _nonnegative_token_count(item.get("tokens_predicted"))
+                predicted_source = "tokens_predicted"
+                if raw_predicted is None and isinstance(usage, dict):
+                    raw_predicted = _nonnegative_token_count(usage.get("completion_tokens"))
+                    predicted_source = "usage.completion_tokens"
+                if raw_predicted is not None:
                     if backend_completion_tokens != raw_predicted:
                         backend_completion_tokens = raw_predicted
                         token_count_changed = True
-                    if raw_predicted >= reported_tokens:
-                        reported_tokens = raw_predicted
-                elif completion_events > reported_tokens:
+                    completion_tokens_source = predicted_source
+                    reported_tokens = raw_predicted
+                elif backend_completion_tokens is None and completion_events > reported_tokens:
                     reported_tokens = completion_events
                 if token_count_changed:
                     # Only semantic/model progress resets the native deadlock backstop.
@@ -1080,23 +1107,15 @@ class LlamaCppClient:
                             "completion_tokens": reported_tokens,
                             "backend_prompt_tokens": backend_prompt_tokens,
                             "backend_completion_tokens": backend_completion_tokens,
-                            "completion_tokens_source": (
-                                "tokens_predicted"
-                                if backend_completion_tokens is not None
-                                else "stream_event_count"
-                            ),
-                            "prompt_tokens_source": (
-                                "tokens_evaluated"
-                                if backend_prompt_tokens is not None
-                                else None
-                            ),
+                            "completion_tokens_source": completion_tokens_source,
+                            "prompt_tokens_source": prompt_tokens_source,
                             "elapsed_seconds": round(elapsed, 3),
                             "tokens_per_second": round(reported_tokens / elapsed, 3),
                             "first_token_seconds": first_token_seconds,
                             "token_timeout_seconds": token_timeout_seconds,
                         }
                     )
-                if item.get("stop") or _chat_finished(item):
+                if item.get("stop"):
                     break
         except requests.Timeout as exc:
             if fail_safe_observed.is_set():
@@ -1152,9 +1171,15 @@ class LlamaCppClient:
         if backend_monitor is not None:
             body["fail_safe_timeout_seconds"] = fail_safe_timeout_seconds
             body["backend_activity"] = backend_monitor.snapshot()
-        completion_tokens = body.get("tokens_predicted")
-        if not isinstance(completion_tokens, int):
-            completion_tokens = reported_tokens
+        if chat_usage is not None:
+            body["usage"] = chat_usage
+        body["finish_reason"] = finish_reason
+        body["prompt_tokens_source"] = prompt_tokens_source
+        body["completion_tokens_source"] = completion_tokens_source
+        completion_tokens = (
+            backend_completion_tokens
+            if backend_completion_tokens is not None else reported_tokens
+        )
         tokens_per_second = round(completion_tokens / max(elapsed_seconds, 1e-9), 3) if completion_tokens else 0.0
         body["elapsed_seconds"] = elapsed_seconds
         body["tokens_per_second"] = tokens_per_second
@@ -1163,9 +1188,9 @@ class LlamaCppClient:
             text=str(body.get("content", "")),
             raw_request=stream_payload,
             raw_response=body,
-            prompt_tokens=body.get("tokens_evaluated"),
+            prompt_tokens=backend_prompt_tokens,
             completion_tokens=completion_tokens,
-            finish_reason=_completion_finish_reason(body),
+            finish_reason=finish_reason,
             elapsed_seconds=elapsed_seconds,
             tokens_per_second=tokens_per_second,
             first_token_seconds=first_token_seconds,
@@ -1232,6 +1257,10 @@ def _http_error_detail(
     )
 
 
+def _nonnegative_token_count(value: Any) -> int | None:
+    return value if isinstance(value, int) and not isinstance(value, bool) and value >= 0 else None
+
+
 def _completion_piece(item: dict[str, Any]) -> str:
     if "content" in item:
         return str(item.get("content", ""))
@@ -1261,14 +1290,6 @@ def _chat_content(item: dict[str, Any]) -> str:
     if isinstance(message, dict) and isinstance(message.get("content"), str):
         return str(message["content"])
     return ""
-
-
-def _chat_finished(item: dict[str, Any]) -> bool:
-    choices = item.get("choices")
-    if not isinstance(choices, list) or not choices:
-        return False
-    first = choices[0]
-    return isinstance(first, dict) and bool(first.get("finish_reason"))
 
 
 def _completion_finish_reason(body: dict[str, Any]) -> str | None:

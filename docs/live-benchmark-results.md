@@ -1,3 +1,7 @@
+# October fourteenth scheduling and accounting investigation
+
+The [same-backend scheduling and accounting study](conversation-scheduling-and-accounting-2026-10-14.md) isolates actual admission delay with six controlled paired trials, compares full-state read-only replies alongside real TCP planning, and evaluates the same small model at higher precision. Parallel admission helps the prototype but leaves ordinary session-lock latency unresolved; the Q8 reader still fails semantic cases. A reproduced chat streaming defect now retains provider token usage and finish reasons. Production model selection, routing, locking and capacity remain unchanged; final release evidence is recorded in the study.
+
 # Live benchmark results
 
 These measurements are retained as model/server-specific evidence, not universal policy. Machine-readable artifacts are intentionally outside the repository and currently span `/data/var/swaag/benchmarks`, `/data/var/swaag-benchmarks`, `/data/var/swaag/manual-tests`, and `/data/var/swaag/protocol-conformance` according to benchmark/protocol family. Deployment/package-identity claims are valid only for the exact source tree/wheel fingerprint named by the retained verifier artifact and must be refreshed after subsequent source changes.
