@@ -23,7 +23,7 @@ admission.py uses the actual InferenceRequestCoordinator and its durable SQLite 
 | Worker still generating when status finishes | 0/3 | 3/3 |
 | Maximum server running requests | 1 | 2 |
 
-The warm single-capacity worker measurements are 20.399–20.418 s; the first is 23.883 s. Two-capacity workers take 22.016–22.042 s. Thus overlap improves status latency at a measurable worker cost, rather than making both requests uniformly faster. Every coordinator ended with zero queued/running requests. Native metrics independently prove two server requests running during overlap. Raw requests, events, usage and before/during/after metrics are retained per trial.
+The warm single-capacity worker measurements are 20.399–20.418 s; the first is 23.883 s. Two-capacity workers take 22.016–22.042 s. Thus overlap improves status latency at a measurable worker cost, rather than making both requests uniformly faster. Every coordinator ended with zero queued/running requests. Native metrics independently prove two server requests running during overlap. Raw requests, events, usage and before/during/after metrics are retained per trial. Native cumulative phase counters reconcile exactly with two requests, 1246 prompt tokens and 203 generated tokens in every pair. The cold pair has zero prefix-cache hits and 6.255 s summed prefill time; every later pair has 784 cached tokens. Warm summed prefill is 2.803–2.804 s at capacity one and 2.896–2.898 s at capacity two. Summed decode is 19.276–19.295 s versus 21.637–21.664 s. Server-side queueing is below three milliseconds in every pair, confirming that the approximately eighteen-second serial delay is in SWAAG admission. These are sums of per-request phase durations, not wall-clock makespan or isolated kernel throughput; overlapping durations must not be added as sequential elapsed time. No native preemption occurs in these short-prompt pairs.
 
 ## Actual planner, finalized ingress and full-state reader
 
@@ -79,7 +79,11 @@ Q8 still fails material semantics: it reverses the question about **not** deploy
 
 ## Certification and disposition
 
-The final source suite passed 1157 tests with three optional skips and no failures in 1138.20 seconds. Source and tests were unchanged during this run. Installed-package verification follows before deployment is claimed.
+The final source suite passed 1157 tests with three optional skips and no failures in 1138.20 seconds. Source and tests were unchanged during this run. The correction is committed, pushed and installed through the canonical runtime installer. All 190 tracked package files match the installed package byte for byte. A further 61 focused streaming, tokenization and cache tests pass against the installed package in 2.21 s, with the import path explicitly verified.
+
+An uncached installed-runtime TCP request returned exactly ready in 11.936 s. Its single model call took 10.122 s and retained the server's 1334 input / 43 output token usage and stop reason. No tools ran, no controls remained pending and the exact user text occurred once. This is installed execution evidence, not a claim of interactive latency. The preceding full-state concurrency experiments used the same tested source correction before installation.
+
+The production BF16/Q3 services retained processes 2546/77648 and zero restarts. The temporary Q8 process is stopped, its runtime override removed, and the preexisting inactive service restored exactly. No Infra repository file was modified; the unrelated Jetson configuration edit remains. Raw evidence, scripts, source/installed identities, native phase accounting and test logs are indexed by evidence-index.json in the benchmark root. Thor-owned start, memory, native log and cleanup records reside in its matching benchmark directory.
 
 Current decision: retain the production instruction path, locks, model selection and conservative capacity fallback. The controlled scheduling benefit is real; sufficient production conversational correctness and responsiveness are still unproved. Earlier small-model failures remain unresolved by today's scheduler measurements.
 
