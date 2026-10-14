@@ -31,6 +31,7 @@ def make_config(tmp_path: Path):
     def _make(**overrides: Any) -> AgentConfig:
         env = {
             "SWAAG__SESSIONS__ROOT": str(tmp_path / "sessions"),
+            "SWAAG__AGENT_DATA__ROOT": str(tmp_path / "agent-data"),
             "SWAAG__TOOLS__READ_ROOTS": f'["{tmp_path}"]',
             "SWAAG__TOOLS__STAGED_DISCOVERY": "false",
             "SWAAG__RUNTIME__COMPLETION_EVALUATION_ENABLED": "false",

@@ -115,6 +115,7 @@ def test_communication_store_preserves_delivery_order_and_correlation(make_confi
     assert {ordinary.priority, pause.priority, stop.priority} == {0}
     runtime.generate_communication_status = lambda **kwargs: {  # type: ignore[method-assign]
         "answer": "The session is idle.",
+        "operation_session_id": runtime.create_or_load_session("status-probe").session_id,
         "source_event_references": [],
         "evidence_projected": False,
     }

@@ -791,10 +791,23 @@ def _run_turn_with_communication_probe(
         total_deadline if resume_timeout_seconds is not None else probe_started + wait_seconds,
     )
     active = None
+    require_dispatched = bool(
+        getattr(scenario, "communication_probe_use_separate_assistant", False)
+    )
     while time.monotonic() < observation_deadline:
-        active = runtime.preemption.active_call(state.session_id)
-        if active is not None:
-            break
+        candidate = runtime.preemption.active_call(state.session_id)
+        if candidate is not None:
+            # Registration precedes local admission. An independent-overlap
+            # experiment must observe a dispatched main request, not merely a
+            # queued preemptible handle; preserve the shared-preemption probe.
+            dispatched = not require_dispatched or any(
+                event.event_type == "model_request_sent"
+                and event.payload.get("call_id") == candidate.call_id
+                for event in runtime.history.iter_history_reverse(state.session_id)
+            )
+            if dispatched:
+                active = candidate
+                break
         if not worker.is_alive():
             break
         time.sleep(0.005)
@@ -828,10 +841,14 @@ def _run_turn_with_communication_probe(
         )
     metrics["separate_assistant_runtime"] = use_separate_assistant
     status_started = time.monotonic()
-    status_answer = CommunicationService(
+    communication = CommunicationService(
         runtime,
         assistant_runtime=assistant_runtime if use_separate_assistant else None,
-    ).answer_status_question(state.session_id, question)
+    )
+    try:
+        status_answer = communication.answer_status_question(state.session_id, question)
+    finally:
+        communication.close()
     status_completed = time.monotonic()
     metrics["status_response_seconds"] = round(status_completed - status_started, 6)
     metrics["status_answer"] = status_answer

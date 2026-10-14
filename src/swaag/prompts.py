@@ -388,6 +388,7 @@ class PromptBuilder:
         capability_index: Iterable[tuple[str, str, str]],
         context_components: list[PromptComponent] | None = None,
         validation_feedback: str = "",
+        tool_result_projections: dict[int, str] | None = None,
     ) -> PromptAssembly:
         history, current_user, turn_transcript = self.partition_turn(messages)
         capabilities = list(capability_index)
@@ -404,6 +405,7 @@ class PromptBuilder:
             *self.message_prompt_components(
                 history, prefix="conversation_history", category="history",
                 header="Previous conversation messages, verbatim:", optional=True,
+                tool_result_projections=tool_result_projections,
             ),
             PromptComponent(
                 name="current_user_turn", category="current_user",
@@ -413,6 +415,7 @@ class PromptBuilder:
             *self.message_prompt_components(
                 turn_transcript, prefix="current_turn", category="turn_context",
                 header="Exact assistant actions and tool results since the current user message:",
+                tool_result_projections=tool_result_projections,
             ),
         ]
         if pending_user_messages:
@@ -647,7 +650,7 @@ class PromptBuilder:
                 text=(
                     "\nDecide only whether the user's objective is actually complete from the supplied authoritative evidence. "
                     "Return complete=true only when no meaningful requested work remains. Do not generate a reason, "
-                    "remaining-work list, evidence request, plan, status, or user-facing prose. Return only the constrained JSON object.\n"
+                    "remaining-work list, evidence request, plan, status, or user-facing prose. Return only the constrained JSON object."
                 ),
             )
         )

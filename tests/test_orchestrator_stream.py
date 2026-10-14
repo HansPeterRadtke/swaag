@@ -1,0 +1,125 @@
+from __future__ import annotations
+import asyncio
+import json
+import threading
+import time
+import pytest
+from swaag.communication import CommunicationService
+from swaag.runtime import AgentRuntime
+from tests.test_agent_action_loop import FakeModelClient, _action
+from tests.test_preemption import _ImmediateClient
+
+
+def _service(make_config, monkeypatch):
+    entered, release = threading.Event(), threading.Event()
+    def finish(payload):
+        entered.set()
+        assert release.wait(8), 'test did not release final generation'
+        return _action(message='The value was verified.')
+    client = FakeModelClient([
+        _action(message='I am checking the value.', tool_calls=[('echo', {'text':'verified'})], continue_loop=True),
+        finish,
+    ])
+    runtime = AgentRuntime(make_config(model__context_limit=32000, communication__poll_seconds=0.01), model_client=client)
+    service = CommunicationService(runtime, orchestrator_runtime=runtime)
+    return service, client, entered, release
+
+
+def test_slow_speech_does_not_hold_tool_or_final_answer_and_reconnect_does_not_reexecute(make_config, monkeypatch):
+    service, client, entered, release = _service(make_config, monkeypatch)
+    try:
+        stream = service.iter_orchestrator_message('Check the value.', control_id='stream_repeat')
+        assert next(stream)['event'] == 'accepted'
+        progress = next(stream)
+        assert progress['event'] == 'assistant_progress'
+        assert progress['assistant_text'] == 'I am checking the value.'
+        assert entered.wait(2)
+        history = service.orchestrator_runtime.history.read_history(progress['session_id'])
+        receipt = next(e for e in history if e.event_type == 'tool_result')
+        assert receipt.sequence < progress['sequence']
+        # Hold the consumer at speech delivery; the real tool/model thread proceeds.
+        release.set()
+        deadline = time.monotonic()+8
+        while time.monotonic()<deadline:
+            state = service._load_orchestrator_state()
+            if state.messages and state.messages[-1].content == 'The value was verified.':
+                break
+            time.sleep(0.01)
+        else:
+            pytest.fail('speech consumer blocked execution')
+        stream.close()
+        replay = list(service.iter_orchestrator_message('Check the value.', control_id='stream_repeat', after_sequence=progress['sequence']))
+        assert [item['event'] for item in replay] == ['accepted','completed']
+        assert replay[-1]['result']['answer'] == 'The value was verified.'
+        assert len(client.requests) == 2
+        with pytest.raises(ValueError, match='different finalized message'):
+            list(service.iter_orchestrator_message('Execute another command.', control_id='stream_repeat'))
+    finally:
+        release.set(); service.close()
+
+
+def test_jsonl_disconnect_keeps_accepted_work_and_replays_progress(make_config, monkeypatch):
+    service, client, entered, release = _service(make_config, monkeypatch)
+    async def exercise():
+        server = await asyncio.start_server(service.handle_client, '127.0.0.1', 0)
+        port = server.sockets[0].getsockname()[1]
+        request = {'op':'orchestrator.message','message':'Check the value.','stream':True,'control_id':'disconnect_test'}
+        try:
+            reader, writer = await asyncio.open_connection('127.0.0.1', port)
+            writer.write((json.dumps(request)+'\n').encode()); await writer.drain()
+            accepted = json.loads(await asyncio.wait_for(reader.readline(), 5))
+            assert accepted['event'] == 'accepted'
+            progress = json.loads(await asyncio.wait_for(reader.readline(), 5))
+            assert progress['event'] == 'assistant_progress'
+            writer.close(); await writer.wait_closed()
+            release.set()
+            reader2, writer2 = await asyncio.open_connection('127.0.0.1', port)
+            writer2.write((json.dumps({**request,'after_sequence':progress['sequence']})+'\n').encode()); await writer2.drain()
+            assert json.loads(await asyncio.wait_for(reader2.readline(), 5))['event'] == 'accepted'
+            final = json.loads(await asyncio.wait_for(reader2.readline(), 8))
+            assert final['event'] == 'completed'
+            assert final['result']['answer'] == 'The value was verified.'
+            writer2.close(); await writer2.wait_closed()
+            assert len(client.requests) == 2
+        finally:
+            release.set(); server.close(); await server.wait_closed()
+    try:
+        asyncio.run(exercise())
+    finally:
+        release.set(); service.close()
+
+
+def test_stream_skips_prior_turns_and_validates_before_receipt(make_config):
+    runtime = AgentRuntime(make_config(model__context_limit=32000, communication__poll_seconds=0.01), model_client=_ImmediateClient('Ready.'))
+    service = CommunicationService(runtime, orchestrator_runtime=runtime)
+    try:
+        service.orchestrator_message('Hello.')
+        events = list(service.iter_orchestrator_message('Are you there?', control_id='second'))
+        assert [e['event'] for e in events] == ['accepted','completed']
+        before = len(runtime.history.read_history(events[-1]['session_id']))
+        for kw in ({'control_id':'../escape'}, {'after_sequence':True}, {'after_sequence':-1}):
+            with pytest.raises(ValueError):
+                list(service.iter_orchestrator_message('Invalid', **kw))
+        assert len(runtime.history.read_history(events[-1]['session_id'])) == before
+    finally:
+        service.close()
+
+
+def test_failed_dispatch_never_publishes_success_draft(make_config):
+    client = FakeModelClient([
+        _action(message='I have sent the instruction.', tool_calls=[('agent_control', {'session_ref':'missing_target','message':'Hold.'})], continue_loop=True),
+        _action(message='The target was not found, so the instruction was not queued.'),
+    ])
+    runtime = AgentRuntime(make_config(model__context_limit=32000,
+        tools__enabled=['agent_control'],tools__allow_side_effect_tools=True,
+        runtime__completion_evaluation_enabled=False,communication__poll_seconds=0.01),model_client=client)
+    service = CommunicationService(runtime,orchestrator_runtime=runtime)
+    try:
+        events = list(service.iter_orchestrator_message('Tell the missing target to hold.',control_id='failed_dispatch'))
+        assert [event['event'] for event in events] == ['accepted','completed']
+        assert events[-1]['result']['answer'].startswith('The target was not found')
+        history = runtime.history.read_history(events[-1]['session_id'])
+        assert any(event.event_type == 'tool_error' for event in history)
+        assert not any(event.event_type == 'assistant_progress' for event in history)
+    finally:
+        service.close()

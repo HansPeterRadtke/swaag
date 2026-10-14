@@ -9,10 +9,63 @@ from swaag.types import ToolExecutionResult, ToolGeneratedEvent
 from swaag.utils import stable_json_dumps
 
 
+def _resolve_control_target(context: ToolContext, ref: str) -> tuple[HistoryStore, str]:
+    """Resolve exact worker IDs through their owner; names/IDs remain session refs."""
+    orchestration = context.runtime_capabilities.get("orchestration")
+    manager = getattr(orchestration, "manager", None)
+    for workers in getattr(manager, "worker_managers", {}).values():
+        try:
+            worker = workers.store.get(ref)
+        except FileNotFoundError:
+            continue
+        owner = manager.worker_managers.get(worker.model_key, workers)
+        return owner.runtime.history, worker.session_id
+    store = HistoryStore(context.config.sessions.root, write_projections=False)
+    session_id = store.resolve_session_ref(ref, latest_if_none=False)
+    if session_id is None:
+        raise FileNotFoundError(f"Unknown target session or worker: {ref}")
+    return store, session_id
+
+
+def _originating_user_authority(context: ToolContext) -> list[dict[str, Any]]:
+    # Only the trusted foreground controller supplies original user authority.
+    # A worker's own message or tool output cannot promote itself into this lane.
+    if "system_snapshot_provider" not in context.runtime_capabilities:
+        return []
+    history = HistoryStore(context.config.sessions.root, write_projections=False)
+    events = history.iter_history_reverse(context.session_state.session_id)
+    messages = []
+    for event in events:
+        if event.event_type == "turn_started":
+            original = event.payload.get("user_text")
+            if isinstance(original, str) and not any(item["message"] == original for item in messages):
+                messages.append({"source_session_id": context.session_state.session_id,
+                                 "source_event_sequence": event.sequence,
+                                 "message": original})
+            break
+        if event.event_type != "message_added":
+            continue
+        message = event.payload.get("message", {})
+        if message.get("role") == "user":
+            messages.append({"source_session_id": context.session_state.session_id,
+                             "source_event_sequence": event.sequence,
+                             "control_id": message.get("metadata", {}).get("orchestrator_control_id"),
+                             "message": message["content"]})
+    # The initial message precedes turn_started in some entry paths. Use the
+    # current user turn only, never earlier unrelated conversation.
+    if not messages:
+        latest = next((m for m in reversed(context.session_state.messages) if m.role == "user"), None)
+        if latest is not None:
+            messages.append({"source_session_id": context.session_state.session_id,
+                             "control_id": latest.metadata.get("orchestrator_control_id"),
+                             "message": latest.content})
+    return list(reversed(messages))
+
+
 class AgentStatusLookupTool(Tool):
     name = "agent_status_lookup"
     description = "Read durable status for another SWAAG session without changing it."
-    usage_guidance = "Use an exact session id/name. Returns active goal, waiting/running state, pending controls, turn/event counts, and the complete durable semantic status history."
+    usage_guidance = "Use an exact worker ID or session id/name. Returns active goal, waiting/running state, pending controls, turn/event counts, and the complete durable semantic status history."
     kind = "pure"
     input_schema = {
         "type": "object",
@@ -28,11 +81,8 @@ class AgentStatusLookupTool(Tool):
         return {"session_ref": (ref or "").strip()}
 
     def execute(self, validated_input: dict[str, Any], context: ToolContext) -> ToolExecutionResult:
-        store = HistoryStore(context.config.sessions.root, write_projections=False)
         ref = validated_input["session_ref"] or context.session_state.session_id
-        session_id = store.resolve_session_ref(ref, latest_if_none=True)
-        if session_id is None:
-            raise FileNotFoundError("No session available")
+        store, session_id = _resolve_control_target(context, ref)
         state = store.rebuild_from_history(session_id, write_projections=False)
         latest_user = next((m.content for m in reversed(state.messages) if m.role == "user"), "")
         status_history = [
@@ -62,7 +112,7 @@ class AgentStatusLookupTool(Tool):
 class AgentControlTool(Tool):
     name = "agent_control"
     description = "Queue an exact, ordered, durable control/instruction for another SWAAG session."
-    usage_guidance = "Use only when the user asks to redirect, pause, stop, or send an instruction to the target agent. The control is durable and correlated by control_id."
+    usage_guidance = "Use an exact worker ID or session id/name when the user redirects, pauses, stops, or instructs the target. Preserve exact wording. queued=true confirms durable enqueue only, not acknowledgement or effects. Report the pending state and continue in the background; do not resend to poll. Original user authority is preserved separately from your routing note."
     kind = "side_effect"
     input_schema = {
         "type": "object",
@@ -84,11 +134,11 @@ class AgentControlTool(Tool):
         return {"session_ref": ref.strip(), "message": message}
 
     def execute(self, validated_input: dict[str, Any], context: ToolContext) -> ToolExecutionResult:
-        store = HistoryStore(context.config.sessions.root, write_projections=False)
-        session_id = store.resolve_session_ref(validated_input["session_ref"], latest_if_none=False)
-        if session_id is None:
-            raise FileNotFoundError(f"Unknown target session: {validated_input['session_ref']}")
-        payload = store.enqueue_control_message(session_id, validated_input["message"], source="agent_control")
+        store, session_id = _resolve_control_target(context, validated_input["session_ref"])
+        payload = store.enqueue_control_message(
+            session_id, validated_input["message"], source="agent_control",
+            authority=_originating_user_authority(context),
+        )
         output = {**payload, "queued": True}
         return ToolExecutionResult(self.name, output, f"Queued control {payload['control_id']} for {session_id}")
 

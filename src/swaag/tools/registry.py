@@ -8,6 +8,7 @@ from swaag.config import AgentConfig
 from swaag.delegated_tools import DelegatedToolSpec
 from swaag.environment.environment import AgentEnvironment
 from swaag.tools.base import SemanticCallRequest, Tool, ToolContext, ToolValidationError
+from swaag.tools.shared_knowledge import SHARED_KNOWLEDGE_TOOLS
 from swaag.tools.agent_workspace import AGENT_WORKSPACE_TOOLS
 from swaag.tools.artifacts import ARTIFACT_TOOLS
 from swaag.tools.attachments import ATTACHMENT_TOOLS
@@ -96,6 +97,7 @@ class ToolRegistry:
         self._tools: dict[str, Tool] = {}
         for tool in tools or [
             *AGENT_WORKSPACE_TOOLS,
+            *SHARED_KNOWLEDGE_TOOLS,
             *BUILTIN_TOOLS,
             *HISTORY_TOOLS,
             *PROMPT_INSTRUCTION_TOOLS,

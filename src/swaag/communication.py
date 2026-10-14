@@ -35,6 +35,7 @@ from cryptography.hazmat.primitives.asymmetric import ec
 from cryptography.hazmat.primitives.asymmetric.utils import decode_dss_signature
 from cryptography.hazmat.primitives.ciphers.aead import AESGCM
 
+from swaag.orchestrator_stream import OrchestratorEventCursor
 from swaag.capacity import QueueCapacityError, positive_capacity, require_capacity
 from swaag.background_work import BackgroundWork
 from swaag.config import AgentConfig
@@ -1319,6 +1320,17 @@ class CommunicationService:
         self._orchestrator_ingress_slots = threading.BoundedSemaphore(
             runtime.history.max_pending_controls
         )
+        # Execution has its own bounded admission; speech/transport consumers
+        # never run inside the model or tool thread.
+        self._orchestrator_stream_executor = ThreadPoolExecutor(
+            max_workers=max(1, int(max_concurrency)),
+            thread_name_prefix="swaag-orchestrator-stream",
+        )
+        self._orchestrator_stream_slots = threading.BoundedSemaphore(
+            runtime.config.communication.max_pending_requests
+        )
+        self._orchestrator_stream_jobs = {}
+        self._orchestrator_stream_lock = threading.RLock()
         self.workers = WorkerManager(
             runtime, max_workers=max_concurrency, model_key="default"
         )
@@ -1365,6 +1377,7 @@ class CommunicationService:
         # Already submitted finalized input must reach durable storage even if
         # its transport disconnected; these jobs never wait for model execution.
         self._orchestrator_ingress_executor.shutdown(wait=wait, cancel_futures=False)
+        self._orchestrator_stream_executor.shutdown(wait=wait, cancel_futures=False)
         self._status_executor.shutdown(wait=wait, cancel_futures=False)
         self.supervisor.close()
         self.workers.shutdown(wait=wait)
@@ -1571,7 +1584,12 @@ class CommunicationService:
     def _orchestrator_state(self):
         runtime = self.orchestrator_runtime
         state = self._load_orchestrator_state()
-        instruction_id = "instruction_swaag_orchestrator_role_v2"
+        instruction_id = "instruction_swaag_orchestrator_role_v3"
+        for previous in list(state.prompt_instructions):
+            if previous.instruction_id == "instruction_swaag_orchestrator_role_v2":
+                runtime.history.record_event(state, "prompt_instruction_removed", {
+                    "instruction_id": previous.instruction_id, "instruction_store": "session",
+                })
         if not any(
             item.instruction_id == instruction_id for item in state.prompt_instructions
         ):
@@ -1617,42 +1635,47 @@ class CommunicationService:
                 "prompt_instruction_added",
                 {"instruction": asdict(instruction), "instruction_store": "session"},
             )
+        control_instruction_id = "instruction_swaag_user_controls_v2"
+        if any(item.instruction_id == "instruction_swaag_user_controls_v1" for item in state.prompt_instructions):
+            runtime.history.record_event(state, "prompt_instruction_removed", {
+                "instruction_id": "instruction_swaag_user_controls_v1", "instruction_store": "session",
+            })
+        if not any(item.instruction_id == control_instruction_id for item in state.prompt_instructions):
+            instruction = make_prompt_instruction(
+                runtime.config, title="Deliver authoritative user controls",
+                content=(
+                    "Reconcile every part of a mixed question and instruction. A new restriction, "
+                    "correction or future condition governs affected workers even when queued or "
+                    "when the restricted action has not started. If an existing objective or plan "
+                    "permits an action that the user now restricts, revise that plan or use "
+                    "agent_control to deliver the exact user message to each affected worker. "
+                    "A status-only reply does not deliver the restriction. A successful agent_control "
+                    "result with queued=true is the durable queue receipt. It permits saying the "
+                    "instruction is queued; it does not prove worker acknowledgement or completed "
+                    "effects. Finish the foreground reply with current status and this precise pending "
+                    "state. Worker execution and acknowledgement are background work; do not repeatedly "
+                    "send the same control or wait in the conversational turn for a queued worker. "
+                    "Use a read-only status lookup to inspect acknowledgement if needed. "
+                    "Do not broadcast unrelated assignments "
+                    "or treat quoted/hypothetical examples as commands."
+                ), scopes=["all"], categories=["orchestration", "user-facing-control"],
+                instruction_id=control_instruction_id, authority="project_policy",
+                source_kind="swaag_core", source_ref="infra-guidelines/agents-orchestration",
+                specificity=100,
+            )
+            runtime.history.record_event(state, "prompt_instruction_added", {
+                "instruction": asdict(instruction), "instruction_store": "session",
+            })
         runtime.bind_tool_runtime_capability(
             state.session_id, "orchestration", self.orchestration_api
         )
-        return state
-
-    # Invariant for the fast chat-only route: without entering orchestration it
-    # has performed NO tools, created NO plans, and started NO workers. When the
-    # model promises a future tool action rather than answering the user, its
-    # proposed direct reply is invalid. The full SWAAG planner must decide and
-    # carry out the action. This is a rejection gate, not a keyword-based task
-    # router; it does not delegate or execute work by itself.
-    _UNEXECUTED_COMMITMENT = re.compile(
-        r"(?i)\b(?:I\s+will|I[’']ll|I\s+am\s+going\s+to|"
-        r"I(?:[’']m|\s+am)\s+(?:ready|prepared|about)\s+to|"
-        r"I\s+can(?:\s+now)?|"
-        r"we\s+will|we[’']ll|let\s+me|"
-        r"I\s+can\s+confirm\s+that\s+I\s+will)\s+"
-        r"(?!(?:not|never|only|just|simply\s+explain)\b)"
-        r"(?:\w+[\s,]+){0,6}"
-        r"(?:write|create|start|launch|build|run|execute|implement|"
-        r"modify|install|deploy|edit|change|update|delete|send|"
-        r"schedule|begin|perform|work\s+on|do)\b"
-    )
-    _UNSUPPORTED_COMPLETION = re.compile(
-        r"(?i)\b(?:I(?:\s+have|[’']ve)\s+(?:just\s+)?"
-        r"(?:started|created|launched|written|built|deployed)|"
-        r"(?:starting|launching|creating)\s+(?:a\s+|the\s+)?"
-        r"(?:worker|task|program|process|project)\s+now)\b"
-    )
-
-    @classmethod
-    def _fast_reply_claims_unperformed_work(cls, answer: str) -> bool:
-        return bool(
-            cls._UNEXECUTED_COMMITMENT.search(str(answer))
-            or cls._UNSUPPORTED_COMPLETION.search(str(answer))
+        runtime.bind_tool_runtime_capability(
+            state.session_id, "system_snapshot_provider", self._orchestrator_runtime_snapshot
         )
+        runtime.bind_tool_runtime_capability(
+            state.session_id, "system_snapshot_fingerprint", self._orchestrator_task_snapshot_fingerprint
+        )
+        return state
 
     def _orchestrator_runtime_snapshot(self) -> dict[str, Any]:
         """Exact current records, collected after any backend preemption wait.
@@ -1678,6 +1701,14 @@ class CommunicationService:
             )
         }
         pending = self.orchestrator_runtime.history.list_pending_control_messages(state.session_id)
+        managers = {"default": self.workers, **self.worker_model_managers}
+        worker_controls = []
+        for worker in workers:
+            owner = managers.get(worker.model_key, self.workers)
+            controls = owner.runtime.history.list_pending_control_messages(worker.session_id)
+            if controls:
+                worker_controls.append({"worker_id": worker.worker_id, "session_id": worker.session_id,
+                                        "pending_controls": controls})
         return {
             "collection_started_at": started_at,
             "captured_at": utc_now_iso(),
@@ -1687,6 +1718,7 @@ class CommunicationService:
                 "active_turn": active_turn,
                 "pending_user_messages": [item for item in pending if item.get("source") == "orchestrator_user"],
             },
+            "worker_controls": worker_controls,
             "active_workers": [
                 asdict(worker) for worker in workers
                 if worker.status not in WORKER_TERMINAL_STATES
@@ -1722,6 +1754,7 @@ class CommunicationService:
             "active_workers", "terminal_workers", "active_plans", "terminal_plans",
         )}
         facts["worker_question_inventory"] = inventory
+        facts["worker_controls"] = snapshot.get("worker_controls", [])
         orchestrator = copy.deepcopy(snapshot.get("orchestrator"))
         if orchestrator and orchestrator.get("active_turn"):
             # Inference dispatch/streaming telemetry is sampled evidence, like
@@ -1770,9 +1803,14 @@ class CommunicationService:
     def orchestrator_message(self, message: str) -> dict[str, str]:
         return self._process_orchestrator_receipt(self._receive_orchestrator_message(message))
 
-    def _receive_orchestrator_message(self, message: str) -> dict[str, Any]:
+    def _receive_orchestrator_message(self, message: str, *, control_id: str | None = None) -> dict[str, Any]:
         """Persist finalized authority before either request or session admission."""
         text = str(message)
+        if control_id is not None and (
+            not isinstance(control_id, str)
+            or re.fullmatch(r"[A-Za-z0-9_-]{1,128}", control_id) is None
+        ):
+            raise ValueError("control_id must contain one to 128 letters, digits, underscores or hyphens")
         if not text.strip():
             raise ValueError("orchestrator message must not be empty")
         runtime = self.orchestrator_runtime
@@ -1780,9 +1818,104 @@ class CommunicationService:
         # Only finalized ordinary messages reach this API. Persist receipt before
         # waiting for the planner's execution lock so in-flight actions can see
         # newer authority through the existing control-generation fence.
-        return runtime.history.enqueue_control_message(
-            initial.session_id, text, source="orchestrator_user"
+        receipt = runtime.history.enqueue_control_message(
+            initial.session_id, text, source="orchestrator_user", control_id=control_id,
         )
+        if receipt["message"] != text or receipt["source"] != "orchestrator_user":
+            raise ValueError("control_id is already bound to a different finalized message")
+        return receipt
+
+    def _start_orchestrator_stream(self, message: str, control_id: str | None = None):
+        with self._orchestrator_stream_lock:
+            existing = self._orchestrator_stream_jobs.get(control_id)
+            if existing is not None:
+                receipt, future = existing
+                if receipt["message"] != message:
+                    raise ValueError("control_id is already bound to a different finalized message")
+                return receipt, future
+            if not self._orchestrator_stream_slots.acquire(blocking=False):
+                raise QueueCapacityError("Foreground streaming capacity reached; request not accepted")
+            try:
+                receipt = self._receive_orchestrator_message(message, control_id=control_id)
+                future = self._orchestrator_stream_executor.submit(
+                    copy_context().run, self._process_orchestrator_receipt, receipt,
+                )
+            except BaseException:
+                self._orchestrator_stream_slots.release()
+                raise
+            key = receipt["control_id"]
+            self._orchestrator_stream_jobs[key] = (receipt, future)
+            def finished(done):
+                self._orchestrator_stream_slots.release()
+                with self._orchestrator_stream_lock:
+                    self._orchestrator_stream_jobs.pop(key, None)
+                # Retrieve errors even if the transport has gone away.
+                done.exception()
+            future.add_done_callback(finished)
+            return receipt, future
+
+    def iter_orchestrator_message(self, message: str, *, control_id: str | None = None,
+                                  after_sequence: int = 0):
+        # Validate before accepting authority. The iterator consumer may pause for
+        # speech indefinitely without holding back the independent execution job.
+        if isinstance(after_sequence, bool) or not isinstance(after_sequence, int) or after_sequence < 0:
+            raise ValueError("after_sequence must be a non-negative integer")
+        receipt, future = self._start_orchestrator_stream(message, control_id)
+        cursor = OrchestratorEventCursor(self.orchestrator_runtime.history, receipt,
+                                        after_sequence=after_sequence)
+        yield {"event": "accepted", "session_id": receipt["session_id"],
+               "control_id": receipt["control_id"]}
+        while True:
+            yield from cursor.poll()
+            if future.done() and cursor.caught_up():
+                yield {"event": "completed", "session_id": receipt["session_id"],
+                       "control_id": receipt["control_id"], "sequence": cursor.final_sequence,
+                       "result": future.result()}
+                return
+            if cursor.caught_up():
+                time.sleep(self.runtime.config.communication.poll_seconds)
+
+    async def _stream_orchestrator_json_lines(self, request, writer):
+        after = request.get("after_sequence", 0)
+        if isinstance(after, bool) or not isinstance(after, int) or after < 0:
+            raise ValueError("after_sequence must be a non-negative integer")
+        # Dedicated ingress cannot be starved by tool/model jobs in the default pool.
+        if not self._orchestrator_ingress_slots.acquire(blocking=False):
+            raise QueueCapacityError("Finalized-message ingress capacity reached; request not accepted")
+        def receive():
+            try:
+                return self._start_orchestrator_stream(
+                    str(request.get("message", "")), request.get("control_id"),
+                )
+            finally:
+                self._orchestrator_ingress_slots.release()
+        try:
+            job = asyncio.get_running_loop().run_in_executor(
+                self._orchestrator_ingress_executor, receive,
+            )
+        except BaseException:
+            self._orchestrator_ingress_slots.release()
+            raise
+        job.add_done_callback(lambda done: None if done.cancelled() else done.exception())
+        receipt, future = await asyncio.shield(job)
+        cursor = OrchestratorEventCursor(self.orchestrator_runtime.history, receipt,
+                                        after_sequence=after)
+        async def send(payload):
+            writer.write((json.dumps({"ok": True, **payload}, sort_keys=True) + "\n").encode())
+            await writer.drain()
+        await send({"event": "accepted", "session_id": receipt["session_id"],
+                    "control_id": receipt["control_id"]})
+        while True:
+            for event in await asyncio.to_thread(cursor.poll):
+                await send(event)
+            caught_up = await asyncio.to_thread(cursor.caught_up)
+            if future.done() and caught_up:
+                await send({"event": "completed", "session_id": receipt["session_id"],
+                            "control_id": receipt["control_id"], "sequence": cursor.final_sequence,
+                            "result": future.result()})
+                return
+            if caught_up:
+                await asyncio.sleep(self.runtime.config.communication.poll_seconds)
 
     async def _receive_protocol_orchestrator_message(self, message: str) -> dict[str, Any]:
         if not self._orchestrator_ingress_slots.acquire(blocking=False):
@@ -1844,7 +1977,7 @@ class CommunicationService:
             orchestrator_backend = self.orchestrator_runtime.config.model.base_url.rstrip("/")
             managers = {"default": self.workers, **self.worker_model_managers}
             for worker in self.workers.list():
-                if worker.status != "working":
+                if worker.status != "working" or not self.runtime.config.communication.preempt_shared_model:
                     continue
                 manager = managers.get(worker.model_key)
                 if manager is None:
@@ -1862,77 +1995,18 @@ class CommunicationService:
                     preemptions.append((runtime, request))
             try:
                 with self.orchestrator_runtime.inference_priority(
-                    1000, source="user_orchestrator"
+                    self.runtime.config.communication.orchestrator_priority, source="user_orchestrator"
                 ):
-                    try:
-                        routed = self._generate_current_orchestrator_interaction(state, text)
-                    except SemanticCallContextOverflow:
-                        routed = {
-                            "route": "orchestrate",
-                            "answer": "",
-                            "reason": (
-                                "The exact orchestrator conversation does not fit the small "
-                                "interaction call; use the full context-managed orchestrator."
-                            ),
-                        }
-                    if routed["route"] == "respond" and self._fast_reply_claims_unperformed_work(
-                        routed["answer"]
-                    ):
-                        self.orchestrator_runtime.history.record_event(
-                            state,
-                            "orchestrator_direct_reply_rejected",
-                            {
-                                "reason": "fast_route_claims_unexecuted_work",
-                                "proposed_route": "respond",
-                                "actual_route": "orchestrate",
-                            },
-                        )
-                        routed = {
-                            "route": "orchestrate",
-                            "answer": "",
-                            "reason": "Fast direct response promised unexecuted work; the full SWAAG orchestrator must execute or report a blocker.",
-                        }
-                    if routed["route"] == "respond":
-                        self.orchestrator_runtime.history.record_event(
-                            state,
-                            "turn_started",
-                            {
-                                "turn_index": state.turn_count + 1,
-                                "user_text": text,
-                                "execution_loop": "orchestrator_direct_interaction",
-                            },
-                        )
-                        self.orchestrator_runtime._record_message(
-                            state,
-                            Message(
-                                role="user",
-                                content=text,
-                                created_at=str(receipt["created_at"]),
-                                metadata={"orchestrator_control_id": receipt["control_id"]},
-                            ),
-                        )
-                        self.orchestrator_runtime.history.record_event(
-                            state, "control_message_processed", {
-                                "control_id": receipt["control_id"],
-                                "session_id": state.session_id,
-                                "message": text,
-                                "decision": routed,
-                                "selected_action": routed,
-                            },
-                        )
-                        self.orchestrator_runtime.history.mark_control_message_processed(
-                            state.session_id, receipt["control_id"]
-                        )
-                        result = self.orchestrator_runtime._finish_turn(
-                            state,
-                            routed["answer"],
-                            [],
-                            [],
-                        )
-                    else:
-                        result = self.orchestrator_runtime.run_turn_in_session(
-                            state, text, user_control_id=str(receipt["control_id"])
-                        )
+                    # Every finalized foreground utterance reaches the same action
+                    # controller. A separate semantic router repeatedly lost mixed
+                    # prohibitions in live trials; English claim regexes also changed
+                    # semantic intent incorrectly. The full action may answer directly
+                    # or issue tools, with current state, ordered authority and the
+                    # configured completion verifier. No second dispatcher can consume
+                    # a user instruction without this controller seeing it.
+                    result = self.orchestrator_runtime.run_turn_in_session(
+                        state, text, user_control_id=str(receipt["control_id"])
+                    )
                 self.orchestration.advance_active_plans()
                 for runtime, request in preemptions:
                     self._complete_runtime_preemption(
@@ -2060,6 +2134,8 @@ class CommunicationService:
         return request
 
     def _preempt_active_main_call(self, session_id: str, message: str):
+        if not self.runtime.config.communication.preempt_shared_model:
+            return None
         return self._preempt_runtime_call(
             self.runtime, session_id, message, source="communication"
         )
@@ -2117,7 +2193,7 @@ class CommunicationService:
             )
             state = self.runtime.history.rebuild_from_history(request.session_id, write_projections=False)
             with self.runtime.inference_priority(
-                100, source="communication_control"
+                self.runtime.config.communication.status_priority, source="communication_control"
             ):
                 result = self.runtime.run_pending_controls_in_session(state)
             reply = result.assistant_text if result is not None else ""
@@ -2157,9 +2233,9 @@ class CommunicationService:
             return await asyncio.to_thread(self.process_once, session_id=session_id)
 
     def _communication_status_snapshot(
-        self, session_id: str
+        self, session_id: str, *, track_execution_phase: bool = False
     ) -> tuple[dict[str, Any], list[HistoryEvent], str]:
-        """Observe durable task facts without treating token telemetry as change."""
+        """Observe task facts and independent execution transitions, not token counts."""
         state = self.runtime.history.rebuild_from_history(
             session_id, write_projections=False
         )
@@ -2178,9 +2254,15 @@ class CommunicationService:
             facts.pop(key, None)
         active = facts.get("active_run")
         if active:
-            facts["active_run"] = {
-                key: active.get(key) for key in ("run_id", "user_text", "started_at")
-            }
+            fields = ("run_id", "user_text", "started_at")
+            if track_execution_phase:
+                # An independent reader must not report queued capacity after
+                # the observed main request has begun executing. Ignore clocks,
+                # token counters and within-call streaming substates. Shared
+                # preemption deliberately changes the target's scheduling and
+                # is excluded by the caller, including escalation to that path.
+                fields += ("phase", "operation_kind", "active_kind", "active_id")
+            facts["active_run"] = {key: active.get(key) for key in fields}
         # Preemption/replay observes model scheduling, not a changed objective
         # or completed effect. Execution start/error and progress/question
         # schemas also matter even before a result/message has been committed.
@@ -2209,10 +2291,12 @@ class CommunicationService:
         if session_id is None:
             raise FileNotFoundError("No target session available")
         for attempt in range(2):
-            answer, answer_runtime, operation_id, observed = (
+            answer, answer_runtime, operation_id, observed, track_phase = (
                 self._answer_status_question_attempt(session_id, question)
             )
-            _mechanical, _events, current = self._communication_status_snapshot(session_id)
+            _mechanical, _events, current = self._communication_status_snapshot(
+                session_id, track_execution_phase=track_phase
+            )
             if observed == current:
                 return answer
             operation_state = answer_runtime.history.rebuild_from_history(
@@ -2235,19 +2319,20 @@ class CommunicationService:
 
     def _answer_status_question_attempt(
         self, session_id: str, question: str
-    ) -> tuple[str, AgentRuntime, str, str]:
+    ) -> tuple[str, AgentRuntime, str, str, bool]:
         preemption = None
+        track_phase = self.assistant_runtime is not None
         try:
             if self.assistant_runtime is None:
                 preemption = self._preempt_active_main_call(session_id, question)
             mechanical_status, source_events, observed_fingerprint = (
-                self._communication_status_snapshot(session_id)
+                self._communication_status_snapshot(session_id, track_execution_phase=track_phase)
             )
             semantic_runtime = self.assistant_runtime or self.runtime
             assistant_failure: Exception | None = None
             try:
                 with semantic_runtime.inference_priority(
-                    100, source="communication_status"
+                    self.runtime.config.communication.status_priority, source="communication_status"
                 ):
                     semantic_status = semantic_runtime.generate_communication_status(
                         target_session_id=session_id,
@@ -2323,13 +2408,14 @@ class CommunicationService:
                     },
                 )
                 preemption = self._preempt_active_main_call(session_id, question)
+                track_phase = False
                 # Escalation/preemption can wait while the worker changes.
                 mechanical_status, source_events, observed_fingerprint = (
                     self._communication_status_snapshot(session_id)
                 )
                 try:
                     with self.runtime.inference_priority(
-                        100, source="communication_status_escalation"
+                        self.runtime.config.communication.status_priority, source="communication_status_escalation"
                     ):
                         stronger_status = self.runtime.generate_communication_status(
                             target_session_id=session_id,
@@ -2380,7 +2466,7 @@ class CommunicationService:
             # This releases a shared-model read-only preemption. It does not
             # publish the draft; the caller verifies task facts before delivery.
             self._complete_preemption(preemption, target_changed=False, reply="")
-            return answer, answer_runtime, answer_operation_id, observed_fingerprint
+            return answer, answer_runtime, answer_operation_id, observed_fingerprint, track_phase
         except Exception as exc:
             self._fail_preemption(preemption, exc)
             raise
@@ -5662,13 +5748,17 @@ class CommunicationService:
             ):
                 await self._handle_http_client(line, reader, writer)
                 return
-            while line and not reader.at_eof():
+            while line:
                 if not line:
                     break
                 try:
                     request = json.loads(line.decode("utf-8"))
                     if not isinstance(request, dict):
                         raise ValueError("request must be an object")
+                    if request.get("op") == "orchestrator.message" and request.get("stream") is True:
+                        await self._stream_orchestrator_json_lines(request, writer)
+                        line = await reader.readline()
+                        continue
                     response = await self._dispatch_json_line_request(request)
                     payload = {"ok": True, "result": response}
                 except Exception as exc:
@@ -5855,6 +5945,7 @@ class CommunicationService:
                 except asyncio.CancelledError:
                     pass
             self._orchestrator_ingress_executor.shutdown(wait=True, cancel_futures=False)
+            self._orchestrator_stream_executor.shutdown(wait=False, cancel_futures=False)
             self._status_executor.shutdown(wait=False, cancel_futures=False)
             self.supervisor.close()
             self.workers.shutdown(wait=False)

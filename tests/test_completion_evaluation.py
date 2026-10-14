@@ -1019,3 +1019,20 @@ def test_completion_receives_current_turn_worker_inventory_without_tool_call(mak
     assert 'q-one' in prompt and 'q-two' in prompt
     assert any(ref['sequence'] == inventory.sequence and ref['hash'] == inventory.hash
                for ref in result['evidence_source_references'])
+
+
+def test_single_verdict_native_template_preserves_exact_component_accounting(make_config):
+    from swaag.utils import sha256_text
+    class TrimmingTemplateClient(_CompletionClient):
+        def render_chat_prompt(self, messages):
+            # The deployed Qwen template trims message edges. Harness-added
+            # whitespace must not force us to discard exact user content.
+            return {'prompt': ''.join('<'+m['role']+'>'+m['content'].strip()+'</'+m['role']+'>' for m in messages)+'<assistant>',
+                    'prompt_protocol_sha256':sha256_text('deployed-trimming-template')}
+    runtime = AgentRuntime(make_config(),model_client=TrimmingTemplateClient([]))
+    exact = '\n  Keep this precise user wording.  \n'
+    assembly = runtime.prompts.build_completion_verdict_prompt(original_request=exact,
+        assistant_message='The instruction is retained.',status_json='{}')
+    runtime._materialize_prompt_protocol(assembly)
+    assert exact in assembly.prompt_text
+    assert ''.join(component.text for component in assembly.components) == assembly.prompt_text

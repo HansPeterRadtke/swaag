@@ -30,7 +30,7 @@ def test_operations_log_records_redacted_startup_sources_and_shutdown(make_confi
     runtime.event("custom", token="direct-token", ordinary="ok")
     runtime.shutdown(reason="test_done")
 
-    rows = _read_json_lines([path])
+    rows = _read_json_lines([Path(str(path) + ".2"), Path(str(path) + ".1"), path])
     assert [row["event"] for row in rows] == ["startup", "custom", "shutdown"]
     startup = rows[0]["attributes"]
     assert startup["config_fingerprint"] == config.config_fingerprint()
@@ -40,7 +40,7 @@ def test_operations_log_records_redacted_startup_sources_and_shutdown(make_confi
     custom = rows[1]["attributes"]
     assert custom["token"].startswith("[REDACTED]:sha256=")
     assert custom["ordinary"] == "ok"
-    serialized = path.read_text(encoding="utf-8")
+    serialized = json.dumps(rows)
     assert "runtime-secret-that-must-not-log" not in serialized
     assert "direct-token" not in serialized
     assert rows[-1]["attributes"]["reason"] == "test_done"
@@ -156,7 +156,7 @@ def test_cli_tools_emits_startup_and_shutdown_operations_log(tmp_path, monkeypat
     )
     assert main(["--config", str(config_path), "tools"]) == 0
     _ = capsys.readouterr()
-    rows = _read_json_lines([log_path])
+    rows = _read_json_lines([Path(str(log_path) + ".2"), Path(str(log_path) + ".1"), log_path])
     assert rows[0]["event"] == "startup"
     assert rows[-1]["event"] == "shutdown"
     assert rows[-1]["attributes"]["reason"] == "cli_exit"
@@ -181,7 +181,7 @@ def test_operations_log_shutdown_survives_saturated_queue(make_config, tmp_path,
     for index in range(100):
         runtime.event("fast", index=index)
     runtime.shutdown(reason="must_survive")
-    rows = _read_json_lines([path])
+    rows = _read_json_lines([Path(str(path) + ".2"), Path(str(path) + ".1"), path])
     shutdown = [row for row in rows if row["event"] == "shutdown"]
     assert len(shutdown) == 1
     assert shutdown[0]["attributes"]["reason"] == "must_survive"
@@ -230,7 +230,7 @@ def test_operations_log_level_filters_routine_events_but_keeps_lifecycle(make_co
     runtime.event("warning_event", severity="WARNING", value=2)
     runtime.shutdown(reason="done")
 
-    rows = _read_json_lines([path])
+    rows = _read_json_lines([Path(str(path) + ".2"), Path(str(path) + ".1"), path])
     assert [row["event"] for row in rows] == [
         "startup",
         "warning_event",

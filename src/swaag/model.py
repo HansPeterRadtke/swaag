@@ -314,6 +314,14 @@ class LlamaCppClient:
             return f"{parsed.scheme}://{parsed.netloc}{endpoint}"
         return f"{self._base}/{endpoint}"
 
+    def _chat_template_options(self) -> dict[str, Any]:
+        mode = self.config.model.thinking_mode
+        if mode == "server_default":
+            return {}
+        if self.config.model.provider_name.lower() not in {"vllm", "vllm-openai", "vllm_openai", "llama.cpp", "llama_cpp"}:
+            raise ModelClientError("Explicit thinking_mode requires a verified vLLM or llama.cpp adapter")
+        return {"chat_template_kwargs": {"enable_thinking": mode == "enabled"}}
+
     def _remote_tokenize_messages(
         self,
         messages: list[dict[str, str]],
@@ -324,6 +332,7 @@ class LlamaCppClient:
                 "model": self.config.model.profile_name,
                 "messages": messages,
                 "add_generation_prompt": True,
+                **self._chat_template_options(),
             },
             timeout=(
                 self.config.model.connect_timeout_seconds,
@@ -417,6 +426,7 @@ class LlamaCppClient:
             "base_url": self.config.model.base_url.rstrip("/"),
             "completion_endpoint": self.config.model.completion_endpoint,
             "profile_name": self.config.model.profile_name,
+            "thinking_mode": self.config.model.thinking_mode,
         }
         if self._uses_chat_transport:
             try:
@@ -500,6 +510,7 @@ class LlamaCppClient:
             stable_model = stable_openai_model_metadata(model)
             return {
                 "serialization": "provider_opaque_openai_chat_v1",
+                "thinking_mode": self.config.model.thinking_mode,
                 "model_metadata_sha256": sha256_text(
                     stable_json_dumps(stable_model, indent=None)
                 ),
@@ -536,6 +547,7 @@ class LlamaCppClient:
         generation = props.get("default_generation_settings")
         n_ctx = generation.get("n_ctx") if isinstance(generation, dict) else None
         return {
+            "thinking_mode": self.config.model.thinking_mode,
             "chat_template_sha256": sha256_text(template),
             "chat_template_caps_sha256": sha256_text(
                 stable_json_dumps(props.get("chat_template_caps"), indent=None)
@@ -597,7 +609,7 @@ class LlamaCppClient:
         before = self._prompt_protocol_identity()
         response = requests.post(
             f"{self._base}/apply-template",
-            json={"messages": messages},
+            json={"messages": messages, **self._chat_template_options()},
             timeout=(
                 self.config.model.connect_timeout_seconds,
                 min(self.config.model.timeout_seconds, 30),
@@ -846,6 +858,7 @@ class LlamaCppClient:
                     },
                 },
             }
+            request.update(self._chat_template_options())
             if self._is_openrouter:
                 request["provider"] = {"require_parameters": True}
             if self.config.model.stop:

@@ -846,7 +846,7 @@ def test_trusted_instruction_bypasses_semantic_selector(make_config):
     assert "Trusted recording/user/project instructions are never semantically deselected" in exact.text
 
 
-def test_prompt_instructions_are_not_injected_when_capability_is_disabled(make_config) -> None:
+def test_prompt_instructions_remain_enforced_when_editing_capability_is_disabled(make_config) -> None:
     from swaag.prompt_instructions import make_prompt_instruction
     from swaag.runtime import AgentRuntime
 
@@ -856,8 +856,8 @@ def test_prompt_instructions_are_not_injected_when_capability_is_disabled(make_c
     state.prompt_instructions.append(
         make_prompt_instruction(
             config,
-            title="Disabled",
-            content="must not be injected",
+            title="Editing disabled",
+            content="must remain enforced",
             scopes=["action"],
         )
     )
@@ -873,7 +873,7 @@ def test_prompt_instructions_are_not_injected_when_capability_is_disabled(make_c
         ],
     )
     runtime._inject_system_prompt_contributors(state, assembly)
-    assert all(
-        component.name != "durable_prompt_instructions"
-        for component in assembly.components
-    )
+    instruction = next(component for component in assembly.components
+                       if component.name == "durable_prompt_instructions")
+    assert "must remain enforced" in instruction.text
+    assert "prompt_instructions" not in config.tools.enabled

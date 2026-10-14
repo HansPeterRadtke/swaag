@@ -52,6 +52,7 @@ def test_status_ignores_accounting_and_heartbeat_but_detects_queued_control(make
     assistant=AgentRuntime(make_config(model__context_limit=32000),model_client=_ImmediateClient('unused'))
     target=main.create_or_load_session();service=CommunicationService(main,assistant_runtime=assistant)
     main.history.set_active_run(target.session_id,run_id='same-run',user_text='Keep working')
+    main.history.update_active_run(target.session_id,run_id='same-run',phase='inference',substate='streaming',detail='initial heartbeat')
     calls=[]
     def generate(operation_state,**kwargs):
         calls.append(kwargs)
@@ -114,3 +115,31 @@ def test_failed_escalation_does_not_publish_small_model_draft(make_config,monkey
             service.answer_status_question(target.session_id,'Status?')
         assert main.history.latest_communication_status(target.session_id) is None
     finally:service.close()
+
+
+def test_independent_status_rejects_queued_snapshot_after_inference_starts(make_config, monkeypatch):
+    main = AgentRuntime(make_config(model__context_limit=32000), model_client=_ImmediateClient('unused'))
+    assistant = AgentRuntime(make_config(model__context_limit=32000), model_client=_ImmediateClient('unused'))
+    target = main.create_or_load_session()
+    main.history.set_active_run(target.session_id, run_id='live-main', user_text='Keep working')
+    main.history.update_active_run(target.session_id, run_id='live-main', phase='queued_inference',
+        substate='awaiting_capacity', active_kind='model', active_id='same-call', operation_kind='action')
+    service = CommunicationService(main, assistant_runtime=assistant)
+    calls = []
+    def generate(operation_state, **kwargs):
+        calls.append(kwargs)
+        if len(calls) == 1:
+            assert kwargs['mechanical_status']['active_run']['phase'] == 'queued_inference'
+            main.history.update_active_run(target.session_id, run_id='live-main', phase='inference',
+                substate='streaming', active_kind='model', active_id='same-call', operation_kind='action')
+            return status_result('The main agent is waiting for model capacity.')
+        assert kwargs['mechanical_status']['active_run']['phase'] == 'inference'
+        return status_result('The main agent is generating its response.')
+    monkeypatch.setattr(assistant, '_generate_communication_status', generate)
+    try:
+        assert service.answer_status_question(target.session_id, 'What is happening now?') == 'The main agent is generating its response.'
+        assert len(calls) == 2
+        latest = main.history.latest_communication_status(target.session_id)
+        assert latest.payload['status']['answer'] == 'The main agent is generating its response.'
+    finally:
+        service.close()

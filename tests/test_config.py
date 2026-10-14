@@ -434,3 +434,18 @@ def test_enabled_perception_requires_valid_http_model_config(tmp_path: Path) -> 
             "SWAAG__PERCEPTION__ENABLED": "true",
             "SWAAG__PERCEPTION__BASE_URL": "not-a-url",
         })
+
+
+def test_workspace_capture_and_permission_metadata_match_validation():
+    config = load_config(env={})
+    metadata = config.parameter_metadata()
+    for key in ('agent_data.max_capture_chars', 'agent_data.max_output_bytes',
+                'agent_data.max_list_files', 'agent_data.command_timeout_seconds',
+                'communication.max_concurrent_requests'):
+        assert metadata[key]['valid_range'] == 'integer > 0'
+        assert not metadata[key]['description'].startswith(('Behavioral setting', 'Resource/capacity setting'))
+        with pytest.raises(ValueError):
+            load_config(env={'SWAAG__' + key.replace('.', '__').upper(): '0'})
+    assert metadata['agent_data.max_output_bytes']['unit'] == 'bytes'
+    assert metadata['communication.max_concurrent_requests']['unit'] == 'count'
+    assert metadata['tools.allow_side_effect_tools']['criticality'] == 'critical'

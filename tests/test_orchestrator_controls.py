@@ -5,7 +5,6 @@ import pytest
 from swaag.communication import CommunicationService
 from swaag.runtime import AgentRuntime
 from tests.test_agent_action_loop import FakeModelClient, _action
-from tests.test_preemption import _orchestrator_interaction
 
 
 def test_ordinary_correction_invalidates_inflight_planner_action(make_config):
@@ -21,7 +20,6 @@ def test_ordinary_correction_invalidates_inflight_planner_action(make_config):
         assert exact in payload['prompt']
         return _action(message='The calculation was canceled before execution.')
     client = FakeModelClient([
-        _orchestrator_interaction(route='orchestrate', reason='Requested calculation'),
         stale, reconciled,
     ])
     c = make_config(model__context_limit=32000, tools__enabled=['calculator'], runtime__completion_evaluation_enabled=False)
@@ -49,7 +47,7 @@ def test_ordinary_correction_invalidates_inflight_planner_action(make_config):
         events=runtime.history.read_history(state.session_id)
         assert not [e for e in events if e.event_type=='tool_called']
         assert any(e.event_type=='agent_action_rejected' and 'New user control arrived' in e.payload.get('reason','') for e in events)
-        assert len(client.requests)==3, 'The correction must not be executed as a second new task'
+        assert len(client.requests)==2, 'The correction must not be executed as a second new task'
         state=service._load_orchestrator_state()
         assert [m.content for m in state.messages if m.role=='user']==['Calculate six times seven.',exact]
     finally:
@@ -78,8 +76,8 @@ def test_received_controls_keep_order_and_later_turn_can_supersede_them(make_con
         assert '[USER INTERVENTION' not in prompt
         return _action(tool_calls=[('calculator', {'expression':'6 * 7'})], continue_loop=True)
     client=FakeModelClient([
-        _orchestrator_interaction(route='orchestrate'), stale, reconcile,
-        _orchestrator_interaction(route='orchestrate'), newer, _action(message='The result is forty-two.'),
+         stale, reconcile,
+         newer, _action(message='The result is forty-two.'),
     ])
     runtime=AgentRuntime(make_config(model__context_limit=32000,tools__enabled=['calculator'],runtime__completion_evaluation_enabled=False),model_client=client)
     service=CommunicationService(runtime,orchestrator_runtime=runtime)
@@ -100,13 +98,13 @@ def test_received_controls_keep_order_and_later_turn_can_supersede_them(make_con
         release.set()
         for t in threads:t.join(10)
         assert not errors and not any(t.is_alive() for t in threads)
-        assert len(client.requests)==3
+        assert len(client.requests)==2
         state=service._load_orchestrator_state()
         assert [x.content for x in state.messages if x.role=='user']==['Calculate six times seven.',first,second]
         assert service.orchestrator_message(third)['answer']=='The result is forty-two.'
         events=runtime.history.read_history(session)
         assert len([e for e in events if e.event_type=='tool_called'])==1
-        assert len(client.requests)==6
+        assert len(client.requests)==4
     finally:
         release.set()
         for t in threads:
@@ -114,7 +112,7 @@ def test_received_controls_keep_order_and_later_turn_can_supersede_them(make_con
         service.close()
 
 
-def test_final_message_survives_gate_failure_and_reconciles_after_service_recreation(make_config):
+def test_final_message_survives_action_failure_and_reconciles_after_service_recreation(make_config):
     c=make_config(model__context_limit=32000,tools__enabled=['calculator'],runtime__completion_evaluation_enabled=False)
     exact='\n  Calculate six times seven.  \n'
     correction='Cancel that calculation; do not run it.'
@@ -130,7 +128,7 @@ def test_final_message_survives_gate_failure_and_reconciles_after_service_recrea
     def reconcile(payload):
         assert exact in payload['prompt'] and correction in payload['prompt']
         return _action(message='The pending calculation was canceled without running.')
-    client=FakeModelClient([_orchestrator_interaction(route='orchestrate'),reconcile])
+    client=FakeModelClient([reconcile])
     runtime=AgentRuntime(c,model_client=client)
     service=CommunicationService(runtime,orchestrator_runtime=runtime)
     try:
@@ -148,7 +146,7 @@ def test_final_message_is_not_duplicated_after_action_connection_failure(make_co
     exact='Calculate six times seven with the calculator.'
     correction='Cancel that calculation without running it.'
     def fail(payload):raise RuntimeError('injected action connection loss')
-    runtime=AgentRuntime(c,model_client=FakeModelClient([_orchestrator_interaction(route='orchestrate'),fail]))
+    runtime=AgentRuntime(c,model_client=FakeModelClient([fail]))
     service=CommunicationService(runtime,orchestrator_runtime=runtime)
     try:
         with pytest.raises(RuntimeError,match='injected action connection loss'):
@@ -157,7 +155,7 @@ def test_final_message_is_not_duplicated_after_action_connection_failure(make_co
     def reconcile(payload):
         assert exact in payload['prompt'] and correction in payload['prompt']
         return _action(message='Canceled before calculation.')
-    runtime=AgentRuntime(c,model_client=FakeModelClient([_orchestrator_interaction(route='orchestrate'),reconcile]))
+    runtime=AgentRuntime(c,model_client=FakeModelClient([reconcile]))
     service=CommunicationService(runtime,orchestrator_runtime=runtime)
     try:
         assert service.orchestrator_message(correction)['answer']=='Canceled before calculation.'
@@ -240,7 +238,7 @@ def test_protocol_correction_is_received_before_request_semaphore(make_config, e
         assert correction in payload['prompt']
         return _action(message='The calculation was canceled before execution.')
     client = FakeModelClient([
-        _orchestrator_interaction(route='orchestrate'), stale, reconciled,
+         stale, reconciled,
     ])
     runtime = AgentRuntime(make_config(model__context_limit=32000,
         tools__enabled=['calculator'], runtime__completion_evaluation_enabled=False), model_client=client)
@@ -274,7 +272,7 @@ def test_protocol_correction_is_received_before_request_semaphore(make_config, e
             events = runtime.history.read_history(state.session_id)
             assert not any(event.event_type == 'tool_called' for event in events)
             assert any(event.event_type == 'agent_action_rejected' for event in events)
-            assert len(client.requests) == 3
+            assert len(client.requests) == 2
         finally:
             release.set()
             await asyncio.gather(first, *([second] if second is not None else []), return_exceptions=True)
@@ -290,12 +288,15 @@ def test_canceled_transport_keeps_bounded_ingress_until_receipt_finishes(make_co
     runtime = AgentRuntime(make_config(runtime__max_pending_controls=1), model_client=FakeModelClient([]))
     service = CommunicationService(runtime, orchestrator_runtime=runtime)
     entered, release = threading.Event(), threading.Event()
+    finish_receipt = threading.Event()
     receive = service._receive_orchestrator_message
     exact = 'Do not publish until I have reviewed the result.'
     def blocked(message):
         entered.set()
         assert release.wait(8)
-        return receive(message)
+        receipt = receive(message)
+        assert finish_receipt.wait(8)
+        return receipt
     monkeypatch.setattr(service, '_receive_orchestrator_message', blocked)
     async def exercise():
         request = asyncio.create_task(service._receive_protocol_orchestrator_message(exact))
@@ -318,10 +319,17 @@ def test_canceled_transport_keeps_bounded_ingress_until_receipt_finishes(make_co
                     break
                 await asyncio.sleep(.01)
             assert [item['message'] for item in pending] == [exact]
-            assert service._orchestrator_ingress_slots.acquire(blocking=False)
+            # Storage visibility precedes completion of the receipt-producing
+            # job. Capacity must stay occupied until that job actually returns.
+            assert not service._orchestrator_ingress_slots.acquire(blocking=False)
+            finish_receipt.set()
+            deadline = time.monotonic() + 3
+            while not service._orchestrator_ingress_slots.acquire(blocking=False):
+                assert time.monotonic() < deadline, 'Receipt job did not release ingress capacity'
+                await asyncio.sleep(.01)
             service._orchestrator_ingress_slots.release()
         finally:
-            release.set()
+            release.set(); finish_receipt.set()
     try:
         asyncio.run(exercise())
     finally:

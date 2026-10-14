@@ -41,7 +41,8 @@ class PromptInstructionContributor:
     name: str = "prompt_instructions"
 
     def enabled(self, runtime: "AgentRuntime") -> bool:
-        return self.name in set(runtime.config.tools.enabled)
+        # Tool exposure controls editing permission, never enforcement of durable authority.
+        return True
 
     def inject(
         self, runtime: "AgentRuntime", state: SessionState | None, assembly: PromptAssembly

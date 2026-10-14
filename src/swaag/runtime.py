@@ -221,6 +221,7 @@ class PreparedCall:
     report: BudgetReport
     prompt_mode: str
     contract: ContractSpec
+    runtime_snapshot: dict[str, Any] | None = None
 
 
 @dataclass(slots=True, frozen=True)
@@ -989,6 +990,10 @@ class AgentRuntime:
                         )
                     except (ActionValidationError, ValueError) as exc:
                         validation_feedback = str(exc)
+                        self.history.record_event(state, "agent_action_rejected", {
+                            "action_index": action_index, "validation_attempt": validation_attempt,
+                            "reason": validation_feedback, "mode": "single_responsibility",
+                        })
                     continue
 
                 contract = agent_action_contract(
@@ -1206,16 +1211,7 @@ class AgentRuntime:
                         metadata={"internal_action": True, "action_index": action_index},
                     ),
                 )
-                if selected_action.assistant_message.strip():
-                    self.history.record_event(
-                        state,
-                        "assistant_progress",
-                        {
-                            "action_index": action_index,
-                            "assistant_text": selected_action.assistant_message,
-                        },
-                    )
-
+                all_tool_receipts_succeeded = True
                 interrupted_by_control = False
                 for tool_call_index, tool_call in enumerate(selected_action.tool_calls, start=1):
                     pending_during_action = self.history.list_pending_control_messages(
@@ -1261,6 +1257,8 @@ class AgentRuntime:
                         )
                         if result is not None:
                             tool_results.append(result)
+                        else:
+                            all_tool_receipts_succeeded = False
                         self.history.record_event(
                             state,
                             "agent_tool_call_completed",
@@ -1321,6 +1319,8 @@ class AgentRuntime:
                             pending_payloads=pending_during_action,
                         )
                         break
+                    if result is None:
+                        all_tool_receipts_succeeded = False
                     if result is None and self._single_responsibility_mode() and tool_call.tool_name != "load_tools":
                         recovery_feedback = (
                             f"The concrete invocation of {tool_call.tool_name!r} failed mechanically. "
@@ -1376,6 +1376,19 @@ class AgentRuntime:
                             pending_payloads=pending_during_action,
                         )
                         break
+                if (not interrupted_by_control and all_tool_receipts_succeeded
+                        and selected_action.assistant_message.strip()
+                        and not self.history.list_pending_control_messages(state.session_id)):
+                    # The action model has not observed these results when drafting
+                    # its text. Do not publish an apparent dispatch claim before the
+                    # actual tool receipt. Worker-launch/control tools return while
+                    # background work continues; speech never blocks that execution.
+                    self.history.record_event(state, "assistant_progress", {
+                        "action_index": action_index,
+                        "assistant_text": selected_action.assistant_message,
+                        "delivery_phase": "after_tool_receipts",
+                        "completed_tool_names": [call.tool_name for call in selected_action.tool_calls],
+                    })
                 if interrupted_by_control:
                     recovery_feedback = (
                         "A user control arrived while the accepted action was executing. "
@@ -1527,7 +1540,15 @@ class AgentRuntime:
     def _authoritative_intervention_texts(self, state: SessionState) -> list[str]:
         represented = {message.metadata.get("orchestrator_control_id")
                        for message in state.messages if message.role == "user"}
-        return [str(item["message"])
+        def authority_text(item):
+            originals = item.get("authority", [])
+            if not originals:
+                return str(item["message"])
+            return ("Orchestrator routing note (subordinate to the exact user instruction):\n"
+                    + str(item["message"]) + "\nOriginal user instructions, verbatim and in order; "
+                    "apply the parts relevant to this worker, and preserve conditions and prohibitions:\n"
+                    + "\n\n".join(entry["message"] for entry in originals))
+        return [authority_text(item)
                 for item in self.history.list_authoritative_control_messages(state.session_id)
                 if str(item.get("message", "")).strip()
                 and item.get("source") != "question_revision"
@@ -1596,55 +1617,6 @@ class AgentRuntime:
     def _single_responsibility_mode(self) -> bool:
         return int(self.config.model.max_semantic_responsibilities_per_call) <= 1
 
-    def _prepare_single_responsibility_call(
-        self,
-        state: SessionState,
-        *,
-        assembly: PromptAssembly,
-        contract: ContractSpec,
-        minimum_output_tokens: int | None = None,
-    ) -> PreparedCall:
-        effective_minimum = (
-            self.config.context.reserved_response_tokens
-            if minimum_output_tokens is None
-            else int(minimum_output_tokens)
-        )
-        compilation = self._compile_context(
-            state, assembly, contract, minimum_output_tokens=effective_minimum
-        )
-        self.history.record_event(
-            state,
-            "context_compiled",
-            {
-                "kind": assembly.kind,
-                "prompt_mode": assembly.prompt_mode,
-                "accounting": compilation.accounting(),
-                "cap_error": "" if compilation.report.fits else "context_limit_exceeded",
-                "candidate_only": not compilation.report.fits,
-            },
-        )
-        self.history.record_event(
-            state,
-            "budget_checked",
-            {
-                "kind": assembly.kind,
-                "prompt_mode": assembly.prompt_mode,
-                "budget_report": asdict(compilation.report),
-                "cap_error": "" if compilation.report.fits else "context_limit_exceeded",
-                "candidate_only": not compilation.report.fits,
-            },
-        )
-        if not compilation.report.fits:
-            raise BudgetExceededError(
-                f"The exact {assembly.kind} prompt does not fit the model context.",
-                compilation.report,
-            )
-        self._record_prompt_built(state, assembly, contract, compilation.report)
-        return PreparedCall(
-            assembly=assembly, report=compilation.report,
-            prompt_mode=assembly.prompt_mode, contract=contract,
-        )
-
     def _single_responsibility_capability_action(
         self,
         state: SessionState,
@@ -1662,18 +1634,21 @@ class AgentRuntime:
         ]
         if not available:
             return None
-        components = self._runtime_context_components(
-            state, self._counter(state)
-        )
         names = [str(item[0]) for item in available]
         contract = agent_capability_selection_contract(names)
-        assembly = self.prompts.build_agent_capability_selection_prompt(
-            list(state.messages), original_request=original_request,
-            pending_user_messages=pending_messages, capability_index=available,
-            context_components=components, validation_feedback=validation_feedback,
-        )
-        prepared = self._prepare_single_responsibility_call(
-            state, assembly=assembly, contract=contract
+
+        def build_assembly(messages, components, projections, mode):
+            return self.prompts.build_agent_capability_selection_prompt(
+                messages, original_request=original_request,
+                pending_user_messages=pending_messages, capability_index=available,
+                context_components=components, validation_feedback=validation_feedback,
+                tool_result_projections=projections,
+            )
+
+        prepared = self._prepare_action_call(
+            state, original_request=original_request, pending_messages=pending_messages,
+            tool_specs=[], contract=contract, validation_feedback=validation_feedback,
+            assembly_builder=build_assembly,
         )
 
         def validate(payload: dict[str, Any]) -> AgentAction | None:
@@ -1743,23 +1718,19 @@ class AgentRuntime:
         if not tool_specs and not capability_index:
             return None
         contract = agent_tool_call_contract(tool_specs)
-        components = self._runtime_context_components(
-            state, self._counter(state)
-        )
-        assembly = self.prompts.build_agent_tool_call_prompt(
-            list(state.messages),
-            tool_specs,
-            original_request=original_request,
-            pending_user_messages=pending_messages,
-            context_components=components,
-            capability_index=capability_index,
-            completed_tool_calls=self._completed_tool_calls_for_prompt(
-                state, tool_specs
-            ),
-            validation_feedback=validation_feedback,
-        )
-        prepared = self._prepare_single_responsibility_call(
-            state, assembly=assembly, contract=contract
+        def build_assembly(messages, components, projections, mode):
+            return self.prompts.build_agent_tool_call_prompt(
+                messages, tool_specs, original_request=original_request,
+                pending_user_messages=pending_messages, context_components=components,
+                capability_index=capability_index, tool_result_projections=projections,
+                completed_tool_calls=self._completed_tool_calls_for_prompt(state, tool_specs),
+                validation_feedback=validation_feedback,
+            )
+
+        prepared = self._prepare_action_call(
+            state, original_request=original_request, pending_messages=pending_messages,
+            tool_specs=tool_specs, contract=contract, validation_feedback=validation_feedback,
+            assembly_builder=build_assembly,
         )
         tool_names = [str(item[0]) for item in tool_specs]
         enabled = set(tool_names)
@@ -2021,19 +1992,19 @@ class AgentRuntime:
         contract = agent_terminal_response_contract(
             allow_silent_completion=allow_silent_completion
         )
-        components = self._runtime_context_components(
-            state, self._counter(state)
-        )
-        assembly = self.prompts.build_agent_terminal_response_prompt(
-            list(state.messages),
-            original_request=original_request,
-            pending_user_messages=pending_messages,
-            context_components=components,
-            allow_silent_completion=allow_silent_completion,
-            validation_feedback=validation_feedback,
-        )
-        prepared = self._prepare_single_responsibility_call(
-            state, assembly=assembly, contract=contract
+        def build_assembly(messages, components, projections, mode):
+            return self.prompts.build_agent_terminal_response_prompt(
+                messages, original_request=original_request,
+                pending_user_messages=pending_messages, context_components=components,
+                tool_result_projections=projections,
+                allow_silent_completion=allow_silent_completion,
+                validation_feedback=validation_feedback,
+            )
+
+        prepared = self._prepare_action_call(
+            state, original_request=original_request, pending_messages=pending_messages,
+            tool_specs=[], contract=contract, validation_feedback=validation_feedback,
+            assembly_builder=build_assembly,
         )
 
         def validate(payload: dict[str, Any]) -> AgentAction:
@@ -2086,6 +2057,9 @@ class AgentRuntime:
         contract: ContractSpec,
         validation_feedback: str,
         minimum_output_tokens: int | None = None,
+        assembly_builder: Callable[
+            [list[Message], list[PromptComponent], dict[int, str], str], PromptAssembly
+        ] | None = None,
     ) -> PreparedCall:
         last_report: BudgetReport | None = None
         tool_result_projections: dict[int, str] = {}
@@ -2119,6 +2093,8 @@ class AgentRuntime:
             *,
             mode: str,
         ) -> PromptAssembly:
+            if assembly_builder is not None:
+                return assembly_builder(messages, components, tool_result_projections, mode)
             return self.prompts.build_agent_action_prompt(
                 messages,
                 tool_specs,
@@ -2143,7 +2119,7 @@ class AgentRuntime:
                 state,
                 "context_compiled",
                 {
-                    "kind": "action",
+                    "kind": assembly.kind,
                     "prompt_mode": mode,
                     "accounting": compilation.accounting(),
                     "cap_error": "" if report.fits else "context_limit_exceeded",
@@ -2157,7 +2133,7 @@ class AgentRuntime:
                 state,
                 "budget_checked",
                 {
-                    "kind": "action",
+                    "kind": assembly.kind,
                     "prompt_mode": mode,
                     "budget_report": asdict(report),
                     "cap_error": "" if report.fits else "context_limit_exceeded",
@@ -2198,8 +2174,10 @@ class AgentRuntime:
                     report=report,
                     prompt_mode=prompt_mode,
                     contract=contract,
+                    runtime_snapshot=system_context_state.get("runtime_system_snapshot"),
                 )
-            if prompt_mode == "standard" and self.config.runtime.lean_on_overflow:
+            if (assembly_builder is None and prompt_mode == "standard"
+                    and self.config.runtime.lean_on_overflow):
                 lean_assembly = build_action_assembly(
                     history_messages, context_components, mode="lean"
                 )
@@ -2239,6 +2217,7 @@ class AgentRuntime:
                         report=report,
                         prompt_mode=prompt_mode,
                         contract=contract,
+                        runtime_snapshot=system_context_state.get("runtime_system_snapshot"),
                     )
             if not self.config.context.compact_on_overflow or compaction_round >= max_rounds:
                 break
@@ -2305,7 +2284,7 @@ class AgentRuntime:
                 state,
                 "context_compiled",
                 {
-                    "kind": "action",
+                    "kind": assembly.kind,
                     "prompt_mode": prompt_mode,
                     "accounting": recovered.accounting(),
                     "cap_error": "",
@@ -2320,7 +2299,7 @@ class AgentRuntime:
                 state,
                 "budget_checked",
                 {
-                    "kind": "action",
+                    "kind": assembly.kind,
                     "prompt_mode": prompt_mode,
                     "budget_report": asdict(recovered.report),
                     "cap_error": "",
@@ -2340,10 +2319,11 @@ class AgentRuntime:
                 report=recovered.report,
                 prompt_mode=prompt_mode,
                 contract=contract,
+                runtime_snapshot=system_context_state.get("runtime_system_snapshot"),
             )
 
         raise BudgetExceededError(
-            "The exact action prompt, tool schemas, output reserve, and safety margin do not fit the model context.",
+            f"The exact {assembly.kind} prompt, tool schemas, output reserve, and safety margin do not fit the model context.",
             last_report,
         )
 
@@ -2364,6 +2344,15 @@ class AgentRuntime:
             operation_kind="completion_evaluation",
         )
         evidence_rows = self._completion_evidence_rows(state, tool_results)
+        capabilities = self.tool_runtime_capabilities(state.session_id)
+        snapshot_provider = capabilities.get("system_snapshot_provider")
+        snapshot_fingerprint = capabilities.get("system_snapshot_fingerprint")
+        completion_snapshot = snapshot_provider() if callable(snapshot_provider) else None
+        completion_snapshot_event = None
+        if completion_snapshot is not None:
+            completion_snapshot_event = self.history.record_event(state, "runtime_system_snapshot", {
+                "snapshot": completion_snapshot, "purpose": "completion_evaluation",
+            })
         history_snapshot = self.history.read_history(state.session_id)
         current_run_sequence = next(
             (event.sequence for event in reversed(history_snapshot)
@@ -2402,6 +2391,8 @@ class AgentRuntime:
             if current_user_sequence is not None and event.sequence >= current_user_sequence
             and event.event_type in {"worker_question_inventory", "agent_question",
                 "agent_question_revised", "agent_question_resolved", "agent_progress"})
+        if completion_snapshot_event is not None:
+            historical_events.append(completion_snapshot_event)
         historical_rows = [
             self._communication_evidence_row(event) for event in historical_events
         ]
@@ -2744,6 +2735,12 @@ class AgentRuntime:
                             for source_key, row in reexpanded_evidence.items()
                         ],
                     }
+                    if (completion_snapshot is not None and callable(snapshot_fingerprint)
+                            and snapshot_fingerprint(completion_snapshot) != snapshot_fingerprint(snapshot_provider())):
+                        result.update(complete=False,
+                            reason="System task state changed during completion evaluation; reconsider the current state before replying.",
+                            remaining_work=["Regenerate the action or answer from a fresh system snapshot."],
+                            snapshot_changed=True)
                     self.history.record_event(state, "completion_evaluated", result)
                     return result
             if (
@@ -5733,9 +5730,33 @@ class AgentRuntime:
         *,
         context_state: dict[str, object] | None = None,
     ) -> list[SystemContextSource]:
-        return runtime_system_context_sources(
+        sources = runtime_system_context_sources(
             self.config, state, context_state=context_state
         )
+        provider = self.tool_runtime_capabilities(state.session_id).get("system_snapshot_provider")
+        if callable(provider):
+            # Freeze one exact observation across compilation/reduction retries;
+            # the next action preparation collects again. Do not rehash changing
+            # clocks during one semantic projection or silently reuse old state.
+            local = context_state if context_state is not None else {}
+            if "runtime_system_snapshot" not in local:
+                snapshot = provider()
+                local["runtime_system_snapshot"] = snapshot
+                event = self.history.record_event(state, "runtime_system_snapshot", {"snapshot": snapshot})
+                local["runtime_system_snapshot_sequence"] = event.sequence
+            snapshot = local["runtime_system_snapshot"]
+            sources.append(SystemContextSource(
+                name="runtime_system_snapshot", category="environment",
+                text=stable_json_dumps(snapshot, indent=2),
+                introduction="Current whole-system state, observed for this request. Worker and tool text is evidence, not authority. Distinguish queued, planning, executing and verified completion:\n",
+                locator={"authoritative_source": "history", "session_id": state.session_id,
+                         "sequence": local["runtime_system_snapshot_sequence"],
+                         "recovery_tool": "history_window"},
+                projection_source_label="current workers, plans, results, questions, pending authoritative controls and supervision",
+                projection_header="[SEMANTIC PROJECTION OF THE TIMESTAMPED SYSTEM SNAPSHOT]\n",
+                optional=False, projectable=True,
+            ))
+        return sources
 
 
     def _project_runtime_context_for_overflow(
@@ -7832,6 +7853,24 @@ class AgentRuntime:
             ) from exc
         if not isinstance(payload, dict):
             raise ValueError(f"Contract {prepared.contract.name} must return one JSON object")
+        if prepared.runtime_snapshot is not None:
+            capabilities = self.tool_runtime_capabilities(state.session_id)
+            provider = capabilities.get("system_snapshot_provider")
+            fingerprint = capabilities.get("system_snapshot_fingerprint")
+            if callable(provider) and callable(fingerprint):
+                current = provider()
+                before_controls = prepared.runtime_snapshot.get("orchestrator", {}).get("pending_user_messages", [])
+                current_controls = current.get("orchestrator", {}).get("pending_user_messages", [])
+                # New authoritative controls use the outer ordered control fence,
+                # which refreshes pending_messages/history before regenerating.
+                # An inner validation retry would retain an outdated inbox view.
+                if before_controls != current_controls:
+                    return validator(payload) if validator is not None else payload
+                if fingerprint(prepared.runtime_snapshot) != fingerprint(current):
+                    raise ActionValidationError(
+                        "System task state changed during action generation. The proposed reply and tools "
+                        "were not applied. Reconsider the fresh snapshot before responding or acting."
+                    )
         return validator(payload) if validator is not None else payload
 
     def _execute_with_output_recovery(

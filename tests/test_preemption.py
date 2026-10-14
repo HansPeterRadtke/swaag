@@ -444,11 +444,8 @@ class _PreemptReplayClient(_BaseClient):
         self.requests.append(copied)
         if payload.get("contract") == "communication_status":
             return self._result(payload, _status("The main agent is still working."))
-        if payload.get("contract") == "orchestrator_interaction":
-            return self._result(
-                payload,
-                _orchestrator_interaction("Yes, I can hear you."),
-            )
+        if payload.get("contract") == "agent_action" and "central SWAAG orchestrator" in payload["prompt"]:
+            return self._result(payload, _action("Yes, I can hear you."))
         if self.first_main_request is None:
             self.first_main_request = copied
             self.main_started.set()
@@ -924,11 +921,8 @@ class _UsagePreemptReplayClient(_PreemptReplayClient):
         self.requests.append(copied)
         if payload.get("contract") == "communication_status":
             return self._result(payload, _status("The main agent is still working."))
-        if payload.get("contract") == "orchestrator_interaction":
-            return self._result(
-                payload,
-                _orchestrator_interaction("Yes, I can hear you."),
-            )
+        if payload.get("contract") == "agent_action" and "central SWAAG orchestrator" in payload["prompt"]:
+            return self._result(payload, _action("Yes, I can hear you."))
         if self.first_main_request is None:
             self.first_main_request = copied
             self.main_started.set()
@@ -1077,17 +1071,13 @@ def test_orchestrator_lightweight_interaction_is_one_model_call_and_starts_no_wo
     assert before_workers == []
     assert after_workers == []
     assert [request["contract"] for request in client.requests] == [
-        "orchestrator_interaction"
+        "agent_action"
     ]
     prompt = client.requests[0]["prompt"]
-    assert "Do not mention backend URLs" in prompt
-    assert "Never substitute runtime-status commentary" in prompt
-    assert "user's exact current request and later corrections" in prompt
-    assert "Do not replace them with a different objective" in prompt
-    assert "invent an answer to an important unknown" in prompt
-    assert "route to orchestration instead of guessing" in prompt
-    assert "omit implementation noise and machine identifiers" in prompt
-    assert "state material uncertainty or a blocker" in prompt
+    assert "Hello, can you hear me?" in prompt
+    assert "central SWAAG orchestrator" in prompt
+    assert "Ordinary conversation is your own job" in prompt
+    assert "Current whole-system state" in prompt
     state = orchestrator.create_or_load_user_session("SWAAG Orchestrator")
     visible = [
         message
@@ -1196,7 +1186,7 @@ def test_orchestrator_preserves_current_user_whitespace_verbatim(make_config) ->
 
     assert answer["answer"] == "preserved"
     prompt = str(client.requests[0]["prompt"])
-    assert "Current user utterance, verbatim and authoritative:\n" + message in prompt
+    assert "Current user message, verbatim:\n" + message in prompt
     state = orchestrator.create_or_load_user_session("SWAAG Orchestrator")
     visible = [item.content for item in state.messages if item.role == "user"]
     assert visible[-1] == message
@@ -1228,7 +1218,7 @@ class _BrokenFastRouterClient(_ImmediateClient):
         return self._result(payload, _action("The planner handled the requested work."))
 
 
-def test_false_fast_promise_routes_to_full_orchestrator(make_config) -> None:
+def test_foreground_uses_action_controller_without_unreliable_fast_router(make_config) -> None:
     config = make_config(
         model__context_limit=32_000,
         tools__enabled=["orchestration_control"],
@@ -1244,11 +1234,12 @@ def test_false_fast_promise_routes_to_full_orchestrator(make_config) -> None:
     )
     assert answer["answer"] == "The planner handled the requested work."
     assert [x["contract"] for x in client.requests] == [
-        "orchestrator_interaction", "agent_action",
+        "agent_action",
     ]
     state = runtime.create_or_load_user_session("SWAAG Orchestrator")
     event_types = [x.event_type for x in runtime.history.read_history(state.session_id)]
-    assert "orchestrator_direct_reply_rejected" in event_types
+    assert "agent_action_selected" in event_types
+    assert "orchestrator_interaction_requested" not in event_types
     assert "I'll write" not in answer["answer"]
 
 
@@ -1278,7 +1269,7 @@ def test_recorded_real_phone_worker_request_cannot_end_in_readiness_promise(make
     answer = service.orchestrator_message("Fucking start a fucking worker.")
     assert answer["answer"] == "Real orchestration was invoked."
     assert [q["contract"] for q in client.requests] == [
-        "orchestrator_interaction", "agent_action",
+        "agent_action",
     ]
 
 
@@ -1307,21 +1298,21 @@ def test_foreground_orchestrator_uses_live_tokenizer_without_rereading_cache(mak
     assert len(calls) == 1
 
 
-def test_unexecuted_work_claim_guard_preserves_direct_noncommitments() -> None:
-    from swaag.communication import CommunicationService
-    yes = CommunicationService._fast_reply_claims_unperformed_work
-    assert yes("I'm ready to start a worker for you now.")
-    assert yes("I am prepared to launch your worker.")
-    assert yes("I can start the worker now.")
-    assert yes("I'll write a Python program that creates a file.")
-    assert yes("I will write a Python program.")
-    assert yes("I can confirm that I will write a program.")
-    assert yes("I have started the worker.")
-    assert yes("Starting the worker now.")
-    assert not yes("No, I haven't started a worker.")
-    assert not yes("There are no workers running.")
-    assert not yes("Yes, I can hear you.")
-    assert not yes("I will not delete your files.")
+@pytest.mark.parametrize("answer", [
+    "I can explain how to start a worker.",
+    "If you approve later, I can deploy it.",
+    "Ich kann erklären, wie ein Worker gestartet wird.",
+])
+def test_foreground_does_not_reclassify_model_answers_by_english_words(make_config, answer):
+    runtime = AgentRuntime(make_config(model__context_limit=32000), model_client=_ImmediateClient(answer))
+    service = CommunicationService(runtime, orchestrator_runtime=runtime)
+    try:
+        result = service.orchestrator_message("Explain the available capability; do not execute it.")
+        assert result["answer"] == answer
+        assert [r["contract"] for r in runtime.client.requests] == ["agent_action"]
+        assert service.workers.list() == []
+    finally:
+        service.close()
 
 
 class _ExtraAnswerPlannerClient(_ImmediateClient):
@@ -1336,7 +1327,7 @@ class _ExtraAnswerPlannerClient(_ImmediateClient):
         return self._result(payload, _action("Full planner accepted the real request."))
 
 
-def test_fast_route_orchestrate_discards_invalid_extra_answer(make_config) -> None:
+def test_foreground_does_not_request_unused_gate_answer(make_config) -> None:
     config = make_config(
         model__context_limit=32_000,
         tools__enabled=["orchestration_control"],
@@ -1350,11 +1341,11 @@ def test_fast_route_orchestrate_discards_invalid_extra_answer(make_config) -> No
     answer = service.orchestrator_message("Start the requested worker now.")
     assert answer["answer"] == "Full planner accepted the real request."
     assert [item["contract"] for item in client.requests] == [
-        "orchestrator_interaction", "agent_action",
+        "agent_action",
     ]
 
 
-def test_orchestrator_substantive_command_enters_full_planner_after_gate(make_config) -> None:
+def test_orchestrator_substantive_command_enters_full_planner_directly(make_config) -> None:
     config = make_config(
         model__context_limit=32_000,
         tools__enabled=["orchestration_control"],
@@ -1372,11 +1363,10 @@ def test_orchestrator_substantive_command_enters_full_planner_after_gate(make_co
 
     assert answer["answer"] == "planner handled the substantive request"
     assert [request["contract"] for request in client.requests] == [
-        "orchestrator_interaction",
         "agent_action",
     ]
 
-def test_orchestrator_fast_interaction_receives_exact_prior_conversation(make_config) -> None:
+def test_orchestrator_action_receives_exact_prior_conversation(make_config) -> None:
     config = make_config(
         model__context_limit=32_000,
         tools__enabled=["orchestration_control"],
@@ -1393,13 +1383,13 @@ def test_orchestrator_fast_interaction_receives_exact_prior_conversation(make_co
     assert first["answer"] == "Yes."
     assert second["answer"] == "Yes."
     assert [request["contract"] for request in client.requests] == [
-        "orchestrator_interaction",
-        "orchestrator_interaction",
+        "agent_action",
+        "agent_action",
     ]
     assert "Remember the phrase blue lantern." in client.requests[1]["prompt"]
     assert "What phrase did I just say?" in client.requests[1]["prompt"]
 
-def test_orchestrator_fast_status_call_receives_current_worker_snapshot(make_config) -> None:
+def test_orchestrator_action_receives_current_worker_snapshot(make_config) -> None:
     config = make_config(
         model__context_limit=32_000,
         tools__enabled=["orchestration_control"],
@@ -1418,7 +1408,7 @@ def test_orchestrator_fast_status_call_receives_current_worker_snapshot(make_con
 
     assert answer["answer"] == "One worker is currently prepared."
     assert [request["contract"] for request in client.requests] == [
-        "orchestrator_interaction"
+        "agent_action"
     ]
     prompt = client.requests[0]["prompt"]
     assert created["worker"]["worker_id"] in prompt
@@ -1477,7 +1467,7 @@ class _ConcurrentOrchestratorClient(_ImmediateClient):
         self._orchestrator_lock = threading.Lock()
 
     def send_completion(self, payload: dict[str, Any], **kwargs) -> CompletionResult:
-        if payload.get("contract") != "orchestrator_interaction":
+        if payload.get("contract") != "agent_action":
             return super().send_completion(payload, **kwargs)
         with self._orchestrator_lock:
             self._orchestrator_calls += 1
@@ -1486,15 +1476,10 @@ class _ConcurrentOrchestratorClient(_ImmediateClient):
         if call_index == 1:
             self.first_started.set()
             assert self.release_first.wait(timeout=5)
-        # A newly received message can invalidate a direct draft. Answer the
-        # actual current utterance on refresh, rather than treating call count
-        # as user-turn identity.
-        current = payload["prompt"].rsplit(
-            "Current user utterance, verbatim and authoritative:\n", 1
-        )[1].splitlines()[0]
-        assert current in {"first user", "second user"}
-        answer = "first reply" if current == "first user" else "second reply"
-        return self._result(payload, _orchestrator_interaction(answer))
+        # Later finalized authority is reconciled in the active turn; the stale
+        # first draft is never committed and both receipts refer to the result.
+        answer = "second reply" if "second user" in payload["prompt"] else "first reply"
+        return self._result(payload, _action(answer))
 
 
 def test_concurrent_orchestrator_messages_preserve_order_and_history(make_config) -> None:
@@ -1537,7 +1522,7 @@ def test_concurrent_orchestrator_messages_preserve_order_and_history(make_config
 
         assert not errors
         assert not first.is_alive() and not second.is_alive()
-        assert results["first"]["answer"] == "first reply"
+        assert results["first"]["answer"] == "second reply"
         assert results["second"]["answer"] == "second reply"
         state = runtime.create_or_load_user_session("SWAAG Orchestrator")
         visible = [
@@ -1546,17 +1531,13 @@ def test_concurrent_orchestrator_messages_preserve_order_and_history(make_config
             if message.role in {"user", "assistant"}
             and not message.metadata.get("internal_action")
         ]
-        assert visible[-4:] == [
-            "first user",
-            "first reply",
-            "second user",
-            "second reply",
-        ]
-        assert client._orchestrator_calls == 3
+        assert visible[-3:] == ["first user", "second user", "second reply"]
+        assert "first reply" not in visible
+        assert client._orchestrator_calls == 2
         rejected = [event for event in runtime.history.read_history(state.session_id)
-                    if event.event_type == "orchestrator_direct_reply_rejected"]
+                    if event.event_type == "agent_action_rejected"]
         assert len(rejected) == 1
-        assert rejected[0].payload["reason"] == "task_state_changed_during_generation"
+        assert "New user control arrived" in rejected[0].payload["reason"]
     finally:
         client.release_first.set()
         if first.ident:
@@ -1611,3 +1592,33 @@ def test_autonomous_idea_semantic_call_is_history_grounded_and_can_decline(make_
         assert "Do not invent a task merely to stay busy" in prompt
         assert "Never pretend the user explicitly requested" in prompt
         assert result["objective"] == ("Improve repository verification" if create else "")
+
+
+@pytest.mark.parametrize('preempt', [True, False])
+def test_configured_foreground_priority_and_preemption_policy(make_config, monkeypatch, preempt):
+    from contextlib import contextmanager
+    runtime = AgentRuntime(make_config(model__context_limit=32000,
+        communication__orchestrator_priority=73,communication__preempt_shared_model=preempt),
+        model_client=_ImmediateClient('Current state received.'))
+    service = CommunicationService(runtime,orchestrator_runtime=runtime)
+    calls, priorities = [], []
+    worker = service.workers.create('Background work')
+    service.workers.store.transition(worker.worker_id,'working')
+    def record(*args, **kwargs):
+        calls.append((args,kwargs))
+        return None
+    @contextmanager
+    def priority(value, *, source):
+        priorities.append((value,source))
+        yield
+    monkeypatch.setattr(service,'_preempt_runtime_call',record)
+    monkeypatch.setattr(runtime,'inference_priority',priority)
+    try:
+        assert service.orchestrator_message('What is happening?')['answer'] == 'Current state received.'
+        assert len(calls) == int(preempt)
+        assert priorities == [(73,'user_orchestrator')]
+        if not preempt:
+            assert service._preempt_active_main_call(worker.session_id,'Question') is None
+            assert calls == []
+    finally:
+        service.close()

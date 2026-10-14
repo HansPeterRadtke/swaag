@@ -22,6 +22,8 @@ ALLOWED_EVENT_TYPES = frozenset(
         "action_prompt_mode_fallback",
         "semantic_reduction_output_exhausted",
         "runtime_context_projected",
+        "runtime_system_snapshot",
+        "shared_knowledge_revision",
         "runtime_context_projection_reused",
         "runtime_context_projection_skipped",
         "tool_result_projected",
@@ -88,6 +90,7 @@ ALLOWED_EVENT_TYPES = frozenset(
         "action_selected",
         "action_selection_resolved",
         "agent_action_rejected",
+        "tool_invocation_failed_recoverably",
         "agent_action_interrupted",
         "agent_action_selected",
         "agent_status",
@@ -304,6 +307,8 @@ REQUIRED_PAYLOAD_KEYS: dict[str, frozenset[str]] = {
     "notes_selected": frozenset({"included_note_ids", "omitted_note_ids", "tokens", "exact"}),
     "prompt_built": frozenset({"kind", "prompt_mode", "contract", "prompt", "components", "budget_report"}),
     "context_compiled": frozenset({"kind", "prompt_mode", "accounting"}),
+    "runtime_system_snapshot": frozenset({"snapshot"}),
+    "shared_knowledge_revision": frozenset({"namespace", "name", "revision", "sha256", "operation", "scope"}),
     "runtime_context_projected": frozenset(
         {
             "source_name",
@@ -599,6 +604,7 @@ REQUIRED_PAYLOAD_KEYS: dict[str, frozenset[str]] = {
     "action_selected": frozenset({"selected_action", "ready_step_ids", "scores", "strategy", "stop_reason"}),
     "action_selection_resolved": frozenset({"selected_action", "candidates", "source"}),
     "agent_action_rejected": frozenset({"action_index", "validation_attempt", "reason"}),
+    "tool_invocation_failed_recoverably": frozenset({"action_index", "tool_name", "reason"}),
     "agent_action_interrupted": frozenset(
         {
             "action_index",

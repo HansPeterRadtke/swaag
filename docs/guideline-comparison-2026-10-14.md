@@ -1,5 +1,10 @@
 # Complete Infra guideline comparison with SWAAG — 2026-10-14
 
+> This document preserves the audited installed baseline. Subsequent corrections
+> and current acceptance evidence are maintained in
+> [guideline-corrections-2026-10-14.md](guideline-corrections-2026-10-14.md).
+> Source changes must not be mistaken for a certified deployed state.
+
 ## Scope and evidence boundary
 
 The complete `/data/infra/docs/guidlines` tree was reread, including the original recordings, then compared with current source, installed packages, operating state, retained live experiments, and focused reproductions. The directory is spelled `guidlines` in Infra. This is a requirement comparison, not certification that every requirement has passed and not a redesign proposal.

@@ -1,6 +1,8 @@
 from __future__ import annotations
 
 import json
+import codecs
+import hashlib
 from dataclasses import asdict, dataclass
 import os
 from pathlib import Path
@@ -19,6 +21,8 @@ class TextArtifact:
     created_at: str
     size_chars: int
     sha256: str
+    size_bytes: int | None = None
+    decoding_errors: str = "strict"
 
 
 class TextArtifactStore:
@@ -63,6 +67,57 @@ class TextArtifactStore:
         write_text(metadata_path, json.dumps(asdict(artifact), indent=2, sort_keys=True) + "\n", encoding="utf-8")
         return artifact
 
+    def create_from_file(self, source: Path, *, kind: str) -> TextArtifact:
+        """Persist exact bytes with bounded memory; text views disclose decoding policy."""
+        if self.archive_root.exists():
+            raise RuntimeError(f"Cannot add an artifact to archived session: {self.session_id}")
+        ensure_dir(self.root)
+        artifact_id = new_id("artifact")
+        text_path = self._text_path(artifact_id)
+        metadata_path = self._metadata_path(artifact_id)
+        temporary = text_path.with_suffix(".pending")
+        digest = hashlib.sha256()
+        decoder = codecs.getincrementaldecoder("utf-8")(errors="replace")
+        size_chars = size_bytes = 0
+        try:
+            with source.open("rb") as incoming, temporary.open("xb") as outgoing:
+                while chunk := incoming.read(65536):
+                    outgoing.write(chunk)
+                    digest.update(chunk)
+                    size_bytes += len(chunk)
+                    size_chars += len(decoder.decode(chunk))
+                size_chars += len(decoder.decode(b"", final=True))
+                outgoing.flush()
+                os.fsync(outgoing.fileno())
+            os.replace(temporary, text_path)
+            artifact = TextArtifact(
+                artifact_id=artifact_id, kind=str(kind), path=str(text_path),
+                metadata_path=str(metadata_path), created_at=utc_now_iso(),
+                size_chars=size_chars, sha256=digest.hexdigest(),
+                size_bytes=size_bytes, decoding_errors="replace",
+            )
+            write_text(metadata_path, json.dumps(asdict(artifact), indent=2, sort_keys=True) + "\n", encoding="utf-8")
+            return artifact
+        except BaseException:
+            temporary.unlink(missing_ok=True)
+            # Never return a successful artifact reference without its metadata.
+            if not metadata_path.exists():
+                text_path.unlink(missing_ok=True)
+            raise
+
+    @staticmethod
+    def _measure(path: Path, *, errors: str) -> tuple[int, int, str]:
+        digest = hashlib.sha256()
+        decoder = codecs.getincrementaldecoder("utf-8")(errors=errors)
+        size_chars = size_bytes = 0
+        with path.open("rb") as source:
+            while chunk := source.read(65536):
+                digest.update(chunk)
+                size_bytes += len(chunk)
+                size_chars += len(decoder.decode(chunk))
+            size_chars += len(decoder.decode(b"", final=True))
+        return size_chars, size_bytes, digest.hexdigest()
+
     def get(self, artifact_id: str) -> TextArtifact:
         if not artifact_id or "/" in artifact_id or "\\" in artifact_id or ".." in artifact_id:
             raise ValueError("invalid artifact_id")
@@ -85,8 +140,11 @@ class TextArtifactStore:
             or not actual.is_file()
         ):
             raise ValueError(f"Invalid artifact metadata for {artifact_id}")
-        text = actual.read_text(encoding="utf-8")
-        if len(text) != artifact.size_chars or sha256_text(text) != artifact.sha256:
+        if artifact.decoding_errors not in {"strict", "replace"}:
+            raise ValueError(f"Invalid artifact decoding policy: {artifact_id}")
+        chars, size_bytes, digest = self._measure(actual, errors=artifact.decoding_errors)
+        if (chars != artifact.size_chars or digest != artifact.sha256
+                or artifact.size_bytes is not None and size_bytes != artifact.size_bytes):
             raise ValueError(f"Artifact failed integrity verification: {artifact_id}")
         return artifact
 
@@ -96,19 +154,31 @@ class TextArtifactStore:
         if max_chars <= 0:
             raise ValueError("max_chars must be positive")
         artifact = self.get(artifact_id)
-        text = Path(artifact.path).read_text(encoding="utf-8")
-        start = min(start_offset, len(text))
-        end = min(len(text), start + max_chars)
+        start = min(start_offset, artifact.size_chars)
+        end = min(artifact.size_chars, start + max_chars)
+        # Character offsets remain stable across Unicode and CRLF boundaries.
+        with Path(artifact.path).open("r", encoding="utf-8", errors=artifact.decoding_errors, newline="") as source:
+            remaining = start
+            while remaining:
+                skipped = source.read(min(remaining, 65536))
+                if not skipped:
+                    raise ValueError(f"Artifact changed during read: {artifact_id}")
+                remaining -= len(skipped)
+            text = source.read(end - start)
+        if len(text) != end - start:
+            raise ValueError(f"Artifact changed during read: {artifact_id}")
         return {
             "artifact_id": artifact.artifact_id,
             "kind": artifact.kind,
             "start_offset": start,
             "end_offset": end,
             "next_offset": end,
-            "finished": end >= len(text),
-            "total_chars": len(text),
+            "finished": end >= artifact.size_chars,
+            "total_chars": artifact.size_chars,
             "sha256": artifact.sha256,
-            "text": text[start:end],
+            "size_bytes": artifact.size_bytes,
+            "decoding_errors": artifact.decoding_errors,
+            "text": text,
         }
 
     def archive(self) -> int:

@@ -44,6 +44,7 @@ class ModelConfig:
     cache_max_bytes: int = 134217728
     cache_max_entries: int = 16384
     cache_lock_stripes: int = 128
+    thinking_mode: str = "server_default"
 
 
 @dataclass(slots=True)
@@ -84,6 +85,10 @@ class AgentDataConfig:
     python_executable: str
     command_timeout_seconds: int
     max_capture_chars: int
+    max_output_bytes: int = 67108864
+    max_list_files: int = 1000
+    max_knowledge_bytes: int = 67108864
+    max_knowledge_revisions: int = 10000
 
 
 @dataclass(slots=True)
@@ -330,6 +335,9 @@ class CommunicationConfig:
     max_pending_requests: int = 128
     idle_work_mode: str = "finish_only"
     max_background_plans: int = 128
+    orchestrator_priority: int = 1000
+    status_priority: int = 100
+    preempt_shared_model: bool = True
     autonomous_idea_interval_seconds: float = 300.0
     model_routes: dict[str, str] = field(default_factory=dict)
     open_webui_artifacts: OpenWebUiArtifactServingConfig = field(
@@ -436,8 +444,11 @@ class AgentConfig:
             default_value = _dotted_value(packaged_defaults, dotted)
             key = dotted.rsplit(".", 1)[-1]
             group = dotted.split(".", 1)[0]
-            unit = _parameter_unit(key)
-            security_sensitive = any(
+            unit = _parameter_unit(dotted)
+            security_sensitive = dotted in {
+                "tools.allow_side_effect_tools", "tools.allow_stateful_tools",
+                "tools.read_roots", "editor.allow_writes", "agent_data.sandbox_backend",
+            } or any(
                 marker in dotted.casefold()
                 for marker in ("authorization", "credential", "secret", "private_key", "allowed_hosts")
             )
@@ -468,7 +479,7 @@ class AgentConfig:
                 "change_likelihood": likelihood,
                 "source": self.source_for(dotted),
                 "default_value": default_value,
-                "valid_range": _parameter_range(key, value),
+                "valid_range": _parameter_range(dotted, value),
                 "description": description,
                 "consequences": consequences,
             }
@@ -603,6 +614,10 @@ def _coerce_config(
         python_executable=str(data["agent_data"]["python_executable"]),
         command_timeout_seconds=int(data["agent_data"]["command_timeout_seconds"]),
         max_capture_chars=int(data["agent_data"]["max_capture_chars"]),
+        max_output_bytes=int(data["agent_data"]["max_output_bytes"]),
+        max_list_files=int(data["agent_data"]["max_list_files"]),
+        max_knowledge_bytes=int(data["agent_data"]["max_knowledge_bytes"]),
+        max_knowledge_revisions=int(data["agent_data"]["max_knowledge_revisions"]),
     )
     environment = EnvironmentConfig(**data["environment"])
     tools = ToolConfig(
@@ -794,6 +809,9 @@ def _coerce_config(
         poll_seconds=float(data["communication"]["poll_seconds"]),
         max_active_workers=data["communication"].get("max_active_workers", 128),
         max_pending_requests=data["communication"].get("max_pending_requests", 128),
+        orchestrator_priority=int(data["communication"]["orchestrator_priority"]),
+        status_priority=int(data["communication"]["status_priority"]),
+        preempt_shared_model=bool(data["communication"]["preempt_shared_model"]),
         idle_work_mode=str(data["communication"].get("idle_work_mode", "finish_only")),
         max_background_plans=int(data["communication"].get("max_background_plans", 128)),
         autonomous_idea_interval_seconds=float(data["communication"].get("autonomous_idea_interval_seconds", 300.0)),
@@ -897,6 +915,10 @@ def _coerce_config(
     _validate_positive("model.fail_safe_timeout_seconds", model.fail_safe_timeout_seconds)
     if model.progress_poll_seconds <= 0:
         raise ValueError("model.progress_poll_seconds must be positive")
+    if model.thinking_mode not in {"server_default", "enabled", "disabled"}:
+        raise ValueError("model.thinking_mode must be server_default, enabled or disabled")
+    if model.thinking_mode != "server_default" and model.provider_name.lower() not in {"vllm", "vllm-openai", "vllm_openai", "llama.cpp", "llama_cpp"}:
+        raise ValueError("Explicit thinking_mode requires a verified vLLM or llama.cpp chat-template adapter")
     if model.structured_output_mode != "server_schema":
         raise ValueError("model.structured_output_mode must be server_schema")
     if not model.provider_name.strip():
@@ -1196,6 +1218,10 @@ def _coerce_config(
         "agent_data.command_timeout_seconds", agent_data.command_timeout_seconds
     )
     _validate_positive("agent_data.max_capture_chars", agent_data.max_capture_chars)
+    _validate_positive("agent_data.max_output_bytes", agent_data.max_output_bytes)
+    _validate_positive("agent_data.max_list_files", agent_data.max_list_files)
+    _validate_positive("agent_data.max_knowledge_bytes", agent_data.max_knowledge_bytes)
+    _validate_positive("agent_data.max_knowledge_revisions", agent_data.max_knowledge_revisions)
 
     if a2a_card_signing.enabled:
         if not a2a_card_signing.private_key_env.strip():
@@ -1256,8 +1282,18 @@ def _dotted_value(value: dict[str, Any], dotted: str) -> Any:
 
 
 def _parameter_unit(key: str) -> str | None:
-    lowered = key.casefold()
-    if lowered in {"max_open_questions", "max_background_plans", "max_active_workers", "max_pending_controls", "max_pending_inference", "max_pending_requests", "cache_max_entries", "cache_lock_stripes", "max_token_count_cache_entries"}:
+    if key.startswith("budget_policy.") and "ratio" in key:
+        return "ratio"
+    if key.startswith("budget_policy.") and "factor" in key:
+        return "multiplier"
+    if key.startswith("budget_policy.structured_output_json_floor_by_contract."):
+        return "tokens"
+    lowered = key.rsplit(".", 1)[-1].casefold()
+    if lowered in {"orchestrator_priority", "status_priority"}:
+        return "relative-priority"
+    if lowered == "max_knowledge_revisions":
+        return "count"
+    if lowered in {"max_open_questions", "max_background_plans", "max_active_workers", "max_pending_controls", "max_pending_inference", "max_pending_requests", "cache_max_entries", "cache_lock_stripes", "max_token_count_cache_entries", "max_concurrent_requests", "max_list_files"}:
         return "count"
     if lowered.endswith("_seconds"):
         return "seconds"
@@ -1348,11 +1384,11 @@ def _parameter_semantics(
             "A wrong value can either reject valid requests or send requests the remote backend cannot admit.",
         ),
         "context.reserved_response_tokens": (
-            "Maximum response headroom reserved by context planning for ordinary calls.",
+            "Minimum response headroom required by context planning for ordinary calls.",
             "Increasing it reduces available input context; decreasing it raises output-starvation/retry risk.",
         ),
         "context.reserved_summary_tokens": (
-            "Response headroom reserved for history-summary/compaction calls.",
+            "Minimum response headroom for history-summary/compaction calls.",
             "Changing it trades source capacity against room for a faithful semantic reduction response.",
         ),
         "context.safety_margin_tokens": (
@@ -1378,6 +1414,38 @@ def _parameter_semantics(
         "agent_data.root": (
             "Persistent private root for agent-owned scratch data, notes, experiments, and the isolated Python environment.",
             "Changing it moves private agent state and must not overlap user project roots unless that exposure is intentional.",
+        ),
+        "agent_data.max_capture_chars": (
+            "Maximum characters shown from each captured command stream or one scratch text page.",
+            "This bounds the preview, not retained command output. Exact artifacts and continuation offsets recover the remainder; increasing it uses more model context.",
+        ),
+        "agent_data.max_output_bytes": (
+            "Maximum combined exact stdout and stderr bytes retained by one agent-workspace command.",
+            "Exceeding this bound stops the owned command and reports an explicit incomplete capture with recoverable retained output; it never reports success or discards a tail silently.",
+        ),
+        "agent_data.max_list_files": (
+            "Maximum file entries returned by one agent-workspace directory page.",
+            "Smaller pages use less memory and model context but require more continuation calls; the exact remaining names stay discoverable via next_path.",
+        ),
+        "agent_data.command_timeout_seconds": (
+            "Maximum execution time of one agent-workspace command or wait for its shared mutation lock.",
+            "Expiry stops only the owned command tree and retains captured output; already performed writes are not undone and must be inspected before a retry.",
+        ),
+        "communication.orchestrator_priority": (
+            "Inference admission priority of finalized foreground user turns; larger values are admitted first.",
+            "Changing it changes ordering against workers and status queries, not capacity or permission; extreme priorities can starve lower-priority work.",
+        ),
+        "communication.status_priority": (
+            "Inference admission priority of status queries and finalized targeted controls.",
+            "Higher values reduce queueing behind workers but can delay their progress; this does not add backend inference slots.",
+        ),
+        "communication.preempt_shared_model": (
+            "Whether foreground communication explicitly preempts and replays active calls sharing its model endpoint.",
+            "Disable only after measuring safe multi-sequence overlap; a single-slot backend may then queue conversation behind workers. Durable user control fences remain active in both modes.",
+        ),
+        "communication.max_concurrent_requests": (
+            "Maximum ordinary communication requests admitted for execution by this service.",
+            "Raising this permits more concurrent request processing but does not create model slots; durable receipt and targeted-status admission have separate boundaries.",
         ),
         "agent_data.sandbox_backend": (
             "OS sandbox implementation used by the private agent workspace.",
@@ -1458,6 +1526,10 @@ def _parameter_semantics(
     }
     if dotted in exact:
         return exact[dotted]
+    from swaag.config_documentation import parameter_documentation
+    documentation = parameter_documentation(dotted)
+    if documentation is not None:
+        return documentation
     lowered = key.casefold()
     words = key.replace("_", " ")
     if lowered.endswith("_timeout_seconds") or lowered == "timeout_seconds":
@@ -1486,8 +1558,24 @@ def _parameter_semantics(
     )
 
 
-def _parameter_range(key: str, value: Any) -> str | None:
-    lowered = key.casefold()
+def _parameter_range(dotted: str, value: Any) -> str | None:
+    if dotted in {"agent_data.max_capture_chars", "agent_data.max_output_bytes",
+                  "agent_data.max_list_files", "agent_data.command_timeout_seconds",
+                  "communication.max_concurrent_requests", "agent_data.max_knowledge_bytes",
+                  "agent_data.max_knowledge_revisions"}:
+        return "integer > 0"
+    lowered = dotted.rsplit(".", 1)[-1].casefold()
+    from swaag.config_documentation import VALIDATE_POSITIVE_PARAMETERS, VALIDATE_NON_NEGATIVE_PARAMETERS
+    if dotted in VALIDATE_POSITIVE_PARAMETERS and lowered != "port":
+        return ("integer" if isinstance(value, int) else "number") + " > 0"
+    if dotted == "reader.default_overlap_chars":
+        return "integer >= 0 and < reader.default_chunk_chars"
+    if dotted in VALIDATE_NON_NEGATIVE_PARAMETERS:
+        return ("integer" if isinstance(value, int) else "number") + " >= 0"
+    if dotted == "model.thinking_mode":
+        return "server_default|enabled|disabled; explicit overrides require vLLM or llama.cpp"
+    if lowered in {"orchestrator_priority", "status_priority"}:
+        return "signed integer; larger values are admitted first"
     if lowered == "idle_work_mode":
         return "finish_only|authorized_backlog|autonomous_continue"
     if lowered in {"max_open_questions", "max_open_question_chars", "max_background_plans", "max_active_workers", "max_pending_controls", "max_pending_inference", "max_pending_requests", "cache_max_entries", "cache_lock_stripes", "max_token_count_cache_entries"}:
