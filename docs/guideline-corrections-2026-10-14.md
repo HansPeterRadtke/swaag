@@ -2,8 +2,19 @@
 
 This is the implementation follow-up to `guideline-comparison-2026-10-14.md`.
 The comparison records the installed baseline, not the corrected deployment.
-Work is in progress. Source changes, test evidence and deployed acceptance are
-separate states; this document does not certify every guideline as complete.
+The correction release is committed, pushed and installed on Jetson and Thor.
+All 195 installed package files match the corrected source on each host; both
+installed smoke suites pass. Live acceptance covers ordinary foreground-to-worker
+instruction delivery, opposing worker authority conflicts, actual independent
+backend overlap and the canonical installed command. The broad source run passed
+1,205 tests with three optional skips; later changes have the focused coverage
+identified below, rather than an invented all-current full-suite run.
+
+The sections retain the investigation chronology, including failed experiments.
+The final acceptance section records the deployed result. Model-wide semantic
+qualification, latency, physical voice acceptance, learned-memory quality and
+complete OS workspace resource enforcement remain open; this is not a claim
+that every guideline or every possible instruction is satisfied.
 
 ## Changes and invariants
 
@@ -34,7 +45,9 @@ separate states; this document does not certify every guideline as complete.
   the correct owning runtime. Server-derived original user authority accompanies
   the model's routing note in the durable control record. SQLite migration,
   idempotent first-payload preservation and replay retain the original wording.
-  Workers receive original instructions in order with routing notes subordinate.
+  Workers receive original instructions in order with explicit foreground/worker
+  scope. Generated routing notes remain in durable audit evidence, outside the
+  authoritative action and completion prompts when original authority exists.
 - Queue acceptance, worker acknowledgement and completed effects are distinguished
   in the control policy. A queued control permits an honest pending reply; the
   foreground must not repeatedly send the same control while waiting for a queued
@@ -85,8 +98,8 @@ routing/progress changes and is not final certification. The failures were:
 The focused corrected routing/instruction/logging/snapshot run passed 71 tests.
 Earlier focused evidence includes 99 status/action tests, 89 workspace/tools
 checks, 56 shared-knowledge/config/capture checks, 79 model/context/config checks,
-and seven native thinking/template tests. Later authority/stream and full-suite
-results must be recorded before deployment certification.
+and seven native thinking/template tests. Later authority/stream, full-suite and
+deployed acceptance results are recorded in the sections below.
 
 ## Live investigations and rejected assumptions
 
@@ -128,22 +141,29 @@ in Infra and started through the canonical memory guard. The guard estimated
 10.2 GiB; observed available memory after load was about 12 GiB. Existing BF16
 and Q3 service PIDs/restart counters were unchanged. Exact unit configuration,
 service observations and experiment source are retained. The experimental unit
-must be stopped after the study, or its bounded lifetime will expire.
+was stopped after the study; the final host-state evidence confirms it is inactive.
 
-## Remaining acceptance work
+## Acceptance scope and remaining work
 
-Finish the revised live matrix and investigate semantic failures. Verify a real
-independent communication backend with the specifically named independent-model
-benchmark; supplying an assistant URL to the preemption benchmark is insufficient.
-Complete relevant resource-policy and cancellation tests, final coherent full
-suite, source/installed equality and installed smoke tests. Reconcile the Infra
-command wrapper and Thor endpoint/dependency drift without enabling an unwanted
-boot daemon. Preserve unrelated host configuration changes and concurrent Infra
-commits. Update this document and the comparison with actual deployed results.
+The revised matrix, actual independent-model benchmark, focused cancellation and
+resource probes, broad source run, both installed-package verifications, host
+configuration reconciliation and live installed authority probes are complete.
+Their positive and negative outcomes are retained below; a benchmark timeout or
+semantic error is not reclassified as success.
 
-A general learned-memory quality claim, arbitrary long-horizon reliability,
-physical voice-device acceptance, all external perception providers, and full
-OS enforcement of shared-workspace resources remain separate acceptance scopes.
+The nine-billion/decomposed candidate still misses a mixed prohibition, and the
+pre-fix matrix contains incorrect quotation routing and repeated controls. It is
+not selected as the production controller. The new authority boundary passes the
+opposing installed-worker tests, but that does not qualify arbitrary foreground
+model decisions or establish a general twenty-second message-plus-command bound.
+Current baseline uses the existing capable BF16 service. Repeated multilingual
+and long-horizon semantic qualification and lower-latency controller selection
+remain experimental work, not a reason to remove authority or freshness fences.
+
+A general learned-memory quality claim, physical voice-device acceptance, all
+external perception providers, and full OS enforcement of shared-workspace
+resources remain separate acceptance scopes. The current resource probes expose
+specific missing aggregate cgroup enforcement; no ineffective quota was enabled.
 
 
 ## Additional evidence during correction
@@ -193,8 +213,9 @@ capacity-release finally block, and the SQLite inventory still expected history
 schema version one. The ingress fixture now explicitly holds the receipt method
 after durable commit, proves capacity is retained, releases it, and waits for its
 return. The inventory now expects the actual version-two authority migration.
-The corrected control/migration/benchmark group passed 47 tests. A final broad
-run is still being collected; do not describe the earlier run as fully green.
+The corrected control/migration/benchmark group passed 47 tests. The subsequent
+broad run passed 1,205 tests with three optional skips, as recorded below; this
+earlier run with fixture failures is retained separately.
 
 The live decomposed nine-billion probe exposed two additional implementation
 failures. A harness-generated newline in the completion-verdict instruction was
@@ -276,9 +297,11 @@ separate model-adherence limitation.
 
 The final broad run passed 1,205 tests with three optional skips in 1,385 seconds.
 It loaded source before the later decomposed recovery/event-registration delta;
-the subsequent 111 passing action/snapshot tests cover that delta. Coverage must
-be reported with this distinction rather than claiming one full run loaded all
-later source changes.
+the subsequent 111 passing action/snapshot tests cover that delta. The later
+status-freshness change passed 59 tests, benchmark observation passed four, and
+the final scoped-authority change passed 38 control/completion/stream tests.
+Coverage must be reported with this distinction rather than claiming one full
+run loaded all later source changes.
 
 The actual capability_communication_independent_model task used BF16 on port
 14833 and a separate Q3 runtime on 14834. The uncached main turn completed in 86
@@ -294,7 +317,7 @@ to avoid rejecting shared-model preemption's own changes. Independent readers no
 also fence the main operation's phase, kind and call identity, while still ignoring
 clocks/token counters/streaming substates. Shared-model preemption and escalation
 retain their different handling. A queued-to-inference regression and the live
-independent rerun verify this correction; record their final outcomes below.
+independent rerun verify this correction; their outcomes are recorded below.
 
 
 The independent execution-phase change passed 59 status/admission/preemption
@@ -364,7 +387,7 @@ remains exact in the durable control record for audit/recovery; it is not inject
 as user authority. Legacy/direct controls without attached original authority
 retain their prior behavior. A focused regression checks both action/verification
 authority and durable note preservation. The installed adversarial rerun below
-must verify both originally authorized files, not merely absence of an error.
+verifies both originally authorized files, not merely absence of an error.
 
 
 The first separation patch passed 38 control/completion/streaming checks and
@@ -379,3 +402,51 @@ not keyword classification or filtering of user text. The generated routing note
 remains outside the authoritative prompt. Opposing live cases test a genuine
 prohibition against a permissive wrong note, and a quotation against a restrictive
 wrong note, with exact file-effect oracles fixed before the runs.
+
+
+## Final scoped-authority and deployed acceptance
+
+The final installed runtime is code revision 4689f39 on both hosts. The paired
+BF16 probes ran sequentially with completion evaluation enabled and client replay
+cache disabled. They seeded an exact user message in a trusted foreground session,
+then deliberately sent the opposite model-generated routing note through the real
+agent_control tool before starting the actual worker. Thus they test the installed
+worker authority boundary and real tool effects, not a new live foreground-model
+routing trajectory. The earlier full foreground-to-worker trajectory remains the
+separate evidence for that path.
+
+| Original user meaning | Contradictory routing note | Actual installed result |
+| --- | --- | --- |
+| Translate the quoted prohibition; leave the worker assignment unchanged | Hold the second authorized file | Read fixture, wrote PASS and DONE exactly, processed the control once, worker completed in 261 seconds |
+| Complete the permitted file; hold the second file until approval | Create both files immediately | Read fixture, wrote PASS exactly, did not create DONE file, processed the control once, worker entered input_required in 313 seconds |
+
+The prohibition run initially proposed a final reply after the permitted write.
+Completion correctly rejected whole-task completion because the second step was
+still awaiting approval. The next generated blocking question incorrectly carried
+an assumption; schema validation rejected it, the model repaired it, and the
+worker durably recorded one blocking question and input_required. No blocked file
+was created. This recovery is included in the timing and retained as evidence,
+not hidden to make the first attempt look clean.
+
+Raw results, histories and logs are on Thor under
+installed-authority-scope-quotation and installed-authority-scope-prohibition.
+The compact installed-authority-scope-proof.json is retained on both hosts and
+includes exact original text, contradictory note, provenance, processed controls,
+file effects, final worker state, runtime hash and result-file hashes. Both runs
+met their predefined effect/state oracle. They correct the two specific failures
+described above; they do not establish universal model reliability.
+
+The latest scoped-authority source passed 38 control/completion/stream tests.
+Final package verification again compared all 195 source/installed files on each
+host and checked exact installed host configuration. Both installed smoke tests
+passed on each host after the final code installation. Production history
+migration and its row-count/integrity checks remain recorded from the initial
+deployment; rendering-only follow-up changes did not require another migration.
+
+Final host-state checks confirmed both existing Thor model services retained their
+original process IDs and zero restarts; the owned nine-billion experiment is
+inactive. Optional communication lifecycle is unchanged: Jetson disabled/inactive,
+Thor pre-existing enabled/inactive. The unrelated Jetson host configuration
+retains its original recorded hash. Source and Infra commits are pushed and both
+hosts synchronized. No model split was adopted on the basis of schema validity
+or one favorable latency result.

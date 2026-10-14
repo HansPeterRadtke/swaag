@@ -2,18 +2,18 @@
 
 > Active October 14 implementation follow-up: see
 > [guideline-corrections-2026-10-14.md](guideline-corrections-2026-10-14.md).
-> The earlier comparison is baseline evidence; corrected source is undergoing
-> final live and deployment acceptance, not universally certified complete.
+> The earlier comparison is baseline evidence. The correction release is installed
+> and verified on both hosts; remaining model and resource acceptance is explicit.
 
 
-The [complete guideline comparison](guideline-comparison-2026-10-14.md) records the pre-correction audit of all 242 guideline files, including 165 original recordings. The [implementation and acceptance report](guideline-corrections-2026-10-14.md) records the corrections and remaining model limitations. The broad source run passed 1,205 tests with three optional skips; 111 action/snapshot checks cover the later decomposed-context and recoverable-error fixes. Live worker consumption preserved the later prohibition while completing the permitted file effect. Final package/configuration reconciliation is in progress.
+The [complete guideline comparison](guideline-comparison-2026-10-14.md) records the pre-correction audit of all 242 guideline files, including 165 original recordings. The [implementation and acceptance report](guideline-corrections-2026-10-14.md) records the corrections and remaining model limitations. The broad source run passed 1,205 tests with three optional skips; 111 action/snapshot checks cover the later decomposed-context and recoverable-error fixes. Live worker consumption preserved the later prohibition while completing the permitted file effect. The final installed authority-conflict pair passed both quotation and real-prohibition cases, including completed versus input-required worker state. The later status/benchmark/authority deltas passed 59, four and 38 focused tests respectively. Both hosts have exact source/installed package and configuration equality and passing installed smoke tests.
 
 - [x] **Preserve and recover exact agent-workspace output.** Stream exact bytes into bounded artifacts, retain recovery after publication failure, paginate text/directories, and serialize shared-environment mutation.
 - [ ] **Qualify conversational semantics across models and instructions.** Ordinary messages reach the full action controller, exact user authority survives worker handoff, and progress follows successful receipts. Live mixed restrictions and quotation cases still expose model errors; no small/decomposed controller is qualified for adoption.
 - [x] **Refresh whole-system context for ordinary orchestration.** Fresh action and completion snapshots include workers, plans, results, questions and pending controls; stale task decisions are rejected before effects. Dedicated status execution-phase freshness received an additional live reproduction and correction.
 - [x] **Deliver ordinary receipt and progress independently of the speech consumer.** Durable cursors, reconnect, bounded ingress and superseded-action fences are tested. A valid full tool call is required before execution; arbitrary model latency and physical voice-device acceptance remain separate.
 - [x] **Implement shared-tool-forge and Diane foundations and explicit configuration policy.** Versioned, scoped, pinned/CAS catalogues, evidence pointers, rollback, retirement and bounded admission are implemented and tested. Learned-memory quality and complete OS workspace resource integration remain open acceptance scopes.
-- [ ] **Reconcile and certify installed runtime/configuration.** Backups and an isolated built-package smoke are complete; install current source on both hosts and verify byte equality, migration, canonical command and real installed inference. Preserve existing model workloads and optional daemon lifecycle.
+- [x] **Reconcile and certify installed runtime/configuration.** Installed on both hosts with private rollback backups, 195-file byte equality, exact host configuration, unchanged-row-count history migration and integrity checks, passing installed smoke tests, canonical real inference and actual installed worker authority acceptance. Existing model workloads and optional daemon lifecycle are preserved.
 
 # October fourteenth ordinary action and shell verification
 
