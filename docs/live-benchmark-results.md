@@ -1,3 +1,7 @@
+# October fourteenth conversation delivery follow-up
+
+The [delivery and status study](conversation-delivery-and-status-2026-10-14.md) tests real early replies, cancellation and reconnects alongside the unchanged canonical planner, plus forty-eight small-model reasoning trials. It corrects independent status admission under a saturated planner and rejects status answers made stale during generation or escalation. Fast ordinary delivery remains experimental: the small reader still fails factual and whole-system role questions.
+
 # October fourteenth scheduling and accounting investigation
 
 The [same-backend scheduling and accounting study](conversation-scheduling-and-accounting-2026-10-14.md) isolates actual admission delay with six controlled paired trials, compares full-state read-only replies alongside real TCP planning, and evaluates the same small model at higher precision. Parallel admission helps the prototype but leaves ordinary session-lock latency unresolved; the Q8 reader still fails semantic cases. A reproduced chat streaming defect now retains provider token usage and finish reasons. Production model selection, routing, locking and capacity remain unchanged; final release evidence is recorded in the study.

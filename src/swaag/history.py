@@ -1045,8 +1045,17 @@ class HistoryStore:
                 """
                 SELECT session_id, sequence, event_id, timestamp, event_type,
                        payload_json, metadata_json, prev_hash, event_hash
-                FROM events
+                FROM events AS candidate
                 WHERE event_type='communication_status_generated'
+                  AND NOT EXISTS (
+                      SELECT 1 FROM events AS rejected
+                      WHERE rejected.session_id=candidate.session_id
+                        AND rejected.event_type IN (
+                            'communication_status_reply_rejected',
+                            'communication_status_escalation_requested'
+                        )
+                        AND rejected.sequence>candidate.sequence
+                  )
                 ORDER BY timestamp DESC, sequence DESC
                 """
             )

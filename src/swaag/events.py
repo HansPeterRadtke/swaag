@@ -36,6 +36,7 @@ ALLOWED_EVENT_TYPES = frozenset(
         "caller_structured_output_created",
         "communication_status_requested",
         "communication_status_generated",
+        "communication_status_reply_rejected",
         "orchestrator_interaction_requested",
         "orchestrator_interaction_generated",
         "orchestrator_direct_reply_rejected",
@@ -427,6 +428,10 @@ REQUIRED_PAYLOAD_KEYS: dict[str, frozenset[str]] = {
             "source_event_references",
             "evidence_projected",
         }
+    ),
+    "communication_status_reply_rejected": frozenset(
+        {"target_session_id", "question", "attempt", "reason",
+         "observed_fingerprint", "current_fingerprint", "next_action"}
     ),
     "communication_status_rejected": frozenset(
         {"target_session_id", "attempt", "reason"}

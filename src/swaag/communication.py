@@ -2,6 +2,7 @@ from __future__ import annotations
 
 from contextlib import AbstractContextManager, nullcontext
 from concurrent.futures import ThreadPoolExecutor
+from contextvars import copy_context
 
 import asyncio
 import base64
@@ -67,7 +68,7 @@ from swaag.orchestration import OrchestrationManager
 from swaag.orchestration_api import OrchestrationApi
 from swaag.telemetry import record_http_response_status, record_protocol_correlation
 from swaag.utils import new_id, stable_json_dumps, utc_now_iso
-from swaag.types import Message
+from swaag.types import HistoryEvent, Message
 from swaag.tools.base import SemanticCallContextOverflow
 from swaag.supervision import RuntimeSupervisor, client_activity_monitor
 from swaag.workers import WORKER_TERMINAL_STATES, WorkerManager, WorkerRecord
@@ -1302,6 +1303,16 @@ class CommunicationService:
         self._protocol_send_lock = threading.Lock()
         self._client_writers: set[asyncio.StreamWriter] = set()
         self._semaphore = asyncio.Semaphore(max(1, int(max_concurrency)))
+        # Status interpretation owns no target-session writer lock. Its model
+        # may be independent, so a busy planner's request/default executor must
+        # not prevent it from reaching inference admission or preemption.
+        self._status_executor = ThreadPoolExecutor(
+            max_workers=max(1, int(max_concurrency)),
+            thread_name_prefix="swaag-communication-status",
+        )
+        self._status_slots = threading.BoundedSemaphore(
+            runtime.config.communication.max_pending_requests
+        )
         self._orchestrator_ingress_executor = ThreadPoolExecutor(
             max_workers=1, thread_name_prefix="swaag-orchestrator-ingress"
         )
@@ -1354,6 +1365,7 @@ class CommunicationService:
         # Already submitted finalized input must reach durable storage even if
         # its transport disconnected; these jobs never wait for model execution.
         self._orchestrator_ingress_executor.shutdown(wait=wait, cancel_futures=False)
+        self._status_executor.shutdown(wait=wait, cancel_futures=False)
         self.supervisor.close()
         self.workers.shutdown(wait=wait)
         for manager in self.worker_model_managers.values():
@@ -2116,23 +2128,121 @@ class CommunicationService:
             self.store.set_status(request.correlation_id, "failed", reply=f"{type(exc).__name__}: {exc}")
         return self.status(request.correlation_id)
 
+    async def _answer_status_question_async(
+        self, session_ref: str | None, question: str
+    ) -> str:
+        if not self._status_slots.acquire(blocking=False):
+            raise QueueCapacityError("Communication status capacity reached; request not accepted")
+
+        def answer() -> str:
+            try:
+                return self.answer_status_question(session_ref, question)
+            finally:
+                self._status_slots.release()
+
+        try:
+            future = asyncio.get_running_loop().run_in_executor(
+                self._status_executor, copy_context().run, answer
+            )
+        except BaseException:
+            self._status_slots.release()
+            raise
+        # Disconnecting the waiter must neither cancel an admitted read nor
+        # release its capacity while its model request is still running.
+        future.add_done_callback(lambda done: None if done.cancelled() else done.exception())
+        return await asyncio.shield(future)
+
     async def process_once_async(self, *, session_id: str | None = None) -> CommunicationRequest | None:
         async with self._semaphore:
             return await asyncio.to_thread(self.process_once, session_id=session_id)
+
+    def _communication_status_snapshot(
+        self, session_id: str
+    ) -> tuple[dict[str, Any], list[HistoryEvent], str]:
+        """Observe durable task facts without treating token telemetry as change."""
+        state = self.runtime.history.rebuild_from_history(
+            session_id, write_projections=False
+        )
+        mechanical = self.runtime.session_status_payload(state)
+        events = self.runtime.history.read_history(session_id)
+        pending = self.runtime.history.list_pending_control_messages(session_id)
+        mechanical["pending_user_message_receipts"] = pending
+        mechanical["observed_at"] = utc_now_iso()
+        mechanical["consistency"] = "per-source observations; task facts are rechecked before delivery"
+        facts = copy.deepcopy(mechanical)
+        for key in (
+            "supervision", "heartbeat_at", "event_count", "active_step",
+            "mechanical_phase", "mechanical_substate", "operation_kind",
+            "observed_at", "consistency",
+        ):
+            facts.pop(key, None)
+        active = facts.get("active_run")
+        if active:
+            facts["active_run"] = {
+                key: active.get(key) for key in ("run_id", "user_text", "started_at")
+            }
+        # Preemption/replay observes model scheduling, not a changed objective
+        # or completed effect. Execution start/error and progress/question
+        # schemas also matter even before a result/message has been committed.
+        scheduling_events = {
+            "model_call_preempted", "model_call_replayed",
+            "model_call_replay_invalidated",
+        }
+        task_events = {
+            "tool_called", "tool_error", "agent_progress", "agent_question",
+            "assistant_progress", "turn_started", "turn_finished",
+        }
+        facts["task_event_references"] = [
+            (event.sequence, event.hash) for event in events
+            if event.event_type in task_events or (
+                self.runtime._communication_status_semantic_event_type(event.event_type)
+                and event.event_type not in scheduling_events
+            )
+        ]
+        fingerprint = hashlib.sha256(
+            stable_json_dumps(facts, indent=None).encode()
+        ).hexdigest()
+        return mechanical, events, fingerprint
 
     def answer_status_question(self, session_ref: str | None, question: str) -> str:
         session_id = self.runtime.resolve_session_ref(session_ref, latest_if_none=True)
         if session_id is None:
             raise FileNotFoundError("No target session available")
+        for attempt in range(2):
+            answer, answer_runtime, operation_id, observed = (
+                self._answer_status_question_attempt(session_id, question)
+            )
+            _mechanical, _events, current = self._communication_status_snapshot(session_id)
+            if observed == current:
+                return answer
+            operation_state = answer_runtime.history.rebuild_from_history(
+                operation_id, write_projections=False
+            )
+            answer_runtime.history.record_event(
+                operation_state, "communication_status_reply_rejected", {
+                    "target_session_id": session_id,
+                    "question": question,
+                    "attempt": attempt + 1,
+                    "reason": "task_state_changed_during_generation",
+                    "observed_fingerprint": observed,
+                    "current_fingerprint": current,
+                    "next_action": "refresh" if attempt == 0 else "reject",
+                },
+            )
+        raise RuntimeError(
+            "Task state changed during both status attempts; no current answer could be verified."
+        )
+
+    def _answer_status_question_attempt(
+        self, session_id: str, question: str
+    ) -> tuple[str, AgentRuntime, str, str]:
         preemption = None
         try:
             if self.assistant_runtime is None:
                 preemption = self._preempt_active_main_call(session_id, question)
-            state = self.runtime.history.rebuild_from_history(
-                session_id, write_projections=False
+            mechanical_status, source_events, observed_fingerprint = (
+                self._communication_status_snapshot(session_id)
             )
-            mechanical_status = self.runtime.session_status_payload(state)
-            source_events = self.runtime.history.read_history(session_id)
             semantic_runtime = self.assistant_runtime or self.runtime
             assistant_failure: Exception | None = None
             try:
@@ -2213,6 +2323,10 @@ class CommunicationService:
                     },
                 )
                 preemption = self._preempt_active_main_call(session_id, question)
+                # Escalation/preemption can wait while the worker changes.
+                mechanical_status, source_events, observed_fingerprint = (
+                    self._communication_status_snapshot(session_id)
+                )
                 try:
                     with self.runtime.inference_priority(
                         100, source="communication_status_escalation"
@@ -2238,6 +2352,8 @@ class CommunicationService:
                     )
                     raise
                 answer = str(stronger_status["answer"])
+                answer_runtime = self.runtime
+                answer_operation_id = str(stronger_status["operation_session_id"])
                 self.assistant_runtime.history.record_event(
                     operation_state,
                     "communication_status_escalation_resolved",
@@ -2259,8 +2375,12 @@ class CommunicationService:
                 )
             else:
                 answer = str(semantic_status["answer"])
-            self._complete_preemption(preemption, target_changed=False, reply=answer)
-            return answer
+                answer_runtime = semantic_runtime
+                answer_operation_id = str(semantic_status["operation_session_id"])
+            # This releases a shared-model read-only preemption. It does not
+            # publish the draft; the caller verifies task facts before delivery.
+            self._complete_preemption(preemption, target_changed=False, reply="")
+            return answer, answer_runtime, answer_operation_id, observed_fingerprint
         except Exception as exc:
             self._fail_preemption(preemption, exc)
             raise
@@ -5396,16 +5516,10 @@ class CommunicationService:
                 async with self._semaphore:
                     return await asyncio.to_thread(self._process_orchestrator_receipt, receipt)
             if op == "ask_status":
-                async with self._semaphore:
-                    answer = await asyncio.to_thread(
-                        self.answer_status_question,
-                        request.get("session"),
-                        str(
-                            request.get(
-                                "question", "What is the current status?"
-                            )
-                        ),
-                    )
+                answer = await self._answer_status_question_async(
+                    request.get("session"),
+                    str(request.get("question", "What is the current status?")),
+                )
                 return {"answer": answer}
             if op.startswith("task."):
                 params = request.get("params") or {}
@@ -5741,6 +5855,7 @@ class CommunicationService:
                 except asyncio.CancelledError:
                     pass
             self._orchestrator_ingress_executor.shutdown(wait=True, cancel_futures=False)
+            self._status_executor.shutdown(wait=False, cancel_futures=False)
             self.supervisor.close()
             self.workers.shutdown(wait=False)
             for manager in self.worker_model_managers.values():
