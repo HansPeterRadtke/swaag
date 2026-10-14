@@ -1548,7 +1548,15 @@ class AgentRuntime:
             # record, but must not be promoted into the authoritative user
             # channel, even with a "subordinate" label. Live conflict tests
             # showed that mixing both in this channel changed the user's task.
-            return "\n\n".join(entry["message"] for entry in originals)
+            return (
+                "These original user messages were received by the foreground orchestrator "
+                "and forwarded as governing context for this worker. Reconcile the portions "
+                "that change this worker's assigned task. Unrelated foreground conversation "
+                "does not replace the worker objective and remains the orchestrator's job. "
+                "Preserve relevant prohibitions, conditions and corrections. "
+                "Original user messages, verbatim and in delivery order:\n\n"
+                + "\n\n".join(entry["message"] for entry in originals)
+            )
         return [authority_text(item)
                 for item in self.history.list_authoritative_control_messages(state.session_id)
                 if str(item.get("message", "")).strip()

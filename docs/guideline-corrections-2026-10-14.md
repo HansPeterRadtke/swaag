@@ -365,3 +365,17 @@ as user authority. Legacy/direct controls without attached original authority
 retain their prior behavior. A focused regression checks both action/verification
 authority and durable note preservation. The installed adversarial rerun below
 must verify both originally authorized files, not merely absence of an error.
+
+
+The first separation patch passed 38 control/completion/streaming checks and
+three exact-authority/prompt checks, and was installed on both hosts. The live
+rerun no longer followed the bad routing note, but treated the forwarded
+translation request as a replacement worker task. Completion correctly rejected
+that incomplete answer twice. This additional failure is retained separately.
+The authority renderer now explicitly identifies the messages as received by the
+foreground orchestrator and forwards their relevant constraints without replacing
+the worker assignment with unrelated conversation. This is provenance/role scope,
+not keyword classification or filtering of user text. The generated routing note
+remains outside the authoritative prompt. Opposing live cases test a genuine
+prohibition against a permissive wrong note, and a quotation against a restrictive
+wrong note, with exact file-effect oracles fixed before the runs.
