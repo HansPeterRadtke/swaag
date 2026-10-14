@@ -6,7 +6,7 @@ import json
 import sys
 import threading
 import time
-from contextlib import contextmanager
+from contextlib import contextmanager, nullcontext
 from dataclasses import asdict, dataclass, fields
 from datetime import datetime, timezone
 from pathlib import Path
@@ -6171,15 +6171,17 @@ class AgentRuntime:
             if context_limit_resolution is None
             else context_limit_resolution
         )
-        compilation = self.context_compiler.compile(
-            assembly,
-            contract,
-            self._counter(state),
-            minimum_output_tokens=minimum_output_tokens,
-            desired_output_tokens=desired_output_tokens,
-            context_limit=context_limit,
-            context_limit_source=context_limit_source,
-        )
+        tokenization_scope = getattr(self.client, "tokenization_scope", None)
+        with tokenization_scope() if callable(tokenization_scope) else nullcontext():
+            compilation = self.context_compiler.compile(
+                assembly,
+                contract,
+                self._counter(state),
+                minimum_output_tokens=minimum_output_tokens,
+                desired_output_tokens=desired_output_tokens,
+                context_limit=context_limit,
+                context_limit_source=context_limit_source,
+            )
         activity(
             "context_fit" if compilation.report.fits else "context_overflow",
             (

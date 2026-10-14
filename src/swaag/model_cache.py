@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from contextlib import contextmanager
+from contextlib import contextmanager, nullcontext
 from dataclasses import asdict, dataclass
 import inspect
 import json
@@ -424,6 +424,11 @@ class RecordReplayModelClient:
         if callable(health):
             return health()
         return {"status": "ok", "mode": self.mode}
+
+    def tokenization_scope(self):
+        # Offline replay must not instantiate or contact live transports.
+        scope = getattr(self.delegate, "tokenization_scope", None) if self.mode != "replay" else None
+        return scope() if callable(scope) else nullcontext()
 
     def tokenize(self, text: str) -> int:
         return self._tokenize_record_replay(text, operation="tokenize")

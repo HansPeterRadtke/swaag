@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+from contextlib import contextmanager
 from dataclasses import dataclass, field
 import json
 import os
@@ -7,7 +8,7 @@ from urllib.parse import urlparse
 import time
 import threading
 from pathlib import Path
-from typing import Any, Callable, Protocol
+from typing import Any, Callable, Iterator, Protocol
 
 import requests
 
@@ -169,6 +170,7 @@ class LlamaCppClient:
     _remote_prompt_tokens: dict[str, int] = field(default_factory=dict, init=False)
     _backend_monitor: BackendActivityMonitor | None = field(default=None, init=False)
     _backend_monitor_lock: Any = field(default_factory=threading.Lock, init=False)
+    _tokenization_transport: Any = field(default_factory=threading.local, init=False, repr=False)
 
     def backend_activity(self) -> dict[str, Any]:
         provider = self.config.model.provider_name.strip().lower()
@@ -687,6 +689,24 @@ class LlamaCppClient:
             )
         return self.server_context_limit(), "server_props:n_ctx"
 
+    @contextmanager
+    def tokenization_scope(self) -> Iterator[None]:
+        """Reuse native tokenizer connections for one synchronous compilation.
+
+        Sessions belong to a client and OS thread, never to shared async context.
+        Nested scopes borrow the outer owner; errors/cancellation close its pool.
+        Generation, cancellation transport and backend probes are unaffected.
+        """
+        if self._uses_chat_transport or getattr(self._tokenization_transport, "session", None) is not None:
+            yield
+            return
+        with requests.Session() as session:
+            self._tokenization_transport.session = session
+            try:
+                yield
+            finally:
+                del self._tokenization_transport.session
+
     def tokenize(self, text: str) -> int:
         if self._uses_chat_transport:
             recorded = self._remote_prompt_tokens.get(sha256_text(text))
@@ -695,21 +715,30 @@ class LlamaCppClient:
             raise ModelClientError(
                 "Exact tokenization is unavailable for this opaque OpenAI-compatible prompt fragment"
             )
-        response = requests.post(
+        session = getattr(self._tokenization_transport, "session", None)
+        if session is not None:
+            # Match the previous per-request Session behavior: server cookies
+            # must not silently become cross-request authentication/state.
+            session.cookies.clear()
+        post = requests.post if session is None else session.post
+        response = post(
             f"{self._base}{self.config.model.tokenize_endpoint}",
             json={"content": text},
             timeout=(self.config.model.connect_timeout_seconds, self.config.model.timeout_seconds),
             **self._request_headers_kwargs(),
         )
-        response.raise_for_status()
-        payload = response.json()
-        if isinstance(payload.get("tokens"), list):
-            return len(payload["tokens"])
-        if isinstance(payload.get("token_ids"), list):
-            return len(payload["token_ids"])
-        if isinstance(payload.get("n_tokens"), int):
-            return int(payload["n_tokens"])
-        raise ModelClientError(f"Unexpected tokenize response: {payload!r}")
+        try:
+            response.raise_for_status()
+            payload = response.json()
+            if isinstance(payload.get("tokens"), list):
+                return len(payload["tokens"])
+            if isinstance(payload.get("token_ids"), list):
+                return len(payload["token_ids"])
+            if isinstance(payload.get("n_tokens"), int):
+                return int(payload["n_tokens"])
+            raise ModelClientError(f"Unexpected tokenize response: {payload!r}")
+        finally:
+            response.close()
 
     def count_text(self, text: str) -> CountResult:
         if self._uses_chat_transport:
