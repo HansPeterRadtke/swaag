@@ -140,6 +140,58 @@ def test_model_identity_refreshes_before_every_lookup(tmp_path: Path) -> None:
     assert delegate.calls == 2
 
 
+@pytest.mark.parametrize("transport", ["native", "chat"])
+@pytest.mark.parametrize("nested", [False, True])
+def test_schema_property_order_changes_generation_and_survives_recording(
+    tmp_path: Path, transport: str, nested: bool,
+) -> None:
+    schema = {
+        "type": "object",
+        "properties": {"route": {"type": "string"}, "answer": {"type": "string"}},
+        "required": ["route", "answer"],
+        "additionalProperties": False,
+    }
+    if nested:
+        schema = {"type": "array", "items": schema}
+    payload = base_payload()
+    payload.pop("json_schema")
+    if transport == "native":
+        payload["json_schema"] = schema
+    else:
+        payload["response_format"] = {
+            "type": "json_schema", "json_schema": {"name": "routing", "schema": schema},
+        }
+
+    def properties(request):
+        current = (request["json_schema"] if transport == "native"
+                   else request["response_format"]["json_schema"]["schema"])
+        return current["items"]["properties"] if nested else current["properties"]
+
+    delegate = Delegate()
+    cached = client(tmp_path, delegate)
+    first = cached.send_completion(payload)
+    changed = copy.deepcopy(payload)
+    reordered = properties(changed)
+    route = reordered.pop("route")
+    reordered["route"] = route
+    second = cached.send_completion(changed)
+    assert second.text != first.text
+    assert delegate.calls == 2
+    assert cached.send_completion(copy.deepcopy(payload)).text == first.text
+    assert cached.send_completion(copy.deepcopy(changed)).text == second.text
+    assert delegate.calls == 2
+
+    entries = json.loads((tmp_path / "cassette.json").read_text())["entries"]
+    for entry in entries:
+        expected = ["route", "answer"] if entry["response"]["text"] == first.text else ["answer", "route"]
+        assert list(properties(entry["request"]["payload"])) == expected
+        assert list(properties(entry["response"]["raw_request"])) == expected
+
+    # Ordinary envelope key order is not a model generation input.
+    assert cached.send_completion(dict(reversed(list(payload.items())))).text == first.text
+    assert delegate.calls == 2
+
+
 def test_chat_template_rendering_records_and_replays_without_network(
     tmp_path: Path,
 ) -> None:
