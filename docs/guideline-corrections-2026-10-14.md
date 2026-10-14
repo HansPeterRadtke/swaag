@@ -307,3 +307,61 @@ registered, before backend dispatch. The independent probe now waits for a
 matching model_request_sent event; shared preemption's distinct observation is
 unchanged. This corrects experiment construction, not application routing. The
 additional focused probe and fresh live result are retained separately.
+
+
+## Installed release verification
+
+The corrections are committed and pushed. Both Jetson and Thor now run the
+current installed package; all 195 package files match source byte-for-byte on
+each host. The canonical offline installer completed on both. History migrated
+to schema version two with identical counts for every existing table and passing
+SQLite integrity checks: one production history on Jetson and two on Thor.
+Private pre-deployment database/package/configuration backups remain available.
+
+Both real installed-package smoke tests passed on each host. The lean production
+environment did not include the optional pytest dependency; it was installed for
+these checks. Thor required its normal package index because that optional test
+package was not cached. This changes no runtime dependency declaration.
+
+The canonical Jetson command used the installed host profile and a fresh isolated
+session, invoked the real calculator once for 23 * 29, observed 667 and returned
+that result. Action inference took 36 and 39 seconds, with a 14-second completion
+check. Client replay caching was disabled; server-side prefix caches were not
+purged, so these are warm-service observations, not cold-load timings.
+
+Four targeted benchmark-observation tests passed. The corrected independent
+benchmark completed with a current answer after 58 seconds while the main action
+continued. Evidence proves the assistant used Q3 on 14834 and the main action
+used BF16 on 14833: distinct session backend URLs, actual request model aliases,
+model-request/response timestamps and zero preemption/replay events. The main
+action ran 17:23:12–17:24:20 UTC; assistant generation ran 17:23:14–17:24:10.
+The main turn's later completion check finished at 17:24:43. This verifies genuine
+backend overlap and this status answer, not semantic reliability for arbitrary
+instructions. Independent ordinary-controller adoption remains rejected.
+
+The Infra runtime/voice profiles and optional Thor unit were installed from their
+committed source and verified exactly. The Thor unit remains inactive and retains
+its pre-existing enabled state; Jetson communication remains disabled/inactive.
+No model service was restarted. The Jetson host configuration unrelated to this
+work remains byte-identical to the original recorded hash. Concurrent Infra
+changes were merged normally and both Infra checkouts are synchronized.
+
+
+## Adversarial installed-worker correction
+
+A further installed BF16 worker probe reproduced the quotation-routing risk with
+an exact original user instruction to leave the worker unchanged and an
+intentionally contradictory model routing note. The worker incorrectly withheld
+the second authorized file and repeated the first write. The exact original was
+stored, but the runtime combined the generated note and original wording in one
+section labelled as authoritative user interventions. Labelling the note
+subordinate did not prevent its semantic promotion. The owned experiment client
+was stopped after this concrete failure was retained; model servers were untouched.
+
+The runtime now places only the original user text in the authoritative action
+and completion channels when provenance is available. The generated routing note
+remains exact in the durable control record for audit/recovery; it is not injected
+as user authority. Legacy/direct controls without attached original authority
+retain their prior behavior. A focused regression checks both action/verification
+authority and durable note preservation. The installed adversarial rerun below
+must verify both originally authorized files, not merely absence of an error.

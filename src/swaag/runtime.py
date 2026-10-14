@@ -1544,10 +1544,11 @@ class AgentRuntime:
             originals = item.get("authority", [])
             if not originals:
                 return str(item["message"])
-            return ("Orchestrator routing note (subordinate to the exact user instruction):\n"
-                    + str(item["message"]) + "\nOriginal user instructions, verbatim and in order; "
-                    "apply the parts relevant to this worker, and preserve conditions and prohibitions:\n"
-                    + "\n\n".join(entry["message"] for entry in originals))
+            # The model's routing note is retained in the durable control
+            # record, but must not be promoted into the authoritative user
+            # channel, even with a "subordinate" label. Live conflict tests
+            # showed that mixing both in this channel changed the user's task.
+            return "\n\n".join(entry["message"] for entry in originals)
         return [authority_text(item)
                 for item in self.history.list_authoritative_control_messages(state.session_id)
                 if str(item.get("message", "")).strip()
