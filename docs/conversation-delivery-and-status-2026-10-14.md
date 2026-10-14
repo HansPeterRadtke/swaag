@@ -1,5 +1,11 @@
 # Conversation delivery, status admission and reasoning — 2026-10-14
 
+## Material resource failure
+
+This experiment failed resource qualification. Despite guarded admission, the added Q5 server's unreserved host prompt cache filled and available memory repeatedly fell below the 4 GiB reserve. At 06:24:18 UTC the host safety guard terminated an unrelated Blender render under combined pressure. The study recorded memory but did not enforce the reserve while running; the later cleanup check was too late. The owned Q5 service is now stopped. Its original unit is unchanged, and the two pre-existing model services remain healthy with unchanged PIDs and no restarts.
+
+Infra's admission estimator omitted the installed llama.cpp default 8 GiB saved-prompt cache. The correction is committed and pushed as 806fd60 and applied to both Jetson and Thor without restarting any running model. Four regressions failed before the correction; the 17-test suite passes on both machines. A read-only check against the actual inactive Thor unit now refuses admission: 18.5 GiB available versus an 18.1 GiB estimate plus 4 GiB reserve. No model was started by that verification. Full incident evidence and remaining allocation limits are documented in Infra docs/llms/swaag-memory-admission-2026-10-14.md. The interrupted rendering work was not blindly restarted.
+
 ## Scope and evidence
 
 This continues the [scheduling/accounting investigation](conversation-scheduling-and-accounting-2026-10-14.md) from source baseline 88d5903. Evidence is retained under /data/var/swaag-benchmarks/conversation-delivery-study-20261014 on Jetson; Thor holds service provenance and memory samples under the same path. Requests, native timing frames, complete streamed events, isolated canonical histories, durable delivery outboxes, exact inputs, failed fixtures and corrected reproductions are retained. The analyze.py script reconstructs analysis.json.
@@ -40,7 +46,7 @@ Limits: reconnect was tested within the same process, not crash recovery of in-f
 
 ## Qwen3.5-9B reasoning comparison
 
-Thor's existing inactive Q5 service was admitted through the canonical guard: 18.5 GiB available, 10.1 GiB estimated footprint, 4 GiB reserve and 4.4 GiB extra headroom. It retained llama.cpp build b9842, context 32,768, one slot, q8 K/V, Flash Attention, fourteen threads, batch 1,024 and microbatch 256. Previously running BF16 and Q3 services stayed in place.
+Thor's existing inactive Q5 service was admitted through the canonical guard: 18.5 GiB available, 10.1 GiB estimated footprint, 4 GiB reserve and 4.4 GiB extra headroom. That startup estimate was incomplete, as detailed above. It retained llama.cpp build b9842, context 32,768, one slot, q8 K/V, Flash Attention, fourteen threads, batch 1,024 and microbatch 256. Previously running BF16 and Q3 services stayed in place.
 
 Sixteen cases include twelve previous cases and four newly fixed holdouts. Pair order was randomized with seed 83, temperature zero and the same strict read-only prompt/state/schema. Native prefix caching remained enabled; saved-response caching was absent.
 
@@ -74,3 +80,24 @@ Investigation found a prompt/validator contradiction: the prompt permitted empty
 The final prompt states the existing nonempty requirements, distinguishes model inference from tool invocation/effects, and retains the short metadata and audio-style requirements. With that prompt, the complete live API returned its status in 50.417 seconds while the planner remained active. The first 192-token response was truncated; normal output recovery increased the allowance to 288 and completed with 213 tokens. Both calls used the independent Q5 endpoint. No planner preemption occurred, the calculator executed once, and the planner finished at 120.525 seconds. These sequential trajectories have different backend load and generated tokens; their wall-time difference is not attributed wholly to prompt wording.
 
 The new executor also needed explicit context-variable propagation to retain the request tracing context previously supplied by asyncio.to_thread. A regression exposed the missing propagation before release; copying request context fixes it. Final status/preemption/prompt checks passed 54 tests. Existing whole-system read-only-role confusion and other small-model factual failures remain open; this contract correction does not qualify the model.
+
+
+## Installed verification and full-path timing
+
+Source correction 140fd921c07313b6bf428d538d74431515419ee7 was installed through scripts/install-runtime-env.sh. All 190 tracked package files match the installed package byte for byte. Nineteen focused installed-runtime tests passed in 24.22 seconds with import-path verification; the final source status/preemption checks passed 54 tests. The prior full-suite result is retained as baseline evidence, not relabeled as a new full-suite run.
+
+A fresh actual TCP trajectory used the installed package with an experimental 288-token status allowance and thinking disabled only in the harness. Its independent Q5 call returned 227 tokens in 22.642 seconds; complete status latency was 32.701 seconds. The canonical Q3 planner continued, finished in 113.652 seconds, and used the calculator exactly once. There were zero preemptions and no pending controls. The shared request semaphore was still occupied when status returned. This establishes the corrected admission path, not interactive latency or small-model semantic qualification. Neither the experimental output allowance nor model/template setting was promoted.
+
+## Measured non-model overhead
+
+Four frozen-input replays used fresh runtime/client instances, identical evidence, the same 288-token allowance and ABBA ordering of ordinary versus compact tokenization-audit logging. Native prefix reuse remained enabled. Every trial emitted the same 227-token answer. Full time ranged from 17.918 to 22.191 seconds, while model time ranged from 8.343 to 8.910 seconds. Each compilation made fourteen sequential tokenizer HTTP requests, taking 6.160 to 8.474 seconds, plus template and other work.
+
+Normal/compact median full times were 20.336/19.542 seconds. Network and repeated-run variation prevent attributing that difference to audit logging; no assistant audit policy was changed. Durable accounting remains intact.
+
+A separate twelve-request ABBA transport probe used identical full-prompt tokenizer bodies. All returned 2,827 tokens. Fresh-connection median was 0.502 seconds, pooled median including first connections was 0.295 seconds, and the four warm pooled requests had median 0.268 seconds. The probe's explicit tokenizer body was consistent within the comparison but differs from the production body's optional flags. This is a candidate transport optimization, not a measured end-to-end SWAAG improvement. No shared Session or new tokenizer cache was introduced: concurrency ownership, cancellation, closure, authentication and record/replay equivalence require focused verification before promotion.
+
+## Final disposition
+
+The existing status API's independent admission, request-context propagation, current-state recheck and prompt/validator contract are corrected and installed. Exact finalized controls and planner serialization remain authoritative. The small reader and two-stage delivery prototype remain unqualified because of retained factual/role errors and unresolved visible-history, crash-recovery, ownership and voice acceptance. The tested Q5 co-residency configuration is also rejected on resource evidence. Independent capacity can improve scheduling, but the measured full path and semantic failures do not justify deploying a separate conversational model.
+
+Thor evidence contains 2,423 one-second memory samples, 1,028 below 4 GiB and a minimum of 1.40165 GiB. Guard attribution and source evidence identify the omitted cache; they do not fully apportion every host fluctuation. No further model start was attempted after the incident review. Future live experiments require active reserve enforcement on the owned experimental process, a complete cache/checkpoint budget and current host-load admission.

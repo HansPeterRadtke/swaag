@@ -1,6 +1,6 @@
 # October fourteenth conversation delivery follow-up
 
-The [delivery and status study](conversation-delivery-and-status-2026-10-14.md) tests real early replies, cancellation and reconnects alongside the unchanged canonical planner, plus forty-eight small-model reasoning trials. It corrects independent status admission under a saturated planner and rejects status answers made stale during generation or escalation. Fast ordinary delivery remains experimental: the small reader still fails factual and whole-system role questions.
+The [delivery and status study](conversation-delivery-and-status-2026-10-14.md) tests real early replies, cancellation and reconnects alongside the unchanged canonical planner, plus forty-eight small-model reasoning trials. It corrects independent status admission under a saturated planner and rejects status answers made stale during generation or escalation. Fast ordinary delivery remains experimental: the small reader still fails factual and whole-system role questions. The installed independent status trajectory completed without planner preemption, but took 32.701 seconds. Resource qualification failed: an omitted 8 GiB host prompt-cache reservation led to reserve breaches and the safety guard terminated an unrelated render. The test model is stopped; Infra admission is corrected, verified and applied on both machines. See the study for exact impact and limits.
 
 # October fourteenth scheduling and accounting investigation
 
