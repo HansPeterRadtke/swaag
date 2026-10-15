@@ -74,7 +74,7 @@ def test_telemetry_type_metadata_cannot_drop_or_add_source_events(make_config):
     from swaag.history import HistoryInvariantError
     runtime=AgentRuntime(make_config(),model_client=object());state=runtime.create_or_load_session()
     event=runtime.history.record_event(state,'model_response_received',{
-        'kind':'action','prompt_mode':'standard','completion':{'text':'EXACT_RAW_RESPONSE'}})
+        'kind':'action','prompt_mode':'standard','attempt':1,'completion':{'text':'EXACT_RAW_RESPONSE'}})
     source=runtime_telemetry_reference([event])
     provider=RuntimeTelemetryEvidenceProvider()
     for types in [None, {}, {'message_added':1}, {'model_response_received':True},
@@ -87,7 +87,7 @@ def test_legacy_individual_model_audit_reference_remains_recoverable(make_config
     from swaag.utils import stable_json_dumps,sha256_text
     runtime=AgentRuntime(make_config(),model_client=object());state=runtime.create_or_load_session()
     event=runtime.history.record_event(state,'model_response_received',{
-        'kind':'action','prompt_mode':'standard','completion':{'text':'OLD_EXACT_RESPONSE'}})
+        'kind':'action','prompt_mode':'standard','attempt':1,'completion':{'text':'OLD_EXACT_RESPONSE'}})
     text=stable_json_dumps(asdict(event),indent=None)
     source={'source_kind':'runtime_audit','source_id':f'{state.session_id}:{event.sequence}',
         'sha256':sha256_text(text),'size_chars':len(text),'source_event_references':[{
