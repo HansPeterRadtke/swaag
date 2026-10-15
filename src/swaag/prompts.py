@@ -707,6 +707,21 @@ class PromptBuilder:
             ),
             *(authority_components or []),
             PromptComponent(
+                name="completion_lifecycle",
+                category="instruction",
+                text=(
+                    "Runtime completion semantics: accepting this candidate marks the current task completed, "
+                    "not paused. If the task still requires resuming after a user answer or authorization, "
+                    "it remains unfinished: the actor must record a blocking question to create the durable "
+                    "input_required state. A prose promise to wait does not create that state. Reject such a "
+                    "candidate and identify the missing durable wait as remaining work; never recommend "
+                    "performing the withheld action without authorization. Distinguish a temporary hold from "
+                    "a cancellation or a user-narrowed objective that is genuinely complete. Evaluate only "
+                    "the current task scope: a foreground status answer or verified instruction handoff can "
+                    "be complete while a separate background task remains waiting.\n\n"
+                ),
+            ),
+            PromptComponent(
                 name="completion_candidate",
                 category="turn_context",
                 text=f"Candidate final answer:\n{assistant_message}\n\n",

@@ -1175,3 +1175,19 @@ def test_completion_can_recover_requested_runtime_measurements(make_config):
         selected_action=_completed_action(), tool_results=[])
     assert result['complete'] is True
     assert len(runtime.client.requests) == 2
+
+
+def test_both_completion_modes_preserve_task_lifecycle_and_scope(make_config):
+    builder = PromptBuilder(make_config())
+    for build in (builder.build_completion_evaluation_prompt, builder.build_completion_verdict_prompt):
+        assembly = build(original_request='Hold the release until I explicitly approve it.',
+                         assistant_message='Checks passed; release awaits approval.', status_json='{}')
+        lifecycle = [c for c in assembly.components if c.name == 'completion_lifecycle']
+        assert len(lifecycle) == 1
+        assert lifecycle[0].category == 'instruction'
+        assert lifecycle[0].text in assembly.prompt_text
+        assert 'input_required' in lifecycle[0].text
+        assert 'cancellation' in lifecycle[0].text
+        assert 'foreground status answer' in lifecycle[0].text
+        assert 'Hold the release until I explicitly approve it.' in assembly.prompt_text
+        assert ''.join(c.text for c in assembly.components) == assembly.prompt_text
