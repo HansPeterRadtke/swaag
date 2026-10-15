@@ -113,7 +113,7 @@ class AgentStatusLookupTool(Tool):
 class AgentControlTool(Tool):
     name = "agent_control"
     description = "Queue an exact, ordered, durable control/instruction for another SWAAG session."
-    usage_guidance = "Use an exact worker ID or session id/name when the user redirects, pauses, stops, or instructs the target. Preserve exact wording. queued=true confirms durable enqueue only, not acknowledgement or effects. Report the pending state and continue in the background; do not resend to poll. Original user authority is preserved separately from your routing note. Retries for the same original user events and target reuse the first receipt; status reports pending or processed, never proof of completed effects."
+    usage_guidance = "Use an exact worker ID or session id/name when the user redirects, pauses, stops, or instructs the target. Preserve exact wording. queued=true confirms durable enqueue only, not acknowledgement or effects. Report the pending state and continue in the background; do not resend to poll. Wakes an input-required worker to interpret the control; other lifecycle states stay unchanged. Original user authority is preserved separately from your routing note. Retries for the same original user events and target reuse the first receipt; status reports pending or processed, never proof of completed effects."
     kind = "side_effect"
     input_schema = {
         "type": "object",
@@ -151,6 +151,14 @@ class AgentControlTool(Tool):
             session_id, validated_input["message"], source="agent_control",
             control_id=control_id, authority=authority,
         )
+        # A new answer must reach a waiting worker without an out-of-band
+        # resume. The owner retains lifecycle, capacity and delegated-tool gates;
+        # this does not start created work or revive completed/canceled tasks.
+        orchestration = context.runtime_capabilities.get("orchestration")
+        if orchestration is not None:
+            orchestration.dispatch_waiting_controls(
+                session_id=session_id, history_root=store.root,
+            )
         # queued retains its durable-acceptance meaning; status is the observed
         # delivery state and may already be processed when returning a retry.
         output = {**payload, "queued": True}

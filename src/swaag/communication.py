@@ -5834,6 +5834,7 @@ class CommunicationService:
         )
 
     def _advance_orchestration(self) -> None:
+        self.orchestration_api.dispatch_waiting_controls()
         self.orchestration.advance_active_plans()
         self.background_work.dispatch_once()
 
