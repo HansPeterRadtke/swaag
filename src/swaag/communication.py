@@ -1635,10 +1635,11 @@ class CommunicationService:
                 "prompt_instruction_added",
                 {"instruction": asdict(instruction), "instruction_store": "session"},
             )
-        control_instruction_id = "instruction_swaag_user_controls_v3"
+        control_instruction_id = "instruction_swaag_user_controls_v4"
         for previous in list(state.prompt_instructions):
             if previous.instruction_id in {
                 "instruction_swaag_user_controls_v1", "instruction_swaag_user_controls_v2",
+                "instruction_swaag_user_controls_v3",
             }:
                 runtime.history.record_event(state, "prompt_instruction_removed", {
                     "instruction_id": previous.instruction_id, "instruction_store": "session",
@@ -1647,8 +1648,11 @@ class CommunicationService:
             instruction = make_prompt_instruction(
                 runtime.config, title="Deliver authoritative user controls",
                 content=(
-                    "Reconcile every part of a mixed question and instruction. A new restriction, "
-                    "correction or future condition governs affected workers even when queued or "
+                    "Reconcile every part of a mixed question and instruction from the complete "
+                    "user utterance. Quoted, hypothetical, translated or explained material is not "
+                    "itself an instruction to execute. Explicit requests to leave work unchanged "
+                    "must not become new worker controls merely because they mention an action. "
+                    "A real new restriction, correction or future condition governs affected workers even when queued or "
                     "when the restricted action has not started. If an existing objective or plan "
                     "permits an action that the user now restricts, revise that plan or use "
                     "agent_control to deliver the exact user message to each affected worker. "
@@ -1661,8 +1665,10 @@ class CommunicationService:
                     "A successful agent_control "
                     "result with queued=true is the durable queue receipt. It permits saying the "
                     "instruction is queued; it does not prove worker acknowledgement or completed "
-                    "effects. Finish the foreground reply with current status and this precise pending "
-                    "state. Worker execution and acknowledgement are background work; do not repeatedly "
+                    "effects. When a control was requested and actually queued, report relevant "
+                    "current status and that precise pending state. This receipt-reporting rule does "
+                    "not require a control or status report for an unrelated conversational request. "
+                    "Worker execution and acknowledgement are background work; do not repeatedly "
                     "send the same control or wait in the conversational turn for a queued worker. "
                     "Use a read-only status lookup to inspect acknowledgement if needed. "
                     "Do not broadcast unrelated assignments "

@@ -95,7 +95,7 @@ fixture failures remain in the evidence directory. They were not runtime defects
 ## Prompt-only installed rerun
 
 Revision e66e401 was installed on both hosts with all 195 package files matching
-source. Installed smoke tests passed on Jetson. Four serial live cases preserved
+source. Installed smoke tests passed on both hosts. Four serial live cases preserved
 the exact original authority and correct control scope. Mixed English delivered
 progress at 61.9 seconds and finished at 151.4 seconds; quotation finished at
 72.1 seconds without controls. However, scoped and German instructions still
@@ -130,7 +130,61 @@ failures and the final passing output remain in the evidence directory.
 
 ## Enforced installed acceptance
 
-The enforced correction is ready for the serial installed rerun. Results and final
-source/install equality will be recorded here after observation. No universal
-model-reliability or fixed twenty-second dispatch claim is made.
+Revision e844850 was installed on both hosts, with all 195 package files matching
+source and both installed smoke tests passing on each. The ordinary
+acknowledgement/cancellation/snapshot/authority group passed 36 tests; a further
+27 context/action compatibility tests passed, with 82 unrelated tests deselected.
+The latter includes the unchanged experimental single-responsibility contract.
+
+The scoped case delivered progress at 77.9 seconds and completed at 201.7 seconds,
+with one Alpha control and no Beta control. Mixed English delivered progress at
+66.9 seconds and completed at 164.7 seconds, with one Alpha control. Independent
+durable-history inspection confirms successful queue receipts preceded progress,
+target sessions matched, and exact original authority and receipt identities
+matched the worker queues. No repair was needed for either initial message.
+The scoped final answer still used a heading and bullets, failing spoken-format
+adherence despite passing the finite routing/delivery oracle.
+
+The quotation case FAILED: its first action correctly returned the translation
+without a tool call. Completion evaluation then incorrectly extracted the
+embedded prohibition as a real command and demanded agent_control. The following
+action queued that unwanted control. Later evaluations alternated between
+criticizing the unsolicited control and demanding acknowledgement of it. The
+420-second supervisor deadline expired without a final response. Its exact
+original foreground authority remained attached, but correct provenance alone
+does not make unnecessary routing acceptable. Workers were not started, so no
+publication or file effects occurred.
+
+The deadline is included as a failure rather than silently omitted because the
+external supervisor killed the process before result.json could be written.
+A separate timeout-observation.json reconstructs the retained queue/events and
+identifies itself explicitly as an observer record. The original trace is intact.
+
+## Completion-review authority correction
+
+The failed quotation trace exposed two problems in the surrounding instructions.
+Completion feedback was introduced as a finding and required a materially new
+action, discouraging a correct unchanged answer when the checker itself was
+wrong. The receipt policy also expressed its final-status requirement without
+explicitly conditioning that sentence on a requested, actually queued control.
+
+Reviewer feedback is now explicitly fallible model output, subordinate to the
+complete user request and observed evidence. Genuine omissions still require
+correction. A model that identifies a mistaken review can explain the discrepancy
+and submit a correct candidate to evaluation again; it cannot bypass evaluation
+or manufacture an unauthorized effect to appease it. Ordinary foreground
+completion receives an accounted scope component distinguishing the current user
+turn from completion of all background work, preserving quotation/discussion
+scope and requiring actual delivery of genuine restrictions.
+
+Core control policy version four makes receipt reporting conditional on a control
+actually requested and queued. Old core versions are upgraded once; unrelated
+user rules remain. Current runtime snapshots are no longer incorrectly headed as
+evidence exclusively from before the user turn. The complete original request,
+exact evidence and freshness fences remain present.
+
+The missing foreground-scope regression failed before correction. The first
+completion/snapshot/control/stream group passed 51 tests. The final policy/label group passed 42 tests, including scoped completion context,
+fallible review feedback, exact history/projection behavior and one-time policy
+upgrade. Installed opposing live reruns are recorded below when complete.
 

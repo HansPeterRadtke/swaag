@@ -68,6 +68,13 @@ why they stay mechanical.
 - Cancellation releases transport work. Unsupported true suspension is never
   claimed: an unchanged request is reconstructed and replayed exactly, while a
   changed source snapshot supersedes it.
+- Foreground worker-control retries derive receipt identity from exact originating
+  user event records and the resolved target session. Returning the first durable
+  receipt prevents duplicate delivery of that same instruction. A new event,
+  additional correction or different target remains distinct; unprovenanced
+  direct controls retain their existing identity behavior. This is protocol
+  idempotency, not a judgment that two differently worded requests mean the same
+  thing, and it does not suppress repeated read-only observations.
 - Continuous completion mode is an explicit caller contract. Normal completion,
   blocking-question criticality, status meaning, and escalation remain LLM
   decisions under closed schemas.
@@ -77,6 +84,17 @@ why they stay mechanical.
 - JSON/schema validation, protocol versions, cache TTLs, cursor bounds, IDs,
   transport locality, and deterministic lifecycle mappings enforce wire
   contracts. Adapters project canonical task/history state and do not own it.
+- The ordinary first finalized foreground action requires a nonempty
+  assistant_message, even when handing work to tools. Empty drafts enter bounded
+  validation repair before tool effects. Successful receipts precede progress
+  delivery; failed and superseded drafts are withheld. This checks message
+  presence and execution ordering, not truth, style, intent or semantic quality.
+  Worker, explicit-silent and experimental tool-only contracts are unchanged.
+- Completion-review scope follows the known operation role. Reviewer output
+  remains model-authored advice subordinate to original user authority and exact
+  observations. No string matcher decides whether an utterance is a quotation or
+  an action; the model interprets the complete message. A rejected candidate still
+  requires renewed evaluation after reconciliation.
 - Caller-declared structured-output bindings may fill only mechanical fields such
   as IDs, timestamps, and lifecycle state. Semantic fields come from a centrally
   compiled LLM operation.

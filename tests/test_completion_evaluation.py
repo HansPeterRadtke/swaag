@@ -81,6 +81,7 @@ def test_completion_prompt_accounts_for_exact_or_projected_historical_evidence(
         if item.name == "completion_historical_evidence"
     )
     assert "prior-marker" in exact_component.text
+    assert "historical evidence and current runtime observations" in exact_component.text
     assert "SEMANTIC PROJECTION" not in exact_component.text
     assert "SEMANTIC PROJECTION" in projected_component.text
 

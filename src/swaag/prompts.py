@@ -756,7 +756,7 @@ class PromptBuilder:
                         name="completion_historical_evidence",
                         category="history",
                         text=(
-                            "\nDurable evidence from before the current user turn:\n"
+                            "\nDurable historical evidence and current runtime observations, with exact source timestamps:\n"
                             + (
                                 "[SEMANTIC PROJECTION; exact events remain authoritative "
                                 "and retrievable]\n"
