@@ -184,7 +184,10 @@ def action_from_payload(payload: dict[str, Any], *, enabled_tool_names: Iterable
 
     if any(question.criticality == "blocking" for question in questions) and tool_calls:
         raise ActionValidationError(
-            "blocking questions cannot accompany tool calls in the same action; gather safe evidence first, then emit the blocking question as the next step"
+            "blocking questions cannot accompany tool calls in the same action. "
+            "The questions array opens new unanswered questions, not resolutions. "
+            "To resolve an answered question, use questions=[] with the questions.resolve "
+            "tool call and continue_loop=true. Ask a genuinely unanswered blocking question separately."
         )
 
     for index, question in enumerate(questions):

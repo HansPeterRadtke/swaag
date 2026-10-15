@@ -1563,6 +1563,19 @@ class AgentRuntime:
     def _authoritative_intervention_texts(self, state: SessionState) -> list[str]:
         represented = {message.metadata.get("orchestrator_control_id")
                        for message in state.messages if message.role == "user"}
+        controls = self.history.list_authoritative_control_messages(state.session_id)
+        needed = {item["control_id"] for item in controls
+                  if item.get("authority") and item.get("status") == "processed"}
+        local_evidence = {}
+        if needed:
+            for event in self.history.iter_history_reverse(
+                state.session_id, event_types=("control_message_processed",),
+            ):
+                control_id = event.payload.get("control_id")
+                if control_id in needed and control_id not in local_evidence:
+                    local_evidence[control_id] = event.sequence
+                    if len(local_evidence) == len(needed):
+                        break
         def authority_text(item):
             originals = item.get("authority", [])
             if not originals:
@@ -1579,9 +1592,15 @@ class AgentRuntime:
                 "Preserve relevant prohibitions, conditions and corrections. "
                 "Original user messages, verbatim and in delivery order:\n\n"
                 + "\n\n".join(entry["message"] for entry in originals)
+                + (
+                    "\n\nForwarded original-user evidence is recorded at local history event sequence "
+                    + str(local_evidence[item["control_id"]])
+                    + "; cite that sequence when resolving an answered question."
+                    if item["control_id"] in local_evidence else ""
+                )
             )
         return [authority_text(item)
-                for item in self.history.list_authoritative_control_messages(state.session_id)
+                for item in controls
                 if str(item.get("message", "")).strip()
                 and item.get("source") != "question_revision"
                 and not (item.get("source") == "orchestrator_user"
