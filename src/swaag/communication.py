@@ -1720,10 +1720,21 @@ class CommunicationService:
         worker_controls = []
         for worker in workers:
             owner = managers.get(worker.model_key, self.workers)
-            controls = owner.runtime.history.list_pending_control_messages(worker.session_id)
+            # Import legacy inbox files before taking one canonical read. Derive
+            # pending messages and receipt lifecycle from the same rows so a
+            # concurrent acknowledgement cannot contradict its own receipt.
+            owner.runtime.history.list_pending_control_messages(worker.session_id)
+            controls = owner.runtime.history.list_authoritative_control_messages(worker.session_id)
             if controls:
-                worker_controls.append({"worker_id": worker.worker_id, "session_id": worker.session_id,
-                                        "pending_controls": controls})
+                worker_controls.append({
+                    "worker_id": worker.worker_id, "session_id": worker.session_id,
+                    "pending_controls": [item for item in controls if item["status"] == "pending"],
+                    # Retain every receipt identity, without replaying processed
+                    # instruction text as new authority or copying worker history.
+                    "delivery_receipts": [{key: item[key] for key in (
+                        "control_id", "status", "created_at", "processed_at",
+                    )} for item in controls],
+                })
         return {
             "collection_started_at": started_at,
             "captured_at": utc_now_iso(),
@@ -1733,6 +1744,11 @@ class CommunicationService:
                 "active_turn": active_turn,
                 "pending_user_messages": [item for item in pending if item.get("source") == "orchestrator_user"],
             },
+            "worker_control_status_semantics": (
+                "Current delivery receipts supersede earlier receipt statuses for the same control_id. "
+                "pending means queued; processed means consumed by the worker and does not prove execution "
+                "or completion of the requested effect. latest_model_status is a worker report, not verified effects."
+            ),
             "worker_controls": worker_controls,
             "active_workers": [
                 asdict(worker) for worker in workers

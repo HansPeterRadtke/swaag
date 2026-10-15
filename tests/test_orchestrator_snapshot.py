@@ -429,3 +429,64 @@ def test_false_completion_feedback_remains_subordinate_to_original_user(make_con
         assert checks == [False, True]
     finally:
         service.close()
+
+
+def test_snapshot_retains_consumed_control_receipts_without_replaying_old_instructions(make_config):
+    runtime = AgentRuntime(make_config(model__context_limit=32000), model_client=_ImmediateClient('Recorded.'))
+    service = CommunicationService(runtime, orchestrator_runtime=runtime)
+    try:
+        worker = service.workers.create('Verify the fixture')
+        old = runtime.history.enqueue_control_message(worker.session_id, 'OLD_CONTROL_TEXT_362')
+        runtime.history.mark_control_message_processed(worker.session_id, old['control_id'])
+        pending = runtime.history.enqueue_control_message(worker.session_id, 'CURRENT_CONTROL_TEXT_498')
+        snapshot = service._orchestrator_runtime_snapshot()
+        controls = snapshot['worker_controls'][0]
+        assert controls['pending_controls'][0]['control_id'] == pending['control_id']
+        receipts = {item['control_id']: item for item in controls['delivery_receipts']}
+        assert receipts[old['control_id']]['status'] == 'processed'
+        assert receipts[old['control_id']]['processed_at']
+        assert receipts[pending['control_id']]['status'] == 'pending'
+        assert receipts[pending['control_id']]['processed_at'] is None
+        assert 'OLD_CONTROL_TEXT_362' not in str(snapshot)
+        before = service._orchestrator_task_snapshot_fingerprint(snapshot)
+        runtime.history.mark_control_message_processed(worker.session_id, pending['control_id'])
+        current = service._orchestrator_runtime_snapshot()
+        assert current['worker_controls'][0]['pending_controls'] == []
+        assert all(item['status'] == 'processed' for item in current['worker_controls'][0]['delivery_receipts'])
+        assert service._orchestrator_task_snapshot_fingerprint(current) != before
+        service.orchestrator_message('Has the worker consumed the instruction?')
+        prompt = runtime.client.requests[0]['prompt']
+        assert pending['control_id'] in prompt and 'processed_at' in prompt
+        assert 'consumed by the worker' in prompt and 'does not prove execution' in prompt
+    finally:
+        service.close()
+
+
+def test_worker_semantic_progress_invalidates_stale_foreground_reply(make_config, monkeypatch):
+    runtime = AgentRuntime(make_config(model__context_limit=32000), model_client=_ImmediateClient('unused'))
+    service = CommunicationService(runtime, orchestrator_runtime=runtime)
+    snapshots = []
+    try:
+        worker = service.workers.create('Verify both fixture stages')
+        service.workers.store.transition(worker.worker_id, 'working')
+        state = runtime.history.rebuild_from_history(worker.session_id)
+        runtime.history.record_event(state, 'agent_status', {'situation': 'FIRST_STAGE_PENDING_618', 'action': 'Verify the first stage', 'reason': 'Checks remain', 'action_index': 1, 'importance': 'normal', 'importance_rank': 2})
+        def generate(**kwargs):
+            snapshot = kwargs['runtime_snapshot']
+            snapshots.append(snapshot)
+            if len(snapshots) == 1:
+                runtime.history.record_event(state, 'agent_status', {'situation': 'FIRST_STAGE_DONE_951', 'action': 'Verify the second stage', 'reason': 'First stage done', 'action_index': 2, 'importance': 'normal', 'importance_rank': 2})
+                return {'route': 'respond', 'answer': 'The first stage is pending.', 'reason': 'old snapshot'}
+            assert 'FIRST_STAGE_DONE_951' in str(snapshot)
+            assert 'FIRST_STAGE_PENDING_618' not in str(snapshot)
+            return {'route': 'respond', 'answer': 'The worker reports the first stage is done.', 'reason': 'fresh snapshot'}
+        _mock_action_generation(runtime, service, generate, monkeypatch)
+        result = service.orchestrator_message('How far is the worker?')
+        assert result['answer'] == 'The worker reports the first stage is done.'
+        assert len(snapshots) == 2
+        status = snapshots[-1]['worker_question_inventory']['workers'][0]['latest_model_status']
+        assert status['status_kind'] == 'worker_action_status'
+        assert status['status_event_sequence'] and status['status_event_hash']
+        assert all(m.content != 'The first stage is pending.' for m in service._load_orchestrator_state().messages if m.role == 'assistant')
+    finally:
+        service.close()

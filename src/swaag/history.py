@@ -867,7 +867,7 @@ class HistoryStore:
         with self._sqlite_connect() as connection:
             rows = connection.execute(
                 """
-                SELECT control_id, session_id, message, source, created_at, priority, status, authority_json
+                SELECT control_id, session_id, message, source, created_at, priority, status, processed_at, authority_json
                 FROM control_messages
                 WHERE session_id=? AND status IN ('pending', 'processed')
                 ORDER BY created_at, control_id

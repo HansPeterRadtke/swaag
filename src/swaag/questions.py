@@ -123,6 +123,7 @@ def question_inventory(manager):
             workers.append({'worker_id': worker.worker_id, 'session_id': worker.session_id,
                             'model_key': worker.model_key, 'status': worker.status,
                             'objective': worker.objective, 'progress': worker_progress(worker, state),
+                            'latest_model_status': owner.runtime.latest_semantic_status_payload(state),
                             'through_sequence': state.event_count})
             for item in state.open_questions:
                 questions.append({**normalize_question(item), 'worker_id': worker.worker_id,
