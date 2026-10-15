@@ -2177,6 +2177,12 @@ class AgentRuntime:
             )
 
         for compaction_round in range(max_rounds + 1):
+            if self._runtime_snapshot_changed(state, system_context_state.get("runtime_system_snapshot")):
+                # Keep exact tool/history evidence, but never keep reducing an
+                # obsolete whole-system observation across compilation rounds.
+                system_context_state.pop("runtime_system_snapshot", None)
+                system_context_state.pop("runtime_system_snapshot_sequence", None)
+                runtime_context_projections.pop("runtime_system_snapshot", None)
             counter = self._counter(state)
             context_components = self._runtime_context_components(
                 state,
@@ -7997,25 +8003,27 @@ class AgentRuntime:
             ) from exc
         if not isinstance(payload, dict):
             raise ValueError(f"Contract {prepared.contract.name} must return one JSON object")
-        if prepared.runtime_snapshot is not None:
-            capabilities = self.tool_runtime_capabilities(state.session_id)
-            provider = capabilities.get("system_snapshot_provider")
-            fingerprint = capabilities.get("system_snapshot_fingerprint")
-            if callable(provider) and callable(fingerprint):
-                current = provider()
-                before_controls = prepared.runtime_snapshot.get("orchestrator", {}).get("pending_user_messages", [])
-                current_controls = current.get("orchestrator", {}).get("pending_user_messages", [])
-                # New authoritative controls use the outer ordered control fence,
-                # which refreshes pending_messages/history before regenerating.
-                # An inner validation retry would retain an outdated inbox view.
-                if before_controls != current_controls:
-                    return validator(payload) if validator is not None else payload
-                if fingerprint(prepared.runtime_snapshot) != fingerprint(current):
-                    raise ActionValidationError(
-                        "System task state changed during action generation. The proposed reply and tools "
-                        "were not applied. Reconsider the fresh snapshot before responding or acting."
-                    )
+        if self._runtime_snapshot_changed(state, prepared.runtime_snapshot):
+            raise ActionValidationError(
+                "System task state changed during action generation. The proposed reply and tools "
+                "were not applied. Reconsider the fresh snapshot before responding or acting."
+            )
         return validator(payload) if validator is not None else payload
+
+    def _runtime_snapshot_changed(self, state: SessionState, snapshot: dict[str, Any] | None) -> bool:
+        if snapshot is None:
+            return False
+        capabilities = self.tool_runtime_capabilities(state.session_id)
+        provider = capabilities.get("system_snapshot_provider")
+        fingerprint = capabilities.get("system_snapshot_fingerprint")
+        if not callable(provider) or not callable(fingerprint):
+            return False
+        current = provider()
+        before_controls = snapshot.get("orchestrator", {}).get("pending_user_messages", [])
+        current_controls = current.get("orchestrator", {}).get("pending_user_messages", [])
+        # User corrections still use the outer ordered authority fence. A local
+        # task-state refresh must not consume or bypass their pending messages.
+        return before_controls == current_controls and fingerprint(snapshot) != fingerprint(current)
 
     def _execute_with_output_recovery(
         self,
@@ -8793,6 +8801,20 @@ class AgentRuntime:
                 )
                 continue
             self._record_inference_started(state, acquired)
+            try:
+                if self._runtime_snapshot_changed(state, prepared.runtime_snapshot):
+                    raise ActionValidationError(
+                        "System task state changed before action dispatch. The stale request was not sent. "
+                        "Reconsider the fresh snapshot before responding or acting."
+                    )
+            except Exception as exc:
+                self._finish_inference(
+                    state, inference_request.request_id,
+                    status="superseded" if isinstance(exc, ActionValidationError) else "failed",
+                    error=str(exc),
+                )
+                self.preemption.clear_active(state.session_id, call_id)
+                raise
             guard.record(
                 "model_request_sent",
                 {

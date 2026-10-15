@@ -490,3 +490,74 @@ def test_worker_semantic_progress_invalidates_stale_foreground_reply(make_config
         assert all(m.content != 'The first stage is pending.' for m in service._load_orchestrator_state().messages if m.role == 'assistant')
     finally:
         service.close()
+
+
+def test_action_refreshes_snapshot_after_context_reduction(make_config, monkeypatch):
+    from dataclasses import replace
+    from swaag.grammar import agent_action_contract
+    from swaag.runtime import RuntimeContextProjection
+    from swaag.utils import sha256_text, stable_json_dumps
+    runtime = AgentRuntime(make_config(model__context_limit=32000, tools__enabled=[],
+        runtime__lean_on_overflow=False), model_client=_ImmediateClient('unused'))
+    service = CommunicationService(runtime, orchestrator_runtime=runtime)
+    try:
+        worker = service.workers.create('Complete while context is reduced')
+        service.workers.store.transition(worker.worker_id, 'working')
+        state = service._orchestrator_state()
+        compile_original = runtime._compile_context
+        compilations = []
+        def compile_once_overflow(*args, **kwargs):
+            value = compile_original(*args, **kwargs)
+            compilations.append(value)
+            if len(compilations) == 1:
+                value.report = replace(value.report, context_limit=value.report.required_tokens - 1, fits=False)
+            return value
+        def project(_state, **kwargs):
+            old_snapshot = kwargs['context_state']['runtime_system_snapshot']
+            service.workers.store.transition(worker.worker_id, 'completed', result='FRESH_AFTER_REDUCTION_347')
+            return 'runtime_system_snapshot', RuntimeContextProjection(
+                sha256_text(stable_json_dumps(old_snapshot, indent=2)), 'STALE_PROJECTED_REPORT_917')
+        monkeypatch.setattr(runtime, '_compile_context', compile_once_overflow)
+        monkeypatch.setattr(runtime, '_project_largest_tool_result_for_overflow', lambda *a, **k: None)
+        monkeypatch.setattr(runtime, '_project_runtime_context_for_overflow', project)
+        prepared = runtime._prepare_action_call(state, original_request='Has the worker finished?',
+            pending_messages=[], tool_specs=[], contract=agent_action_contract([]), validation_feedback='')
+        assert 'FRESH_AFTER_REDUCTION_347' in prepared.assembly.prompt_text
+        assert 'STALE_PROJECTED_REPORT_917' not in prepared.assembly.prompt_text
+        assert prepared.runtime_snapshot['terminal_workers'][0]['status'] == 'completed'
+        assert not runtime.client.requests
+    finally:
+        service.close()
+
+
+def test_snapshot_changed_while_waiting_for_inference_is_not_sent(make_config, monkeypatch):
+    from tests.test_agent_action_loop import FakeModelClient, _action
+    def reply(payload):
+        return _action(message=('The worker finished.' if 'FRESH_AT_ADMISSION_463' in payload['prompt']
+                                else 'The worker is still working.'))
+    client = FakeModelClient([reply, reply])
+    runtime = AgentRuntime(make_config(model__context_limit=32000, tools__enabled=[]), model_client=client)
+    service = CommunicationService(runtime, orchestrator_runtime=runtime)
+    try:
+        worker = service.workers.create('Complete while inference is occupied')
+        service.workers.store.transition(worker.worker_id, 'working')
+        acquire = runtime.inference.acquire
+        changed = []
+        def finish_at_admission(*args, **kwargs):
+            admitted = acquire(*args, **kwargs)
+            if not changed:
+                changed.append(True)
+                service.workers.store.transition(worker.worker_id, 'completed', result='FRESH_AT_ADMISSION_463')
+            return admitted
+        monkeypatch.setattr(runtime.inference, 'acquire', finish_at_admission)
+        result = service.orchestrator_message('Has the worker finished?')
+        assert result['answer'] == 'The worker finished.'
+        assert len(client.requests) == 1
+        assert 'FRESH_AT_ADMISSION_463' in client.requests[0]['prompt']
+        state = service._load_orchestrator_state()
+        requests = runtime.inference.list(session_id=state.session_id)
+        assert {item.status for item in requests} == {'superseded', 'completed'}
+        assert runtime.preemption.active_call(state.session_id) is None
+        assert all(m.content != 'The worker is still working.' for m in state.messages if m.role == 'assistant')
+    finally:
+        service.close()
