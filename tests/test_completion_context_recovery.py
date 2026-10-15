@@ -16,9 +16,9 @@ def test_turn_completion_keeps_answer_exact_but_recovers_budget_audit_separately
     assert view['payload']['tool_steps']==2
     assert 'EXACT_BUDGET_DETAIL_983' not in json.dumps(view)
     rows=runtime._completion_evidence_source_inventory(state,evidence_rows=[],historical_events=[event])
-    source=next(x for x in rows if x['source_kind']=='runtime_audit')
-    exact=RuntimeAuditEvidenceProvider().reexpand(config=runtime.config,state=state,source=source)
-    assert json.loads(exact['text'])==asdict(event)
+    source=next(x for x in rows if x['source_kind']=='runtime_telemetry')
+    exact=RuntimeTelemetryEvidenceProvider().reexpand(config=runtime.config,state=state,source=source)
+    assert json.loads(exact['text'])==[asdict(event)]
     assert runtime.history.read_history(state.session_id)[-1].payload==event.payload
 
 
@@ -95,3 +95,46 @@ def test_legacy_individual_model_audit_reference_remains_recoverable(make_config
             'event_type':event.event_type}]}
     exact=RuntimeAuditEvidenceProvider().reexpand(config=runtime.config,state=state,source=source)
     assert json.loads(exact['text'])==asdict(event)
+
+
+def test_failed_review_retains_reason_but_recovers_its_nested_budget(make_config):
+    runtime=AgentRuntime(make_config(),model_client=object());state=runtime.create_or_load_session()
+    event=runtime.history.record_event(state,'completion_evaluation_unavailable',{
+        'reason':'No completion verdict was obtained: context limit exceeded.',
+        'budget_report':{'measurement':'FAILED_REVIEW_ACCOUNTING_462','rows':['size']*2000},
+        'projected_source_event_sequences':[12,19]})
+    view=runtime._completion_historical_evidence_row(event)
+    assert view['payload']['reason']==event.payload['reason']
+    assert view['payload']['projected_source_event_sequences']==[12,19]
+    assert 'FAILED_REVIEW_ACCOUNTING_462' not in json.dumps(view)
+    inventory=runtime._completion_evidence_source_inventory(state,evidence_rows=[],historical_events=[event])
+    source=next(x for x in inventory if x['source_kind']=='runtime_telemetry')
+    exact=RuntimeTelemetryEvidenceProvider().reexpand(config=runtime.config,state=state,source=source)
+    assert json.loads(exact['text'])==[asdict(event)]
+
+
+def test_prompt_mode_fallback_budget_is_part_of_exact_telemetry(make_config):
+    runtime=AgentRuntime(make_config(),model_client=object());state=runtime.create_or_load_session()
+    event=runtime.history.record_event(state,'action_prompt_mode_fallback',{
+        'from_prompt_mode':'standard','to_prompt_mode':'lean','reason':'measured_context_overflow',
+        'standard_budget_report':{'input':10000},'lean_budget_report':{'input':7500}})
+    rows=runtime._completion_historical_evidence_rows([event])
+    assert len(rows)==1 and rows[0]['source_kind']=='runtime_telemetry'
+    exact=RuntimeTelemetryEvidenceProvider().reexpand(config=runtime.config,state=state,source=rows[0])
+    assert json.loads(exact['text'])==[asdict(event)]
+
+
+def test_repeated_failed_reviews_share_one_source_without_losing_failure_reasons(make_config):
+    runtime=AgentRuntime(make_config(),model_client=object());state=runtime.create_or_load_session()
+    events=[runtime.history.record_event(state,'completion_evaluation_unavailable',{
+        'reason':f'Exact review failure {i}', 'budget_report':{'diagnostic':f'RAW_BUDGET_{i}'},
+        'projected_source_event_sequences':[]}) for i in range(80)]
+    rows=runtime._completion_historical_evidence_rows(events)
+    for event in events:
+        row=next(r for r in rows if r.get('sequence')==event.sequence)
+        assert row['payload']['reason']==event.payload['reason']
+    inventory=runtime._completion_evidence_source_inventory(state,evidence_rows=[],historical_events=events)
+    assert len(inventory)==1
+    assert len(json.dumps(inventory))<3000
+    exact=RuntimeTelemetryEvidenceProvider().reexpand(config=runtime.config,state=state,source=inventory[0])
+    assert json.loads(exact['text'])==[asdict(e) for e in events]

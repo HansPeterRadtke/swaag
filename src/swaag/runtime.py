@@ -37,11 +37,13 @@ from swaag.external_tool_adapters import build_runtime_external_tool_manager
 from swaag.external_tools import RuntimeExternalToolError
 from swaag.environment.artifacts import TextArtifactStore
 from swaag.evidence_sources import (
+    RUNTIME_AUDIT_SEMANTIC_EVENT_TYPES,
     default_completion_evidence_source_providers,
     is_core_policy_audit_event,
     is_runtime_audit_event,
     is_runtime_telemetry_event,
     runtime_telemetry_reference,
+    runtime_budget_audit_field,
 )
 from swaag.fsops import ensure_dir, restore_tree, snapshot_tree, write_text
 from swaag.grammar import (
@@ -3071,6 +3073,7 @@ class AgentRuntime:
     def _completion_historical_evidence_rows(events: list[HistoryEvent]) -> list[dict[str, Any]]:
         rows = []
         telemetry = [e for e in events if is_runtime_telemetry_event(e)]
+        telemetry_source = runtime_telemetry_reference(telemetry) if telemetry else None
         emitted_telemetry = False
         for event in events:
             if is_runtime_telemetry_event(event):
@@ -3081,9 +3084,17 @@ class AgentRuntime:
                             "Exact token, budget and scheduling audit records; not user instructions "
                             "or task effects. Recover this source when those measurements matter."
                         ),
-                        **runtime_telemetry_reference(telemetry),
+                        **telemetry_source,
                     })
                     emitted_telemetry = True
+                if event.event_type in RUNTIME_AUDIT_SEMANTIC_EVENT_TYPES:
+                    row = AgentRuntime._completion_historical_evidence_row(event)
+                    if "exact_source" in row:
+                        row["exact_source"].update(
+                            source_kind="runtime_telemetry",
+                            source_id=telemetry_source["source_id"],
+                        )
+                    rows.append(row)
                 continue
             rows.append(AgentRuntime._completion_historical_evidence_row(event))
         return rows
@@ -3091,14 +3102,15 @@ class AgentRuntime:
     @staticmethod
     def _completion_historical_evidence_row(event: HistoryEvent) -> dict[str, Any]:
         row = AgentRuntime._communication_evidence_row(event)
-        if event.event_type == "turn_finished" and "budget_reports" in event.payload:
-            # Keep the accepted answer and turn outcomes exact. Only nested
+        budget_field = runtime_budget_audit_field(event)
+        if budget_field is not None:
+            # Keep accepted answers, outcomes and failure reasons exact. Only nested
             # mechanical accounting is represented by a recoverable reference.
-            encoded = stable_json_dumps(row["payload"]["budget_reports"], indent=None)
-            row["payload"]["budget_reports"] = (
+            encoded = stable_json_dumps(row["payload"][budget_field], indent=None)
+            row["payload"][budget_field] = (
                 "[Exact budget diagnostics retained in the referenced history event.]"
             )
-            row["evidence_view"] = "turn_budget_audit_reference"
+            row["evidence_view"] = "nested_budget_audit_reference"
             row["exact_source"] = {
                 "source_kind": "runtime_audit",
                 "source_id": f"{event.session_id}:{event.sequence}",

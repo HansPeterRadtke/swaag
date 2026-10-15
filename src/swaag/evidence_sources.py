@@ -62,18 +62,32 @@ def is_core_policy_audit_event(event: HistoryEvent) -> bool:
     )
 
 
+def runtime_budget_audit_field(event: HistoryEvent) -> str | None:
+    field = {
+        "turn_finished": "budget_reports",
+        "completion_evaluation_unavailable": "budget_report",
+    }.get(event.event_type)
+    return field if field is not None and field in event.payload else None
+
+
 def is_runtime_audit_event(event: HistoryEvent) -> bool:
     return (is_core_policy_audit_event(event) or event.event_type in {
         "prompt_built", "model_request_sent", "model_response_received",
-    } or (event.event_type == "turn_finished" and "budget_reports" in event.payload))
+    } or runtime_budget_audit_field(event) is not None)
+
+
+# Their semantic payload fields remain inline; only nested accounting is replaced.
+RUNTIME_AUDIT_SEMANTIC_EVENT_TYPES = frozenset({
+    "turn_finished", "completion_evaluation_unavailable",
+})
 
 
 RUNTIME_TELEMETRY_EVENT_TYPES = frozenset({
     "context_compiled", "budget_checked", "model_token_progress",
     "inference_request_queued", "inference_request_started", "inference_request_finished",
-    "prompt_instructions_selected",
+    "prompt_instructions_selected", "action_prompt_mode_fallback",
     "prompt_built", "model_request_sent", "model_response_received",
-})
+}) | RUNTIME_AUDIT_SEMANTIC_EVENT_TYPES
 
 
 def is_runtime_telemetry_event(event: HistoryEvent) -> bool:
@@ -81,7 +95,7 @@ def is_runtime_telemetry_event(event: HistoryEvent) -> bool:
 
 
 def runtime_telemetry_reference(events: list[HistoryEvent]) -> dict[str, object]:
-    """One exact range reference for mechanical telemetry, never task observations."""
+    """One exact audit range; semantic outcome fields also remain in their own views."""
     selected = sorted((e for e in events if is_runtime_telemetry_event(e)),
                       key=lambda e: e.sequence)
     if not selected or len({e.session_id for e in selected}) != 1:
