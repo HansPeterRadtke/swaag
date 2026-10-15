@@ -1981,21 +1981,46 @@ class CommunicationService:
                     # The active planner may already have reconciled this exact
                     # message. Reuse its committed answer; never execute it twice.
                     seen = False
+                    turn = None
+                    controls: set[str] = set()
+                    cancelled = False
                     for event in runtime.history.read_history(state.session_id):
-                        if event.event_type == "control_message_processed" and event.payload.get("control_id") == receipt["control_id"]:
-                            seen = True
-                        elif seen and event.event_type == "turn_started":
-                            break  # A later turn is not evidence this one completed.
+                        if event.event_type == "turn_started":
+                            resumed = event.payload.get("resumed_control_ids", [])
+                            if seen and receipt["control_id"] not in resumed:
+                                raise RuntimeError("The interrupted receipt was superseded by a later turn; it cannot be replayed.")
+                            turn = event
+                            controls = set(resumed)
+                        elif event.event_type == "control_message_processed":
+                            controls.add(str(event.payload["control_id"]))
+                            if event.payload.get("control_id") == receipt["control_id"]:
+                                seen = True
                         elif seen and event.event_type == "turn_finished":
                             return {"session_id": state.session_id, "answer": str(event.payload["assistant_text"])}
-                    raise RuntimeError("The finalized message was processed, but no completed response is recorded.")
+                        elif seen and event.event_type == "turn_cancelled":
+                            cancelled = True
+                    if not seen or turn is None:
+                        raise RuntimeError("The finalized message has no recoverable processed turn.")
+                    run_id = str(turn.payload.get("run_id", ""))
+                    if cancelled or (run_id and runtime.preemption.run_cancellation(state.session_id, run_id)):
+                        raise RuntimeError("The interrupted receipt belongs to a canceled turn; it cannot be replayed.")
+                    # We own the cross-process session lock. Continue the exact
+                    # interrupted objective with its committed evidence, without
+                    # adding user authority or reissuing the selected tool batch.
+                    return self._orchestrator_message_locked(
+                        receipt, resume_request=str(turn.payload["user_text"]),
+                        resumed_control_ids=tuple(sorted(controls)),
+                    )
                 # File-lock acquisition is not FIFO. Drain durable receipt order,
                 # including requests left pending after a failed connection/run.
                 result = self._orchestrator_message_locked(pending[0])
                 if pending[0]["control_id"] == receipt["control_id"]:
                     return result
 
-    def _orchestrator_message_locked(self, receipt: dict[str, Any]) -> dict[str, str]:
+    def _orchestrator_message_locked(
+        self, receipt: dict[str, Any], *, resume_request: str | None = None,
+        resumed_control_ids: tuple[str, ...] = (),
+    ) -> dict[str, str]:
         text = str(receipt["message"])
         orchestrator_state = self._load_orchestrator_state()
         with session_execution_lock(
@@ -2035,9 +2060,14 @@ class CommunicationService:
                     # or issue tools, with current state, ordered authority and the
                     # configured completion verifier. No second dispatcher can consume
                     # a user instruction without this controller seeing it.
-                    result = self.orchestrator_runtime.run_turn_in_session(
-                        state, text, user_control_id=str(receipt["control_id"])
-                    )
+                    if resume_request is None:
+                        result = self.orchestrator_runtime.run_turn_in_session(
+                            state, text, user_control_id=str(receipt["control_id"])
+                        )
+                    else:
+                        result = self.orchestrator_runtime.resume_turn_in_session(
+                            state, resume_request, resumed_control_ids=resumed_control_ids,
+                        )
                 self.orchestration.advance_active_plans()
                 for runtime, request in preemptions:
                     self._complete_runtime_preemption(

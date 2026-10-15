@@ -591,6 +591,9 @@ class AgentRuntime:
                 )
                 raise
             except RunCancellationRequested as exc:
+                self.history.record_event(state, "turn_cancelled", {
+                    "run_id": run_id, "reason": str(exc),
+                })
                 self.preemption.complete_run_cancellation(state.session_id, run_id)
                 self._heartbeat(state, run_id=run_id, phase="cancelled", detail=str(exc))
                 raise
@@ -603,7 +606,10 @@ class AgentRuntime:
                     self.supervisor.finish_session(state.session_id)
 
     @exclusive_session_turn
-    def resume_turn_in_session(self, state: SessionState, original_request: str) -> TurnResult:
+    def resume_turn_in_session(
+        self, state: SessionState, original_request: str,
+        *, resumed_control_ids: tuple[str, ...] = (),
+    ) -> TurnResult:
         """Resume an interrupted durable task without duplicating its user request."""
         self._refresh_state_from_history(state)
         objective = original_request
@@ -629,6 +635,7 @@ class AgentRuntime:
                     state,
                     objective,
                     record_user_message=False,
+                    resumed_control_ids=resumed_control_ids,
                 )
                 self._heartbeat(state, run_id=run_id, phase="completed", detail="resumed turn completed")
                 return result
@@ -644,6 +651,9 @@ class AgentRuntime:
                 )
                 raise
             except RunCancellationRequested as exc:
+                self.history.record_event(state, "turn_cancelled", {
+                    "run_id": run_id, "reason": str(exc),
+                })
                 self.preemption.complete_run_cancellation(state.session_id, run_id)
                 self._heartbeat(state, run_id=run_id, phase="cancelled", detail=str(exc))
                 raise
@@ -696,6 +706,9 @@ class AgentRuntime:
                 )
                 raise
             except RunCancellationRequested as exc:
+                self.history.record_event(state, "turn_cancelled", {
+                    "run_id": run_id, "reason": str(exc),
+                })
                 self.preemption.complete_run_cancellation(state.session_id, run_id)
                 self._heartbeat(state, run_id=run_id, phase="cancelled", detail=str(exc))
                 raise
@@ -814,6 +827,7 @@ class AgentRuntime:
         record_user_message: bool = True,
         allow_silent_completion: bool = False,
         user_control_id: str | None = None,
+        resumed_control_ids: tuple[str, ...] = (),
     ) -> TurnResult:
         original_request = user_text
         if not original_request.strip():
@@ -838,6 +852,8 @@ class AgentRuntime:
                 "turn_index": state.turn_count + 1,
                 "user_text": original_request,
                 "execution_loop": "model_tool_loop",
+                "run_id": self._active_run_id(state),
+                "resumed_control_ids": list(resumed_control_ids),
             },
         )
 

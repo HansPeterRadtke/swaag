@@ -36,9 +36,11 @@ class OrchestratorEventCursor:
                     and event.payload.get("control_id") == self.control_id):
                 self.active = True
             elif self.active and event.event_type == "turn_started":
-                # Do not attribute a later run to an interrupted/failed receipt.
-                self.finished = True
-                break
+                # Explicit recovery links survive process loss; unrelated later
+                # turns must never be attributed to this receipt.
+                if self.control_id not in event.payload.get("resumed_control_ids", []):
+                    self.finished = True
+                    break
             elif self.active and event.event_type == "turn_finished":
                 self.finished = True
                 self.final_sequence = event.sequence
