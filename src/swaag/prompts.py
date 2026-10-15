@@ -278,6 +278,7 @@ class PromptBuilder:
         capability_index: Iterable[tuple[str, str, str]] | None = None,
         tool_result_projections: dict[int, str] | None = None,
         validation_feedback: str = "",
+        require_user_acknowledgement: bool = False,
     ) -> PromptAssembly:
         history, current_user, turn_transcript = self.partition_turn(messages)
         components = [
@@ -371,6 +372,21 @@ class PromptBuilder:
                 text=self._load_template(action_template),
             )
         )
+        if require_user_acknowledgement:
+            components.append(PromptComponent(
+                name="initial_foreground_acknowledgement",
+                category="instruction",
+                text=(
+                    "\nThis is the initial foreground action for a finalized user message. "
+                    "Its assistant_message must be nonempty even when it includes tool calls. "
+                    "Give a brief useful acknowledgement and already-observed status, respecting "
+                    "the user's requested format; otherwise use natural spoken prose. "
+                    "Describe unobserved actions as intentions, not completed facts. "
+                    "Keep the authorized tool calls in this same action. The runtime delivers "
+                    "the acknowledgement only after successful receipts, without waiting for "
+                    "another model call or for background completion.\n"
+                ),
+            ))
         return self._assemble(
             "action",
             prompt_mode,

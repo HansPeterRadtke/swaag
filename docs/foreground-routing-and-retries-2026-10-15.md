@@ -92,9 +92,45 @@ AgentEnvironment is constructed per session and imported from its implementation
 module, rather than a runtime attribute or package-level export. Those initial
 fixture failures remain in the evidence directory. They were not runtime defects.
 
-## Corrected installed acceptance
+## Prompt-only installed rerun
 
-The source correction is ready for the serial installed rerun. Results and final
+Revision e66e401 was installed on both hosts with all 195 package files matching
+source. Installed smoke tests passed on Jetson. Four serial live cases preserved
+the exact original authority and correct control scope. Mixed English delivered
+progress at 61.9 seconds and finished at 151.4 seconds; quotation finished at
+72.1 seconds without controls. However, scoped and German instructions still
+omitted early progress, finishing at 194.4 and 250.4 seconds respectively.
+The scoped final answer also used headings/bullets rather than the expected
+spoken format. The explicit acknowledgement policy alone was insufficient.
+
+## Enforced ordinary foreground acknowledgement
+
+The ordinary first foreground action now carries an explicit, budget-accounted
+prompt component requiring a useful nonempty assistant message in the same action
+as authorized tool calls. Empty messages fail action validation before any tools
+run and enter the existing bounded repair loop. Receipts still precede delivery;
+superseded and failed drafts remain suppressed. Unobserved effects must be
+described as intentions. Explicit user formatting requests take precedence over
+the default spoken presentation.
+
+This applies to the ordinary joint foreground action contract. Worker turns,
+explicit silent turns and the separate experimental single-responsibility mode
+retain their existing contracts. It does not add unsupported constraints to the
+portable response schema. The runtime enforces presence, not semantic truth or
+presentation quality; these still require live inspection.
+
+The final focused regression run passed 36 tests across stream delivery,
+intervening controls, fresh snapshots and trusted authority. A new regression
+proves that an empty draft executes no tools, its repair executes exactly once,
+and delivery follows the actual tool receipt. Four older cancellation fixtures
+were adjusted to produce a valid nonempty initial draft; all cancellation
+assertions remain intact. An initial implementation that changed the experimental
+tool-only mode failed its compatibility regression and was removed. Both initial
+failures and the final passing output remain in the evidence directory.
+
+## Enforced installed acceptance
+
+The enforced correction is ready for the serial installed rerun. Results and final
 source/install equality will be recorded here after observation. No universal
 model-reliability or fixed twenty-second dispatch claim is made.
 

@@ -14,7 +14,7 @@ def test_ordinary_correction_invalidates_inflight_planner_action(make_config):
     def stale(payload):
         entered.set()
         assert release.wait(8)
-        return _action(tool_calls=[('calculator', {'expression':'6 * 7'})], continue_loop=True)
+        return _action(message='I am checking that calculation.', tool_calls=[('calculator', {'expression':'6 * 7'})], continue_loop=True)
     def reconciled(payload):
         prompts.append(payload['prompt'])
         assert exact in payload['prompt']
@@ -63,7 +63,7 @@ def test_received_controls_keep_order_and_later_turn_can_supersede_them(make_con
     entered, release = threading.Event(), threading.Event()
     def stale(payload):
         entered.set(); assert release.wait(8)
-        return _action(tool_calls=[('calculator', {'expression':'6 * 7'})], continue_loop=True)
+        return _action(message='I am checking that calculation.', tool_calls=[('calculator', {'expression':'6 * 7'})], continue_loop=True)
     def reconcile(payload):
         prompt=payload['prompt']
         assert prompt.index(first) < prompt.index(second)
@@ -74,7 +74,7 @@ def test_received_controls_keep_order_and_later_turn_can_supersede_them(make_con
         # Older controls are now earlier conversation, not falsely labelled as
         # interventions later than the new explicit user request.
         assert '[USER INTERVENTION' not in prompt
-        return _action(tool_calls=[('calculator', {'expression':'6 * 7'})], continue_loop=True)
+        return _action(message='I am checking that calculation.', tool_calls=[('calculator', {'expression':'6 * 7'})], continue_loop=True)
     client=FakeModelClient([
          stale, reconcile,
          newer, _action(message='The result is forty-two.'),
@@ -233,7 +233,7 @@ def test_protocol_correction_is_received_before_request_semaphore(make_config, e
     def stale(payload):
         entered.set()
         assert release.wait(8)
-        return _action(tool_calls=[('calculator', {'expression': '6 * 7'})], continue_loop=True)
+        return _action(message='I am checking that calculation.', tool_calls=[('calculator', {'expression': '6 * 7'})], continue_loop=True)
     def reconciled(payload):
         assert correction in payload['prompt']
         return _action(message='The calculation was canceled before execution.')

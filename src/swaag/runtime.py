@@ -921,6 +921,10 @@ class AgentRuntime:
             if delegated_catalog is not None:
                 self._ensure_delegated_catalog_observed(state, delegated_catalog)
             action_index = accepted_actions + 1
+            require_user_acknowledgement = (
+                bool(user_control_id) and accepted_actions == 0
+                and not allow_silent_completion and not self._single_responsibility_mode()
+            )
             pending_payloads = self.history.list_pending_control_messages(state.session_id)
             pending_messages = self._authoritative_intervention_texts(state)
             validation_feedback = recovery_feedback
@@ -1012,6 +1016,7 @@ class AgentRuntime:
                     ),
                     contract=contract, validation_feedback=validation_feedback,
                     minimum_output_tokens=action_minimum_output_tokens,
+                    require_user_acknowledgement=require_user_acknowledgement,
                 )
                 budget_reports.append(prepared.report)
 
@@ -1023,6 +1028,13 @@ class AgentRuntime:
                         payload=payload,
                     )
                     action = action_from_payload(payload, enabled_tool_names=tool_names)
+                    if require_user_acknowledgement and not action.assistant_message.strip():
+                        raise ActionValidationError(
+                            "The initial foreground action requires a nonempty assistant_message "
+                            "with a brief useful acknowledgement and already-observed facts. "
+                            "Describe unobserved actions as intentions. Preserve the authorized "
+                            "tool calls; the runtime delivers this message after successful receipts."
+                        )
                     if action.silent_completion and not allow_silent_completion:
                         raise ActionValidationError(
                             "silent_completion is not permitted for this turn; return the complete user-facing result in assistant_message"
@@ -2066,6 +2078,7 @@ class AgentRuntime:
         contract: ContractSpec,
         validation_feedback: str,
         minimum_output_tokens: int | None = None,
+        require_user_acknowledgement: bool = False,
         assembly_builder: Callable[
             [list[Message], list[PromptComponent], dict[int, str], str], PromptAssembly
         ] | None = None,
@@ -2114,6 +2127,7 @@ class AgentRuntime:
                 capability_index=capability_index,
                 tool_result_projections=tool_result_projections,
                 validation_feedback=validation_feedback,
+                require_user_acknowledgement=require_user_acknowledgement,
             )
 
         def record_action_compilation(

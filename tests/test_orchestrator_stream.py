@@ -123,3 +123,32 @@ def test_failed_dispatch_never_publishes_success_draft(make_config):
         assert not any(event.event_type == 'assistant_progress' for event in history)
     finally:
         service.close()
+
+
+def test_initial_empty_foreground_action_is_repaired_before_tool_execution(make_config):
+    client = FakeModelClient([
+        _action(message='', tool_calls=[('echo', {'text':'unaccepted draft'})], continue_loop=True),
+        _action(message='I am checking that now.', tool_calls=[('echo', {'text':'verified'})], continue_loop=True),
+        _action(message='The value was verified.'),
+    ])
+    runtime = AgentRuntime(make_config(model__context_limit=32000,
+        runtime__completion_evaluation_enabled=False, communication__poll_seconds=0.01),
+        model_client=client)
+    service = CommunicationService(runtime, orchestrator_runtime=runtime)
+    try:
+        events = list(service.iter_orchestrator_message('Check the value.', control_id='required_ack'))
+        progress = [e for e in events if e['event']=='assistant_progress']
+        assert len(progress)==1 and progress[0]['assistant_text']=='I am checking that now.'
+        history = runtime.history.read_history(events[-1]['session_id'])
+        calls = [e for e in history if e.event_type=='tool_called']
+        assert len(calls)==1 and calls[0].payload['tool_input']=={'text':'verified'}
+        assert any(e.event_type=='agent_action_rejected' and
+                   'initial foreground action' in e.payload.get('reason','') for e in history)
+        receipt = next(e for e in history if e.event_type=='tool_result')
+        assert receipt.sequence < progress[0]['sequence']
+        assert len(client.requests)==3
+        assert 'initial foreground action' in client.requests[0]['prompt']
+        assert 'initial_foreground_acknowledgement' in str([
+            e.payload for e in history if e.event_type=='context_compiled'])
+    finally:
+        service.close()
