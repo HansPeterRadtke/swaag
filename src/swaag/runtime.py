@@ -2556,6 +2556,17 @@ class AgentRuntime:
                     )] if completion_snapshot is not None else []),
                     *self._current_authority_components(state, original_request),
                     *([PromptComponent(
+                        name="completion_open_questions", category="environment",
+                        text=(
+                            "Current unresolved questions for this session, from authoritative state. "
+                            "Check their applicability to the current request. If an applicable question "
+                            "is already answered or superseded, record its resolution through the questions "
+                            "tool using exact supporting user evidence. Do not ask it again. Unrelated "
+                            "background questions need not block a foreground status answer.\n"
+                            + stable_json_dumps(state.open_questions, indent=None) + "\n\n"
+                        ),
+                    )] if state.open_questions else []),
+                    *([PromptComponent(
                         name="current_run_user_messages", category="current_user",
                         text=("Finalized user messages received during this run, verbatim and in order. "
                               "Later messages supersede conflicting earlier instructions; preserve other requirements.\n"
@@ -3080,7 +3091,22 @@ class AgentRuntime:
     @staticmethod
     def _completion_historical_evidence_row(event: HistoryEvent) -> dict[str, Any]:
         row = AgentRuntime._communication_evidence_row(event)
-        if is_core_policy_audit_event(event):
+        if event.event_type == "turn_finished" and "budget_reports" in event.payload:
+            # Keep the accepted answer and turn outcomes exact. Only nested
+            # mechanical accounting is represented by a recoverable reference.
+            encoded = stable_json_dumps(row["payload"]["budget_reports"], indent=None)
+            row["payload"]["budget_reports"] = (
+                "[Exact budget diagnostics retained in the referenced history event.]"
+            )
+            row["evidence_view"] = "turn_budget_audit_reference"
+            row["exact_source"] = {
+                "source_kind": "runtime_audit",
+                "source_id": f"{event.session_id}:{event.sequence}",
+                "event_hash": event.hash,
+                "content_sha256": sha256_text(encoded),
+                "content_chars": len(encoded),
+            }
+        elif is_core_policy_audit_event(event):
             # Harness instruction configuration is supplied by the scoped
             # instruction contributor, not reactivated by its audit history.
             # Exact policy text remains a model-requestable, verified source.

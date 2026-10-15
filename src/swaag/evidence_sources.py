@@ -63,15 +63,16 @@ def is_core_policy_audit_event(event: HistoryEvent) -> bool:
 
 
 def is_runtime_audit_event(event: HistoryEvent) -> bool:
-    return is_core_policy_audit_event(event) or event.event_type in {
+    return (is_core_policy_audit_event(event) or event.event_type in {
         "prompt_built", "model_request_sent", "model_response_received",
-    }
+    } or (event.event_type == "turn_finished" and "budget_reports" in event.payload))
 
 
 RUNTIME_TELEMETRY_EVENT_TYPES = frozenset({
     "context_compiled", "budget_checked", "model_token_progress",
     "inference_request_queued", "inference_request_started", "inference_request_finished",
     "prompt_instructions_selected",
+    "prompt_built", "model_request_sent", "model_response_received",
 })
 
 
@@ -120,7 +121,15 @@ class RuntimeTelemetryEvidenceProvider:
             raise HistoryInvariantError("Runtime telemetry has an invalid sequence range")
         events = HistoryStore(config.sessions.root, write_projections=False).read_history_window(
             state.session_id, start_sequence=first, limit=last-first+1)
-        selected = [e for e in events if is_runtime_telemetry_event(e)]
+        # References freeze the event-type selection as well as the range/hash.
+        # Older references must not acquire newly supported audit event types.
+        event_types = source.get("event_types")
+        if (not isinstance(event_types, dict) or not event_types
+                or any(kind not in RUNTIME_TELEMETRY_EVENT_TYPES
+                       or type(count) is not int or count < 1
+                       for kind, count in event_types.items())):
+            raise HistoryInvariantError("Runtime telemetry has invalid event types")
+        selected = [e for e in events if e.event_type in event_types]
         for event in selected:
             verify_event_integrity(event, event.prev_hash)
         observed = runtime_telemetry_reference(selected)
@@ -144,6 +153,7 @@ class RuntimeAuditEvidenceProvider:
         for event in source_events:
             source_id = f"{event.session_id}:{event.sequence}"
             if (event.session_id != state.session_id or not is_runtime_audit_event(event)
+                    or is_runtime_telemetry_event(event)
                     or source_id not in referenced_values):
                 continue
             text = stable_json_dumps(asdict(event), indent=None)
