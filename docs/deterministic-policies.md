@@ -44,6 +44,11 @@ why they stay mechanical.
   observations remain available. The model can request any advertised exact audit
   source; recovery verifies its session, event integrity, hash and size. This
   boundary does not inspect the meaning of the user's language or discard history.
+- Historical token/accounting/scheduling events use an explicit schema list and
+  one integrity-checked range source in completion context. This groups mechanical
+  telemetry without filtering user meaning or changing canonical task observations.
+  Exact re-expansion checks session, range, per-event integrity and the bundle hash,
+  size, count and boundary references; raw history remains unchanged.
 - Search result counts and protocol cursors are caller-visible retrieval bounds,
   not context-selection policy. Raw events remain addressable through exact
   windows, archive retrieval, artifacts, or another model-selected search.

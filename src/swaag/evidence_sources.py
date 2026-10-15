@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+from collections import Counter
 from dataclasses import asdict
 from pathlib import Path
 from typing import Protocol
@@ -65,6 +66,68 @@ def is_runtime_audit_event(event: HistoryEvent) -> bool:
     return is_core_policy_audit_event(event) or event.event_type in {
         "prompt_built", "model_request_sent", "model_response_received",
     }
+
+
+RUNTIME_TELEMETRY_EVENT_TYPES = frozenset({
+    "context_compiled", "budget_checked", "model_token_progress",
+    "inference_request_queued", "inference_request_started", "inference_request_finished",
+    "prompt_instructions_selected",
+})
+
+
+def is_runtime_telemetry_event(event: HistoryEvent) -> bool:
+    return event.event_type in RUNTIME_TELEMETRY_EVENT_TYPES
+
+
+def runtime_telemetry_reference(events: list[HistoryEvent]) -> dict[str, object]:
+    """One exact range reference for mechanical telemetry, never task observations."""
+    selected = sorted((e for e in events if is_runtime_telemetry_event(e)),
+                      key=lambda e: e.sequence)
+    if not selected or len({e.session_id for e in selected}) != 1:
+        raise HistoryInvariantError("Runtime telemetry requires one nonempty session range")
+    first, last = selected[0], selected[-1]
+    text = stable_json_dumps([asdict(e) for e in selected], indent=None)
+    return {
+        "source_kind": "runtime_telemetry",
+        "source_id": f"{first.session_id}:{first.sequence}-{last.sequence}",
+        "session_id": first.session_id,
+        "first_sequence": first.sequence, "last_sequence": last.sequence,
+        "event_count": len(selected),
+        "event_types": dict(sorted(Counter(e.event_type for e in selected).items())),
+        "size_chars": len(text), "sha256": sha256_text(text),
+        "source_event_references": [_event_reference(first), _event_reference(last)],
+    }
+
+
+class RuntimeTelemetryEvidenceProvider:
+    source_kind = "runtime_telemetry"
+
+    def inventory(self, *, config: AgentConfig, state: SessionState,
+                  source_events: list[HistoryEvent], referenced_values: set[str]
+                  ) -> list[dict[str, object]]:
+        del config
+        selected = [e for e in source_events if e.session_id == state.session_id
+                    and is_runtime_telemetry_event(e)
+                    and f"{e.session_id}:{e.sequence}" in referenced_values]
+        return [runtime_telemetry_reference(selected)] if selected else []
+
+    def reexpand(self, *, config: AgentConfig, state: SessionState,
+                 source: dict[str, object]) -> dict[str, object]:
+        if source.get("session_id") != state.session_id:
+            raise HistoryInvariantError("Runtime telemetry cannot cross the operation session")
+        first, last = source.get("first_sequence"), source.get("last_sequence")
+        if (type(first) is not int or type(last) is not int or first < 1 or last < first):
+            raise HistoryInvariantError("Runtime telemetry has an invalid sequence range")
+        events = HistoryStore(config.sessions.root, write_projections=False).read_history_window(
+            state.session_id, start_sequence=first, limit=last-first+1)
+        selected = [e for e in events if is_runtime_telemetry_event(e)]
+        for event in selected:
+            verify_event_integrity(event, event.prev_hash)
+        observed = runtime_telemetry_reference(selected)
+        if any(source.get(key) != value for key, value in observed.items()):
+            raise HistoryInvariantError("Runtime telemetry differs from its exact source")
+        return {**source, "integrity_verified": True,
+                "text": stable_json_dumps([asdict(e) for e in selected], indent=None)}
 
 
 class RuntimeAuditEvidenceProvider:
@@ -268,4 +331,5 @@ class RawAttachmentEvidenceProvider:
 
 def default_completion_evidence_source_providers(
 ) -> tuple[CompletionEvidenceSourceProvider, ...]:
-    return (TextArtifactEvidenceProvider(), RawAttachmentEvidenceProvider(), RuntimeAuditEvidenceProvider())
+    return (TextArtifactEvidenceProvider(), RawAttachmentEvidenceProvider(),
+            RuntimeAuditEvidenceProvider(), RuntimeTelemetryEvidenceProvider())

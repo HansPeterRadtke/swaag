@@ -1108,3 +1108,70 @@ def test_completion_can_request_exact_core_policy_audit_text(make_config):
         assert runtime.history.read_history(state.session_id)[event.sequence-1].payload['instruction']['content'] == holder['content']
     finally:
         service.close()
+
+
+def test_telemetry_bundle_preserves_task_rows_and_exact_range_recovery(make_config):
+    import pytest
+    from dataclasses import asdict
+    from swaag.evidence_sources import RuntimeTelemetryEvidenceProvider
+    from swaag.history import HistoryInvariantError
+    runtime = AgentRuntime(make_config(model__context_limit=32000), model_client=_CompletionClient([]))
+    state = runtime.create_or_load_user_session('Keep this exact original requirement.')
+    first = runtime.history.record_event(state, 'budget_checked', {
+        'kind':'action', 'prompt_mode':'standard', 'cap_error':'',
+        'budget_report':{'measurement':'FIRST_TELEMETRY_751', 'tokens':123}})
+    canonical = runtime.history.record_event(state, 'message_added', {'message':{
+        'role':'user', 'content':'SECOND_USER_AUTHORITY_953: Do not publish.',
+        'created_at':first.timestamp, 'metadata':{}}})
+    last = runtime.history.record_event(state, 'budget_checked', {
+        'kind':'completion_evaluation', 'prompt_mode':'standard', 'cap_error':'',
+        'budget_report':{'measurement':'LAST_TELEMETRY_752', 'tokens':456}})
+    events = runtime.history.read_history(state.session_id)
+    rows = runtime._completion_historical_evidence_rows(events)
+    persisted_canonical = next(e for e in events if e.sequence == canonical.sequence)
+    assert runtime._communication_evidence_row(persisted_canonical) in rows
+    assert 'FIRST_TELEMETRY_751' not in json.dumps(rows)
+    inventory = runtime._completion_evidence_source_inventory(state, evidence_rows=[], historical_events=events)
+    source = next(x for x in inventory if x['source_kind'] == 'runtime_telemetry')
+    assert source['event_count'] == 2
+    assert source['first_sequence'] == first.sequence and source['last_sequence'] == last.sequence
+    provider = RuntimeTelemetryEvidenceProvider()
+    recovered = provider.reexpand(config=runtime.config, state=state, source=source)
+    assert json.loads(recovered['text']) == [asdict(first), asdict(last)]
+    assert recovered['integrity_verified'] is True
+    with pytest.raises(HistoryInvariantError, match='differs'):
+        provider.reexpand(config=runtime.config, state=state, source={**source, 'sha256':'wrong'})
+    with pytest.raises(HistoryInvariantError, match='cross'):
+        provider.reexpand(config=runtime.config, state=state, source={**source, 'session_id':'other'})
+    with pytest.raises(HistoryInvariantError, match='differs'):
+        provider.reexpand(config=runtime.config, state=state, source={**source, 'last_sequence':last.sequence+1})
+    assert runtime.history.read_history(state.session_id) == events
+
+
+def test_completion_can_recover_requested_runtime_measurements(make_config):
+    from tests.test_agent_action_loop import FakeModelClient
+    holder = {}
+    def request_source(payload):
+        assert 'MEASURED_TOKEN_COUNT_626' not in payload['prompt']
+        assert 'runtime_telemetry' in payload['prompt']
+        return json.dumps({'complete':False, 'reason':'Need the requested exact measurements.',
+            'remaining_work':[], 'evidence_requests':[{'source_kind':'runtime_telemetry',
+            'source_id':holder['source_id'], 'purpose':'Inspect the exact historical measurement.',
+            'literal_query':''}]})
+    def verify(payload):
+        assert 'MEASURED_TOKEN_COUNT_626' in payload['prompt']
+        result = {'complete':True, 'reason':'The exact measurements are available.', 'remaining_work':[]}
+        if 'evidence_requests' in payload['json_schema']['properties']:
+            result['evidence_requests'] = []
+        return json.dumps(result)
+    runtime = AgentRuntime(make_config(model__context_limit=32000), model_client=FakeModelClient([request_source, verify]))
+    state = runtime.create_or_load_user_session('Inspect the exact prior token measurements.')
+    event = runtime.history.record_event(state, 'budget_checked', {'kind':'action',
+        'prompt_mode':'standard', 'cap_error':'', 'budget_report':{'measurement':'MEASURED_TOKEN_COUNT_626'}})
+    holder['source_id'] = f'{state.session_id}:{event.sequence}-{event.sequence}'
+    request = 'Inspect the exact prior token measurements.'
+    runtime.history.record_event(state, 'turn_started', {'turn_index':1, 'user_text':request})
+    result = runtime._evaluate_completion(state, original_request=request,
+        selected_action=_completed_action(), tool_results=[])
+    assert result['complete'] is True
+    assert len(runtime.client.requests) == 2

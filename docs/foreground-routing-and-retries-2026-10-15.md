@@ -270,3 +270,142 @@ rejection. The core-policy-only group passed 44 tests; the generalized audit run
 mandatory event-envelope fields. After supplying attempt and prompt_mode without
 weakening assertions, both targeted scope/feedback tests passed. The final broader
 run and installed fresh/persistent results are recorded below after observation.
+
+
+## Installed audit-reference candidate
+
+Code revision 1766a6d is installed on Jetson and Thor. All 195 package files match
+source byte-for-byte on each, with per-file hashes retained. Both installed smoke
+tests passed on both hosts. The final broader focused suite passed 86 tests in
+151.4 seconds, covering completion sources, snapshots, authority, stream ordering,
+intervening controls, durable instructions and context compilation. The preceding
+invalid new event fixture remains recorded separately; its missing mandatory
+attempt/prompt_mode fields were supplied without changing any assertion.
+
+The first actual installed quotation rerun passed: zero worker controls, correct
+translation, no failed completion/re-expansion loop, final response in 106.3
+seconds. The completion reviewer explicitly recognized the quoted text as the
+translation subject and the existing worker assignment as unchanged. Its action
+call took 61.5 seconds and completion check 40.5 seconds. This is a functional
+repair of the reproduced case, not a twenty-second interaction or proof that
+all future quotations will be interpreted correctly.
+
+The mixed English restriction also passed: its actual receipt preceded progress
+at 68.0 seconds, final response at 155.3 seconds, exactly one Alpha control, no
+output repair and one successful completion review. The scoped case preserved
+Alpha-only delivery and produced progress at 56.3 seconds. It finished at 240.8
+seconds, but its first reviewer incorrectly required worker acknowledgement and
+check initiation before releasing the conversation. After requesting the exact
+control-policy audit source, the second reviewer recognized the receipt-stage
+contract and accepted the same candidate. This extra 54.5-second review is part
+of the result, not omitted from the latency.
+
+The German case FAILED the 420-second deadline despite correct delivery of one
+control and progress at 82.4 seconds. Its second action exhausted a 288-token
+output budget; the existing bounded repair completed a valid action. The candidate
+then overstated the hold as already applied while also saying it was pending.
+The reviewer demanded worker acknowledgement and check initiation and requested
+two policy audit sources instead of finishing the conversation. Both returned
+verdicts were incomplete; another call was in flight at the external deadline.
+Exact authority, target identity and receipt-before-progress checks still pass,
+but neither final-reply completion nor truthful presentation is certified by that.
+
+This fixture intentionally leaves workers created and enables only control/status
+tools. Therefore it cannot establish that the model would correctly start a real
+worker, nor can it satisfy a demand to observe actual worker execution. It remains
+a failed conversational case. A separate real-worker probe and opposing raw
+completion-scope counterfactuals distinguish that fixture boundary from the
+receipt-versus-application reporting problem.
+
+For the three completed initial audit cases, recorded model calls consume
+101.9/106.3 seconds (quotation), 146.9/155.3 seconds (mixed), and 229.1/240.8 seconds
+(scoped). The remainders include preparation, scheduling, persistence and Python
+work; they are not a measured pure scheduling phase. Effective output rate across
+these four cases' returned calls is approximately 4.6 tokens/second at the median,
+computed as output tokens divided by elapsed time after first output. This is not
+provider-internal decoding throughput: prefix caching, queueing and host load are
+not isolated. No twenty-second complete-action guarantee follows from a short
+first-token time.
+
+
+## Explicit quoted-delivery holdout
+
+The actual foreground call routed the explicit quoted instruction to Alpha once,
+with exact full original authority and progress at 60.5 seconds. It finished in
+266.9 seconds. This passes the predefined routing/queue/completed-reply oracle,
+but FAILS truthful wording: its final answer says both "Its checks remain running"
+and "its checks haven't started." The first reviewer identified the unsupported
+claim; after expanding the receipt policy, the second rationalized the contradiction
+and accepted it. The same exact recorded candidate and evidence are therefore a
+negative case in the next checker experiment. It must not be described as an
+unqualified successful conversational response.
+
+## Foreground handoff scope and persistent telemetry follow-up
+
+Three raw checker probes added an explicit receipt-stage completion scope. The
+truthful pending-status counterfactual passed in 28.7 seconds; an unsupported
+applied/started counterfactual was rejected in 56.3 seconds; the exact contradictory
+quoted-delivery candidate was rejected in 56.1 seconds. The latter preserves the
+recorded candidate and evidence. The two other candidates are explicitly synthetic.
+These are first checker verdicts, not completed runtime recovery loops: both
+negative verdicts also requested further audit evidence. The raw probe appended
+the scope to the system message; the installed candidate keeps it in the existing
+budget-accounted foreground scope component. Live acceptance therefore remains
+necessary and is not inferred from identical placement.
+
+The completion scope now explicitly permits an accurate pending receipt response
+while acknowledgement, initiation and execution remain background work. A user
+who explicitly requests waiting for or verifying an effect still requires the
+actual effect. An undelivered instruction remains incomplete, and a claim of
+started/applied action cannot be inferred from a pending receipt. Worker completion
+semantics are unchanged.
+
+The persistent-session translation FAILED the original 420-second supervisor
+limit, including its 76.4-second successful status priming turn. No worker control
+was sent. Its target action was generated, but completion history then required
+hierarchical evidence projection. The first attempted completion context carried
+about 61,700 historical-evidence characters after just one ordinary preceding
+exchange. Token/accounting/scheduling records dominated much of that volume.
+
+A narrow explicit event-schema boundary now collects budget/accounting reports,
+token progress, inference queue/start/finish events and instruction-selection
+telemetry into one exact recoverable range source. It does not select by utterance
+meaning, truncate task data or delete any raw event. User/assistant messages,
+selected actions, tool results, questions and system snapshots remain exact.
+Recovery pins the session and event range, verifies each event's integrity and the
+bundle's hash, size, count, boundary references and event-type counts. An evaluator
+requesting historical runtime measurements can recover all exact records through
+the existing semantic evidence-request loop.
+
+An offline reconstruction of the retained persistent case reduces historical
+layout from 61,567 to 31,796 characters; source inventory grows from 4,140 to 4,972
+characters. The combined representation falls by about 44 percent. The slight
+baseline difference from the original compiled record reflects reconstruction
+against the retained observation set; the exact original compiled accounting is
+also retained. This is representation size evidence, not a latency result.
+
+The existing completion/snapshot group passed 37 tests. Two new recovery tests
+pass, including canonical interleaved user-event preservation, exact recovery,
+changed hash/range and cross-session rejection, and model-requested expansion.
+Initial new fixtures omitted a message timestamp and then compared an in-memory
+message enriched with replay provenance against its persisted canonical form;
+those fixture errors were corrected without weakening the preservation assertion.
+The original failure logs remain alongside the passing results. The broader regression run passed 88 tests in 147.9 seconds. Installed rerun
+outcomes follow below after observation.
+
+## Remaining acceptance boundaries
+
+The deterministic regressions establish the runtime's authority, receipt identity,
+message-presence, freshness and recoverability contracts. They do not certify
+arbitrary model-authored wording. The created-worker matrix separately checks
+queue effects, completed replies and receipt-stage streaming; it does not score
+physical worker execution or all spoken-format requirements. In particular,
+"queued", "acknowledged" and "applied" remain distinct states, and a reply that
+uses stronger language than the observed state fails truthful reporting even if
+its queue-target oracle passes.
+
+The runtime has not been split into additional conversational models or processes.
+Existing model services, memory reservations and optional communication daemon
+lifecycle remain unchanged. The previous small-model and independent-backend
+results keep their original limited scopes; this study does not qualify a new
+model, remove the session ordering lock, or bypass completion evaluation.

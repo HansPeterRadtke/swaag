@@ -374,6 +374,10 @@ def test_completion_verifier_distinguishes_foreground_scope_from_worker_assignme
         assert exact in requests[0] and exact in requests[1]
         assert 'current foreground user turn' in requests[0]
         assert 'current foreground user turn' not in requests[1]
+        assert 'the conversational reply may be complete before worker acknowledgement' in requests[0]
+        assert 'An explicit user request to wait for or verify an effect' in requests[0]
+        assert 'false when only a pending receipt is observed' in requests[0]
+        assert 'the conversational reply may be complete before worker acknowledgement' not in requests[1]
         system_portion = requests[0].split('Original user objective:', 1)[0]
         assert 'USER_RULE_RETAINED_814' in system_portion
         assert "Act as the user's central SWAAG orchestrator" not in system_portion
