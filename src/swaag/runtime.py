@@ -2503,6 +2503,8 @@ class AgentRuntime:
             if historical_rows
             else ""
         )
+        # This estimate bounds reduction work; target capacity is measured from
+        # the full pending prompt independently below.
         historical_evidence_tokens = (
             self._counter(state).count_text(historical_evidence).tokens
             if historical_evidence
@@ -2945,22 +2947,21 @@ class AgentRuntime:
                 and historical_component_tokens
                 >= max(largest_tool_component_tokens, largest_expanded_tokens)
             ):
-                placeholder = self.prompts.build_completion_evaluation_prompt(
-                    original_request=original_request,
-                    assistant_message=selected_action.assistant_message,
-                    status_json=stable_json_dumps(
-                        asdict(selected_action.status), indent=None
-                    ),
-                    tool_evidence_rows=evidence_rows,
-                    tool_result_projections=projections,
-                    evidence_source_inventory=available_sources,
-                    reexpanded_evidence_rows=list(reexpanded_evidence.values()),
-                    reexpanded_evidence_projections=(
-                        reexpanded_evidence_projections
-                    ),
-                    historical_evidence_projection=(
+                # Measure the actual pending prompt, preserving its mode,
+                # authority, foreground scope and unresolved-question state.
+                placeholder_kwargs = {
+                    **prompt_kwargs,
+                    "historical_evidence": "",
+                    "historical_evidence_projection": (
                         "[purpose-specific historical evidence projection]"
                     ),
+                }
+                placeholder = (
+                    self.prompts.build_completion_verdict_prompt(**placeholder_kwargs)
+                    if single_verdict
+                    else self.prompts.build_completion_evaluation_prompt(
+                        **placeholder_kwargs, evidence_source_inventory=available_sources
+                    )
                 )
                 base_compilation = self._compile_context(
                     state,
@@ -2974,15 +2975,19 @@ class AgentRuntime:
                     - base_compilation.report.input_tokens
                 )
                 if projection_capacity >= 32:
-                    reduction = max(32, compilation.overflow_tokens + 16)
-                    previous_target = (
-                        historical_evidence_tokens
+                    # A standalone component estimate and full serialized
+                    # request overflow need not share tokenizer accounting.
+                    # Subtracting them can invent a tiny target despite ample
+                    # measured room. Only shrink an already-tried target when
+                    # recompilation shows that its projection still overflows.
+                    historical_projection_target_tokens = (
+                        projection_capacity
                         if historical_projection_target_tokens is None
-                        else historical_projection_target_tokens
-                    )
-                    historical_projection_target_tokens = min(
-                        projection_capacity,
-                        max(32, previous_target - reduction),
+                        else min(
+                            projection_capacity,
+                            max(32, historical_projection_target_tokens
+                                - max(32, compilation.overflow_tokens + 16)),
+                        )
                     )
                     historical_evidence_projection, projection_report = (
                         self._reduce_text_hierarchically(
