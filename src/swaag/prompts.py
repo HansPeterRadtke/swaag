@@ -129,6 +129,15 @@ class PromptBuilder:
             )
         return "\n\n".join(rendered)
 
+    @staticmethod
+    def user_message_provenance(message: Message | None) -> str:
+        if message is None or message.role != "user":
+            return ""
+        sequence = message.metadata.get("source_message_event_sequence")
+        if isinstance(sequence, bool) or not isinstance(sequence, int) or sequence < 1:
+            return ""
+        return f"[USER MESSAGE SOURCE sequence={sequence}]\n"
+
     def message_prompt_components(
         self,
         messages: list[Message],
@@ -163,7 +172,7 @@ class PromptBuilder:
                 label = f"{label}:{message.name}"
             event_sequence = message.metadata.get("source_event_sequence")
             event_hash = message.metadata.get("source_event_hash")
-            provenance = ""
+            provenance = self.user_message_provenance(message)
             body = message.content
             component_name = f"{prefix}_{index}"
             if message.role == "tool" and isinstance(event_sequence, int):
@@ -315,7 +324,8 @@ class PromptBuilder:
                 category="current_user",
                 text=(
                     "Current user message, verbatim:\n"
-                    f"{current_user.content if current_user is not None else original_request}\n\n"
+                    + self.user_message_provenance(current_user)
+                    + f"{current_user.content if current_user is not None else original_request}\n\n"
                 ),
             ),
             *self.message_prompt_components(
@@ -432,6 +442,7 @@ class PromptBuilder:
             PromptComponent(
                 name="current_user_turn", category="current_user",
                 text=("Current user message, verbatim:\n" +
+                      self.user_message_provenance(current_user) +
                       f"{current_user.content if current_user is not None else original_request}\n\n"),
             ),
             *self.message_prompt_components(
@@ -576,6 +587,7 @@ class PromptBuilder:
             PromptComponent(
                 name="current_user_turn", category="current_user",
                 text=("Current user message, verbatim:\n" +
+                      self.user_message_provenance(current_user) +
                       f"{current_user.content if current_user is not None else original_request}\n\n"),
             ),
             *self.message_prompt_components(
