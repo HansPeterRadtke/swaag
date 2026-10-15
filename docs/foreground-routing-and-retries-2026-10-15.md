@@ -22,9 +22,10 @@ Evidence on Jetson:
 `/data/var/swaag-benchmarks/foreground-routing-20261015`.
 The probe, manifests, exact inputs, durable histories, streamed events, supervision
 outcomes and compact summaries are retained. Each foreground case has a
-420-second external deadline. Workers are genuinely recorded in isolated durable
-state but deliberately not started; these tests measure foreground model routing
-and actual queue effects, not worker execution. The preceding day's real worker
+420-second external deadline. Workers in the foreground matrix are genuinely recorded in isolated durable
+state but deliberately not started; that matrix measures model routing and actual
+queue effects. The separately labeled real-worker trajectory below also tests
+worker execution and harmless file effects. The preceding day's real worker
 file-effect probes remain separate evidence for consumption and execution.
 
 ## Predefined foreground cases and baseline result
@@ -392,6 +393,188 @@ message enriched with replay provenance against its persisted canonical form;
 those fixture errors were corrected without weakening the preservation assertion.
 The original failure logs remain alongside the passing results. The broader regression run passed 88 tests in 147.9 seconds. Installed rerun
 outcomes follow below after observation.
+
+## Installed handoff/telemetry candidate
+
+Revision e1e38c5 is installed on both hosts. All 195 package files match source
+byte-for-byte on each host, and both installed smoke tests pass on each. The
+unchanged service configuration and existing model workloads are retained.
+
+The first fresh translation rerun passes in 87.3 seconds, with zero worker
+controls and a correct translated answer that leaves background work unchanged.
+The German request finishes in 206.4 seconds, with receipt-stage progress at
+99.1 seconds and one exact-authority control to Alpha. The explicit quoted-delivery
+holdout finishes in 170.1 seconds, with progress at 61.3 seconds and one control.
+Both pass the queue-target, exact-authority, identity and receipt-before-progress
+oracles. Both FAIL truthful final wording: they say checks are continuing or are
+left running while also saying that the created worker has performed no steps and
+checks have not begun. The checker accepts these contradictions. Structural
+routing success is therefore not conversational acceptance.
+
+The persistent-session rerun successfully primes a status exchange in 77.0 seconds.
+Its next translation action takes 46.9 seconds, but completion still overflows:
+31,934 historical characters and 5,111 source-inventory characters produce a
+14,652-token conservative input estimate against an 8,192-token backend window.
+Hierarchical projection starts; its first result exhausts the 256-token output
+budget after 60.5 seconds and enters bounded output repair. The telemetry change
+reduces representation size but does not eliminate semantic projection.
+
+The persistent turn again FAILED the 420-second external deadline, including its
+77.0-second priming exchange. No worker instruction was sent. Three projection
+responses exhausted their output limits before one projection completed; another
+projection was in flight at the deadline. This is still a functional failure to
+return the conversational answer, not a routing failure. The telemetry correction
+alone does not qualify persistent-conversation latency.
+
+A subsequent raw consistency ablation added an explicit clause-by-clause factual
+check at the exact existing foreground-scope location, retaining the recorded
+German request, candidate, evidence, schema and backend settings. It FAILED: the
+contradictory candidate was accepted in 38.5 seconds. The explicitly synthetic
+truthful pending candidate was accepted in 40.0 seconds. Neither requested extra
+evidence. The unsuccessful checker addition was removed before deployment; this
+experiment does not justify making the checker prompt longer.
+
+A narrower actor candidate now distinguishes requested future work from observed
+execution and instructs it to correct unsupported premises instead of echoing them.
+It upgrades only the harness-owned user-control policy to version six, retaining
+user rules. It is tested from the source package using the installed interpreter
+and dependencies, with package identity and exact candidate diff recorded. It is
+not yet an installed or qualified release. The first source candidate failed
+before inference because its policy text exceeded the configured 2,000-character
+storage limit; this is retained as `consistent-german_hold`. Its focused test run
+also failed on the same guard and was interrupted after diagnosis. The policy
+was shortened to 1,825 characters without raising the storage limit or removing
+the exact-authority, conditional receipt or unrelated-work restrictions. The
+bounded candidate uses the separate `grounded` label. Its 27 control, snapshot and
+streaming tests passed in 75.8 seconds, but its first real German reply FAILED:
+at 89.6 seconds it claimed publication had been halted and checks left running,
+while the observed worker was created with no steps and a pending control. The
+owned experiment supervisor was interrupted at 166.1 seconds after that decisive
+spoken-stage failure. The remaining planned candidate cases did not run. The
+candidate and migration change were withdrawn; their exact diff and failure
+history remain in the evidence directory. Source/installed equality was rechecked
+at all 195 package files. This failed prompt candidate was never deployed.
+
+The installed-code real-worker experiment then started separately. Its supervisor
+starts the existing worker only after observing the actual foreground control
+receipt. It permits the local checks marker and forbids a publication marker
+until user approval. This tests real model routing, exact authority consumption,
+background execution and effects, not autonomous selection of a worker-start tool.
+
+## First installed real-worker trajectory
+
+The full trajectory FAILED its 900-second external deadline. It did establish
+actual authorized effects and exact authority consumption: the check marker
+contains exactly PASS, the publication marker is absent, and one worker control
+with the complete original German message is processed. The worker was admitted
+85.1 seconds after ingress and first spoken progress arrived at 85.2 seconds,
+while foreground processing continued. The experiment supervisor initiated that
+worker start only after the durable control, so autonomous start-tool selection
+is not certified.
+
+The model later retried the same agent_control. Both actual receipts have the
+same durable control ID; the first says pending and the second processed. This
+verifies replay deduplication after consumption. The second progress message
+incorrectly says pending despite that processed receipt, so spoken truthfulness
+fails. A stale foreground action was rejected before effects, and a later
+structurally invalid action was also rejected.
+
+The worker repeatedly returned a terminal message saying it was waiting for
+approval without a blocking question, and its independent completion check
+correctly rejected overall completion. It had not reached input_required when
+the deadline terminated the owned experiment process. The foreground was also
+stuck in evidence projection/output repair and never delivered its final reply.
+The read-only `timeout-observation.json` reconstructs this outcome from durable
+history, queue rows and actual files; it explicitly labels the remaining working
+row as stale after process termination. Effects/authority pass, overall completion
+fails. Production services were untouched.
+
+## Reproduced stale-state recovery framing defect
+
+The installed real-worker trajectory exposed a separate implementation defect.
+After the snapshot fence rejects a candidate because worker state changed, the
+next serialized prompt labels the feedback a mechanical error and says to
+"Correct only that structural error." The next line explicitly requires
+reconsidering the fresh task state. The contradictory wrapper also receives
+remaining-work and tool-recovery feedback through the same input parameter.
+The exact live excerpt is retained in `stale-recovery-prompt-reproduction.json`;
+it proves the mismatch, not that this is the sole cause of every model failure.
+
+The existing real-runtime stale-state regression was extended to inspect the
+actual second request as well as proving fresh evidence and zero stale tool
+execution. It fails against the old wrapper. The first assertion was initially
+inside the model double, where the retry machinery obscured it; it was moved
+after the completed fake trajectory so the retained red result directly shows
+the contradictory serialized instruction. No runtime acceptance assertion was
+weakened.
+
+A shared feedback component now tells the model to use current authoritative
+instructions and observations, repair structural errors where reported, and
+reconcile changed state, controls, failed tools or remaining work instead of
+preserving stale decisions. Feedback still grants no new authority and cannot
+override the user. Joint action, capability selection and decomposed terminal
+response use the same component; empty-feedback prompts and validators remain
+unchanged.
+
+The source-candidate real-model recovery probe PASSED in 122.2 seconds. The
+experiment created a real second durable worker after the first action request
+captured the one-worker state. The stale action was rejected without delivery or
+effects; the next action received both the fresh two-worker state and corrected
+recovery framing. The final sentence accurately listed Alpha and Beta as created.
+Neither worker started, neither received a control, and completion evaluation
+remained enabled. This is actual BF16 generation with a controlled concurrent
+state change, not a model double or a latency comparison. The broader action, snapshot, control, streaming, completion and compiler run
+passed 160 tests in 504.9 seconds. Installation and the repeated real-worker
+trajectory follow after observation.
+
+## Timing and comparison with Infra measurements
+
+For the three completed installed handoff cases, model-call elapsed time accounts
+for 82.7/87.3 seconds (translation), 197.9/206.4 (German instruction) and
+163.2/170.1 (quoted delivery), about 95–96 percent of end-to-end time. Total local
+admission waits are 0.110, 0.148 and 0.196 seconds respectively; no individual local
+wait exceeds 0.081 seconds. The remainder is combined preparation, compilation,
+persistence, scheduling and Python work, not a measured pure orchestration phase.
+The retained `handoff-timing-decomposition.json` records every returned call.
+
+The first action sees roughly 6,400–6,500 input tokens and first content after
+8.5–8.9 seconds. Its complete 182/404/231-token structured output takes
+47.9/96.4/58.5 seconds. Thus this Thor BF16 trajectory is chiefly delayed after
+first output, unlike the earlier Jetson Q4 prefill-dominated trajectory. First
+content is not a complete validated message-plus-tool action. Warm server caching,
+provider-side queueing, transport and other host activity are not isolated; these
+are not native prompt-evaluation or decoding counters.
+
+Infra's `measurements.md` and model matrix have zero instrumented latency calls
+for the BF16-capacity row. Its phase report supplies no equivalent current BF16
+vLLM/8192-window service baseline. Q3's reported ten-token/second result uses a
+different quantization/configuration, and the Q8 aggregates mix contexts/phases.
+They cannot substantiate a like-for-like speed regression for this service.
+Infra's methodology explicitly warns against treating heterogeneous rollups as
+controlled throughput comparisons. Existing service settings and load were kept,
+so no raw-speed ranking or throughput guarantee is claimed here.
+
+## Refresh against the latest guideline additions
+
+The complete earlier audit covered 242 files and 165 original recordings. The
+current tree contains 246 files and 167 originals; four files were added and
+12 existing files changed, with none removed. `guideline-delta.json` records the
+exact current hashes and reading provenance. Both new recordings and both new
+normalized documents were read in full, with all changed normalized/index/research
+sections compared against the audited baseline. The canonical source-preservation
+check reports 167 originals, 167 coverage entries, 167 preserved, zero errors.
+
+The new answer-first/goal-relevance recording reinforces this study's distinction
+between received, queued, started and completed, and the current user's task
+outranking unrelated background goals. Current notes, editable prompt instructions,
+Diane evidence and exact authority provide foundations; they do not certify
+selective goal retrieval, explicit-versus-inferred goal provenance, supersession,
+project exclusions or personalization quality. Those require their own held-out
+acceptance. In particular, the generic Note schema and free metadata are not proof
+of a complete goal workflow, and rendering all notes that fit is not proof of
+selecting only applicable goals. No goal extraction or separate rendering model
+was silently enabled by this study. The new learned-habit game guideline governs
+a game task; it does not require embedding a game controller in SWAAG.
 
 ## Remaining acceptance boundaries
 

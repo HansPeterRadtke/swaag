@@ -12,9 +12,24 @@ recoverable audit sources rather than reactivating their instructions. Canonical
 user messages, selected actions, observations and current state remain exact.
 The audit-reference release passes fresh quotation routing but exposes a
 persistent-session telemetry blow-up and contradictory wording accepted after
-review. The next receipt-scope and recoverable-telemetry correction passes 88
-focused regressions. Its installed acceptance and remaining semantic, presentation
-and latency limits are recorded in the study, not inferred from structural validity.
+review. The installed receipt-scope and recoverable-telemetry correction passes 88
+focused regressions and the three fresh routing/delivery cases, but two replies
+still contradict the created worker state. Persistent translation again misses
+its 420-second supervisor deadline during projection. Two further prompt candidates
+fail their semantic gate and are not adopted. Real worker effects and remaining
+semantic, presentation and latency limits are recorded in the study, not inferred
+from structural validity. The first real-worker run preserves the exact instruction,
+creates the allowed marker and withholds publication, but misses its 900-second
+completion deadline. That trace reproduces contradictory recovery framing:
+changed task state is incorrectly labeled a structural-only repair. A common
+feedback correction passes a live state-change/zero-effects trajectory; its
+broader regression and installed worker rerun are recorded in the study.
+
+The latest guideline refresh covers the now 246-file tree and both new original
+recordings. Goal relevance, current-task-first reporting, explicit/inferred goal
+provenance, supersession and project exclusions require dedicated held-out
+qualification; generic notes and configurable prompts are foundations, not proof
+that this newer workflow is complete.
 
 # October fourteenth complete guideline comparison
 

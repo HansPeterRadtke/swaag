@@ -255,6 +255,9 @@ def test_full_action_rejects_stale_global_state_before_reply_or_effect(make_conf
         service.workers.store.transition(worker_id, 'working')
         result = service.orchestrator_message('Check verification and perform any necessary calculation.')
         assert result['answer'] == 'Verification completed, so no additional calculation was needed.'
+        fresh_prompt = client.requests[1]['prompt']
+        assert 'System task state changed' in fresh_prompt
+        assert 'Correct only that structural error' not in fresh_prompt
         events = runtime.history.read_history(service._load_orchestrator_state().session_id)
         assert not any(e.event_type == 'tool_called' for e in events)
         assert any(e.event_type == 'agent_action_rejected' and 'System task state changed' in e.payload.get('reason', '') for e in events)

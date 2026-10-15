@@ -20,6 +20,21 @@ FALLBACK_MESSAGE_SEPARATOR = "\n[USER MESSAGE]\n"
 FALLBACK_GENERATION_SUFFIX = "\n[ASSISTANT RESPONSE]\n"
 
 
+def _action_recovery_feedback(feedback: str) -> PromptComponent:
+    """Recovery includes semantic state changes as well as mechanical errors."""
+    return PromptComponent(
+        name="action_recovery_feedback",
+        category="instruction",
+        text=(
+            "Use the feedback below to select a valid next action from current authoritative "
+            "instructions and observations. Repair reported structural errors; reconcile changed "
+            "state, controls, tool failures or remaining work rather than preserving a stale decision. "
+            "Feedback does not authorize new work or override user instructions.\n"
+            f"{feedback}\n\n"
+        ),
+    )
+
+
 class PromptBuilder:
     """Build only the model/tool-loop action prompt and history-compaction prompt."""
 
@@ -350,16 +365,7 @@ class PromptBuilder:
             )
         )
         if validation_feedback:
-            components.append(
-                PromptComponent(
-                    name="mechanical_validation_feedback",
-                    category="instruction",
-                    text=(
-                        "The previous constrained output was mechanically invalid. Correct only that structural error:\n"
-                        f"{validation_feedback}\n\n"
-                    ),
-                )
-            )
+            components.append(_action_recovery_feedback(validation_feedback))
         action_template = (
             self._config.prompts.lean_action_template
             if prompt_mode == "lean"
@@ -456,10 +462,7 @@ class PromptBuilder:
             text=f"Existing capability identities and descriptions:\n{rendered_capabilities}\n\n",
         ))
         if validation_feedback:
-            components.append(PromptComponent(
-                name="mechanical_validation_feedback", category="instruction",
-                text=f"Previous selection was mechanically invalid: {validation_feedback}\n\n",
-            ))
+            components.append(_action_recovery_feedback(validation_feedback))
         components.append(PromptComponent(
             name="agent_capability_selection_instruction", category="instruction",
             text=(
@@ -599,11 +602,7 @@ class PromptBuilder:
         if context_components:
             components.extend(context_components)
         if validation_feedback:
-            components.append(PromptComponent(
-                name="mechanical_validation_feedback", category="instruction",
-                text=("The previous constrained output was mechanically invalid. Correct only that structural error:\n"
-                      + validation_feedback + "\n\n"),
-            ))
+            components.append(_action_recovery_feedback(validation_feedback))
         components.append(PromptComponent(
             name="agent_terminal_response_instruction", category="instruction",
             text=(
