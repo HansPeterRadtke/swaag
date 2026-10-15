@@ -188,3 +188,39 @@ completion/snapshot/control/stream group passed 51 tests. The final policy/label
 fallible review feedback, exact history/projection behavior and one-time policy
 upgrade. Installed opposing live reruns are recorded below when complete.
 
+
+
+## Failed scope-only rerun and role correction
+
+Revision b6f7839 matched all 195 installed files on each host and both installed
+smoke tests passed on each. Nevertheless its quotation rerun reproduced the wrong
+review and unwanted control. The advisory-feedback wording and additional scope
+text were insufficient. The owned experiment was stopped after 347.5 seconds
+once the failure was retained, before the remaining scope-variant cases ran.
+The supervisor received SIGINT; model services were untouched. This result is
+recorded separately from the earlier deadline.
+
+Inspection of the exact compiled checker prompt found both core actor policies
+in its system instructions, because their scope was all model operations. Thus
+the independent evaluator was also told to act as the user-facing orchestrator,
+manage workers and issue receipt-stage responses. A focused regression reproduced
+that role leakage while proving an ordinary all-scope user rule was present.
+
+The two core actor policies now explicitly apply only to action and experimental
+orchestrator-interaction calls. Role policy version four and control policy
+version five upgrade their prior core versions once. Independent completion keeps
+its evaluator role, exact user requirements, full historical evidence, current
+runtime snapshot, foreground scope and freshness checks. User-owned all-scope
+instructions remain system authority; historical policy events remain exact
+recoverable evidence. This is explicit operation-role scoping, not automatic
+semantic filtering of the user's message or a new routing gate.
+
+The role correction passed 42 focused completion, authority and snapshot tests,
+including preserved action-role instructions, retained all-scope user authority
+and one-time core-policy upgrades.
+
+The next live matrix retains the four predefined cases and adds an opposing
+holdout: an explicit request to tell Alpha a quoted prohibition. That case must
+forward the instruction, distinguishing authorized quotation delivery from a
+translation that explicitly leaves work unchanged. No model-wide quality claim
+follows from either outcome.

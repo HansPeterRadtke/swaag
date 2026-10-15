@@ -347,6 +347,14 @@ def test_completion_verifier_distinguishes_foreground_scope_from_worker_assignme
     service = CommunicationService(runtime, orchestrator_runtime=runtime)
     try:
         foreground = service._orchestrator_state()
+        from dataclasses import asdict
+        from swaag.prompt_instructions import make_prompt_instruction
+        user_rule = make_prompt_instruction(runtime.config, title='User requirement',
+            content='USER_RULE_RETAINED_814: Keep the report private.', scopes=['all'],
+            categories=['privacy'], instruction_id='user_rule_retained_814',
+            authority='durable_user_policy', source_kind='test', source_ref='test', specificity=100)
+        runtime.history.record_event(foreground, 'prompt_instruction_added',
+            {'instruction':asdict(user_rule),'instruction_store':'session'})
         runtime.history.record_event(foreground, 'turn_started', {'turn_index':1,'user_text':exact})
         runtime._evaluate_completion(foreground, original_request=exact,
                                     selected_action=_completed_action(), tool_results=[])
@@ -357,6 +365,10 @@ def test_completion_verifier_distinguishes_foreground_scope_from_worker_assignme
         assert exact in requests[0] and exact in requests[1]
         assert 'current foreground user turn' in requests[0]
         assert 'current foreground user turn' not in requests[1]
+        system_portion = requests[0].split('Original user objective:', 1)[0]
+        assert 'USER_RULE_RETAINED_814' in system_portion
+        assert "Act as the user's central SWAAG orchestrator" not in system_portion
+        assert 'A status-only reply does not deliver the restriction' not in system_portion
         events = runtime.history.read_history(foreground.session_id)
         assert 'foreground_completion_scope' in str([
             e.payload for e in events if e.event_type == 'context_compiled'])

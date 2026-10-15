@@ -1584,9 +1584,9 @@ class CommunicationService:
     def _orchestrator_state(self):
         runtime = self.orchestrator_runtime
         state = self._load_orchestrator_state()
-        instruction_id = "instruction_swaag_orchestrator_role_v3"
+        instruction_id = "instruction_swaag_orchestrator_role_v4"
         for previous in list(state.prompt_instructions):
-            if previous.instruction_id == "instruction_swaag_orchestrator_role_v2":
+            if previous.instruction_id in {"instruction_swaag_orchestrator_role_v2", "instruction_swaag_orchestrator_role_v3"}:
                 runtime.history.record_event(state, "prompt_instruction_removed", {
                     "instruction_id": previous.instruction_id, "instruction_store": "session",
                 })
@@ -1622,7 +1622,7 @@ class CommunicationService:
                     "Supervision is independently observable with orchestration_control.supervision; a heartbeat "
                     "alone does not prove inference progress. Do not invent automatic semantic stuck-worker cancellation."
                 ),
-                scopes=["all"],
+                scopes=["action", "orchestrator_interaction"],
                 categories=["orchestration", "user-facing-control"],
                 instruction_id=instruction_id,
                 authority="project_policy",
@@ -1635,11 +1635,11 @@ class CommunicationService:
                 "prompt_instruction_added",
                 {"instruction": asdict(instruction), "instruction_store": "session"},
             )
-        control_instruction_id = "instruction_swaag_user_controls_v4"
+        control_instruction_id = "instruction_swaag_user_controls_v5"
         for previous in list(state.prompt_instructions):
             if previous.instruction_id in {
                 "instruction_swaag_user_controls_v1", "instruction_swaag_user_controls_v2",
-                "instruction_swaag_user_controls_v3",
+                "instruction_swaag_user_controls_v3", "instruction_swaag_user_controls_v4",
             }:
                 runtime.history.record_event(state, "prompt_instruction_removed", {
                     "instruction_id": previous.instruction_id, "instruction_store": "session",
@@ -1673,7 +1673,7 @@ class CommunicationService:
                     "Use a read-only status lookup to inspect acknowledgement if needed. "
                     "Do not broadcast unrelated assignments "
                     "or treat quoted/hypothetical examples as commands."
-                ), scopes=["all"], categories=["orchestration", "user-facing-control"],
+                ), scopes=["action", "orchestrator_interaction"], categories=["orchestration", "user-facing-control"],
                 instruction_id=control_instruction_id, authority="project_policy",
                 source_kind="swaag_core", source_ref="infra-guidelines/agents-orchestration",
                 specificity=100,
