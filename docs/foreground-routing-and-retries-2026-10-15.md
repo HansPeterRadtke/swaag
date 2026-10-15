@@ -224,3 +224,49 @@ holdout: an explicit request to tell Alpha a quoted prohibition. That case must
 forward the instruction, distinguishing authorized quotation delivery from a
 translation that explicitly leaves work unchanged. No model-wide quality claim
 follows from either outcome.
+
+
+## Audit-evidence ablation and recoverable context correction
+
+The role-scoped installed quotation case still failed and queued an unwanted
+control. It was stopped after 235.4 seconds; the remaining role cases and proposed
+holdout were not run. The checker cited actor-policy text that was now present
+only in historical audit evidence. Source inspection confirmed that historical
+prompt-instruction events duplicated the current actor policy, while prior-turn
+model request/response envelopes can duplicate entire earlier prompts and
+unaccepted drafts.
+
+A raw constrained checker experiment reused the exact failed request, with the
+same endpoint, response schema, generation parameters and recorded state. It also
+constructed a clearly labelled counterfactual with a real publication restriction
+and a status-only candidate, for which completion must be false. No tools ran.
+Repeating the complete request/candidate with explicit scope at the end still
+failed the translation (69.9 seconds); it correctly rejected the genuinely
+undelivered restriction (41.9 seconds). This prompt-order change was not adopted.
+
+Replacing only the two core-policy audit text bodies with explicit exact-source
+references passed both opposing raw checker cases: translation accepted in 27.3
+seconds, undelivered real restriction rejected in 27.2 seconds. Other task data,
+current state and original wording were retained. This is a two-case raw input
+ablation, not installed end-to-end qualification. The negative is a synthetic
+counterfactual, and its retained source identifiers are fixture metadata rather
+than newly verified live history.
+
+Completion context now distinguishes harness configuration/model envelopes from
+canonical task evidence by their explicit event schemas. Core project-policy audit
+records retain identity, scope, hash and exact recovery metadata rather than
+reactivating their text as task instructions. Saved prompt/model-request/model-
+response envelopes likewise have explicit audit references. Canonical user and
+assistant messages, selected actions, tool observations and state remain exact.
+No utterance keywords or task meanings decide this boundary. Current applicable
+instructions still enter through the scoped instruction contributor.
+
+The runtime_audit evidence provider advertises referenced audit events only, pins
+the operation session, verifies the event integrity and exact source hash, and
+allows the completion model to request the complete original event. All raw
+records remain unchanged. Tests cover retained all-scope user rules, prior model
+prompt/draft leakage, exact source recovery, changed hashes and cross-session
+rejection. The core-policy-only group passed 44 tests; the generalized audit run passed 43 checks and exposed one new fixture missing
+mandatory event-envelope fields. After supplying attempt and prompt_mode without
+weakening assertions, both targeted scope/feedback tests passed. The final broader
+run and installed fresh/persistent results are recorded below after observation.

@@ -36,7 +36,7 @@ from swaag.environment.environment import AgentEnvironment
 from swaag.external_tool_adapters import build_runtime_external_tool_manager
 from swaag.external_tools import RuntimeExternalToolError
 from swaag.environment.artifacts import TextArtifactStore
-from swaag.evidence_sources import default_completion_evidence_source_providers
+from swaag.evidence_sources import default_completion_evidence_source_providers, is_core_policy_audit_event, is_runtime_audit_event
 from swaag.fsops import ensure_dir, restore_tree, snapshot_tree, write_text
 from swaag.grammar import (
     agent_action_contract,
@@ -2422,7 +2422,7 @@ class AgentRuntime:
         if completion_snapshot_event is not None:
             historical_events.append(completion_snapshot_event)
         historical_rows = [
-            self._communication_evidence_row(event) for event in historical_events
+            self._completion_historical_evidence_row(event) for event in historical_events
         ]
         historical_source_references = [
             self._communication_evidence_reference(event)
@@ -3008,6 +3008,49 @@ class AgentRuntime:
             "payload": to_jsonable(event.payload),
             "metadata": to_jsonable(event.metadata),
         }
+
+    @staticmethod
+    def _completion_historical_evidence_row(event: HistoryEvent) -> dict[str, Any]:
+        row = AgentRuntime._communication_evidence_row(event)
+        if is_core_policy_audit_event(event):
+            # Harness instruction configuration is supplied by the scoped
+            # instruction contributor, not reactivated by its audit history.
+            # Exact policy text remains a model-requestable, verified source.
+            instruction = row["payload"]["instruction"]
+            content = instruction["content"]
+            instruction["content"] = (
+                "[Core policy audit text retained in the exact referenced history event. "
+                "Applicable current instructions are supplied separately for this operation.]"
+            )
+            row["evidence_view"] = "core_policy_audit_reference"
+            row["exact_source"] = {
+                "source_kind": "runtime_audit",
+                "source_id": f"{event.session_id}:{event.sequence}",
+                "event_hash": event.hash,
+                "content_sha256": sha256_text(content),
+                "content_chars": len(content),
+            }
+        elif is_runtime_audit_event(event):
+            # Model transport/compilation envelopes duplicate prompts and raw
+            # unaccepted drafts. Canonical user messages, selected actions and
+            # actual observations stay exact in their own event schemas.
+            encoded = stable_json_dumps(row["payload"], indent=None)
+            row["payload"] = {
+                "operation_kind": event.payload.get("kind"),
+                "view_notice": (
+                    "Runtime model envelope retained as exact audit evidence. "
+                    "This is not a new instruction or a completed tool effect."
+                ),
+            }
+            row["evidence_view"] = "runtime_audit_reference"
+            row["exact_source"] = {
+                "source_kind": "runtime_audit",
+                "source_id": f"{event.session_id}:{event.sequence}",
+                "event_hash": event.hash,
+                "content_sha256": sha256_text(encoded),
+                "content_chars": len(encoded),
+            }
+        return row
 
     @staticmethod
     def _communication_status_semantic_event_type(event_type: str) -> bool:
@@ -4564,6 +4607,10 @@ class AgentRuntime:
                     for event in historical_events
                 ],
             ]
+        )
+        referenced_values.update(
+            f"{event.session_id}:{event.sequence}"
+            for event in historical_events if is_runtime_audit_event(event)
         )
         source_events = self.history.read_history(state.session_id)
         inventory: list[dict[str, Any]] = []

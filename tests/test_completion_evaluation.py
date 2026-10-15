@@ -1037,3 +1037,74 @@ def test_single_verdict_native_template_preserves_exact_component_accounting(mak
     runtime._materialize_prompt_protocol(assembly)
     assert exact in assembly.prompt_text
     assert ''.join(component.text for component in assembly.components) == assembly.prompt_text
+
+
+def test_core_policy_audit_reference_preserves_exact_recovery_and_integrity(make_config):
+    import copy
+    import pytest
+    from swaag.communication import CommunicationService
+    from swaag.evidence_sources import RuntimeAuditEvidenceProvider
+    from swaag.history import HistoryInvariantError
+    runtime = AgentRuntime(make_config(model__context_limit=32000), model_client=_CompletionClient([]))
+    service = CommunicationService(runtime, orchestrator_runtime=runtime)
+    try:
+        state = service._orchestrator_state()
+        event = next(e for e in runtime.history.read_history(state.session_id)
+                     if e.event_type == 'prompt_instruction_added')
+        original = event.payload['instruction']['content']
+        view = runtime._completion_historical_evidence_row(event)
+        assert view['evidence_view'] == 'core_policy_audit_reference'
+        assert original not in json.dumps(view)
+        assert event.payload['instruction']['content'] == original
+        provider = RuntimeAuditEvidenceProvider()
+        inventory = provider.inventory(config=runtime.config, state=state,
+                                       source_events=[event], referenced_values={f'{state.session_id}:{event.sequence}'})
+        assert len(inventory) == 1
+        exact = provider.reexpand(config=runtime.config, state=state, source=inventory[0])
+        assert exact['integrity_verified'] is True
+        assert json.loads(exact['text'])['payload']['instruction']['content'] == original
+        wrong_hash = {**inventory[0], 'sha256':'wrong'}
+        with pytest.raises(HistoryInvariantError, match='differs'):
+            provider.reexpand(config=runtime.config, state=state, source=wrong_hash)
+        other_session = copy.deepcopy(inventory[0])
+        other_session['source_event_references'][0]['session_id'] = 'another-session'
+        with pytest.raises(HistoryInvariantError, match='cross'):
+            provider.reexpand(config=runtime.config, state=state, source=other_session)
+    finally:
+        service.close()
+
+
+def test_completion_can_request_exact_core_policy_audit_text(make_config):
+    from swaag.communication import CommunicationService
+    from tests.test_agent_action_loop import FakeModelClient
+    holder = {}
+    def request_source(payload):
+        assert holder['content'] not in payload['prompt']
+        return json.dumps({'complete':False,'reason':'The user asks for the exact historical policy.',
+            'remaining_work':[], 'evidence_requests':[{
+                'source_kind':'runtime_audit','source_id':holder['source_id'],
+                'purpose':'Check the exact requested historical policy text.','literal_query':''}]})
+    def check_source(payload):
+        assert holder['content'] in payload['prompt']
+        result = {'complete':True,'reason':'The exact source was recovered.','remaining_work':[]}
+        if 'evidence_requests' in payload['json_schema']['properties']:
+            result['evidence_requests'] = []
+        return json.dumps(result)
+    runtime = AgentRuntime(make_config(model__context_limit=32000),
+                           model_client=FakeModelClient([request_source,check_source]))
+    service = CommunicationService(runtime, orchestrator_runtime=runtime)
+    try:
+        state = service._orchestrator_state()
+        event = next(e for e in runtime.history.read_history(state.session_id)
+                     if e.event_type == 'prompt_instruction_added')
+        holder.update(content=event.payload['instruction']['content'],
+                      source_id=f'{state.session_id}:{event.sequence}')
+        request = 'Verify the exact historical orchestrator policy text.'
+        runtime.history.record_event(state, 'turn_started', {'turn_index':1,'user_text':request})
+        result = runtime._evaluate_completion(state, original_request=request,
+                       selected_action=_completed_action(), tool_results=[])
+        assert result['complete'] is True
+        assert len(runtime.client.requests) == 2
+        assert runtime.history.read_history(state.session_id)[event.sequence-1].payload['instruction']['content'] == holder['content']
+    finally:
+        service.close()

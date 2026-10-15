@@ -36,6 +36,14 @@ why they stay mechanical.
   the candidate. This chooses a replaceable storage region, not which facts to
   retain: the summary LLM receives every exact candidate message and owns semantic
   retention, including how many candidate-tail messages remain verbatim.
+- Completion evidence separates harness policy audit records and saved model
+  transport/compilation envelopes from canonical task observations using their
+  explicit schemas and provenance. These records have exact session/sequence/hash
+  references instead of reactivating stored instructions or unaccepted drafts.
+  Current scoped instructions, user messages, selected actions and actual tool
+  observations remain available. The model can request any advertised exact audit
+  source; recovery verifies its session, event integrity, hash and size. This
+  boundary does not inspect the meaning of the user's language or discard history.
 - Search result counts and protocol cursors are caller-visible retrieval bounds,
   not context-selection policy. Raw events remain addressable through exact
   windows, archive retrieval, artifacts, or another model-selected search.

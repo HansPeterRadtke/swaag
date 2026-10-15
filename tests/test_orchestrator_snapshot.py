@@ -315,7 +315,10 @@ def test_completion_verifier_gets_fresh_worker_controls_and_rejects_changed_stat
         assert marker in payload['prompt']
         assert 'runtime_system_snapshot' in payload['prompt']
         holder['service'].workers.store.transition(holder['worker'].worker_id,'completed',result='Completed during evaluation')
-        return json.dumps({'complete':True,'reason':'Observed current state.','remaining_work':[]})
+        result = {'complete':True,'reason':'Observed current state.','remaining_work':[]}
+        if 'evidence_requests' in payload['json_schema']['properties']:
+            result['evidence_requests'] = []
+        return json.dumps(result)
     runtime = AgentRuntime(make_config(model__context_limit=32000),model_client=FakeModelClient([verify]))
     service = CommunicationService(runtime,orchestrator_runtime=runtime)
     holder['service'] = service
@@ -341,7 +344,10 @@ def test_completion_verifier_distinguishes_foreground_scope_from_worker_assignme
     requests = []
     def verify(payload):
         requests.append(payload['prompt'])
-        return json.dumps({'complete':True,'reason':'The requested translation is present.','remaining_work':[]})
+        result = {'complete':True,'reason':'The requested translation is present.','remaining_work':[]}
+        if 'evidence_requests' in payload['json_schema']['properties']:
+            result['evidence_requests'] = []
+        return json.dumps(result)
     runtime = AgentRuntime(make_config(model__context_limit=32000),
                            model_client=FakeModelClient([verify, verify]))
     service = CommunicationService(runtime, orchestrator_runtime=runtime)
@@ -355,6 +361,9 @@ def test_completion_verifier_distinguishes_foreground_scope_from_worker_assignme
             authority='durable_user_policy', source_kind='test', source_ref='test', specificity=100)
         runtime.history.record_event(foreground, 'prompt_instruction_added',
             {'instruction':asdict(user_rule),'instruction_store':'session'})
+        runtime.history.record_event(foreground, 'model_response_received', {
+            'kind':'action', 'attempt':1, 'prompt_mode':'standard', 'completion':{'text':'UNACCEPTED_MODEL_DRAFT_916',
+                'raw_request':{'messages':[{'role':'system','content':'OLD_ACTOR_PROMPT_537'}]}}})
         runtime.history.record_event(foreground, 'turn_started', {'turn_index':1,'user_text':exact})
         runtime._evaluate_completion(foreground, original_request=exact,
                                     selected_action=_completed_action(), tool_results=[])
@@ -369,6 +378,11 @@ def test_completion_verifier_distinguishes_foreground_scope_from_worker_assignme
         assert 'USER_RULE_RETAINED_814' in system_portion
         assert "Act as the user's central SWAAG orchestrator" not in system_portion
         assert 'A status-only reply does not deliver the restriction' not in system_portion
+        assert 'A status-only reply does not deliver the restriction' not in requests[0]
+        assert 'runtime_audit' in requests[0]
+        assert 'OLD_ACTOR_PROMPT_537' not in requests[0]
+        assert 'UNACCEPTED_MODEL_DRAFT_916' not in requests[0]
+        assert 'USER_RULE_RETAINED_814' in requests[0]
         events = runtime.history.read_history(foreground.session_id)
         assert 'foreground_completion_scope' in str([
             e.payload for e in events if e.event_type == 'context_compiled'])
