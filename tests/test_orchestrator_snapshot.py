@@ -561,3 +561,54 @@ def test_snapshot_changed_while_waiting_for_inference_is_not_sent(make_config, m
         assert all(m.content != 'The worker is still working.' for m in state.messages if m.role == 'assistant')
     finally:
         service.close()
+
+
+def test_current_receipts_survive_lossy_snapshot_projection(make_config):
+    from swaag.runtime import RuntimeContextProjection
+    from swaag.utils import sha256_text
+    runtime = AgentRuntime(make_config(model__context_limit=32000), model_client=_ImmediateClient('unused'))
+    service = CommunicationService(runtime, orchestrator_runtime=runtime)
+    try:
+        worker = service.workers.create('Verify receipt lifecycle')
+        receipt = runtime.history.enqueue_control_message(worker.session_id, 'Do not publish yet.')
+        runtime.history.mark_control_message_processed(worker.session_id, receipt['control_id'])
+        state = service._orchestrator_state()
+        context = {}
+        sources = runtime._runtime_context_sources(state, context_state=context)
+        snapshot = next(s for s in sources if s.name == 'runtime_system_snapshot')
+        projection = RuntimeContextProjection(sha256_text(snapshot.text), 'The worker is waiting.')
+        components = runtime._runtime_context_components(state, runtime._counter(state),
+            projections={'runtime_system_snapshot': projection}, context_state=context)
+        text = ''.join(c.text for c in components)
+        assert receipt['control_id'] in text
+        assert 'processed_at' in text and 'processed' in text
+        assert 'does not prove execution' in text
+        assert 'supersede earlier receipt statuses' in text
+        receipts = next(s for s in sources if s.name == 'worker_control_receipts')
+        assert not receipts.projectable and not receipts.optional
+        assert 'Do not publish yet.' not in receipts.text
+    finally:
+        service.close()
+
+
+def test_question_inventory_uses_same_observation_as_refreshed_snapshot(make_config):
+    runtime = AgentRuntime(make_config(model__context_limit=32000), model_client=_ImmediateClient('unused'))
+    service = CommunicationService(runtime, orchestrator_runtime=runtime)
+    try:
+        worker = service.workers.create('Wait for approval after checks')
+        state = service._orchestrator_state()
+        old = service._orchestrator_runtime_snapshot()
+        runtime.history.record_event(state, 'worker_question_inventory', old['worker_question_inventory'])
+        worker_state = runtime.history.rebuild_from_history(worker.session_id)
+        runtime.history.record_event(worker_state, 'agent_status', {
+            'situation': 'FRESH_STATUS_AFTER_REDUCTION_674', 'action': 'Wait for approval',
+            'reason': 'Checks done', 'action_index': 1, 'importance': 'normal', 'importance_rank': 2})
+        context = {}
+        sources = runtime._runtime_context_sources(state, context_state=context)
+        inventory = next(s for s in sources if s.name == 'worker_question_inventory')
+        assert 'FRESH_STATUS_AFTER_REDUCTION_674' in inventory.text
+        assert state.worker_question_inventory == context['runtime_system_snapshot']['worker_question_inventory']
+        restored = runtime.history.rebuild_from_history(state.session_id)
+        assert restored.worker_question_inventory == state.worker_question_inventory
+    finally:
+        service.close()
