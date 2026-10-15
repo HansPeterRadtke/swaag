@@ -546,3 +546,30 @@ def test_tiny_evidence_reduction_uses_target_aware_response_budget(make_config, 
     assert observed["minimum"] == 32
     assert observed["desired"] == 88
     assert observed["reserve"] == 88
+
+
+def test_evidence_projection_instruction_fits_the_actual_generation_allowance(make_config, monkeypatch):
+    import re
+    from swaag.grammar import evidence_projection_contract
+    from swaag.tokens import ExactTokenCounter
+    runtime = AgentRuntime(make_config(model__context_limit=2048,
+        context__reserved_response_tokens=256, context__semantic_reduction_max_input_tokens=0),
+        model_client=_ProjectionClient(), token_counter=ExactTokenCounter(lambda text: len(text.split())))
+    state = runtime.create_or_load_session()
+    observed = []
+    def execute(_state, prepared, **kwargs):
+        requested = int(re.search(r'approximately (\d+) tokens', prepared.assembly.prompt_text).group(1))
+        observed.append((requested, prepared.report.reserved_response_tokens))
+        return {'projection': 'The exact key fact remains available.'}, prepared
+    monkeypatch.setattr(runtime, '_execute_with_output_recovery', execute)
+    for source_words in (6, 1600):
+        projection, report = runtime._reduce_text_hierarchically(state,
+            source_text='evidence ' * source_words, source_label='exact original source',
+            target_tokens=1727, contract=evidence_projection_contract(), output_key='projection',
+            build_assembly=lambda text, label, target: runtime.prompts.build_evidence_projection_prompt(
+                purpose='retain the key fact', source_label=label, raw_evidence=text, target_tokens=target),
+            remaining_calls=[16], context_limit_resolution=(2048, 'test'))
+        assert projection and report.fits
+    assert observed
+    assert all(requested + 24 <= allowance for requested, allowance in observed), observed
+    assert any(allowance < 256 for _, allowance in observed), observed

@@ -4998,8 +4998,13 @@ class AgentRuntime:
         # projection larger than half of its bounded input working set. This only
         # applies after measured overflow has already selected semantic reduction;
         # authoritative source material remains durable and recoverable outside the
-        # prompt. A disabled input cap (0) preserves the legacy behavior exactly.
-        effective_target_tokens = int(target_tokens)
+        # prompt. A disabled input cap (0) removes only this working-set restriction.
+        # The prompt's requested content size must be achievable inside the
+        # configured generation allowance, including the JSON wrapper. A large
+        # caller target is not permission to promise more output than we admit.
+        effective_target_tokens = min(
+            int(target_tokens), max(1, int(self.config.context.reserved_response_tokens) - 24)
+        )
         if reduction_cap > 0:
             effective_target_tokens = min(
                 effective_target_tokens,
@@ -5049,6 +5054,22 @@ class AgentRuntime:
             if recovered is not None:
                 compilation = recovered
                 prompt_instruction_projected = True
+        # Input pressure may reduce the admitted output below that configured
+        # allowance. Rebuild the instruction against measured headroom before
+        # generation. Targets only decrease, so this local compilation converges
+        # without an extra model call or dropping any exact source input.
+        while compilation.report.fits and effective_target_tokens > max(
+            1, compilation.report.reserved_response_tokens - 24
+        ):
+            effective_target_tokens = max(1, compilation.report.reserved_response_tokens - 24)
+            assembly = build_assembly(source_text, source_label, effective_target_tokens)
+            compilation = self._compile_context(
+                state, assembly, contract,
+                minimum_output_tokens=minimum_output_tokens,
+                context_limit_resolution=context_limit_resolution,
+                desired_output_tokens=desired_output_tokens,
+                include_prompt_instructions=include_prompt_instructions,
+            )
         exceeds_reduction_working_set = (
             reduction_cap > 0 and compilation.report.input_tokens > reduction_cap
         )
