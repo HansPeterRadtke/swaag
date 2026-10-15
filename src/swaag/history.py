@@ -807,6 +807,7 @@ class HistoryStore:
         if row is not None:
             payload = {key: row[key] for key in ("control_id", "session_id", "message", "source", "created_at", "priority")}
             payload["authority"] = json.loads(row["authority_json"])
+            payload["status"] = str(row["status"])
             if str(row["status"]) == "pending":
                 self._write_projection(self.control_inbox_dir(session_id) / f"{control_id}.json", payload)
         return payload

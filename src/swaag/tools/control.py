@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import hashlib
 from dataclasses import asdict
 from typing import Any
 
@@ -112,7 +113,7 @@ class AgentStatusLookupTool(Tool):
 class AgentControlTool(Tool):
     name = "agent_control"
     description = "Queue an exact, ordered, durable control/instruction for another SWAAG session."
-    usage_guidance = "Use an exact worker ID or session id/name when the user redirects, pauses, stops, or instructs the target. Preserve exact wording. queued=true confirms durable enqueue only, not acknowledgement or effects. Report the pending state and continue in the background; do not resend to poll. Original user authority is preserved separately from your routing note."
+    usage_guidance = "Use an exact worker ID or session id/name when the user redirects, pauses, stops, or instructs the target. Preserve exact wording. queued=true confirms durable enqueue only, not acknowledgement or effects. Report the pending state and continue in the background; do not resend to poll. Original user authority is preserved separately from your routing note. Retries for the same original user events and target reuse the first receipt; status reports pending or processed, never proof of completed effects."
     kind = "side_effect"
     input_schema = {
         "type": "object",
@@ -135,12 +136,28 @@ class AgentControlTool(Tool):
 
     def execute(self, validated_input: dict[str, Any], context: ToolContext) -> ToolExecutionResult:
         store, session_id = _resolve_control_target(context, validated_input["session_ref"])
+        authority = _originating_user_authority(context)
+        # The original foreground events are the action identity. A generated
+        # routing-note paraphrase, target alias, or retry must not deliver them
+        # twice. A new user event, changed authority set, or target gets a new ID.
+        # Direct/legacy worker controls have no such provenance and stay distinct.
+        control_id = None
+        if authority:
+            identity = stable_json_dumps(
+                {"target_session_id": session_id, "authority": authority}, indent=None
+            )
+            control_id = "control_authority_" + hashlib.sha256(identity.encode()).hexdigest()
         payload = store.enqueue_control_message(
             session_id, validated_input["message"], source="agent_control",
-            authority=_originating_user_authority(context),
+            control_id=control_id, authority=authority,
         )
+        # queued retains its durable-acceptance meaning; status is the observed
+        # delivery state and may already be processed when returning a retry.
         output = {**payload, "queued": True}
-        return ToolExecutionResult(self.name, output, f"Queued control {payload['control_id']} for {session_id}")
+        return ToolExecutionResult(
+            self.name, output,
+            f"Durable control {payload['control_id']} for {session_id}: {payload['status']}",
+        )
 
 
 CONTROL_TOOLS = [AgentStatusLookupTool(), AgentControlTool()]

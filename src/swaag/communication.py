@@ -1635,11 +1635,14 @@ class CommunicationService:
                 "prompt_instruction_added",
                 {"instruction": asdict(instruction), "instruction_store": "session"},
             )
-        control_instruction_id = "instruction_swaag_user_controls_v2"
-        if any(item.instruction_id == "instruction_swaag_user_controls_v1" for item in state.prompt_instructions):
-            runtime.history.record_event(state, "prompt_instruction_removed", {
-                "instruction_id": "instruction_swaag_user_controls_v1", "instruction_store": "session",
-            })
+        control_instruction_id = "instruction_swaag_user_controls_v3"
+        for previous in list(state.prompt_instructions):
+            if previous.instruction_id in {
+                "instruction_swaag_user_controls_v1", "instruction_swaag_user_controls_v2",
+            }:
+                runtime.history.record_event(state, "prompt_instruction_removed", {
+                    "instruction_id": previous.instruction_id, "instruction_store": "session",
+                })
         if not any(item.instruction_id == control_instruction_id for item in state.prompt_instructions):
             instruction = make_prompt_instruction(
                 runtime.config, title="Deliver authoritative user controls",
@@ -1649,7 +1652,13 @@ class CommunicationService:
                     "when the restricted action has not started. If an existing objective or plan "
                     "permits an action that the user now restricts, revise that plan or use "
                     "agent_control to deliver the exact user message to each affected worker. "
-                    "A status-only reply does not deliver the restriction. A successful agent_control "
+                    "A status-only reply does not deliver the restriction. When handing off or "
+                    "updating background work, include a brief useful acknowledgement in that "
+                    "action's assistant_message, together with status already supported by the "
+                    "snapshot. Describe unobserved actions as intentions, not completed results. "
+                    "The runtime releases this text after successful tool receipts; do not defer "
+                    "the acknowledgement to another model call or background completion. "
+                    "A successful agent_control "
                     "result with queued=true is the durable queue receipt. It permits saying the "
                     "instruction is queued; it does not prove worker acknowledgement or completed "
                     "effects. Finish the foreground reply with current status and this precise pending "
