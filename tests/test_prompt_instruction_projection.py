@@ -479,6 +479,17 @@ def test_action_recovers_instruction_overflow_before_rebuilding_history(
         scopes=['action'],
     ))
     compacted = []
+    reductions = []
+    project_context = runtime._project_runtime_context_for_overflow
+    def project(*args, **kwargs):
+        reductions.append(True)
+        return project_context(*args, **kwargs)
+    recover = runtime._recover_system_prompt_contributor_overflow
+    def recover_after_views(*args, **kwargs):
+        assert reductions, "Try available context views before reducing system instructions"
+        return recover(*args, **kwargs)
+    monkeypatch.setattr(runtime, "_project_runtime_context_for_overflow", project)
+    monkeypatch.setattr(runtime, "_recover_system_prompt_contributor_overflow", recover_after_views)
     def compact(*args, **kwargs):
         compacted.append(True)
         return False

@@ -2246,6 +2246,60 @@ class AgentRuntime:
                 },
             )
 
+        def recover_instruction_call() -> PreparedCall | None:
+            # Try this after other available views, but before raw history
+            # reconstruction can undo already reduced tool-result context.
+            recovered = self._recover_system_prompt_contributor_overflow(
+                state,
+                assembly,
+                contract,
+                compilation,
+                minimum_output_tokens=effective_minimum,
+            )
+            if recovered is not None:
+                self.history.record_event(
+                    state,
+                    "context_compiled",
+                    {
+                        "kind": assembly.kind,
+                        "prompt_mode": prompt_mode,
+                        "accounting": recovered.accounting(),
+                        "cap_error": "",
+                        "prompt_instruction_projection": True,
+                        "history_source": history_source,
+                        "candidate_only": False,
+                        "authoritative_message_count": len(authoritative_messages),
+                        "projected_message_count": len(history_messages),
+                    },
+                )
+                self.history.record_event(
+                    state,
+                    "budget_checked",
+                    {
+                        "kind": assembly.kind,
+                        "prompt_mode": prompt_mode,
+                        "budget_report": asdict(recovered.report),
+                        "cap_error": "",
+                        "prompt_instruction_projection": True,
+                        "history_source": history_source,
+                        "candidate_only": False,
+                    },
+                )
+                self._record_prompt_built(
+                    state,
+                    assembly,
+                    contract,
+                    recovered.report,
+                )
+                return PreparedCall(
+                    assembly=assembly,
+                    report=recovered.report,
+                    prompt_mode=prompt_mode,
+                    contract=contract,
+                    runtime_snapshot=system_context_state.get("runtime_system_snapshot"),
+                )
+            return None
+
         for compaction_round in range(max_rounds + 1):
             if self._runtime_snapshot_changed(state, system_context_state.get("runtime_system_snapshot")):
                 # Keep exact tool/history evidence, but never keep reducing an
@@ -2329,60 +2383,10 @@ class AgentRuntime:
                         contract=contract,
                         runtime_snapshot=system_context_state.get("runtime_system_snapshot"),
                     )
-            # Recover a fitting system-instruction view before rebuilding raw
-            # history, which can undo already reduced tool-result views.
-            # The contributor first checks whether its own reduction can
-            # cover the measured overflow; other recovery paths remain.
-            recovered = self._recover_system_prompt_contributor_overflow(
-                state,
-                assembly,
-                contract,
-                compilation,
-                minimum_output_tokens=effective_minimum,
-            )
-            if recovered is not None:
-                self.history.record_event(
-                    state,
-                    "context_compiled",
-                    {
-                        "kind": assembly.kind,
-                        "prompt_mode": prompt_mode,
-                        "accounting": recovered.accounting(),
-                        "cap_error": "",
-                        "prompt_instruction_projection": True,
-                        "history_source": history_source,
-                        "candidate_only": False,
-                        "authoritative_message_count": len(authoritative_messages),
-                        "projected_message_count": len(history_messages),
-                    },
-                )
-                self.history.record_event(
-                    state,
-                    "budget_checked",
-                    {
-                        "kind": assembly.kind,
-                        "prompt_mode": prompt_mode,
-                        "budget_report": asdict(recovered.report),
-                        "cap_error": "",
-                        "prompt_instruction_projection": True,
-                        "history_source": history_source,
-                        "candidate_only": False,
-                    },
-                )
-                self._record_prompt_built(
-                    state,
-                    assembly,
-                    contract,
-                    recovered.report,
-                )
-                return PreparedCall(
-                    assembly=assembly,
-                    report=recovered.report,
-                    prompt_mode=prompt_mode,
-                    contract=contract,
-                    runtime_snapshot=system_context_state.get("runtime_system_snapshot"),
-                )
             if not self.config.context.compact_on_overflow or compaction_round >= max_rounds:
+                recovered_call = recover_instruction_call()
+                if recovered_call is not None:
+                    return recovered_call
                 break
             if reduce_system_context_for_overflow(
                 self, state, assembly, system_context_state
@@ -2420,6 +2424,9 @@ class AgentRuntime:
                 source_name, projection = projected_context
                 runtime_context_projections[source_name] = projection
                 continue
+            recovered_call = recover_instruction_call()
+            if recovered_call is not None:
+                return recovered_call
             if history_source == "authoritative_message_events" and has_derived_history:
                 compacted = self._compact_once(
                     state,

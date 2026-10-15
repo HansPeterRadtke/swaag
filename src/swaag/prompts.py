@@ -323,8 +323,8 @@ class PromptBuilder:
                 name="current_user_turn",
                 category="current_user",
                 text=(
-                    "Current user message, verbatim:\n"
-                    + self.user_message_provenance(current_user)
+                    self.user_message_provenance(current_user)
+                    + "Current user message, verbatim:\n"
                     + f"{current_user.content if current_user is not None else original_request}\n\n"
                 ),
             ),
@@ -441,8 +441,8 @@ class PromptBuilder:
             ),
             PromptComponent(
                 name="current_user_turn", category="current_user",
-                text=("Current user message, verbatim:\n" +
-                      self.user_message_provenance(current_user) +
+                text=(self.user_message_provenance(current_user) +
+                      "Current user message, verbatim:\n" +
                       f"{current_user.content if current_user is not None else original_request}\n\n"),
             ),
             *self.message_prompt_components(
@@ -586,8 +586,8 @@ class PromptBuilder:
             ),
             PromptComponent(
                 name="current_user_turn", category="current_user",
-                text=("Current user message, verbatim:\n" +
-                      self.user_message_provenance(current_user) +
+                text=(self.user_message_provenance(current_user) +
+                      "Current user message, verbatim:\n" +
                       f"{current_user.content if current_user is not None else original_request}\n\n"),
             ),
             *self.message_prompt_components(
