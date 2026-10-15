@@ -2096,6 +2096,15 @@ class AgentRuntime:
     ) -> PreparedCall:
         last_report: BudgetReport | None = None
         tool_result_projections: dict[int, str] = {}
+        # A declined exact selection cannot improve merely because another
+        # context source was reduced. Scope this memo to one frozen preparation.
+        failed_tool_projections: set[tuple] = set()
+        tool_projection_objective = original_request
+        if pending_messages:
+            tool_projection_objective += (
+                "\n\nLater authoritative user interventions, in order:\n"
+                + "\n\n".join(pending_messages)
+            )
         runtime_context_projections: dict[str, RuntimeContextProjection] = {}
         remaining_runtime_projection_calls = [
             max(8, int(self.config.context.max_compaction_rounds) * 8)
@@ -2267,11 +2276,12 @@ class AgentRuntime:
                 continue
             projected = self._project_largest_tool_result_for_overflow(
                 state,
-                original_request=original_request,
+                original_request=tool_projection_objective,
                 assembly=assembly,
                 compilation=compilation,
                 existing_projections=tool_result_projections,
                 messages=history_messages,
+                failed_attempts=failed_tool_projections,
             )
             if projected is not None:
                 sequence, projection = projected
@@ -4851,6 +4861,7 @@ class AgentRuntime:
         compilation: ContextCompilation,
         existing_projections: dict[int, str],
         messages: list[Message] | None = None,
+        failed_attempts: set[tuple] | None = None,
     ) -> tuple[int, str] | None:
         overflow = compilation.overflow_tokens
         if overflow <= 0:
@@ -4881,23 +4892,31 @@ class AgentRuntime:
                 candidates.append((matching_tokens, sequence, message))
         if not candidates:
             return None
-        current_tokens, sequence, message = max(candidates, key=lambda item: item[0])
-        # Recover only the measured deficit plus fixed framing slack. The next
-        # complete prompt is rebuilt and counted, so no proportional semantic
-        # reduction is needed as a substitute for exact admission.
-        target_tokens = max(64, current_tokens - overflow - 32)
-        if sequence in existing_projections:
-            projected_text_tokens = self._counter(state).count_text(
-                existing_projections[sequence]
-            ).tokens
-            target_tokens = min(
+        for current_tokens, sequence, message in sorted(candidates, key=lambda item: item[0], reverse=True):
+            # Exact deficit plus framing slack; changed targets remain retryable.
+            target_tokens = max(64, current_tokens - overflow - 32)
+            if sequence in existing_projections:
+                projected_text_tokens = self._counter(state).count_text(
+                    existing_projections[sequence]
+                ).tokens
+                target_tokens = min(
+                    target_tokens, max(64, projected_text_tokens - max(16, overflow)),
+                )
+            attempt_key = (
+                sequence, str(message.metadata.get("source_event_hash", "")),
+                sha256_text(message.content), message.name, sha256_text(original_request),
                 target_tokens,
-                max(64, projected_text_tokens - max(16, overflow)),
             )
-        if target_tokens >= current_tokens:
+            if target_tokens >= current_tokens or (
+                failed_attempts is not None and attempt_key in failed_attempts
+            ):
+                continue
+            break
+        else:
             return None
         stored_projection = self._stored_tool_result_projection(
             state,
+            original_request=original_request,
             source_event_sequence=sequence,
             source_event_hash=str(message.metadata.get("source_event_hash", "")),
             target_tokens=target_tokens,
@@ -4928,6 +4947,8 @@ class AgentRuntime:
             overflow_tokens=overflow,
         )
         if not projection:
+            if failed_attempts is not None:
+                failed_attempts.add(attempt_key)
             return None
         return sequence, projection
 
@@ -4935,12 +4956,14 @@ class AgentRuntime:
         self,
         state: SessionState,
         *,
+        original_request: str,
         source_event_sequence: int,
         source_event_hash: str,
         target_tokens: int,
     ) -> tuple[int, str, int] | None:
         event = self.history.latest_tool_result_projection(
             state.session_id,
+            objective_sha256=sha256_text(original_request),
             source_event_sequence=source_event_sequence,
             source_event_hash=source_event_hash,
             max_projected_tokens=target_tokens,
@@ -5718,6 +5741,7 @@ class AgentRuntime:
                 "tool_result_projection_skipped",
                 {
                     "source_event_sequence": sequence,
+                    "objective_sha256": sha256_text(original_request),
                     "source_event_hash": source_hash,
                     "reason": "exact semantic selector failed; preserve authoritative raw tool result",
                     "target_tokens": target_tokens,
@@ -5741,6 +5765,7 @@ class AgentRuntime:
                     "tool_result_projection_skipped",
                     {
                         "source_event_sequence": sequence,
+                        "objective_sha256": sha256_text(original_request),
                         "source_event_hash": source_hash,
                         "reason": "model-selected exact evidence did not reduce the source",
                         "target_tokens": target_tokens,
@@ -5757,6 +5782,7 @@ class AgentRuntime:
                     "tool_result_projection_skipped",
                     {
                         "source_event_sequence": sequence,
+                        "objective_sha256": sha256_text(original_request),
                         "source_event_hash": source_hash,
                         "reason": "model-selected exact evidence exceeds the measured projection target",
                         "target_tokens": target_tokens,
@@ -5772,6 +5798,7 @@ class AgentRuntime:
                 "tool_result_projected",
                 {
                     "source_event_sequence": sequence,
+                    "objective_sha256": sha256_text(original_request),
                     "source_event_hash": source_hash,
                     "source_event_references": message.metadata.get(
                         "source_event_references", []
@@ -5820,6 +5847,7 @@ class AgentRuntime:
                 "tool_result_projection_skipped",
                 {
                     "source_event_sequence": sequence,
+                    "objective_sha256": sha256_text(original_request),
                     "source_event_hash": source_hash,
                     "reason": f"{type(exc).__name__}: {exc}",
                     "target_tokens": target_tokens,
@@ -5841,6 +5869,7 @@ class AgentRuntime:
                 "tool_result_projection_skipped",
                 {
                     "source_event_sequence": sequence,
+                    "objective_sha256": sha256_text(original_request),
                     "source_event_hash": source_hash,
                     "reason": "semantic projection did not reduce the source",
                     "target_tokens": target_tokens,
@@ -5856,6 +5885,7 @@ class AgentRuntime:
             "tool_result_projected",
             {
                 "source_event_sequence": sequence,
+                "objective_sha256": sha256_text(original_request),
                 "source_event_hash": source_hash,
                 "source_event_references": message.metadata.get(
                     "source_event_references", []

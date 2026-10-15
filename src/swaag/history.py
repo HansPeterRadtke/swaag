@@ -1099,6 +1099,7 @@ class HistoryStore:
         self,
         session_id: str,
         *,
+        objective_sha256: str,
         source_event_sequence: int,
         source_event_hash: str,
         max_projected_tokens: int,
@@ -1119,6 +1120,8 @@ class HistoryStore:
                 )
                 for row in rows:
                     payload = json.loads(str(row["payload_json"]))
+                    if payload.get("objective_sha256") != objective_sha256:
+                        continue
                     if payload.get("source_event_sequence") != source_event_sequence:
                         continue
                     if source_event_hash and str(payload.get("source_event_hash", "")) != source_event_hash:
@@ -1149,6 +1152,8 @@ class HistoryStore:
             if event.event_type != "tool_result_projected":
                 continue
             payload = event.payload
+            if payload.get("objective_sha256") != objective_sha256:
+                continue
             if payload.get("source_event_sequence") != source_event_sequence:
                 continue
             if source_event_hash and str(payload.get("source_event_hash", "")) != source_event_hash:

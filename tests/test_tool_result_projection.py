@@ -7,6 +7,7 @@ from swaag.model import CompletionRequestPolicy
 from swaag.runtime import AgentRuntime
 from swaag.prompts import PromptBuilder
 from swaag.types import CompletionResult, ContractSpec, Message
+from swaag.utils import sha256_text
 
 
 class _CharacterCountProjectionClient:
@@ -136,6 +137,7 @@ def test_runtime_reuses_only_matching_projection_that_meets_new_target(
         state,
         "tool_result_projected",
         {
+            "objective_sha256": sha256_text("same objective"),
             "source_event_sequence": 12,
             "source_event_hash": "abc",
             "tool_name": "shell_command",
@@ -149,18 +151,21 @@ def test_runtime_reuses_only_matching_projection_that_meets_new_target(
 
     assert runtime._stored_tool_result_projection(
         state,
+        original_request="same objective",
         source_event_sequence=12,
         source_event_hash="abc",
         target_tokens=90,
     ) == (event.sequence, "durable semantic projection", 80)
     assert runtime._stored_tool_result_projection(
         state,
+        original_request="same objective",
         source_event_sequence=12,
         source_event_hash="abc",
         target_tokens=70,
     ) is None
     assert runtime._stored_tool_result_projection(
         state,
+        original_request="same objective",
         source_event_sequence=12,
         source_event_hash="different",
         target_tokens=90,
