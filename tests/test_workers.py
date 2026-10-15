@@ -199,6 +199,16 @@ class _InputClient(_WorkerClient):
         if self.calls == 1:
             return self.result(payload, _action("Which target?", blocking_question="Which target?"))
         assert "Use target green" in str(payload["prompt"])
+        if self.calls == 2:
+            action = json.loads(_action("Record the explicit answer."))
+            action["continue_loop"] = True
+            action["tool_calls"] = [{"tool_name": "questions", "arguments": {
+                "operation": "resolve", "question_id": self.question_id,
+                "resolution": "answered_by_user", "answer": "Use target green",
+                "reason": "The user supplied the requested target.",
+                "evidence_sequences": [self.answer_sequence],
+            }}]
+            return self.result(payload, json.dumps(action))
         return self.result(payload, _action("green complete"))
 
 
@@ -598,15 +608,20 @@ def test_worker_message_during_presentation_rebuilds_terminal_result(
 
 def test_input_required_worker_resumes_without_duplicate_original_request(make_config) -> None:
     from swaag.runtime import AgentRuntime
+    from swaag.types import Message
 
     client = _InputClient()
-    runtime = AgentRuntime(make_config(model__context_limit=32_000), model_client=client)
+    runtime = AgentRuntime(make_config(model__context_limit=32_000, tools__enabled=["questions"]), model_client=client)
     manager = WorkerManager(runtime)
     worker = manager.create("choose a target")
     manager.start(worker.worker_id)
     waiting = manager.wait(worker.worker_id, timeout_seconds=10)
     assert waiting.status == "input_required"
 
+    state = runtime.history.rebuild_from_history(worker.session_id, write_projections=False)
+    client.question_id = state.open_questions[0]["question_id"]
+    runtime._record_message(state, Message(role="user", content="Use target green", created_at="now"))
+    client.answer_sequence = state.event_count
     manager.message(worker.worker_id, "Use target green")
     finished = manager.wait(worker.worker_id, timeout_seconds=10)
     state = runtime.history.rebuild_from_history(worker.session_id, write_projections=False)
@@ -614,8 +629,9 @@ def test_input_required_worker_resumes_without_duplicate_original_request(make_c
 
     assert finished.status == "completed"
     assert finished.result == "green complete"
+    assert not state.open_questions
     assert [message.content for message in state.messages if message.role == "user"] == [
-        "choose a target"
+        "choose a target", "Use target green"
     ]
 
 

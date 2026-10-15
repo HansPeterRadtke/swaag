@@ -1411,6 +1411,7 @@ class WorkerManager:
         state = self.runtime.history.rebuild_from_history(
             working.session_id, write_projections=False
         )
+        self.runtime.bind_tool_runtime_capability(working.session_id, "worker_id", worker_id)
         output_spec = self._output_spec(working)
         try:
             while True:
@@ -1428,7 +1429,6 @@ class WorkerManager:
                 if latest.status != "working":
                     return
                 working = latest
-                first_sequence = state.event_count + 1
                 try:
                     with self.runtime.inference_priority(
                         0,
@@ -1485,13 +1485,11 @@ class WorkerManager:
                 if continued is not None:
                     working = continued
                     continue
-                blocking = any(
-                    event.event_type in {"agent_question", "agent_question_revised"}
-                    and event.payload.get("criticality") == "blocking"
-                    for event in self.runtime.history.iter_history(
-                        working.session_id, start_sequence=first_sequence
-                    )
+                question_state = self.runtime.history.rebuild_from_history(
+                    working.session_id, write_projections=False
                 )
+                blocking = any(question.get("criticality") == "blocking"
+                               for question in question_state.open_questions)
                 if blocking:
                     # Close the delivery-versus-wait race using the same lock as
                     # control dispatch, just as the terminal commit already does.

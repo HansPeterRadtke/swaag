@@ -43,7 +43,7 @@ from swaag.evidence_sources import (
     is_runtime_audit_event,
     is_runtime_telemetry_event,
     runtime_telemetry_reference,
-    runtime_budget_audit_field,
+    runtime_audit_fields,
 )
 from swaag.fsops import ensure_dir, restore_tree, snapshot_tree, write_text
 from swaag.grammar import (
@@ -1436,6 +1436,30 @@ class AgentRuntime:
                 continue
 
             has_blocking_question = any(question.criticality == "blocking" for question in selected_action.questions)
+            unresolved_blocking = [question for question in state.open_questions
+                                   if question.get("criticality") == "blocking"]
+            if (self.tool_runtime_capabilities(state.session_id).get("worker_id")
+                    and unresolved_blocking and not has_blocking_question):
+                # Current durable question state is a mechanical completion gate,
+                # independent of a model verdict and of the turn that created it.
+                recovery_feedback = (
+                    "A durable-state invariant prevents worker completion: these existing blocking "
+                    "questions are unresolved: "
+                    + stable_json_dumps(unresolved_blocking, indent=None)
+                    + ". Reconcile every listed question before declaring the task complete. "
+                    "If answered or superseded, use questions.resolve with its exact question_id "
+                    "and supporting evidence. That tool action uses questions=[] and continue_loop=true; "
+                    "do not create a duplicate question. If essential input is still missing, keep "
+                    "the task waiting instead of claiming completion. This gate is not a fallible "
+                    "model-review opinion or new user authority."
+                )
+                self.history.record_event(state, "completion_rejected", {
+                    "action_index": action_index, "reason": recovery_feedback,
+                    "remaining_work": ["Reconcile current blocking questions before worker completion."],
+                    "mechanical_question_gate": True,
+                    "question_ids": [question["question_id"] for question in unresolved_blocking],
+                })
+                continue
             if has_blocking_question:
                 self._heartbeat(state, phase="waiting_for_user", detail="blocking user question", active_kind="question", active_id=str(action_index))
             try:
@@ -3102,15 +3126,19 @@ class AgentRuntime:
     @staticmethod
     def _completion_historical_evidence_row(event: HistoryEvent) -> dict[str, Any]:
         row = AgentRuntime._communication_evidence_row(event)
-        budget_field = runtime_budget_audit_field(event)
-        if budget_field is not None:
-            # Keep accepted answers, outcomes and failure reasons exact. Only nested
-            # mechanical accounting is represented by a recoverable reference.
-            encoded = stable_json_dumps(row["payload"][budget_field], indent=None)
-            row["payload"][budget_field] = (
-                "[Exact budget diagnostics retained in the referenced history event.]"
+        audit_fields = runtime_audit_fields(event)
+        if audit_fields:
+            # Preserve accepted answers, verdicts, projections and failure reasons.
+            # Accounting and complete source-reference catalogues remain exact in
+            # the recoverable event, without recursively crowding later reviews.
+            encoded = stable_json_dumps(
+                {field: row["payload"][field] for field in audit_fields}, indent=None
             )
-            row["evidence_view"] = "nested_budget_audit_reference"
+            for field in audit_fields:
+                row["payload"][field] = (
+                    "[Exact runtime audit data retained in the referenced history event.]"
+                )
+            row["evidence_view"] = "nested_runtime_audit_reference"
             row["exact_source"] = {
                 "source_kind": "runtime_audit",
                 "source_id": f"{event.session_id}:{event.sequence}",

@@ -138,3 +138,23 @@ def test_repeated_failed_reviews_share_one_source_without_losing_failure_reasons
     assert len(json.dumps(inventory))<3000
     exact=RuntimeTelemetryEvidenceProvider().reexpand(config=runtime.config,state=state,source=inventory[0])
     assert json.loads(exact['text'])==[asdict(e) for e in events]
+
+
+def test_review_verdict_keeps_semantics_but_recovers_full_source_catalogues(make_config):
+    runtime=AgentRuntime(make_config(),model_client=object());state=runtime.create_or_load_session()
+    event=runtime.history.record_event(state,'completion_evaluated',{
+        'complete':True,'reason':'The measured effect meets the objective.','remaining_work':[],
+        'historical_evidence_projection':'Exact relevant evidence excerpt.',
+        'evidence_source_references':[{'sequence':i,'hash':'EXACT_SOURCE_HASH_642'} for i in range(100)],
+        'historical_source_event_references':[{'sequence':i,'hash':'EXACT_SOURCE_HASH_642'} for i in range(100)],
+        'historical_projection_budget_report':{'measurement':'VERDICT_BUDGET_643'}})
+    rows=runtime._completion_historical_evidence_rows([event])
+    view=next(r for r in rows if r.get('sequence')==event.sequence)
+    for key in ['complete','reason','remaining_work','historical_evidence_projection']:
+        assert view['payload'][key]==event.payload[key]
+    assert 'EXACT_SOURCE_HASH_642' not in json.dumps(rows)
+    assert 'VERDICT_BUDGET_643' not in json.dumps(rows)
+    inventory=runtime._completion_evidence_source_inventory(state,evidence_rows=[],historical_events=[event])
+    assert len(inventory)==1
+    exact=RuntimeTelemetryEvidenceProvider().reexpand(config=runtime.config,state=state,source=inventory[0])
+    assert json.loads(exact['text'])==[asdict(event)]

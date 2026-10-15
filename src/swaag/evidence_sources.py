@@ -62,24 +62,29 @@ def is_core_policy_audit_event(event: HistoryEvent) -> bool:
     )
 
 
-def runtime_budget_audit_field(event: HistoryEvent) -> str | None:
-    field = {
-        "turn_finished": "budget_reports",
-        "completion_evaluation_unavailable": "budget_report",
-    }.get(event.event_type)
-    return field if field is not None and field in event.payload else None
+RUNTIME_AUDIT_FIELDS = {
+    "turn_finished": ("budget_reports",),
+    "completion_evaluation_unavailable": ("budget_report",),
+    "completion_evaluated": (
+        "evidence_source_references", "historical_source_event_references",
+        "historical_projection_budget_report",
+    ),
+}
+
+
+def runtime_audit_fields(event: HistoryEvent) -> tuple[str, ...]:
+    return tuple(field for field in RUNTIME_AUDIT_FIELDS.get(event.event_type, ())
+                 if field in event.payload)
 
 
 def is_runtime_audit_event(event: HistoryEvent) -> bool:
     return (is_core_policy_audit_event(event) or event.event_type in {
         "prompt_built", "model_request_sent", "model_response_received",
-    } or runtime_budget_audit_field(event) is not None)
+    } or bool(runtime_audit_fields(event)))
 
 
 # Their semantic payload fields remain inline; only nested accounting is replaced.
-RUNTIME_AUDIT_SEMANTIC_EVENT_TYPES = frozenset({
-    "turn_finished", "completion_evaluation_unavailable",
-})
+RUNTIME_AUDIT_SEMANTIC_EVENT_TYPES = frozenset(RUNTIME_AUDIT_FIELDS)
 
 
 RUNTIME_TELEMETRY_EVENT_TYPES = frozenset({
