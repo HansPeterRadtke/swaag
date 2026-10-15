@@ -453,3 +453,53 @@ def test_output_starvation_rebuild_projects_instructions_only_after_overflow(
         and event.payload.get("prompt_instruction_projection") is True
         for event in runtime.history.read_history(state.session_id)
     )
+
+
+def test_action_recovers_instruction_overflow_before_rebuilding_history(
+    make_config, monkeypatch,
+) -> None:
+    config = make_config(
+        model__context_limit=700,
+        context__max_compaction_rounds=2,
+        prompt_instructions__max_instruction_chars=30_000,
+        prompt_instructions__max_total_chars=32_000,
+    )
+    client = _InstructionProjectionClient()
+    runtime = AgentRuntime(
+        config, model_client=client,
+        token_counter=ExactTokenCounter(
+            lambda text: len(text.split()) if text.strip() else 0
+        ),
+    )
+    state = runtime.create_or_load_user_session('Report progress without changing files.')
+    state.prompt_instructions.append(make_prompt_instruction(
+        config, title='Large exact correction',
+        content='NEVER_DROP_ALPHA ' + 'repeated contextual wording ' * 350
+            + ' ALWAYS_KEEP_BETA',
+        scopes=['action'],
+    ))
+    compacted = []
+    def compact(*args, **kwargs):
+        compacted.append(True)
+        return False
+    monkeypatch.setattr(runtime, '_compact_once', compact)
+    def build(messages, components, projections, mode):
+        return runtime.prompts.build_semantic_operation_prompt(
+            kind='action', system_instruction='Choose the next valid action.',
+            components=[PromptComponent(
+                name='request', category='current_user',
+                text='Report progress without changing files.',
+            )], prompt_mode=mode,
+        )
+    before = list(state.messages)
+    prepared = runtime._prepare_action_call(
+        state, original_request='Report progress without changing files.',
+        pending_messages=[], tool_specs=[], contract=yes_no_contract(),
+        validation_feedback='', minimum_output_tokens=64, assembly_builder=build,
+    )
+    assert prepared.report.fits
+    assert not compacted, 'A fitting instruction projection must precede history reconstruction'
+    assert state.messages == before
+    assert 'NEVER_DROP_ALPHA' in prepared.assembly.prompt_text
+    assert 'ALWAYS_KEEP_BETA' in prepared.assembly.prompt_text
+    assert client.prompts

@@ -2313,6 +2313,59 @@ class AgentRuntime:
                         contract=contract,
                         runtime_snapshot=system_context_state.get("runtime_system_snapshot"),
                     )
+            # Recover a fitting system-instruction view before rebuilding raw
+            # history, which can undo already reduced tool-result views.
+            # The contributor first checks whether its own reduction can
+            # cover the measured overflow; other recovery paths remain.
+            recovered = self._recover_system_prompt_contributor_overflow(
+                state,
+                assembly,
+                contract,
+                compilation,
+                minimum_output_tokens=effective_minimum,
+            )
+            if recovered is not None:
+                self.history.record_event(
+                    state,
+                    "context_compiled",
+                    {
+                        "kind": assembly.kind,
+                        "prompt_mode": prompt_mode,
+                        "accounting": recovered.accounting(),
+                        "cap_error": "",
+                        "prompt_instruction_projection": True,
+                        "history_source": history_source,
+                        "candidate_only": False,
+                        "authoritative_message_count": len(authoritative_messages),
+                        "projected_message_count": len(history_messages),
+                    },
+                )
+                self.history.record_event(
+                    state,
+                    "budget_checked",
+                    {
+                        "kind": assembly.kind,
+                        "prompt_mode": prompt_mode,
+                        "budget_report": asdict(recovered.report),
+                        "cap_error": "",
+                        "prompt_instruction_projection": True,
+                        "history_source": history_source,
+                        "candidate_only": False,
+                    },
+                )
+                self._record_prompt_built(
+                    state,
+                    assembly,
+                    contract,
+                    recovered.report,
+                )
+                return PreparedCall(
+                    assembly=assembly,
+                    report=recovered.report,
+                    prompt_mode=prompt_mode,
+                    contract=contract,
+                    runtime_snapshot=system_context_state.get("runtime_system_snapshot"),
+                )
             if not self.config.context.compact_on_overflow or compaction_round >= max_rounds:
                 break
             if reduce_system_context_for_overflow(
@@ -2367,55 +2420,6 @@ class AgentRuntime:
             history_messages = list(state.messages)
             history_source = "dynamic_history_projection"
 
-        recovered = self._recover_system_prompt_contributor_overflow(
-            state,
-            assembly,
-            contract,
-            compilation,
-            minimum_output_tokens=effective_minimum,
-        )
-        if recovered is not None:
-            self.history.record_event(
-                state,
-                "context_compiled",
-                {
-                    "kind": assembly.kind,
-                    "prompt_mode": prompt_mode,
-                    "accounting": recovered.accounting(),
-                    "cap_error": "",
-                    "prompt_instruction_projection": True,
-                    "history_source": history_source,
-                    "candidate_only": False,
-                    "authoritative_message_count": len(authoritative_messages),
-                    "projected_message_count": len(history_messages),
-                },
-            )
-            self.history.record_event(
-                state,
-                "budget_checked",
-                {
-                    "kind": assembly.kind,
-                    "prompt_mode": prompt_mode,
-                    "budget_report": asdict(recovered.report),
-                    "cap_error": "",
-                    "prompt_instruction_projection": True,
-                    "history_source": history_source,
-                    "candidate_only": False,
-                },
-            )
-            self._record_prompt_built(
-                state,
-                assembly,
-                contract,
-                recovered.report,
-            )
-            return PreparedCall(
-                assembly=assembly,
-                report=recovered.report,
-                prompt_mode=prompt_mode,
-                contract=contract,
-                runtime_snapshot=system_context_state.get("runtime_system_snapshot"),
-            )
 
         raise BudgetExceededError(
             f"The exact {assembly.kind} prompt, tool schemas, output reserve, and safety margin do not fit the model context.",
