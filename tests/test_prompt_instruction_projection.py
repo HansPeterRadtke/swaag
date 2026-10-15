@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import json
+import pytest
 from typing import Any
 
 from swaag.grammar import yes_no_contract
@@ -514,3 +515,29 @@ def test_action_recovers_instruction_overflow_before_rebuilding_history(
     assert 'NEVER_DROP_ALPHA' in prepared.assembly.prompt_text
     assert 'ALWAYS_KEEP_BETA' in prepared.assembly.prompt_text
     assert client.prompts
+
+
+def test_instruction_projection_skips_impossible_request_despite_component_estimate(
+    make_config, monkeypatch,
+):
+    config = make_config(model__context_limit=700)
+    runtime = AgentRuntime(config, model_client=object(), token_counter=ExactTokenCounter(
+        lambda text: len(text.split()) if text.strip() else 0))
+    state = runtime.create_or_load_session()
+    state.prompt_instructions.append(make_prompt_instruction(
+        config, title='Required policy', content='Preserve every restriction. ' * 50, scopes=['action']))
+    assembly = runtime.prompts.build_semantic_operation_prompt(
+        kind='action', system_instruction='Follow the user request.',
+        components=[PromptComponent(name='required_request', category='current_user', text='required ' * 800)])
+    failed = runtime._compile_context(state, assembly, yes_no_contract(), minimum_output_tokens=64,
+        context_limit_resolution=(700, 'test'))
+    assert not failed.report.fits
+    # Per-component fallback estimates can differ from whole-request accounting.
+    source = next(c for c in failed.report.breakdown if c.name == 'durable_prompt_instructions')
+    source.tokens = failed.overflow_tokens + 2000
+    def unexpected(*args, **kwargs):
+        pytest.fail('No instruction projection can fit the already oversized required request')
+    monkeypatch.setattr(runtime, '_reduce_text_hierarchically', unexpected)
+    assert runtime._recover_system_prompt_contributor_overflow(
+        state, assembly, yes_no_contract(), failed, minimum_output_tokens=64,
+        context_limit_resolution=(700, 'test')) is None

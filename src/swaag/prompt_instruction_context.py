@@ -412,8 +412,6 @@ class PromptInstructionContextManager:
             return None
         source_tokens = int(source_report.tokens)
         overflow_tokens = max(1, int(failed.overflow_tokens))
-        if source_tokens <= overflow_tokens + 32:
-            return None
 
         source_rows = self._selected_prompt_instruction_rows(
             state,
@@ -437,41 +435,8 @@ class PromptInstructionContextManager:
             "Apply every operative rule below. Exact source instructions remain "
             "authoritative and recoverable through the prompt_instructions capability.\n"
         )
-        counter = runtime._counter(state)
-        header_tokens = counter.count_text(projection_header).tokens
-        target_tokens = max(
-            32,
-            source_tokens - overflow_tokens - header_tokens - 16,
-        )
-        if target_tokens >= source_tokens:
-            return None
-        remaining_calls = [max(8, int(runtime.config.context.max_compaction_rounds) * 8)]
-        maximum_rounds = max(1, int(runtime.config.context.max_compaction_rounds) + 1)
-        for round_index in range(maximum_rounds):
-            projection, projection_report = runtime._reduce_text_hierarchically(
-                state,
-                source_text=exact_source,
-                source_label=(
-                    f"exact durable instructions for {assembly.kind} calls"
-                ),
-                target_tokens=target_tokens,
-                contract=prompt_instruction_projection_contract(),
-                output_key="projection",
-                build_assembly=lambda text, _label, target: (
-                    runtime.prompts.build_prompt_instruction_projection_prompt(
-                        call_kind=assembly.kind,
-                        source_instructions=text,
-                        source_sha256=sha256_text(text),
-                        source_tokens=counter.count_text(text).tokens,
-                        overflow_tokens=overflow_tokens,
-                        target_tokens=target,
-                    )
-                ),
-                remaining_calls=remaining_calls,
-                context_limit_resolution=context_limit_resolution,
-                include_prompt_instructions=False,
-            )
-            projected_tokens = counter.count_text(projection).tokens
+
+        def build_candidate(projection: str) -> PromptAssembly:
             candidate = copy.deepcopy(assembly)
             replacement_index = next(
                 index
@@ -503,6 +468,55 @@ class PromptInstructionContextManager:
                     sha256=sha256_text(projection),
                 )
             ]
+            return candidate
+
+        counter = runtime._counter(state)
+        # Component counts may be fallback estimates while the full request is
+        # tokenized differently. Measure the room with every other required
+        # component and the projection's own header before spending model calls.
+        base = runtime._compile_context(
+            state, build_candidate(""), contract,
+            minimum_output_tokens=minimum_output_tokens,
+            desired_output_tokens=minimum_output_tokens,
+            context_limit_resolution=context_limit_resolution,
+            include_prompt_instructions=False,
+        )
+        capacity = base.available_input_tokens - base.report.input_tokens
+        if not base.report.fits or capacity < 32:
+            return None
+        target_tokens = max(32, capacity - 16)
+        effective_projection_target = target_tokens
+
+        def build_projection(text: str, _label: str, target: int) -> PromptAssembly:
+            nonlocal effective_projection_target
+            effective_projection_target = target
+            return runtime.prompts.build_prompt_instruction_projection_prompt(
+                call_kind=assembly.kind, source_instructions=text,
+                source_sha256=sha256_text(text),
+                source_tokens=counter.count_text(text).tokens,
+                overflow_tokens=overflow_tokens, target_tokens=target,
+            )
+
+        remaining_calls = [max(8, int(runtime.config.context.max_compaction_rounds) * 8)]
+        maximum_rounds = max(1, int(runtime.config.context.max_compaction_rounds) + 1)
+        for round_index in range(maximum_rounds):
+            effective_projection_target = target_tokens
+            projection, projection_report = runtime._reduce_text_hierarchically(
+                state,
+                source_text=exact_source,
+                source_label=(
+                    f"exact durable instructions for {assembly.kind} calls"
+                ),
+                target_tokens=target_tokens,
+                contract=prompt_instruction_projection_contract(),
+                output_key="projection",
+                build_assembly=build_projection,
+                remaining_calls=remaining_calls,
+                context_limit_resolution=context_limit_resolution,
+                include_prompt_instructions=False,
+            )
+            projected_tokens = counter.count_text(projection).tokens
+            candidate = build_candidate(projection)
             recovered = runtime._compile_context(
                 state,
                 candidate,
@@ -545,7 +559,7 @@ class PromptInstructionContextManager:
                 int(recovered.overflow_tokens) + 16,
                 projected_tokens - target_tokens,
             )
-            next_target = max(32, target_tokens - reduction)
+            next_target = max(32, min(target_tokens, effective_projection_target) - reduction)
             if next_target >= target_tokens:
                 break
             target_tokens = next_target
