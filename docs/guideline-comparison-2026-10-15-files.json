@@ -4764,12 +4764,13 @@
   "unique_contents": 234,
   "exact_duplicate_aliases": 12,
   "physical_files": 246,
-  "last_verified_at": "2026-10-16T00:28:40.432707+00:00",
+  "last_verified_at": "2026-10-16T02:01:33.220895+00:00",
   "verification": {
-    "expected_files": 246,
-    "actual_files": 246,
+    "integrity_artifact": "/data/var/swaag-benchmarks/foreground-routing-20261015/full-reread/native-output-release-integrity.json",
     "new": [],
     "missing": [],
-    "changed": []
+    "changed": [],
+    "expected_files": 246,
+    "actual_files": 246
   }
 }

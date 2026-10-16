@@ -4,7 +4,7 @@ The [foreground study](foreground-routing-and-retries-2026-10-15.md) and
 [complete guideline comparison](guideline-comparison-2026-10-15.md) record actual
 ordinary action routing, exact instruction delivery, permitted versus withheld
 file effects, later approval/resume and verified worker closure. The final source
-suite passes 1,311 tests with three optional skips. Fresh actual-state status takes
+suite passes 1,312 tests with three optional skips. Fresh actual-state status takes
 about 89 seconds on production BF16 and 199–212 seconds on Q3; smaller current-status
 results reduce retrieval cost but do not improve overall measured Q3 latency.
 Measured preservation batching retains all eight required facts and excludes decoys

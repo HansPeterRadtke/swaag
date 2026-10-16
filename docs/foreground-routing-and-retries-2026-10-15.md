@@ -1478,7 +1478,7 @@ sequence 3642 confirms the foreground approval question remains open; the next
 probe's starting manifest confirms the worker stays completed, controls are
 unchanged and both file hashes match. This failure is retained in
 `history-reuse-resume-status-analysis.json`. The subsequent production BF16 probe
-actually starts on86170ad; its manifest records the backend and source separately.
+actually starts on 86170ad; its manifest records the backend and source separately.
 
 Current README, voice integration and operations-manual prose is also reconciled
 with the source. Their stale one-call ordinary-gate and final-only delivery claims
@@ -1512,3 +1512,87 @@ returns both model identities and the same limits. No server resize or restart
 is attempted. A larger client-only context would not be valid on these servers.
 
 The full af284a5 source suite passes **1,312 tests with three optional skips in 227.73 seconds** on Thor. Its live selector comparison waits for the preceding production-backend probe to stop, so the two experiments do not share an active inference trial.
+
+## Installed selector release and partial-progress correction
+
+The serial live selector pair completes: baseline takes 30.330 seconds, exhausts
+both 64/128-token attempts and returns semantic failure while preserving raw
+source. Candidate af284a5 takes 29.510 seconds in one completed call, retaining
+all 32 required lines and no filler or decoys. Its output is 265 tokens. The
+small timing difference is not a speedup claim: prefix-cache warming and one
+observation do not establish a latency ranking. The result establishes a formerly
+truncated selection can finish correctly with measured output space.
+
+The preceding production BF16 continuation on 86170ad fails with a context-budget
+error after 679.422 probe seconds (683.175 supervisor seconds), ending at sequence
+3917. It does not resolve the original foreground question. This failure remains
+separate from source regression and bounded selector success.
+
+The af284a5 code with documentation commit 525ef45 is installed on both hosts.
+Each package matches all 195 tracked source files; installed smoke checks pass
+two cases each (Jetson 2.49 seconds, Thor 0.51 seconds). Immediate prior packages were
+byte-verified and privately backed up before replacement. The installed BF16
+continuation retains the original receipt and additionally freezes the complete
+worker inventory/run counts, capturing negative-state evidence on errors too.
+It exceeds its 900-second deadline without a new progress or final reply. The
+next immutable manifest confirms the complete worker inventory, worker controls
+and both file hashes are unchanged. The original foreground question remains
+open. `installed-production-long-status-analysis.json` preserves the exact
+3917–4145 event interval: two wide selections exhaust 1,182 and 1,773 tokens,
+spending 261.498 and 384.663 seconds decoding distinct valid source IDs. The
+bounded 32-fact result does not qualify this much larger source.
+
+Tracing the rejected reductions reveals a separate mechanical inconsistency.
+`_history_compaction_target` explicitly permits partial recovery, but `_compact_once`
+subsequently requires each individual semantic span to recover the entire action
+deficit. A regression with two safe regions separated by protected user direction
+fails despite their combined reductions fitting. Candidate 9e94752 accepts positive
+recovery when frozen facts prevent one region meeting the complete deficit, records
+that partial result, and lets the bounded outer loop remeasure before further
+reduction. Zero/negative recovery still fails, and no over-budget action is admitted.
+Seventeen focused cases pass in 25.02 seconds, including the case where protected
+authority itself remains too large and must still fail. Exact facts, the entire
+protected instruction and authoritative replay remain unchanged. These use controlled
+semantic judgments and do not claim live model compaction quality.
+
+The complete 9e94752 suite passes **1,314 tests with three optional skips in
+223.64 seconds** on Thor. Its original-receipt continuation uses the existing
+Q3 backend after the installed BF16 trial stops; backend and accumulated-state
+differences prevent a paired latency comparison.
+
+A read-only tokenizer probe identifies a further source of wide-selection output
+exhaustion. Both actual vLLM endpoints accept plain completion text without
+special tokens. A 256-item coordinate-ID JSON response needs 3,859 native tokens
+while the opaque-fragment estimator assigns 1,632. The native counts agree across
+both models; each query takes about a quarter second and does not generate output.
+This is a demonstrated counting mismatch, separate from model semantic selection.
+The proposed correction measures selector output using the supported native
+adapter, retains provider fallback and exact offline replay, and preserves soft
+desired headroom and overflow-driven batching. Its red regression confirms that
+a too-low fragment estimate can exhaust a fitting complete response.
+
+The final native-output candidate is ebb9675. Thirty-five focused checks pass;
+a final twenty-test delta adds unavailable-provider fallback and rejects falsely
+recording a word count as an exact tokenizer result. These overlapping scopes are
+not a combined suite count. The live adapter returns the independently measured
+3,859 count on both deployed endpoints (about 0.23 seconds each), as recorded in
+`native-output-adapter-live.json`. Ordinary chat-fragment counting is unchanged.
+The complete immutable-source Thor suite gates a further continuation of the same
+receipt. Its predeclared deadline is 1,800 seconds to allow inspection of whole-turn
+functional recovery; this is not a twenty-second or paired speed acceptance test.
+
+The partial-history-only continuation reaches its 900-second deadline at sequence
+4436. It returns fifteen calls totaling 802.094 seconds, including six exhausted
+selector attempts; it never reaches a committed history reduction or a new actor
+reply. Worker inventory, run counts, controls and both result-file hashes remain
+unchanged, and the original foreground question remains open. This does not test
+the new partial-recovery path end to end because the earlier evidence-selection
+phase consumes the deadline. `partial-history-long-status-analysis.json` retains
+that distinction.
+
+The full ebb9675 source suite passes **1,323 tests with three optional skips in
+223.22 seconds** on Thor. The complete report and the prior 1,314-test report are
+mirrored byte-for-byte on Jetson with their SHA-256 identities. The native-output
+continuation starts at sequence 4436 only after both earlier jobs have stopped
+and the full-suite gate passes. Private rollback copies on both machines match
+all 195 files of the prior installed 525ef45 package before replacement.
