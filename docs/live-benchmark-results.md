@@ -4,13 +4,16 @@ The [foreground study](foreground-routing-and-retries-2026-10-15.md) and
 [complete guideline comparison](guideline-comparison-2026-10-15.md) record actual
 ordinary action routing, exact instruction delivery, permitted versus withheld
 file effects, later approval/resume and verified worker closure. The final source
-suite passes 1,329 tests with three optional skips. Fresh actual-state status takes
+suite passes 1,347 tests with three optional skips. Fresh actual-state status takes
 about 89 seconds on production BF16 and 199–212 seconds on Q3; smaller current-status
 results reduce retrieval cost but do not improve overall measured Q3 latency.
 Measured preservation batching retains all eight required facts and excludes decoys
 while reducing four calls to one, from 47.6 to 24.3 seconds. The original accumulated
-conversation still exceeds its deadline; history reuse and its continued recovery
-are tracked separately. Installation and long-conversation acceptance must be read
+conversation still exceeds its deadline; the twelve-round trial also times out after schema discovery. The follow-up
+[history action-scope correction](history-action-scope-2026-10-16.md) removes
+reduction invalidation caused by schema loading and initial acknowledgement. The
+[search-index correction](history-index-cost-2026-10-16.md) reduces reconstruction
+of the same frozen 5,570-event journal from 104.4 to 4.7 seconds with identical rows. Installation and long-conversation acceptance must be read
 from the latest release section of the study, not inferred from focused tests.
 
 # October fourteenth ordinary action and shell verification

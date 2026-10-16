@@ -10,21 +10,26 @@ The real worker trajectory verifies permitted/withheld effects, later approved
 publication, exact readback and final worker-question closure.
 
 Current source includes native selector-output counting, positive partial-history
-recovery and preparation-scoped reuse of identical successful evidence selections.
-The complete 4501764 source suite passes 1,329 tests with three optional skips;
+recovery, preparation-scoped reuse of identical successful evidence selections,
+linear new-event search indexing, and history reuse keyed to available capabilities
+rather than schema-loading/acknowledgement presentation.
+The complete combined 275dce1 source suite passes 1,347 tests with three optional skips;
 main's 195 package files are byte-identical to that immutable test source.
-The prior 525ef45 release passed installed equality and smoke checks on both hosts.
-Thor subsequently received native-count release d99be4c, again with 195-file equality
-and two installed smoke passes. The current long-turn trial imports immutable
-ebb9675 on Jetson; its environment is held unchanged while it runs.
+Both installed packages now match all 195 source files and each other; two
+installed smoke checks pass on each host. No active test environment was changed
+while its process was running.
 
 Real preservation batching reduces four calls to one while retaining eight critical
 facts; native output counting is verified against both deployed tokenizers. A fitting
 32-fact tool selection completes where the old fixed allowances truncate. Fresh
 actual-state status succeeds in about 89 seconds on production BF16 and 199–212
 seconds on Q3. Accumulated original history still has deadline and context-budget
-failures; the native-count continuation and any necessary scoped-reuse continuation
-are explicit whole-turn gates. First-response wording, long-history availability
+failures; the native-count, scoped-reuse and installed default-discovery continuations
+all fail their whole-turn gate. The last of these observes actual identical-selection
+reuse but exhausts its four-round admission allowance with context still too large.
+The twelve-round configuration diagnostic also times out; it reaches schema
+discovery, then repeats reduction. The combined action-scope correction addresses
+that reproduced invalidation and has a separate installed functional gate. First-response wording, long-history availability
 and complete goal-memory semantics remain distinct acceptance requirements.
 
 

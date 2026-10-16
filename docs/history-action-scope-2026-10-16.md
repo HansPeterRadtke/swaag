@@ -49,3 +49,14 @@ Evidence under `/data/var/swaag-benchmarks/foreground-routing-20261015` includes
 `history-action-scope-focused-final.txt`. This change does not qualify semantic
 summaries as always accurate, remove locks, raise production reduction allowances,
 or enlarge model context.
+
+
+The complete immutable combined source 275dce1 passes **1,347 tests with three
+optional skips in 232.39 seconds** on Thor. This includes the search-index
+correction and all authority negative cases; it is distinct from the prior
+1,332-test index-only release. The preceding installed twelve-round Q3 trial
+stops at its 1,800-second deadline with only schema discovery performed and the
+foreground question still open. All worker/control/file negative checks pass.
+The combined source is eligible for installation after the stopped-process and
+private rollback gates; the next installed original-receipt trial is separately
+recorded in the foreground study.

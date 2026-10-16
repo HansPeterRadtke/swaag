@@ -1626,3 +1626,114 @@ The complete 4501764 suite passes **1,329 tests with three optional skips in
 237.69 seconds** on Thor. The merged main package is byte-identical across all
 195 files to the tested immutable source. Its continuation remains gated on the
 preceding fixed-source live trial; no concurrent inference trial is introduced.
+
+## Installed release and production discovery-default experiment
+
+Both hosts now run 5f9a01f (4501764 package code), with all 195 package files
+matching source and each other. Installed smoke checks pass two cases on each
+host: Jetson 2.20 seconds and Thor 0.48 seconds. Prior packages were checked against
+the private rollback manifests, and no shared environment was replaced while its
+probe or test process was active.
+
+The native-count whole-turn probe exceeds its 1,800-second deadline. It returns
+42 calls totaling 1,580.674 model seconds, commits one source-backed history
+reprojection, and produces genuine new progress at 1,604.440 seconds together
+with successful read-only worker-status and question-list calls. It does not
+finish the requested answer or close the foreground question. Historical progress
+replay is excluded from this measurement. The following manifest verifies the
+worker inventory, run counts, controls and result files remain unchanged.
+`native-output-long-status-analysis.json` records the exact 4436–5117 interval.
+
+The scoped-reuse continuation then fails with a context-budget error after
+252.121 probe seconds. It retains the already saved history reduction and appends
+new exact messages correctly; inspecting the trace disproves a suspected loss of
+source-backed history reuse. Its final action input still requires 8,710 tokens,
+or 9,785 with output reserve and safety margin, under an 8,192-token server limit.
+No new actor reply or tool effect occurs; all negative-state checks pass and the
+foreground question remains open. This run contains no identical-selection reuse
+hit, so its shorter elapsed time is not evidence of that optimization's speedup.
+
+A source/default comparison establishes that the inherited fixture explicitly
+sets tools.staged_discovery=false while production defaults to true. A separate
+installed-runtime continuation therefore removes only that override, retains the
+Q3 endpoint, uncached model mode, exact original receipt and fixture permissions,
+and records effective_staged_discovery=true in its manifest. Its accumulated
+state and configuration differ from earlier trials; this is a functional
+configuration experiment, not a paired latency ranking.
+
+Read-only native-tokenizer counterfactuals reconstruct the exact successful
+actor request at prompt event 4931 and match its observed 6,983 input tokens.
+Removing only historical components changes that count by 1,460 tokens; loaded
+tool schemas by 983; the separate actor instruction by 538; the system prompt by 858;
+the already projected durable policy by 79; environment context by 1,492. These
+marginal differences are not additive. No model generation or execution uses any
+omitted-component variant, and these measurements do not authorize dropping
+mandatory instructions or history. `native-prompt-component-costs.json` retains
+the exact identity and diagnostic scope.
+
+
+## Installed discovery-default outcome and reduction allowance
+
+The installed default-discovery continuation fails after **901.466 seconds** with
+`BudgetExceededError`, not its 1,800-second supervisor deadline. Its interval is
+5284–5570. Sixteen returned model calls account for 808.642 seconds; recorded
+admission waits total 6.565 seconds. The remaining intervals include compilation,
+tokenizer HTTP, durable recording and state reads, and are not attributed wholly
+to CPU overhead. `installed-staged-long-status-phase-gaps.json` retains each gap.
+No new actor action or tool effect occurs. The final input is 11,632 tokens and
+12,707 with reserve/margin against the 8,192-token backend limit. Worker inventory,
+run count, controls and both file hashes remain unchanged; one foreground question
+remains open. `installed-staged-long-status-analysis.json` records the oracle.
+
+The identical-selection correction is exercised at event 5444: the second exact
+status source reuses the first source's successful selection, while retaining
+separate source identity and target validation. This establishes live reuse, not
+a paired whole-turn latency improvement. The documented four-round admission
+limit is consumed by two runtime projections, one tool projection and one partial
+history reduction. That finite configured limit is behaving as specified; it is
+not relabeled a looping defect. A bounded diagnostic continuation changes only
+that allowance to twelve rounds, keeps production staged discovery, the installed
+package and existing Q3 backend, and resumes the same receipt without a new user
+instruction. `installed-expanded-reduction-long-status-q3/manifest.json` records
+the exact configuration and frozen negative-effect oracle. This diagnostic does
+not change production defaults or enlarge/restart either model server.
+
+A separate semantic error remains visible in event 5567: the generated history
+summary says the foreground approval question is resolved, although the exact
+question-list evidence carried alongside it and durable state still show it open.
+An attempted tool operation and successful durable resolution are distinct facts.
+Neither valid JSON nor attached verbatim evidence certifies the prose summary.
+The continuation's current snapshot still supplies the actual open question.
+
+`summary-question-boundary/result.json` exercises the installed worker boundary
+with a deliberately false summary and false terminal claim, both with completion
+review enabled and disabled. Both cases reject completion before invoking the
+recorded-user-backed question-resolution tool and finish only after durable
+reconciliation. This verifies that existing mechanical worker protection survives
+the contradiction. It does not establish arbitrary foreground answer truthfulness
+or repair the model's inaccurate history-summary prose.
+
+
+The twelve-round installed diagnostic times out after 1,800.026 seconds at event
+6168. It returns 31 model calls totaling 1,454.320 seconds; the in-flight final
+selection is not counted as a returned call. Genuine new progress arrives at
+734.719 seconds after a successful `load_tools` result. No question resolution or
+final answer follows. The full worker inventory, run counts, authoritative controls
+and both result-file hashes remain unchanged; the worker is completed and one
+foreground question remains open. The post-timeout snapshot and interval analysis
+are saved separately. Increasing the allowance alone does not pass this gate.
+
+The follow-up [history-index study](history-index-cost-2026-10-16.md) isolates and
+corrects a separate quadratic search-index scan: the same 5,570-event frozen journal
+rebuilds in 4.715 seconds instead of 104.380, with identical canonical/search rows.
+The [ordinary action-scope study](history-action-scope-2026-10-16.md) records why
+loading an available schema and satisfying the initial acknowledgement needlessly
+invalidate the history projection. Its corrected-fixture baseline, authority
+negative cases and ordinary-loop checks precede the combined full-suite gate.
+
+
+The combined 275dce1 source passes 1,347 tests with three optional skips in 232.39
+seconds on Thor. Both hosts' pre-install rollback copies are private and verified
+against all 195 files of the existing 5f9a01f installation. Guideline integrity is
+rechecked at 03:40:07 UTC: all 246 files match the completed reread, Infra remains
+867200e, and the unrelated Jetson configuration hash is unchanged.
