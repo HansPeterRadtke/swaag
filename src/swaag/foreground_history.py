@@ -46,21 +46,40 @@ def fold_identical_prior_user_messages(messages, turn_sequence):
 def foreground_action_history(messages, events, turn_sequence):
     """Defer only typed, earlier-turn assistant actions, never user authority.
 
-    Tool receipts and every visible utterance remain exact. Accepted progress is
+    Effect receipts and every visible utterance remain exact. Older read-only
+    snapshot payloads remain retrievable by their exact tool-event identity.
+    Accepted progress is
     reconstructed from its delivery event, not from an unverified draft inside
     the action envelope. The durable events themselves are never changed.
     """
     deferred = []
+    snapshot_reads = []
     kept = []
     for message in messages:
         sequence = message.metadata.get("source_message_event_sequence")
+        output = message.metadata.get("output")
+        source_sequence = message.metadata.get("source_event_sequence")
+        if (message.role == "tool" and message.name == "runtime_snapshot_lookup"
+                and isinstance(sequence, int) and not isinstance(sequence, bool)
+                and sequence < turn_sequence and isinstance(source_sequence, int)
+                and message.metadata.get("source_event_type") == "tool_result"
+                and not message.metadata.get("context_updates")
+                and isinstance(output, dict)
+                and set(output) == {"observed_at", "pointer", "snapshot_hash", "snapshot_sequence", "value"}):
+            reference = {key: value for key, value in output.items() if key != "value"}
+            reference["value"] = {"exact_tool_result_event": source_sequence,
+                "notice": "Earlier read-only snapshot; retrieve this event before historical claims."}
+            kept.append(replace(message, content=stable_json_dumps(reference),
+                metadata={**message.metadata, "output": reference}))
+            snapshot_reads.append(source_sequence)
+            continue
         if (message.role == "assistant" and message.metadata.get("internal_action") is True
                 and isinstance(sequence, int) and not isinstance(sequence, bool)
                 and sequence < turn_sequence):
             deferred.append(sequence)
         else:
             kept.append(message)
-    if not deferred:
+    if not deferred and not snapshot_reads:
         return messages, ""
     for event in events:
         if event.event_type != "assistant_progress" or event.sequence >= turn_sequence:
@@ -77,12 +96,12 @@ def foreground_action_history(messages, events, turn_sequence):
     # their existing relative order; this view never drops them by inference.
     kept.sort(key=lambda message: message.metadata.get("source_message_event_sequence", 0))
     notice = (
-        f"{len(deferred)} prior-turn internal assistant action envelopes are deferred "
-        f"(active-session event sequences {min(deferred)} through {max(deferred)}). "
+        f"{len(deferred)} prior-turn internal assistant action envelopes are deferred. "
+        f"{len(snapshot_reads)} earlier read-only snapshot payloads are referenced by exact tool-event sequence. "
         "Every user message, visible assistant reply, accepted progress utterance, "
-        "tool receipt and current-turn action is retained exactly. Internal drafts "
+        "effect receipt and current-turn action is retained exactly. Internal drafts "
         "are not evidence of execution or user authorization. If prior machine "
-        "actions are needed, discover history_window/history_search and read their "
+        "actions or referenced snapshot payloads are needed, discover history_window/history_search and read their "
         "exact durable events. No source history has been deleted.\n\n"
     )
     return fold_identical_prior_user_messages(kept, turn_sequence), notice
