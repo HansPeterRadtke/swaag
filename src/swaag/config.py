@@ -334,6 +334,7 @@ class CommunicationConfig:
     port: int
     poll_seconds: float
     stream_heartbeat_seconds: float = 5.0
+    initial_foreground_output_tokens: int = 0
     max_active_workers: int = 128
     max_pending_requests: int = 128
     idle_work_mode: str = "finish_only"
@@ -813,6 +814,7 @@ def _coerce_config(
         port=int(data["communication"]["port"]),
         poll_seconds=float(data["communication"]["poll_seconds"]),
         stream_heartbeat_seconds=float(data["communication"]["stream_heartbeat_seconds"]),
+        initial_foreground_output_tokens=int(data["communication"]["initial_foreground_output_tokens"]),
         max_active_workers=data["communication"].get("max_active_workers", 128),
         max_pending_requests=data["communication"].get("max_pending_requests", 128),
         orchestrator_priority=int(data["communication"]["orchestrator_priority"]),
@@ -1076,6 +1078,8 @@ def _coerce_config(
         raise ValueError("communication.poll_seconds must be positive")
     if not 0 < communication.stream_heartbeat_seconds <= 30:
         raise ValueError("communication.stream_heartbeat_seconds must be positive and at most 30")
+    _validate_non_negative("communication.initial_foreground_output_tokens",
+                           communication.initial_foreground_output_tokens)
     artifact_serving = communication.open_webui_artifacts
     if artifact_serving.enabled:
         parsed_artifact_url = urlparse(artifact_serving.public_base_url)
@@ -1451,6 +1455,10 @@ def _parameter_semantics(
         "communication.orchestrator_priority": (
             "Inference admission priority of finalized foreground user turns; larger values are admitted first.",
             "Changing it changes ordering against workers and status queries, not capacity or permission; extreme priorities can starve lower-priority work.",
+        ),
+        "communication.initial_foreground_output_tokens": (
+            "Initial minimum output reservation for foreground actions; zero uses the contract's structural floor.",
+            "The call still receives available safe output headroom. Actual output exhaustion expands the reservation and recompiles before any partial action can execute; workers keep context.reserved_response_tokens.",
         ),
         "communication.status_priority": (
             "Inference admission priority of status queries and finalized targeted controls.",

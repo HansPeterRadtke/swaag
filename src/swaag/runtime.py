@@ -897,7 +897,13 @@ class AgentRuntime:
         budget_reports: list[BudgetReport] = []
         validation_failure_counts: dict[str, int] = {}
         recovery_feedback = ""
-        action_minimum_output_tokens = int(self.config.context.reserved_response_tokens)
+        initial_action_output_minimum = (
+            int(self.config.communication.initial_foreground_output_tokens)
+            if ("runtime_snapshot_lookup" in self.config.tools.enabled
+                and callable(runtime_capabilities.get("system_snapshot_provider")))
+            else int(self.config.context.reserved_response_tokens)
+        )
+        action_minimum_output_tokens = initial_action_output_minimum
         accepted_actions = 0
         mechanical_attempt = 0
 
@@ -1209,7 +1215,7 @@ class AgentRuntime:
             # Output starvation applies to the call that exhibited it. A
             # successful complete action restores full-fidelity-first admission
             # for the next independently compiled action.
-            action_minimum_output_tokens = int(self.config.context.reserved_response_tokens)
+            action_minimum_output_tokens = initial_action_output_minimum
 
             if not self._consume_pending_control_messages(
                 state, pending_payloads=pending_payloads, selected_action=selected_action,

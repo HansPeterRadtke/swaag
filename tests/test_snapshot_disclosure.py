@@ -17,6 +17,70 @@ from tests.test_completion_evaluation import _completed_action
 from tests.test_preemption import _ImmediateClient
 
 
+@pytest.mark.parametrize('foreground,configured,expected', [
+    (True, 0, 0), (True, 400, 400), (False, 0, 256)])
+def test_foreground_initial_reservation_is_separate_from_worker_budget(
+    make_config, foreground, configured, expected,
+):
+    from tests.test_agent_action_loop import _action
+    config = make_config(model__context_limit=12000,
+        context__reserved_response_tokens=256,
+        communication__initial_foreground_output_tokens=configured,
+        tools__enabled=['runtime_snapshot_lookup'])
+    runtime = AgentRuntime(config, model_client=FakeModelClient([_action(message='Hello.')]))
+    service = CommunicationService(runtime, orchestrator_runtime=runtime)
+    try:
+        if foreground:
+            result = service.orchestrator_message('Say hello.')
+            session_id = result['session_id']
+        else:
+            session_id = runtime.run_turn('Say hello.').session_id
+        event = next(e for e in runtime.history.iter_history_reverse(session_id,
+            event_types=('context_compiled',)) if e.payload['kind'] == 'action')
+        accounting = event.payload['accounting']
+        assert accounting['minimum_output_tokens'] == expected
+        assert accounting['reserved_response_tokens'] >= accounting['structured_output_floor_tokens']
+    finally:
+        service.close()
+
+
+def test_foreground_output_exhaustion_retries_before_any_partial_effect(make_config):
+    from tests.test_agent_action_loop import OutputLimitedFakeModelClient, _action
+    class Client(OutputLimitedFakeModelClient):
+        def send_completion(self, payload, *, timeout_seconds=None, progress_callback=None):
+            result = super().send_completion(payload,
+                timeout_seconds=timeout_seconds, progress_callback=progress_callback)
+            if result.finish_reason == 'length':
+                # Even a complete-looking tool call is unaccepted when the
+                # provider reports truncation. No partial intent may execute.
+                return replace(result, text=_action(message='Writing it.',
+                    tool_calls=[('echo', {'text': 'UNACCEPTED_EFFECT'})], continue_loop=True))
+            return result
+    client = Client([_action(message='The complete answer.')])
+    runtime = AgentRuntime(make_config(model__context_limit=12000,
+        tools__enabled=['runtime_snapshot_lookup', 'echo']), model_client=client)
+    service = CommunicationService(runtime, orchestrator_runtime=runtime)
+    try:
+        result = service.orchestrator_message('Give the complete answer.')
+        assert result['answer'] == 'The complete answer.'
+        assert len(client.requests) == 2
+        assert client.requests[1]['n_predict'] > client.requests[0]['n_predict']
+        events = runtime.history.read_history(result['session_id'])
+        assert not any(e.event_type == 'tool_called' for e in events)
+        assert any(e.event_type == 'model_output_budget_exhausted' for e in events)
+    finally:
+        service.close()
+
+
+def test_negative_foreground_reservation_is_invalid(tmp_path):
+    from swaag.config import load_config
+    with pytest.raises(ValueError, match='initial_foreground_output_tokens'):
+        load_config(env={
+            'SWAAG__SESSIONS__ROOT': str(tmp_path / 'sessions'),
+            'SWAAG__COMMUNICATION__INITIAL_FOREGROUND_OUTPUT_TOKENS': '-1',
+        })
+
+
 def _snapshot():
     return {
         'captured_at': 'now',
