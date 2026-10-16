@@ -783,3 +783,49 @@ def test_control_message_preserves_exact_nonempty_text(make_config) -> None:
     assert queued["message"] == message
     pending = runtime.history.list_pending_control_messages(state.session_id)
     assert pending[-1]["message"] == message
+
+
+@pytest.mark.parametrize("missing_search_row", [False, True])
+def test_reindex_existing_event_repairs_search_once_without_changing_history(make_config, missing_search_row):
+    store, state = _state_with_history(make_config(), session_id="session_search_repair")
+    events = store.read_history(state.session_id)
+    event = next(event for event in events if "Blue Heron" in store._event_search_content(event))
+    original_bytes = store.history_path(state.session_id).read_bytes()
+    with store._sqlite_connect() as connection:
+        if missing_search_row:
+            connection.execute("DELETE FROM events_fts WHERE session_id=? AND sequence=?", (event.session_id, event.sequence))
+        store._sqlite_insert_event(connection, event)
+        store._sqlite_insert_event(connection, event)
+        assert connection.execute("SELECT COUNT(*) FROM events WHERE session_id=? AND sequence=?", (event.session_id, event.sequence)).fetchone()[0] == 1
+        assert connection.execute("SELECT COUNT(*) FROM events_fts WHERE session_id=? AND sequence=?", (event.session_id, event.sequence)).fetchone()[0] == 1
+    assert store.history_path(state.session_id).read_bytes() == original_bytes
+    assert store.read_history(state.session_id) == events
+    matches = store.query_history_details(state.session_id, "Blue Heron", max_results=20)["matches"]
+    assert matches
+    assert len({item["sequence"] for item in matches}) == len(matches)
+
+
+def test_new_search_insert_failure_rolls_back_canonical_row_and_retries_exactly(make_config, tmp_path):
+    store, state = _state_with_history(make_config(), session_id="session_search_transaction")
+    event = store.read_history(state.session_id)[0]
+    target = HistoryStore(tmp_path / "new-index")
+
+    class FailedSearchInsert:
+        def __init__(self, connection):
+            self.connection = connection
+
+        def execute(self, sql, parameters=()):
+            if "INSERT INTO events_fts" in sql:
+                raise RuntimeError("injected search write failure")
+            return self.connection.execute(sql, parameters)
+
+    with pytest.raises(RuntimeError, match="injected search write failure"):
+        with target._sqlite_connect() as connection:
+            target._sqlite_insert_event(FailedSearchInsert(connection), event)
+    with target._sqlite_connect() as connection:
+        assert connection.execute("SELECT COUNT(*) FROM events").fetchone()[0] == 0
+        assert connection.execute("SELECT COUNT(*) FROM events_fts").fetchone()[0] == 0
+        target._sqlite_insert_event(connection, event)
+        target._sqlite_insert_event(connection, event)
+        assert connection.execute("SELECT COUNT(*) FROM events").fetchone()[0] == 1
+        assert connection.execute("SELECT COUNT(*) FROM events_fts").fetchone()[0] == 1

@@ -287,7 +287,7 @@ class HistoryStore:
     def _sqlite_insert_event(self, connection: sqlite3.Connection, event: HistoryEvent) -> None:
         payload_json = stable_json_dumps(event.payload, indent=None)
         metadata_json = stable_json_dumps(event.metadata, indent=None)
-        connection.execute(
+        inserted = connection.execute(
             """
             INSERT OR IGNORE INTO events(
                 session_id, sequence, event_id, timestamp, event_type,
@@ -306,7 +306,12 @@ class HistoryStore:
                 event.hash,
             ),
         )
-        exists = connection.execute(
+        # Canonical and search rows are committed in the same transaction. A
+        # newly inserted event cannot already have a search row in a valid index.
+        # The FTS identity columns are UNINDEXED: checking them for every append
+        # scans all prior rows and makes reconstruction quadratic. On duplicate
+        # canonical rows, keep the existing missing-search-row repair path.
+        exists = None if inserted.rowcount == 1 else connection.execute(
             "SELECT 1 FROM events_fts WHERE session_id=? AND sequence=? LIMIT 1",
             (event.session_id, event.sequence),
         ).fetchone()
