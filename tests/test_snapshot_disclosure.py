@@ -117,6 +117,25 @@ def test_view_preserves_live_authority_all_questions_and_recoverable_terminal_de
     assert view['detail_access']['snapshot_sequence'] == 42
 
 
+def test_snapshot_references_only_exact_duplicate_authoritative_utterance():
+    text = '  Keep every word.\nDo not publish.  '
+    snapshot = _snapshot()
+    snapshot['orchestrator'] = {'active_turn': {'user_text': text}, 'pending_user_messages': [
+        {'control_id': 'same', 'message': text, 'authority': ['verified'], 'priority': 1},
+        {'control_id': 'correction', 'message': 'Actually, cancel it.', 'priority': 2},
+        {'control_id': 'different_whitespace', 'message': text.strip(), 'priority': 3}]}
+    original = copy.deepcopy(snapshot)
+    view = snapshot_prompt_view(snapshot, 42, current_user_text=text, current_user_sequence=37)
+    assert view['orchestrator']['active_turn']['user_text'] == {'exact_user_text_at_sequence': 37}
+    controls = view['orchestrator']['pending_user_messages']
+    assert controls[0] == {**original['orchestrator']['pending_user_messages'][0],
+                          'message': {'exact_user_text_at_sequence': 37}}
+    assert controls[1:] == original['orchestrator']['pending_user_messages'][1:]
+    assert snapshot_value(snapshot, '/orchestrator') == original['orchestrator']
+    assert snapshot == original
+    assert snapshot_prompt_view(snapshot, 42)['orchestrator'] == original['orchestrator']
+
+
 @pytest.mark.parametrize('pointer', ['terminal_workers', '/terminal_workers/-1', '/terminal_workers/01',
                                     '/terminal_workers/0/error/x', '/~2invalid', '/terminal_workers/99'])
 def test_invalid_pointers_cannot_silently_select_different_data(pointer):

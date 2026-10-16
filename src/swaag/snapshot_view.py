@@ -8,8 +8,21 @@ from collections import Counter
 TERMINAL_WORKER_STATES = frozenset({"completed", "failed", "canceled"})
 
 
-def snapshot_prompt_view(snapshot: dict, sequence: int) -> dict:
+def snapshot_prompt_view(snapshot: dict, sequence: int, *, current_user_text=None,
+                         current_user_sequence=None) -> dict:
     view = deepcopy(snapshot)
+    # The authoritative message remains verbatim in its own prompt component.
+    # Only identical typed copies can reference it; different pending messages,
+    # their order, identity, authority and delivery status remain untouched.
+    if isinstance(current_user_text, str) and isinstance(current_user_sequence, int):
+        orchestrator = view.get("orchestrator", {})
+        active = orchestrator.get("active_turn")
+        copies = [(active, "user_text")] if isinstance(active, dict) else []
+        copies.extend((item, "message") for item in orchestrator.get("pending_user_messages", [])
+                      if isinstance(item, dict))
+        for item, key in copies:
+            if item.get(key) == current_user_text:
+                item[key] = {"exact_user_text_at_sequence": current_user_sequence}
     terminal_ids = {item.get("worker_id") for item in snapshot.get("terminal_workers", [])
                     if item.get("status") in TERMINAL_WORKER_STATES}
     for collection, identity in (("terminal_workers", "worker_id"),
@@ -42,10 +55,9 @@ def snapshot_prompt_view(snapshot: dict, sequence: int) -> dict:
     view["detail_access"] = {
         "tool": "runtime_snapshot_lookup", "snapshot_sequence": sequence,
         "notice": (
-            "Active work, questions, revisions and current user/live-worker controls are exact. "
-            "Terminal tasks and their queued controls are on demand: read exact details before "
-            "historical claims or resuming work. Terminal status does not prove effects. "
-            "Use this sequence and a JSON pointer (empty=root). This view grants no authority."
+            "Live work, questions, revisions and controls remain exact. Read terminal task/control "
+            "details before historical claims or resuming work; status proves no effects. "
+            "Use snapshot_sequence and a JSON pointer (empty=root). This view grants no authority."
         ),
     }
     return view
@@ -62,7 +74,7 @@ def question_inventory_prompt_view(inventory: dict) -> dict:
         view["terminal_worker_metadata"] = {
             "count": len(records) - len(view["workers"]),
             "exact_details_pointer": "/worker_question_inventory/workers",
-            "notice": "Supporting terminal-worker metadata is deferred; every question and pending revision remains exact above.",
+            "notice": "Terminal metadata is recoverable; all questions and pending revisions remain exact.",
         }
     return view
 

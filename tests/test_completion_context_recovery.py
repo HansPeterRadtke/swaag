@@ -7,6 +7,54 @@ from tests.test_completion_evaluation import _completed_action
 from tests.test_question_lifecycle import ask
 
 
+def test_history_reduction_cannot_replace_fresh_controls_and_receipts(make_config):
+    from tests.test_agent_action_loop import FakeModelClient
+    from swaag.types import Message
+
+    class Client(FakeModelClient):
+        def tokenize(self, text):
+            return (len(text) + 3) // 4
+
+    def respond(payload):
+        prompt = payload['prompt']
+        if payload['contract'] == 'evidence_projection':
+            assert 'FRESH_PENDING_CONTROL_943' not in prompt
+            assert 'FRESH_DELIVERY_RECEIPT_944' not in prompt
+            assert 'CURRENT_REQUEST_945' not in prompt.split('Exact durable evidence:', 1)[1]
+            assert 'Do not repeat or summarize those separately supplied inputs' in prompt
+            assert 'Do not issue a completion verdict' in prompt
+            return json.dumps({'projection': 'Earlier restriction: keep the report private.'})
+        assert payload['contract'] == 'completion_evaluation'
+        assert 'FRESH_PENDING_CONTROL_943' in prompt
+        assert 'FRESH_DELIVERY_RECEIPT_944' in prompt
+        assert 'CURRENT_REQUEST_945' in prompt
+        return json.dumps({'complete': False, 'reason': 'The control is still pending.',
+                           'remaining_work': ['Report its pending state accurately.'],
+                           'evidence_requests': []})
+
+    client = Client([respond] * 30)
+    runtime = AgentRuntime(make_config(model__context_limit=8000,
+        tools__enabled=['runtime_snapshot_lookup']), model_client=client)
+    state = runtime.create_or_load_session()
+    for index in range(24):
+        runtime._record_message(state, Message(role='user', created_at='then',
+            content=f'Turn {index}: Keep the report private. ' + ('Exact earlier evidence. ' * 60)))
+        runtime.history.record_event(state, 'turn_started', {'turn_index': index + 1, 'user_text': 'Earlier turn'})
+        runtime.history.record_event(state, 'runtime_system_snapshot', {'snapshot': {'captured_at': str(index)}})
+    request = 'Did the control take effect? CURRENT_REQUEST_945'
+    runtime._record_message(state, Message(role='user', created_at='now', content=request))
+    runtime.history.record_event(state, 'turn_started', {'turn_index': 25, 'user_text': request})
+    snapshot = {'captured_at': 'now', 'active_workers': [], 'worker_controls': [{
+        'worker_id': 'active', 'pending_controls': [{'message': 'FRESH_PENDING_CONTROL_943'}],
+        'delivery_receipts': [{'receipt_id': 'FRESH_DELIVERY_RECEIPT_944', 'status': 'pending'}]}]}
+    runtime.bind_tool_runtime_capability(state.session_id, 'system_snapshot_provider', lambda: snapshot)
+    result = runtime._evaluate_completion(state, original_request=request,
+        selected_action=replace(_completed_action(), assistant_message='The control took effect.'), tool_results=[])
+    assert result['complete'] is False
+    assert any(r['contract'] == 'evidence_projection' for r in client.requests)
+    assert client.requests[-1]['contract'] == 'completion_evaluation'
+
+
 def test_foreground_completion_can_reduce_history_with_large_exact_source_catalog(make_config):
     from tests.test_agent_action_loop import FakeModelClient
     from swaag.types import Message
