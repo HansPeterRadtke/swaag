@@ -56,3 +56,14 @@ def test_selector_failure_retains_every_exact_unit(make_config, monkeypatch):
     result, semantic_ok = runtime._select_history_verbatim_lines(state, [Message(role="user", content="\n".join(lines), created_at="now")])
     assert not semantic_ok
     assert result == lines
+
+
+def test_desired_all_id_output_does_not_split_otherwise_fitting_input(make_config):
+    client = FakeModelClient([json.dumps({"selected_line_ids": [], "reason": "No exact facts in routine progress."}) for _ in range(128)])
+    runtime = AgentRuntime(make_config(model__context_limit=3500), model_client=client,
+        token_counter=ExactTokenCounter(len))
+    state = runtime.create_or_load_session()
+    lines = [f"Routine {i}." for i in range(64)]
+    selected, semantic_ok = runtime._select_history_verbatim_lines(state, [Message(role="assistant", content="\n".join(lines), created_at="now")])
+    assert semantic_ok and selected == []
+    assert len(client.requests) == 1, "Desired all-ID headroom must not force needless input splitting"

@@ -7752,8 +7752,9 @@ class AgentRuntime:
                 f"{line_id} [{role}] {line}"
                 for line_id, role, line in chunk
             )
-            # Every ID may legitimately be necessary. Reserve a measured all-ID
-            # response plus concise reason framing before admitting a larger batch.
+            # Every ID may legitimately be necessary. Request measured all-ID
+            # headroom, without turning desired output into an input quota.
+            # Observed output exhaustion raises the minimum and can split input.
             complete_selection = stable_json_dumps({"selected_line_ids": ids, "reason": ""}, indent=2)
             selection_output_tokens = max(48, self._counter(state).count_text(complete_selection).tokens + 32)
             request = SemanticCallRequest(
@@ -7780,7 +7781,7 @@ class AgentRuntime:
                     )
                 ],
                 contract=history_verbatim_selection_contract(ids),
-                minimum_output_tokens=selection_output_tokens,
+                minimum_output_tokens=48,
                 desired_output_tokens=max(192, selection_output_tokens),
                 include_prompt_instructions=False,
             )
