@@ -8033,40 +8033,42 @@ class AgentRuntime:
                         state, effective_source_messages, exact_only_payload
                     )
                 )
-                if max_recovery < required_recovery:
-                    continue
-                try:
-                    summary_text, report = self._refine_summary_with_frozen_spans(
-                        state,
-                        source_messages=source_messages,
-                        verbatim_spans=verbatim_spans,
-                        target_summary_tokens=target_summary_tokens,
-                        context_limit_resolution=context_limit_resolution,
-                        minimum_output_tokens=minimum_summary_tokens,
+                # One semantic span need not solve the whole action deficit.
+                # If its frozen facts make that impossible, retain positive
+                # recovery and let the outer loop remeasure other safe spans.
+                if max_recovery >= required_recovery:
+                    try:
+                        summary_text, report = self._refine_summary_with_frozen_spans(
+                            state,
+                            source_messages=source_messages,
+                            verbatim_spans=verbatim_spans,
+                            target_summary_tokens=target_summary_tokens,
+                            context_limit_resolution=context_limit_resolution,
+                            minimum_output_tokens=minimum_summary_tokens,
+                        )
+                        summary_refinement_used = True
+                    except (
+                        _OutputRecoveryContextOverflow,
+                        BudgetExceededError,
+                        OutputBudgetExhaustedError,
+                    ):
+                        # Frozen exact facts remain authoritative; if the semantic-only
+                        # refinement cannot fit/finish, reject this candidate instead of
+                        # trimming or re-ranking those facts deterministically.
+                        continue
+                    summary_payload = summary_message_payload(
+                        summary_text,
+                        source_message_count=effective_source_count,
+                        created_at=utc_now_iso(),
+                        source_message_start=source_start,
+                        source_event_references=source_event_references,
                     )
-                    summary_refinement_used = True
-                except (
-                    _OutputRecoveryContextOverflow,
-                    BudgetExceededError,
-                    OutputBudgetExhaustedError,
-                ):
-                    # Frozen exact facts remain authoritative; if the semantic-only
-                    # refinement cannot fit/finish, reject this candidate instead of
-                    # trimming or re-ranking those facts deterministically.
-                    continue
-                summary_payload = summary_message_payload(
-                    summary_text,
-                    source_message_count=effective_source_count,
-                    created_at=utc_now_iso(),
-                    source_message_start=source_start,
-                    source_event_references=source_event_references,
-                )
-                recovered_tokens, actual_source_tokens, replacement_tokens = (
-                    self._compaction_recovery(
-                        state, effective_source_messages, summary_payload
+                    recovered_tokens, actual_source_tokens, replacement_tokens = (
+                        self._compaction_recovery(
+                            state, effective_source_messages, summary_payload
+                        )
                     )
-                )
-            if recovered_tokens < required_recovery:
+            if recovered_tokens <= 0:
                 continue
             if projection_objective_sha256:
                 summary_payload["metadata"]["projection_objective_sha256"] = projection_objective_sha256
@@ -8103,6 +8105,7 @@ class AgentRuntime:
                 "hierarchical": hierarchical,
                 "summary_refinement_used": summary_refinement_used,
                 "required_recovery_tokens": required_recovery,
+                "partial_recovery": recovered_tokens < required_recovery,
                 "target_summary_tokens": target_summary_tokens,
                 "estimated_source_tokens": estimated_source_tokens,
                 "actual_source_tokens": actual_source_tokens,

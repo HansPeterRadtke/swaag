@@ -158,3 +158,56 @@ def test_changed_instruction_selection_during_reuse_rejects_candidate(reduction_
     assert prepare().report.fits
     assert len(compacted) == 2
     assert compacted[-1]["authoritative_messages"]
+
+
+@pytest.mark.parametrize("protected_repetitions, should_fit", [(1500, True), (2500, False)])
+def test_disjoint_safe_history_reductions_combine_across_protected_direction(make_config, monkeypatch, protected_repetitions, should_fit):
+    runtime = AgentRuntime(make_config(model__context_limit=6000, runtime__lean_on_overflow=False),
+        model_client=object(), token_counter=ExactTokenCounter(lambda text: len(text.split())))
+    state = runtime.create_or_load_session()
+    protected = "Do not publish. " * protected_repetitions
+    for role, text in [("user", "Report the task facts."),
+                       ("assistant", "FACT_A " + "detail " * 2000),
+                       ("user", protected),
+                       ("assistant", "FACT_B " + "detail " * 2000),
+                       ("user", "Report both facts and preserve my prohibition.")]:
+        runtime._record_message(state, Message(role=role, content=text, created_at="now"))
+    authoritative_before = runtime.history.read_authoritative_messages(state.session_id)
+
+    def select(_state, messages):
+        # Controlled semantic judgments: two safe regions separated by protected authority.
+        return [{"source_message_start": i, "source_message_count": 1,
+                 "criticality": "compressible", "reason": "retain exact fact, omit routine detail",
+                 "projection": "", "hierarchical": False}
+                for i, message in enumerate(messages)
+                if message.role == "assistant" and "detail " in message.content]
+
+    def summarize(_state, prepared, **kwargs):
+        marker = "FACT_A" if "FACT_A" in prepared.assembly.prompt_text else "FACT_B"
+        return {"summary": "Earlier task evidence.", "verbatim_spans": [marker], "preserve_recent_messages": 0}, prepared
+
+    def build(messages, components, projections, mode):
+        return runtime.prompts.build_semantic_operation_prompt(kind="action", prompt_mode=mode,
+            system_instruction="Report both exact facts without changing files.",
+            components=[PromptComponent(name="history", category="history", text="\n".join(m.content for m in messages))])
+
+    monkeypatch.setattr(runtime, "_select_history_compaction_spans", select)
+    monkeypatch.setattr(runtime, "_execute_with_output_recovery", summarize)
+    options = dict(original_request="Report the task facts.", pending_messages=[],
+        tool_specs=[], contract=yes_no_contract(), validation_feedback="",
+        minimum_output_tokens=64, assembly_builder=build)
+    if should_fit:
+        prepared = runtime._prepare_action_call(state, **options)
+        assert prepared.report.fits
+        final_view = prepared.assembly.prompt_text
+    else:
+        with pytest.raises(BudgetExceededError):
+            runtime._prepare_action_call(state, **options)
+        final_view = "\n".join(message.content for message in state.messages)
+    assert "FACT_A" in final_view and "FACT_B" in final_view
+    assert protected in final_view
+    assert runtime.history.read_authoritative_messages(state.session_id) == authoritative_before
+    reductions = [e for e in runtime.history.read_history(state.session_id) if e.event_type == "history_compressed"]
+    assert len(reductions) == 2
+    assert 0 < reductions[0].payload["actual_recovered_tokens"] < reductions[0].payload["required_recovery_tokens"]
+    assert runtime.history.rebuild_from_history(state.session_id, prefer_checkpoint=False).messages == state.messages
