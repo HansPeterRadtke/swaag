@@ -211,3 +211,46 @@ def test_foreground_bookkeeping_is_recoverable_without_repeating_hashes(make_con
     source = next(s for s in inventory if s['source_kind']=='runtime_telemetry')
     expanded = RuntimeTelemetryEvidenceProvider().reexpand(config=runtime.config, state=state, source=source)
     assert json.loads(expanded['text']) == [asdict(e) for e in accounting]
+
+
+def test_legacy_per_fragment_tokenization_is_exact_recoverable_telemetry(make_config):
+    runtime = AgentRuntime(make_config(), model_client=object())
+    state = runtime.create_or_load_session()
+    events = []
+    for n in range(120):
+        events.append(runtime.history.record_event(state, 'model_tokenize_requested',
+            {'text_hash': f'{n:064x}'}))
+        events.append(runtime.history.record_event(state, 'token_estimate_used',
+            {'text_hash': f'{n:064x}', 'tokens': n + 1, 'strategy': 'chars_per_token'}))
+    rows = runtime._completion_historical_evidence_rows(events)
+    assert len(rows) == 1 and rows[0]['evidence_view'] == 'runtime_telemetry_reference'
+    inventory = runtime._completion_evidence_source_inventory(state, evidence_rows=[], historical_events=events)
+    source = next(s for s in inventory if s['source_kind'] == 'runtime_telemetry')
+    exact = RuntimeTelemetryEvidenceProvider().reexpand(config=runtime.config, state=state, source=source)
+    assert json.loads(exact['text']) == [asdict(e) for e in events]
+
+
+@pytest.mark.parametrize('turn_first', [False, True])
+def test_conversation_view_retains_wording_and_unknown_metadata_once_with_exact_detail_recovery(make_config, turn_first):
+    runtime = AgentRuntime(make_config(), model_client=object())
+    state = runtime.create_or_load_session()
+    text = '  Keep this private.\nDo not publish.  '
+    def turn():
+        runtime.history.record_event(state, 'turn_started', {'turn_index':1, 'user_text':text})
+    if turn_first:turn()
+    runtime._record_message(state, Message(role='user', content=text, created_at='original-time',
+        metadata={'custom_constraint':'PRESERVE_THIS'}))
+    if not turn_first:turn()
+    events = runtime.history.read_history(state.session_id)
+    details = {e.sequence for e in events if e.event_type in ('message_added','turn_started')}
+    inventory = runtime._completion_evidence_source_inventory(state, evidence_rows=[],
+        historical_events=events, disclosed_conversation=details)
+    rows = runtime._foreground_completion_history_view(
+        runtime._completion_historical_evidence_rows(events), set(), inventory)
+    messages = [row for row in rows if row.get('role') == 'user']
+    assert len(messages) == 1 and messages[0]['content'] == text
+    assert messages[0]['metadata']['custom_constraint'] == 'PRESERVE_THIS'
+    assert not any(row.get('event_type') == 'turn_started' for row in rows)
+    source = next(s for s in inventory if s['source_kind'] == 'foreground_history')
+    recovered = ForegroundHistoryEvidenceProvider().reexpand(config=runtime.config, state=state, source=source)
+    assert json.loads(recovered['text']) == [asdict(e) for e in events if e.sequence in details]

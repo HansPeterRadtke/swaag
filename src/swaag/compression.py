@@ -142,15 +142,18 @@ def summary_provenance_text(message: Message) -> str:
     ranges = message.metadata.get("source_event_ranges")
     if not isinstance(ranges, list) or not ranges:
         return ""
-    rendered = ", ".join(
-        (f"{item.get('session_id')}:" if item.get("session_id") else "")
-        + (
+    grouped: dict[str, list[str]] = {}
+    for item in ranges:
+        if not isinstance(item, dict):
+            continue
+        grouped.setdefault(str(item.get("session_id") or ""), []).append(
             str(item.get("start_sequence"))
             if item.get("start_sequence") == item.get("end_sequence")
             else f"{item.get('start_sequence')}-{item.get('end_sequence')}"
         )
-        for item in ranges
-        if isinstance(item, dict)
+    rendered = "; ".join(
+        (f"{session}:" if session else "") + ",".join(spans)
+        for session, spans in grouped.items()
     )
     projection_sequence = message.metadata.get("projection_event_sequence", "unknown")
     return (

@@ -888,7 +888,11 @@ class AgentRuntime:
             # by the runtime. Preload its exact schema once; do NOT disable
             # staged discovery and recursively materialize /data as a massive
             # unrelated file manifest. Other tools still require discovery.
-            loaded_tool_names.add("orchestration_control")
+            # With exact snapshot disclosure, preload only the small read API.
+            # The full planning schema remains discoverable through the normal
+            # action controller, which still receives every finalized message.
+            loaded_tool_names.add("runtime_snapshot_lookup" if
+                "runtime_snapshot_lookup" in base_capability_names else "orchestration_control")
         tool_results: list[ToolExecutionResult] = []
         budget_reports: list[BudgetReport] = []
         validation_failure_counts: dict[str, int] = {}
@@ -2209,12 +2213,24 @@ class AgentRuntime:
                 + "\n\n".join(pending_messages)
             )
         runtime_context_projections: dict[str, RuntimeContextProjection] = {}
+        failed_runtime_projections: set[tuple] = set()
         remaining_runtime_projection_calls = [
             max(8, int(self.config.context.max_compaction_rounds) * 8)
         ]
         authoritative_messages = self.history.read_authoritative_messages(
             state.session_id
         )
+        history_disclosure_notice = ""
+        if ("history_window" in self.config.tools.enabled
+                and callable(self.tool_runtime_capabilities(state.session_id).get("system_snapshot_provider"))):
+            turn = next(self.history.iter_history_reverse(
+                state.session_id, event_types=("turn_started",)), None)
+            if turn is not None:
+                from swaag.foreground_history import foreground_action_history
+                authoritative_messages, history_disclosure_notice = foreground_action_history(
+                    authoritative_messages, self.history.iter_history_reverse(
+                        state.session_id, end_sequence=turn.sequence - 1,
+                        event_types=("assistant_progress",)), turn.sequence)
         projected_messages = list(state.messages)
         has_derived_history = authoritative_messages != projected_messages
         history_messages = (
@@ -2240,6 +2256,10 @@ class AgentRuntime:
             *,
             mode: str,
         ) -> PromptAssembly:
+            if history_disclosure_notice:
+                components = [*components, PromptComponent(
+                    name="prior_machine_action_disclosure", category="runtime_context",
+                    text=history_disclosure_notice)]
             if assembly_builder is not None:
                 return assembly_builder(messages, components, tool_result_projections, mode)
             return self.prompts.build_agent_action_prompt(
@@ -2253,6 +2273,8 @@ class AgentRuntime:
                 tool_result_projections=tool_result_projections,
                 validation_feedback=validation_feedback,
                 require_user_acknowledgement=require_user_acknowledgement,
+                foreground=("runtime_snapshot_lookup" in self.config.tools.enabled
+                    and callable(self.tool_runtime_capabilities(state.session_id).get("system_snapshot_provider"))),
             )
 
         def record_action_compilation(
@@ -2541,6 +2563,7 @@ class AgentRuntime:
                 existing_projections=runtime_context_projections,
                 remaining_calls=remaining_runtime_projection_calls,
                 context_state=system_context_state,
+                failed_attempts=failed_runtime_projections,
             )
             if projected_context is not None:
                 source_name, projection = projected_context
@@ -2655,7 +2678,27 @@ class AgentRuntime:
             evidence_rows=evidence_rows,
             historical_events=historical_events,
             deferred_observations=deferred_observations,
+            disclosed_snapshots=({completion_snapshot_event.sequence}
+                if completion_snapshot_event is not None
+                and "runtime_snapshot_lookup" in self.config.tools.enabled else set()),
+            disclosed_conversation=({event.sequence for event in historical_events
+                if event.event_type in {"message_added", "turn_started", "turn_finished"}}
+                if deferred_observations else set()),
         )
+        if (completion_snapshot_event is not None and "runtime_snapshot_lookup" in self.config.tools.enabled
+                and any(completion_snapshot_event.sequence in source.get("event_sequences", [])
+                        for source in evidence_source_inventory if source["source_kind"] == "foreground_history")):
+            from swaag.snapshot_view import snapshot_prompt_view, question_inventory_prompt_view
+            for row in historical_rows:
+                if row.get("sequence") == completion_snapshot_event.sequence:
+                    row["payload"]["snapshot"] = snapshot_prompt_view(
+                        completion_snapshot, completion_snapshot_event.sequence)
+                    row["snapshot_evidence_notice"] = (
+                        "Terminal details are recoverable from this event's exact foreground_history source. "
+                        "Fetch it before validating any claim that depends on omitted details.")
+                elif (row.get("event_type") == "worker_question_inventory"
+                      and row.get("sequence", 0) >= (current_run_sequence or 0)):
+                    row["payload"] = question_inventory_prompt_view(row["payload"])
         if deferred_observations:
             historical_rows = self._foreground_completion_history_view(
                 historical_rows, deferred_observations, evidence_source_inventory)
@@ -3131,6 +3174,7 @@ class AgentRuntime:
                     placeholder,
                     contract,
                     minimum_output_tokens=minimum_output_tokens,
+                    desired_output_tokens=minimum_output_tokens,
                     context_limit_resolution=context_limit_resolution,
                 )
                 projection_capacity = (
@@ -3271,7 +3315,9 @@ class AgentRuntime:
         known_sources = {"foreground_history", "runtime_audit", "runtime_telemetry",
                          "text_artifact", "raw_attachment"}
         return [{key: value for key, value in source.items()
-                 if source.get("source_kind") not in known_sources or key not in accounting}
+                 if (source.get("source_kind") not in known_sources or key not in accounting)
+                 and not (source.get("source_kind") == "foreground_history"
+                          and key in {"first_timestamp", "last_timestamp", "size_chars"})}
                 for source in inventory]
 
     @staticmethod
@@ -3287,12 +3333,47 @@ class AgentRuntime:
         session_ids = {row["session_id"] for row in rows if "session_id" in row}
         shared_session = next(iter(session_ids)) if len(session_ids) == 1 else None
         result = []
+        latest_message = None
+        next_messages = {}
+        upcoming = None
+        for item in reversed(rows):
+            next_messages[item.get("sequence")] = upcoming
+            candidate = item.get("payload", {}).get("message")
+            if (item.get("event_type") == "message_added" and isinstance(candidate, dict)
+                    and item.get("sequence") not in deferred_sequences):
+                upcoming = candidate
         for row in rows:
             if shared_session is not None and row.get("session_id") == shared_session:
                 # Exact event hashes remain in historical_source_references and
                 # canonical history. Repeating them adds no semantic evidence.
                 row = {key: value for key, value in row.items() if key not in {"hash", "session_id"}}
             sequence = row.get("sequence")
+            if sequence in sources and sequence not in deferred_sequences:
+                payload = row.get("payload", {})
+                message = payload.get("message")
+                if row.get("event_type") == "message_added" and isinstance(message, dict):
+                    latest_message = message
+                    compact_message = {key: value for key, value in message.items()
+                                       if key not in {"created_at", "metadata"}}
+                    metadata = {key: value for key, value in message.get("metadata", {}).items()
+                        if key not in {"source_message_event_sequence", "source_message_event_hash",
+                            "source_message_event_type", "source_message_session_id", "orchestrator_control_id"}}
+                    if metadata:
+                        compact_message["metadata"] = metadata
+                    if compact_message.get("name") is None:
+                        compact_message.pop("name", None)
+                    row = {"sequence": sequence, **compact_message}
+                elif (any(message is not None and (
+                    row.get("event_type") == "turn_started" and message.get("role") == "user"
+                    and payload.get("user_text") == message.get("content")
+                    and set(payload) <= {"turn_index", "user_text", "execution_loop", "run_id", "resumed_control_ids"}
+                    or row.get("event_type") == "turn_finished" and message.get("role") == "assistant"
+                    and payload.get("assistant_text") == message.get("content")
+                    and set(payload) <= {"turn_index", "assistant_text", "tool_steps", "budget_reports"})
+                    for message in (latest_message, next_messages.get(sequence)))):
+                    # Only exact duplicated wording; turn timing/accounting is
+                    # recoverable from the indexed event, never discarded.
+                    continue
             exact = row.get("exact_source", {})
             recoverable_audit = (exact.get("source_kind"), exact.get("source_id")) in inventory_keys
             if row.get("evidence_view") == "core_policy_audit_reference" and recoverable_audit:
@@ -3335,7 +3416,11 @@ class AgentRuntime:
             "Prior assistant claims do not prove effects. Fetch the relevant source before judging "
             "a claim about an earlier effect or historical state; absence from this view is not "
             "evidence of absence. Prior verifier reasons/verdicts remain inline; their derived "
-            "summaries and token accounting are in runtime_telemetry."
+            "summaries and token accounting are in runtime_telemetry. Visible message text is exact; "
+            "timestamps, provenance and identical turn-envelope copies are recoverable from the "
+            "foreground_history source whose sequence range contains that message. Conversation "
+            "rows use role and content. Model-generation failures/rejections are runtime_telemetry; "
+            "they do not establish a tool effect or task completion."
         )})
         return result
 
@@ -4983,6 +5068,8 @@ class AgentRuntime:
         evidence_rows: list[dict[str, Any]],
         historical_events: list[HistoryEvent],
         deferred_observations: set[int] | None = None,
+        disclosed_snapshots: set[int] | None = None,
+        disclosed_conversation: set[int] | None = None,
     ) -> list[dict[str, Any]]:
         referenced_values = self._string_leaves(
             [
@@ -4992,7 +5079,7 @@ class AgentRuntime:
                         "payload": event.payload,
                         "metadata": event.metadata,
                     }
-                    for event in historical_events
+                    for event in historical_events if not is_runtime_telemetry_event(event)
                 ],
             ]
         )
@@ -5003,7 +5090,9 @@ class AgentRuntime:
         )
         referenced_values.update(
             f"foreground_history:{event.session_id}:{event.sequence}"
-            for event in historical_events if event.sequence in (deferred_observations or set())
+            for event in historical_events if event.sequence in (
+                (deferred_observations or set()) | (disclosed_snapshots or set())
+                | (disclosed_conversation or set()))
         )
         source_events = self.history.read_history(state.session_id)
         inventory: list[dict[str, Any]] = []
@@ -6320,20 +6409,26 @@ class AgentRuntime:
                 # including a refresh during context reduction, not the older
                 # outer-loop sample. Keep this update replayable as well.
                 self.history.record_event(state, "worker_question_inventory", inventory)
-        sources = runtime_system_context_sources(
-            self.config, state, context_state=context_state
-        )
+        disclosure = snapshot is not None and "runtime_snapshot_lookup" in self.config.tools.enabled
+        if disclosure:
+            from swaag.snapshot_view import snapshot_prompt_view
+            prompt_snapshot = snapshot_prompt_view(snapshot, local["runtime_system_snapshot_sequence"])
+            local["worker_question_inventory_prompt_view"] = prompt_snapshot.get("worker_question_inventory")
+        else:
+            prompt_snapshot = snapshot
+            local.pop("worker_question_inventory_prompt_view", None)
+        sources = runtime_system_context_sources(self.config, state, context_state=local)
         if snapshot is not None:
             locator = {"authoritative_source": "history", "session_id": state.session_id,
                        "sequence": local["runtime_system_snapshot_sequence"],
                        "recovery_tool": "history_window"}
-            semantic_snapshot = dict(snapshot)
+            semantic_snapshot = dict(prompt_snapshot)
             # Already supplied once as its own complete context source.
             semantic_snapshot.pop("worker_question_inventory", None)
             receipts = [{
                 "worker_id": item["worker_id"], "session_id": item["session_id"],
                 "delivery_receipts": item["delivery_receipts"],
-            } for item in snapshot.get("worker_controls", []) if item.get("delivery_receipts")]
+            } for item in prompt_snapshot.get("worker_controls", []) if item.get("delivery_receipts")]
             if receipts:
                 # Receipt lifecycle is mechanical state, not a summary judgment.
                 # A lossy projection must not leave an old pending tool receipt as
@@ -6350,7 +6445,7 @@ class AgentRuntime:
                 semantic_snapshot.pop("worker_control_status_semantics", None)
                 semantic_snapshot["worker_controls"] = [
                     {key: value for key, value in item.items() if key != "delivery_receipts"}
-                    for item in snapshot.get("worker_controls", [])
+                    for item in prompt_snapshot.get("worker_controls", [])
                 ]
             sources.append(SystemContextSource(
                 name="runtime_system_snapshot", category="environment",
@@ -6373,6 +6468,7 @@ class AgentRuntime:
         existing_projections: dict[str, RuntimeContextProjection],
         remaining_calls: list[int],
         context_state: dict[str, object] | None = None,
+        failed_attempts: set[tuple] | None = None,
     ) -> tuple[str, RuntimeContextProjection] | None:
         if compilation.overflow_tokens <= 0:
             return None
@@ -6412,6 +6508,10 @@ class AgentRuntime:
             previous_tokens - max(16, compilation.overflow_tokens) - 32,
         )
         if target_tokens >= previous_tokens:
+            return None
+        attempt_key = (source_name, source_hash, objective_hash,
+                       sha256_text(previous_projection or ""), target_tokens)
+        if failed_attempts is not None and attempt_key in failed_attempts:
             return None
         stored = self.history.latest_runtime_context_projection(
             state.session_id,
@@ -6461,6 +6561,8 @@ class AgentRuntime:
                 context_limit_resolution=self._resolve_context_limit(state),
             )
         except (BudgetExceededError, OutputBudgetExhaustedError) as exc:
+            if failed_attempts is not None:
+                failed_attempts.add(attempt_key)
             self.history.record_event(
                 state,
                 "runtime_context_projection_skipped",
@@ -6484,6 +6586,8 @@ class AgentRuntime:
             return None
         projected_tokens = counter.count_text(projection).tokens
         if projected_tokens >= previous_tokens:
+            if failed_attempts is not None:
+                failed_attempts.add(attempt_key)
             self.history.record_event(
                 state,
                 "runtime_context_projection_skipped",
@@ -6530,9 +6634,8 @@ class AgentRuntime:
         wakeup_store = WakeupStore(self.config.sessions.root)
         latest_handles: dict[str, str] = {}
         tool_context_updates: dict[str, object] = {}
-        for event in self.history.iter_history(state.session_id):
-            if event.event_type != "tool_result":
-                continue
+        for event in reversed(list(self.history.iter_history_reverse(
+                state.session_id, event_types=("tool_result",)))):
             output = event.payload.get("output", {})
             if not isinstance(output, dict):
                 continue

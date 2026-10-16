@@ -207,3 +207,23 @@ def test_review_verdict_keeps_semantics_but_recovers_full_source_catalogues(make
     assert len(inventory)==1
     exact=RuntimeTelemetryEvidenceProvider().reexpand(config=runtime.config,state=state,source=inventory[0])
     assert json.loads(exact['text'])==[asdict(event)]
+
+
+def test_telemetry_manifest_avoids_copying_payload_and_reads_legacy_references(make_config, monkeypatch):
+    import swaag.evidence_sources as sources
+    runtime = AgentRuntime(make_config(), model_client=object())
+    state = runtime.create_or_load_session()
+    event = runtime.history.record_event(state, 'token_estimate_used', {
+        'text_hash':'original', 'tokens':123, 'strategy':'chars_per_token',
+        'retained_audit_detail':'EXACT_DETAIL_' * 10000})
+    legacy = runtime_telemetry_reference([event], legacy_content_digest=True)
+    with monkeypatch.context() as patch:
+        def forbid_copy(value):
+            raise AssertionError('Index construction copied an entire telemetry payload')
+        patch.setattr(sources, 'asdict', forbid_copy)
+        manifest = runtime_telemetry_reference([event])
+    assert manifest['integrity_scheme'] == 'event_manifest_v1'
+    assert len(json.dumps(manifest)) < 2000
+    for source in (manifest, legacy):
+        exact = RuntimeTelemetryEvidenceProvider().reexpand(config=runtime.config, state=state, source=source)
+        assert json.loads(exact['text']) == [asdict(event)]

@@ -184,4 +184,46 @@ class AgentControlTool(Tool):
         )
 
 
-CONTROL_TOOLS = [AgentStatusLookupTool(), AgentControlTool()]
+class RuntimeSnapshotLookupTool(Tool):
+    name = "runtime_snapshot_lookup"
+    description = "Read exact task details from a supplied timestamped system snapshot."
+    usage_guidance = "Use its snapshot_sequence and exact_details_pointer. Read relevant terminal task details before claiming past results. Empty pointer returns the complete observation; select an individual record or field when sufficient. No state changes."
+    kind = "pure"
+    required_runtime_capability = "system_snapshot_provider"
+    input_schema = {
+        "type": "object", "additionalProperties": False,
+        "properties": {"snapshot_sequence": {"type": "integer"},
+                       "pointer": {"type": "string"}},
+        "required": ["snapshot_sequence", "pointer"],
+    }
+
+    def validate(self, raw_input):
+        if not isinstance(raw_input, dict) or set(raw_input) != set(self.input_schema["required"]):
+            raise ToolValidationError("snapshot lookup requires sequence and pointer")
+        sequence, pointer = raw_input["snapshot_sequence"], raw_input["pointer"]
+        if type(sequence) is not int or sequence < 1 or not isinstance(pointer, str):
+            raise ToolValidationError("invalid snapshot sequence or pointer")
+        return dict(raw_input)
+
+    def execute(self, validated_input, context):
+        from swaag.events import verify_event_integrity
+        from swaag.snapshot_view import snapshot_value
+        store = HistoryStore(context.config.sessions.root, write_projections=False)
+        sequence = validated_input["snapshot_sequence"]
+        events = store.read_history_window(context.session_state.session_id,
+                                          start_sequence=sequence, limit=1)
+        if not events or events[0].sequence != sequence or events[0].event_type != "runtime_system_snapshot":
+            raise ToolValidationError("sequence is not a system snapshot in this session")
+        event = events[0]
+        verify_event_integrity(event, event.prev_hash)
+        try:
+            value = snapshot_value(event.payload["snapshot"], validated_input["pointer"])
+        except (ValueError, KeyError, IndexError) as exc:
+            raise ToolValidationError("snapshot pointer does not identify a value") from exc
+        output = {"snapshot_sequence": sequence, "snapshot_hash": event.hash,
+                  "observed_at": event.timestamp, "pointer": validated_input["pointer"],
+                  "value": value}
+        return ToolExecutionResult(self.name, output, stable_json_dumps(output, indent=None))
+
+
+CONTROL_TOOLS = [AgentStatusLookupTool(), AgentControlTool(), RuntimeSnapshotLookupTool()]

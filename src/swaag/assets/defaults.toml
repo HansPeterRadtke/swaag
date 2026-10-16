@@ -496,7 +496,7 @@ max_pending_requests = 128
 # Initial status/control response cap. Output-recovery may grow this only when
 # constrained generation actually exhausts the cap.
 status_max_output_tokens = 192
-enabled_tools = ["agent_workspace", "tool_forge", "diane", "list_files", "read_file", "read_text", "search_in_file", "search_repo", "read_artifact", "time_now", "system_resources", "calculator", "history_search", "history_window", "agent_status_lookup", "agent_control", "orchestration_control", "background_work", "questions", "revise_question", "worker_questions", "report_progress"]
+enabled_tools = ["agent_workspace", "tool_forge", "diane", "list_files", "read_file", "read_text", "search_in_file", "search_repo", "read_artifact", "time_now", "system_resources", "calculator", "history_search", "history_window", "agent_status_lookup", "runtime_snapshot_lookup", "agent_control", "orchestration_control", "background_work", "questions", "revise_question", "worker_questions", "report_progress"]
 host = "127.0.0.1"
 port = 8765
 poll_seconds = 0.2

@@ -72,6 +72,23 @@ def test_estimated_counting_uses_percentage_safety(make_config):
     assert result.report.safety_margin_tokens > 64
 
 
+def test_exact_serialized_count_with_estimated_fragments_uses_fixed_safety(make_config):
+    from swaag.tokens import CountResult
+    class ProviderCounter:
+        def count_text(self, text):
+            return CountResult(tokens=len(text), exact=text == 'system user', strategy='provider')
+    config = make_config(model__context_limit=10000, context__safety_margin_tokens=64)
+    assembly = PromptAssembly(kind='action', prompt_mode='standard', prompt_text='system user',
+        components=[PromptComponent(name='system', text='system '),
+                    PromptComponent(name='user', text='user')])
+    result = ContextCompiler(config).compile(assembly, agent_action_contract([]), ProviderCounter(),
+                                             minimum_output_tokens=200)
+    assert result.report.input_tokens == len('system user')
+    assert result.report.exact is True
+    assert result.report.safety_margin_tokens == 64
+    assert result.report.breakdown[0].exact is False
+
+
 def test_full_fidelity_input_not_rejected_only_for_desired_output_ratio(make_config):
     config = make_config(model__context_limit=1000, context__safety_margin_tokens=10)
     compiler = ContextCompiler(config)

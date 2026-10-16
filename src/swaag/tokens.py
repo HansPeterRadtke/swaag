@@ -140,7 +140,12 @@ def build_budget(
             counted = counter.count_text(component.text)
             delta = counted.tokens
             non_context_tokens += delta
-        exact = exact and counted.exact
+        # Prefix differences may be estimated while the provider supplies an
+        # exact count for the complete serialized request. Only that final
+        # context count determines input accuracy; a non-context grammar or an
+        # estimated breakdown must not add a second proportional safety margin.
+        if component.include_in_context:
+            exact = counted.exact
         breakdown.append(
             BudgetComponentReport(
                 name=component.name,
