@@ -88,7 +88,10 @@ def test_cli_tools_command(capsys) -> None:
 
 
 
-def test_cli_budget_demo(capsys, monkeypatch) -> None:
+def test_cli_budget_demo(capsys, monkeypatch, make_config) -> None:
+    # The CLI rendering check must not read or fill the host replay cache.
+    config = make_config()
+    monkeypatch.setattr("swaag.cli.load_config", lambda paths: config)
     monkeypatch.setattr("swaag.model.LlamaCppClient.tokenize", lambda self, text: max(1, len(text) // 4))
     monkeypatch.setattr("swaag.model.LlamaCppClient.tokenize_selection", lambda self, text: max(1, len(text) // 4))
     monkeypatch.setattr(
