@@ -333,6 +333,7 @@ class CommunicationConfig:
     host: str
     port: int
     poll_seconds: float
+    stream_heartbeat_seconds: float = 5.0
     max_active_workers: int = 128
     max_pending_requests: int = 128
     idle_work_mode: str = "finish_only"
@@ -811,6 +812,7 @@ def _coerce_config(
         host=str(data["communication"]["host"]),
         port=int(data["communication"]["port"]),
         poll_seconds=float(data["communication"]["poll_seconds"]),
+        stream_heartbeat_seconds=float(data["communication"]["stream_heartbeat_seconds"]),
         max_active_workers=data["communication"].get("max_active_workers", 128),
         max_pending_requests=data["communication"].get("max_pending_requests", 128),
         orchestrator_priority=int(data["communication"]["orchestrator_priority"]),
@@ -1072,6 +1074,8 @@ def _coerce_config(
         raise ValueError("communication.port must be between 1 and 65535")
     if communication.poll_seconds <= 0:
         raise ValueError("communication.poll_seconds must be positive")
+    if not 0 < communication.stream_heartbeat_seconds <= 30:
+        raise ValueError("communication.stream_heartbeat_seconds must be positive and at most 30")
     artifact_serving = communication.open_webui_artifacts
     if artifact_serving.enabled:
         parsed_artifact_url = urlparse(artifact_serving.public_base_url)

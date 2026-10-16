@@ -500,6 +500,8 @@ enabled_tools = ["agent_workspace", "tool_forge", "diane", "list_files", "read_f
 host = "127.0.0.1"
 port = 8765
 poll_seconds = 0.2
+# Connection liveness only; never evidence of model progress or tool completion.
+stream_heartbeat_seconds = 5.0
 # Explicit opt-in: finish_only does not dispatch queued background plans.
 # authorized_backlog starts user-authorized plans only when foreground work is idle.
 # autonomous_continue additionally permits one history-grounded model-proposed task at a time.

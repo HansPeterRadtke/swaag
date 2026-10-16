@@ -107,6 +107,47 @@ def test_stream_skips_prior_turns_and_validates_before_receipt(make_config):
         service.close()
 
 
+def test_voice_stream_keeps_idle_transport_alive_without_claiming_model_progress(make_config):
+    release = threading.Event()
+    def finish(payload):
+        assert release.wait(5)
+        return _action(message="Done.")
+    runtime = AgentRuntime(make_config(model__context_limit=32000,
+        runtime__completion_evaluation_enabled=False, communication__poll_seconds=0.01,
+        communication__stream_heartbeat_seconds=0.03), model_client=FakeModelClient([finish]))
+    service = CommunicationService(runtime, orchestrator_runtime=runtime)
+    async def exercise():
+        server = await asyncio.start_server(service.handle_client, '127.0.0.1', 0)
+        writer = None
+        try:
+            reader, writer = await asyncio.open_connection('127.0.0.1', server.sockets[0].getsockname()[1])
+            writer.write((json.dumps({'op':'orchestrator.message','message':'Hello',
+                                     'stream':True,'operation_id':'silent_model'})+'\n').encode())
+            await writer.drain()
+            accepted = json.loads(await asyncio.wait_for(reader.readline(), 2))
+            assert accepted['event'] == 'accepted'
+            for _ in range(2):
+                event = json.loads(await asyncio.wait_for(reader.readline(), 1))
+                assert event['event'] == 'keepalive'
+                assert event['session_id'] == accepted['session_id']
+                assert 'assistant_text' not in event
+            release.set()
+            while True:
+                event = json.loads(await asyncio.wait_for(reader.readline(), 2))
+                if event['event'] == 'completed':
+                    assert event['result']['answer'] == 'Done.'
+                    break
+        finally:
+            release.set()
+            if writer is not None:
+                writer.close(); await writer.wait_closed()
+            server.close(); await server.wait_closed()
+    try:
+        asyncio.run(exercise())
+    finally:
+        release.set(); service.close()
+
+
 def test_failed_dispatch_never_publishes_success_draft(make_config):
     client = FakeModelClient([
         _action(message='I have sent the instruction.', tool_calls=[('agent_control', {'session_ref':'missing_target','message':'Hold.'})], continue_loop=True),

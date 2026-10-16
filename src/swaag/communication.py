@@ -2081,15 +2081,22 @@ class CommunicationService:
         await send({"event": "accepted", "session_id": receipt["session_id"],
                     "control_id": receipt["control_id"],
                     "operation_id": receipt.get("operation_id"), "duplicate": bool(receipt.get("duplicate"))})
+        last_sent = time.monotonic()
         while True:
             for event in await asyncio.to_thread(cursor.poll):
                 await send(event)
+                last_sent = time.monotonic()
             caught_up = await asyncio.to_thread(cursor.caught_up)
             if future.done() and caught_up:
                 await send({"event": "completed", "session_id": receipt["session_id"],
                             "control_id": receipt["control_id"], "sequence": cursor.final_sequence,
                             "result": future.result()})
                 return
+            if (receipt.get("operation_id") is not None
+                    and time.monotonic() - last_sent >= self.runtime.config.communication.stream_heartbeat_seconds):
+                await send({"event":"keepalive", "session_id":receipt["session_id"],
+                            "control_id":receipt["control_id"]})
+                last_sent = time.monotonic()
             if caught_up:
                 await asyncio.sleep(self.runtime.config.communication.poll_seconds)
 
