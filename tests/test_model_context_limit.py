@@ -615,3 +615,36 @@ def test_output_tokenizer_rejects_invalid_counts(make_config, monkeypatch, paylo
     ))
     with pytest.raises(ModelClientError):
         client.tokenize_output("nonempty")
+
+@pytest.mark.parametrize("content", ["USR\n", "  USR", "\n  USR  \n", "    indented_code()\n", "USR"])
+def test_native_template_preserves_message_boundary_whitespace(make_config, monkeypatch, content):
+    class Props:
+        def raise_for_status(self): pass
+        def json(self): return {"chat_template": "strip-template", "model_alias": "local"}
+    class Render:
+        def raise_for_status(self): pass
+        def json(self): return {"prompt": "<system>SYS</system><user>" + content.strip() + "</user><assistant>"}
+    monkeypatch.setattr("swaag.model.requests.get", lambda *a, **kw: Props())
+    monkeypatch.setattr("swaag.model.requests.post", lambda *a, **kw: Render())
+    client = LlamaCppClient(make_config())
+    rendered = client.render_chat_prompt([
+        {"role": "system", "content": "SYS"}, {"role": "user", "content": content}
+    ])
+    assert rendered["prompt"] == "<system>SYS</system><user>" + content + "</user><assistant>"
+    client.verify_prompt_protocol(rendered["prompt_protocol_sha256"])
+
+
+def test_native_template_rejects_nonboundary_content_changes(make_config, monkeypatch):
+    class Props:
+        def raise_for_status(self): pass
+        def json(self): return {"chat_template": "unsafe-template"}
+    class Render:
+        def raise_for_status(self): pass
+        def json(self): return {"prompt": "<system>SYS</system><user>Changed instruction</user>"}
+    monkeypatch.setattr("swaag.model.requests.get", lambda *a, **kw: Props())
+    monkeypatch.setattr("swaag.model.requests.post", lambda *a, **kw: Render())
+    with pytest.raises(ModelClientError, match="transformed message content"):
+        LlamaCppClient(make_config()).render_chat_prompt([
+            {"role": "system", "content": "SYS"},
+            {"role": "user", "content": "  Original instruction\n"}
+        ])

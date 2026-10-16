@@ -565,6 +565,7 @@ class LlamaCppClient:
         generation = props.get("default_generation_settings")
         n_ctx = generation.get("n_ctx") if isinstance(generation, dict) else None
         return {
+            "serialization": "llama_cpp_exact_message_boundaries_v1",
             "thinking_mode": self.config.model.thinking_mode,
             "chat_template_sha256": sha256_text(template),
             "chat_template_caps_sha256": sha256_text(
@@ -579,6 +580,34 @@ class LlamaCppClient:
             "model_alias": str(props.get("model_alias", "")),
             "server_build_info": str(props.get("build_info", "")),
         }
+
+    @staticmethod
+    def _preserve_native_message_boundaries(
+        prompt: str, messages: list[dict[str, str]],
+    ) -> str:
+        """Restore only template-trimmed boundary whitespace in the raw prompt.
+
+        Native /completion consumes this exact string, so accounting and generation
+        both retain the original content, including indentation and final newlines.
+        Other template transformations remain unsupported rather than hidden.
+        """
+        pieces: list[str] = []
+        cursor = 0
+        for message in messages:
+            content = message["content"]
+            matched = content
+            offset = prompt.find(content, cursor)
+            if offset < 0:
+                matched = content.strip()
+                offset = prompt.find(matched, cursor) if matched else -1
+            if offset < cursor:
+                raise ModelClientError(
+                    "Model chat template transformed message content beyond boundary whitespace"
+                )
+            pieces.extend((prompt[cursor:offset], content))
+            cursor = offset + len(matched)
+        pieces.append(prompt[cursor:])
+        return "".join(pieces)
 
     def render_chat_prompt(self, messages: list[dict[str, str]]) -> dict[str, str]:
         if not messages or any(
@@ -639,6 +668,7 @@ class LlamaCppClient:
         prompt = payload.get("prompt") if isinstance(payload, dict) else None
         if not isinstance(prompt, str) or not prompt:
             raise ModelClientError(f"Unexpected apply-template response: {payload!r}")
+        prompt = self._preserve_native_message_boundaries(prompt, messages)
         after = self._prompt_protocol_identity()
         if before != after:
             raise ModelClientError(
