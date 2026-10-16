@@ -63,9 +63,27 @@ class OrchestratorOperations:
 
     def activate(self,key,session_id):
         with self.connect() as db:
+            db.execute('BEGIN IMMEDIATE')
+            row = db.execute('SELECT cancel_requested FROM operations WHERE operation_id=?', (key,)).fetchone()
+            if row is None:
+                raise RuntimeError('operation ledger missing')
+            if row['cancel_requested']:
+                raise OperationCanceled('orchestrator interruption requested')
             db.execute('UPDATE operations SET status=?,session_id=?,updated=? WHERE operation_id=?',
                        ('running',session_id,time.time(),key))
         self.check_cancellation(key)
+
+    def bind_session(self, key, session_id):
+        """Remember queued receipt ownership before an execution worker is free."""
+        with self.connect() as db:
+            db.execute('BEGIN IMMEDIATE')
+            row = db.execute('SELECT session_id FROM operations WHERE operation_id=?', (key,)).fetchone()
+            if row is None:
+                raise RuntimeError('operation ledger missing')
+            if row['session_id'] and row['session_id'] != session_id:
+                raise ValueError('operation is already bound to a different session')
+            db.execute('UPDATE operations SET session_id=?,updated=? WHERE operation_id=?',
+                       (session_id, time.time(), key))
 
     def check_cancellation(self,key):
         row=self.get(key)

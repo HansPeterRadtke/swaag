@@ -14,7 +14,7 @@ from typing import Any, Callable, Iterable, Iterator
 
 
 from swaag.questions import validate_question_capacity, apply_revision_controls
-from swaag.session_lock import exclusive_session_turn, session_execution_lock
+from swaag.session_lock import exclusive_session_turn, session_execution_lock, session_control_lock
 from swaag.redaction import configured_secret_values
 from swaag.action import ActionValidationError, AgentAction, action_from_payload
 from swaag.attachments import AttachmentStore
@@ -1206,6 +1206,15 @@ class AgentRuntime:
             # for the next independently compiled action.
             action_minimum_output_tokens = int(self.config.context.reserved_response_tokens)
 
+            if not self._consume_pending_control_messages(
+                state, pending_payloads=pending_payloads, selected_action=selected_action,
+            ):
+                recovery_feedback = (
+                    "User control receipts changed at action acceptance. The stale action "
+                    "was not executed. Reconcile the current authoritative controls."
+                )
+                continue
+
             action_payload = asdict(selected_action)
             occurrence = 1
             self.history.record_event(
@@ -1249,11 +1258,6 @@ class AgentRuntime:
             # action merely because its signature or an observation call repeats. Benchmark
             # policy may bound total actions/tool calls and score repetition for a specific task.
 
-            self._consume_pending_control_messages(
-                state,
-                pending_payloads=pending_payloads,
-                selected_action=selected_action,
-            )
             accepted_actions += 1
 
             if selected_action.tool_calls:
@@ -1692,6 +1696,21 @@ class AgentRuntime:
         state: SessionState,
         *,
         pending_payloads: list[dict[str, Any]],
+        selected_action: AgentAction,
+    ) -> bool:
+        # A withdrawal may race the earlier snapshot check. Serialize only this
+        # short acceptance boundary with receipt mutation, never model/tool work.
+        with session_control_lock(self.history, state.session_id):
+            current = self.history.list_pending_control_messages(state.session_id)
+            if [p["control_id"] for p in current] != [p["control_id"] for p in pending_payloads]:
+                return False
+            self._consume_pending_control_messages_locked(
+                state, pending_payloads=pending_payloads, selected_action=selected_action,
+            )
+            return True
+
+    def _consume_pending_control_messages_locked(
+        self, state: SessionState, *, pending_payloads: list[dict[str, Any]],
         selected_action: AgentAction,
     ) -> None:
         for payload in pending_payloads:

@@ -11,6 +11,7 @@ from pathlib import Path
 from typing import Any, Callable, Iterable, Iterator
 
 from swaag.capacity import positive_capacity, require_capacity
+from swaag.session_lock import exclusive_control_mutation
 from swaag.questions import question_record, normalize_question, QUESTION_FIELDS
 from swaag.redaction import redact_for_persistence
 from swaag.environment.state import EnvironmentState, ProcessRecord, ShellSessionState, WorkspaceState
@@ -766,6 +767,7 @@ class HistoryStore:
             return None
         return payload if isinstance(payload, dict) else None
 
+    @exclusive_control_mutation
     def enqueue_control_message(self, session_id: str, text: str, *, source: str = "cli", control_id: str | None = None, authority: list[dict[str, Any]] | None = None) -> dict[str, Any]:
         control_id = control_id or new_id("control")
         if not isinstance(text, str) or not text.strip():
@@ -894,8 +896,9 @@ class HistoryStore:
             _ensure_directory(processed_path.parent)
             os.replace(inbox_path, processed_path)
 
-    def cancel_pending_control_message(self, session_id: str, control_id: str) -> None:
-        """Withdraw only an unconsumed receipt while its execution lock is held.
+    @exclusive_control_mutation
+    def cancel_pending_control_message(self, session_id: str, control_id: str) -> bool:
+        """Withdraw an unconsumed receipt atomically with action acceptance.
 
         The canonical row retains the exact accepted input. A consumed receipt
         is never described as unexecuted; run/tool cancellation keeps its own
@@ -908,6 +911,7 @@ class HistoryStore:
             )
         if cursor.rowcount:
             (self.control_inbox_dir(session_id) / f"{control_id}.json").unlink(missing_ok=True)
+        return bool(cursor.rowcount)
 
     def _iter_history_jsonl(
         self,

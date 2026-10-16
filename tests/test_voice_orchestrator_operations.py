@@ -44,6 +44,14 @@ class DurableVoiceOperationTests(unittest.TestCase):
         self.store.claim('voice-one','Create B');self.store.finish('voice-one','completed',{'answer':'Created'})
         self.assertEqual('completed',self.store.cancel('voice-one')['status'])
 
+    def test_activation_cannot_resurrect_canceled_operation(self):
+        self.store.claim('voice-one', 'Create A')
+        self.store.cancel('voice-one')
+        self.store.finish('voice-one', 'canceled')
+        with self.assertRaises(OperationCanceled):
+            self.store.activate('voice-one', 'session')
+        self.assertEqual('canceled', self.store.get('voice-one')['status'])
+
     def service(self):
         service=CommunicationService.__new__(CommunicationService)
         service.orchestrator_operations=self.store
@@ -138,3 +146,114 @@ def test_cancel_before_run_identity_cannot_execute_or_poison_next_turn(make_conf
 
 
 if __name__=='__main__':unittest.main()
+
+
+def test_voice_correction_reaches_running_action_before_execution_lock(make_config):
+    from swaag.runtime import AgentRuntime
+    from tests.test_agent_action_loop import FakeModelClient, _action
+    entered, release = threading.Event(), threading.Event()
+    def stale(payload):
+        entered.set()
+        assert release.wait(5)
+        return _action(message='I am writing it.', tool_calls=[('echo', {'text':'STALE_EFFECT'})], continue_loop=True)
+    def corrected(payload):
+        assert 'Do not execute that action. Just acknowledge the correction.' in payload['prompt']
+        return _action(message='The correction is acknowledged.')
+    client = FakeModelClient([stale, corrected])
+    runtime = AgentRuntime(make_config(model__context_limit=32000), model_client=client)
+    service = CommunicationService(runtime, orchestrator_runtime=runtime)
+    try:
+        first, old = service._start_voice_operation_stream('Execute the action.', 'original_voice')
+        assert entered.wait(5)
+        correction, new = service._start_voice_operation_stream(
+            'Do not execute that action. Just acknowledge the correction.', 'corrected_voice')
+        assert any(p['control_id'] == correction['control_id'] for p in
+                   runtime.history.list_pending_control_messages(first['session_id']))
+        assert not old.done()
+        release.set()
+        assert old.result(timeout=8)['answer'] == 'The correction is acknowledged.'
+        assert new.result(timeout=8)['answer'] == 'The correction is acknowledged.'
+        history = runtime.history.read_history(first['session_id'])
+        assert not any(e.event_type == 'tool_called' for e in history)
+        assert any(e.event_type == 'agent_action_rejected' for e in history)
+        assert len(client.requests) == 2
+        assert service.orchestrator_operations.get('corrected_voice')['status'] == 'completed'
+    finally:
+        release.set()
+        service.close()
+
+
+def test_queued_voice_withdrawal_needs_no_execution_slot_and_cannot_poison_next_turn(make_config):
+    from swaag.runtime import AgentRuntime
+    from swaag.session_lock import session_execution_lock
+    from tests.test_agent_action_loop import FakeModelClient, _action
+    client = FakeModelClient([_action(message='The new request is answered.')])
+    runtime = AgentRuntime(make_config(model__context_limit=32000), model_client=client)
+    service = CommunicationService(runtime, orchestrator_runtime=runtime)
+    try:
+        state = service._load_orchestrator_state()
+        with session_execution_lock(runtime.history, state.session_id):
+            receipt, future = service._start_voice_operation_stream('Execute WITHDRAWN_ACTION.', 'queued_voice')
+            assert not future.done()
+            result = service.cancel_orchestrator_operation('queued_voice', 'Withdraw before execution')
+            assert result['cancellation_acknowledged'] is True
+            assert runtime.history.list_pending_control_messages(state.session_id) == []
+        with pytest.raises(OperationCanceled):
+            future.result(timeout=5)
+        assert not client.requests
+        assert service.orchestrator_operations.get('queued_voice')['status'] == 'canceled'
+        assert service.orchestrator_message('Answer the new request.')['answer'] == 'The new request is answered.'
+        assert 'WITHDRAWN_ACTION' not in client.requests[0]['prompt']
+    finally:
+        service.close()
+
+
+def test_withdrawal_between_snapshot_and_action_commit_rejects_stale_authority(make_config):
+    from swaag.runtime import AgentRuntime
+    import json
+    from swaag.action import action_from_payload
+    from tests.test_agent_action_loop import _action
+    runtime = AgentRuntime(make_config(), model_client=object())
+    state = runtime.create_or_load_session()
+    runtime.history.enqueue_control_message(state.session_id, 'WITHDRAWN_ACTION', source='orchestrator_user', control_id='withdrawn')
+    pending = runtime.history.list_pending_control_messages(state.session_id)
+    assert runtime.history.cancel_pending_control_message(state.session_id, 'withdrawn') is True
+    action = action_from_payload(json.loads(_action(message='Unaccepted candidate.')), enabled_tool_names=[])
+    assert runtime._consume_pending_control_messages(state, pending_payloads=pending, selected_action=action) is False
+    assert not any(e.event_type == 'control_message_processed' for e in runtime.history.read_history(state.session_id))
+    assert not state.messages
+
+
+def test_cancel_after_receipt_consumption_recovers_committed_answer_without_replay(make_config, monkeypatch):
+    from swaag.runtime import AgentRuntime
+    from tests.test_agent_action_loop import FakeModelClient, _action
+    entered, release = threading.Event(), threading.Event()
+    cancellation = []
+    def first(payload):
+        entered.set()
+        assert release.wait(5)
+        return _action(message='Superseded draft.')
+    client = FakeModelClient([first, _action(message='Both requests were reconciled.')])
+    runtime = AgentRuntime(make_config(model__context_limit=32000), model_client=client)
+    service = CommunicationService(runtime, orchestrator_runtime=runtime)
+    consume = runtime._consume_pending_control_messages
+    def after_acceptance(state, **kwargs):
+        accepted = consume(state, **kwargs)
+        if accepted and any(p['control_id'] == service._voice_control_id('late_cancel')
+                            for p in kwargs['pending_payloads']):
+            cancellation.append(service.cancel_orchestrator_operation('late_cancel', 'Stop if still pending'))
+        return accepted
+    monkeypatch.setattr(runtime, '_consume_pending_control_messages', after_acceptance)
+    try:
+        _, old = service._start_voice_operation_stream('Answer the first request.', 'prior_turn')
+        assert entered.wait(5)
+        _, newer = service._start_voice_operation_stream('Also acknowledge this.', 'late_cancel')
+        release.set()
+        assert old.result(timeout=8)['answer'] == 'Both requests were reconciled.'
+        assert newer.result(timeout=8)['answer'] == 'Both requests were reconciled.'
+        assert len(cancellation) == 1 and cancellation[0]['cancellation_acknowledged'] is False
+        assert service.orchestrator_operations.get('late_cancel')['status'] == 'completed'
+        assert len(client.requests) == 2
+    finally:
+        release.set()
+        service.close()

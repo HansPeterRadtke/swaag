@@ -12,7 +12,20 @@ _ownership = threading.local()
 
 @contextmanager
 def session_execution_lock(history, session_id, *, blocking=True):
-    path = history.active_run_path(session_id).with_name('execution.lock')
+    with _session_lock(history, session_id, 'execution.lock', blocking=blocking) as acquired:
+        yield acquired
+
+
+@contextmanager
+def session_control_lock(history, session_id):
+    """Serialize receipt acceptance/withdrawal with the short action commit fence."""
+    with _session_lock(history, session_id, 'controls.lock') as acquired:
+        yield acquired
+
+
+@contextmanager
+def _session_lock(history, session_id, filename, *, blocking=True):
+    path = history.active_run_path(session_id).with_name(filename)
     key = str(path.resolve())
     held = getattr(_ownership, 'held', None)
     if held is None:
@@ -35,6 +48,14 @@ def session_execution_lock(history, session_id, *, blocking=True):
             if acquired:
                 held.remove(key)
                 fcntl.flock(stream, fcntl.LOCK_UN)
+
+
+def exclusive_control_mutation(method):
+    @wraps(method)
+    def wrapped(self, session_id, *args, **kwargs):
+        with session_control_lock(self, session_id):
+            return method(self, session_id, *args, **kwargs)
+    return wrapped
 
 
 def exclusive_session_turn(method):

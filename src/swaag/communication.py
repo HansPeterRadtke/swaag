@@ -58,7 +58,7 @@ from swaag.protocol_adapters import (
     OpenWebUiProjectionAdapter,
 )
 from swaag.runtime import AgentRuntime
-from swaag.session_lock import session_execution_lock
+from swaag.session_lock import session_execution_lock, session_control_lock
 from swaag.shared_state import (
     SharedStateChannel,
     SharedStateConflictError,
@@ -1886,17 +1886,48 @@ class CommunicationService:
                 if active is not None:
                     self.orchestrator_runtime.preemption.request_run_cancellation(
                         record["session_id"], str(active["run_id"]), reason=reason)
+            elif record["session_id"] and record["status"] in {"accepted", "running"}:
+                withdrawn = self.orchestrator_runtime.history.cancel_pending_control_message(
+                    record["session_id"], self._voice_control_id(operation_id))
+                if withdrawn is True:
+                    self.orchestrator_operations.finish(operation_id, "canceled")
+                    record = self.orchestrator_operations.get(operation_id)
         return {"ok": True, **record,
                 "cancellation_acknowledged": record["status"] == "canceled"}
+
+    def _prepare_voice_operation_receipt(self, message: str, operation_id: str):
+        runtime = self.orchestrator_runtime
+        state = self._load_orchestrator_state()
+        self.orchestrator_operations.bind_session(operation_id, state.session_id)
+        control_id = self._voice_control_id(operation_id)
+        with session_control_lock(runtime.history, state.session_id):
+            record = self.orchestrator_operations.get(operation_id)
+            if record["cancel_requested"]:
+                # A consumed message may already have committed effects in the
+                # preceding active turn. Recover its answer, never replay it.
+                for receipt in runtime.history.list_authoritative_control_messages(state.session_id):
+                    if receipt["control_id"] == control_id and receipt["status"] == "processed":
+                        return receipt
+                runtime.history.cancel_pending_control_message(state.session_id, control_id)
+                raise OperationCanceled("orchestrator interruption requested")
+            receipt = self._receive_orchestrator_message(message, control_id=control_id)
+            if self.orchestrator_operations.get(operation_id)["cancel_requested"]:
+                runtime.history.cancel_pending_control_message(state.session_id, control_id)
+                raise OperationCanceled("orchestrator interruption requested")
+            return receipt
 
     def _orchestrator_message_once(self, message: str, operation_id: str = "") -> dict[str, str]:
         if not operation_id:
             return self._process_orchestrator_receipt(self._receive_orchestrator_message(message))
+        receipt = self._prepare_voice_operation_receipt(message, operation_id)
         state = self._load_orchestrator_state()
         runtime = self.orchestrator_runtime
         # Legacy operation transport retains conservative unknown-outcome recovery.
         # Its execution still uses the current authoritative receipt/action controller.
         with session_execution_lock(runtime.history, state.session_id):
+            receipt = self._prepare_voice_operation_receipt(message, operation_id)
+            if self.orchestrator_operations.get(operation_id)["cancel_requested"] and receipt.get("status") == "processed":
+                return self._process_orchestrator_receipt(receipt, allow_resume=False)
             canceled = threading.Event()
             with self._orchestrator_operation_lock:
                 self.orchestrator_operations.activate(operation_id, state.session_id)
@@ -1905,7 +1936,6 @@ class CommunicationService:
             runtime.bind_tool_runtime_capability(state.session_id, "run_cancellation_check", canceled.is_set)
             try:
                 self.orchestrator_operations.check_cancellation(operation_id)
-                receipt = self._receive_orchestrator_message(message, control_id=self._voice_control_id(operation_id))
                 return self._process_orchestrator_receipt(receipt)
             except (OperationCanceled, RunCancellationRequested):
                 # Do not leave a canceled, unconsumed request in the canonical
@@ -1977,13 +2007,22 @@ class CommunicationService:
                     receipt["duplicate"] = True
                     self._orchestrator_stream_slots.release()
                     return receipt, future
+                # Persist finalized authority before executor/session admission.
+                # A running action can now observe a correction immediately.
+                receipt.update(self._prepare_voice_operation_receipt(message, operation_id))
                 future = self._orchestrator_stream_executor.submit(
                     copy_context().run, self._execute_claimed_orchestrator_operation, message, operation_id,
                 )
+            except OperationCanceled:
+                self._orchestrator_stream_slots.release()
+                self.orchestrator_operations.finish(operation_id, "canceled")
+                raise
             except BaseException:
                 self._orchestrator_stream_slots.release()
                 if claimed:
-                    self.orchestrator_operations.finish(operation_id, "outcome_unknown")
+                    current = self.orchestrator_operations.get(operation_id)
+                    if current["status"] != "canceled":
+                        self.orchestrator_operations.finish(operation_id, "outcome_unknown")
                 raise
             self._orchestrator_stream_jobs[key] = (receipt, future)
             def finished(done):
@@ -2122,7 +2161,7 @@ class CommunicationService:
         future.add_done_callback(lambda done: None if done.cancelled() else done.exception())
         return await asyncio.shield(future)
 
-    def _process_orchestrator_receipt(self, receipt: dict[str, Any]) -> dict[str, str]:
+    def _process_orchestrator_receipt(self, receipt: dict[str, Any], *, allow_resume: bool = True) -> dict[str, str]:
         runtime = self.orchestrator_runtime
         with session_execution_lock(runtime.history, str(receipt["session_id"])):
             while True:
@@ -2156,6 +2195,8 @@ class CommunicationService:
                     run_id = str(turn.payload.get("run_id", ""))
                     if cancelled or (run_id and runtime.preemption.run_cancellation(state.session_id, run_id)):
                         raise RuntimeError("The interrupted receipt belongs to a canceled turn; it cannot be replayed.")
+                    if not allow_resume:
+                        raise RuntimeError("The canceled receipt has no committed answer; its outcome requires inspection.")
                     # We own the cross-process session lock. Continue the exact
                     # interrupted objective with its committed evidence, without
                     # adding user authority or reissuing the selected tool batch.
