@@ -41,3 +41,24 @@ def test_oversized_selection_declines_without_truncation(make_config):
         original_request='Continue.', candidate='Ready.', target_tokens=20)
     assert result is None
     assert rows[0]['content'] == 'Do not publish. ' * 200
+
+
+def test_action_selection_preserves_current_authority_tool_receipts_and_unknown_metadata(make_config):
+    from swaag.types import Message
+    runtime = AgentRuntime(make_config(), model_client=FakeModelClient([
+        json.dumps({'selected_line_ids': ['E1']})]))
+    state = runtime.create_or_load_session()
+    def message(role, sequence, text, **metadata):
+        return Message(role=role, content=text, created_at='now', metadata={
+            'source_message_event_sequence': sequence, **metadata})
+    prior = message('user', 1, 'Do not publish.')
+    irrelevant = message('assistant', 2, 'Hello from an older turn.')
+    unknown = message('user', 3, 'Preserve extended authority.', future_authority=True)
+    receipt = message('tool', 4, 'The earlier external effect failed.')
+    current = message('user', 9, 'Continue checking privately.')
+    correction = message('user', 11, 'Stop that check now.')
+    messages = [prior, irrelevant, unknown, receipt, current, correction]
+    selected = runtime._select_foreground_action_context(state, messages=messages,
+        turn_sequence=10, original_request=current.content)
+    assert selected == [prior, unknown, receipt, current, correction]
+    assert messages == [prior, irrelevant, unknown, receipt, current, correction]
