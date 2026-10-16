@@ -2163,6 +2163,8 @@ class AgentRuntime:
         # A declined exact selection cannot improve merely because another
         # context source was reduced. Scope this memo to one frozen preparation.
         failed_tool_projections: set[tuple] = set()
+        # Identical pure selection inputs share a result only in this preparation.
+        verbatim_selections: dict[tuple[str, str, str], tuple[list[str], int, str]] = {}
         tool_projection_objective = original_request
         if pending_messages:
             tool_projection_objective += (
@@ -2474,6 +2476,7 @@ class AgentRuntime:
                 existing_projections=tool_result_projections,
                 messages=history_messages,
                 failed_attempts=failed_tool_projections,
+                verbatim_selections=verbatim_selections,
             )
             if projected is not None:
                 sequence, projection = projected
@@ -5055,6 +5058,7 @@ class AgentRuntime:
         existing_projections: dict[int, str],
         messages: list[Message] | None = None,
         failed_attempts: set[tuple] | None = None,
+        verbatim_selections: dict[tuple[str, str, str], tuple[list[str], int, str]] | None = None,
     ) -> tuple[int, str] | None:
         overflow = compilation.overflow_tokens
         if overflow <= 0:
@@ -5138,6 +5142,7 @@ class AgentRuntime:
             target_tokens=target_tokens,
             original_tokens=current_tokens,
             overflow_tokens=overflow,
+            verbatim_selections=verbatim_selections,
         )
         if not projection:
             if failed_attempts is not None:
@@ -5925,6 +5930,7 @@ class AgentRuntime:
         target_tokens: int,
         original_tokens: int,
         overflow_tokens: int,
+        verbatim_selections: dict[tuple[str, str, str], tuple[list[str], int, str]] | None = None,
     ) -> str:
         sequence = message.metadata.get("source_event_sequence")
         source_hash = str(message.metadata.get("source_event_hash", ""))
@@ -5947,14 +5953,31 @@ class AgentRuntime:
             verbatim_selection_semantic = True
             selection_source = "tool_result_best_anchor"
         else:
-            verbatim_fragments, verbatim_selection_semantic = (
-                self._select_tool_result_verbatim_fragments(
-                    state,
-                    original_request=original_request,
-                    tool_name=message.name or "tool",
-                    source_text=message.content,
+            selection_key = (message.name or "tool", sha256_text(original_request),
+                             sha256_text(message.content))
+            cached = (verbatim_selections.get(selection_key)
+                      if verbatim_selections is not None else None)
+            if cached is not None:
+                verbatim_fragments = list(cached[0])
+                verbatim_selection_semantic = True
+                self.history.record_event(state, "tool_result_selection_reused", {
+                    "source_event_sequence": sequence, "source_event_hash": source_hash,
+                    "selection_source_event_sequence": cached[1],
+                    "selection_source_event_hash": cached[2],
+                    "objective_sha256": selection_key[1],
+                    "source_text_sha256": selection_key[2],
+                })
+            else:
+                verbatim_fragments, verbatim_selection_semantic = (
+                    self._select_tool_result_verbatim_fragments(
+                        state,
+                        original_request=original_request,
+                        tool_name=message.name or "tool",
+                        source_text=message.content,
+                    )
                 )
-            )
+                if verbatim_selection_semantic and verbatim_selections is not None:
+                    verbatim_selections[selection_key] = (list(verbatim_fragments), sequence, source_hash)
             selection_source = "tool_result_verbatim_selection"
         if not verbatim_selection_semantic:
             self.history.record_event(
