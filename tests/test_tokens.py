@@ -138,3 +138,27 @@ def test_budget_handles_huge_user_prompt(make_config) -> None:
     huge = "word " * 100
     report = build_budget(counter, [PromptComponent(name="user", text=huge, category="current_user")], config.context, config.model.context_limit)
     assert report.fits is False
+
+@pytest.mark.parametrize("invalid", [0, -1, True, 3.5, "5", None])
+def test_invalid_provider_count_is_never_cached_as_exact(invalid):
+    calls = []
+    def tokenize(text):
+        calls.append(text)
+        return invalid if len(calls) == 1 else 4
+    counter = FallbackTokenCounter(tokenize)
+    first = counter.count_text("nonempty evidence")
+    assert not first.exact and first.tokens > 0
+    second = counter.count_text("nonempty evidence")
+    assert second.exact and second.tokens == 4
+    strict = FallbackTokenCounter(lambda text: invalid, allow_fallback=False)
+    with pytest.raises(ValueError, match="token count"):
+        strict.count_text("nonempty evidence")
+    with pytest.raises(ValueError, match="token count"):
+        ExactTokenCounter(lambda text: invalid).count_text("nonempty evidence")
+
+
+def test_valid_empty_provider_count_is_preserved():
+    for counter in (ExactTokenCounter(lambda text: 0),
+                    FallbackTokenCounter(lambda text: 0)):
+        assert counter.count_text("").tokens == 0
+        assert counter.count_text("").exact

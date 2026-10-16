@@ -18,13 +18,36 @@ from swaag.config import AgentConfig
 from swaag.schema_portability import PortableSchemaError, assert_portable_json_schema
 from swaag.preemption import ModelCallPreempted
 from swaag.telemetry import inject_trace_context
-from swaag.tokens import ConservativeEstimator, CountResult
+from swaag.tokens import ConservativeEstimator, CountResult, validated_token_count
 from swaag.types import CompletionResult, ContractSpec
 from swaag.utils import sha256_text, stable_json_dumps
 
 
 class ModelClientError(RuntimeError):
     pass
+
+
+def _tokenizer_response_count(
+    payload: Any, *, count_field: str, token_fields: tuple[str, ...],
+    has_content: bool,
+) -> int:
+    """Validate counts from the documented tokenizer response dialect."""
+    if not isinstance(payload, dict):
+        raise ModelClientError("Tokenizer response must be an object")
+    if count_field in payload:
+        value = payload[count_field]
+    else:
+        tokens = next((payload[key] for key in token_fields if key in payload), None)
+        if not isinstance(tokens, list) or any(
+            not isinstance(token, int) or isinstance(token, bool) or token < 0
+            for token in tokens
+        ):
+            raise ModelClientError("Tokenizer response lacks valid token IDs")
+        value = len(tokens)
+    try:
+        return validated_token_count(value, has_content=has_content)
+    except ValueError as exc:
+        raise ModelClientError(str(exc)) from exc
 
 
 class ModelClient(Protocol):
@@ -344,15 +367,10 @@ class LlamaCppClient:
         payload = response.json()
         if not isinstance(payload, dict):
             raise ModelClientError(f"Unexpected remote tokenize response: {payload!r}")
-        count = payload.get("count")
-        if not isinstance(count, int) or isinstance(count, bool) or count < 0:
-            tokens = payload.get("tokens")
-            if isinstance(tokens, list):
-                count = len(tokens)
-            else:
-                raise ModelClientError(
-                    f"Remote tokenize response lacks an exact count: {payload!r}"
-                )
+        count = _tokenizer_response_count(
+            payload, count_field="count", token_fields=("tokens",),
+            has_content=bool(messages),
+        )
         capacity = payload.get("max_model_len")
         if not isinstance(capacity, int) or isinstance(capacity, bool) or capacity <= 0:
             capacity = None
@@ -742,13 +760,10 @@ class LlamaCppClient:
         try:
             response.raise_for_status()
             payload = response.json()
-            if isinstance(payload.get("tokens"), list):
-                return len(payload["tokens"])
-            if isinstance(payload.get("token_ids"), list):
-                return len(payload["token_ids"])
-            if isinstance(payload.get("n_tokens"), int):
-                return int(payload["n_tokens"])
-            raise ModelClientError(f"Unexpected tokenize response: {payload!r}")
+            return _tokenizer_response_count(
+                payload, count_field="n_tokens", token_fields=("tokens", "token_ids"),
+                has_content=bool(text.strip()),
+            )
         finally:
             response.close()
 
@@ -789,18 +804,10 @@ class LlamaCppClient:
         try:
             response.raise_for_status()
             payload = response.json()
-            if not isinstance(payload, dict):
-                raise ModelClientError("Invalid output tokenizer response")
-            count = payload.get("count")
-            if not isinstance(count, int) or isinstance(count, bool) or count < 0:
-                tokens = payload.get("tokens")
-                if not isinstance(tokens, list) or any(
-                    not isinstance(token, int) or isinstance(token, bool) or token < 0
-                    for token in tokens
-                ):
-                    raise ModelClientError("Output tokenizer returned no valid exact count")
-                count = len(tokens)
-            return count
+            return _tokenizer_response_count(
+                payload, count_field="count", token_fields=("tokens",),
+                has_content=bool(text.strip()),
+            )
         finally:
             response.close()
 
