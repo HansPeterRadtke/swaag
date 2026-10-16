@@ -1,5 +1,31 @@
 # October fifteenth foreground delivery and review authority
 
+The [complete current guideline comparison](guideline-comparison-2026-10-15.md)
+records the completed semantic reread of all 246 guideline files and 167 originals,
+with a hash-verified per-file ledger. Installed corrections preserve current
+receipts/questions, resume waiting workers after approval, validate forwarded user
+evidence, reject false completion with unresolved blocking questions, recover
+interrupted foreground receipts, and maintain cancellation/supersession fences.
+The real worker trajectory verifies permitted/withheld effects, later approved
+publication, exact readback and final worker-question closure.
+
+The installed 364c869 package matches all 195 source files and passes its smoke
+suite on both hosts. Fresh actual-state status succeeds in about 89 seconds on
+production BF16 and 199–212 seconds on Q3, but the accumulated original foreground
+conversation still exceeds a 1,800-second deadline. First-response wording,
+long-history availability and complete goal-memory semantics remain distinct gates.
+The final optimization candidate has source-backed history reuse, current-status
+lookup with explicit complete-history retrieval, and measured history-preservation
+batching. The combined pre-batching source passes 1,307 tests with three optional
+skips; final batching preserves all eight authoritative facts and excludes decoys
+in one real call instead of four, taking 24.3 rather than 47.6 seconds. The final source passes 1,311 tests with three optional skips on Thor. The original
+receipt still exceeds its 900-second deadline, but saves two reductions and reaches
+read-only action execution; a further same-receipt continuation confirms those
+reductions are reused. Its final result remains pending. No end-to-end speedup or
+final installation is inferred from the bounded preservation sub-operation.
+
+
+
 The [foreground routing and retry study](foreground-routing-and-retries-2026-10-15.md)
 records actual ordinary model routing, exact control receipts, repeat identity,
 and receipt-stage acknowledgement. Retries now reuse one durable instruction

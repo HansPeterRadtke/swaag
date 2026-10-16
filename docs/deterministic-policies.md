@@ -31,11 +31,18 @@ why they stay mechanical.
   closed; bounded reads return offsets and completion flags; bounded tool/browser
   previews and external-process/provider errors retain integrity-linked raw
   artifacts before their reduced display text is recorded.
-- History compaction starts with the smallest oldest prefix that can mechanically
-  recover the measured deficit while leaving at least one exact message outside
-  the candidate. This chooses a replaceable storage region, not which facts to
-  retain: the summary LLM receives every exact candidate message and owns semantic
-  retention, including how many candidate-tail messages remain verbatim.
+- History compaction partitions exact contiguous source regions mechanically,
+  then a model ranks their semantic criticality without using age as relevance.
+  Protected regions cannot be crossed by composed candidates. Python measures
+  deficit/recovery; the model chooses retained meaning and exact source units.
+- Reusing a derived history view requires measured raw overflow, exact
+  source/projection provenance and unchanged task/authority/policy/tool identity.
+  Current state and new observations remain fresh. A changed key or unknown
+  legacy summary restores authoritative sources; source events are never deleted.
+- Current-status lookup is an explicit retrieval contract. Its default returns
+  the latest exact status event with count/range/hash and full-history recovery;
+  include_history=true returns every exact status. Event order identifies the
+  latest report, not its truth or the semantic relevance of older reports.
 - Completion evidence separates harness policy audit records and saved model
   transport/compilation envelopes from canonical task observations using their
   explicit schemas and provenance. These records have exact session/sequence/hash

@@ -1,3 +1,18 @@
+# October fifteenth and sixteenth foreground correctness and history recovery
+
+The [foreground study](foreground-routing-and-retries-2026-10-15.md) and
+[complete guideline comparison](guideline-comparison-2026-10-15.md) record actual
+ordinary action routing, exact instruction delivery, permitted versus withheld
+file effects, later approval/resume and verified worker closure. The final source
+suite passes 1,311 tests with three optional skips. Fresh actual-state status takes
+about 89 seconds on production BF16 and 199–212 seconds on Q3; smaller current-status
+results reduce retrieval cost but do not improve overall measured Q3 latency.
+Measured preservation batching retains all eight required facts and excludes decoys
+while reducing four calls to one, from 47.6 to 24.3 seconds. The original accumulated
+conversation still exceeds its deadline; history reuse and its continued recovery
+are tracked separately. Installation and long-conversation acceptance must be read
+from the latest release section of the study, not inferred from focused tests.
+
 # October fourteenth ordinary action and shell verification
 
 The [ordinary action study](orchestrator-action-delivery-2026-10-14.md) directly tests the user's question about a message plus commands. With shell execution explicitly enabled in isolated configurations, the installed orchestrator emits both in the same first action, then executes a real shell command once. Two trials validate successful file output and accurate reporting of an expected command failure; a third validates cancellation during action inference with zero shell effects. Dispatch took about forty-nine and sixty seconds. The ordinary client receives only the final answer after approximately two minutes, so early message generation and client delivery remain distinct. Production code and defaults are unchanged by this diagnostic.
