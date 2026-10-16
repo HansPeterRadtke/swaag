@@ -574,17 +574,18 @@ def test_summary_structured_output_reserve_accounts_for_exact_spans() -> None:
     ) == 484
 
 
-@pytest.mark.parametrize("direct_projection", [False, True])
+@pytest.mark.parametrize("selector_level", ["ordinary", "important", "compressible"])
 def test_history_compaction_refines_semantic_summary_with_frozen_exact_spans(
-    make_config, direct_projection,
+    make_config, selector_level,
 ) -> None:
+    direct_projection = selector_level == "compressible"
     marker = "exact-preserved-marker-991"
 
     def response(payload: dict[str, Any]) -> str:
         contract = payload["contract"]
         if contract == "history_compaction_selection":
             return json.dumps(
-                {"criticality": "compressible" if direct_projection else "ordinary",
+                {"criticality": selector_level,
                  "reason_code": "redundant_progress" if direct_projection else "current_direction",
                  "projection": "verbose " * 3_000 if direct_projection else ""}
             )
@@ -2676,3 +2677,26 @@ def test_single_responsibility_recovers_from_real_tool_error(make_config):
     assert len(recoveries) == 1
     assert recoveries[0].payload['tool_name'] == 'read_file'
     assert any(e.event_type == 'tool_result' and e.payload.get('tool_name') == 'calculator' for e in events)
+
+
+def test_history_protect_path_keeps_complete_literal_window(make_config) -> None:
+    def protect(payload):
+        assert payload["contract"] == "history_compaction_selection"
+        return json.dumps({"criticality": "protect", "reason_code": "exact_wording", "projection": ""})
+
+    client = FakeModelClient([protect for _ in range(16)])
+    runtime = AgentRuntime(make_config(model__context_limit=32_000), model_client=client)
+    state = runtime.create_or_load_session()
+    for role, content in [
+        ("user", "Retain this complete literal transcript; do not replace it with excerpts."),
+        ("assistant", "Repeated scope. " * 400),
+        ("user", "Do not publish release A. Release B still needs explicit approval."),
+        ("assistant", "Repeated scope. " * 400),
+    ]:
+        runtime._record_message(state, Message(role=role, content=content, created_at="t"))
+    before = [(m.role, m.content) for m in state.messages]
+    assert runtime._compact_once(state) is False
+    assert [(m.role, m.content) for m in state.messages] == before
+    assert not any(e.event_type in {"history_compressed", "history_reprojected"}
+                   for e in runtime.history.read_history(state.session_id))
+    assert all(r["contract"] == "history_compaction_selection" for r in client.requests)
