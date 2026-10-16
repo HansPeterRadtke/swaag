@@ -44,6 +44,7 @@ from swaag.evidence_sources import (
     is_runtime_telemetry_event,
     runtime_telemetry_reference,
     runtime_audit_fields,
+    is_foreground_observation_event,
 )
 from swaag.fsops import ensure_dir, restore_tree, snapshot_tree, write_text
 from swaag.grammar import (
@@ -2638,6 +2639,12 @@ class AgentRuntime:
                 "agent_question_revised", "agent_question_resolved", "agent_progress"})
         if completion_snapshot_event is not None:
             historical_events.append(completion_snapshot_event)
+        deferred_observations = {
+            event.sequence for event in historical_events
+            if completion_snapshot_event is not None and not self._single_responsibility_mode()
+            and current_run_sequence is not None and event.sequence < current_run_sequence
+            and is_foreground_observation_event(event)
+        }
         historical_rows = self._completion_historical_evidence_rows(historical_events)
         historical_source_references = [
             self._communication_evidence_reference(event)
@@ -2647,7 +2654,11 @@ class AgentRuntime:
             state,
             evidence_rows=evidence_rows,
             historical_events=historical_events,
+            deferred_observations=deferred_observations,
         )
+        if deferred_observations:
+            historical_rows = self._foreground_completion_history_view(
+                historical_rows, deferred_observations, evidence_source_inventory)
         historical_evidence = (
             stable_json_dumps(historical_rows, indent=None)
             if historical_rows
@@ -2767,7 +2778,9 @@ class AgentRuntime:
                 self.prompts.build_completion_verdict_prompt(**prompt_kwargs)
                 if single_verdict
                 else self.prompts.build_completion_evaluation_prompt(
-                    **prompt_kwargs, evidence_source_inventory=available_sources
+                    **prompt_kwargs, evidence_source_inventory=(
+                        self._foreground_evidence_catalog(available_sources)
+                        if deferred_observations else available_sources)
                 )
             )
             compilation = self._compile_context(
@@ -3247,6 +3260,84 @@ class AgentRuntime:
             "payload": to_jsonable(event.payload),
             "metadata": to_jsonable(event.metadata),
         }
+
+    @staticmethod
+    def _foreground_evidence_catalog(inventory):
+        # The harness verifies these exact identities/hashes on expansion. The
+        # model chooses by source identity, type, timestamps and descriptive
+        # metadata; it need not repeatedly ingest cryptographic bookkeeping.
+        accounting = {"sha256", "source_event_references", "event_sequences",
+                      "session_id", "first_sequence", "last_sequence"}
+        known_sources = {"foreground_history", "runtime_audit", "runtime_telemetry",
+                         "text_artifact", "raw_attachment"}
+        return [{key: value for key, value in source.items()
+                 if source.get("source_kind") not in known_sources or key not in accounting}
+                for source in inventory]
+
+    @staticmethod
+    def _foreground_completion_history_view(rows, deferred_sequences, inventory):
+        sources = {sequence: {"source_kind": source["source_kind"], "source_id": source["source_id"]}
+                   for source in inventory if source["source_kind"] == "foreground_history"
+                   for sequence in source["event_sequences"]}
+        if not deferred_sequences.issubset(sources):
+            # Custom evidence-provider configurations may not implement this
+            # optional source type. Retain the complete legacy view in that case.
+            return rows
+        inventory_keys = {(source["source_kind"], source["source_id"]) for source in inventory}
+        session_ids = {row["session_id"] for row in rows if "session_id" in row}
+        shared_session = next(iter(session_ids)) if len(session_ids) == 1 else None
+        result = []
+        for row in rows:
+            if shared_session is not None and row.get("session_id") == shared_session:
+                # Exact event hashes remain in historical_source_references and
+                # canonical history. Repeating them adds no semantic evidence.
+                row = {key: value for key, value in row.items() if key not in {"hash", "session_id"}}
+            sequence = row.get("sequence")
+            exact = row.get("exact_source", {})
+            recoverable_audit = (exact.get("source_kind"), exact.get("source_id")) in inventory_keys
+            if row.get("evidence_view") == "core_policy_audit_reference" and recoverable_audit:
+                # The same source title/scopes are already in the catalogue;
+                # applicable policy text is supplied by the instruction layer.
+                continue
+            if row.get("evidence_view") == "runtime_telemetry_reference":
+                result.append({key: row[key] for key in ("source_kind", "source_id", "notice")})
+                continue
+            if row.get("evidence_view") == "nested_runtime_audit_reference" and recoverable_audit:
+                row = copy.deepcopy(row)
+                row["exact_source"] = {key: exact[key] for key in ("source_kind", "source_id")}
+                audit_fields = {
+                    "turn_finished": {"budget_reports"},
+                    "completion_evaluated": {"evidence_source_references", "historical_source_event_references",
+                        "historical_projection_budget_report", "historical_projection_target_tokens",
+                        "projected_source_event_sequences", "historical_evidence_projected",
+                        "historical_evidence_projection", "reexpanded_evidence_sources"},
+                    "runtime_context_projected": {"projection_budget_report", "source_tokens", "previous_tokens",
+                        "target_tokens", "projected_tokens", "overflow_tokens", "source_sha256",
+                        "objective_sha256", "projection"},
+                    "runtime_context_projection_skipped": {"budget_report", "source_tokens", "previous_tokens",
+                        "target_tokens", "projected_tokens", "overflow_tokens", "source_sha256", "objective_sha256"},
+                }.get(row.get("event_type"), set())
+                row["payload"] = {key: value for key, value in row["payload"].items() if key not in audit_fields}
+                row["evidence_view"] = "prior_verdict_or_projection_audit_reference"
+            if sequence not in deferred_sequences:
+                result.append(row)
+            elif row.get("event_type") == "control_message_processed":
+                # Keep the exact finalized user instruction in its own authority
+                # channel; only the duplicated model decision is deferred.
+                retained = copy.deepcopy(row)
+                for field in ("decision", "selected_action"):
+                    if field in retained["payload"]:
+                        retained["payload"][field] = {"exact_observation_source": sources[sequence]}
+                result.append(retained)
+        result.append({"evidence_view": "foreground_history_disclosure", "session_id": shared_session, "notice": (
+            "Prior runtime observations, internal actions and tool effects are in exact "
+            "foreground_history sources. Current state and authoritative user wording remain inline. "
+            "Prior assistant claims do not prove effects. Fetch the relevant source before judging "
+            "a claim about an earlier effect or historical state; absence from this view is not "
+            "evidence of absence. Prior verifier reasons/verdicts remain inline; their derived "
+            "summaries and token accounting are in runtime_telemetry."
+        )})
+        return result
 
     @staticmethod
     def _completion_historical_evidence_rows(events: list[HistoryEvent]) -> list[dict[str, Any]]:
@@ -4891,6 +4982,7 @@ class AgentRuntime:
         *,
         evidence_rows: list[dict[str, Any]],
         historical_events: list[HistoryEvent],
+        deferred_observations: set[int] | None = None,
     ) -> list[dict[str, Any]]:
         referenced_values = self._string_leaves(
             [
@@ -4908,6 +5000,10 @@ class AgentRuntime:
             f"{event.session_id}:{event.sequence}"
             for event in historical_events
             if is_runtime_audit_event(event) or is_runtime_telemetry_event(event)
+        )
+        referenced_values.update(
+            f"foreground_history:{event.session_id}:{event.sequence}"
+            for event in historical_events if event.sequence in (deferred_observations or set())
         )
         source_events = self.history.read_history(state.session_id)
         inventory: list[dict[str, Any]] = []
@@ -8984,6 +9080,9 @@ class AgentRuntime:
                 "request_sha256": active_call.request_sha256,
                 "preempted_usage_evidence": usage,
                 "request": frozen_request,
+                # History canonicalizes object keys. Retain the serialized
+                # request so exact-replay evidence also preserves schema order.
+                "request_json": active_call.request_json,
             },
         )
 

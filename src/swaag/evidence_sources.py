@@ -94,11 +94,98 @@ RUNTIME_TELEMETRY_EVENT_TYPES = frozenset({
     "inference_request_queued", "inference_request_started", "inference_request_finished",
     "prompt_instructions_selected", "action_prompt_mode_fallback",
     "prompt_built", "model_request_sent", "model_response_received",
+    "semantic_reduction_working_set_exceeded", "model_output_budget_exhausted",
+    "budget_repaired",
 }) | RUNTIME_AUDIT_SEMANTIC_EVENT_TYPES
 
 
 def is_runtime_telemetry_event(event: HistoryEvent) -> bool:
     return event.event_type in RUNTIME_TELEMETRY_EVENT_TYPES
+
+
+# Historical observations are available on demand to the foreground checker.
+# This is schema selection, never a relevance guess from user wording. Current
+# observations and all authoritative user text remain in the initial context.
+FOREGROUND_OBSERVATION_TYPES = frozenset({
+    "session_created", "environment_initialized", "tool_capabilities_loaded",
+    "runtime_system_snapshot", "agent_action_selected", "agent_status",
+    "tool_called", "tool_result", "tool_error", "tool_execution_context",
+    "agent_tool_call_completed", "agent_action_terminal", "control_message_processed",
+})
+
+
+def is_foreground_observation_event(event: HistoryEvent) -> bool:
+    if event.event_type in FOREGROUND_OBSERVATION_TYPES:
+        return True
+    message = event.payload.get("message")
+    return (event.event_type == "message_added" and isinstance(message, dict)
+            and (message.get("role") == "tool" or (
+                message.get("role") == "assistant"
+                and isinstance(message.get("metadata"), dict)
+                and message["metadata"].get("internal_action") is True)))
+
+
+def foreground_history_reference(events: list[HistoryEvent]) -> dict[str, object]:
+    selected = sorted(events, key=lambda event: event.sequence)
+    if (not selected or len({e.session_id for e in selected}) != 1
+            or len({e.sequence for e in selected}) != len(selected)
+            or any(not is_foreground_observation_event(e) for e in selected)):
+        raise HistoryInvariantError("Foreground history requires exact observations from one session")
+    first, last = selected[0], selected[-1]
+    text = stable_json_dumps([asdict(e) for e in selected], indent=None)
+    return {
+        "source_kind": "foreground_history",
+        "source_id": f"{first.session_id}:{first.sequence}-{last.sequence}",
+        "session_id": first.session_id,
+        "event_sequences": [e.sequence for e in selected],
+        "event_types": dict(sorted(Counter(e.event_type for e in selected).items())),
+        "first_timestamp": first.timestamp, "last_timestamp": last.timestamp,
+        "tool_names": sorted({str(e.payload["tool_name"]) for e in selected
+                              if isinstance(e.payload.get("tool_name"), str)}),
+        "size_chars": len(text), "sha256": sha256_text(text),
+        "source_event_references": [_event_reference(first), _event_reference(last)],
+    }
+
+
+class ForegroundHistoryEvidenceProvider:
+    source_kind = "foreground_history"
+
+    def inventory(self, *, config, state, source_events, referenced_values):
+        del config
+        groups, selected = [], []
+        for event in source_events:
+            if event.event_type == "turn_started" and selected:
+                groups.append(foreground_history_reference(selected))
+                selected = []
+            if (event.session_id == state.session_id
+                    and f"foreground_history:{event.session_id}:{event.sequence}" in referenced_values
+                    and is_foreground_observation_event(event)):
+                selected.append(event)
+        if selected:
+            groups.append(foreground_history_reference(selected))
+        return groups
+
+    def reexpand(self, *, config, state, source):
+        if source.get("session_id") != state.session_id:
+            raise HistoryInvariantError("Foreground history cannot cross the operation session")
+        sequences = source.get("event_sequences")
+        if (not isinstance(sequences, list) or not sequences
+                or any(type(n) is not int or n < 1 for n in sequences)
+                or sequences != sorted(set(sequences))):
+            raise HistoryInvariantError("Foreground history has invalid event sequences")
+        events = HistoryStore(config.sessions.root, write_projections=False).read_history_window(
+            state.session_id, start_sequence=sequences[0], limit=sequences[-1]-sequences[0]+1)
+        wanted = set(sequences)
+        selected = [event for event in events if event.sequence in wanted]
+        if [event.sequence for event in selected] != sequences:
+            raise HistoryInvariantError("Foreground history source is unavailable")
+        for event in selected:
+            verify_event_integrity(event, event.prev_hash)
+        observed = foreground_history_reference(selected)
+        if any(source.get(key) != value for key, value in observed.items()):
+            raise HistoryInvariantError("Foreground history differs from its exact source")
+        return {**source, "integrity_verified": True,
+                "text": stable_json_dumps([asdict(e) for e in selected], indent=None)}
 
 
 def runtime_telemetry_reference(events: list[HistoryEvent]) -> dict[str, object]:
@@ -363,4 +450,5 @@ class RawAttachmentEvidenceProvider:
 def default_completion_evidence_source_providers(
 ) -> tuple[CompletionEvidenceSourceProvider, ...]:
     return (TextArtifactEvidenceProvider(), RawAttachmentEvidenceProvider(),
-            RuntimeAuditEvidenceProvider(), RuntimeTelemetryEvidenceProvider())
+            RuntimeAuditEvidenceProvider(), RuntimeTelemetryEvidenceProvider(),
+            ForegroundHistoryEvidenceProvider())

@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import json
+from dataclasses import replace
 import threading
 from unittest.mock import patch
 import time
@@ -10,11 +11,45 @@ from typing import Any
 import pytest
 
 from swaag.communication import CommunicationService
+from swaag.grammar import completion_evaluation_contract
 from swaag.model import CompletionRequestPolicy
 from swaag.preemption import ModelCallPreempted, ModelPreemptionCoordinator
 from swaag.runtime import AgentRuntime
 from swaag.types import CompletionResult, ContractSpec, Message
 from swaag.utils import stable_json_dumps, utc_now_iso
+
+
+def test_preemption_preserves_schema_declaration_order_and_exact_replay(tmp_path) -> None:
+    coordinator = ModelPreemptionCoordinator(tmp_path)
+    contract = completion_evaluation_contract([
+        ("foreground_history", "session-example:5-5"),
+        ("runtime_telemetry", "session-example:2-4"),
+    ])
+    request = {
+        "messages": [{"role": "user", "content": "Exact wording: ä\n  preserved"}],
+        "response_format": {"type": "json_schema", "json_schema": {
+            "name": contract.name, "schema": contract.json_schema, "strict": True,
+        }},
+    }
+    active = coordinator.register_active("session-example", "call-one", "completion", request)
+    frozen = active.request
+    properties = frozen["response_format"]["json_schema"]["schema"]["properties"]
+    assert list(properties) == ["complete", "reason", "remaining_work", "evidence_requests"]
+    for variant in properties["evidence_requests"]["items"]["anyOf"]:
+        assert list(variant["properties"]) == ["source_kind", "source_id", "purpose", "literal_query"]
+    assert frozen == request
+
+    request["messages"][0]["content"] = "mutated after registration"
+    restored = ModelPreemptionCoordinator(tmp_path).active_call("session-example")
+    assert restored is not None
+    assert restored.request_json == active.request_json
+    assert restored.request_sha256 == active.request_sha256
+    assert restored.request == frozen
+
+    reordered = json.loads(json.dumps(frozen, sort_keys=True))
+    changed = coordinator.register_active("session-other", "call-two", "completion", reordered)
+    assert changed.request == frozen
+    assert changed.request_sha256 != active.request_sha256
 
 
 def _action(message: str) -> str:
@@ -844,6 +879,24 @@ def test_benchmark_communication_probe_exercises_exact_replay(make_config, tmp_p
     )
     assert report.passed is True
     assert report.checks["exact_preemption_replay"] is True
+
+    replay = next(e for e in events if e.event_type == "model_call_replayed")
+    original_json = replay.payload["request_json"]
+    assert json.loads(original_json) == replay.payload["request"]
+    # Sorting leaves dictionary equality intact but changes grammar order.
+    sorted_json = stable_json_dumps(replay.payload["request"], indent=None)
+    assert original_json != sorted_json
+    for changed_json in (sorted_json, "{}", "invalid JSON"):
+        changed = replace(replay, payload={**replay.payload, "request_json": changed_json})
+        altered_events = [changed if e is replay else e for e in events]
+        invalid = verify_benchmark_contract(
+            scenario.verification_contract,
+            assistant_text=turn.assistant_text,
+            state=rebuilt,
+            events=altered_events,
+            workspace_before={}, workspace_after={}, workspace_root=str(tmp_path),
+        )
+        assert invalid.checks["exact_preemption_replay"] is False
 
 
 def test_orchestrator_preempts_named_route_worker_on_shared_backend(make_config) -> None:

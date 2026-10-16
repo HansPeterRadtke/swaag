@@ -114,7 +114,18 @@ def verify_benchmark_contract(
                     request = replay.payload.get("request")
                     if not isinstance(request, dict):
                         continue
-                    serialized = stable_json_dumps(request, indent=None)
+                    serialized = replay.payload.get("request_json")
+                    if serialized is None:
+                        # Legacy requests were sorted before dispatch.
+                        serialized = stable_json_dumps(request, indent=None)
+                    elif isinstance(serialized, str):
+                        try:
+                            if json.loads(serialized) != request:
+                                continue
+                        except (ValueError, TypeError):
+                            continue
+                    else:
+                        continue
                     replay_hash = sha256_text(serialized)
                     if interrupted_hash and interrupted_hash == str(replay.payload.get("request_sha256", "")) == replay_hash:
                         exact = True
