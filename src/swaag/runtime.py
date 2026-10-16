@@ -5731,6 +5731,13 @@ class AgentRuntime:
                 f"{fragment_id} {fragment}"
                 for fragment_id, fragment, _start, _end in chunk
             )
+            # The exact ID list can exceed the old fixed allowance even when
+            # input and output both fit. Desired capacity stays soft; only
+            # observed exhaustion raises the admission minimum.
+            selection_output = stable_json_dumps({"has": True, "ids": ids}, indent=2)
+            desired_selection_tokens = max(
+                64, self._counter(state).count_text(selection_output).tokens + 32
+            )
             request = SemanticCallRequest(
                 kind="tool_result_verbatim_selection",
                 system_instruction=(
@@ -5762,7 +5769,7 @@ class AgentRuntime:
                 ],
                 contract=tool_result_verbatim_selection_contract(ids),
                 minimum_output_tokens=24,
-                desired_output_tokens=64,
+                desired_output_tokens=desired_selection_tokens,
                 include_prompt_instructions=False,
             )
             reduction_cap = max(
