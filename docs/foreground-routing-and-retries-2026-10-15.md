@@ -1469,3 +1469,46 @@ Thor run follows. Real changed instructions, validation requirements and source
 identity continue to invalidate reuse.
 
 The full 86170ad suite passes **1,311 tests with three optional skips in 223.73 seconds** on Thor. The further live continuation is gated on this result and the end of the earlier Q3 run. It uses the already-running production BF16 endpoint with the same original receipt, accumulated history, exact approval evidence and file/control oracle; this backend change is not a paired speed comparison.
+
+The continued 66d3a65 Q3 run ends with a context-budget error after 818.412
+seconds in the probe (821.935 including supervisor startup), not a timeout. It
+returns 34 calls and saves one further reduction after the output-feedback
+invalidation, but no final answer or new progress. Replaying exactly through
+sequence 3642 confirms the foreground approval question remains open; the next
+probe's starting manifest confirms the worker stays completed, controls are
+unchanged and both file hashes match. This failure is retained in
+`history-reuse-resume-status-analysis.json`. The subsequent production BF16 probe
+actually starts on86170ad; its manifest records the backend and source separately.
+
+Current README, voice integration and operations-manual prose is also reconciled
+with the source. Their stale one-call ordinary-gate and final-only delivery claims
+are removed; the full action controller, receipt-stage streaming and optional
+backend topology are described explicitly. Voice guidance now distinguishes
+speech detection and STT-final segments from semantic turn completion and
+authorization. Historical dated experiments retain their original findings.
+
+## Measured output capacity for tool-evidence selection
+
+Both continued Q3 and production BF16 traces expose the analogous tool-result
+selector limit: its desired output is fixed at 64 tokens, retries at 128, then
+fails while listing distinct valid source IDs. Recorded response text disproves
+a duplicate-ID generation loop. A character-counting limited-response regression
+reproduces the failure even when all input and selected output fit. Candidate
+af284a5 measures the full candidate-ID JSON response plus serialization headroom
+as a soft desired allowance. The minimum remains 24 tokens; measured input
+overflow, actual output-exhaustion recovery, exact range mapping, and failure
+preservation of the raw source remain unchanged. All 24 focused tool-projection,
+context-engineering and history-batching tests pass in 153.03 seconds. The full
+source suite on Thor and a serial live baseline/candidate comparison are separate
+gates. The live oracle freezes 32 required exact facts across 64 units, including
+constraints, an unanswered question, causal facts and shard results, with routine
+filler and two explicitly untrusted decoys. Baseline failure is retained rather
+than preventing the corrected candidate from being measured.
+
+A fresh read of both active server configurations and `/v1/models` confirms
+8,192-token maximum context. The initial loopback metadata probe is refused
+because the services use their configured VPN address; the canonical address
+returns both model identities and the same limits. No server resize or restart
+is attempted. A larger client-only context would not be valid on these servers.
+
+The full af284a5 source suite passes **1,312 tests with three optional skips in 227.73 seconds** on Thor. Its live selector comparison waits for the preceding production-backend probe to stop, so the two experiments do not share an active inference trial.
