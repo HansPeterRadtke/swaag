@@ -115,6 +115,7 @@ def test_communication_store_preserves_delivery_order_and_correlation(make_confi
     assert {ordinary.priority, pause.priority, stop.priority} == {0}
     runtime.generate_communication_status = lambda **kwargs: {  # type: ignore[method-assign]
         "answer": "The session is idle.",
+        "operation_session_id": runtime.create_or_load_session("status-probe").session_id,
         "source_event_references": [],
         "evidence_projected": False,
     }
@@ -303,7 +304,7 @@ def test_control_tools_read_status_and_queue_exact_message(make_config, tmp_path
         )
     status_run = runtime.execute_tool_once(
         "agent_status_lookup",
-        {"session_ref": "target-agent"},
+        {"session_ref": "target-agent", "include_history": True},
         session_id=source.session_id,
     )
     assert status_run.tool_result.output["session_id"] == target.session_id

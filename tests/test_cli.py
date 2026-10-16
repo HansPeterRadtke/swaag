@@ -24,9 +24,10 @@ def test_cli_ask_uses_in_process_persistent_orchestrator_by_default(capsys, monk
     class _Service:
         orchestrator_runtime = _OrchestratorRuntime()
 
-        def orchestrator_message(self, message):
+        def iter_orchestrator_message(self, message):
             calls.append(message)
-            return {"session_id": "orchestrator-session", "answer": "foreground answer"}
+            yield {"event":"assistant_progress", "assistant_text":"checking"}
+            yield {"event":"completed", "result":{"session_id": "orchestrator-session", "answer": "foreground answer"}}
 
         def close(self):
             calls.append("closed")
@@ -38,7 +39,7 @@ def test_cli_ask_uses_in_process_persistent_orchestrator_by_default(capsys, monk
 
     assert main(["ask", "  exact foreground wording  "]) == 0
     captured = capsys.readouterr()
-    assert captured.out.strip() == "foreground answer"
+    assert captured.out.strip() == "checking\nforeground answer"
     assert calls == ["  exact foreground wording  ", "closed"]
     assert "SWAAG Orchestrator" in captured.err
 
@@ -59,9 +60,9 @@ def test_cli_chat_uses_in_process_persistent_orchestrator_by_default(capsys, mon
     class _Service:
         orchestrator_runtime = _OrchestratorRuntime()
 
-        def orchestrator_message(self, message):
+        def iter_orchestrator_message(self, message):
             calls.append(message)
-            return {"session_id": "orchestrator-session", "answer": "chat answer"}
+            yield {"event":"completed", "result":{"session_id": "orchestrator-session", "answer": "chat answer"}}
 
         def close(self):
             calls.append("closed")
@@ -87,7 +88,10 @@ def test_cli_tools_command(capsys) -> None:
 
 
 
-def test_cli_budget_demo(capsys, monkeypatch) -> None:
+def test_cli_budget_demo(capsys, monkeypatch, make_config) -> None:
+    # The CLI rendering check must not read or fill the host replay cache.
+    config = make_config()
+    monkeypatch.setattr("swaag.cli.load_config", lambda paths: config)
     monkeypatch.setattr("swaag.model.LlamaCppClient.tokenize", lambda self, text: max(1, len(text) // 4))
     monkeypatch.setattr("swaag.model.LlamaCppClient.tokenize_selection", lambda self, text: max(1, len(text) // 4))
     monkeypatch.setattr(

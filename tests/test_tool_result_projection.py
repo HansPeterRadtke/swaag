@@ -7,6 +7,7 @@ from swaag.model import CompletionRequestPolicy
 from swaag.runtime import AgentRuntime
 from swaag.prompts import PromptBuilder
 from swaag.types import CompletionResult, ContractSpec, Message
+from swaag.utils import sha256_text
 
 
 class _CharacterCountProjectionClient:
@@ -136,6 +137,7 @@ def test_runtime_reuses_only_matching_projection_that_meets_new_target(
         state,
         "tool_result_projected",
         {
+            "objective_sha256": sha256_text("same objective"),
             "source_event_sequence": 12,
             "source_event_hash": "abc",
             "tool_name": "shell_command",
@@ -149,18 +151,21 @@ def test_runtime_reuses_only_matching_projection_that_meets_new_target(
 
     assert runtime._stored_tool_result_projection(
         state,
+        original_request="same objective",
         source_event_sequence=12,
         source_event_hash="abc",
         target_tokens=90,
     ) == (event.sequence, "durable semantic projection", 80)
     assert runtime._stored_tool_result_projection(
         state,
+        original_request="same objective",
         source_event_sequence=12,
         source_event_hash="abc",
         target_tokens=70,
     ) is None
     assert runtime._stored_tool_result_projection(
         state,
+        original_request="same objective",
         source_event_sequence=12,
         source_event_hash="different",
         target_tokens=90,
@@ -328,3 +333,30 @@ def test_tool_result_anchor_path_uses_bounded_neighborhood_for_oversized_single_
         + spans[0]
     )
     assert runtime._counter(state).count_text(block).tokens <= 600
+
+
+def test_tool_selector_reserves_measured_output_for_many_exact_facts(make_config):
+    from dataclasses import replace
+
+    class LimitedSelector(_CharacterCountProjectionClient):
+        def send_completion(self, payload, **kwargs):
+            result = super().send_completion(payload, **kwargs)
+            if len(result.text) > payload["n_predict"]:
+                return replace(result, text=result.text[:payload["n_predict"]],
+                    finish_reason="length", completion_tokens=payload["n_predict"])
+            return result
+
+    lines = [f"FACT: preserve exact Ä_{i:03d}." if i % 2 == 0 else f"Routine healthy check {i}." for i in range(64)]
+    source = "\n".join(lines)
+    client = LimitedSelector(["FACT:"])
+    runtime = AgentRuntime(make_config(model__context_limit=16000), model_client=client)
+    state = runtime.create_or_load_session()
+    runtime._record_message(state, Message(role="tool", name="reader", content=source, created_at="t"))
+    selected, semantic_ok = runtime._select_tool_result_verbatim_fragments(
+        state, original_request="Preserve every exact FACT, omit routine filler.",
+        tool_name="reader", source_text=source,
+    )
+    assert semantic_ok, "Fitting selection output must not fail behind a fixed tiny cap"
+    assert selected == [line + "\n" for line in lines if line.startswith("FACT:")]
+    assert len(client.requests) == 1
+    assert runtime.history.read_authoritative_messages(state.session_id)[0].content == source

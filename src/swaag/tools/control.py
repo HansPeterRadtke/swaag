@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import hashlib
 from dataclasses import asdict
 from typing import Any
 
@@ -9,15 +10,71 @@ from swaag.types import ToolExecutionResult, ToolGeneratedEvent
 from swaag.utils import stable_json_dumps
 
 
+def _resolve_control_target(context: ToolContext, ref: str) -> tuple[HistoryStore, str]:
+    """Resolve exact worker IDs through their owner; names/IDs remain session refs."""
+    orchestration = context.runtime_capabilities.get("orchestration")
+    manager = getattr(orchestration, "manager", None)
+    for workers in getattr(manager, "worker_managers", {}).values():
+        try:
+            worker = workers.store.get(ref)
+        except FileNotFoundError:
+            continue
+        owner = manager.worker_managers.get(worker.model_key, workers)
+        return owner.runtime.history, worker.session_id
+    store = HistoryStore(context.config.sessions.root, write_projections=False)
+    session_id = store.resolve_session_ref(ref, latest_if_none=False)
+    if session_id is None:
+        raise FileNotFoundError(f"Unknown target session or worker: {ref}")
+    return store, session_id
+
+
+def _originating_user_authority(context: ToolContext) -> list[dict[str, Any]]:
+    # Only the trusted foreground controller supplies original user authority.
+    # A worker's own message or tool output cannot promote itself into this lane.
+    if "system_snapshot_provider" not in context.runtime_capabilities:
+        return []
+    history = HistoryStore(context.config.sessions.root, write_projections=False)
+    events = history.iter_history_reverse(context.session_state.session_id)
+    messages = []
+    for event in events:
+        if event.event_type == "turn_started":
+            original = event.payload.get("user_text")
+            if isinstance(original, str) and not any(item["message"] == original for item in messages):
+                messages.append({"source_session_id": context.session_state.session_id,
+                                 "source_event_sequence": event.sequence,
+                                 "message": original})
+            break
+        if event.event_type != "message_added":
+            continue
+        message = event.payload.get("message", {})
+        if message.get("role") == "user":
+            messages.append({"source_session_id": context.session_state.session_id,
+                             "source_event_sequence": event.sequence,
+                             "control_id": message.get("metadata", {}).get("orchestrator_control_id"),
+                             "message": message["content"]})
+    # The initial message precedes turn_started in some entry paths. Use the
+    # current user turn only, never earlier unrelated conversation.
+    if not messages:
+        latest = next((m for m in reversed(context.session_state.messages) if m.role == "user"), None)
+        if latest is not None:
+            messages.append({"source_session_id": context.session_state.session_id,
+                             "control_id": latest.metadata.get("orchestrator_control_id"),
+                             "message": latest.content})
+    return list(reversed(messages))
+
+
 class AgentStatusLookupTool(Tool):
     name = "agent_status_lookup"
     description = "Read durable status for another SWAAG session without changing it."
-    usage_guidance = "Use an exact session id/name. Returns active goal, waiting/running state, pending controls, turn/event counts, and the complete durable semantic status history."
+    usage_guidance = "Use an exact worker ID or session id/name when current status is missing from the supplied system snapshot. Returns active goal, waiting/running state, pending controls, counts and the exact latest semantic status. Set include_history=true only when the full status trajectory is needed; its exact events remain recoverable."
     kind = "pure"
     input_schema = {
         "type": "object",
-        "properties": {"session_ref": {"anyOf": [{"type": "string"}, {"type": "null"}]}},
-        "required": ["session_ref"],
+        "properties": {
+            "session_ref": {"anyOf": [{"type": "string"}, {"type": "null"}]},
+            "include_history": {"anyOf": [{"type": "boolean"}, {"type": "null"}]},
+        },
+        "required": ["session_ref", "include_history"],
         "additionalProperties": False,
     }
 
@@ -25,19 +82,18 @@ class AgentStatusLookupTool(Tool):
         ref = raw_input.get("session_ref")
         if ref is not None and not isinstance(ref, str):
             raise ToolValidationError("agent_status_lookup.session_ref must be a string or null")
-        return {"session_ref": (ref or "").strip()}
+        include_history = raw_input.get("include_history")
+        if include_history is not None and not isinstance(include_history, bool):
+            raise ToolValidationError("agent_status_lookup.include_history must be a boolean or null")
+        return {"session_ref": (ref or "").strip(), "include_history": include_history is True}
 
     def execute(self, validated_input: dict[str, Any], context: ToolContext) -> ToolExecutionResult:
-        store = HistoryStore(context.config.sessions.root, write_projections=False)
         ref = validated_input["session_ref"] or context.session_state.session_id
-        session_id = store.resolve_session_ref(ref, latest_if_none=True)
-        if session_id is None:
-            raise FileNotFoundError("No session available")
+        store, session_id = _resolve_control_target(context, ref)
         state = store.rebuild_from_history(session_id, write_projections=False)
         latest_user = next((m.content for m in reversed(state.messages) if m.role == "user"), "")
-        status_history = [
-            event.payload
-            for event in store.iter_history(session_id)
+        status_events = [
+            event for event in store.iter_history(session_id)
             if event.event_type == "agent_status"
         ]
         active_run = store.read_active_run(session_id)
@@ -54,15 +110,26 @@ class AgentStatusLookupTool(Tool):
             "pending_control_count": len(store.list_pending_control_messages(session_id)),
             "turn_count": state.turn_count,
             "event_count": state.event_count,
-            "status_history": status_history,
+            "latest_status": status_events[-1].payload if status_events else None,
+            "status_history_reference": {
+                "session_id": session_id,
+                "event_type": "agent_status",
+                "count": len(status_events),
+                "first_sequence": status_events[0].sequence if status_events else None,
+                "last_sequence": status_events[-1].sequence if status_events else None,
+                "last_event_hash": status_events[-1].hash if status_events else None,
+                "recovery": "agent_status_lookup with include_history=true returns all exact statuses",
+            },
         }
+        if validated_input.get("include_history", False):
+            output["status_history"] = [event.payload for event in status_events]
         return ToolExecutionResult(self.name, output, f"agent_status_lookup result: {stable_json_dumps(output, indent=2)}")
 
 
 class AgentControlTool(Tool):
     name = "agent_control"
     description = "Queue an exact, ordered, durable control/instruction for another SWAAG session."
-    usage_guidance = "Use only when the user asks to redirect, pause, stop, or send an instruction to the target agent. The control is durable and correlated by control_id."
+    usage_guidance = "Use an exact worker ID or session id/name when the user redirects, pauses, stops, or instructs the target. Preserve exact wording. queued=true confirms durable enqueue only, not acknowledgement or effects. Report the pending state and continue in the background; do not resend to poll. Wakes an input-required worker to interpret the control; other lifecycle states stay unchanged. Original user authority is preserved separately from your routing note. Retries for the same original user events and target reuse the first receipt; status reports pending or processed, never proof of completed effects."
     kind = "side_effect"
     input_schema = {
         "type": "object",
@@ -84,13 +151,37 @@ class AgentControlTool(Tool):
         return {"session_ref": ref.strip(), "message": message}
 
     def execute(self, validated_input: dict[str, Any], context: ToolContext) -> ToolExecutionResult:
-        store = HistoryStore(context.config.sessions.root, write_projections=False)
-        session_id = store.resolve_session_ref(validated_input["session_ref"], latest_if_none=False)
-        if session_id is None:
-            raise FileNotFoundError(f"Unknown target session: {validated_input['session_ref']}")
-        payload = store.enqueue_control_message(session_id, validated_input["message"], source="agent_control")
+        store, session_id = _resolve_control_target(context, validated_input["session_ref"])
+        authority = _originating_user_authority(context)
+        # The original foreground events are the action identity. A generated
+        # routing-note paraphrase, target alias, or retry must not deliver them
+        # twice. A new user event, changed authority set, or target gets a new ID.
+        # Direct/legacy worker controls have no such provenance and stay distinct.
+        control_id = None
+        if authority:
+            identity = stable_json_dumps(
+                {"target_session_id": session_id, "authority": authority}, indent=None
+            )
+            control_id = "control_authority_" + hashlib.sha256(identity.encode()).hexdigest()
+        payload = store.enqueue_control_message(
+            session_id, validated_input["message"], source="agent_control",
+            control_id=control_id, authority=authority,
+        )
+        # A new answer must reach a waiting worker without an out-of-band
+        # resume. The owner retains lifecycle, capacity and delegated-tool gates;
+        # this does not start created work or revive completed/canceled tasks.
+        orchestration = context.runtime_capabilities.get("orchestration")
+        if orchestration is not None:
+            orchestration.dispatch_waiting_controls(
+                session_id=session_id, history_root=store.root,
+            )
+        # queued retains its durable-acceptance meaning; status is the observed
+        # delivery state and may already be processed when returning a retry.
         output = {**payload, "queued": True}
-        return ToolExecutionResult(self.name, output, f"Queued control {payload['control_id']} for {session_id}")
+        return ToolExecutionResult(
+            self.name, output,
+            f"Durable control {payload['control_id']} for {session_id}: {payload['status']}",
+        )
 
 
 CONTROL_TOOLS = [AgentStatusLookupTool(), AgentControlTool()]

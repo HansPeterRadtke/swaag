@@ -22,6 +22,40 @@ class OrchestrationApi:
         self.background_work = background_work
         self.supervisor = supervisor
 
+    def dispatch_waiting_controls(self, *, session_id=None, history_root=None):
+        """Wake only input-required owners with queued agent controls.
+
+        Also used by the service tick to recover a crash after enqueue but
+        before submission. Question edits, canceled/archived work and delegated
+        tool waits must not become implicit permission to execute.
+        """
+        dispatched, seen = [], set()
+        for manager in self.manager.worker_managers.values():
+            # A targeted delivery must acquire the owner's transition lock even
+            # if it observes working immediately before a blocking commit.
+            if session_id is not None:
+                target = manager.store.find_by_session(session_id)
+                candidates = [] if target is None else [target]
+            else:
+                candidates = manager.store.list(statuses={"input_required"})
+            for worker in candidates:
+                owner = self.manager.worker_managers.get(worker.model_key, manager)
+                root = owner.runtime.history.root
+                identity = (str(root), worker.worker_id)
+                if identity in seen:
+                    continue
+                seen.add(identity)
+                if session_id is not None and worker.session_id != session_id:
+                    continue
+                if history_root is not None and root != history_root:
+                    continue
+                result = owner.dispatch_pending_controls_for_session(
+                    worker.session_id, waiting_only=True,
+                )
+                if result is not None and result.status == "queued":
+                    dispatched.append(worker.worker_id)
+        return dispatched
+
     def execute(self, operation: str, payload: dict[str, Any] | None = None) -> dict[str, Any]:
         args = dict(payload or {})
         if operation == "questions.list":

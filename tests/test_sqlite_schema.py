@@ -107,7 +107,7 @@ def test_all_runtime_sqlite_stores_record_explicit_schema_versions(
 
     assert _version(communication.path) == 6
     assert _version(workers.path) == 6
-    assert _version(history.sqlite_history_path()) == 1
+    assert _version(history.sqlite_history_path()) == 2
     assert _version(archives.catalog_path) == 1
     assert _version(inference.path) == 2
     assert _version(preemption.path) == 1
@@ -477,3 +477,19 @@ def test_continuous_node_migration_preserves_legacy_node_and_default_mode(tmp_pa
     assert migrated.pop('completion_mode') == 'natural'
     assert migrated == original
     assert store.get_plan('legacy').revision == 9
+
+
+def test_control_authority_migration_keeps_legacy_pending_text(tmp_path):
+    from swaag.history import _HISTORY_INDEX_MIGRATIONS
+    sessions = tmp_path / 'sessions'
+    sessions.mkdir()
+    path = sessions / 'history.sqlite3'
+    exact = '\n  Keep this legacy restriction unchanged.  \n'
+    with sqlite3.connect(path) as connection:
+        apply_sqlite_migrations(connection,store_name='history',migrations=_HISTORY_INDEX_MIGRATIONS[:1])
+        connection.execute('INSERT INTO control_messages(control_id,session_id,message,source,created_at) VALUES (?,?,?,?,?)',
+                           ('legacy_control','legacy_session',exact,'cli','2026-10-14T00:00:00Z'))
+    store = HistoryStore(sessions)
+    pending = store.list_pending_control_messages('legacy_session')
+    assert pending[0]['message'] == exact and pending[0]['authority'] == []
+    assert _version(path) == 2

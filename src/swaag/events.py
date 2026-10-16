@@ -14,6 +14,7 @@ ALLOWED_EVENT_TYPES = frozenset(
         "session_renamed",
         "message_added",
         "turn_started",
+        "turn_cancelled",
         "turn_finished",
         "notes_selected",
         "prompt_built",
@@ -22,10 +23,13 @@ ALLOWED_EVENT_TYPES = frozenset(
         "action_prompt_mode_fallback",
         "semantic_reduction_output_exhausted",
         "runtime_context_projected",
+        "runtime_system_snapshot",
+        "shared_knowledge_revision",
         "runtime_context_projection_reused",
         "runtime_context_projection_skipped",
         "tool_result_projected",
         "tool_result_projection_reused",
+        "tool_result_selection_reused",
         "tool_result_projection_skipped",
         "completion_evaluated",
         "completion_rejected",
@@ -36,6 +40,7 @@ ALLOWED_EVENT_TYPES = frozenset(
         "caller_structured_output_created",
         "communication_status_requested",
         "communication_status_generated",
+        "communication_status_reply_rejected",
         "orchestrator_interaction_requested",
         "orchestrator_interaction_generated",
         "orchestrator_direct_reply_rejected",
@@ -87,6 +92,7 @@ ALLOWED_EVENT_TYPES = frozenset(
         "action_selected",
         "action_selection_resolved",
         "agent_action_rejected",
+        "tool_invocation_failed_recoverably",
         "agent_action_interrupted",
         "agent_action_selected",
         "agent_status",
@@ -160,6 +166,7 @@ ALLOWED_EVENT_TYPES = frozenset(
         "model_retry_scheduled",
         "model_tokenize_requested",
         "model_tokenize_result",
+        "selection_output_counted",
         "model_tokenize_failed",
         "token_estimate_used",
         "decision_parsed",
@@ -299,10 +306,13 @@ REQUIRED_PAYLOAD_KEYS: dict[str, frozenset[str]] = {
     "session_renamed": frozenset({"session_id", "old_name", "new_name", "reason"}),
     "message_added": frozenset({"message"}),
     "turn_started": frozenset({"turn_index", "user_text"}),
+    "turn_cancelled": frozenset({"run_id", "reason"}),
     "turn_finished": frozenset({"turn_index", "assistant_text", "tool_steps", "budget_reports"}),
     "notes_selected": frozenset({"included_note_ids", "omitted_note_ids", "tokens", "exact"}),
     "prompt_built": frozenset({"kind", "prompt_mode", "contract", "prompt", "components", "budget_report"}),
     "context_compiled": frozenset({"kind", "prompt_mode", "accounting"}),
+    "runtime_system_snapshot": frozenset({"snapshot"}),
+    "shared_knowledge_revision": frozenset({"namespace", "name", "revision", "sha256", "operation", "scope"}),
     "runtime_context_projected": frozenset(
         {
             "source_name",
@@ -427,6 +437,10 @@ REQUIRED_PAYLOAD_KEYS: dict[str, frozenset[str]] = {
             "source_event_references",
             "evidence_projected",
         }
+    ),
+    "communication_status_reply_rejected": frozenset(
+        {"target_session_id", "question", "attempt", "reason",
+         "observed_fingerprint", "current_fingerprint", "next_action"}
     ),
     "communication_status_rejected": frozenset(
         {"target_session_id", "attempt", "reason"}
@@ -594,6 +608,7 @@ REQUIRED_PAYLOAD_KEYS: dict[str, frozenset[str]] = {
     "action_selected": frozenset({"selected_action", "ready_step_ids", "scores", "strategy", "stop_reason"}),
     "action_selection_resolved": frozenset({"selected_action", "candidates", "source"}),
     "agent_action_rejected": frozenset({"action_index", "validation_attempt", "reason"}),
+    "tool_invocation_failed_recoverably": frozenset({"action_index", "tool_name", "reason"}),
     "agent_action_interrupted": frozenset(
         {
             "action_index",
@@ -755,6 +770,8 @@ REQUIRED_PAYLOAD_KEYS: dict[str, frozenset[str]] = {
     # and intentionally omit raw model-visible text.
     "model_tokenize_requested": frozenset({"text_hash"}),
     "model_tokenize_result": frozenset({"text_hash", "tokens", "exact"}),
+    "selection_output_counted": frozenset({"text_sha256", "text_chars", "tokens", "exact", "strategy"}),
+    "tool_result_selection_reused": frozenset({"source_event_sequence", "source_event_hash", "selection_source_event_sequence", "selection_source_event_hash", "objective_sha256", "source_text_sha256"}),
     "model_tokenize_failed": frozenset({"text_hash", "error", "error_type"}),
     "token_estimate_used": frozenset({"text_hash", "tokens", "strategy"}),
     "decision_parsed": frozenset({"decision", "prompt_mode"}),

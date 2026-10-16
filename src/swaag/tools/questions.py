@@ -17,7 +17,9 @@ class QuestionsTool(Tool):
     usage_guidance = (
         "Unanswered optional questions do not block safe work. Reconcile questions when user answers, "
         "research answers, or changed circumstances make them superseded, irrelevant, or expired. "
-        "Use the exact question_id and history event sequences supporting your decision. A new message "
+        "Use the exact question_id and history event sequences supporting your decision. User answers "
+        "require a user-message event or the local processed-control event backed by forwarded original "
+        "user authority; tool results alone are not user answers. A new message "
         "alone is not an answer. Never label a provisional assumption as an answer. Resolution records "
         "remain in exact history after the question leaves the open list."
     )
@@ -82,11 +84,26 @@ class QuestionsTool(Tool):
                     start_sequence=min(wanted), end_sequence=max(wanted)) if event.sequence in wanted]
         if {event.sequence for event in evidence} != wanted:
             raise ToolValidationError("Question resolution cites missing history evidence")
-        if validated_input["resolution"] == "answered_by_user" and not any(
-            event.event_type == "message_added" and event.payload.get("message", {}).get("role") == "user"
-            for event in evidence
-        ):
-            raise ToolValidationError("User answer requires a recorded user message")
+        if validated_input["resolution"] == "answered_by_user":
+            controls = {
+                item["control_id"]: item
+                for item in history.list_authoritative_control_messages(state.session_id)
+                if item.get("source") == "agent_control"
+                and item.get("status") == "processed" and item.get("authority")
+            }
+            def user_evidence(event):
+                if event.event_type == "message_added":
+                    return event.payload.get("message", {}).get("role") == "user"
+                if event.event_type != "control_message_processed":
+                    return False
+                control = controls.get(event.payload.get("control_id"))
+                return bool(control and event.payload.get("session_id") == state.session_id
+                            and event.payload.get("message") == control["message"])
+            if not any(user_evidence(event) for event in evidence):
+                raise ToolValidationError(
+                    "User answer requires a recorded user message or processed control "
+                    "backed by forwarded original user authority; tool results alone are not user answers"
+                )
         if validated_input["resolution"] == "answered_by_research" and not any(
             event.event_type in {"tool_result", "external_source_observed"} for event in evidence
         ):

@@ -1035,14 +1035,25 @@ class WorkerManager:
         return self.store.list(include_archived=include_archived)
 
     def dispatch_pending_controls_for_session(
-        self, session_id: str
+        self, session_id: str, *, waiting_only: bool = False
     ) -> WorkerRecord | None:
-        """Resume a worker-owned session without bypassing its durable lifecycle."""
+        """Dispatch durable controls; ordinary answers only awaken an existing wait.
+
+        Awakening re-enters semantic reconciliation, not automatic approval or
+        question resolution. Scheduled wakeups retain their existing lifecycle.
+        """
         with self._control_transition_lock:
             current = self.store.find_by_session(session_id)
             if current is None:
                 return None
+            if waiting_only and (
+                current.status != "input_required"
+                or self.runtime.delegated_tools.pending_call(session_id) is not None
+            ):
+                return current
             pending = self.runtime.history.list_pending_control_messages(session_id)
+            if waiting_only:
+                pending = [item for item in pending if item.get("source") == "agent_control"]
             if not pending:
                 return None
             if current.archived_at is not None or current.status in {
@@ -1400,6 +1411,7 @@ class WorkerManager:
         state = self.runtime.history.rebuild_from_history(
             working.session_id, write_projections=False
         )
+        self.runtime.bind_tool_runtime_capability(working.session_id, "worker_id", worker_id)
         output_spec = self._output_spec(working)
         try:
             while True:
@@ -1417,7 +1429,6 @@ class WorkerManager:
                 if latest.status != "working":
                     return
                 working = latest
-                first_sequence = state.event_count + 1
                 try:
                     with self.runtime.inference_priority(
                         0,
@@ -1474,23 +1485,31 @@ class WorkerManager:
                 if continued is not None:
                     working = continued
                     continue
-                blocking = any(
-                    event.event_type in {"agent_question", "agent_question_revised"}
-                    and event.payload.get("criticality") == "blocking"
-                    for event in self.runtime.history.iter_history(
-                        working.session_id, start_sequence=first_sequence
-                    )
+                question_state = self.runtime.history.rebuild_from_history(
+                    working.session_id, write_projections=False
                 )
+                blocking = any(question.get("criticality") == "blocking"
+                               for question in question_state.open_questions)
                 if blocking:
-                    self._sync_history_events(working)
-                    self.store.transition(
-                        worker_id,
-                        "input_required",
-                        expected={"working"},
-                        result=result.assistant_text,
-                        event_type="worker_input_required",
-                    )
-                    return
+                    # Close the delivery-versus-wait race using the same lock as
+                    # control dispatch, just as the terminal commit already does.
+                    with self._control_transition_lock:
+                        continued = self._continue_for_pending_controls(
+                            worker_id, working, phase="input_required_commit",
+                            provisional_result=result.assistant_text,
+                        )
+                        if continued is None:
+                            self._sync_history_events(working)
+                            self.store.transition(
+                                worker_id,
+                                "input_required",
+                                expected={"working"},
+                                result=result.assistant_text,
+                                event_type="worker_input_required",
+                            )
+                            return
+                    working = continued
+                    continue
 
                 if working.completion_mode == "continuous":
                     self._sync_history_events(working)

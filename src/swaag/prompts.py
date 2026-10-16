@@ -20,6 +20,21 @@ FALLBACK_MESSAGE_SEPARATOR = "\n[USER MESSAGE]\n"
 FALLBACK_GENERATION_SUFFIX = "\n[ASSISTANT RESPONSE]\n"
 
 
+def _action_recovery_feedback(feedback: str) -> PromptComponent:
+    """Recovery includes semantic state changes as well as mechanical errors."""
+    return PromptComponent(
+        name="action_recovery_feedback",
+        category="instruction",
+        text=(
+            "Use the feedback below to select a valid next action from current authoritative "
+            "instructions and observations. Repair reported structural errors; reconcile changed "
+            "state, controls, tool failures or remaining work rather than preserving a stale decision. "
+            "Feedback does not authorize new work or override user instructions.\n"
+            f"{feedback}\n\n"
+        ),
+    )
+
+
 class PromptBuilder:
     """Build only the model/tool-loop action prompt and history-compaction prompt."""
 
@@ -114,6 +129,15 @@ class PromptBuilder:
             )
         return "\n\n".join(rendered)
 
+    @staticmethod
+    def user_message_provenance(message: Message | None) -> str:
+        if message is None or message.role != "user":
+            return ""
+        sequence = message.metadata.get("source_message_event_sequence")
+        if isinstance(sequence, bool) or not isinstance(sequence, int) or sequence < 1:
+            return ""
+        return f"[USER MESSAGE SOURCE sequence={sequence}]\n"
+
     def message_prompt_components(
         self,
         messages: list[Message],
@@ -148,7 +172,7 @@ class PromptBuilder:
                 label = f"{label}:{message.name}"
             event_sequence = message.metadata.get("source_event_sequence")
             event_hash = message.metadata.get("source_event_hash")
-            provenance = ""
+            provenance = self.user_message_provenance(message)
             body = message.content
             component_name = f"{prefix}_{index}"
             if message.role == "tool" and isinstance(event_sequence, int):
@@ -278,6 +302,7 @@ class PromptBuilder:
         capability_index: Iterable[tuple[str, str, str]] | None = None,
         tool_result_projections: dict[int, str] | None = None,
         validation_feedback: str = "",
+        require_user_acknowledgement: bool = False,
     ) -> PromptAssembly:
         history, current_user, turn_transcript = self.partition_turn(messages)
         components = [
@@ -298,8 +323,9 @@ class PromptBuilder:
                 name="current_user_turn",
                 category="current_user",
                 text=(
-                    "Current user message, verbatim:\n"
-                    f"{current_user.content if current_user is not None else original_request}\n\n"
+                    self.user_message_provenance(current_user)
+                    + "Current user message, verbatim:\n"
+                    + f"{current_user.content if current_user is not None else original_request}\n\n"
                 ),
             ),
             *self.message_prompt_components(
@@ -349,16 +375,7 @@ class PromptBuilder:
             )
         )
         if validation_feedback:
-            components.append(
-                PromptComponent(
-                    name="mechanical_validation_feedback",
-                    category="instruction",
-                    text=(
-                        "The previous constrained output was mechanically invalid. Correct only that structural error:\n"
-                        f"{validation_feedback}\n\n"
-                    ),
-                )
-            )
+            components.append(_action_recovery_feedback(validation_feedback))
         action_template = (
             self._config.prompts.lean_action_template
             if prompt_mode == "lean"
@@ -371,6 +388,21 @@ class PromptBuilder:
                 text=self._load_template(action_template),
             )
         )
+        if require_user_acknowledgement:
+            components.append(PromptComponent(
+                name="initial_foreground_acknowledgement",
+                category="instruction",
+                text=(
+                    "\nThis is the initial foreground action for a finalized user message. "
+                    "Its assistant_message must be nonempty even when it includes tool calls. "
+                    "Give a brief useful acknowledgement and already-observed status, respecting "
+                    "the user's requested format; otherwise use natural spoken prose. "
+                    "Describe unobserved actions as intentions, not completed facts. "
+                    "Keep the authorized tool calls in this same action. The runtime delivers "
+                    "the acknowledgement only after successful receipts, without waiting for "
+                    "another model call or for background completion.\n"
+                ),
+            ))
         return self._assemble(
             "action",
             prompt_mode,
@@ -388,6 +420,7 @@ class PromptBuilder:
         capability_index: Iterable[tuple[str, str, str]],
         context_components: list[PromptComponent] | None = None,
         validation_feedback: str = "",
+        tool_result_projections: dict[int, str] | None = None,
     ) -> PromptAssembly:
         history, current_user, turn_transcript = self.partition_turn(messages)
         capabilities = list(capability_index)
@@ -404,15 +437,18 @@ class PromptBuilder:
             *self.message_prompt_components(
                 history, prefix="conversation_history", category="history",
                 header="Previous conversation messages, verbatim:", optional=True,
+                tool_result_projections=tool_result_projections,
             ),
             PromptComponent(
                 name="current_user_turn", category="current_user",
-                text=("Current user message, verbatim:\n" +
+                text=(self.user_message_provenance(current_user) +
+                      "Current user message, verbatim:\n" +
                       f"{current_user.content if current_user is not None else original_request}\n\n"),
             ),
             *self.message_prompt_components(
                 turn_transcript, prefix="current_turn", category="turn_context",
                 header="Exact assistant actions and tool results since the current user message:",
+                tool_result_projections=tool_result_projections,
             ),
         ]
         if pending_user_messages:
@@ -437,10 +473,7 @@ class PromptBuilder:
             text=f"Existing capability identities and descriptions:\n{rendered_capabilities}\n\n",
         ))
         if validation_feedback:
-            components.append(PromptComponent(
-                name="mechanical_validation_feedback", category="instruction",
-                text=f"Previous selection was mechanically invalid: {validation_feedback}\n\n",
-            ))
+            components.append(_action_recovery_feedback(validation_feedback))
         components.append(PromptComponent(
             name="agent_capability_selection_instruction", category="instruction",
             text=(
@@ -553,7 +586,8 @@ class PromptBuilder:
             ),
             PromptComponent(
                 name="current_user_turn", category="current_user",
-                text=("Current user message, verbatim:\n" +
+                text=(self.user_message_provenance(current_user) +
+                      "Current user message, verbatim:\n" +
                       f"{current_user.content if current_user is not None else original_request}\n\n"),
             ),
             *self.message_prompt_components(
@@ -580,11 +614,7 @@ class PromptBuilder:
         if context_components:
             components.extend(context_components)
         if validation_feedback:
-            components.append(PromptComponent(
-                name="mechanical_validation_feedback", category="instruction",
-                text=("The previous constrained output was mechanically invalid. Correct only that structural error:\n"
-                      + validation_feedback + "\n\n"),
-            ))
+            components.append(_action_recovery_feedback(validation_feedback))
         components.append(PromptComponent(
             name="agent_terminal_response_instruction", category="instruction",
             text=(
@@ -607,6 +637,7 @@ class PromptBuilder:
         self,
         *,
         original_request: str,
+        authority_components: list[PromptComponent] | None = None,
         assistant_message: str,
         status_json: str,
         tool_evidence: str = "",
@@ -619,6 +650,7 @@ class PromptBuilder:
     ) -> PromptAssembly:
         base = self.build_completion_evaluation_prompt(
             original_request=original_request,
+            authority_components=authority_components,
             assistant_message=assistant_message,
             status_json=status_json,
             tool_evidence=tool_evidence,
@@ -645,7 +677,7 @@ class PromptBuilder:
                 text=(
                     "\nDecide only whether the user's objective is actually complete from the supplied authoritative evidence. "
                     "Return complete=true only when no meaningful requested work remains. Do not generate a reason, "
-                    "remaining-work list, evidence request, plan, status, or user-facing prose. Return only the constrained JSON object.\n"
+                    "remaining-work list, evidence request, plan, status, or user-facing prose. Return only the constrained JSON object."
                 ),
             )
         )
@@ -666,6 +698,7 @@ class PromptBuilder:
         self,
         *,
         original_request: str,
+        authority_components: list[PromptComponent] | None = None,
         assistant_message: str,
         status_json: str,
         tool_evidence: str = "",
@@ -683,6 +716,22 @@ class PromptBuilder:
                 name="completion_objective",
                 category="current_user",
                 text=f"Original user objective:\n{original_request}\n\n",
+            ),
+            *(authority_components or []),
+            PromptComponent(
+                name="completion_lifecycle",
+                category="instruction",
+                text=(
+                    "Runtime completion semantics: accepting this candidate marks the current task completed, "
+                    "not paused. If the task still requires resuming after a user answer or authorization, "
+                    "it remains unfinished: the actor must record a blocking question to create the durable "
+                    "input_required state. A prose promise to wait does not create that state. Reject such a "
+                    "candidate and identify the missing durable wait as remaining work; never recommend "
+                    "performing the withheld action without authorization. Distinguish a temporary hold from "
+                    "a cancellation or a user-narrowed objective that is genuinely complete. Evaluate only "
+                    "the current task scope: a foreground status answer or verified instruction handoff can "
+                    "be complete while a separate background task remains waiting.\n\n"
+                ),
             ),
             PromptComponent(
                 name="completion_candidate",
@@ -733,7 +782,7 @@ class PromptBuilder:
                         name="completion_historical_evidence",
                         category="history",
                         text=(
-                            "\nDurable evidence from before the current user turn:\n"
+                            "\nDurable historical evidence and current runtime observations, with exact source timestamps:\n"
                             + (
                                 "[SEMANTIC PROJECTION; exact events remain authoritative "
                                 "and retrievable]\n"

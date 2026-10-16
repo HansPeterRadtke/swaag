@@ -271,6 +271,49 @@ def test_trusted_authority_conflict_case_encodes_precedence_and_provenance(make_
     assert verification["passed"] is True
 
 
+
+def test_current_user_overrides_older_trusted_instruction_for_current_turn(make_config, tmp_path) -> None:
+    from swaag.benchmark.prompt_instruction_behavior import _seed_case
+    from swaag.prompt_instruction_store import PromptInstructionStore
+
+    case = next(
+        item for item in select_cases() if item.case_id == "current_user_overrides_trusted"
+    )
+    config = make_config()
+    config.sessions.root = tmp_path / "sessions"
+    runtime = AgentRuntime(config, model_client=object())
+    state = runtime.create_or_load_session()
+    store = PromptInstructionStore(config.sessions.root, config)
+    seeded_ids = _seed_case(case, store, state)
+    instructions = store.list()
+
+    assert len(seeded_ids) == 1
+    assert len(instructions) == 1
+    trusted = instructions[0]
+    assert trusted.authority == "explicit_user_correction"
+    assert trusted.source_kind == "explicit_user_correction"
+    assert trusted.source_ref == "benchmark:current-user-overrides-trusted"
+
+    verification = _verify_case(
+        case,
+        seeded_ids=seeded_ids,
+        user_instructions=instructions,
+        session_instructions=[],
+        store_actions=["add"],
+        tool_actions=[],
+        assistant_text="CURRENT-USER-OVERRIDE-731",
+        selection_events=[{
+            "kind": "action",
+            "instruction_ids": seeded_ids,
+            "semantic_selection": False,
+            "selection_fallback": False,
+        }],
+    )
+    assert verification["passed"] is True
+    assert verification["checks"]["trusted_still_injected"] is True
+    assert verification["checks"]["current_user_answer_wins"] is True
+
+
 def test_distillation_case_accepts_semantic_category_split() -> None:
     case = next(
         item for item in select_cases() if item.case_id == "distill_messy_categories"

@@ -248,6 +248,8 @@ def _benchmark_checkpoint_signature(
     task_timeout_seconds: int | None,
     connect_timeout_seconds: int | None,
     max_consecutive_identical_tool_calls: int | None,
+    assistant_model_base_url: str | None = None,
+    assistant_model_profile: str | None = None,
 ) -> dict[str, Any]:
     task_policy = [
         {
@@ -273,6 +275,8 @@ def _benchmark_checkpoint_signature(
         "use_live_model": bool(use_live_model),
         "agent_behavior_mode": agent_behavior_mode or "",
         "model_base_url": model_base_url,
+        "assistant_model_base_url": assistant_model_base_url or "",
+        "assistant_model_profile": assistant_model_profile or "",
         "model_profile": model_profile or "",
         "structured_output_mode": structured_output_mode or "",
         "timeout_seconds": timeout_seconds,
@@ -745,10 +749,14 @@ def _run_turn_with_communication_probe(
     scenario,
     *,
     resume_timeout_seconds: float | None = None,
+    probe_metrics: dict[str, Any] | None = None,
+    assistant_runtime: AgentRuntime | None = None,
 ) -> Any:
     question = str(getattr(scenario, "communication_probe_question", "") or "").strip()
     if not question:
         return runtime.run_turn_in_session(state, scenario.prompt)
+    metrics = probe_metrics if probe_metrics is not None else {}
+    metrics.clear()
 
     probe_started = time.monotonic()
     holder: dict[str, Any] = {}
@@ -783,10 +791,23 @@ def _run_turn_with_communication_probe(
         total_deadline if resume_timeout_seconds is not None else probe_started + wait_seconds,
     )
     active = None
+    require_dispatched = bool(
+        getattr(scenario, "communication_probe_use_separate_assistant", False)
+    )
     while time.monotonic() < observation_deadline:
-        active = runtime.preemption.active_call(state.session_id)
-        if active is not None:
-            break
+        candidate = runtime.preemption.active_call(state.session_id)
+        if candidate is not None:
+            # Registration precedes local admission. An independent-overlap
+            # experiment must observe a dispatched main request, not merely a
+            # queued preemptible handle; preserve the shared-preemption probe.
+            dispatched = not require_dispatched or any(
+                event.event_type == "model_request_sent"
+                and event.payload.get("call_id") == candidate.call_id
+                for event in runtime.history.iter_history_reverse(state.session_id)
+            )
+            if dispatched:
+                active = candidate
+                break
         if not worker.is_alive():
             break
         time.sleep(0.005)
@@ -804,7 +825,34 @@ def _run_turn_with_communication_probe(
             "before the main turn completed"
         )
 
-    CommunicationService(runtime).answer_status_question(state.session_id, question)
+    active_observed = time.monotonic()
+    metrics.update(
+        {
+            "question": question,
+            "active_call_observed_seconds": round(active_observed - probe_started, 6),
+        }
+    )
+    use_separate_assistant = bool(
+        getattr(scenario, "communication_probe_use_separate_assistant", False)
+    )
+    if use_separate_assistant and assistant_runtime is None:
+        raise RuntimeError(
+            "communication probe requires a separately configured assistant model runtime"
+        )
+    metrics["separate_assistant_runtime"] = use_separate_assistant
+    status_started = time.monotonic()
+    communication = CommunicationService(
+        runtime,
+        assistant_runtime=assistant_runtime if use_separate_assistant else None,
+    )
+    try:
+        status_answer = communication.answer_status_question(state.session_id, question)
+    finally:
+        communication.close()
+    status_completed = time.monotonic()
+    metrics["status_response_seconds"] = round(status_completed - status_started, 6)
+    metrics["status_answer"] = status_answer
+    metrics["status_answer_chars"] = len(status_answer)
     resume_wait_seconds = max(0.1, total_deadline - time.monotonic())
     worker.join(timeout=resume_wait_seconds)
     if worker.is_alive():
@@ -813,6 +861,9 @@ def _run_turn_with_communication_probe(
         )
     if failure:
         raise failure["error"]
+    metrics["main_turn_resume_seconds"] = round(
+        time.monotonic() - status_completed, 6
+    )
     return holder["turn"]
 
 
@@ -1078,6 +1129,8 @@ def run_benchmarks(
     live_subset: bool = False,
     use_live_model: bool = False,
     model_base_url: str | None = None,
+    assistant_model_base_url: str | None = None,
+    assistant_model_profile: str | None = None,
     timeout_seconds: int | None = None,
     connect_timeout_seconds: int | None = None,
     model_profile: str | None = None,
@@ -1139,6 +1192,8 @@ def run_benchmarks(
         use_live_model=use_live_model,
         agent_behavior_mode=resolved_agent_behavior_mode,
         model_base_url=effective_base_url,
+        assistant_model_base_url=assistant_model_base_url,
+        assistant_model_profile=assistant_model_profile,
         model_profile=effective_profile,
         structured_output_mode=effective_structured_output_mode,
         timeout_seconds=effective_timeout,
@@ -1229,6 +1284,32 @@ def run_benchmarks(
                 replay_cache_root=effective_replay_cache_root,
             )
             runtime = AgentRuntime(config, model_client=runtime_model_client)
+            communication_probe_assistant_runtime = None
+            if bool(
+                getattr(scenario, "communication_probe_use_separate_assistant", False)
+            ):
+                if not assistant_model_base_url:
+                    raise ValueError(
+                        "This benchmark task requires --assistant-model-base-url"
+                    )
+                assistant_config = _build_config(
+                    sessions_root=sessions_root / "communication-assistant",
+                    workspace=scenario.workspace,
+                    overrides={},
+                    base_url=str(assistant_model_base_url).rstrip("/"),
+                    connect_timeout_seconds=effective_connect_timeout,
+                    timeout_seconds=effective_timeout,
+                    profile_name=assistant_model_profile,
+                    structured_output_mode=effective_structured_output_mode,
+                    progress_poll_seconds=effective_progress_poll,
+                    seed=seed,
+                )
+                assistant_config.model.cache_enabled = False
+                assistant_config.tools.enabled = []
+                assistant_config.tools.allow_stateful_tools = False
+                assistant_config.tools.allow_side_effect_tools = False
+                assistant_config.runtime.completion_evaluation_enabled = False
+                communication_probe_assistant_runtime = AgentRuntime(assistant_config)
             state = runtime.create_or_load_session()
             if scenario.history_messages:
                 _seed_scenario_history(runtime, state, scenario.history_messages)
@@ -1236,6 +1317,7 @@ def run_benchmarks(
             assistant_text = ""
             task_started = time.monotonic()
             loop_info: dict[str, Any] = {"triggered": False}
+            communication_probe_metrics: dict[str, Any] = {}
             task_loop_limit = task.benchmark_max_consecutive_identical_tool_calls
             if task_loop_limit is None:
                 task_loop_limit = max_consecutive_identical_tool_calls
@@ -1253,6 +1335,8 @@ def run_benchmarks(
                             state,
                             scenario,
                             resume_timeout_seconds=effective_task_timeout,
+                            probe_metrics=communication_probe_metrics,
+                            assistant_runtime=communication_probe_assistant_runtime,
                         )
                 assistant_text = turn.assistant_text
             except BenchmarkSeedTimeout as exc:
@@ -1372,6 +1456,7 @@ def run_benchmarks(
                     "verification_repair_rounds": repair_rounds_used,
                     "wall_clock_seconds": task_elapsed,
                     "replay_cache": replay_cache_info or {},
+                    "communication_probe": dict(communication_probe_metrics),
                     "runtime_error": (
                         None
                         if runtime_error is None
@@ -1427,6 +1512,11 @@ def run_benchmarks(
                     "cache_mode_summary": _actual_cache_mode(
                         seed_results,
                         cached=resolved_agent_behavior_mode == "cached",
+                    ),
+                    "communication_probe": (
+                        dict(seed_results[-1].get("communication_probe", {}))
+                        if len(seed_results) == 1
+                        else {}
                     ),
                     "execution_blocked": bool(aggregate_execution_blockers),
                     "execution_blockers": aggregate_execution_blockers,
@@ -1560,7 +1650,9 @@ def _build_parser() -> argparse.ArgumentParser:
     manual_parser.add_argument("--task", action="append", default=[], help="Run only the named validation task id. Can be passed multiple times.")
     manual_parser.add_argument("--validation-subset", dest="validation_subset", action="store_true", help="Run the shorter generated validation subset.")
     manual_parser.add_argument("--full-catalog", dest="validation_subset", action="store_false", help="Run the full benchmark catalog (default).")
-    manual_parser.add_argument("--model-base-url", help="Override the llama.cpp base URL for manual validation.")
+    manual_parser.add_argument("--model-base-url", help="Override the main-model base URL for manual validation.")
+    manual_parser.add_argument("--assistant-model-base-url", help="Optional independent communication-model endpoint used by capability cases that require it.")
+    manual_parser.add_argument("--assistant-model-profile", help="Model profile/id exposed by the independent communication-model endpoint.")
     manual_parser.add_argument("--timeout-seconds", type=int, help="Override the model read timeout.")
     manual_parser.add_argument("--task-timeout-seconds", type=int, help="Override the benchmark wall-clock timeout for one task seed.")
     manual_parser.add_argument("--connect-timeout-seconds", type=int, help="Override the model connect timeout.")
@@ -1672,6 +1764,23 @@ def _build_parser() -> argparse.ArgumentParser:
     orchestration_scheduler_parser.add_argument(
         "--json", action="store_true", help="Print the full JSON report."
     )
+
+    backend_scheduling_parser = subparsers.add_parser(
+        "backend-scheduling",
+        help="Measure interactive-request latency while a long backend generation is active.",
+    )
+    backend_scheduling_parser.add_argument("--endpoint", required=True, help="OpenAI-compatible chat completions endpoint.")
+    backend_scheduling_parser.add_argument("--model", required=True, help="Served model name.")
+    backend_scheduling_parser.add_argument("--metrics-url", default="", help="Optional vLLM-compatible metrics endpoint.")
+    backend_scheduling_parser.add_argument("--output", default="backend_scheduling_output", help="Artifact directory.")
+    backend_scheduling_parser.add_argument("--long-prompt-repetitions", type=int, default=5000)
+    backend_scheduling_parser.add_argument("--long-max-tokens", type=int, default=256)
+    backend_scheduling_parser.add_argument("--short-max-tokens", type=int, default=32)
+    backend_scheduling_parser.add_argument("--short-submit-delay-seconds", type=float, default=1.0)
+    backend_scheduling_parser.add_argument("--scheduler-sample-delay-seconds", type=float, default=0.25)
+    backend_scheduling_parser.add_argument("--timeout-seconds", type=float, default=300.0)
+    backend_scheduling_parser.add_argument("--clean", action="store_true")
+    backend_scheduling_parser.add_argument("--json", action="store_true")
 
     tool_strategy_parser = subparsers.add_parser(
         "tool-strategy",
@@ -2179,6 +2288,8 @@ def main(argv: Sequence[str] | None = None) -> int:
             benchmark_task_ids=list(args.task) or None,
             validation_subset=bool(args.validation_subset),
             model_base_url=args.model_base_url,
+            assistant_model_base_url=args.assistant_model_base_url,
+            assistant_model_profile=args.assistant_model_profile,
             timeout_seconds=args.timeout_seconds,
             task_timeout_seconds=args.task_timeout_seconds,
             connect_timeout_seconds=args.connect_timeout_seconds,
@@ -2333,6 +2444,39 @@ def main(argv: Sequence[str] | None = None) -> int:
                 f"output={Path(args.output) / 'orchestration_scheduler_results.json'}"
             )
         return 0 if report["complete"] and report["all_passed"] else 1
+
+    if args.command == "backend-scheduling":
+        from swaag.benchmark.backend_scheduling import run_backend_scheduling_benchmark
+
+        report = run_backend_scheduling_benchmark(
+            output_dir=Path(args.output),
+            endpoint=str(args.endpoint),
+            model=str(args.model),
+            metrics_url=str(args.metrics_url),
+            long_prompt_repetitions=int(args.long_prompt_repetitions),
+            long_max_tokens=int(args.long_max_tokens),
+            short_max_tokens=int(args.short_max_tokens),
+            short_submit_delay_seconds=float(args.short_submit_delay_seconds),
+            scheduler_sample_delay_seconds=float(args.scheduler_sample_delay_seconds),
+            timeout_seconds=float(args.timeout_seconds),
+            clean=bool(args.clean),
+        )
+        if args.json:
+            print(stable_json_dumps(report, indent=2))
+        else:
+            print(f"transport_succeeded={report['transport_succeeded']}")
+            print(f"long_ttft_seconds={report['long'].get('ttft_seconds')}")
+            print(f"short_ttft_seconds={report['short'].get('ttft_seconds')}")
+            print(f"short_finished_before_long={report['short_finished_before_long']}")
+            print(f"short_first_token_before_long_finished={report['short_first_token_before_long_finished']}")
+            print(f"interactive_overlap_observed={report['interactive_overlap_observed']}")
+            print(f"short_serialized_behind_long={report['short_serialized_behind_long']}")
+            print(f"scheduler_peak_running={report['scheduler_peak_running']}")
+            print(f"scheduler_peak_waiting={report['scheduler_peak_waiting']}")
+            print(f"scheduler_concurrency_observed={report['scheduler_concurrency_observed']}")
+            print(f"overlap_seconds={report['overlap_seconds']}")
+            print(f"output={Path(args.output) / 'backend_scheduling_results.json'}")
+        return 0 if report["passed"] else 1
 
     if args.command == "tool-strategy":
         from swaag.benchmark.tool_strategy import run_tool_strategy_benchmark

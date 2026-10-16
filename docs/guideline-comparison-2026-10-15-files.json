@@ -1,0 +1,4776 @@
+{
+  "audit": "guideline-comparison-2026-10-15.md",
+  "created_at": "2026-10-15T21:39:49.480873+00:00",
+  "infra_head": "867200e2c493f0c38c06e1121db3ad620f585b79",
+  "source_root": "/data/infra/docs/guidlines",
+  "evidence_root": "/data/var/swaag-benchmarks/foreground-routing-20261015",
+  "scope_note": "Complete file-level reading and thematic mapping; neither every sentence is normative nor every mapped requirement passes. Historical applicability labels are not copied as current implementation status.",
+  "files": [
+    {
+      "path": "OPEN_QUESTIONS_AUDIT_2026-10-09.md",
+      "sha256": "ba0a28f1ae162f10a2b319a23ea5ddf0a7ef9cad4bedaa4cd24391c8037ad867",
+      "bytes": 9446,
+      "characters": 9430,
+      "comparison_ids": [
+        "C10",
+        "C11",
+        "D9"
+      ],
+      "reading": "Complete current reread; source-preservation appendix and whole-file aliases checked against separately read originals; full-reread/semantic-ledger.json records findings.",
+      "previous_sha256": "ba0a28f1ae162f10a2b319a23ea5ddf0a7ef9cad4bedaa4cd24391c8037ad867",
+      "current_status_source": "guideline-comparison-2026-10-15.md; chronological acceptance in foreground-routing-and-retries-2026-10-15.md"
+    },
+    {
+      "path": "README.md",
+      "sha256": "24c4e50df2255e12fbd6add0eb7dd56b1712454ccd9d10ea6c90cc4ee4253e86",
+      "bytes": 10860,
+      "characters": 10858,
+      "comparison_ids": [
+        "C10",
+        "C11",
+        "D9"
+      ],
+      "reading": "Complete current reread; source-preservation appendix and whole-file aliases checked against separately read originals; full-reread/semantic-ledger.json records findings.",
+      "previous_sha256": "6d4a0fa219e6c733d35bf623228a02cb7dd00804ed88fc37ebdd4b32108dcd39",
+      "current_status_source": "guideline-comparison-2026-10-15.md; chronological acceptance in foreground-routing-and-retries-2026-10-15.md"
+    },
+    {
+      "path": "RESEARCH_2026-08-30.md",
+      "sha256": "79993deec5151c4c9c9dbdced3c816aac889255eaa9b8689c4e257b9d5d64fd0",
+      "bytes": 264,
+      "characters": 264,
+      "comparison_ids": [
+        "C10",
+        "C11",
+        "D9"
+      ],
+      "reading": "Complete current reread; source-preservation appendix and whole-file aliases checked against separately read originals; full-reread/semantic-ledger.json records findings.",
+      "previous_sha256": "79993deec5151c4c9c9dbdced3c816aac889255eaa9b8689c4e257b9d5d64fd0",
+      "current_status_source": "guideline-comparison-2026-10-15.md; chronological acceptance in foreground-routing-and-retries-2026-10-15.md"
+    },
+    {
+      "path": "RESEARCH_AUDIT.md",
+      "sha256": "1f67e29ff04be4cb48606841f03e2174b65a5dc976493cf7a0ec96d1e6a865d7",
+      "bytes": 43372,
+      "characters": 43370,
+      "comparison_ids": [
+        "C10",
+        "C11",
+        "D9"
+      ],
+      "reading": "Complete current reread; source-preservation appendix and whole-file aliases checked against separately read originals; full-reread/semantic-ledger.json records findings.",
+      "previous_sha256": "04cf41d2bdd0b85750ba9c773c190a651c965313babcdfb8b428a3b3c09cd2e0",
+      "current_status_source": "guideline-comparison-2026-10-15.md; chronological acceptance in foreground-routing-and-retries-2026-10-15.md"
+    },
+    {
+      "path": "agents.md",
+      "sha256": "5bcf8e159df45b00af242d39152be9ac7bb0044d6810654972a935e73127ad29",
+      "bytes": 37012,
+      "characters": 37010,
+      "comparison_ids": [
+        "A1",
+        "A2",
+        "A3",
+        "A4",
+        "A5",
+        "A6",
+        "A7",
+        "A8",
+        "A9",
+        "A10",
+        "A11",
+        "A12",
+        "A13",
+        "B1",
+        "B2",
+        "B3",
+        "B4",
+        "B5",
+        "B6",
+        "B7",
+        "B8",
+        "B9",
+        "B10",
+        "B11",
+        "C1",
+        "C5",
+        "D1"
+      ],
+      "reading": "Complete current reread; source-preservation appendix and whole-file aliases checked against separately read originals; full-reread/semantic-ledger.json records findings.",
+      "previous_sha256": "3f1ffd590b8fb29ef89b60537d3ff1ae8be591b77dc2f2c9cf6e4157a2eb38a4",
+      "current_status_source": "guideline-comparison-2026-10-15.md; chronological acceptance in foreground-routing-and-retries-2026-10-15.md"
+    },
+    {
+      "path": "agents/architecture.md",
+      "sha256": "0a6cb0c8b59568863588939860ddbf18c0cf1319242f1a8bce9cee845c6ba79a",
+      "bytes": 18715,
+      "characters": 18713,
+      "comparison_ids": [
+        "A1",
+        "A2",
+        "A3",
+        "A5",
+        "A7",
+        "A8",
+        "A9",
+        "A10",
+        "A11",
+        "A12",
+        "A13",
+        "B1",
+        "B3",
+        "B5",
+        "B7",
+        "B8",
+        "C2",
+        "C5"
+      ],
+      "reading": "Complete current reread; source-preservation appendix and whole-file aliases checked against separately read originals; full-reread/semantic-ledger.json records findings.",
+      "previous_sha256": "0a6cb0c8b59568863588939860ddbf18c0cf1319242f1a8bce9cee845c6ba79a",
+      "current_status_source": "guideline-comparison-2026-10-15.md; chronological acceptance in foreground-routing-and-retries-2026-10-15.md"
+    },
+    {
+      "path": "agents/fast_user_facing_dispatch_and_preemption.md",
+      "sha256": "5a313f18be8e860bd7fa9300c184c1b96d48bbe202020ecadad4bd6e63e31453",
+      "bytes": 19982,
+      "characters": 19924,
+      "comparison_ids": [
+        "A1",
+        "A2",
+        "A3",
+        "A4",
+        "A5",
+        "A6",
+        "A7",
+        "A8",
+        "C1",
+        "C4",
+        "C5",
+        "D4",
+        "D5"
+      ],
+      "reading": "Complete current reread; source-preservation appendix and whole-file aliases checked against separately read originals; full-reread/semantic-ledger.json records findings.",
+      "previous_sha256": "1906c329224e3725dffecffc27e4c24a2ca2651c66989f0d09fe2ffcb625f3b2",
+      "current_status_source": "guideline-comparison-2026-10-15.md; chronological acceptance in foreground-routing-and-retries-2026-10-15.md"
+    },
+    {
+      "path": "agents/large_sources.md",
+      "sha256": "a40536c8db64c81311d202609601042785d7f5295855890cbfbef5fd261218f4",
+      "bytes": 3216,
+      "characters": 3216,
+      "comparison_ids": [
+        "B1",
+        "B2",
+        "B3",
+        "B4",
+        "B9"
+      ],
+      "reading": "Complete current reread; source-preservation appendix and whole-file aliases checked against separately read originals; full-reread/semantic-ledger.json records findings.",
+      "previous_sha256": "a40536c8db64c81311d202609601042785d7f5295855890cbfbef5fd261218f4",
+      "current_status_source": "guideline-comparison-2026-10-15.md; chronological acceptance in foreground-routing-and-retries-2026-10-15.md"
+    },
+    {
+      "path": "agents/reusable_workspace_and_tool_forge.md",
+      "sha256": "18072a8c0f1a8322800bc2a3a87b059deeab24baf16731dd06137bb7292efb3e",
+      "bytes": 21654,
+      "characters": 21618,
+      "comparison_ids": [
+        "B4",
+        "B5",
+        "B7",
+        "B8",
+        "C1",
+        "C2",
+        "C5",
+        "C7",
+        "C8"
+      ],
+      "reading": "Complete current reread; source-preservation appendix and whole-file aliases checked against separately read originals; full-reread/semantic-ledger.json records findings.",
+      "previous_sha256": "18072a8c0f1a8322800bc2a3a87b059deeab24baf16731dd06137bb7292efb3e",
+      "current_status_source": "guideline-comparison-2026-10-15.md; chronological acceptance in foreground-routing-and-retries-2026-10-15.md"
+    },
+    {
+      "path": "agents/user_goals_and_answer_first_communication.md",
+      "sha256": "4f9b9f487ead659e9c0fcd7099e6c6d2cb5eda86ae4a88c4ac14f7d9c2d34e84",
+      "bytes": 15174,
+      "characters": 15170,
+      "comparison_ids": [
+        "A1",
+        "A3",
+        "A4",
+        "A5",
+        "B5",
+        "B6",
+        "C1",
+        "C7",
+        "D1",
+        "D4",
+        "G1"
+      ],
+      "reading": "Complete current reread; source-preservation appendix and whole-file aliases checked against separately read originals; full-reread/semantic-ledger.json records findings.",
+      "previous_sha256": null,
+      "current_status_source": "guideline-comparison-2026-10-15.md; chronological acceptance in foreground-routing-and-retries-2026-10-15.md"
+    },
+    {
+      "path": "agents/voice_turn_taking_and_priority.md",
+      "sha256": "fd975c154703dbb64aa758711194946ef38859416d8b53ac0ec8014d9a32c2ab",
+      "bytes": 5063,
+      "characters": 5063,
+      "comparison_ids": [
+        "A1",
+        "A7",
+        "A8",
+        "C6",
+        "D4",
+        "D5"
+      ],
+      "reading": "Complete current reread; source-preservation appendix and whole-file aliases checked against separately read originals; full-reread/semantic-ledger.json records findings.",
+      "previous_sha256": "fd975c154703dbb64aa758711194946ef38859416d8b53ac0ec8014d9a32c2ab",
+      "current_status_source": "guideline-comparison-2026-10-15.md; chronological acceptance in foreground-routing-and-retries-2026-10-15.md"
+    },
+    {
+      "path": "appendix/recording-coverage.md",
+      "sha256": "bbbb06193cfdb7749fbfe7c38e79ec5a6eb26450f964a329ee37f180e5ef2133",
+      "bytes": 21900,
+      "characters": 21900,
+      "comparison_ids": [
+        "C10",
+        "C11",
+        "D9"
+      ],
+      "reading": "Complete current reread; source-preservation appendix and whole-file aliases checked against separately read originals; full-reread/semantic-ledger.json records findings.",
+      "previous_sha256": "c44d349f39e79b28e3f6cdbb2cecaa4affbd031f5664a3e070e476b5573dd94f",
+      "current_status_source": "guideline-comparison-2026-10-15.md; chronological acceptance in foreground-routing-and-retries-2026-10-15.md"
+    },
+    {
+      "path": "appendix/research-and-alternatives.md",
+      "sha256": "3b0acf0bbf59a53829b87f31bd226ef15272619221c7a9e18903034bc6e048f6",
+      "bytes": 48370,
+      "characters": 48350,
+      "comparison_ids": [
+        "C10",
+        "C11",
+        "D9"
+      ],
+      "reading": "Complete current reread; source-preservation appendix and whole-file aliases checked against separately read originals; full-reread/semantic-ledger.json records findings.",
+      "previous_sha256": "81b96485809a317df547ea841191057d492ad7747a4e1ad8ec7b0a1cb3db7207",
+      "current_status_source": "guideline-comparison-2026-10-15.md; chronological acceptance in foreground-routing-and-retries-2026-10-15.md"
+    },
+    {
+      "path": "appendix/source-preservation.md",
+      "sha256": "7355534852f1a99b242eaaa2889d2a626c449dafb96c04a31fbb48fded2005d3",
+      "bytes": 2272621,
+      "characters": 2272619,
+      "comparison_ids": [
+        "C10",
+        "C11",
+        "D9"
+      ],
+      "reading": "Complete current reread; source-preservation appendix and whole-file aliases checked against separately read originals; full-reread/semantic-ledger.json records findings.",
+      "previous_sha256": "77bd5f8631ef6c646b3fb61833a4794d129e55d845d364b1e03a3edacd13aca9",
+      "current_status_source": "guideline-comparison-2026-10-15.md; chronological acceptance in foreground-routing-and-retries-2026-10-15.md"
+    },
+    {
+      "path": "configuration.md",
+      "sha256": "4a36d97919e49d65b6c641b9f0d9a4b4f3cb1f8abcbc425aa01a1a965e0fd014",
+      "bytes": 8164,
+      "characters": 8152,
+      "comparison_ids": [
+        "A8",
+        "C1",
+        "C2",
+        "C7"
+      ],
+      "reading": "Complete current reread; source-preservation appendix and whole-file aliases checked against separately read originals; full-reread/semantic-ledger.json records findings.",
+      "previous_sha256": "4a36d97919e49d65b6c641b9f0d9a4b4f3cb1f8abcbc425aa01a1a965e0fd014",
+      "current_status_source": "guideline-comparison-2026-10-15.md; chronological acceptance in foreground-routing-and-retries-2026-10-15.md"
+    },
+    {
+      "path": "constraint_decoding.txt",
+      "sha256": "b9960cbdd86b51fe14a0d44e30847fac0de9b5ab7e2da3185f0f2f96bb36fbfa",
+      "bytes": 1782,
+      "characters": 1782,
+      "comparison_ids": [
+        "A2",
+        "B1",
+        "B10",
+        "C8"
+      ],
+      "reading": "Complete current reread; source-preservation appendix and whole-file aliases checked against separately read originals; full-reread/semantic-ledger.json records findings.",
+      "previous_sha256": "b9960cbdd86b51fe14a0d44e30847fac0de9b5ab7e2da3185f0f2f96bb36fbfa",
+      "current_status_source": "guideline-comparison-2026-10-15.md; chronological acceptance in foreground-routing-and-retries-2026-10-15.md"
+    },
+    {
+      "path": "doc/audio_style.md",
+      "sha256": "f4bab777990d08dbf2f8ca5c63dfcc25f6ea5b25822db8363f6c9816a03a252a",
+      "bytes": 5312,
+      "characters": 5310,
+      "comparison_ids": [
+        "D1"
+      ],
+      "reading": "Complete current reread; source-preservation appendix and whole-file aliases checked against separately read originals; full-reread/semantic-ledger.json records findings.",
+      "previous_sha256": "f4bab777990d08dbf2f8ca5c63dfcc25f6ea5b25822db8363f6c9816a03a252a",
+      "current_status_source": "guideline-comparison-2026-10-15.md; chronological acceptance in foreground-routing-and-retries-2026-10-15.md"
+    },
+    {
+      "path": "games/core_and_modalities.md",
+      "sha256": "a2b1bdb1d1e633bc0eb20aba6613b4da1238ac0493ca8d5038b45e41d6d37755",
+      "bytes": 7128,
+      "characters": 7124,
+      "comparison_ids": [
+        "C8",
+        "D6"
+      ],
+      "reading": "Complete current reread; source-preservation appendix and whole-file aliases checked against separately read originals; full-reread/semantic-ledger.json records findings.",
+      "previous_sha256": "a2b1bdb1d1e633bc0eb20aba6613b4da1238ac0493ca8d5038b45e41d6d37755",
+      "current_status_source": "guideline-comparison-2026-10-15.md; chronological acceptance in foreground-routing-and-retries-2026-10-15.md"
+    },
+    {
+      "path": "games/early_game_engagement_and_onboarding.md",
+      "sha256": "01b260494ae0b9911fdbf4f2b7de6804b5ca6e47fb05887985e00ed6109b334f",
+      "bytes": 6759,
+      "characters": 6759,
+      "comparison_ids": [
+        "C8",
+        "D6"
+      ],
+      "reading": "Complete current reread; source-preservation appendix and whole-file aliases checked against separately read originals; full-reread/semantic-ledger.json records findings.",
+      "previous_sha256": "bb00e6da8db791568ef6daca2ea13a41ebb9e3326085905e101fc7ad8385a659",
+      "current_status_source": "guideline-comparison-2026-10-15.md; chronological acceptance in foreground-routing-and-retries-2026-10-15.md"
+    },
+    {
+      "path": "games/hidden_systems_and_player_research.md",
+      "sha256": "53bc90372e83f9fd358f106a5286b006250a096fb5cfe9fe8eac73fb2fa5146d",
+      "bytes": 5211,
+      "characters": 5207,
+      "comparison_ids": [
+        "C8",
+        "D6"
+      ],
+      "reading": "Complete current reread; source-preservation appendix and whole-file aliases checked against separately read originals; full-reread/semantic-ledger.json records findings.",
+      "previous_sha256": "be1a90e4b304302efcac1874b2a17af04e0e2f2b96de6869dc4fe6a5b55d33db",
+      "current_status_source": "guideline-comparison-2026-10-15.md; chronological acceptance in foreground-routing-and-retries-2026-10-15.md"
+    },
+    {
+      "path": "games/learned_habits_and_automation.md",
+      "sha256": "e7c5e2cd6b42d566e2e00b32c30353f057239b36e7a0ec8098bc6481caa0c549",
+      "bytes": 10093,
+      "characters": 10093,
+      "comparison_ids": [
+        "C8",
+        "C10",
+        "D6"
+      ],
+      "reading": "Complete current reread; source-preservation appendix and whole-file aliases checked against separately read originals; full-reread/semantic-ledger.json records findings.",
+      "previous_sha256": null,
+      "current_status_source": "guideline-comparison-2026-10-15.md; chronological acceptance in foreground-routing-and-retries-2026-10-15.md"
+    },
+    {
+      "path": "games/physical_character_model.md",
+      "sha256": "764fa9d8c7a49ac3857bf99eaf6ffb3299c0f17f2b00a96dfdc2481d1dc65b94",
+      "bytes": 10105,
+      "characters": 10101,
+      "comparison_ids": [
+        "C8",
+        "D6"
+      ],
+      "reading": "Complete current reread; source-preservation appendix and whole-file aliases checked against separately read originals; full-reread/semantic-ledger.json records findings.",
+      "previous_sha256": "6621fb4f5fc19167fdd5181054fdeaac31fb7eba4e81d624adc681311bc8fd39",
+      "current_status_source": "guideline-comparison-2026-10-15.md; chronological acceptance in foreground-routing-and-retries-2026-10-15.md"
+    },
+    {
+      "path": "games/playability_realism_and_saving.md",
+      "sha256": "aa4971fb095968cebb6beb52f91bf04f5749e77f5d0abaf740cb46dfeacc944a",
+      "bytes": 5978,
+      "characters": 5978,
+      "comparison_ids": [
+        "C8",
+        "D6"
+      ],
+      "reading": "Complete current reread; source-preservation appendix and whole-file aliases checked against separately read originals; full-reread/semantic-ledger.json records findings.",
+      "previous_sha256": "aa4971fb095968cebb6beb52f91bf04f5749e77f5d0abaf740cb46dfeacc944a",
+      "current_status_source": "guideline-comparison-2026-10-15.md; chronological acceptance in foreground-routing-and-retries-2026-10-15.md"
+    },
+    {
+      "path": "games/semantic_physics_text_loop.md",
+      "sha256": "5872841698b0d1a0fc8a8604f74f2cb5fc0a306e0fd21fd83edc9ddd5ce4062d",
+      "bytes": 9088,
+      "characters": 9046,
+      "comparison_ids": [
+        "C8",
+        "D6"
+      ],
+      "reading": "Complete current reread; source-preservation appendix and whole-file aliases checked against separately read originals; full-reread/semantic-ledger.json records findings.",
+      "previous_sha256": "5872841698b0d1a0fc8a8604f74f2cb5fc0a306e0fd21fd83edc9ddd5ce4062d",
+      "current_status_source": "guideline-comparison-2026-10-15.md; chronological acceptance in foreground-routing-and-retries-2026-10-15.md"
+    },
+    {
+      "path": "games/standard_game_foundation.md",
+      "sha256": "020b8472fad0f75219e6970bc694622a1109118ea583e0e1640d4a54a761d66d",
+      "bytes": 8486,
+      "characters": 8482,
+      "comparison_ids": [
+        "C8",
+        "D6"
+      ],
+      "reading": "Complete current reread; source-preservation appendix and whole-file aliases checked against separately read originals; full-reread/semantic-ledger.json records findings.",
+      "previous_sha256": "020b8472fad0f75219e6970bc694622a1109118ea583e0e1640d4a54a761d66d",
+      "current_status_source": "guideline-comparison-2026-10-15.md; chronological acceptance in foreground-routing-and-retries-2026-10-15.md"
+    },
+    {
+      "path": "games/world_and_generation.md",
+      "sha256": "22440062f4f9f1c9eaf63b6ae974c0f163a8388d4e3c2533d5e35970115dd922",
+      "bytes": 12614,
+      "characters": 12604,
+      "comparison_ids": [
+        "C8",
+        "D6"
+      ],
+      "reading": "Complete current reread; source-preservation appendix and whole-file aliases checked against separately read originals; full-reread/semantic-ledger.json records findings.",
+      "previous_sha256": "afbd5e05156c183715ad8144b370c0c5f1444d11e10d57cf6c8d0a1e3a7d7ba1",
+      "current_status_source": "guideline-comparison-2026-10-15.md; chronological acceptance in foreground-routing-and-retries-2026-10-15.md"
+    },
+    {
+      "path": "gui/INDEX_FOR_BOTS.md",
+      "sha256": "3b707836e179422019fd631b5443186057924ce141ab34e1099f97bdce85de95",
+      "bytes": 894,
+      "characters": 894,
+      "comparison_ids": [
+        "D2",
+        "D3",
+        "D9"
+      ],
+      "reading": "Complete current reread; source-preservation appendix and whole-file aliases checked against separately read originals; full-reread/semantic-ledger.json records findings.",
+      "previous_sha256": "3b707836e179422019fd631b5443186057924ce141ab34e1099f97bdce85de95",
+      "current_status_source": "guideline-comparison-2026-10-15.md; chronological acceptance in foreground-routing-and-retries-2026-10-15.md"
+    },
+    {
+      "path": "gui/README.md",
+      "sha256": "b3b13e8d6e4a83a443d54c3de358d884f8a85569c83ec272162ffab9b762c3eb",
+      "bytes": 8050,
+      "characters": 8048,
+      "comparison_ids": [
+        "D2",
+        "D3",
+        "D9"
+      ],
+      "reading": "Complete current reread; source-preservation appendix and whole-file aliases checked against separately read originals; full-reread/semantic-ledger.json records findings.",
+      "previous_sha256": "b3b13e8d6e4a83a443d54c3de358d884f8a85569c83ec272162ffab9b762c3eb",
+      "current_status_source": "guideline-comparison-2026-10-15.md; chronological acceptance in foreground-routing-and-retries-2026-10-15.md"
+    },
+    {
+      "path": "gui/REFERENCES.md",
+      "sha256": "f763a8430296d9ea1f8719e9a2abee828b423992cc9bdfb7729379d65ea02bae",
+      "bytes": 5155,
+      "characters": 5155,
+      "comparison_ids": [
+        "D2",
+        "D3",
+        "D9"
+      ],
+      "reading": "Complete current reread; source-preservation appendix and whole-file aliases checked against separately read originals; full-reread/semantic-ledger.json records findings.",
+      "previous_sha256": "f763a8430296d9ea1f8719e9a2abee828b423992cc9bdfb7729379d65ea02bae",
+      "current_status_source": "guideline-comparison-2026-10-15.md; chronological acceptance in foreground-routing-and-retries-2026-10-15.md"
+    },
+    {
+      "path": "gui/core/01_question_first_design.md",
+      "sha256": "8967bdd3af2d6db413c7d6dbbff7018a39a44687bcfafe50cf05dce393c38862",
+      "bytes": 871,
+      "characters": 871,
+      "comparison_ids": [
+        "A4",
+        "A11",
+        "D2",
+        "D3"
+      ],
+      "reading": "Complete current reread; source-preservation appendix and whole-file aliases checked against separately read originals; full-reread/semantic-ledger.json records findings.",
+      "previous_sha256": "8967bdd3af2d6db413c7d6dbbff7018a39a44687bcfafe50cf05dce393c38862",
+      "current_status_source": "guideline-comparison-2026-10-15.md; chronological acceptance in foreground-routing-and-retries-2026-10-15.md"
+    },
+    {
+      "path": "gui/core/02_screen_question_contract.md",
+      "sha256": "b711b45929a8a58a78be4105aac81f4f4546499292db40053258563d25331e53",
+      "bytes": 2860,
+      "characters": 2844,
+      "comparison_ids": [
+        "A4",
+        "A11",
+        "D2",
+        "D3"
+      ],
+      "reading": "Complete current reread; source-preservation appendix and whole-file aliases checked against separately read originals; full-reread/semantic-ledger.json records findings.",
+      "previous_sha256": "b711b45929a8a58a78be4105aac81f4f4546499292db40053258563d25331e53",
+      "current_status_source": "guideline-comparison-2026-10-15.md; chronological acceptance in foreground-routing-and-retries-2026-10-15.md"
+    },
+    {
+      "path": "gui/core/03_module_purpose_contract.md",
+      "sha256": "fcc8e24897af546df5bca83ff33852169ae6635388455d42b2bf21f41aef750e",
+      "bytes": 2408,
+      "characters": 2400,
+      "comparison_ids": [
+        "A4",
+        "A11",
+        "D2",
+        "D3"
+      ],
+      "reading": "Complete current reread; source-preservation appendix and whole-file aliases checked against separately read originals; full-reread/semantic-ledger.json records findings.",
+      "previous_sha256": "fcc8e24897af546df5bca83ff33852169ae6635388455d42b2bf21f41aef750e",
+      "current_status_source": "guideline-comparison-2026-10-15.md; chronological acceptance in foreground-routing-and-retries-2026-10-15.md"
+    },
+    {
+      "path": "gui/core/04_visibility_priority_model.md",
+      "sha256": "001d3e6a8622a8a410eb7f7d004f123b4dabfcf04638aa5be855ddf8002e4121",
+      "bytes": 3670,
+      "characters": 3670,
+      "comparison_ids": [
+        "A4",
+        "A11",
+        "D2",
+        "D3"
+      ],
+      "reading": "Complete current reread; source-preservation appendix and whole-file aliases checked against separately read originals; full-reread/semantic-ledger.json records findings.",
+      "previous_sha256": "001d3e6a8622a8a410eb7f7d004f123b4dabfcf04638aa5be855ddf8002e4121",
+      "current_status_source": "guideline-comparison-2026-10-15.md; chronological acceptance in foreground-routing-and-retries-2026-10-15.md"
+    },
+    {
+      "path": "gui/core/05_rejection_gates.md",
+      "sha256": "fcb84567b766749831fa623c8da7596b985e40e81c0ae28ba3fed7bd8c59ccd9",
+      "bytes": 1963,
+      "characters": 1963,
+      "comparison_ids": [
+        "A4",
+        "A11",
+        "D2",
+        "D3"
+      ],
+      "reading": "Complete current reread; source-preservation appendix and whole-file aliases checked against separately read originals; full-reread/semantic-ledger.json records findings.",
+      "previous_sha256": "fcb84567b766749831fa623c8da7596b985e40e81c0ae28ba3fed7bd8c59ccd9",
+      "current_status_source": "guideline-comparison-2026-10-15.md; chronological acceptance in foreground-routing-and-retries-2026-10-15.md"
+    },
+    {
+      "path": "gui/core/06_action_acknowledgement_and_progress.md",
+      "sha256": "4f2f67f6b3386400a7bd4e54dfa93a6e83880551a135cda30d13b6033a4c2ced",
+      "bytes": 8948,
+      "characters": 8934,
+      "comparison_ids": [
+        "A4",
+        "A7",
+        "A11",
+        "D2",
+        "D5"
+      ],
+      "reading": "Complete current reread; source-preservation appendix and whole-file aliases checked against separately read originals; full-reread/semantic-ledger.json records findings.",
+      "previous_sha256": "4f2f67f6b3386400a7bd4e54dfa93a6e83880551a135cda30d13b6033a4c2ced",
+      "current_status_source": "guideline-comparison-2026-10-15.md; chronological acceptance in foreground-routing-and-retries-2026-10-15.md"
+    },
+    {
+      "path": "gui/core/color.md",
+      "sha256": "0db6cc3c637b9a730faf1750e7f7571988fd4f78b8d671a56c205c732b973985",
+      "bytes": 2074,
+      "characters": 2072,
+      "comparison_ids": [
+        "A4",
+        "A11",
+        "D2",
+        "D3"
+      ],
+      "reading": "Complete current reread; source-preservation appendix and whole-file aliases checked against separately read originals; full-reread/semantic-ledger.json records findings.",
+      "previous_sha256": "0db6cc3c637b9a730faf1750e7f7571988fd4f78b8d671a56c205c732b973985",
+      "current_status_source": "guideline-comparison-2026-10-15.md; chronological acceptance in foreground-routing-and-retries-2026-10-15.md"
+    },
+    {
+      "path": "gui/core/status_visibility.md",
+      "sha256": "8ef28fa0a50ba95bcb8622f253032835247344455d337fde8bd23ab2196bebb2",
+      "bytes": 1089,
+      "characters": 1089,
+      "comparison_ids": [
+        "A5",
+        "A6",
+        "A11",
+        "A13",
+        "D2"
+      ],
+      "reading": "Complete current reread; source-preservation appendix and whole-file aliases checked against separately read originals; full-reread/semantic-ledger.json records findings.",
+      "previous_sha256": "8ef28fa0a50ba95bcb8622f253032835247344455d337fde8bd23ab2196bebb2",
+      "current_status_source": "guideline-comparison-2026-10-15.md; chronological acceptance in foreground-routing-and-retries-2026-10-15.md"
+    },
+    {
+      "path": "gui/domains/backtest_results.md",
+      "sha256": "fb1269330dc8232f11e8d036a90d5b7655c874728ee31a9c9178164f81ad3579",
+      "bytes": 2934,
+      "characters": 2922,
+      "comparison_ids": [
+        "D2",
+        "D3",
+        "D7"
+      ],
+      "reading": "Complete current reread; source-preservation appendix and whole-file aliases checked against separately read originals; full-reread/semantic-ledger.json records findings.",
+      "previous_sha256": "fb1269330dc8232f11e8d036a90d5b7655c874728ee31a9c9178164f81ad3579",
+      "current_status_source": "guideline-comparison-2026-10-15.md; chronological acceptance in foreground-routing-and-retries-2026-10-15.md"
+    },
+    {
+      "path": "gui/domains/backtest_running.md",
+      "sha256": "88b803d99732e0d3c2067f02514aef915f3a8733f4aca293359522564a3d34e3",
+      "bytes": 2765,
+      "characters": 2733,
+      "comparison_ids": [
+        "D2",
+        "D3",
+        "D7"
+      ],
+      "reading": "Complete current reread; source-preservation appendix and whole-file aliases checked against separately read originals; full-reread/semantic-ledger.json records findings.",
+      "previous_sha256": "88b803d99732e0d3c2067f02514aef915f3a8733f4aca293359522564a3d34e3",
+      "current_status_source": "guideline-comparison-2026-10-15.md; chronological acceptance in foreground-routing-and-retries-2026-10-15.md"
+    },
+    {
+      "path": "gui/domains/etf_combo_search.md",
+      "sha256": "e749aabdbf505ddd40d9ea0c9665d6670eefcd932f2a39f08e35a60bb60eb002",
+      "bytes": 1992,
+      "characters": 1972,
+      "comparison_ids": [
+        "D2",
+        "D3",
+        "D7"
+      ],
+      "reading": "Complete current reread; source-preservation appendix and whole-file aliases checked against separately read originals; full-reread/semantic-ledger.json records findings.",
+      "previous_sha256": "e749aabdbf505ddd40d9ea0c9665d6670eefcd932f2a39f08e35a60bb60eb002",
+      "current_status_source": "guideline-comparison-2026-10-15.md; chronological acceptance in foreground-routing-and-retries-2026-10-15.md"
+    },
+    {
+      "path": "gui/domains/live_trading.md",
+      "sha256": "9f6a3a23dfd60ea19e994d585607d989f7755bc06a7b0d826cab77489a141aae",
+      "bytes": 3873,
+      "characters": 3853,
+      "comparison_ids": [
+        "D2",
+        "D3",
+        "D7"
+      ],
+      "reading": "Complete current reread; source-preservation appendix and whole-file aliases checked against separately read originals; full-reread/semantic-ledger.json records findings.",
+      "previous_sha256": "9f6a3a23dfd60ea19e994d585607d989f7755bc06a7b0d826cab77489a141aae",
+      "current_status_source": "guideline-comparison-2026-10-15.md; chronological acceptance in foreground-routing-and-retries-2026-10-15.md"
+    },
+    {
+      "path": "gui/domains/optimization.md",
+      "sha256": "de2ad739d993fe8ee57c41b7d916106f85958218099d6acc047a452e6c44b3eb",
+      "bytes": 1759,
+      "characters": 1755,
+      "comparison_ids": [
+        "D2",
+        "D3",
+        "D7"
+      ],
+      "reading": "Complete current reread; source-preservation appendix and whole-file aliases checked against separately read originals; full-reread/semantic-ledger.json records findings.",
+      "previous_sha256": "de2ad739d993fe8ee57c41b7d916106f85958218099d6acc047a452e6c44b3eb",
+      "current_status_source": "guideline-comparison-2026-10-15.md; chronological acceptance in foreground-routing-and-retries-2026-10-15.md"
+    },
+    {
+      "path": "gui/domains/options_search.md",
+      "sha256": "d6e1d44a53c4342014c080d9008f34d649e212f18cd3489908aee4d378fbec8e",
+      "bytes": 2257,
+      "characters": 2245,
+      "comparison_ids": [
+        "D2",
+        "D3",
+        "D7"
+      ],
+      "reading": "Complete current reread; source-preservation appendix and whole-file aliases checked against separately read originals; full-reread/semantic-ledger.json records findings.",
+      "previous_sha256": "d6e1d44a53c4342014c080d9008f34d649e212f18cd3489908aee4d378fbec8e",
+      "current_status_source": "guideline-comparison-2026-10-15.md; chronological acceptance in foreground-routing-and-retries-2026-10-15.md"
+    },
+    {
+      "path": "gui/domains/portfolio_overview.md",
+      "sha256": "335b53bb1d8a8f58e1932d65f915659d04ff19eb61c10d583597c9b62c74755c",
+      "bytes": 1816,
+      "characters": 1816,
+      "comparison_ids": [
+        "D2",
+        "D3",
+        "D7"
+      ],
+      "reading": "Complete current reread; source-preservation appendix and whole-file aliases checked against separately read originals; full-reread/semantic-ledger.json records findings.",
+      "previous_sha256": "335b53bb1d8a8f58e1932d65f915659d04ff19eb61c10d583597c9b62c74755c",
+      "current_status_source": "guideline-comparison-2026-10-15.md; chronological acceptance in foreground-routing-and-retries-2026-10-15.md"
+    },
+    {
+      "path": "gui/platforms/android.md",
+      "sha256": "655cef309fbff30deb781190eb70c655e20eb4d1407569df273bfd29361d9150",
+      "bytes": 8830,
+      "characters": 8830,
+      "comparison_ids": [
+        "C6",
+        "D2",
+        "D3",
+        "D4"
+      ],
+      "reading": "Complete current reread; source-preservation appendix and whole-file aliases checked against separately read originals; full-reread/semantic-ledger.json records findings.",
+      "previous_sha256": "655cef309fbff30deb781190eb70c655e20eb4d1407569df273bfd29361d9150",
+      "current_status_source": "guideline-comparison-2026-10-15.md; chronological acceptance in foreground-routing-and-retries-2026-10-15.md"
+    },
+    {
+      "path": "gui/platforms/desktop_general.md",
+      "sha256": "58baef8657db41b629b086832d9ae81b2239cb66316f9fc5f3477286cca6ec84",
+      "bytes": 1629,
+      "characters": 1629,
+      "comparison_ids": [
+        "C6",
+        "D2",
+        "D3",
+        "D4"
+      ],
+      "reading": "Complete current reread; source-preservation appendix and whole-file aliases checked against separately read originals; full-reread/semantic-ledger.json records findings.",
+      "previous_sha256": "58baef8657db41b629b086832d9ae81b2239cb66316f9fc5f3477286cca6ec84",
+      "current_status_source": "guideline-comparison-2026-10-15.md; chronological acceptance in foreground-routing-and-retries-2026-10-15.md"
+    },
+    {
+      "path": "gui/platforms/qt_desktop.md",
+      "sha256": "787fd2d59c483d1c56ed799306bf61b2c954eac6fc2462ca446d93f1a2ee9a89",
+      "bytes": 2425,
+      "characters": 2425,
+      "comparison_ids": [
+        "C6",
+        "D2",
+        "D3",
+        "D4"
+      ],
+      "reading": "Complete current reread; source-preservation appendix and whole-file aliases checked against separately read originals; full-reread/semantic-ledger.json records findings.",
+      "previous_sha256": "787fd2d59c483d1c56ed799306bf61b2c954eac6fc2462ca446d93f1a2ee9a89",
+      "current_status_source": "guideline-comparison-2026-10-15.md; chronological acceptance in foreground-routing-and-retries-2026-10-15.md"
+    },
+    {
+      "path": "gui/platforms/tablet_large_screen.md",
+      "sha256": "d47a0b02882b76bc9a08e33934929887bb3e83c952e3630956b4f4e04478ef49",
+      "bytes": 1052,
+      "characters": 1052,
+      "comparison_ids": [
+        "C6",
+        "D2",
+        "D3",
+        "D4"
+      ],
+      "reading": "Complete current reread; source-preservation appendix and whole-file aliases checked against separately read originals; full-reread/semantic-ledger.json records findings.",
+      "previous_sha256": "d47a0b02882b76bc9a08e33934929887bb3e83c952e3630956b4f4e04478ef49",
+      "current_status_source": "guideline-comparison-2026-10-15.md; chronological acceptance in foreground-routing-and-retries-2026-10-15.md"
+    },
+    {
+      "path": "gui/platforms/web.md",
+      "sha256": "f6a386dd32b494cb3be8e7156e65e4c1e7506361a824923a243602e3e6481574",
+      "bytes": 1417,
+      "characters": 1417,
+      "comparison_ids": [
+        "C6",
+        "D2",
+        "D3",
+        "D4"
+      ],
+      "reading": "Complete current reread; source-preservation appendix and whole-file aliases checked against separately read originals; full-reread/semantic-ledger.json records findings.",
+      "previous_sha256": "f6a386dd32b494cb3be8e7156e65e4c1e7506361a824923a243602e3e6481574",
+      "current_status_source": "guideline-comparison-2026-10-15.md; chronological acceptance in foreground-routing-and-retries-2026-10-15.md"
+    },
+    {
+      "path": "gui/recipes/bad_good_examples.md",
+      "sha256": "ac72b3a2d0a0a45ab13880dcdf665ebd9194badd3c3f678d001780ed153dec41",
+      "bytes": 2125,
+      "characters": 2055,
+      "comparison_ids": [
+        "C8",
+        "D1",
+        "D2",
+        "D3"
+      ],
+      "reading": "Complete current reread; source-preservation appendix and whole-file aliases checked against separately read originals; full-reread/semantic-ledger.json records findings.",
+      "previous_sha256": "ac72b3a2d0a0a45ab13880dcdf665ebd9194badd3c3f678d001780ed153dec41",
+      "current_status_source": "guideline-comparison-2026-10-15.md; chronological acceptance in foreground-routing-and-retries-2026-10-15.md"
+    },
+    {
+      "path": "gui/recipes/charts.md",
+      "sha256": "7e42f212b28452eab0aa6df76208a518df1d452f0673d1c9dfd6a3545c85b696",
+      "bytes": 3545,
+      "characters": 3545,
+      "comparison_ids": [
+        "C8",
+        "D1",
+        "D2",
+        "D3"
+      ],
+      "reading": "Complete current reread; source-preservation appendix and whole-file aliases checked against separately read originals; full-reread/semantic-ledger.json records findings.",
+      "previous_sha256": "7e42f212b28452eab0aa6df76208a518df1d452f0673d1c9dfd6a3545c85b696",
+      "current_status_source": "guideline-comparison-2026-10-15.md; chronological acceptance in foreground-routing-and-retries-2026-10-15.md"
+    },
+    {
+      "path": "gui/recipes/loading_and_health.md",
+      "sha256": "4dbe03cf4a40b85f5c77f1584b4faa0ada187a8317991d56f6155b7187939a6f",
+      "bytes": 2409,
+      "characters": 2409,
+      "comparison_ids": [
+        "C8",
+        "D1",
+        "D2",
+        "D3"
+      ],
+      "reading": "Complete current reread; source-preservation appendix and whole-file aliases checked against separately read originals; full-reread/semantic-ledger.json records findings.",
+      "previous_sha256": "4dbe03cf4a40b85f5c77f1584b4faa0ada187a8317991d56f6155b7187939a6f",
+      "current_status_source": "guideline-comparison-2026-10-15.md; chronological acceptance in foreground-routing-and-retries-2026-10-15.md"
+    },
+    {
+      "path": "gui/recipes/metric_dictionary.md",
+      "sha256": "36b1711c3ade657ce9594a5ac21a4563c318dcdec95bbb4d07cbe9aedd1b3820",
+      "bytes": 1941,
+      "characters": 1933,
+      "comparison_ids": [
+        "C8",
+        "D1",
+        "D2",
+        "D3"
+      ],
+      "reading": "Complete current reread; source-preservation appendix and whole-file aliases checked against separately read originals; full-reread/semantic-ledger.json records findings.",
+      "previous_sha256": "36b1711c3ade657ce9594a5ac21a4563c318dcdec95bbb4d07cbe9aedd1b3820",
+      "current_status_source": "guideline-comparison-2026-10-15.md; chronological acceptance in foreground-routing-and-retries-2026-10-15.md"
+    },
+    {
+      "path": "gui/recipes/tables_text_numbers.md",
+      "sha256": "04442a461be8f2f95cff3cd72b94e8b6062aabed54eecf460e29ea46c9ae8b4f",
+      "bytes": 2879,
+      "characters": 2879,
+      "comparison_ids": [
+        "C8",
+        "D1",
+        "D2",
+        "D3"
+      ],
+      "reading": "Complete current reread; source-preservation appendix and whole-file aliases checked against separately read originals; full-reread/semantic-ledger.json records findings.",
+      "previous_sha256": "04442a461be8f2f95cff3cd72b94e8b6062aabed54eecf460e29ea46c9ae8b4f",
+      "current_status_source": "guideline-comparison-2026-10-15.md; chronological acceptance in foreground-routing-and-retries-2026-10-15.md"
+    },
+    {
+      "path": "gui/recipes/tests_and_verification.md",
+      "sha256": "e02682bb9af22a8706ba3a962b4a78e801a24cf4c7d9e37e898e9ff8d8f2b840",
+      "bytes": 3797,
+      "characters": 3797,
+      "comparison_ids": [
+        "C8",
+        "D1",
+        "D2",
+        "D3"
+      ],
+      "reading": "Complete current reread; source-preservation appendix and whole-file aliases checked against separately read originals; full-reread/semantic-ledger.json records findings.",
+      "previous_sha256": "e02682bb9af22a8706ba3a962b4a78e801a24cf4c7d9e37e898e9ff8d8f2b840",
+      "current_status_source": "guideline-comparison-2026-10-15.md; chronological acceptance in foreground-routing-and-retries-2026-10-15.md"
+    },
+    {
+      "path": "gui/templates/module_purpose_contract_template.md",
+      "sha256": "e0fcabda9c48164187b298a4c9a3310c864ae6953da64d210a2ea7c5d339053f",
+      "bytes": 716,
+      "characters": 716,
+      "comparison_ids": [
+        "C8",
+        "D2",
+        "D3",
+        "D9"
+      ],
+      "reading": "Complete current reread; source-preservation appendix and whole-file aliases checked against separately read originals; full-reread/semantic-ledger.json records findings.",
+      "previous_sha256": "e0fcabda9c48164187b298a4c9a3310c864ae6953da64d210a2ea7c5d339053f",
+      "current_status_source": "guideline-comparison-2026-10-15.md; chronological acceptance in foreground-routing-and-retries-2026-10-15.md"
+    },
+    {
+      "path": "gui/templates/screen_contract_template.md",
+      "sha256": "d391c385ea724d8754c0e0226d7201f864bc119e6f19c49cec59d9e11d58d47e",
+      "bytes": 1031,
+      "characters": 1031,
+      "comparison_ids": [
+        "C8",
+        "D2",
+        "D3",
+        "D9"
+      ],
+      "reading": "Complete current reread; source-preservation appendix and whole-file aliases checked against separately read originals; full-reread/semantic-ledger.json records findings.",
+      "previous_sha256": "d391c385ea724d8754c0e0226d7201f864bc119e6f19c49cec59d9e11d58d47e",
+      "current_status_source": "guideline-comparison-2026-10-15.md; chronological acceptance in foreground-routing-and-retries-2026-10-15.md"
+    },
+    {
+      "path": "gui/templates/task_prompt_template.md",
+      "sha256": "201abeaf909b473abcd25965e190b114f15a835f7ff103280e31ce9d62e14101",
+      "bytes": 1360,
+      "characters": 1360,
+      "comparison_ids": [
+        "C8",
+        "D2",
+        "D3",
+        "D9"
+      ],
+      "reading": "Complete current reread; source-preservation appendix and whole-file aliases checked against separately read originals; full-reread/semantic-ledger.json records findings.",
+      "previous_sha256": "201abeaf909b473abcd25965e190b114f15a835f7ff103280e31ce9d62e14101",
+      "current_status_source": "guideline-comparison-2026-10-15.md; chronological acceptance in foreground-routing-and-retries-2026-10-15.md"
+    },
+    {
+      "path": "gui/voice_interfaces.md",
+      "sha256": "d68018c253aea9908f03fa335d76593ad7cf095c637e5a1f645dbf584e550b0e",
+      "bytes": 10825,
+      "characters": 10821,
+      "comparison_ids": [
+        "A1",
+        "A3",
+        "A4",
+        "A5",
+        "A7",
+        "A8",
+        "A11",
+        "C6",
+        "D1",
+        "D2",
+        "D4",
+        "D5"
+      ],
+      "reading": "Complete current reread; source-preservation appendix and whole-file aliases checked against separately read originals; full-reread/semantic-ledger.json records findings.",
+      "previous_sha256": "7c487249754fa6da0a05711581075a920b148178e68ba50c0e2d305f17b882b7",
+      "current_status_source": "guideline-comparison-2026-10-15.md; chronological acceptance in foreground-routing-and-retries-2026-10-15.md"
+    },
+    {
+      "path": "kmd/knowledge_and_memory_design.md",
+      "sha256": "4d35dd19420e718f27993086a4aa5c5db345012ed542ff0047cfce51d8c809f5",
+      "bytes": 4775,
+      "characters": 4757,
+      "comparison_ids": [
+        "B3",
+        "B5",
+        "B6",
+        "D8"
+      ],
+      "reading": "Complete current reread; source-preservation appendix and whole-file aliases checked against separately read originals; full-reread/semantic-ledger.json records findings.",
+      "previous_sha256": "4d35dd19420e718f27993086a4aa5c5db345012ed542ff0047cfce51d8c809f5",
+      "current_status_source": "guideline-comparison-2026-10-15.md; chronological acceptance in foreground-routing-and-retries-2026-10-15.md"
+    },
+    {
+      "path": "knowledge_retrieval.md",
+      "sha256": "7fcee49c3d4ccddbc30e10ca919d142a90e4e2be3e4b554599d0a5257369c10c",
+      "bytes": 3714,
+      "characters": 3714,
+      "comparison_ids": [
+        "B1",
+        "B2",
+        "B3",
+        "B4",
+        "B5",
+        "B6",
+        "B11"
+      ],
+      "reading": "Complete current reread; source-preservation appendix and whole-file aliases checked against separately read originals; full-reread/semantic-ledger.json records findings.",
+      "previous_sha256": "7fcee49c3d4ccddbc30e10ca919d142a90e4e2be3e4b554599d0a5257369c10c",
+      "current_status_source": "guideline-comparison-2026-10-15.md; chronological acceptance in foreground-routing-and-retries-2026-10-15.md"
+    },
+    {
+      "path": "logging.md",
+      "sha256": "5ecf4f22acd9aaedbbaf5256dcfbc7e97f42869c5500db9d87845b29df9dcf3d",
+      "bytes": 4158,
+      "characters": 4158,
+      "comparison_ids": [
+        "A13",
+        "C2",
+        "C3",
+        "C7"
+      ],
+      "reading": "Complete current reread; source-preservation appendix and whole-file aliases checked against separately read originals; full-reread/semantic-ledger.json records findings.",
+      "previous_sha256": "5ecf4f22acd9aaedbbaf5256dcfbc7e97f42869c5500db9d87845b29df9dcf3d",
+      "current_status_source": "guideline-comparison-2026-10-15.md; chronological acceptance in foreground-routing-and-retries-2026-10-15.md"
+    },
+    {
+      "path": "network_transport_and_testing.md",
+      "sha256": "9a330ace1bb8b88764e581a6c3770e061d5a4f8602a1ed41fa421108f4596d85",
+      "bytes": 3302,
+      "characters": 3302,
+      "comparison_ids": [
+        "A7",
+        "C6",
+        "C8",
+        "D4",
+        "D5"
+      ],
+      "reading": "Complete current reread; source-preservation appendix and whole-file aliases checked against separately read originals; full-reread/semantic-ledger.json records findings.",
+      "previous_sha256": "9a330ace1bb8b88764e581a6c3770e061d5a4f8602a1ed41fa421108f4596d85",
+      "current_status_source": "guideline-comparison-2026-10-15.md; chronological acceptance in foreground-routing-and-retries-2026-10-15.md"
+    },
+    {
+      "path": "networking.md",
+      "sha256": "b12546efed9839711605d69b436177ca3ac9963a1a7218b0de0514150d5cfd9e",
+      "bytes": 5352,
+      "characters": 5352,
+      "comparison_ids": [
+        "A7",
+        "C6",
+        "C7"
+      ],
+      "reading": "Complete current reread; source-preservation appendix and whole-file aliases checked against separately read originals; full-reread/semantic-ledger.json records findings.",
+      "previous_sha256": "b12546efed9839711605d69b436177ca3ac9963a1a7218b0de0514150d5cfd9e",
+      "current_status_source": "guideline-comparison-2026-10-15.md; chronological acceptance in foreground-routing-and-retries-2026-10-15.md"
+    },
+    {
+      "path": "original-recordings/Default/Recording 2026-08-04 09-50-01.txt",
+      "sha256": "e2d2eb8c1a271b7456731f42e4ce2ab6e5fdb224c341b11a652768f2dead6fb0",
+      "bytes": 311,
+      "characters": 311,
+      "comparison_ids": [
+        "D9"
+      ],
+      "reading": "Complete current reread; source-preservation appendix and whole-file aliases checked against separately read originals; full-reread/semantic-ledger.json records findings.",
+      "previous_sha256": "e2d2eb8c1a271b7456731f42e4ce2ab6e5fdb224c341b11a652768f2dead6fb0",
+      "current_status_source": "guideline-comparison-2026-10-15.md; chronological acceptance in foreground-routing-and-retries-2026-10-15.md"
+    },
+    {
+      "path": "original-recordings/Default/Recording 2026-08-04 09-52-49.txt",
+      "sha256": "73e739b089beab52fb9fcd0bb83f1274aebd0a6226cb6e5a2f905f5bee6efc61",
+      "bytes": 250,
+      "characters": 250,
+      "comparison_ids": [
+        "D9"
+      ],
+      "reading": "Complete current reread; source-preservation appendix and whole-file aliases checked against separately read originals; full-reread/semantic-ledger.json records findings.",
+      "previous_sha256": "73e739b089beab52fb9fcd0bb83f1274aebd0a6226cb6e5a2f905f5bee6efc61",
+      "current_status_source": "guideline-comparison-2026-10-15.md; chronological acceptance in foreground-routing-and-retries-2026-10-15.md"
+    },
+    {
+      "path": "original-recordings/Default/Recording 2026-08-04 13-51-42.txt",
+      "sha256": "79f6d21ba9920e2b48c3b7c9f4f1b4537394c1f70e47fcee11c6038f0f8d0679",
+      "bytes": 86,
+      "characters": 86,
+      "comparison_ids": [
+        "D9"
+      ],
+      "reading": "Complete current reread; source-preservation appendix and whole-file aliases checked against separately read originals; full-reread/semantic-ledger.json records findings.",
+      "previous_sha256": "79f6d21ba9920e2b48c3b7c9f4f1b4537394c1f70e47fcee11c6038f0f8d0679",
+      "current_status_source": "guideline-comparison-2026-10-15.md; chronological acceptance in foreground-routing-and-retries-2026-10-15.md"
+    },
+    {
+      "path": "original-recordings/Default/Voicebutton E2E smoke test (10).txt",
+      "sha256": "e3750e5b30150ffe2638a9d1d27bd704b7b015a86cd92b66dac55f15fa17e87e",
+      "bytes": 76,
+      "characters": 76,
+      "comparison_ids": [
+        "D9"
+      ],
+      "reading": "Complete current reread; source-preservation appendix and whole-file aliases checked against separately read originals; full-reread/semantic-ledger.json records findings.",
+      "previous_sha256": "e3750e5b30150ffe2638a9d1d27bd704b7b015a86cd92b66dac55f15fa17e87e",
+      "current_status_source": "guideline-comparison-2026-10-15.md; chronological acceptance in foreground-routing-and-retries-2026-10-15.md"
+    },
+    {
+      "path": "original-recordings/Default/Voicebutton E2E smoke test (11).txt",
+      "sha256": "e3750e5b30150ffe2638a9d1d27bd704b7b015a86cd92b66dac55f15fa17e87e",
+      "bytes": 76,
+      "characters": 76,
+      "comparison_ids": [
+        "D9"
+      ],
+      "reading": "Exact duplicate alias, byte/hash checked against the separately read canonical source.",
+      "current_status_source": "guideline-comparison-2026-10-15.md; chronological acceptance in foreground-routing-and-retries-2026-10-15.md",
+      "identical_to": "original-recordings/Default/Voicebutton E2E smoke test (10).txt"
+    },
+    {
+      "path": "original-recordings/Default/Voicebutton E2E smoke test (12).txt",
+      "sha256": "e3750e5b30150ffe2638a9d1d27bd704b7b015a86cd92b66dac55f15fa17e87e",
+      "bytes": 76,
+      "characters": 76,
+      "comparison_ids": [
+        "D9"
+      ],
+      "reading": "Exact duplicate alias, byte/hash checked against the separately read canonical source.",
+      "current_status_source": "guideline-comparison-2026-10-15.md; chronological acceptance in foreground-routing-and-retries-2026-10-15.md",
+      "identical_to": "original-recordings/Default/Voicebutton E2E smoke test (10).txt"
+    },
+    {
+      "path": "original-recordings/Default/Voicebutton E2E smoke test (13).txt",
+      "sha256": "e3750e5b30150ffe2638a9d1d27bd704b7b015a86cd92b66dac55f15fa17e87e",
+      "bytes": 76,
+      "characters": 76,
+      "comparison_ids": [
+        "D9"
+      ],
+      "reading": "Exact duplicate alias, byte/hash checked against the separately read canonical source.",
+      "current_status_source": "guideline-comparison-2026-10-15.md; chronological acceptance in foreground-routing-and-retries-2026-10-15.md",
+      "identical_to": "original-recordings/Default/Voicebutton E2E smoke test (10).txt"
+    },
+    {
+      "path": "original-recordings/Default/Voicebutton E2E smoke test (2).txt",
+      "sha256": "e3750e5b30150ffe2638a9d1d27bd704b7b015a86cd92b66dac55f15fa17e87e",
+      "bytes": 76,
+      "characters": 76,
+      "comparison_ids": [
+        "D9"
+      ],
+      "reading": "Exact duplicate alias, byte/hash checked against the separately read canonical source.",
+      "current_status_source": "guideline-comparison-2026-10-15.md; chronological acceptance in foreground-routing-and-retries-2026-10-15.md",
+      "identical_to": "original-recordings/Default/Voicebutton E2E smoke test (10).txt"
+    },
+    {
+      "path": "original-recordings/Default/Voicebutton E2E smoke test (3).txt",
+      "sha256": "e3750e5b30150ffe2638a9d1d27bd704b7b015a86cd92b66dac55f15fa17e87e",
+      "bytes": 76,
+      "characters": 76,
+      "comparison_ids": [
+        "D9"
+      ],
+      "reading": "Exact duplicate alias, byte/hash checked against the separately read canonical source.",
+      "current_status_source": "guideline-comparison-2026-10-15.md; chronological acceptance in foreground-routing-and-retries-2026-10-15.md",
+      "identical_to": "original-recordings/Default/Voicebutton E2E smoke test (10).txt"
+    },
+    {
+      "path": "original-recordings/Default/Voicebutton E2E smoke test (5).txt",
+      "sha256": "e3750e5b30150ffe2638a9d1d27bd704b7b015a86cd92b66dac55f15fa17e87e",
+      "bytes": 76,
+      "characters": 76,
+      "comparison_ids": [
+        "D9"
+      ],
+      "reading": "Exact duplicate alias, byte/hash checked against the separately read canonical source.",
+      "current_status_source": "guideline-comparison-2026-10-15.md; chronological acceptance in foreground-routing-and-retries-2026-10-15.md",
+      "identical_to": "original-recordings/Default/Voicebutton E2E smoke test (10).txt"
+    },
+    {
+      "path": "original-recordings/Default/Voicebutton E2E smoke test (6).txt",
+      "sha256": "e3750e5b30150ffe2638a9d1d27bd704b7b015a86cd92b66dac55f15fa17e87e",
+      "bytes": 76,
+      "characters": 76,
+      "comparison_ids": [
+        "D9"
+      ],
+      "reading": "Exact duplicate alias, byte/hash checked against the separately read canonical source.",
+      "current_status_source": "guideline-comparison-2026-10-15.md; chronological acceptance in foreground-routing-and-retries-2026-10-15.md",
+      "identical_to": "original-recordings/Default/Voicebutton E2E smoke test (10).txt"
+    },
+    {
+      "path": "original-recordings/Default/Voicebutton E2E smoke test (7).txt",
+      "sha256": "e3750e5b30150ffe2638a9d1d27bd704b7b015a86cd92b66dac55f15fa17e87e",
+      "bytes": 76,
+      "characters": 76,
+      "comparison_ids": [
+        "D9"
+      ],
+      "reading": "Exact duplicate alias, byte/hash checked against the separately read canonical source.",
+      "current_status_source": "guideline-comparison-2026-10-15.md; chronological acceptance in foreground-routing-and-retries-2026-10-15.md",
+      "identical_to": "original-recordings/Default/Voicebutton E2E smoke test (10).txt"
+    },
+    {
+      "path": "original-recordings/Default/Voicebutton E2E smoke test (8).txt",
+      "sha256": "e3750e5b30150ffe2638a9d1d27bd704b7b015a86cd92b66dac55f15fa17e87e",
+      "bytes": 76,
+      "characters": 76,
+      "comparison_ids": [
+        "D9"
+      ],
+      "reading": "Exact duplicate alias, byte/hash checked against the separately read canonical source.",
+      "current_status_source": "guideline-comparison-2026-10-15.md; chronological acceptance in foreground-routing-and-retries-2026-10-15.md",
+      "identical_to": "original-recordings/Default/Voicebutton E2E smoke test (10).txt"
+    },
+    {
+      "path": "original-recordings/Default/Voicebutton E2E smoke test (9).txt",
+      "sha256": "e3750e5b30150ffe2638a9d1d27bd704b7b015a86cd92b66dac55f15fa17e87e",
+      "bytes": 76,
+      "characters": 76,
+      "comparison_ids": [
+        "D9"
+      ],
+      "reading": "Exact duplicate alias, byte/hash checked against the separately read canonical source.",
+      "current_status_source": "guideline-comparison-2026-10-15.md; chronological acceptance in foreground-routing-and-retries-2026-10-15.md",
+      "identical_to": "original-recordings/Default/Voicebutton E2E smoke test (10).txt"
+    },
+    {
+      "path": "original-recordings/Default/Voicebutton E2E smoke test.txt",
+      "sha256": "e3750e5b30150ffe2638a9d1d27bd704b7b015a86cd92b66dac55f15fa17e87e",
+      "bytes": 76,
+      "characters": 76,
+      "comparison_ids": [
+        "D9"
+      ],
+      "reading": "Exact duplicate alias, byte/hash checked against the separately read canonical source.",
+      "current_status_source": "guideline-comparison-2026-10-15.md; chronological acceptance in foreground-routing-and-retries-2026-10-15.md",
+      "identical_to": "original-recordings/Default/Voicebutton E2E smoke test (10).txt"
+    },
+    {
+      "path": "original-recordings/agents/Recording 2026-08-04 10-27-01.txt",
+      "sha256": "9742d6d72566f8a6af9bb7122da4f11e0615c19ffdd68445505a405bbe96b6dc",
+      "bytes": 4,
+      "characters": 4,
+      "comparison_ids": [
+        "A1",
+        "A10",
+        "A11",
+        "A12",
+        "A13",
+        "A2",
+        "A3",
+        "A4",
+        "A5",
+        "A6",
+        "A7",
+        "A8",
+        "A9",
+        "B1",
+        "B10",
+        "B11",
+        "B2",
+        "B3",
+        "B4",
+        "B5",
+        "B6",
+        "B7",
+        "B8",
+        "B9",
+        "C1",
+        "C2",
+        "C5",
+        "D1"
+      ],
+      "reading": "Complete current reread; source-preservation appendix and whole-file aliases checked against separately read originals; full-reread/semantic-ledger.json records findings.",
+      "previous_sha256": "9742d6d72566f8a6af9bb7122da4f11e0615c19ffdd68445505a405bbe96b6dc",
+      "current_status_source": "guideline-comparison-2026-10-15.md; chronological acceptance in foreground-routing-and-retries-2026-10-15.md"
+    },
+    {
+      "path": "original-recordings/agents/Recording 2026-08-04 10-27-24.txt",
+      "sha256": "041ea2a39fcec416c3f3d3085ab14b43ac6ea200022ba503296864f1f2ef8ba8",
+      "bytes": 3037,
+      "characters": 3037,
+      "comparison_ids": [
+        "A1",
+        "A10",
+        "A11",
+        "A12",
+        "A13",
+        "A2",
+        "A3",
+        "A4",
+        "A5",
+        "A6",
+        "A7",
+        "A8",
+        "A9",
+        "B1",
+        "B10",
+        "B11",
+        "B2",
+        "B3",
+        "B4",
+        "B5",
+        "B6",
+        "B7",
+        "B8",
+        "B9",
+        "C1",
+        "C2",
+        "C5",
+        "D1"
+      ],
+      "reading": "Complete current reread; source-preservation appendix and whole-file aliases checked against separately read originals; full-reread/semantic-ledger.json records findings.",
+      "previous_sha256": "041ea2a39fcec416c3f3d3085ab14b43ac6ea200022ba503296864f1f2ef8ba8",
+      "current_status_source": "guideline-comparison-2026-10-15.md; chronological acceptance in foreground-routing-and-retries-2026-10-15.md"
+    },
+    {
+      "path": "original-recordings/agents/Recording 2026-08-04 10-36-47.txt",
+      "sha256": "7039ffd3bd8bdb18e051252c4ca113de0c7bac3270b71020cead0275a85aa3e8",
+      "bytes": 4375,
+      "characters": 4375,
+      "comparison_ids": [
+        "A1",
+        "A10",
+        "A11",
+        "A12",
+        "A13",
+        "A2",
+        "A3",
+        "A4",
+        "A5",
+        "A6",
+        "A7",
+        "A8",
+        "A9",
+        "B1",
+        "B10",
+        "B11",
+        "B2",
+        "B3",
+        "B4",
+        "B5",
+        "B6",
+        "B7",
+        "B8",
+        "B9",
+        "C1",
+        "C2",
+        "C5",
+        "D1"
+      ],
+      "reading": "Complete current reread; source-preservation appendix and whole-file aliases checked against separately read originals; full-reread/semantic-ledger.json records findings.",
+      "previous_sha256": "7039ffd3bd8bdb18e051252c4ca113de0c7bac3270b71020cead0275a85aa3e8",
+      "current_status_source": "guideline-comparison-2026-10-15.md; chronological acceptance in foreground-routing-and-retries-2026-10-15.md"
+    },
+    {
+      "path": "original-recordings/agents/Recording 2026-08-04 19-21-08.txt",
+      "sha256": "9eb8e70d4c898f5395c796cde6dbc4e91f6aeaaa8f322d8e888ae8fc0ccaaa52",
+      "bytes": 10704,
+      "characters": 10704,
+      "comparison_ids": [
+        "A1",
+        "A10",
+        "A11",
+        "A12",
+        "A13",
+        "A2",
+        "A3",
+        "A4",
+        "A5",
+        "A6",
+        "A7",
+        "A8",
+        "A9",
+        "B1",
+        "B10",
+        "B11",
+        "B2",
+        "B3",
+        "B4",
+        "B5",
+        "B6",
+        "B7",
+        "B8",
+        "B9",
+        "C1",
+        "C2",
+        "C5",
+        "D1"
+      ],
+      "reading": "Complete current reread; source-preservation appendix and whole-file aliases checked against separately read originals; full-reread/semantic-ledger.json records findings.",
+      "previous_sha256": "9eb8e70d4c898f5395c796cde6dbc4e91f6aeaaa8f322d8e888ae8fc0ccaaa52",
+      "current_status_source": "guideline-comparison-2026-10-15.md; chronological acceptance in foreground-routing-and-retries-2026-10-15.md"
+    },
+    {
+      "path": "original-recordings/agents/Recording 2026-08-05 11-39-16.txt",
+      "sha256": "737876148e0836ab1bc3e7a8a139654e6437ef2279b843a77011a17f73bb50b6",
+      "bytes": 4738,
+      "characters": 4738,
+      "comparison_ids": [
+        "A1",
+        "A10",
+        "A11",
+        "A12",
+        "A13",
+        "A2",
+        "A3",
+        "A4",
+        "A5",
+        "A6",
+        "A7",
+        "A8",
+        "A9",
+        "B1",
+        "B10",
+        "B11",
+        "B2",
+        "B3",
+        "B4",
+        "B5",
+        "B6",
+        "B7",
+        "B8",
+        "B9",
+        "C1",
+        "C2",
+        "C5",
+        "D1"
+      ],
+      "reading": "Complete current reread; source-preservation appendix and whole-file aliases checked against separately read originals; full-reread/semantic-ledger.json records findings.",
+      "previous_sha256": "737876148e0836ab1bc3e7a8a139654e6437ef2279b843a77011a17f73bb50b6",
+      "current_status_source": "guideline-comparison-2026-10-15.md; chronological acceptance in foreground-routing-and-retries-2026-10-15.md"
+    },
+    {
+      "path": "original-recordings/agents/Recording 2026-08-05 12-00-31.txt",
+      "sha256": "2eeb67569a639d59f756b672dff361a089ff2238f8526702caa912d1a00c805a",
+      "bytes": 2801,
+      "characters": 2801,
+      "comparison_ids": [
+        "A1",
+        "A10",
+        "A11",
+        "A12",
+        "A13",
+        "A2",
+        "A3",
+        "A4",
+        "A5",
+        "A6",
+        "A7",
+        "A8",
+        "A9",
+        "B1",
+        "B10",
+        "B11",
+        "B2",
+        "B3",
+        "B4",
+        "B5",
+        "B6",
+        "B7",
+        "B8",
+        "B9",
+        "C1",
+        "C2",
+        "C5",
+        "D1"
+      ],
+      "reading": "Complete current reread; source-preservation appendix and whole-file aliases checked against separately read originals; full-reread/semantic-ledger.json records findings.",
+      "previous_sha256": "2eeb67569a639d59f756b672dff361a089ff2238f8526702caa912d1a00c805a",
+      "current_status_source": "guideline-comparison-2026-10-15.md; chronological acceptance in foreground-routing-and-retries-2026-10-15.md"
+    },
+    {
+      "path": "original-recordings/agents/Recording 2026-08-06 17-47-36-666.txt",
+      "sha256": "0ce2061b52f3480626bc735dfc5a565222071f33a7bc6279831a32cd861ddce0",
+      "bytes": 5847,
+      "characters": 5847,
+      "comparison_ids": [
+        "A1",
+        "A10",
+        "A11",
+        "A12",
+        "A13",
+        "A2",
+        "A3",
+        "A4",
+        "A5",
+        "A6",
+        "A7",
+        "A8",
+        "A9",
+        "B1",
+        "B10",
+        "B11",
+        "B2",
+        "B3",
+        "B4",
+        "B5",
+        "B6",
+        "B7",
+        "B8",
+        "B9",
+        "C1",
+        "C2",
+        "C5",
+        "D1"
+      ],
+      "reading": "Complete current reread; source-preservation appendix and whole-file aliases checked against separately read originals; full-reread/semantic-ledger.json records findings.",
+      "previous_sha256": "0ce2061b52f3480626bc735dfc5a565222071f33a7bc6279831a32cd861ddce0",
+      "current_status_source": "guideline-comparison-2026-10-15.md; chronological acceptance in foreground-routing-and-retries-2026-10-15.md"
+    },
+    {
+      "path": "original-recordings/agents/Recording 2026-08-07 12-43-50-515.txt",
+      "sha256": "9ce2c474de14d7c78af12d1c8a7de97614e60d73a8c2a053828974a28c69b599",
+      "bytes": 3158,
+      "characters": 3158,
+      "comparison_ids": [
+        "A1",
+        "A10",
+        "A11",
+        "A12",
+        "A13",
+        "A2",
+        "A3",
+        "A4",
+        "A5",
+        "A6",
+        "A7",
+        "A8",
+        "A9",
+        "B1",
+        "B10",
+        "B11",
+        "B2",
+        "B3",
+        "B4",
+        "B5",
+        "B6",
+        "B7",
+        "B8",
+        "B9",
+        "C1",
+        "C2",
+        "C5",
+        "D1"
+      ],
+      "reading": "Complete current reread; source-preservation appendix and whole-file aliases checked against separately read originals; full-reread/semantic-ledger.json records findings.",
+      "previous_sha256": "9ce2c474de14d7c78af12d1c8a7de97614e60d73a8c2a053828974a28c69b599",
+      "current_status_source": "guideline-comparison-2026-10-15.md; chronological acceptance in foreground-routing-and-retries-2026-10-15.md"
+    },
+    {
+      "path": "original-recordings/agents/Recording 2026-08-09 13-35-10-245.txt",
+      "sha256": "f516fc2ab79c4f06ed38deb2611e96a1eebef43d0afcd32978c5078007a5ed54",
+      "bytes": 7355,
+      "characters": 7355,
+      "comparison_ids": [
+        "A1",
+        "A10",
+        "A11",
+        "A12",
+        "A13",
+        "A2",
+        "A3",
+        "A4",
+        "A5",
+        "A6",
+        "A7",
+        "A8",
+        "A9",
+        "B1",
+        "B10",
+        "B11",
+        "B2",
+        "B3",
+        "B4",
+        "B5",
+        "B6",
+        "B7",
+        "B8",
+        "B9",
+        "C1",
+        "C2",
+        "C5",
+        "D1"
+      ],
+      "reading": "Complete current reread; source-preservation appendix and whole-file aliases checked against separately read originals; full-reread/semantic-ledger.json records findings.",
+      "previous_sha256": "f516fc2ab79c4f06ed38deb2611e96a1eebef43d0afcd32978c5078007a5ed54",
+      "current_status_source": "guideline-comparison-2026-10-15.md; chronological acceptance in foreground-routing-and-retries-2026-10-15.md"
+    },
+    {
+      "path": "original-recordings/agents/Recording 2026-08-10 12-20-47-854.txt",
+      "sha256": "613a590ae97589005f3c5cf66857efb8091cc473bcabaf36591c5beed22a1904",
+      "bytes": 10369,
+      "characters": 10369,
+      "comparison_ids": [
+        "A1",
+        "A10",
+        "A11",
+        "A12",
+        "A13",
+        "A2",
+        "A3",
+        "A4",
+        "A5",
+        "A6",
+        "A7",
+        "A8",
+        "A9",
+        "B1",
+        "B10",
+        "B11",
+        "B2",
+        "B3",
+        "B4",
+        "B5",
+        "B6",
+        "B7",
+        "B8",
+        "B9",
+        "C1",
+        "C2",
+        "C5",
+        "D1"
+      ],
+      "reading": "Complete current reread; source-preservation appendix and whole-file aliases checked against separately read originals; full-reread/semantic-ledger.json records findings.",
+      "previous_sha256": "613a590ae97589005f3c5cf66857efb8091cc473bcabaf36591c5beed22a1904",
+      "current_status_source": "guideline-comparison-2026-10-15.md; chronological acceptance in foreground-routing-and-retries-2026-10-15.md"
+    },
+    {
+      "path": "original-recordings/agents/Recording 2026-08-11 11-49-55-272.txt",
+      "sha256": "221185fa471c2c618c3d599c01879a2cd37e20a6093852442454349ece28d8da",
+      "bytes": 4864,
+      "characters": 4864,
+      "comparison_ids": [
+        "A1",
+        "A10",
+        "A11",
+        "A12",
+        "A13",
+        "A2",
+        "A3",
+        "A4",
+        "A5",
+        "A6",
+        "A7",
+        "A8",
+        "A9",
+        "B1",
+        "B10",
+        "B11",
+        "B2",
+        "B3",
+        "B4",
+        "B5",
+        "B6",
+        "B7",
+        "B8",
+        "B9",
+        "C1",
+        "C2",
+        "C5",
+        "D1"
+      ],
+      "reading": "Complete current reread; source-preservation appendix and whole-file aliases checked against separately read originals; full-reread/semantic-ledger.json records findings.",
+      "previous_sha256": "221185fa471c2c618c3d599c01879a2cd37e20a6093852442454349ece28d8da",
+      "current_status_source": "guideline-comparison-2026-10-15.md; chronological acceptance in foreground-routing-and-retries-2026-10-15.md"
+    },
+    {
+      "path": "original-recordings/agents/Recording 2026-08-11 12-06-27-811.txt",
+      "sha256": "16e37710ca95d1e49e8f4d13b4e2821e55ee4ebfac603cf7ef124e959f25570a",
+      "bytes": 34400,
+      "characters": 34400,
+      "comparison_ids": [
+        "A1",
+        "A10",
+        "A11",
+        "A12",
+        "A13",
+        "A2",
+        "A3",
+        "A4",
+        "A5",
+        "A6",
+        "A7",
+        "A8",
+        "A9",
+        "B1",
+        "B10",
+        "B11",
+        "B2",
+        "B3",
+        "B4",
+        "B5",
+        "B6",
+        "B7",
+        "B8",
+        "B9",
+        "C1",
+        "C2",
+        "C5",
+        "D1"
+      ],
+      "reading": "Complete current reread; source-preservation appendix and whole-file aliases checked against separately read originals; full-reread/semantic-ledger.json records findings.",
+      "previous_sha256": "16e37710ca95d1e49e8f4d13b4e2821e55ee4ebfac603cf7ef124e959f25570a",
+      "current_status_source": "guideline-comparison-2026-10-15.md; chronological acceptance in foreground-routing-and-retries-2026-10-15.md"
+    },
+    {
+      "path": "original-recordings/agents/Recording 2026-08-18 18-49-23-836.txt",
+      "sha256": "ff81929393bc96eb23b31d89ab4d6f86f75baa12460e267f3df220d147eb1093",
+      "bytes": 8091,
+      "characters": 8091,
+      "comparison_ids": [
+        "A1",
+        "A10",
+        "A11",
+        "A12",
+        "A13",
+        "A2",
+        "A3",
+        "A4",
+        "A5",
+        "A6",
+        "A7",
+        "A8",
+        "A9",
+        "B1",
+        "B10",
+        "B11",
+        "B2",
+        "B3",
+        "B4",
+        "B5",
+        "B6",
+        "B7",
+        "B8",
+        "B9",
+        "C1",
+        "C2",
+        "C5",
+        "D1"
+      ],
+      "reading": "Complete current reread; source-preservation appendix and whole-file aliases checked against separately read originals; full-reread/semantic-ledger.json records findings.",
+      "previous_sha256": "ff81929393bc96eb23b31d89ab4d6f86f75baa12460e267f3df220d147eb1093",
+      "current_status_source": "guideline-comparison-2026-10-15.md; chronological acceptance in foreground-routing-and-retries-2026-10-15.md"
+    },
+    {
+      "path": "original-recordings/agents/Recording 2026-08-19 18-37-20-756.txt",
+      "sha256": "750947604ced6a5d82614b82fd803bb9050478c488a731444f433dcdd21ffdd0",
+      "bytes": 10431,
+      "characters": 10431,
+      "comparison_ids": [
+        "A1",
+        "A10",
+        "A11",
+        "A12",
+        "A13",
+        "A2",
+        "A3",
+        "A4",
+        "A5",
+        "A6",
+        "A7",
+        "A8",
+        "A9",
+        "B1",
+        "B10",
+        "B11",
+        "B2",
+        "B3",
+        "B4",
+        "B5",
+        "B6",
+        "B7",
+        "B8",
+        "B9",
+        "C1",
+        "C2",
+        "C5",
+        "D1"
+      ],
+      "reading": "Complete current reread; source-preservation appendix and whole-file aliases checked against separately read originals; full-reread/semantic-ledger.json records findings.",
+      "previous_sha256": "750947604ced6a5d82614b82fd803bb9050478c488a731444f433dcdd21ffdd0",
+      "current_status_source": "guideline-comparison-2026-10-15.md; chronological acceptance in foreground-routing-and-retries-2026-10-15.md"
+    },
+    {
+      "path": "original-recordings/agents/Recording 2026-08-20 18-28-49-000.txt",
+      "sha256": "f1202c38d7867092a02899371c7d69f58a5cb8d78c722fddf103909207cafc3a",
+      "bytes": 10236,
+      "characters": 10236,
+      "comparison_ids": [
+        "A1",
+        "A10",
+        "A11",
+        "A12",
+        "A13",
+        "A2",
+        "A3",
+        "A4",
+        "A5",
+        "A6",
+        "A7",
+        "A8",
+        "A9",
+        "B1",
+        "B10",
+        "B11",
+        "B2",
+        "B3",
+        "B4",
+        "B5",
+        "B6",
+        "B7",
+        "B8",
+        "B9",
+        "C1",
+        "C2",
+        "C5",
+        "D1"
+      ],
+      "reading": "Complete current reread; source-preservation appendix and whole-file aliases checked against separately read originals; full-reread/semantic-ledger.json records findings.",
+      "previous_sha256": "f1202c38d7867092a02899371c7d69f58a5cb8d78c722fddf103909207cafc3a",
+      "current_status_source": "guideline-comparison-2026-10-15.md; chronological acceptance in foreground-routing-and-retries-2026-10-15.md"
+    },
+    {
+      "path": "original-recordings/agents/Recording 2026-08-21 20-48-36-202.txt",
+      "sha256": "758aa997690df6251fb0ab5febce8e355cf7391ec8deebfcef52b843c3840e9f",
+      "bytes": 13102,
+      "characters": 13102,
+      "comparison_ids": [
+        "A1",
+        "A10",
+        "A11",
+        "A12",
+        "A13",
+        "A2",
+        "A3",
+        "A4",
+        "A5",
+        "A6",
+        "A7",
+        "A8",
+        "A9",
+        "B1",
+        "B10",
+        "B11",
+        "B2",
+        "B3",
+        "B4",
+        "B5",
+        "B6",
+        "B7",
+        "B8",
+        "B9",
+        "C1",
+        "C2",
+        "C5",
+        "D1"
+      ],
+      "reading": "Complete current reread; source-preservation appendix and whole-file aliases checked against separately read originals; full-reread/semantic-ledger.json records findings.",
+      "previous_sha256": "758aa997690df6251fb0ab5febce8e355cf7391ec8deebfcef52b843c3840e9f",
+      "current_status_source": "guideline-comparison-2026-10-15.md; chronological acceptance in foreground-routing-and-retries-2026-10-15.md"
+    },
+    {
+      "path": "original-recordings/agents/Recording 2026-08-24 12-54-18-186.txt",
+      "sha256": "3538e106c320cc73ccf0861b70f723eb7f9a8419617c631bf5b7888694ef036a",
+      "bytes": 12538,
+      "characters": 12538,
+      "comparison_ids": [
+        "A1",
+        "A10",
+        "A11",
+        "A12",
+        "A13",
+        "A2",
+        "A3",
+        "A4",
+        "A5",
+        "A6",
+        "A7",
+        "A8",
+        "A9",
+        "B1",
+        "B10",
+        "B11",
+        "B2",
+        "B3",
+        "B4",
+        "B5",
+        "B6",
+        "B7",
+        "B8",
+        "B9",
+        "C1",
+        "C2",
+        "C5",
+        "D1"
+      ],
+      "reading": "Complete current reread; source-preservation appendix and whole-file aliases checked against separately read originals; full-reread/semantic-ledger.json records findings.",
+      "previous_sha256": "3538e106c320cc73ccf0861b70f723eb7f9a8419617c631bf5b7888694ef036a",
+      "current_status_source": "guideline-comparison-2026-10-15.md; chronological acceptance in foreground-routing-and-retries-2026-10-15.md"
+    },
+    {
+      "path": "original-recordings/agents/Recording 2026-08-24 17-37-48-367.txt",
+      "sha256": "66911c6e8480339f2ae63f60d6d09b46b6d8f0d7739f27140e479fbddb1daac2",
+      "bytes": 23712,
+      "characters": 23712,
+      "comparison_ids": [
+        "A1",
+        "A10",
+        "A11",
+        "A12",
+        "A13",
+        "A2",
+        "A3",
+        "A4",
+        "A5",
+        "A6",
+        "A7",
+        "A8",
+        "A9",
+        "B1",
+        "B10",
+        "B11",
+        "B2",
+        "B3",
+        "B4",
+        "B5",
+        "B6",
+        "B7",
+        "B8",
+        "B9",
+        "C1",
+        "C2",
+        "C5",
+        "D1"
+      ],
+      "reading": "Complete current reread; source-preservation appendix and whole-file aliases checked against separately read originals; full-reread/semantic-ledger.json records findings.",
+      "previous_sha256": "66911c6e8480339f2ae63f60d6d09b46b6d8f0d7739f27140e479fbddb1daac2",
+      "current_status_source": "guideline-comparison-2026-10-15.md; chronological acceptance in foreground-routing-and-retries-2026-10-15.md"
+    },
+    {
+      "path": "original-recordings/agents/Recording 2026-08-24 19-26-50-252.txt",
+      "sha256": "ec658b13bb791bf9a066670111060fe43b1ec403d6fb9ccad7cadc2310f14afd",
+      "bytes": 16176,
+      "characters": 16176,
+      "comparison_ids": [
+        "A1",
+        "A10",
+        "A11",
+        "A12",
+        "A13",
+        "A2",
+        "A3",
+        "A4",
+        "A5",
+        "A6",
+        "A7",
+        "A8",
+        "A9",
+        "B1",
+        "B10",
+        "B11",
+        "B2",
+        "B3",
+        "B4",
+        "B5",
+        "B6",
+        "B7",
+        "B8",
+        "B9",
+        "C1",
+        "C2",
+        "C5",
+        "D1"
+      ],
+      "reading": "Complete current reread; source-preservation appendix and whole-file aliases checked against separately read originals; full-reread/semantic-ledger.json records findings.",
+      "previous_sha256": "ec658b13bb791bf9a066670111060fe43b1ec403d6fb9ccad7cadc2310f14afd",
+      "current_status_source": "guideline-comparison-2026-10-15.md; chronological acceptance in foreground-routing-and-retries-2026-10-15.md"
+    },
+    {
+      "path": "original-recordings/agents/Recording 2026-08-25 11-38-51-829.txt",
+      "sha256": "be64e2b5a2ef65a3b75385272f6cc45016076e41a610d71c83e6990197e9c882",
+      "bytes": 11585,
+      "characters": 11585,
+      "comparison_ids": [
+        "A1",
+        "A10",
+        "A11",
+        "A12",
+        "A13",
+        "A2",
+        "A3",
+        "A4",
+        "A5",
+        "A6",
+        "A7",
+        "A8",
+        "A9",
+        "B1",
+        "B10",
+        "B11",
+        "B2",
+        "B3",
+        "B4",
+        "B5",
+        "B6",
+        "B7",
+        "B8",
+        "B9",
+        "C1",
+        "C2",
+        "C5",
+        "D1"
+      ],
+      "reading": "Complete current reread; source-preservation appendix and whole-file aliases checked against separately read originals; full-reread/semantic-ledger.json records findings.",
+      "previous_sha256": "be64e2b5a2ef65a3b75385272f6cc45016076e41a610d71c83e6990197e9c882",
+      "current_status_source": "guideline-comparison-2026-10-15.md; chronological acceptance in foreground-routing-and-retries-2026-10-15.md"
+    },
+    {
+      "path": "original-recordings/agents/Recording 2026-08-26 06-30-01-466.txt",
+      "sha256": "72fd91a4728e16a4b193998e777ca399da7338bd8090eac39c9a737774da8e3f",
+      "bytes": 12952,
+      "characters": 12952,
+      "comparison_ids": [
+        "A1",
+        "A10",
+        "A11",
+        "A12",
+        "A13",
+        "A2",
+        "A3",
+        "A4",
+        "A5",
+        "A6",
+        "A7",
+        "A8",
+        "A9",
+        "B1",
+        "B10",
+        "B11",
+        "B2",
+        "B3",
+        "B4",
+        "B5",
+        "B6",
+        "B7",
+        "B8",
+        "B9",
+        "C1",
+        "C2",
+        "C5",
+        "D1"
+      ],
+      "reading": "Complete current reread; source-preservation appendix and whole-file aliases checked against separately read originals; full-reread/semantic-ledger.json records findings.",
+      "previous_sha256": "72fd91a4728e16a4b193998e777ca399da7338bd8090eac39c9a737774da8e3f",
+      "current_status_source": "guideline-comparison-2026-10-15.md; chronological acceptance in foreground-routing-and-retries-2026-10-15.md"
+    },
+    {
+      "path": "original-recordings/agents/Recording 2026-08-27 07-44-58-232.txt",
+      "sha256": "d2cdc0348ff8d7f513f8d4cf5d5458f6817106d8c8943f1ccd4ef5426af9108a",
+      "bytes": 111755,
+      "characters": 111755,
+      "comparison_ids": [
+        "A1",
+        "A10",
+        "A11",
+        "A12",
+        "A13",
+        "A2",
+        "A3",
+        "A4",
+        "A5",
+        "A6",
+        "A7",
+        "A8",
+        "A9",
+        "B1",
+        "B10",
+        "B11",
+        "B2",
+        "B3",
+        "B4",
+        "B5",
+        "B6",
+        "B7",
+        "B8",
+        "B9",
+        "C1",
+        "C2",
+        "C5",
+        "D1"
+      ],
+      "reading": "Complete current reread; source-preservation appendix and whole-file aliases checked against separately read originals; full-reread/semantic-ledger.json records findings.",
+      "previous_sha256": "d2cdc0348ff8d7f513f8d4cf5d5458f6817106d8c8943f1ccd4ef5426af9108a",
+      "current_status_source": "guideline-comparison-2026-10-15.md; chronological acceptance in foreground-routing-and-retries-2026-10-15.md"
+    },
+    {
+      "path": "original-recordings/agents/Recording 2026-08-29 16-51-40-798.txt",
+      "sha256": "27f0ca5476e2a9aaf6c8329c119a56233de358b738219e8847e202a359a186b2",
+      "bytes": 122466,
+      "characters": 122466,
+      "comparison_ids": [
+        "A1",
+        "A10",
+        "A11",
+        "A12",
+        "A13",
+        "A2",
+        "A3",
+        "A4",
+        "A5",
+        "A6",
+        "A7",
+        "A8",
+        "A9",
+        "B1",
+        "B10",
+        "B11",
+        "B2",
+        "B3",
+        "B4",
+        "B5",
+        "B6",
+        "B7",
+        "B8",
+        "B9",
+        "C1",
+        "C2",
+        "C5",
+        "D1"
+      ],
+      "reading": "Complete current reread; source-preservation appendix and whole-file aliases checked against separately read originals; full-reread/semantic-ledger.json records findings.",
+      "previous_sha256": "27f0ca5476e2a9aaf6c8329c119a56233de358b738219e8847e202a359a186b2",
+      "current_status_source": "guideline-comparison-2026-10-15.md; chronological acceptance in foreground-routing-and-retries-2026-10-15.md"
+    },
+    {
+      "path": "original-recordings/agents/Recording 2026-08-30 16-37-33-908.txt",
+      "sha256": "95b16f649484ab6687ac5c49d61ec27df2e6b4b6c05cf37368b8d9c2a91966c7",
+      "bytes": 7719,
+      "characters": 7719,
+      "comparison_ids": [
+        "A1",
+        "A10",
+        "A11",
+        "A12",
+        "A13",
+        "A2",
+        "A3",
+        "A4",
+        "A5",
+        "A6",
+        "A7",
+        "A8",
+        "A9",
+        "B1",
+        "B10",
+        "B11",
+        "B2",
+        "B3",
+        "B4",
+        "B5",
+        "B6",
+        "B7",
+        "B8",
+        "B9",
+        "C1",
+        "C2",
+        "C5",
+        "D1"
+      ],
+      "reading": "Complete current reread; source-preservation appendix and whole-file aliases checked against separately read originals; full-reread/semantic-ledger.json records findings.",
+      "previous_sha256": "95b16f649484ab6687ac5c49d61ec27df2e6b4b6c05cf37368b8d9c2a91966c7",
+      "current_status_source": "guideline-comparison-2026-10-15.md; chronological acceptance in foreground-routing-and-retries-2026-10-15.md"
+    },
+    {
+      "path": "original-recordings/agents/Recording 2026-08-30 20-48-42-423.txt",
+      "sha256": "31085734f775cee5c815ee1b252620966400e3f7a442224c8122534fef099f7b",
+      "bytes": 26167,
+      "characters": 26167,
+      "comparison_ids": [
+        "A1",
+        "A10",
+        "A11",
+        "A12",
+        "A13",
+        "A2",
+        "A3",
+        "A4",
+        "A5",
+        "A6",
+        "A7",
+        "A8",
+        "A9",
+        "B1",
+        "B10",
+        "B11",
+        "B2",
+        "B3",
+        "B4",
+        "B5",
+        "B6",
+        "B7",
+        "B8",
+        "B9",
+        "C1",
+        "C2",
+        "C5",
+        "D1"
+      ],
+      "reading": "Complete current reread; source-preservation appendix and whole-file aliases checked against separately read originals; full-reread/semantic-ledger.json records findings.",
+      "previous_sha256": "31085734f775cee5c815ee1b252620966400e3f7a442224c8122534fef099f7b",
+      "current_status_source": "guideline-comparison-2026-10-15.md; chronological acceptance in foreground-routing-and-retries-2026-10-15.md"
+    },
+    {
+      "path": "original-recordings/agents/Recording 2026-09-02 06-20-58-642.txt",
+      "sha256": "8ea2f7134f8556fafa5a7ddab6fe4834cbd6b9fc96023eb9289835c08cad040d",
+      "bytes": 19917,
+      "characters": 19917,
+      "comparison_ids": [
+        "A1",
+        "A10",
+        "A11",
+        "A12",
+        "A13",
+        "A2",
+        "A3",
+        "A4",
+        "A5",
+        "A6",
+        "A7",
+        "A8",
+        "A9",
+        "B1",
+        "B10",
+        "B11",
+        "B2",
+        "B3",
+        "B4",
+        "B5",
+        "B6",
+        "B7",
+        "B8",
+        "B9",
+        "C1",
+        "C2",
+        "C5",
+        "D1"
+      ],
+      "reading": "Complete current reread; source-preservation appendix and whole-file aliases checked against separately read originals; full-reread/semantic-ledger.json records findings.",
+      "previous_sha256": "8ea2f7134f8556fafa5a7ddab6fe4834cbd6b9fc96023eb9289835c08cad040d",
+      "current_status_source": "guideline-comparison-2026-10-15.md; chronological acceptance in foreground-routing-and-retries-2026-10-15.md"
+    },
+    {
+      "path": "original-recordings/agents/Recording 2026-09-02 12-25-33-881.txt",
+      "sha256": "c4a64a8875910ae3a77cb8223dd8229e181ea1234eee90a66b04bb50e37ff230",
+      "bytes": 179581,
+      "characters": 179581,
+      "comparison_ids": [
+        "A1",
+        "A10",
+        "A11",
+        "A12",
+        "A13",
+        "A2",
+        "A3",
+        "A4",
+        "A5",
+        "A6",
+        "A7",
+        "A8",
+        "A9",
+        "B1",
+        "B10",
+        "B11",
+        "B2",
+        "B3",
+        "B4",
+        "B5",
+        "B6",
+        "B7",
+        "B8",
+        "B9",
+        "C1",
+        "C2",
+        "C5",
+        "D1"
+      ],
+      "reading": "Complete current reread; source-preservation appendix and whole-file aliases checked against separately read originals; full-reread/semantic-ledger.json records findings.",
+      "previous_sha256": "c4a64a8875910ae3a77cb8223dd8229e181ea1234eee90a66b04bb50e37ff230",
+      "current_status_source": "guideline-comparison-2026-10-15.md; chronological acceptance in foreground-routing-and-retries-2026-10-15.md"
+    },
+    {
+      "path": "original-recordings/agents/Recording 2026-09-03 19-37-36-767.txt",
+      "sha256": "3c0d7b4ad62ef07e5211ff20f0262ea35049439699493b780d67a424aaba7370",
+      "bytes": 19394,
+      "characters": 19394,
+      "comparison_ids": [
+        "A1",
+        "A10",
+        "A11",
+        "A12",
+        "A13",
+        "A2",
+        "A3",
+        "A4",
+        "A5",
+        "A6",
+        "A7",
+        "A8",
+        "A9",
+        "B1",
+        "B10",
+        "B11",
+        "B2",
+        "B3",
+        "B4",
+        "B5",
+        "B6",
+        "B7",
+        "B8",
+        "B9",
+        "C1",
+        "C2",
+        "C5",
+        "D1"
+      ],
+      "reading": "Complete current reread; source-preservation appendix and whole-file aliases checked against separately read originals; full-reread/semantic-ledger.json records findings.",
+      "previous_sha256": "3c0d7b4ad62ef07e5211ff20f0262ea35049439699493b780d67a424aaba7370",
+      "current_status_source": "guideline-comparison-2026-10-15.md; chronological acceptance in foreground-routing-and-retries-2026-10-15.md"
+    },
+    {
+      "path": "original-recordings/agents/Recording 2026-09-06 10-59-50-580.txt",
+      "sha256": "9f29e54b4c784319608f6b388101a668bd4f0a479268a24dd2cb69032ff45bad",
+      "bytes": 13331,
+      "characters": 13331,
+      "comparison_ids": [
+        "A1",
+        "A10",
+        "A11",
+        "A12",
+        "A13",
+        "A2",
+        "A3",
+        "A4",
+        "A5",
+        "A6",
+        "A7",
+        "A8",
+        "A9",
+        "B1",
+        "B10",
+        "B11",
+        "B2",
+        "B3",
+        "B4",
+        "B5",
+        "B6",
+        "B7",
+        "B8",
+        "B9",
+        "C1",
+        "C2",
+        "C5",
+        "D1"
+      ],
+      "reading": "Complete current reread; source-preservation appendix and whole-file aliases checked against separately read originals; full-reread/semantic-ledger.json records findings.",
+      "previous_sha256": "9f29e54b4c784319608f6b388101a668bd4f0a479268a24dd2cb69032ff45bad",
+      "current_status_source": "guideline-comparison-2026-10-15.md; chronological acceptance in foreground-routing-and-retries-2026-10-15.md"
+    },
+    {
+      "path": "original-recordings/agents/Recording 2026-09-10 12-42-34-972.txt",
+      "sha256": "4d918ba87001349f6187d0f3dccf797a6396b41f334c0b1cdbc918fc93600ea1",
+      "bytes": 6725,
+      "characters": 6725,
+      "comparison_ids": [
+        "A1",
+        "A10",
+        "A11",
+        "A12",
+        "A13",
+        "A2",
+        "A3",
+        "A4",
+        "A5",
+        "A6",
+        "A7",
+        "A8",
+        "A9",
+        "B1",
+        "B10",
+        "B11",
+        "B2",
+        "B3",
+        "B4",
+        "B5",
+        "B6",
+        "B7",
+        "B8",
+        "B9",
+        "C1",
+        "C2",
+        "C5",
+        "D1"
+      ],
+      "reading": "Complete current reread; source-preservation appendix and whole-file aliases checked against separately read originals; full-reread/semantic-ledger.json records findings.",
+      "previous_sha256": "4d918ba87001349f6187d0f3dccf797a6396b41f334c0b1cdbc918fc93600ea1",
+      "current_status_source": "guideline-comparison-2026-10-15.md; chronological acceptance in foreground-routing-and-retries-2026-10-15.md"
+    },
+    {
+      "path": "original-recordings/agents/Recording 2026-09-14 12-13-21-828.txt",
+      "sha256": "15b87c97995d21c48d8c85edba55561b81935fc035f55913ef37ff6460eebb5a",
+      "bytes": 23249,
+      "characters": 23249,
+      "comparison_ids": [
+        "A1",
+        "A10",
+        "A11",
+        "A12",
+        "A13",
+        "A2",
+        "A3",
+        "A4",
+        "A5",
+        "A6",
+        "A7",
+        "A8",
+        "A9",
+        "B1",
+        "B10",
+        "B11",
+        "B2",
+        "B3",
+        "B4",
+        "B5",
+        "B6",
+        "B7",
+        "B8",
+        "B9",
+        "C1",
+        "C2",
+        "C5",
+        "D1"
+      ],
+      "reading": "Complete current reread; source-preservation appendix and whole-file aliases checked against separately read originals; full-reread/semantic-ledger.json records findings.",
+      "previous_sha256": "15b87c97995d21c48d8c85edba55561b81935fc035f55913ef37ff6460eebb5a",
+      "current_status_source": "guideline-comparison-2026-10-15.md; chronological acceptance in foreground-routing-and-retries-2026-10-15.md"
+    },
+    {
+      "path": "original-recordings/agents/Recording 2026-09-16 22-57-59-230.txt",
+      "sha256": "4c36fca7103e054029d0915f11145fa6cf246a43c8e9f26a2b68f61861c0e2a8",
+      "bytes": 29474,
+      "characters": 29474,
+      "comparison_ids": [
+        "A1",
+        "A10",
+        "A11",
+        "A12",
+        "A13",
+        "A2",
+        "A3",
+        "A4",
+        "A5",
+        "A6",
+        "A7",
+        "A8",
+        "A9",
+        "B1",
+        "B10",
+        "B11",
+        "B2",
+        "B3",
+        "B4",
+        "B5",
+        "B6",
+        "B7",
+        "B8",
+        "B9",
+        "C1",
+        "C2",
+        "C5",
+        "D1"
+      ],
+      "reading": "Complete current reread; source-preservation appendix and whole-file aliases checked against separately read originals; full-reread/semantic-ledger.json records findings.",
+      "previous_sha256": "4c36fca7103e054029d0915f11145fa6cf246a43c8e9f26a2b68f61861c0e2a8",
+      "current_status_source": "guideline-comparison-2026-10-15.md; chronological acceptance in foreground-routing-and-retries-2026-10-15.md"
+    },
+    {
+      "path": "original-recordings/agents/Recording 2026-09-17 11-49-21-406.txt",
+      "sha256": "55258e6dc2c152bf6c59e895f21f6ca5feda1b5b8370967f6d2fb52f2011dd0b",
+      "bytes": 19980,
+      "characters": 19980,
+      "comparison_ids": [
+        "A1",
+        "A10",
+        "A11",
+        "A12",
+        "A13",
+        "A2",
+        "A3",
+        "A4",
+        "A5",
+        "A6",
+        "A7",
+        "A8",
+        "A9",
+        "B1",
+        "B10",
+        "B11",
+        "B2",
+        "B3",
+        "B4",
+        "B5",
+        "B6",
+        "B7",
+        "B8",
+        "B9",
+        "C1",
+        "C2",
+        "C5",
+        "D1"
+      ],
+      "reading": "Complete current reread; source-preservation appendix and whole-file aliases checked against separately read originals; full-reread/semantic-ledger.json records findings.",
+      "previous_sha256": "55258e6dc2c152bf6c59e895f21f6ca5feda1b5b8370967f6d2fb52f2011dd0b",
+      "current_status_source": "guideline-comparison-2026-10-15.md; chronological acceptance in foreground-routing-and-retries-2026-10-15.md"
+    },
+    {
+      "path": "original-recordings/agents/Recording 2026-10-03 15-13-24-878.txt",
+      "sha256": "da00cf277198c9f3edf159c54eca9f9d214bec2c199d16a74426bfdd4319ec5e",
+      "bytes": 14867,
+      "characters": 14867,
+      "comparison_ids": [
+        "A1",
+        "A10",
+        "A11",
+        "A12",
+        "A13",
+        "A2",
+        "A3",
+        "A4",
+        "A5",
+        "A6",
+        "A7",
+        "A8",
+        "A9",
+        "B1",
+        "B10",
+        "B11",
+        "B2",
+        "B3",
+        "B4",
+        "B5",
+        "B6",
+        "B7",
+        "B8",
+        "B9",
+        "C1",
+        "C10",
+        "C2",
+        "C3",
+        "C4",
+        "C5",
+        "C6",
+        "C8",
+        "D1",
+        "D2",
+        "D4",
+        "D5",
+        "D9"
+      ],
+      "reading": "Complete current reread; source-preservation appendix and whole-file aliases checked against separately read originals; full-reread/semantic-ledger.json records findings.",
+      "previous_sha256": "da00cf277198c9f3edf159c54eca9f9d214bec2c199d16a74426bfdd4319ec5e",
+      "current_status_source": "guideline-comparison-2026-10-15.md; chronological acceptance in foreground-routing-and-retries-2026-10-15.md"
+    },
+    {
+      "path": "original-recordings/agents/Recording 2026-10-04 10-18-01-427.txt",
+      "sha256": "37611b73a424d0c67a18b1fa613d81065d240c0c6d46477a6bc633963632c741",
+      "bytes": 18038,
+      "characters": 18038,
+      "comparison_ids": [
+        "A1",
+        "A11",
+        "A3",
+        "A4",
+        "A5",
+        "A7",
+        "A8",
+        "C6",
+        "D1",
+        "D2",
+        "D4",
+        "D5"
+      ],
+      "reading": "Complete current reread; source-preservation appendix and whole-file aliases checked against separately read originals; full-reread/semantic-ledger.json records findings.",
+      "previous_sha256": "37611b73a424d0c67a18b1fa613d81065d240c0c6d46477a6bc633963632c741",
+      "current_status_source": "guideline-comparison-2026-10-15.md; chronological acceptance in foreground-routing-and-retries-2026-10-15.md"
+    },
+    {
+      "path": "original-recordings/agents/Recording 2026-10-12 17-15-15-205.txt",
+      "sha256": "ab81f3cb53dae9515c8222f6b34375c77301cbeefb845683b57da1fdaaad234f",
+      "bytes": 28821,
+      "characters": 28821,
+      "comparison_ids": [
+        "A1",
+        "A10",
+        "A11",
+        "A12",
+        "A13",
+        "A2",
+        "A3",
+        "A4",
+        "A5",
+        "A6",
+        "A7",
+        "A8",
+        "A9",
+        "B1",
+        "B10",
+        "B11",
+        "B2",
+        "B3",
+        "B4",
+        "B5",
+        "B6",
+        "B7",
+        "B8",
+        "B9",
+        "C1",
+        "C10",
+        "C2",
+        "C4",
+        "C5",
+        "C7",
+        "C8",
+        "C9",
+        "D1"
+      ],
+      "reading": "Complete current reread; source-preservation appendix and whole-file aliases checked against separately read originals; full-reread/semantic-ledger.json records findings.",
+      "previous_sha256": "ab81f3cb53dae9515c8222f6b34375c77301cbeefb845683b57da1fdaaad234f",
+      "current_status_source": "guideline-comparison-2026-10-15.md; chronological acceptance in foreground-routing-and-retries-2026-10-15.md"
+    },
+    {
+      "path": "original-recordings/agents/Recording 2026-10-14 12-41-21-326.txt",
+      "sha256": "0c2338bba4e7c951557e2f23d20a7bba21f81d6bb8d0eb83f056a3ef24d72186",
+      "bytes": 10931,
+      "characters": 10931,
+      "comparison_ids": [
+        "A1",
+        "A10",
+        "A11",
+        "A12",
+        "A13",
+        "A2",
+        "A3",
+        "A4",
+        "A5",
+        "A6",
+        "A7",
+        "A8",
+        "A9",
+        "B1",
+        "B10",
+        "B11",
+        "B2",
+        "B3",
+        "B4",
+        "B5",
+        "B6",
+        "B7",
+        "B8",
+        "B9",
+        "C1",
+        "C2",
+        "C4",
+        "C5",
+        "C6",
+        "D1",
+        "D2",
+        "D4",
+        "D5"
+      ],
+      "reading": "Complete current reread; source-preservation appendix and whole-file aliases checked against separately read originals; full-reread/semantic-ledger.json records findings.",
+      "previous_sha256": "0c2338bba4e7c951557e2f23d20a7bba21f81d6bb8d0eb83f056a3ef24d72186",
+      "current_status_source": "guideline-comparison-2026-10-15.md; chronological acceptance in foreground-routing-and-retries-2026-10-15.md"
+    },
+    {
+      "path": "original-recordings/agents/Recording 2026-10-15 17-41-19-190.txt",
+      "sha256": "8b1669420769d25e70d009be93d9adbfdb76b94aa64c8f63693de803842344e7",
+      "bytes": 24403,
+      "characters": 24403,
+      "comparison_ids": [
+        "A1",
+        "A3",
+        "A4",
+        "A5",
+        "B5",
+        "B6",
+        "C1",
+        "C7",
+        "D1",
+        "D4",
+        "G1"
+      ],
+      "reading": "Complete current reread; source-preservation appendix and whole-file aliases checked against separately read originals; full-reread/semantic-ledger.json records findings.",
+      "previous_sha256": null,
+      "current_status_source": "guideline-comparison-2026-10-15.md; chronological acceptance in foreground-routing-and-retries-2026-10-15.md"
+    },
+    {
+      "path": "original-recordings/games/Recording 2026-08-13 17-37-45-601.txt",
+      "sha256": "371af8a051aa51d6688cc33d5f40a2180be2311545866d39bad7b7b673c0aa44",
+      "bytes": 28644,
+      "characters": 28644,
+      "comparison_ids": [
+        "C8",
+        "D6"
+      ],
+      "reading": "Complete current reread; source-preservation appendix and whole-file aliases checked against separately read originals; full-reread/semantic-ledger.json records findings.",
+      "previous_sha256": "371af8a051aa51d6688cc33d5f40a2180be2311545866d39bad7b7b673c0aa44",
+      "current_status_source": "guideline-comparison-2026-10-15.md; chronological acceptance in foreground-routing-and-retries-2026-10-15.md"
+    },
+    {
+      "path": "original-recordings/games/Recording 2026-08-13 18-11-36-235.txt",
+      "sha256": "c60b999c6f31dd9721b09dd08eaae9ac73d9500240eacde4b090c32161842a77",
+      "bytes": 13034,
+      "characters": 13034,
+      "comparison_ids": [
+        "C8",
+        "D6"
+      ],
+      "reading": "Complete current reread; source-preservation appendix and whole-file aliases checked against separately read originals; full-reread/semantic-ledger.json records findings.",
+      "previous_sha256": "c60b999c6f31dd9721b09dd08eaae9ac73d9500240eacde4b090c32161842a77",
+      "current_status_source": "guideline-comparison-2026-10-15.md; chronological acceptance in foreground-routing-and-retries-2026-10-15.md"
+    },
+    {
+      "path": "original-recordings/games/Recording 2026-08-14 13-01-57-849.txt",
+      "sha256": "d602098ca19c0f1e8bb2453a85090d4d0682253939c985458f3fc9c6cd03da17",
+      "bytes": 10442,
+      "characters": 10442,
+      "comparison_ids": [
+        "C8",
+        "D6"
+      ],
+      "reading": "Complete current reread; source-preservation appendix and whole-file aliases checked against separately read originals; full-reread/semantic-ledger.json records findings.",
+      "previous_sha256": "d602098ca19c0f1e8bb2453a85090d4d0682253939c985458f3fc9c6cd03da17",
+      "current_status_source": "guideline-comparison-2026-10-15.md; chronological acceptance in foreground-routing-and-retries-2026-10-15.md"
+    },
+    {
+      "path": "original-recordings/games/Recording 2026-08-14 16-27-52-325.txt",
+      "sha256": "7ce23bc83ac7fdd5c85fa8b456aed2e5f9387a9546b7a9016aff0880b9837665",
+      "bytes": 2976,
+      "characters": 2976,
+      "comparison_ids": [
+        "C8",
+        "D6"
+      ],
+      "reading": "Complete current reread; source-preservation appendix and whole-file aliases checked against separately read originals; full-reread/semantic-ledger.json records findings.",
+      "previous_sha256": "7ce23bc83ac7fdd5c85fa8b456aed2e5f9387a9546b7a9016aff0880b9837665",
+      "current_status_source": "guideline-comparison-2026-10-15.md; chronological acceptance in foreground-routing-and-retries-2026-10-15.md"
+    },
+    {
+      "path": "original-recordings/games/Recording 2026-08-14 17-01-32-916.txt",
+      "sha256": "9cd207a20a887f28effc8c8b9023796c0b910f3e6dbe2bc566e7d5411ab93e0b",
+      "bytes": 4192,
+      "characters": 4192,
+      "comparison_ids": [
+        "C8",
+        "D6"
+      ],
+      "reading": "Complete current reread; source-preservation appendix and whole-file aliases checked against separately read originals; full-reread/semantic-ledger.json records findings.",
+      "previous_sha256": "9cd207a20a887f28effc8c8b9023796c0b910f3e6dbe2bc566e7d5411ab93e0b",
+      "current_status_source": "guideline-comparison-2026-10-15.md; chronological acceptance in foreground-routing-and-retries-2026-10-15.md"
+    },
+    {
+      "path": "original-recordings/games/Recording 2026-08-14 17-49-02-029.txt",
+      "sha256": "81d7ac73d31229f022fcf8a51bad781c4da0572cb582edd40ac8b1403c9da323",
+      "bytes": 17610,
+      "characters": 17610,
+      "comparison_ids": [
+        "C8",
+        "D6"
+      ],
+      "reading": "Complete current reread; source-preservation appendix and whole-file aliases checked against separately read originals; full-reread/semantic-ledger.json records findings.",
+      "previous_sha256": "81d7ac73d31229f022fcf8a51bad781c4da0572cb582edd40ac8b1403c9da323",
+      "current_status_source": "guideline-comparison-2026-10-15.md; chronological acceptance in foreground-routing-and-retries-2026-10-15.md"
+    },
+    {
+      "path": "original-recordings/games/Recording 2026-09-22 16-21-16-561.txt",
+      "sha256": "ec9f9ac6c375841d2eee76552768a30369ebac3eacd1e055f96dd04e4f248d4f",
+      "bytes": 3193,
+      "characters": 3193,
+      "comparison_ids": [
+        "C8",
+        "D6"
+      ],
+      "reading": "Complete current reread; source-preservation appendix and whole-file aliases checked against separately read originals; full-reread/semantic-ledger.json records findings.",
+      "previous_sha256": "ec9f9ac6c375841d2eee76552768a30369ebac3eacd1e055f96dd04e4f248d4f",
+      "current_status_source": "guideline-comparison-2026-10-15.md; chronological acceptance in foreground-routing-and-retries-2026-10-15.md"
+    },
+    {
+      "path": "original-recordings/games/Recording 2026-09-22 19-29-45-708.txt",
+      "sha256": "3caddbd244f4718cee9620ecbe854b85fe312d80dc3e0e58a1aba9c520002e06",
+      "bytes": 17035,
+      "characters": 17035,
+      "comparison_ids": [
+        "C8",
+        "D6"
+      ],
+      "reading": "Complete current reread; source-preservation appendix and whole-file aliases checked against separately read originals; full-reread/semantic-ledger.json records findings.",
+      "previous_sha256": "3caddbd244f4718cee9620ecbe854b85fe312d80dc3e0e58a1aba9c520002e06",
+      "current_status_source": "guideline-comparison-2026-10-15.md; chronological acceptance in foreground-routing-and-retries-2026-10-15.md"
+    },
+    {
+      "path": "original-recordings/games/Recording 2026-09-23 07-45-59-368.txt",
+      "sha256": "e29aa5fcaa0bcf78c287f51964c45b0f5d6db4b8c7dc3b59ecba91d8347e57ab",
+      "bytes": 16241,
+      "characters": 16241,
+      "comparison_ids": [
+        "C8",
+        "D6"
+      ],
+      "reading": "Complete current reread; source-preservation appendix and whole-file aliases checked against separately read originals; full-reread/semantic-ledger.json records findings.",
+      "previous_sha256": "e29aa5fcaa0bcf78c287f51964c45b0f5d6db4b8c7dc3b59ecba91d8347e57ab",
+      "current_status_source": "guideline-comparison-2026-10-15.md; chronological acceptance in foreground-routing-and-retries-2026-10-15.md"
+    },
+    {
+      "path": "original-recordings/games/Recording 2026-09-23 12-43-37-539.txt",
+      "sha256": "d91626236ecc48415fec87879af7e7dc7df4e61ffc77ee4bfb0ddeadf5b734bd",
+      "bytes": 11989,
+      "characters": 11989,
+      "comparison_ids": [
+        "C8",
+        "D6"
+      ],
+      "reading": "Complete current reread; source-preservation appendix and whole-file aliases checked against separately read originals; full-reread/semantic-ledger.json records findings.",
+      "previous_sha256": "d91626236ecc48415fec87879af7e7dc7df4e61ffc77ee4bfb0ddeadf5b734bd",
+      "current_status_source": "guideline-comparison-2026-10-15.md; chronological acceptance in foreground-routing-and-retries-2026-10-15.md"
+    },
+    {
+      "path": "original-recordings/games/Recording 2026-09-23 18-07-16-763.txt",
+      "sha256": "7a6e34efe08afb378e1436c2e51b9bc0312e188110267ab1790266ce80df687b",
+      "bytes": 20271,
+      "characters": 20271,
+      "comparison_ids": [
+        "C8",
+        "D6"
+      ],
+      "reading": "Complete current reread; source-preservation appendix and whole-file aliases checked against separately read originals; full-reread/semantic-ledger.json records findings.",
+      "previous_sha256": "7a6e34efe08afb378e1436c2e51b9bc0312e188110267ab1790266ce80df687b",
+      "current_status_source": "guideline-comparison-2026-10-15.md; chronological acceptance in foreground-routing-and-retries-2026-10-15.md"
+    },
+    {
+      "path": "original-recordings/games/Recording 2026-09-24 11-11-22-318.txt",
+      "sha256": "b7506f7b65e0666d827739093087cba1d76af66d4d5290173a8c585520893798",
+      "bytes": 6804,
+      "characters": 6804,
+      "comparison_ids": [
+        "C8",
+        "D6"
+      ],
+      "reading": "Complete current reread; source-preservation appendix and whole-file aliases checked against separately read originals; full-reread/semantic-ledger.json records findings.",
+      "previous_sha256": "b7506f7b65e0666d827739093087cba1d76af66d4d5290173a8c585520893798",
+      "current_status_source": "guideline-comparison-2026-10-15.md; chronological acceptance in foreground-routing-and-retries-2026-10-15.md"
+    },
+    {
+      "path": "original-recordings/games/Recording 2026-09-24 14-06-13-020.txt",
+      "sha256": "07c826d47d0a137c7b522f205d6ba6cbb9226bd7898b9dcc4c1f16cff9813c35",
+      "bytes": 24310,
+      "characters": 24310,
+      "comparison_ids": [
+        "C8",
+        "D6"
+      ],
+      "reading": "Complete current reread; source-preservation appendix and whole-file aliases checked against separately read originals; full-reread/semantic-ledger.json records findings.",
+      "previous_sha256": "07c826d47d0a137c7b522f205d6ba6cbb9226bd7898b9dcc4c1f16cff9813c35",
+      "current_status_source": "guideline-comparison-2026-10-15.md; chronological acceptance in foreground-routing-and-retries-2026-10-15.md"
+    },
+    {
+      "path": "original-recordings/games/Recording 2026-09-24 19-08-31-060.txt",
+      "sha256": "61908746caac02f4cce87ffb8cdbd0ec38d590f47d614533438b842dec367d6f",
+      "bytes": 14196,
+      "characters": 14196,
+      "comparison_ids": [
+        "C8",
+        "D6"
+      ],
+      "reading": "Complete current reread; source-preservation appendix and whole-file aliases checked against separately read originals; full-reread/semantic-ledger.json records findings.",
+      "previous_sha256": "61908746caac02f4cce87ffb8cdbd0ec38d590f47d614533438b842dec367d6f",
+      "current_status_source": "guideline-comparison-2026-10-15.md; chronological acceptance in foreground-routing-and-retries-2026-10-15.md"
+    },
+    {
+      "path": "original-recordings/games/Recording 2026-09-24 20-20-06-214.txt",
+      "sha256": "1e9b4314614d1b1ac9e8396cdc5811cd24e6612bb18ae179610c679c4c1ac969",
+      "bytes": 25959,
+      "characters": 25959,
+      "comparison_ids": [
+        "C8",
+        "D6"
+      ],
+      "reading": "Complete current reread; source-preservation appendix and whole-file aliases checked against separately read originals; full-reread/semantic-ledger.json records findings.",
+      "previous_sha256": "1e9b4314614d1b1ac9e8396cdc5811cd24e6612bb18ae179610c679c4c1ac969",
+      "current_status_source": "guideline-comparison-2026-10-15.md; chronological acceptance in foreground-routing-and-retries-2026-10-15.md"
+    },
+    {
+      "path": "original-recordings/games/Recording 2026-09-25 18-40-43-161.txt",
+      "sha256": "131abd68f988d114c068ac940a7393926084b3aeb24c4ec4c587055c30aa3a95",
+      "bytes": 23517,
+      "characters": 23517,
+      "comparison_ids": [
+        "C8",
+        "D6"
+      ],
+      "reading": "Complete current reread; source-preservation appendix and whole-file aliases checked against separately read originals; full-reread/semantic-ledger.json records findings.",
+      "previous_sha256": "131abd68f988d114c068ac940a7393926084b3aeb24c4ec4c587055c30aa3a95",
+      "current_status_source": "guideline-comparison-2026-10-15.md; chronological acceptance in foreground-routing-and-retries-2026-10-15.md"
+    },
+    {
+      "path": "original-recordings/games/Recording 2026-09-25 21-49-14-988.txt",
+      "sha256": "38671b9aa30d4fb20e50a4e75334a3a3aceafe6d9417c8e8cf20e3b401e74670",
+      "bytes": 124,
+      "characters": 124,
+      "comparison_ids": [
+        "C8",
+        "D6"
+      ],
+      "reading": "Complete current reread; source-preservation appendix and whole-file aliases checked against separately read originals; full-reread/semantic-ledger.json records findings.",
+      "previous_sha256": "38671b9aa30d4fb20e50a4e75334a3a3aceafe6d9417c8e8cf20e3b401e74670",
+      "current_status_source": "guideline-comparison-2026-10-15.md; chronological acceptance in foreground-routing-and-retries-2026-10-15.md"
+    },
+    {
+      "path": "original-recordings/games/Recording 2026-09-25 21-49-53-432.txt",
+      "sha256": "15f087efafc7e24d5a5fa83bddaff99ff27b930c7c14a24f312c07721ecb17c2",
+      "bytes": 10284,
+      "characters": 10284,
+      "comparison_ids": [
+        "C8",
+        "D6"
+      ],
+      "reading": "Complete current reread; source-preservation appendix and whole-file aliases checked against separately read originals; full-reread/semantic-ledger.json records findings.",
+      "previous_sha256": "15f087efafc7e24d5a5fa83bddaff99ff27b930c7c14a24f312c07721ecb17c2",
+      "current_status_source": "guideline-comparison-2026-10-15.md; chronological acceptance in foreground-routing-and-retries-2026-10-15.md"
+    },
+    {
+      "path": "original-recordings/games/Recording 2026-10-09 12-16-12-908.txt",
+      "sha256": "425cfc8b8587d7b44c5112d94cac5f8348c6eb0294eb19ace5a635565e80aee6",
+      "bytes": 11247,
+      "characters": 11247,
+      "comparison_ids": [
+        "C8",
+        "D6"
+      ],
+      "reading": "Complete current reread; source-preservation appendix and whole-file aliases checked against separately read originals; full-reread/semantic-ledger.json records findings.",
+      "previous_sha256": "425cfc8b8587d7b44c5112d94cac5f8348c6eb0294eb19ace5a635565e80aee6",
+      "current_status_source": "guideline-comparison-2026-10-15.md; chronological acceptance in foreground-routing-and-retries-2026-10-15.md"
+    },
+    {
+      "path": "original-recordings/games/Recording 2026-10-09 18-04-17-301.txt",
+      "sha256": "2d762aaf65d1dda21943a0d8c1612cc424f8df9c2b679f0e2e2409f958238cf0",
+      "bytes": 20640,
+      "characters": 20640,
+      "comparison_ids": [
+        "C8",
+        "D6"
+      ],
+      "reading": "Complete current reread; source-preservation appendix and whole-file aliases checked against separately read originals; full-reread/semantic-ledger.json records findings.",
+      "previous_sha256": "2d762aaf65d1dda21943a0d8c1612cc424f8df9c2b679f0e2e2409f958238cf0",
+      "current_status_source": "guideline-comparison-2026-10-15.md; chronological acceptance in foreground-routing-and-retries-2026-10-15.md"
+    },
+    {
+      "path": "original-recordings/games/Recording 2026-10-10 18-14-53-924.txt",
+      "sha256": "eec72cfb205a06533b1ed4ee38443fe4ba61d2aaf1eb40a2a336e1e50c32ed50",
+      "bytes": 10065,
+      "characters": 10065,
+      "comparison_ids": [
+        "C8",
+        "D6"
+      ],
+      "reading": "Complete current reread; source-preservation appendix and whole-file aliases checked against separately read originals; full-reread/semantic-ledger.json records findings.",
+      "previous_sha256": "eec72cfb205a06533b1ed4ee38443fe4ba61d2aaf1eb40a2a336e1e50c32ed50",
+      "current_status_source": "guideline-comparison-2026-10-15.md; chronological acceptance in foreground-routing-and-retries-2026-10-15.md"
+    },
+    {
+      "path": "original-recordings/games/Recording 2026-10-10 18-42-09-059.txt",
+      "sha256": "186296281d738b065509c4a4362ef7506a82306ddfe30900193e10090eea46ac",
+      "bytes": 4715,
+      "characters": 4715,
+      "comparison_ids": [
+        "C8",
+        "D6"
+      ],
+      "reading": "Complete current reread; source-preservation appendix and whole-file aliases checked against separately read originals; full-reread/semantic-ledger.json records findings.",
+      "previous_sha256": "186296281d738b065509c4a4362ef7506a82306ddfe30900193e10090eea46ac",
+      "current_status_source": "guideline-comparison-2026-10-15.md; chronological acceptance in foreground-routing-and-retries-2026-10-15.md"
+    },
+    {
+      "path": "original-recordings/games/Recording 2026-10-14 18-33-46-960.txt",
+      "sha256": "319d21791b2e271bcb1b92f2c8ac297e8b5056a162e11100f69df614f9f68428",
+      "bytes": 16882,
+      "characters": 16882,
+      "comparison_ids": [
+        "C8",
+        "C10",
+        "D6"
+      ],
+      "reading": "Complete current reread; source-preservation appendix and whole-file aliases checked against separately read originals; full-reread/semantic-ledger.json records findings.",
+      "previous_sha256": null,
+      "current_status_source": "guideline-comparison-2026-10-15.md; chronological acceptance in foreground-routing-and-retries-2026-10-15.md"
+    },
+    {
+      "path": "original-recordings/general/config/Recording 2026-08-10 17-25-49-264.txt",
+      "sha256": "cb2f78284b9faff7e532525a7c56992969ef81f95db04806a5d930a3352bc796",
+      "bytes": 8785,
+      "characters": 8785,
+      "comparison_ids": [
+        "A8",
+        "C1",
+        "C2",
+        "C7"
+      ],
+      "reading": "Complete current reread; source-preservation appendix and whole-file aliases checked against separately read originals; full-reread/semantic-ledger.json records findings.",
+      "previous_sha256": "cb2f78284b9faff7e532525a7c56992969ef81f95db04806a5d930a3352bc796",
+      "current_status_source": "guideline-comparison-2026-10-15.md; chronological acceptance in foreground-routing-and-retries-2026-10-15.md"
+    },
+    {
+      "path": "original-recordings/general/config/Recording 2026-08-21 06-46-58-804.txt",
+      "sha256": "2f70e879ccd61d2b761c8943a6aae2b72a23d2d73483da24e711dbcef315e622",
+      "bytes": 8713,
+      "characters": 8713,
+      "comparison_ids": [
+        "A8",
+        "C1",
+        "C2",
+        "C7"
+      ],
+      "reading": "Complete current reread; source-preservation appendix and whole-file aliases checked against separately read originals; full-reread/semantic-ledger.json records findings.",
+      "previous_sha256": "2f70e879ccd61d2b761c8943a6aae2b72a23d2d73483da24e711dbcef315e622",
+      "current_status_source": "guideline-comparison-2026-10-15.md; chronological acceptance in foreground-routing-and-retries-2026-10-15.md"
+    },
+    {
+      "path": "original-recordings/general/config/Recording 2026-08-31 12-31-37-822.txt",
+      "sha256": "39df00c07a54f513b4f9391641204890c97736f7f9c1bc09256fea962bfd8f03",
+      "bytes": 10169,
+      "characters": 10169,
+      "comparison_ids": [
+        "A8",
+        "C1",
+        "C2",
+        "C7"
+      ],
+      "reading": "Complete current reread; source-preservation appendix and whole-file aliases checked against separately read originals; full-reread/semantic-ledger.json records findings.",
+      "previous_sha256": "39df00c07a54f513b4f9391641204890c97736f7f9c1bc09256fea962bfd8f03",
+      "current_status_source": "guideline-comparison-2026-10-15.md; chronological acceptance in foreground-routing-and-retries-2026-10-15.md"
+    },
+    {
+      "path": "original-recordings/general/logging/Recording 2026-08-09 18-44-42-295.txt",
+      "sha256": "01ba4719c80b6fe911b091a7c05124b64eeece964e09c058ef8f9805daca546b",
+      "bytes": 1,
+      "characters": 1,
+      "comparison_ids": [
+        "A13",
+        "C2",
+        "C3",
+        "C7"
+      ],
+      "reading": "Complete current reread; source-preservation appendix and whole-file aliases checked against separately read originals; full-reread/semantic-ledger.json records findings.",
+      "previous_sha256": "01ba4719c80b6fe911b091a7c05124b64eeece964e09c058ef8f9805daca546b",
+      "current_status_source": "guideline-comparison-2026-10-15.md; chronological acceptance in foreground-routing-and-retries-2026-10-15.md"
+    },
+    {
+      "path": "original-recordings/general/logging/Recording 2026-08-09 18-45-04-576.txt",
+      "sha256": "95d4f99b864ca634df8c78bbcc843e0c5fadf180e3916483ae53c7f5cda68f79",
+      "bytes": 11933,
+      "characters": 11933,
+      "comparison_ids": [
+        "A13",
+        "C2",
+        "C3",
+        "C7"
+      ],
+      "reading": "Complete current reread; source-preservation appendix and whole-file aliases checked against separately read originals; full-reread/semantic-ledger.json records findings.",
+      "previous_sha256": "95d4f99b864ca634df8c78bbcc843e0c5fadf180e3916483ae53c7f5cda68f79",
+      "current_status_source": "guideline-comparison-2026-10-15.md; chronological acceptance in foreground-routing-and-retries-2026-10-15.md"
+    },
+    {
+      "path": "original-recordings/general/network/Recording 2026-08-07 12-59-34-262.txt",
+      "sha256": "15eb8f01ac62edc64b46f9205c75e7c91689cab94445121cd4b35fc5e6ee4bf6",
+      "bytes": 8716,
+      "characters": 8716,
+      "comparison_ids": [
+        "A7",
+        "C6",
+        "C7"
+      ],
+      "reading": "Complete current reread; source-preservation appendix and whole-file aliases checked against separately read originals; full-reread/semantic-ledger.json records findings.",
+      "previous_sha256": "15eb8f01ac62edc64b46f9205c75e7c91689cab94445121cd4b35fc5e6ee4bf6",
+      "current_status_source": "guideline-comparison-2026-10-15.md; chronological acceptance in foreground-routing-and-retries-2026-10-15.md"
+    },
+    {
+      "path": "original-recordings/general/network/Recording 2026-08-07 17-53-06-299.txt",
+      "sha256": "c379adef5ebe33ae5ac5b4adc008fb03a713db241c4d1a6c909e89b3afaf43d9",
+      "bytes": 6906,
+      "characters": 6906,
+      "comparison_ids": [
+        "A7",
+        "C6",
+        "C7"
+      ],
+      "reading": "Complete current reread; source-preservation appendix and whole-file aliases checked against separately read originals; full-reread/semantic-ledger.json records findings.",
+      "previous_sha256": "c379adef5ebe33ae5ac5b4adc008fb03a713db241c4d1a6c909e89b3afaf43d9",
+      "current_status_source": "guideline-comparison-2026-10-15.md; chronological acceptance in foreground-routing-and-retries-2026-10-15.md"
+    },
+    {
+      "path": "original-recordings/general/network/Recording 2026-08-20 13-05-36-584.txt",
+      "sha256": "d5a4840a5b9779f8a0b4f2d8a5864cbe7239181d6619407f25dac263961f777e",
+      "bytes": 6337,
+      "characters": 6337,
+      "comparison_ids": [
+        "A7",
+        "C6",
+        "C7"
+      ],
+      "reading": "Complete current reread; source-preservation appendix and whole-file aliases checked against separately read originals; full-reread/semantic-ledger.json records findings.",
+      "previous_sha256": "d5a4840a5b9779f8a0b4f2d8a5864cbe7239181d6619407f25dac263961f777e",
+      "current_status_source": "guideline-comparison-2026-10-15.md; chronological acceptance in foreground-routing-and-retries-2026-10-15.md"
+    },
+    {
+      "path": "original-recordings/general/network/Recording 2026-10-06 11-24-06-508.txt",
+      "sha256": "c1398fb77fc9c7235e35b8279f91ff9b027e9e58fc000e93892537d96d6b21f6",
+      "bytes": 13408,
+      "characters": 13408,
+      "comparison_ids": [
+        "A7",
+        "C6",
+        "C7",
+        "C8",
+        "D4",
+        "D5"
+      ],
+      "reading": "Complete current reread; source-preservation appendix and whole-file aliases checked against separately read originals; full-reread/semantic-ledger.json records findings.",
+      "previous_sha256": "c1398fb77fc9c7235e35b8279f91ff9b027e9e58fc000e93892537d96d6b21f6",
+      "current_status_source": "guideline-comparison-2026-10-15.md; chronological acceptance in foreground-routing-and-retries-2026-10-15.md"
+    },
+    {
+      "path": "original-recordings/general/programming/Recording 2026-08-26 21-01-35-467.txt",
+      "sha256": "e0bafa8230aa541678cc5c2f30f506d00f670ffcf4d6fd1e2286940c08f59581",
+      "bytes": 11111,
+      "characters": 11111,
+      "comparison_ids": [
+        "A10",
+        "A13",
+        "A2",
+        "A7",
+        "A8",
+        "B4",
+        "B7",
+        "C1",
+        "C10",
+        "C2",
+        "C3",
+        "C4",
+        "C5",
+        "C6",
+        "C8",
+        "C9"
+      ],
+      "reading": "Complete current reread; source-preservation appendix and whole-file aliases checked against separately read originals; full-reread/semantic-ledger.json records findings.",
+      "previous_sha256": "e0bafa8230aa541678cc5c2f30f506d00f670ffcf4d6fd1e2286940c08f59581",
+      "current_status_source": "guideline-comparison-2026-10-15.md; chronological acceptance in foreground-routing-and-retries-2026-10-15.md"
+    },
+    {
+      "path": "original-recordings/general/programming/Recording 2026-08-27 13-07-44-756.txt",
+      "sha256": "2ce568625fe4d95b1790f2cf271b6b73ddf34ed912ba8cfbab432bf4b6e4e0ef",
+      "bytes": 52186,
+      "characters": 52186,
+      "comparison_ids": [
+        "A10",
+        "A13",
+        "A2",
+        "A7",
+        "A8",
+        "B4",
+        "B7",
+        "C1",
+        "C10",
+        "C2",
+        "C3",
+        "C4",
+        "C5",
+        "C6",
+        "C8",
+        "C9"
+      ],
+      "reading": "Complete current reread; source-preservation appendix and whole-file aliases checked against separately read originals; full-reread/semantic-ledger.json records findings.",
+      "previous_sha256": "2ce568625fe4d95b1790f2cf271b6b73ddf34ed912ba8cfbab432bf4b6e4e0ef",
+      "current_status_source": "guideline-comparison-2026-10-15.md; chronological acceptance in foreground-routing-and-retries-2026-10-15.md"
+    },
+    {
+      "path": "original-recordings/general/programming/Recording 2026-08-27 19-35-37-192.txt",
+      "sha256": "d08f83a168cc5db8d20b13c90db37ad8e770c2b48aaa1060b4342d941352998b",
+      "bytes": 16226,
+      "characters": 16226,
+      "comparison_ids": [
+        "A10",
+        "A13",
+        "A2",
+        "A7",
+        "A8",
+        "B4",
+        "B7",
+        "C1",
+        "C10",
+        "C2",
+        "C3",
+        "C4",
+        "C5",
+        "C6",
+        "C8",
+        "C9"
+      ],
+      "reading": "Complete current reread; source-preservation appendix and whole-file aliases checked against separately read originals; full-reread/semantic-ledger.json records findings.",
+      "previous_sha256": "d08f83a168cc5db8d20b13c90db37ad8e770c2b48aaa1060b4342d941352998b",
+      "current_status_source": "guideline-comparison-2026-10-15.md; chronological acceptance in foreground-routing-and-retries-2026-10-15.md"
+    },
+    {
+      "path": "original-recordings/general/programming/Recording 2026-08-28 07-36-32-915.txt",
+      "sha256": "b80519e26fdf42cbade139de080340b609adc9ab3fb8cd3f0ab97056e938ce14",
+      "bytes": 19856,
+      "characters": 19856,
+      "comparison_ids": [
+        "A10",
+        "A13",
+        "A2",
+        "A7",
+        "A8",
+        "B4",
+        "B7",
+        "C1",
+        "C10",
+        "C2",
+        "C3",
+        "C4",
+        "C5",
+        "C6",
+        "C8",
+        "C9"
+      ],
+      "reading": "Complete current reread; source-preservation appendix and whole-file aliases checked against separately read originals; full-reread/semantic-ledger.json records findings.",
+      "previous_sha256": "b80519e26fdf42cbade139de080340b609adc9ab3fb8cd3f0ab97056e938ce14",
+      "current_status_source": "guideline-comparison-2026-10-15.md; chronological acceptance in foreground-routing-and-retries-2026-10-15.md"
+    },
+    {
+      "path": "original-recordings/general/programming/Recording 2026-08-28 18-41-20-415.txt",
+      "sha256": "0c5c284822799894518ebcb5ca5e1d2b01ed6e9e95b0f8f377d14aae8d67e347",
+      "bytes": 28,
+      "characters": 28,
+      "comparison_ids": [
+        "A10",
+        "A13",
+        "A2",
+        "A7",
+        "A8",
+        "B4",
+        "B7",
+        "C1",
+        "C10",
+        "C2",
+        "C3",
+        "C4",
+        "C5",
+        "C6",
+        "C8",
+        "C9"
+      ],
+      "reading": "Complete current reread; source-preservation appendix and whole-file aliases checked against separately read originals; full-reread/semantic-ledger.json records findings.",
+      "previous_sha256": "0c5c284822799894518ebcb5ca5e1d2b01ed6e9e95b0f8f377d14aae8d67e347",
+      "current_status_source": "guideline-comparison-2026-10-15.md; chronological acceptance in foreground-routing-and-retries-2026-10-15.md"
+    },
+    {
+      "path": "original-recordings/general/programming/Recording 2026-08-28 18-41-45-580.txt",
+      "sha256": "b0020f83cf59b3fd9575c8bc8faa1e358f94bdf41906696a50ecd98bab996cec",
+      "bytes": 10167,
+      "characters": 10167,
+      "comparison_ids": [
+        "A10",
+        "A13",
+        "A2",
+        "A7",
+        "A8",
+        "B4",
+        "B7",
+        "C1",
+        "C10",
+        "C2",
+        "C3",
+        "C4",
+        "C5",
+        "C6",
+        "C8",
+        "C9"
+      ],
+      "reading": "Complete current reread; source-preservation appendix and whole-file aliases checked against separately read originals; full-reread/semantic-ledger.json records findings.",
+      "previous_sha256": "b0020f83cf59b3fd9575c8bc8faa1e358f94bdf41906696a50ecd98bab996cec",
+      "current_status_source": "guideline-comparison-2026-10-15.md; chronological acceptance in foreground-routing-and-retries-2026-10-15.md"
+    },
+    {
+      "path": "original-recordings/general/programming/Recording 2026-09-01 18-26-08-628.txt",
+      "sha256": "67f2489efb3cd7a714e805777bedbbc4b2917cd86ec52ec584d37cc604097d71",
+      "bytes": 71718,
+      "characters": 71718,
+      "comparison_ids": [
+        "A10",
+        "A13",
+        "A2",
+        "A7",
+        "A8",
+        "B4",
+        "B7",
+        "C1",
+        "C10",
+        "C2",
+        "C3",
+        "C4",
+        "C5",
+        "C6",
+        "C8",
+        "C9"
+      ],
+      "reading": "Complete current reread; source-preservation appendix and whole-file aliases checked against separately read originals; full-reread/semantic-ledger.json records findings.",
+      "previous_sha256": "67f2489efb3cd7a714e805777bedbbc4b2917cd86ec52ec584d37cc604097d71",
+      "current_status_source": "guideline-comparison-2026-10-15.md; chronological acceptance in foreground-routing-and-retries-2026-10-15.md"
+    },
+    {
+      "path": "original-recordings/general/programming/Recording 2026-09-07 12-13-37-378.txt",
+      "sha256": "322efdf964e3e3c5bee1a63e925813895ae3ab030d11937f5a62bc41d3c768fa",
+      "bytes": 10087,
+      "characters": 10087,
+      "comparison_ids": [
+        "A10",
+        "A13",
+        "A2",
+        "A7",
+        "A8",
+        "B4",
+        "B7",
+        "C1",
+        "C10",
+        "C2",
+        "C3",
+        "C4",
+        "C5",
+        "C6",
+        "C8",
+        "C9"
+      ],
+      "reading": "Complete current reread; source-preservation appendix and whole-file aliases checked against separately read originals; full-reread/semantic-ledger.json records findings.",
+      "previous_sha256": "322efdf964e3e3c5bee1a63e925813895ae3ab030d11937f5a62bc41d3c768fa",
+      "current_status_source": "guideline-comparison-2026-10-15.md; chronological acceptance in foreground-routing-and-retries-2026-10-15.md"
+    },
+    {
+      "path": "original-recordings/general/programming/Recording 2026-09-07 16-57-57-943.txt",
+      "sha256": "d8f7e85feeb21901cc1562351daecb15290e7d0d5c855d833931d267e1fdb67d",
+      "bytes": 14140,
+      "characters": 14140,
+      "comparison_ids": [
+        "A10",
+        "A13",
+        "A2",
+        "A7",
+        "A8",
+        "B4",
+        "B7",
+        "C1",
+        "C10",
+        "C2",
+        "C3",
+        "C4",
+        "C5",
+        "C6",
+        "C8",
+        "C9"
+      ],
+      "reading": "Complete current reread; source-preservation appendix and whole-file aliases checked against separately read originals; full-reread/semantic-ledger.json records findings.",
+      "previous_sha256": "d8f7e85feeb21901cc1562351daecb15290e7d0d5c855d833931d267e1fdb67d",
+      "current_status_source": "guideline-comparison-2026-10-15.md; chronological acceptance in foreground-routing-and-retries-2026-10-15.md"
+    },
+    {
+      "path": "original-recordings/general/programming/Recording 2026-09-09 17-53-23-726.txt",
+      "sha256": "4cf4d4bfce902f6cd0ad74ce4d85f2ab5b837789c9a6e0d2d56111bbfc036bb9",
+      "bytes": 6541,
+      "characters": 6541,
+      "comparison_ids": [
+        "A10",
+        "A13",
+        "A2",
+        "A7",
+        "A8",
+        "B4",
+        "B7",
+        "C1",
+        "C10",
+        "C2",
+        "C3",
+        "C4",
+        "C5",
+        "C6",
+        "C8",
+        "C9"
+      ],
+      "reading": "Complete current reread; source-preservation appendix and whole-file aliases checked against separately read originals; full-reread/semantic-ledger.json records findings.",
+      "previous_sha256": "4cf4d4bfce902f6cd0ad74ce4d85f2ab5b837789c9a6e0d2d56111bbfc036bb9",
+      "current_status_source": "guideline-comparison-2026-10-15.md; chronological acceptance in foreground-routing-and-retries-2026-10-15.md"
+    },
+    {
+      "path": "original-recordings/general/programming/Recording 2026-09-10 17-57-18-069.txt",
+      "sha256": "d2b7b1017e172f68fa95a06103907ad61b4b730b4cd31bb93516956f5a5204d5",
+      "bytes": 9594,
+      "characters": 9594,
+      "comparison_ids": [
+        "A10",
+        "A13",
+        "A2",
+        "A7",
+        "A8",
+        "B4",
+        "B7",
+        "C1",
+        "C10",
+        "C2",
+        "C3",
+        "C4",
+        "C5",
+        "C6",
+        "C8",
+        "C9"
+      ],
+      "reading": "Complete current reread; source-preservation appendix and whole-file aliases checked against separately read originals; full-reread/semantic-ledger.json records findings.",
+      "previous_sha256": "d2b7b1017e172f68fa95a06103907ad61b4b730b4cd31bb93516956f5a5204d5",
+      "current_status_source": "guideline-comparison-2026-10-15.md; chronological acceptance in foreground-routing-and-retries-2026-10-15.md"
+    },
+    {
+      "path": "original-recordings/general/programming/Recording 2026-09-17 07-42-28-553.txt",
+      "sha256": "38130cbfdcea8dd43be5f4edc68ebd783e22c98150bbf51bccb390e66c0632ef",
+      "bytes": 18241,
+      "characters": 18241,
+      "comparison_ids": [
+        "A10",
+        "A13",
+        "A2",
+        "A7",
+        "A8",
+        "B4",
+        "B7",
+        "C1",
+        "C10",
+        "C2",
+        "C3",
+        "C4",
+        "C5",
+        "C6",
+        "C8",
+        "C9"
+      ],
+      "reading": "Complete current reread; source-preservation appendix and whole-file aliases checked against separately read originals; full-reread/semantic-ledger.json records findings.",
+      "previous_sha256": "38130cbfdcea8dd43be5f4edc68ebd783e22c98150bbf51bccb390e66c0632ef",
+      "current_status_source": "guideline-comparison-2026-10-15.md; chronological acceptance in foreground-routing-and-retries-2026-10-15.md"
+    },
+    {
+      "path": "original-recordings/general/programming/Recording 2026-09-18 18-22-26-547.txt",
+      "sha256": "ed7a4ae70d045548ec66fe7ca8d20c055f32c96111230f110776064eb685f6ab",
+      "bytes": 44599,
+      "characters": 44599,
+      "comparison_ids": [
+        "A10",
+        "A13",
+        "A2",
+        "A7",
+        "A8",
+        "B4",
+        "B7",
+        "C1",
+        "C10",
+        "C2",
+        "C3",
+        "C4",
+        "C5",
+        "C6",
+        "C8",
+        "C9"
+      ],
+      "reading": "Complete current reread; source-preservation appendix and whole-file aliases checked against separately read originals; full-reread/semantic-ledger.json records findings.",
+      "previous_sha256": "ed7a4ae70d045548ec66fe7ca8d20c055f32c96111230f110776064eb685f6ab",
+      "current_status_source": "guideline-comparison-2026-10-15.md; chronological acceptance in foreground-routing-and-retries-2026-10-15.md"
+    },
+    {
+      "path": "original-recordings/general/programming/Recording 2026-09-19 09-03-14-084.txt",
+      "sha256": "f66bed6343592cae1a2d03e09943793ae73380d602421740176f2ca195995ef4",
+      "bytes": 32255,
+      "characters": 32255,
+      "comparison_ids": [
+        "A10",
+        "A13",
+        "A2",
+        "A7",
+        "A8",
+        "B4",
+        "B7",
+        "C1",
+        "C10",
+        "C2",
+        "C3",
+        "C4",
+        "C5",
+        "C6",
+        "C8",
+        "C9"
+      ],
+      "reading": "Complete current reread; source-preservation appendix and whole-file aliases checked against separately read originals; full-reread/semantic-ledger.json records findings.",
+      "previous_sha256": "f66bed6343592cae1a2d03e09943793ae73380d602421740176f2ca195995ef4",
+      "current_status_source": "guideline-comparison-2026-10-15.md; chronological acceptance in foreground-routing-and-retries-2026-10-15.md"
+    },
+    {
+      "path": "original-recordings/general/programming/Recording 2026-09-20 10-00-31-110.txt",
+      "sha256": "aea5e2741c308bf45594f581786b8ec44be48d4ebf6839c07c075f335a5a2630",
+      "bytes": 26689,
+      "characters": 26689,
+      "comparison_ids": [
+        "A10",
+        "A13",
+        "A2",
+        "A7",
+        "A8",
+        "B4",
+        "B7",
+        "C1",
+        "C10",
+        "C2",
+        "C3",
+        "C4",
+        "C5",
+        "C6",
+        "C8",
+        "C9"
+      ],
+      "reading": "Complete current reread; source-preservation appendix and whole-file aliases checked against separately read originals; full-reread/semantic-ledger.json records findings.",
+      "previous_sha256": "aea5e2741c308bf45594f581786b8ec44be48d4ebf6839c07c075f335a5a2630",
+      "current_status_source": "guideline-comparison-2026-10-15.md; chronological acceptance in foreground-routing-and-retries-2026-10-15.md"
+    },
+    {
+      "path": "original-recordings/general/programming/Recording 2026-09-26 09-29-14-271.txt",
+      "sha256": "7fab4fde783f287c51f7c68b4e1453b58c76d0e86c5672747d23603e58758bb9",
+      "bytes": 45326,
+      "characters": 45326,
+      "comparison_ids": [
+        "C8",
+        "D8"
+      ],
+      "reading": "Complete current reread; source-preservation appendix and whole-file aliases checked against separately read originals; full-reread/semantic-ledger.json records findings.",
+      "previous_sha256": "7fab4fde783f287c51f7c68b4e1453b58c76d0e86c5672747d23603e58758bb9",
+      "current_status_source": "guideline-comparison-2026-10-15.md; chronological acceptance in foreground-routing-and-retries-2026-10-15.md"
+    },
+    {
+      "path": "original-recordings/general/programming/Recording 2026-09-27 12-45-39-038.txt",
+      "sha256": "83898544f9b2062829981c42bf4170e9c1d8c229761151edc31bba8c212c708f",
+      "bytes": 11671,
+      "characters": 11671,
+      "comparison_ids": [
+        "C8",
+        "D8"
+      ],
+      "reading": "Complete current reread; source-preservation appendix and whole-file aliases checked against separately read originals; full-reread/semantic-ledger.json records findings.",
+      "previous_sha256": "83898544f9b2062829981c42bf4170e9c1d8c229761151edc31bba8c212c708f",
+      "current_status_source": "guideline-comparison-2026-10-15.md; chronological acceptance in foreground-routing-and-retries-2026-10-15.md"
+    },
+    {
+      "path": "original-recordings/general/programming/Recording 2026-09-27 19-44-45-736.txt",
+      "sha256": "42cf7156137d97528037432d9a529413d7a5f7fbc3ba3db05451c3fe1c94781c",
+      "bytes": 17665,
+      "characters": 17665,
+      "comparison_ids": [
+        "C8",
+        "D8"
+      ],
+      "reading": "Complete current reread; source-preservation appendix and whole-file aliases checked against separately read originals; full-reread/semantic-ledger.json records findings.",
+      "previous_sha256": "42cf7156137d97528037432d9a529413d7a5f7fbc3ba3db05451c3fe1c94781c",
+      "current_status_source": "guideline-comparison-2026-10-15.md; chronological acceptance in foreground-routing-and-retries-2026-10-15.md"
+    },
+    {
+      "path": "original-recordings/general/programming/Recording 2026-09-27 20-56-31-463.txt",
+      "sha256": "6fb4c3b01f1e853bb85cc418aadd5e52910393bf7b6c899516e957159f121f00",
+      "bytes": 13158,
+      "characters": 13158,
+      "comparison_ids": [
+        "C8",
+        "D8"
+      ],
+      "reading": "Complete current reread; source-preservation appendix and whole-file aliases checked against separately read originals; full-reread/semantic-ledger.json records findings.",
+      "previous_sha256": "6fb4c3b01f1e853bb85cc418aadd5e52910393bf7b6c899516e957159f121f00",
+      "current_status_source": "guideline-comparison-2026-10-15.md; chronological acceptance in foreground-routing-and-retries-2026-10-15.md"
+    },
+    {
+      "path": "original-recordings/general/programming/Recording 2026-10-07 18-02-02-878.txt",
+      "sha256": "57f5d2fde33f3ca5f644a3df1af40eb9c07bb65e59a5ed6c97d5d3d86d7f395f",
+      "bytes": 12197,
+      "characters": 12197,
+      "comparison_ids": [
+        "A10",
+        "A2",
+        "B7",
+        "C10",
+        "C4",
+        "C8",
+        "C9"
+      ],
+      "reading": "Complete current reread; source-preservation appendix and whole-file aliases checked against separately read originals; full-reread/semantic-ledger.json records findings.",
+      "previous_sha256": "57f5d2fde33f3ca5f644a3df1af40eb9c07bb65e59a5ed6c97d5d3d86d7f395f",
+      "current_status_source": "guideline-comparison-2026-10-15.md; chronological acceptance in foreground-routing-and-retries-2026-10-15.md"
+    },
+    {
+      "path": "original-recordings/general/testing/Recording 2026-08-15 20-49-36-478.txt",
+      "sha256": "5e0509ca1caae5b4094bc3a7ccd629cf86db2df0a447aab1e1aff3e3fd862fb4",
+      "bytes": 15441,
+      "characters": 15441,
+      "comparison_ids": [
+        "A10",
+        "C10",
+        "C8",
+        "C9"
+      ],
+      "reading": "Complete current reread; source-preservation appendix and whole-file aliases checked against separately read originals; full-reread/semantic-ledger.json records findings.",
+      "previous_sha256": "5e0509ca1caae5b4094bc3a7ccd629cf86db2df0a447aab1e1aff3e3fd862fb4",
+      "current_status_source": "guideline-comparison-2026-10-15.md; chronological acceptance in foreground-routing-and-retries-2026-10-15.md"
+    },
+    {
+      "path": "original-recordings/general/testing/Recording 2026-08-16 15-18-25-301.txt",
+      "sha256": "0bcc190063e4638e33df4db1b7b654ffa734d464559ee9571a002026f8999feb",
+      "bytes": 310,
+      "characters": 310,
+      "comparison_ids": [
+        "A10",
+        "C10",
+        "C8",
+        "C9"
+      ],
+      "reading": "Complete current reread; source-preservation appendix and whole-file aliases checked against separately read originals; full-reread/semantic-ledger.json records findings.",
+      "previous_sha256": "0bcc190063e4638e33df4db1b7b654ffa734d464559ee9571a002026f8999feb",
+      "current_status_source": "guideline-comparison-2026-10-15.md; chronological acceptance in foreground-routing-and-retries-2026-10-15.md"
+    },
+    {
+      "path": "original-recordings/general/testing/Recording 2026-08-16 15-21-52-298.txt",
+      "sha256": "42900dd1abd42a5ae65b8deac371706aaa7a44ff1164ba1edc73369a7ef443b4",
+      "bytes": 27064,
+      "characters": 27064,
+      "comparison_ids": [
+        "A10",
+        "C10",
+        "C8",
+        "C9"
+      ],
+      "reading": "Complete current reread; source-preservation appendix and whole-file aliases checked against separately read originals; full-reread/semantic-ledger.json records findings.",
+      "previous_sha256": "42900dd1abd42a5ae65b8deac371706aaa7a44ff1164ba1edc73369a7ef443b4",
+      "current_status_source": "guideline-comparison-2026-10-15.md; chronological acceptance in foreground-routing-and-retries-2026-10-15.md"
+    },
+    {
+      "path": "original-recordings/general/testing/Recording 2026-08-20 17-24-02-965.txt",
+      "sha256": "39f0dc00fda769ee9a55b323e10f474dd341300767da26fcd87c84b963280c58",
+      "bytes": 27824,
+      "characters": 27824,
+      "comparison_ids": [
+        "A10",
+        "C10",
+        "C8",
+        "C9"
+      ],
+      "reading": "Complete current reread; source-preservation appendix and whole-file aliases checked against separately read originals; full-reread/semantic-ledger.json records findings.",
+      "previous_sha256": "39f0dc00fda769ee9a55b323e10f474dd341300767da26fcd87c84b963280c58",
+      "current_status_source": "guideline-comparison-2026-10-15.md; chronological acceptance in foreground-routing-and-retries-2026-10-15.md"
+    },
+    {
+      "path": "original-recordings/general/testing/Recording 2026-09-23 08-47-18-577.txt",
+      "sha256": "f0ad2b233c74d6f4d9d2f0994962ef892bda770d2b6066b8da5ae3a4e81f882c",
+      "bytes": 18762,
+      "characters": 18760,
+      "comparison_ids": [
+        "A10",
+        "C10",
+        "C8",
+        "C9"
+      ],
+      "reading": "Complete current reread; source-preservation appendix and whole-file aliases checked against separately read originals; full-reread/semantic-ledger.json records findings.",
+      "previous_sha256": "f0ad2b233c74d6f4d9d2f0994962ef892bda770d2b6066b8da5ae3a4e81f882c",
+      "current_status_source": "guideline-comparison-2026-10-15.md; chronological acceptance in foreground-routing-and-retries-2026-10-15.md"
+    },
+    {
+      "path": "original-recordings/gui/Recording 2026-08-02 09-05-03-221.txt",
+      "sha256": "7d8887c65d4c56bca0f147c570974b845a2464ddbbbed632a8d2836ca1e85ab2",
+      "bytes": 6702,
+      "characters": 6702,
+      "comparison_ids": [
+        "A1",
+        "A11",
+        "A13",
+        "A3",
+        "A4",
+        "A5",
+        "A6",
+        "A7",
+        "A8",
+        "C6",
+        "C8",
+        "D1",
+        "D2",
+        "D3",
+        "D4",
+        "D5",
+        "D7",
+        "D9"
+      ],
+      "reading": "Complete current reread; source-preservation appendix and whole-file aliases checked against separately read originals; full-reread/semantic-ledger.json records findings.",
+      "previous_sha256": "7d8887c65d4c56bca0f147c570974b845a2464ddbbbed632a8d2836ca1e85ab2",
+      "current_status_source": "guideline-comparison-2026-10-15.md; chronological acceptance in foreground-routing-and-retries-2026-10-15.md"
+    },
+    {
+      "path": "original-recordings/gui/Recording 2026-08-06 05-59-55-646.txt",
+      "sha256": "01ba4719c80b6fe911b091a7c05124b64eeece964e09c058ef8f9805daca546b",
+      "bytes": 1,
+      "characters": 1,
+      "comparison_ids": [
+        "A13",
+        "C2",
+        "C3",
+        "C7"
+      ],
+      "reading": "Exact duplicate alias, byte/hash checked against the separately read canonical source.",
+      "current_status_source": "guideline-comparison-2026-10-15.md; chronological acceptance in foreground-routing-and-retries-2026-10-15.md",
+      "identical_to": "original-recordings/general/logging/Recording 2026-08-09 18-44-42-295.txt"
+    },
+    {
+      "path": "original-recordings/gui/Recording 2026-08-11 16-21-19-567.txt",
+      "sha256": "b5b7814e2fd1ea5e6e9239f9a18b643f25dca033426b96675c0c708a07220be3",
+      "bytes": 1793,
+      "characters": 1793,
+      "comparison_ids": [
+        "A1",
+        "A11",
+        "A13",
+        "A3",
+        "A4",
+        "A5",
+        "A6",
+        "A7",
+        "A8",
+        "C6",
+        "C8",
+        "D1",
+        "D2",
+        "D3",
+        "D4",
+        "D5",
+        "D7",
+        "D9"
+      ],
+      "reading": "Complete current reread; source-preservation appendix and whole-file aliases checked against separately read originals; full-reread/semantic-ledger.json records findings.",
+      "previous_sha256": "b5b7814e2fd1ea5e6e9239f9a18b643f25dca033426b96675c0c708a07220be3",
+      "current_status_source": "guideline-comparison-2026-10-15.md; chronological acceptance in foreground-routing-and-retries-2026-10-15.md"
+    },
+    {
+      "path": "original-recordings/gui/Recording 2026-08-17 17-41-05-624.txt",
+      "sha256": "0647fa2663e85fda6bf625e8aa765b5220ee0b2786a0b629b0535ffed55b6365",
+      "bytes": 8780,
+      "characters": 8780,
+      "comparison_ids": [
+        "A1",
+        "A11",
+        "A13",
+        "A3",
+        "A4",
+        "A5",
+        "A6",
+        "A7",
+        "A8",
+        "C6",
+        "C8",
+        "D1",
+        "D2",
+        "D3",
+        "D4",
+        "D5",
+        "D7",
+        "D9"
+      ],
+      "reading": "Complete current reread; source-preservation appendix and whole-file aliases checked against separately read originals; full-reread/semantic-ledger.json records findings.",
+      "previous_sha256": "0647fa2663e85fda6bf625e8aa765b5220ee0b2786a0b629b0535ffed55b6365",
+      "current_status_source": "guideline-comparison-2026-10-15.md; chronological acceptance in foreground-routing-and-retries-2026-10-15.md"
+    },
+    {
+      "path": "original-recordings/gui/Recording 2026-08-20 06-28-29-010.txt",
+      "sha256": "74d6dea2ed87828129a6e4050ca6c5e70bc37fda03db5aade3166e66267228e8",
+      "bytes": 14846,
+      "characters": 14846,
+      "comparison_ids": [
+        "A1",
+        "A11",
+        "A13",
+        "A3",
+        "A4",
+        "A5",
+        "A6",
+        "A7",
+        "A8",
+        "C6",
+        "C8",
+        "D1",
+        "D2",
+        "D3",
+        "D4",
+        "D5",
+        "D7",
+        "D9"
+      ],
+      "reading": "Complete current reread; source-preservation appendix and whole-file aliases checked against separately read originals; full-reread/semantic-ledger.json records findings.",
+      "previous_sha256": "74d6dea2ed87828129a6e4050ca6c5e70bc37fda03db5aade3166e66267228e8",
+      "current_status_source": "guideline-comparison-2026-10-15.md; chronological acceptance in foreground-routing-and-retries-2026-10-15.md"
+    },
+    {
+      "path": "original-recordings/gui/Recording 2026-08-20 12-40-27-187.txt",
+      "sha256": "ad442ac0c87c5ace9f8d56d50871fc4cafada38678f91b6fdec9e6203d42428c",
+      "bytes": 6277,
+      "characters": 6277,
+      "comparison_ids": [
+        "A1",
+        "A11",
+        "A13",
+        "A3",
+        "A4",
+        "A5",
+        "A6",
+        "A7",
+        "A8",
+        "C6",
+        "C8",
+        "D1",
+        "D2",
+        "D3",
+        "D4",
+        "D5",
+        "D7",
+        "D9"
+      ],
+      "reading": "Complete current reread; source-preservation appendix and whole-file aliases checked against separately read originals; full-reread/semantic-ledger.json records findings.",
+      "previous_sha256": "ad442ac0c87c5ace9f8d56d50871fc4cafada38678f91b6fdec9e6203d42428c",
+      "current_status_source": "guideline-comparison-2026-10-15.md; chronological acceptance in foreground-routing-and-retries-2026-10-15.md"
+    },
+    {
+      "path": "original-recordings/gui/Recording 2026-08-21 13-20-26-329.txt",
+      "sha256": "8130a49806b47969d0203da7ba8dc11cddf9ff196c3078bc758e6719f8450629",
+      "bytes": 21916,
+      "characters": 21916,
+      "comparison_ids": [
+        "A1",
+        "A11",
+        "A13",
+        "A3",
+        "A4",
+        "A5",
+        "A6",
+        "A7",
+        "A8",
+        "C6",
+        "C8",
+        "D1",
+        "D2",
+        "D3",
+        "D4",
+        "D5",
+        "D7",
+        "D9"
+      ],
+      "reading": "Complete current reread; source-preservation appendix and whole-file aliases checked against separately read originals; full-reread/semantic-ledger.json records findings.",
+      "previous_sha256": "8130a49806b47969d0203da7ba8dc11cddf9ff196c3078bc758e6719f8450629",
+      "current_status_source": "guideline-comparison-2026-10-15.md; chronological acceptance in foreground-routing-and-retries-2026-10-15.md"
+    },
+    {
+      "path": "original-recordings/gui/Recording 2026-08-27 18-49-13-262.txt",
+      "sha256": "dfbfba637c87e040ca64d931681702dddfc26e4c7f4da35db39973b598d4e527",
+      "bytes": 11761,
+      "characters": 11761,
+      "comparison_ids": [
+        "A1",
+        "A11",
+        "A13",
+        "A3",
+        "A4",
+        "A5",
+        "A6",
+        "A7",
+        "A8",
+        "C6",
+        "C8",
+        "D1",
+        "D2",
+        "D3",
+        "D4",
+        "D5",
+        "D7",
+        "D9"
+      ],
+      "reading": "Complete current reread; source-preservation appendix and whole-file aliases checked against separately read originals; full-reread/semantic-ledger.json records findings.",
+      "previous_sha256": "dfbfba637c87e040ca64d931681702dddfc26e4c7f4da35db39973b598d4e527",
+      "current_status_source": "guideline-comparison-2026-10-15.md; chronological acceptance in foreground-routing-and-retries-2026-10-15.md"
+    },
+    {
+      "path": "original-recordings/gui/Recording 2026-09-03 18-57-52-081.txt",
+      "sha256": "7a0d757a99f48ec76ff1b72814f0e9c926357e81828a75d5bb560d750d66b5f8",
+      "bytes": 9150,
+      "characters": 9150,
+      "comparison_ids": [
+        "A1",
+        "A11",
+        "A13",
+        "A3",
+        "A4",
+        "A5",
+        "A6",
+        "A7",
+        "A8",
+        "C6",
+        "C8",
+        "D1",
+        "D2",
+        "D3",
+        "D4",
+        "D5",
+        "D7",
+        "D9"
+      ],
+      "reading": "Complete current reread; source-preservation appendix and whole-file aliases checked against separately read originals; full-reread/semantic-ledger.json records findings.",
+      "previous_sha256": "7a0d757a99f48ec76ff1b72814f0e9c926357e81828a75d5bb560d750d66b5f8",
+      "current_status_source": "guideline-comparison-2026-10-15.md; chronological acceptance in foreground-routing-and-retries-2026-10-15.md"
+    },
+    {
+      "path": "original-recordings/gui/Recording 2026-09-05 10-49-12-342.txt",
+      "sha256": "19e13a46695c0dc941ab97bc7adad6ca918921a707a71880cc6d4fce859d8af7",
+      "bytes": 23934,
+      "characters": 23934,
+      "comparison_ids": [
+        "A1",
+        "A11",
+        "A13",
+        "A3",
+        "A4",
+        "A5",
+        "A6",
+        "A7",
+        "A8",
+        "C6",
+        "C8",
+        "D1",
+        "D2",
+        "D3",
+        "D4",
+        "D5",
+        "D7",
+        "D9"
+      ],
+      "reading": "Complete current reread; source-preservation appendix and whole-file aliases checked against separately read originals; full-reread/semantic-ledger.json records findings.",
+      "previous_sha256": "19e13a46695c0dc941ab97bc7adad6ca918921a707a71880cc6d4fce859d8af7",
+      "current_status_source": "guideline-comparison-2026-10-15.md; chronological acceptance in foreground-routing-and-retries-2026-10-15.md"
+    },
+    {
+      "path": "original-recordings/gui/Recording 2026-09-16 11-18-49-098.txt",
+      "sha256": "caec1ed0a834195a938aa39e2b74e4773589b6713fadf99b8ebfe2bdaddae0d8",
+      "bytes": 31026,
+      "characters": 31026,
+      "comparison_ids": [
+        "A1",
+        "A11",
+        "A3",
+        "A4",
+        "A5",
+        "A7",
+        "A8",
+        "C6",
+        "D1",
+        "D2",
+        "D4",
+        "D5"
+      ],
+      "reading": "Complete current reread; source-preservation appendix and whole-file aliases checked against separately read originals; full-reread/semantic-ledger.json records findings.",
+      "previous_sha256": "caec1ed0a834195a938aa39e2b74e4773589b6713fadf99b8ebfe2bdaddae0d8",
+      "current_status_source": "guideline-comparison-2026-10-15.md; chronological acceptance in foreground-routing-and-retries-2026-10-15.md"
+    },
+    {
+      "path": "original-recordings/gui/Recording 2026-10-10 17-44-18-524.txt",
+      "sha256": "4cfce4f5474c6024d020060c213c4e90e246b282b35c7a892650c2183587065e",
+      "bytes": 11034,
+      "characters": 11034,
+      "comparison_ids": [
+        "A1",
+        "A11",
+        "A3",
+        "A4",
+        "A5",
+        "A7",
+        "A8",
+        "C6",
+        "D1",
+        "D2",
+        "D4",
+        "D5"
+      ],
+      "reading": "Complete current reread; source-preservation appendix and whole-file aliases checked against separately read originals; full-reread/semantic-ledger.json records findings.",
+      "previous_sha256": "4cfce4f5474c6024d020060c213c4e90e246b282b35c7a892650c2183587065e",
+      "current_status_source": "guideline-comparison-2026-10-15.md; chronological acceptance in foreground-routing-and-retries-2026-10-15.md"
+    },
+    {
+      "path": "original-recordings/gui/Recovered recording e621bbf3.txt",
+      "sha256": "3603a8847d51a36f4662b1bef957949675ed96b75beb43ba176b904b07814758",
+      "bytes": 15850,
+      "characters": 15850,
+      "comparison_ids": [
+        "A1",
+        "A11",
+        "A13",
+        "A3",
+        "A4",
+        "A5",
+        "A6",
+        "A7",
+        "A8",
+        "C6",
+        "C8",
+        "D1",
+        "D2",
+        "D3",
+        "D4",
+        "D5",
+        "D7",
+        "D9"
+      ],
+      "reading": "Complete current reread; source-preservation appendix and whole-file aliases checked against separately read originals; full-reread/semantic-ledger.json records findings.",
+      "previous_sha256": "3603a8847d51a36f4662b1bef957949675ed96b75beb43ba176b904b07814758",
+      "current_status_source": "guideline-comparison-2026-10-15.md; chronological acceptance in foreground-routing-and-retries-2026-10-15.md"
+    },
+    {
+      "path": "original-recordings/kmd/Recording 2026-08-05 17-22-26-192.txt",
+      "sha256": "3e4f732fb9b6cfbe27ef3c4ce2ea5b1be70ccaf9a1647f0a0116865359b3a58a",
+      "bytes": 12364,
+      "characters": 12364,
+      "comparison_ids": [
+        "B3",
+        "B5",
+        "B6",
+        "D8"
+      ],
+      "reading": "Complete current reread; source-preservation appendix and whole-file aliases checked against separately read originals; full-reread/semantic-ledger.json records findings.",
+      "previous_sha256": "3e4f732fb9b6cfbe27ef3c4ce2ea5b1be70ccaf9a1647f0a0116865359b3a58a",
+      "current_status_source": "guideline-comparison-2026-10-15.md; chronological acceptance in foreground-routing-and-retries-2026-10-15.md"
+    },
+    {
+      "path": "original-recordings/kmd/Recording 2026-08-06 12-09-51-499.txt",
+      "sha256": "a366bf89c5caa2748a8a8562fd42a175b1f1cb43f21bb272ba11e5f444ea7f72",
+      "bytes": 5331,
+      "characters": 5331,
+      "comparison_ids": [
+        "B3",
+        "B5",
+        "B6",
+        "D8"
+      ],
+      "reading": "Complete current reread; source-preservation appendix and whole-file aliases checked against separately read originals; full-reread/semantic-ledger.json records findings.",
+      "previous_sha256": "a366bf89c5caa2748a8a8562fd42a175b1f1cb43f21bb272ba11e5f444ea7f72",
+      "current_status_source": "guideline-comparison-2026-10-15.md; chronological acceptance in foreground-routing-and-retries-2026-10-15.md"
+    },
+    {
+      "path": "original-recordings/kmd/Recording 2026-08-06 17-30-53-705.txt",
+      "sha256": "6ca1dc9acd31a77fd0cfcd6db9cbcd8cb3255866375bb9f2ab9be8d4c5792752",
+      "bytes": 4573,
+      "characters": 4573,
+      "comparison_ids": [
+        "B3",
+        "B5",
+        "B6",
+        "D8"
+      ],
+      "reading": "Complete current reread; source-preservation appendix and whole-file aliases checked against separately read originals; full-reread/semantic-ledger.json records findings.",
+      "previous_sha256": "6ca1dc9acd31a77fd0cfcd6db9cbcd8cb3255866375bb9f2ab9be8d4c5792752",
+      "current_status_source": "guideline-comparison-2026-10-15.md; chronological acceptance in foreground-routing-and-retries-2026-10-15.md"
+    },
+    {
+      "path": "original-recordings/projects/Recording 2026-08-21 19-27-04-642.txt",
+      "sha256": "77d14bad889a7b993eabf39da133d0e700c0b0160a2e47a304ae23a10171f03e",
+      "bytes": 82,
+      "characters": 82,
+      "comparison_ids": [
+        "C10",
+        "D9"
+      ],
+      "reading": "Complete current reread; source-preservation appendix and whole-file aliases checked against separately read originals; full-reread/semantic-ledger.json records findings.",
+      "previous_sha256": "77d14bad889a7b993eabf39da133d0e700c0b0160a2e47a304ae23a10171f03e",
+      "current_status_source": "guideline-comparison-2026-10-15.md; chronological acceptance in foreground-routing-and-retries-2026-10-15.md"
+    },
+    {
+      "path": "original-recordings/projects/Recording 2026-08-21 19-31-23-759.txt",
+      "sha256": "90cb12975120d67b038351f381ca6014de5aadbc62ecfc16b5931f1a4488f8f2",
+      "bytes": 11827,
+      "characters": 11827,
+      "comparison_ids": [
+        "C10",
+        "D9"
+      ],
+      "reading": "Complete current reread; source-preservation appendix and whole-file aliases checked against separately read originals; full-reread/semantic-ledger.json records findings.",
+      "previous_sha256": "90cb12975120d67b038351f381ca6014de5aadbc62ecfc16b5931f1a4488f8f2",
+      "current_status_source": "guideline-comparison-2026-10-15.md; chronological acceptance in foreground-routing-and-retries-2026-10-15.md"
+    },
+    {
+      "path": "original-recordings/test1/Recording 2026-07-28 18-04-27-909.txt",
+      "sha256": "c8f7fa7892a6ae58b38e15efe5ce85a47da73182a3a6e8c9647003a07b7cd3b5",
+      "bytes": 209,
+      "characters": 209,
+      "comparison_ids": [
+        "D9"
+      ],
+      "reading": "Complete current reread; source-preservation appendix and whole-file aliases checked against separately read originals; full-reread/semantic-ledger.json records findings.",
+      "previous_sha256": "c8f7fa7892a6ae58b38e15efe5ce85a47da73182a3a6e8c9647003a07b7cd3b5",
+      "current_status_source": "guideline-comparison-2026-10-15.md; chronological acceptance in foreground-routing-and-retries-2026-10-15.md"
+    },
+    {
+      "path": "original-recordings/test1/Recording 2026-08-02 08-18-36-831.txt",
+      "sha256": "c0b1941938c7254c545477d8e26e64d66e3b70ac719d9297741166e5407a035f",
+      "bytes": 348,
+      "characters": 348,
+      "comparison_ids": [
+        "D9"
+      ],
+      "reading": "Complete current reread; source-preservation appendix and whole-file aliases checked against separately read originals; full-reread/semantic-ledger.json records findings.",
+      "previous_sha256": "c0b1941938c7254c545477d8e26e64d66e3b70ac719d9297741166e5407a035f",
+      "current_status_source": "guideline-comparison-2026-10-15.md; chronological acceptance in foreground-routing-and-retries-2026-10-15.md"
+    },
+    {
+      "path": "original-recordings/test1/Recording 2026-08-06 20-13-41-794.txt",
+      "sha256": "12221ec685c4ace9bc63d78c09f7a88c9a19f53be04a3242c7c5115d74da85e3",
+      "bytes": 51,
+      "characters": 51,
+      "comparison_ids": [
+        "D9"
+      ],
+      "reading": "Complete current reread; source-preservation appendix and whole-file aliases checked against separately read originals; full-reread/semantic-ledger.json records findings.",
+      "previous_sha256": "12221ec685c4ace9bc63d78c09f7a88c9a19f53be04a3242c7c5115d74da85e3",
+      "current_status_source": "guideline-comparison-2026-10-15.md; chronological acceptance in foreground-routing-and-retries-2026-10-15.md"
+    },
+    {
+      "path": "original-recordings/test1/Recording 2026-08-06 20-55-54-374.txt",
+      "sha256": "70e03c2f7d7242798dac72e558dcc49052a62b7780318ec61195f25e13dbaf7e",
+      "bytes": 96,
+      "characters": 96,
+      "comparison_ids": [
+        "D9"
+      ],
+      "reading": "Complete current reread; source-preservation appendix and whole-file aliases checked against separately read originals; full-reread/semantic-ledger.json records findings.",
+      "previous_sha256": "70e03c2f7d7242798dac72e558dcc49052a62b7780318ec61195f25e13dbaf7e",
+      "current_status_source": "guideline-comparison-2026-10-15.md; chronological acceptance in foreground-routing-and-retries-2026-10-15.md"
+    },
+    {
+      "path": "original-recordings/test1/Recording 2026-08-06 20-57-12-902.txt",
+      "sha256": "e9067f1ef592a51f15eecb95850a9d0c9223ac610c462e9bb86e3163a847276d",
+      "bytes": 121,
+      "characters": 121,
+      "comparison_ids": [
+        "D9"
+      ],
+      "reading": "Complete current reread; source-preservation appendix and whole-file aliases checked against separately read originals; full-reread/semantic-ledger.json records findings.",
+      "previous_sha256": "e9067f1ef592a51f15eecb95850a9d0c9223ac610c462e9bb86e3163a847276d",
+      "current_status_source": "guideline-comparison-2026-10-15.md; chronological acceptance in foreground-routing-and-retries-2026-10-15.md"
+    },
+    {
+      "path": "original-recordings/test1/Recording 2026-08-06 22-17-25-669.txt",
+      "sha256": "adda644a693e978d7c00358f1ff8bc55aa23059c8533f01bad2b469eaf41d975",
+      "bytes": 20,
+      "characters": 20,
+      "comparison_ids": [
+        "D9"
+      ],
+      "reading": "Complete current reread; source-preservation appendix and whole-file aliases checked against separately read originals; full-reread/semantic-ledger.json records findings.",
+      "previous_sha256": "adda644a693e978d7c00358f1ff8bc55aa23059c8533f01bad2b469eaf41d975",
+      "current_status_source": "guideline-comparison-2026-10-15.md; chronological acceptance in foreground-routing-and-retries-2026-10-15.md"
+    },
+    {
+      "path": "original-recordings/test1/Recording 2026-08-07 17-46-51-452.txt",
+      "sha256": "3fce93ad98af39bd885befa357644add5e4b6c83621db3a098dba2e17bdf8eb1",
+      "bytes": 96,
+      "characters": 96,
+      "comparison_ids": [
+        "D9"
+      ],
+      "reading": "Complete current reread; source-preservation appendix and whole-file aliases checked against separately read originals; full-reread/semantic-ledger.json records findings.",
+      "previous_sha256": "3fce93ad98af39bd885befa357644add5e4b6c83621db3a098dba2e17bdf8eb1",
+      "current_status_source": "guideline-comparison-2026-10-15.md; chronological acceptance in foreground-routing-and-retries-2026-10-15.md"
+    },
+    {
+      "path": "original-recordings/test1/Recording 2026-08-07 17-48-23-700.txt",
+      "sha256": "2440298bb4f5ec0872b020f85085c9e2a72b735bf356713fbb27721e0f8f85df",
+      "bytes": 75,
+      "characters": 75,
+      "comparison_ids": [
+        "D9"
+      ],
+      "reading": "Complete current reread; source-preservation appendix and whole-file aliases checked against separately read originals; full-reread/semantic-ledger.json records findings.",
+      "previous_sha256": "2440298bb4f5ec0872b020f85085c9e2a72b735bf356713fbb27721e0f8f85df",
+      "current_status_source": "guideline-comparison-2026-10-15.md; chronological acceptance in foreground-routing-and-retries-2026-10-15.md"
+    },
+    {
+      "path": "original-recordings/test1/Recording 2026-08-07 17-49-13-419.txt",
+      "sha256": "4585acebd0e137e334bd631d9b1da45627e550df3f140a59c61ffdfc8f199f62",
+      "bytes": 64,
+      "characters": 64,
+      "comparison_ids": [
+        "D9"
+      ],
+      "reading": "Complete current reread; source-preservation appendix and whole-file aliases checked against separately read originals; full-reread/semantic-ledger.json records findings.",
+      "previous_sha256": "4585acebd0e137e334bd631d9b1da45627e550df3f140a59c61ffdfc8f199f62",
+      "current_status_source": "guideline-comparison-2026-10-15.md; chronological acceptance in foreground-routing-and-retries-2026-10-15.md"
+    },
+    {
+      "path": "original-recordings/test1/Recording 2026-08-07 17-50-05-286.txt",
+      "sha256": "d04eac987da1718f1c7f0f2e29c8e79765dadbb8f7d05f4f0d77f1faf45f64ec",
+      "bytes": 39,
+      "characters": 39,
+      "comparison_ids": [
+        "D9"
+      ],
+      "reading": "Complete current reread; source-preservation appendix and whole-file aliases checked against separately read originals; full-reread/semantic-ledger.json records findings.",
+      "previous_sha256": "d04eac987da1718f1c7f0f2e29c8e79765dadbb8f7d05f4f0d77f1faf45f64ec",
+      "current_status_source": "guideline-comparison-2026-10-15.md; chronological acceptance in foreground-routing-and-retries-2026-10-15.md"
+    },
+    {
+      "path": "original-recordings/test1/Recording 2026-08-07 18-57-18-421.txt",
+      "sha256": "bc9fb41907cf46b498c562e68641930ce64addfabc3b6945bbc61f027f8ecd80",
+      "bytes": 92,
+      "characters": 92,
+      "comparison_ids": [
+        "D9"
+      ],
+      "reading": "Complete current reread; source-preservation appendix and whole-file aliases checked against separately read originals; full-reread/semantic-ledger.json records findings.",
+      "previous_sha256": "bc9fb41907cf46b498c562e68641930ce64addfabc3b6945bbc61f027f8ecd80",
+      "current_status_source": "guideline-comparison-2026-10-15.md; chronological acceptance in foreground-routing-and-retries-2026-10-15.md"
+    },
+    {
+      "path": "original-recordings/test1/Recording 2026-08-07 20-22-53-272.txt",
+      "sha256": "6f4aeb797eed4efbe6bf3575061bcbe9eb4c70209a15c0bb222ce37bd83185bd",
+      "bytes": 58,
+      "characters": 58,
+      "comparison_ids": [
+        "D9"
+      ],
+      "reading": "Complete current reread; source-preservation appendix and whole-file aliases checked against separately read originals; full-reread/semantic-ledger.json records findings.",
+      "previous_sha256": "6f4aeb797eed4efbe6bf3575061bcbe9eb4c70209a15c0bb222ce37bd83185bd",
+      "current_status_source": "guideline-comparison-2026-10-15.md; chronological acceptance in foreground-routing-and-retries-2026-10-15.md"
+    },
+    {
+      "path": "original-recordings/test1/Recording 2026-08-07 20-24-09-601.txt",
+      "sha256": "f7f827a6413984e2deb51391b8f30219e401af657559d17857b4b57d8b42d4cb",
+      "bytes": 78,
+      "characters": 78,
+      "comparison_ids": [
+        "D9"
+      ],
+      "reading": "Complete current reread; source-preservation appendix and whole-file aliases checked against separately read originals; full-reread/semantic-ledger.json records findings.",
+      "previous_sha256": "f7f827a6413984e2deb51391b8f30219e401af657559d17857b4b57d8b42d4cb",
+      "current_status_source": "guideline-comparison-2026-10-15.md; chronological acceptance in foreground-routing-and-retries-2026-10-15.md"
+    },
+    {
+      "path": "original-recordings/test1/Recording 2026-08-07 22-08-48-917.txt",
+      "sha256": "37ee33d8a92f19ebb9d467c616a68de7d7006cf8d7cd8b10fffcf57ff503a2e9",
+      "bytes": 51,
+      "characters": 51,
+      "comparison_ids": [
+        "D9"
+      ],
+      "reading": "Complete current reread; source-preservation appendix and whole-file aliases checked against separately read originals; full-reread/semantic-ledger.json records findings.",
+      "previous_sha256": "37ee33d8a92f19ebb9d467c616a68de7d7006cf8d7cd8b10fffcf57ff503a2e9",
+      "current_status_source": "guideline-comparison-2026-10-15.md; chronological acceptance in foreground-routing-and-retries-2026-10-15.md"
+    },
+    {
+      "path": "original-recordings/test1/Recording 2026-08-07 22-10-44-304.txt",
+      "sha256": "7853a4e8abc29e3786909059c9f8c39afdd0f2a7de89a2abf73153c7c3163af9",
+      "bytes": 62,
+      "characters": 62,
+      "comparison_ids": [
+        "D9"
+      ],
+      "reading": "Complete current reread; source-preservation appendix and whole-file aliases checked against separately read originals; full-reread/semantic-ledger.json records findings.",
+      "previous_sha256": "7853a4e8abc29e3786909059c9f8c39afdd0f2a7de89a2abf73153c7c3163af9",
+      "current_status_source": "guideline-comparison-2026-10-15.md; chronological acceptance in foreground-routing-and-retries-2026-10-15.md"
+    },
+    {
+      "path": "original-recordings/test1/Recording 2026-08-07 22-13-49-080.txt",
+      "sha256": "0ea614a19c9fe001aca76dd1dbe81c915aa48e13e360feff10aea38b01899e69",
+      "bytes": 200,
+      "characters": 200,
+      "comparison_ids": [
+        "D9"
+      ],
+      "reading": "Complete current reread; source-preservation appendix and whole-file aliases checked against separately read originals; full-reread/semantic-ledger.json records findings.",
+      "previous_sha256": "0ea614a19c9fe001aca76dd1dbe81c915aa48e13e360feff10aea38b01899e69",
+      "current_status_source": "guideline-comparison-2026-10-15.md; chronological acceptance in foreground-routing-and-retries-2026-10-15.md"
+    },
+    {
+      "path": "original-recordings/test1/Recording 2026-08-08 13-03-03-852.txt",
+      "sha256": "1ee770a8d44f7fbe9425df1fc4ba7a4448a52667bb51c4e27d6a32f2c2d6c9ea",
+      "bytes": 487,
+      "characters": 487,
+      "comparison_ids": [
+        "D9"
+      ],
+      "reading": "Complete current reread; source-preservation appendix and whole-file aliases checked against separately read originals; full-reread/semantic-ledger.json records findings.",
+      "previous_sha256": "1ee770a8d44f7fbe9425df1fc4ba7a4448a52667bb51c4e27d6a32f2c2d6c9ea",
+      "current_status_source": "guideline-comparison-2026-10-15.md; chronological acceptance in foreground-routing-and-retries-2026-10-15.md"
+    },
+    {
+      "path": "original-recordings/test1/Recording 2026-08-09 13-32-17-557.txt",
+      "sha256": "b9e6296b135d40e53b3f38ce2d8efc5a74f25e27bdeae17af36023069c8cedac",
+      "bytes": 390,
+      "characters": 390,
+      "comparison_ids": [
+        "D9"
+      ],
+      "reading": "Complete current reread; source-preservation appendix and whole-file aliases checked against separately read originals; full-reread/semantic-ledger.json records findings.",
+      "previous_sha256": "b9e6296b135d40e53b3f38ce2d8efc5a74f25e27bdeae17af36023069c8cedac",
+      "current_status_source": "guideline-comparison-2026-10-15.md; chronological acceptance in foreground-routing-and-retries-2026-10-15.md"
+    },
+    {
+      "path": "original-recordings/test1/Recording 2026-09-04 19-33-50-992.txt",
+      "sha256": "101263751e2ad2a3c650647eedef65bb9eac67131ae0d8f66ec51dab73971ae4",
+      "bytes": 51,
+      "characters": 51,
+      "comparison_ids": [
+        "D9"
+      ],
+      "reading": "Complete current reread; source-preservation appendix and whole-file aliases checked against separately read originals; full-reread/semantic-ledger.json records findings.",
+      "previous_sha256": "101263751e2ad2a3c650647eedef65bb9eac67131ae0d8f66ec51dab73971ae4",
+      "current_status_source": "guideline-comparison-2026-10-15.md; chronological acceptance in foreground-routing-and-retries-2026-10-15.md"
+    },
+    {
+      "path": "original-recordings/test1/Recording 2026-09-04 19-36-39-273.txt",
+      "sha256": "b0b5ed43d4921cc3690fc1b750cb66680e7c4ed5d7c6f68bfbbfad2317cece1a",
+      "bytes": 29,
+      "characters": 29,
+      "comparison_ids": [
+        "D9"
+      ],
+      "reading": "Complete current reread; source-preservation appendix and whole-file aliases checked against separately read originals; full-reread/semantic-ledger.json records findings.",
+      "previous_sha256": "b0b5ed43d4921cc3690fc1b750cb66680e7c4ed5d7c6f68bfbbfad2317cece1a",
+      "current_status_source": "guideline-comparison-2026-10-15.md; chronological acceptance in foreground-routing-and-retries-2026-10-15.md"
+    },
+    {
+      "path": "original-recordings/test1/Recording 2026-09-25 16-19-46-804.txt",
+      "sha256": "ddfef96a57c8b89bac145d79bc855a034b328c371cf3a7d884644ebfe8af281b",
+      "bytes": 202,
+      "characters": 202,
+      "comparison_ids": [
+        "D9"
+      ],
+      "reading": "Complete current reread; source-preservation appendix and whole-file aliases checked against separately read originals; full-reread/semantic-ledger.json records findings.",
+      "previous_sha256": "ddfef96a57c8b89bac145d79bc855a034b328c371cf3a7d884644ebfe8af281b",
+      "current_status_source": "guideline-comparison-2026-10-15.md; chronological acceptance in foreground-routing-and-retries-2026-10-15.md"
+    },
+    {
+      "path": "original-recordings/test1/Recording 2026-09-26 15-06-39-010.txt",
+      "sha256": "08b289beb494e8814a5f56c1c8ad7236419daeb5157a80b4be9eb4a34f5d2ad9",
+      "bytes": 242,
+      "characters": 242,
+      "comparison_ids": [
+        "D9"
+      ],
+      "reading": "Complete current reread; source-preservation appendix and whole-file aliases checked against separately read originals; full-reread/semantic-ledger.json records findings.",
+      "previous_sha256": "08b289beb494e8814a5f56c1c8ad7236419daeb5157a80b4be9eb4a34f5d2ad9",
+      "current_status_source": "guideline-comparison-2026-10-15.md; chronological acceptance in foreground-routing-and-retries-2026-10-15.md"
+    },
+    {
+      "path": "original-recordings/test1/Recording 2026-09-26 15-09-03-437.txt",
+      "sha256": "88d8d65d1ad78f3b3a680990ddd18cde5bea170693d8b9cbd38bae5ee84e50b6",
+      "bytes": 328,
+      "characters": 328,
+      "comparison_ids": [
+        "D9"
+      ],
+      "reading": "Complete current reread; source-preservation appendix and whole-file aliases checked against separately read originals; full-reread/semantic-ledger.json records findings.",
+      "previous_sha256": "88d8d65d1ad78f3b3a680990ddd18cde5bea170693d8b9cbd38bae5ee84e50b6",
+      "current_status_source": "guideline-comparison-2026-10-15.md; chronological acceptance in foreground-routing-and-retries-2026-10-15.md"
+    },
+    {
+      "path": "original-recordings/test1/Recording 2026-09-27 10-46-02-973.txt",
+      "sha256": "a3ce6672f13e91ec41fc06ac5f5ffd22654447e32f3a2b29dcd32a1c45b64bb9",
+      "bytes": 177,
+      "characters": 177,
+      "comparison_ids": [
+        "D9"
+      ],
+      "reading": "Complete current reread; source-preservation appendix and whole-file aliases checked against separately read originals; full-reread/semantic-ledger.json records findings.",
+      "previous_sha256": "a3ce6672f13e91ec41fc06ac5f5ffd22654447e32f3a2b29dcd32a1c45b64bb9",
+      "current_status_source": "guideline-comparison-2026-10-15.md; chronological acceptance in foreground-routing-and-retries-2026-10-15.md"
+    },
+    {
+      "path": "original-recordings/test1/Recording 2026-09-27 11-54-32-235.txt",
+      "sha256": "0791eb0d0b972eecd2ad7c703ecaa00916ddc19080cf23ab4255cf8c5ffb4a65",
+      "bytes": 88,
+      "characters": 88,
+      "comparison_ids": [
+        "D9"
+      ],
+      "reading": "Complete current reread; source-preservation appendix and whole-file aliases checked against separately read originals; full-reread/semantic-ledger.json records findings.",
+      "previous_sha256": "0791eb0d0b972eecd2ad7c703ecaa00916ddc19080cf23ab4255cf8c5ffb4a65",
+      "current_status_source": "guideline-comparison-2026-10-15.md; chronological acceptance in foreground-routing-and-retries-2026-10-15.md"
+    },
+    {
+      "path": "original-recordings/test1/Recording 2026-09-27 18-18-28-087.txt",
+      "sha256": "dc6680c1d75e8b748cdf58eb818412ba0e892d6c0e8c42441481be00c10f7a1d",
+      "bytes": 72,
+      "characters": 72,
+      "comparison_ids": [
+        "D9"
+      ],
+      "reading": "Complete current reread; source-preservation appendix and whole-file aliases checked against separately read originals; full-reread/semantic-ledger.json records findings.",
+      "previous_sha256": "dc6680c1d75e8b748cdf58eb818412ba0e892d6c0e8c42441481be00c10f7a1d",
+      "current_status_source": "guideline-comparison-2026-10-15.md; chronological acceptance in foreground-routing-and-retries-2026-10-15.md"
+    },
+    {
+      "path": "original-recordings/trading/Recording 2026-08-22 09-34-44-829.txt",
+      "sha256": "09bbcde2b552630ea7a9145ff1d56ea1dc769b5d7a7d76acecda120b55a91ca1",
+      "bytes": 22948,
+      "characters": 22948,
+      "comparison_ids": [
+        "C8",
+        "D7"
+      ],
+      "reading": "Complete current reread; source-preservation appendix and whole-file aliases checked against separately read originals; full-reread/semantic-ledger.json records findings.",
+      "previous_sha256": "09bbcde2b552630ea7a9145ff1d56ea1dc769b5d7a7d76acecda120b55a91ca1",
+      "current_status_source": "guideline-comparison-2026-10-15.md; chronological acceptance in foreground-routing-and-retries-2026-10-15.md"
+    },
+    {
+      "path": "original-recordings/trading/Recording 2026-08-22 10-17-28-752.txt",
+      "sha256": "84b8087333d327772f71cc4a2bc40c749a8b09eb1f60865ca8e4966f3dc71ed0",
+      "bytes": 10558,
+      "characters": 10558,
+      "comparison_ids": [
+        "C8",
+        "D7"
+      ],
+      "reading": "Complete current reread; source-preservation appendix and whole-file aliases checked against separately read originals; full-reread/semantic-ledger.json records findings.",
+      "previous_sha256": "84b8087333d327772f71cc4a2bc40c749a8b09eb1f60865ca8e4966f3dc71ed0",
+      "current_status_source": "guideline-comparison-2026-10-15.md; chronological acceptance in foreground-routing-and-retries-2026-10-15.md"
+    },
+    {
+      "path": "original-recordings/trading/Recording 2026-08-22 12-08-24-115.txt",
+      "sha256": "366f318c3601752c2d23407c21e9aa9c0ce1e1a55f7bfa53903b4d37461a0100",
+      "bytes": 15,
+      "characters": 15,
+      "comparison_ids": [
+        "C8",
+        "D7"
+      ],
+      "reading": "Complete current reread; source-preservation appendix and whole-file aliases checked against separately read originals; full-reread/semantic-ledger.json records findings.",
+      "previous_sha256": "366f318c3601752c2d23407c21e9aa9c0ce1e1a55f7bfa53903b4d37461a0100",
+      "current_status_source": "guideline-comparison-2026-10-15.md; chronological acceptance in foreground-routing-and-retries-2026-10-15.md"
+    },
+    {
+      "path": "original-recordings/trading/Recording 2026-08-22 12-08-48-969.txt",
+      "sha256": "00051719730a409233602a449ecb582c906c9c0e78fe32abbd13757ed0b00df9",
+      "bytes": 5258,
+      "characters": 5258,
+      "comparison_ids": [
+        "C8",
+        "D7"
+      ],
+      "reading": "Complete current reread; source-preservation appendix and whole-file aliases checked against separately read originals; full-reread/semantic-ledger.json records findings.",
+      "previous_sha256": "00051719730a409233602a449ecb582c906c9c0e78fe32abbd13757ed0b00df9",
+      "current_status_source": "guideline-comparison-2026-10-15.md; chronological acceptance in foreground-routing-and-retries-2026-10-15.md"
+    },
+    {
+      "path": "original-recordings/trading/Recording 2026-08-22 15-47-18-326.txt",
+      "sha256": "4c9fd61faa342ff0494bca5ab1f496a3acc35ca34c918d4d4af4b08b3aec01b4",
+      "bytes": 21709,
+      "characters": 21709,
+      "comparison_ids": [
+        "C8",
+        "D7"
+      ],
+      "reading": "Complete current reread; source-preservation appendix and whole-file aliases checked against separately read originals; full-reread/semantic-ledger.json records findings.",
+      "previous_sha256": "4c9fd61faa342ff0494bca5ab1f496a3acc35ca34c918d4d4af4b08b3aec01b4",
+      "current_status_source": "guideline-comparison-2026-10-15.md; chronological acceptance in foreground-routing-and-retries-2026-10-15.md"
+    },
+    {
+      "path": "original-recordings/trading/Recording 2026-08-26 18-23-52-726.txt",
+      "sha256": "1b376d444f293996c28c8b55996b8043f960857f01705b346c435cd522288978",
+      "bytes": 35761,
+      "characters": 35761,
+      "comparison_ids": [
+        "C8",
+        "D7"
+      ],
+      "reading": "Complete current reread; source-preservation appendix and whole-file aliases checked against separately read originals; full-reread/semantic-ledger.json records findings.",
+      "previous_sha256": "1b376d444f293996c28c8b55996b8043f960857f01705b346c435cd522288978",
+      "current_status_source": "guideline-comparison-2026-10-15.md; chronological acceptance in foreground-routing-and-retries-2026-10-15.md"
+    },
+    {
+      "path": "original-recordings/trading/Recording 2026-09-05 17-48-55-452.txt",
+      "sha256": "bc2d1563fc638a77a240fae69a6aceaad728ea6563d13314e12280a7b1feb179",
+      "bytes": 14881,
+      "characters": 14881,
+      "comparison_ids": [
+        "C8",
+        "D7"
+      ],
+      "reading": "Complete current reread; source-preservation appendix and whole-file aliases checked against separately read originals; full-reread/semantic-ledger.json records findings.",
+      "previous_sha256": "bc2d1563fc638a77a240fae69a6aceaad728ea6563d13314e12280a7b1feb179",
+      "current_status_source": "guideline-comparison-2026-10-15.md; chronological acceptance in foreground-routing-and-retries-2026-10-15.md"
+    },
+    {
+      "path": "original-recordings/trading/Recording 2026-09-16 07-25-43-993.txt",
+      "sha256": "6bccb621d0c2cd6349acb8b6504dad2c705b2c43a73de9727681fdaf3c394973",
+      "bytes": 6187,
+      "characters": 6187,
+      "comparison_ids": [
+        "C8",
+        "D7"
+      ],
+      "reading": "Complete current reread; source-preservation appendix and whole-file aliases checked against separately read originals; full-reread/semantic-ledger.json records findings.",
+      "previous_sha256": "6bccb621d0c2cd6349acb8b6504dad2c705b2c43a73de9727681fdaf3c394973",
+      "current_status_source": "guideline-comparison-2026-10-15.md; chronological acceptance in foreground-routing-and-retries-2026-10-15.md"
+    },
+    {
+      "path": "original-recordings/trading/Recording 2026-09-16 16-14-29-036.txt",
+      "sha256": "fbed20cf2ed7628f08afd0c331a4c7a6a7e651204ec3ae7a785db0648f084eda",
+      "bytes": 11697,
+      "characters": 11697,
+      "comparison_ids": [
+        "C8",
+        "D7"
+      ],
+      "reading": "Complete current reread; source-preservation appendix and whole-file aliases checked against separately read originals; full-reread/semantic-ledger.json records findings.",
+      "previous_sha256": "fbed20cf2ed7628f08afd0c331a4c7a6a7e651204ec3ae7a785db0648f084eda",
+      "current_status_source": "guideline-comparison-2026-10-15.md; chronological acceptance in foreground-routing-and-retries-2026-10-15.md"
+    },
+    {
+      "path": "original-recordings/trading/Recording 2026-09-16 19-24-32-674.txt",
+      "sha256": "b4240f286e7415fb8f46798daef5d70231a85e7e3ce0af8a43601d2c6f8b6abc",
+      "bytes": 23106,
+      "characters": 23106,
+      "comparison_ids": [
+        "C8",
+        "D7"
+      ],
+      "reading": "Complete current reread; source-preservation appendix and whole-file aliases checked against separately read originals; full-reread/semantic-ledger.json records findings.",
+      "previous_sha256": "b4240f286e7415fb8f46798daef5d70231a85e7e3ce0af8a43601d2c6f8b6abc",
+      "current_status_source": "guideline-comparison-2026-10-15.md; chronological acceptance in foreground-routing-and-retries-2026-10-15.md"
+    },
+    {
+      "path": "original-recordings/trading/Recording 2026-09-22 11-25-58-600.txt",
+      "sha256": "c91deb611a86530f1abb27ca573a43aa68f3191f00e4e2ab30e26d237cdeba8e",
+      "bytes": 52962,
+      "characters": 52962,
+      "comparison_ids": [
+        "C8",
+        "D7"
+      ],
+      "reading": "Complete current reread; source-preservation appendix and whole-file aliases checked against separately read originals; full-reread/semantic-ledger.json records findings.",
+      "previous_sha256": "c91deb611a86530f1abb27ca573a43aa68f3191f00e4e2ab30e26d237cdeba8e",
+      "current_status_source": "guideline-comparison-2026-10-15.md; chronological acceptance in foreground-routing-and-retries-2026-10-15.md"
+    },
+    {
+      "path": "original-recordings/trading/Recording 2026-09-25 11-48-16-135.txt",
+      "sha256": "1d9bf8944fbea5eda264a15cde9fc27e10d758546eacd90fcd01ea78b3dde68e",
+      "bytes": 12802,
+      "characters": 12802,
+      "comparison_ids": [
+        "C8",
+        "D7"
+      ],
+      "reading": "Complete current reread; source-preservation appendix and whole-file aliases checked against separately read originals; full-reread/semantic-ledger.json records findings.",
+      "previous_sha256": "1d9bf8944fbea5eda264a15cde9fc27e10d758546eacd90fcd01ea78b3dde68e",
+      "current_status_source": "guideline-comparison-2026-10-15.md; chronological acceptance in foreground-routing-and-retries-2026-10-15.md"
+    },
+    {
+      "path": "original-recordings/trading/Recording 2026-10-08 12-28-50-396.txt",
+      "sha256": "6fa8068e8c7d8e14fcd49e16175e2afd65a880399f9a5a32cc18a68cd07d04af",
+      "bytes": 17694,
+      "characters": 17694,
+      "comparison_ids": [
+        "C8",
+        "D7"
+      ],
+      "reading": "Complete current reread; source-preservation appendix and whole-file aliases checked against separately read originals; full-reread/semantic-ledger.json records findings.",
+      "previous_sha256": "6fa8068e8c7d8e14fcd49e16175e2afd65a880399f9a5a32cc18a68cd07d04af",
+      "current_status_source": "guideline-comparison-2026-10-15.md; chronological acceptance in foreground-routing-and-retries-2026-10-15.md"
+    },
+    {
+      "path": "performance_reliability.md",
+      "sha256": "ba7b596571f75755be4b9344e1c4e89e07827947c4366839a79d7a753a5f5267",
+      "bytes": 5146,
+      "characters": 5142,
+      "comparison_ids": [
+        "A7",
+        "A8",
+        "A13",
+        "B4",
+        "C1",
+        "C2",
+        "C3",
+        "C4",
+        "C5",
+        "C6",
+        "C8"
+      ],
+      "reading": "Complete current reread; source-preservation appendix and whole-file aliases checked against separately read originals; full-reread/semantic-ledger.json records findings.",
+      "previous_sha256": "ba7b596571f75755be4b9344e1c4e89e07827947c4366839a79d7a753a5f5267",
+      "current_status_source": "guideline-comparison-2026-10-15.md; chronological acceptance in foreground-routing-and-retries-2026-10-15.md"
+    },
+    {
+      "path": "programming/README.md",
+      "sha256": "48b0173163d91ec1bf139949ceb73f3f963000f7dcc77d81f123adcc4a75db64",
+      "bytes": 24960,
+      "characters": 24954,
+      "comparison_ids": [
+        "A2",
+        "A10",
+        "B7",
+        "C4",
+        "C8",
+        "C9",
+        "C10"
+      ],
+      "reading": "Complete current reread; source-preservation appendix and whole-file aliases checked against separately read originals; full-reread/semantic-ledger.json records findings.",
+      "previous_sha256": "48b0173163d91ec1bf139949ceb73f3f963000f7dcc77d81f123adcc4a75db64",
+      "current_status_source": "guideline-comparison-2026-10-15.md; chronological acceptance in foreground-routing-and-retries-2026-10-15.md"
+    },
+    {
+      "path": "projects/recording_to_guideline_conversion.md",
+      "sha256": "2eb8d6b54c3c481a35dbe40f04f69ffa57592af9c10b25f67f7df95149fda074",
+      "bytes": 4615,
+      "characters": 4615,
+      "comparison_ids": [
+        "C10",
+        "D9"
+      ],
+      "reading": "Complete current reread; source-preservation appendix and whole-file aliases checked against separately read originals; full-reread/semantic-ledger.json records findings.",
+      "previous_sha256": "2eb8d6b54c3c481a35dbe40f04f69ffa57592af9c10b25f67f7df95149fda074",
+      "current_status_source": "guideline-comparison-2026-10-15.md; chronological acceptance in foreground-routing-and-retries-2026-10-15.md"
+    },
+    {
+      "path": "robotics/algorithm_selection_and_learning.md",
+      "sha256": "2f5487151c19a4251b6aa29e1b0916b319da1a9251a89d6ab42811acc23cef56",
+      "bytes": 8643,
+      "characters": 8643,
+      "comparison_ids": [
+        "C8",
+        "D8"
+      ],
+      "reading": "Complete current reread; source-preservation appendix and whole-file aliases checked against separately read originals; full-reread/semantic-ledger.json records findings.",
+      "previous_sha256": "2f5487151c19a4251b6aa29e1b0916b319da1a9251a89d6ab42811acc23cef56",
+      "current_status_source": "guideline-comparison-2026-10-15.md; chronological acceptance in foreground-routing-and-retries-2026-10-15.md"
+    },
+    {
+      "path": "security_privacy.md",
+      "sha256": "261a19379e3703f1450657c063b47434bf261e46c5eb75db1f5987eedbdfb74b",
+      "bytes": 3651,
+      "characters": 3639,
+      "comparison_ids": [
+        "A1",
+        "B5",
+        "B7",
+        "B9",
+        "C2",
+        "C3",
+        "C5",
+        "C6",
+        "C7"
+      ],
+      "reading": "Complete current reread; source-preservation appendix and whole-file aliases checked against separately read originals; full-reread/semantic-ledger.json records findings.",
+      "previous_sha256": "261a19379e3703f1450657c063b47434bf261e46c5eb75db1f5987eedbdfb74b",
+      "current_status_source": "guideline-comparison-2026-10-15.md; chronological acceptance in foreground-routing-and-retries-2026-10-15.md"
+    },
+    {
+      "path": "source_traceability.md",
+      "sha256": "8ced5659c817ac963f15381636e37b14ad5e069e0980b8524e036be2278dfec7",
+      "bytes": 3163,
+      "characters": 3163,
+      "comparison_ids": [
+        "A1",
+        "B2",
+        "B3",
+        "B5",
+        "B9",
+        "C10"
+      ],
+      "reading": "Complete current reread; source-preservation appendix and whole-file aliases checked against separately read originals; full-reread/semantic-ledger.json records findings.",
+      "previous_sha256": "8ced5659c817ac963f15381636e37b14ad5e069e0980b8524e036be2278dfec7",
+      "current_status_source": "guideline-comparison-2026-10-15.md; chronological acceptance in foreground-routing-and-retries-2026-10-15.md"
+    },
+    {
+      "path": "testing.md",
+      "sha256": "e58026b79a21042c479b9e20eece05774d8f91252e4bd8f0d2954999691ccfaf",
+      "bytes": 18063,
+      "characters": 18057,
+      "comparison_ids": [
+        "A10",
+        "C8",
+        "C9",
+        "C10"
+      ],
+      "reading": "Complete current reread; source-preservation appendix and whole-file aliases checked against separately read originals; full-reread/semantic-ledger.json records findings.",
+      "previous_sha256": "e58026b79a21042c479b9e20eece05774d8f91252e4bd8f0d2954999691ccfaf",
+      "current_status_source": "guideline-comparison-2026-10-15.md; chronological acceptance in foreground-routing-and-retries-2026-10-15.md"
+    },
+    {
+      "path": "tests.txt",
+      "sha256": "40bc540b0e7ef3c7b44da87d95d83db2b5d6f7511ded9ad59b0926bac2a72d4f",
+      "bytes": 9013,
+      "characters": 8957,
+      "comparison_ids": [
+        "C8",
+        "D9"
+      ],
+      "reading": "Complete current reread; source-preservation appendix and whole-file aliases checked against separately read originals; full-reread/semantic-ledger.json records findings.",
+      "previous_sha256": "40bc540b0e7ef3c7b44da87d95d83db2b5d6f7511ded9ad59b0926bac2a72d4f",
+      "current_status_source": "guideline-comparison-2026-10-15.md; chronological acceptance in foreground-routing-and-retries-2026-10-15.md"
+    },
+    {
+      "path": "trading/data_and_backtesting.md",
+      "sha256": "a55162d5df451fc9e96818c205135306d83c4210dceea29bae5c7fbcab60d926",
+      "bytes": 9958,
+      "characters": 9956,
+      "comparison_ids": [
+        "C8",
+        "D7"
+      ],
+      "reading": "Complete current reread; source-preservation appendix and whole-file aliases checked against separately read originals; full-reread/semantic-ledger.json records findings.",
+      "previous_sha256": "a55162d5df451fc9e96818c205135306d83c4210dceea29bae5c7fbcab60d926",
+      "current_status_source": "guideline-comparison-2026-10-15.md; chronological acceptance in foreground-routing-and-retries-2026-10-15.md"
+    },
+    {
+      "path": "trading/data_provenance_database.md",
+      "sha256": "58b4ab027b948455575bcd5f89170319ee5805d8f1f5dddfe57e646aee644254",
+      "bytes": 7447,
+      "characters": 7445,
+      "comparison_ids": [
+        "C8",
+        "D7"
+      ],
+      "reading": "Complete current reread; source-preservation appendix and whole-file aliases checked against separately read originals; full-reread/semantic-ledger.json records findings.",
+      "previous_sha256": "58b4ab027b948455575bcd5f89170319ee5805d8f1f5dddfe57e646aee644254",
+      "current_status_source": "guideline-comparison-2026-10-15.md; chronological acceptance in foreground-routing-and-retries-2026-10-15.md"
+    },
+    {
+      "path": "trading/dcf_market_efficiency_research.md",
+      "sha256": "393467885019352623fa3c629904ec4d3c7c0271b1dd5b9ca546517861cab956",
+      "bytes": 6988,
+      "characters": 6988,
+      "comparison_ids": [
+        "C8",
+        "D7"
+      ],
+      "reading": "Complete current reread; source-preservation appendix and whole-file aliases checked against separately read originals; full-reread/semantic-ledger.json records findings.",
+      "previous_sha256": "393467885019352623fa3c629904ec4d3c7c0271b1dd5b9ca546517861cab956",
+      "current_status_source": "guideline-comparison-2026-10-15.md; chronological acceptance in foreground-routing-and-retries-2026-10-15.md"
+    },
+    {
+      "path": "trading/options.md",
+      "sha256": "0a332bcc8a4c61aeee36fe7b3a91d0edbcf29f37d7fe8b5aa4d26c33300a685c",
+      "bytes": 5440,
+      "characters": 5440,
+      "comparison_ids": [
+        "C8",
+        "D7"
+      ],
+      "reading": "Complete current reread; source-preservation appendix and whole-file aliases checked against separately read originals; full-reread/semantic-ledger.json records findings.",
+      "previous_sha256": "0a332bcc8a4c61aeee36fe7b3a91d0edbcf29f37d7fe8b5aa4d26c33300a685c",
+      "current_status_source": "guideline-comparison-2026-10-15.md; chronological acceptance in foreground-routing-and-retries-2026-10-15.md"
+    },
+    {
+      "path": "trading/public_network_hypotheses.md",
+      "sha256": "6096a55367c5f48d8ef9f07ca7457b5a536b8663a228e4e622a44265a6c682f7",
+      "bytes": 4301,
+      "characters": 4301,
+      "comparison_ids": [
+        "C8",
+        "D7"
+      ],
+      "reading": "Complete current reread; source-preservation appendix and whole-file aliases checked against separately read originals; full-reread/semantic-ledger.json records findings.",
+      "previous_sha256": "6096a55367c5f48d8ef9f07ca7457b5a536b8663a228e4e622a44265a6c682f7",
+      "current_status_source": "guideline-comparison-2026-10-15.md; chronological acceptance in foreground-routing-and-retries-2026-10-15.md"
+    },
+    {
+      "path": "trading/reporting_and_gui.md",
+      "sha256": "2310c6cc9514fddb66a38e3b244aaea634eb21caff646c32ac180a42a9bb1185",
+      "bytes": 5854,
+      "characters": 5850,
+      "comparison_ids": [
+        "C8",
+        "D7"
+      ],
+      "reading": "Complete current reread; source-preservation appendix and whole-file aliases checked against separately read originals; full-reread/semantic-ledger.json records findings.",
+      "previous_sha256": "2310c6cc9514fddb66a38e3b244aaea634eb21caff646c32ac180a42a9bb1185",
+      "current_status_source": "guideline-comparison-2026-10-15.md; chronological acceptance in foreground-routing-and-retries-2026-10-15.md"
+    },
+    {
+      "path": "trading/strategy_research.md",
+      "sha256": "8c3d4173245589e3a0bfc12e6f3562a7dad839bb14f930201261c606694aee67",
+      "bytes": 3872,
+      "characters": 3872,
+      "comparison_ids": [
+        "C8",
+        "D7"
+      ],
+      "reading": "Complete current reread; source-preservation appendix and whole-file aliases checked against separately read originals; full-reread/semantic-ledger.json records findings.",
+      "previous_sha256": "8c3d4173245589e3a0bfc12e6f3562a7dad839bb14f930201261c606694aee67",
+      "current_status_source": "guideline-comparison-2026-10-15.md; chronological acceptance in foreground-routing-and-retries-2026-10-15.md"
+    }
+  ],
+  "unique_contents": 234,
+  "exact_duplicate_aliases": 12,
+  "physical_files": 246,
+  "last_verified_at": "2026-10-16T03:40:07.448651+00:00",
+  "verification": {
+    "integrity_artifact": "/data/var/swaag-benchmarks/foreground-routing-20261015/full-reread/history-scope-release-integrity.json",
+    "new": [],
+    "missing": [],
+    "changed": [],
+    "expected_files": 246,
+    "actual_files": 246
+  }
+}

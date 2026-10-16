@@ -159,6 +159,7 @@ _HISTORY_INDEX_MIGRATIONS = (
         )
         """,
     ),
+    ("ALTER TABLE control_messages ADD COLUMN authority_json TEXT NOT NULL DEFAULT '[]'",),
 )
 
 
@@ -286,7 +287,7 @@ class HistoryStore:
     def _sqlite_insert_event(self, connection: sqlite3.Connection, event: HistoryEvent) -> None:
         payload_json = stable_json_dumps(event.payload, indent=None)
         metadata_json = stable_json_dumps(event.metadata, indent=None)
-        connection.execute(
+        inserted = connection.execute(
             """
             INSERT OR IGNORE INTO events(
                 session_id, sequence, event_id, timestamp, event_type,
@@ -305,7 +306,12 @@ class HistoryStore:
                 event.hash,
             ),
         )
-        exists = connection.execute(
+        # Canonical and search rows are committed in the same transaction. A
+        # newly inserted event cannot already have a search row in a valid index.
+        # The FTS identity columns are UNINDEXED: checking them for every append
+        # scans all prior rows and makes reconstruction quadratic. On duplicate
+        # canonical rows, keep the existing missing-search-row repair path.
+        exists = None if inserted.rowcount == 1 else connection.execute(
             "SELECT 1 FROM events_fts WHERE session_id=? AND sequence=? LIMIT 1",
             (event.session_id, event.sequence),
         ).fetchone()
@@ -760,10 +766,15 @@ class HistoryStore:
             return None
         return payload if isinstance(payload, dict) else None
 
-    def enqueue_control_message(self, session_id: str, text: str, *, source: str = "cli", control_id: str | None = None) -> dict[str, Any]:
+    def enqueue_control_message(self, session_id: str, text: str, *, source: str = "cli", control_id: str | None = None, authority: list[dict[str, Any]] | None = None) -> dict[str, Any]:
         control_id = control_id or new_id("control")
         if not isinstance(text, str) or not text.strip():
             raise ValueError("control message must not be empty")
+        authority = list(authority or [])
+        if any(not isinstance(item, dict) or not isinstance(item.get("message"), str)
+               or not isinstance(item.get("source_session_id"), str) for item in authority):
+            raise ValueError("control authority requires exact messages and source session ids")
+        authority_json = stable_json_dumps(authority, indent=None)
         message = text
         priority = 0
         payload = {
@@ -789,17 +800,19 @@ class HistoryStore:
             connection.execute(
                 """
                 INSERT OR IGNORE INTO control_messages(
-                    control_id, session_id, message, source, created_at, priority, status
-                ) VALUES (?, ?, ?, ?, ?, ?, 'pending')
+                    control_id, session_id, message, source, created_at, priority, status, authority_json
+                ) VALUES (?, ?, ?, ?, ?, ?, 'pending', ?)
                 """,
-                (control_id, session_id, message, source, payload["created_at"], priority),
+                (control_id, session_id, message, source, payload["created_at"], priority, authority_json),
             )
             row = connection.execute(
-                "SELECT control_id, session_id, message, source, created_at, priority, status FROM control_messages WHERE control_id=?",
+                "SELECT control_id, session_id, message, source, created_at, priority, status, authority_json FROM control_messages WHERE control_id=?",
                 (control_id,),
             ).fetchone()
         if row is not None:
             payload = {key: row[key] for key in ("control_id", "session_id", "message", "source", "created_at", "priority")}
+            payload["authority"] = json.loads(row["authority_json"])
+            payload["status"] = str(row["status"])
             if str(row["status"]) == "pending":
                 self._write_projection(self.control_inbox_dir(session_id) / f"{control_id}.json", payload)
         return payload
@@ -808,7 +821,7 @@ class HistoryStore:
         with self._sqlite_connect() as connection:
             rows = connection.execute(
                 """
-                SELECT control_id, session_id, message, source, created_at, priority
+                SELECT control_id, session_id, message, source, created_at, priority, authority_json
                 FROM control_messages
                 WHERE session_id=? AND status='pending'
                 ORDER BY created_at, control_id
@@ -816,7 +829,8 @@ class HistoryStore:
                 (session_id,),
             ).fetchall()
         if rows:
-            return [dict(row) for row in rows]
+            return [{**{k: row[k] for k in row.keys() if k != "authority_json"},
+                     "authority": json.loads(row["authority_json"])} for row in rows]
         # Compatibility import for control files created before SQLite-backed control state.
         inbox = self.control_inbox_dir(session_id)
         if not inbox.exists():
@@ -843,7 +857,7 @@ class HistoryStore:
                 session_id,
                 str(payload.get("message", "")),
                 source=str(payload.get("source", "legacy")),
-                control_id=control_id,
+                control_id=control_id, authority=payload.get("authority", []),
             )
             imported.append(restored)
         return imported
@@ -858,14 +872,15 @@ class HistoryStore:
         with self._sqlite_connect() as connection:
             rows = connection.execute(
                 """
-                SELECT control_id, session_id, message, source, created_at, priority, status
+                SELECT control_id, session_id, message, source, created_at, priority, status, processed_at, authority_json
                 FROM control_messages
                 WHERE session_id=? AND status IN ('pending', 'processed')
                 ORDER BY created_at, control_id
                 """,
                 (session_id,),
             ).fetchall()
-        return [dict(row) for row in rows]
+        return [{**{k: row[k] for k in row.keys() if k != "authority_json"},
+                     "authority": json.loads(row["authority_json"])} for row in rows]
 
     def mark_control_message_processed(self, session_id: str, control_id: str) -> None:
         with self._sqlite_connect() as connection:
@@ -878,6 +893,21 @@ class HistoryStore:
         if inbox_path.exists():
             _ensure_directory(processed_path.parent)
             os.replace(inbox_path, processed_path)
+
+    def cancel_pending_control_message(self, session_id: str, control_id: str) -> None:
+        """Withdraw only an unconsumed receipt while its execution lock is held.
+
+        The canonical row retains the exact accepted input. A consumed receipt
+        is never described as unexecuted; run/tool cancellation keeps its own
+        durable outcome and the caller must not replay uncertain effects.
+        """
+        with self._sqlite_connect() as connection:
+            cursor = connection.execute(
+                "UPDATE control_messages SET status='canceled' WHERE session_id=? AND control_id=? AND status='pending'",
+                (session_id, control_id),
+            )
+        if cursor.rowcount:
+            (self.control_inbox_dir(session_id) / f"{control_id}.json").unlink(missing_ok=True)
 
     def _iter_history_jsonl(
         self,
@@ -1045,8 +1075,17 @@ class HistoryStore:
                 """
                 SELECT session_id, sequence, event_id, timestamp, event_type,
                        payload_json, metadata_json, prev_hash, event_hash
-                FROM events
+                FROM events AS candidate
                 WHERE event_type='communication_status_generated'
+                  AND NOT EXISTS (
+                      SELECT 1 FROM events AS rejected
+                      WHERE rejected.session_id=candidate.session_id
+                        AND rejected.event_type IN (
+                            'communication_status_reply_rejected',
+                            'communication_status_escalation_requested'
+                        )
+                        AND rejected.sequence>candidate.sequence
+                  )
                 ORDER BY timestamp DESC, sequence DESC
                 """
             )
@@ -1080,6 +1119,7 @@ class HistoryStore:
         self,
         session_id: str,
         *,
+        objective_sha256: str,
         source_event_sequence: int,
         source_event_hash: str,
         max_projected_tokens: int,
@@ -1100,6 +1140,8 @@ class HistoryStore:
                 )
                 for row in rows:
                     payload = json.loads(str(row["payload_json"]))
+                    if payload.get("objective_sha256") != objective_sha256:
+                        continue
                     if payload.get("source_event_sequence") != source_event_sequence:
                         continue
                     if source_event_hash and str(payload.get("source_event_hash", "")) != source_event_hash:
@@ -1130,6 +1172,8 @@ class HistoryStore:
             if event.event_type != "tool_result_projected":
                 continue
             payload = event.payload
+            if payload.get("objective_sha256") != objective_sha256:
+                continue
             if payload.get("source_event_sequence") != source_event_sequence:
                 continue
             if source_event_hash and str(payload.get("source_event_hash", "")) != source_event_hash:
@@ -1756,7 +1800,7 @@ class HistoryStore:
             for index, raw_message in enumerate(payload["projected_messages"]):
                 message_payload = dict(raw_message)
                 message_metadata = dict(message_payload.get("metadata", {}))
-                if index == 0 and message_payload.get("role") == "summary":
+                if index == int(payload.get("source_message_start", 0)) and message_payload.get("role") == "summary":
                     message_metadata.setdefault(
                         "projection_event_sequence", event.sequence
                     )

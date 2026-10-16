@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+from contextlib import contextmanager
 from dataclasses import dataclass, field
 import json
 import os
@@ -7,7 +8,7 @@ from urllib.parse import urlparse
 import time
 import threading
 from pathlib import Path
-from typing import Any, Callable, Protocol
+from typing import Any, Callable, Iterator, Protocol
 
 import requests
 
@@ -17,13 +18,36 @@ from swaag.config import AgentConfig
 from swaag.schema_portability import PortableSchemaError, assert_portable_json_schema
 from swaag.preemption import ModelCallPreempted
 from swaag.telemetry import inject_trace_context
-from swaag.tokens import ConservativeEstimator, CountResult
+from swaag.tokens import ConservativeEstimator, CountResult, validated_token_count
 from swaag.types import CompletionResult, ContractSpec
 from swaag.utils import sha256_text, stable_json_dumps
 
 
 class ModelClientError(RuntimeError):
     pass
+
+
+def _tokenizer_response_count(
+    payload: Any, *, count_field: str, token_fields: tuple[str, ...],
+    has_content: bool,
+) -> int:
+    """Validate counts from the documented tokenizer response dialect."""
+    if not isinstance(payload, dict):
+        raise ModelClientError("Tokenizer response must be an object")
+    if count_field in payload:
+        value = payload[count_field]
+    else:
+        tokens = next((payload[key] for key in token_fields if key in payload), None)
+        if not isinstance(tokens, list) or any(
+            not isinstance(token, int) or isinstance(token, bool) or token < 0
+            for token in tokens
+        ):
+            raise ModelClientError("Tokenizer response lacks valid token IDs")
+        value = len(tokens)
+    try:
+        return validated_token_count(value, has_content=has_content)
+    except ValueError as exc:
+        raise ModelClientError(str(exc)) from exc
 
 
 class ModelClient(Protocol):
@@ -169,6 +193,7 @@ class LlamaCppClient:
     _remote_prompt_tokens: dict[str, int] = field(default_factory=dict, init=False)
     _backend_monitor: BackendActivityMonitor | None = field(default=None, init=False)
     _backend_monitor_lock: Any = field(default_factory=threading.Lock, init=False)
+    _tokenization_transport: Any = field(default_factory=threading.local, init=False, repr=False)
 
     def backend_activity(self) -> dict[str, Any]:
         provider = self.config.model.provider_name.strip().lower()
@@ -312,6 +337,19 @@ class LlamaCppClient:
             return f"{parsed.scheme}://{parsed.netloc}{endpoint}"
         return f"{self._base}/{endpoint}"
 
+    def _chat_template_options(self) -> dict[str, Any]:
+        mode = self.config.model.thinking_mode
+        options = dict(self.config.model.chat_template_kwargs)
+        if mode == "server_default":
+            return {"chat_template_kwargs": options} if options else {}
+        if self.config.model.provider_name.lower() not in {"vllm", "vllm-openai", "vllm_openai", "llama.cpp", "llama_cpp"}:
+            raise ModelClientError("Explicit thinking_mode requires a verified vLLM or llama.cpp adapter")
+        enabled = mode == "enabled"
+        if "enable_thinking" in options and options["enable_thinking"] != enabled:
+            raise ModelClientError("thinking_mode conflicts with chat_template_kwargs.enable_thinking")
+        options["enable_thinking"] = enabled
+        return {"chat_template_kwargs": options}
+
     def _remote_tokenize_messages(
         self,
         messages: list[dict[str, str]],
@@ -322,8 +360,7 @@ class LlamaCppClient:
                 "model": self.config.model.profile_name,
                 "messages": messages,
                 "add_generation_prompt": True,
-                **({"chat_template_kwargs": dict(self.config.model.chat_template_kwargs)}
-                   if self.config.model.chat_template_kwargs else {}),
+                **self._chat_template_options(),
             },
             timeout=(
                 self.config.model.connect_timeout_seconds,
@@ -335,15 +372,10 @@ class LlamaCppClient:
         payload = response.json()
         if not isinstance(payload, dict):
             raise ModelClientError(f"Unexpected remote tokenize response: {payload!r}")
-        count = payload.get("count")
-        if not isinstance(count, int) or isinstance(count, bool) or count < 0:
-            tokens = payload.get("tokens")
-            if isinstance(tokens, list):
-                count = len(tokens)
-            else:
-                raise ModelClientError(
-                    f"Remote tokenize response lacks an exact count: {payload!r}"
-                )
+        count = _tokenizer_response_count(
+            payload, count_field="count", token_fields=("tokens",),
+            has_content=bool(messages),
+        )
         capacity = payload.get("max_model_len")
         if not isinstance(capacity, int) or isinstance(capacity, bool) or capacity <= 0:
             capacity = None
@@ -417,6 +449,7 @@ class LlamaCppClient:
             "base_url": self.config.model.base_url.rstrip("/"),
             "completion_endpoint": self.config.model.completion_endpoint,
             "profile_name": self.config.model.profile_name,
+            "thinking_mode": self.config.model.thinking_mode,
         }
         if self.config.model.chat_template_kwargs:
             identity["chat_template_kwargs"] = dict(self.config.model.chat_template_kwargs)
@@ -506,6 +539,7 @@ class LlamaCppClient:
             return {
                 **template_identity,
                 "serialization": "provider_opaque_openai_chat_v1",
+                "thinking_mode": self.config.model.thinking_mode,
                 "model_metadata_sha256": sha256_text(
                     stable_json_dumps(stable_model, indent=None)
                 ),
@@ -543,6 +577,7 @@ class LlamaCppClient:
         n_ctx = generation.get("n_ctx") if isinstance(generation, dict) else None
         return {
             **template_identity,
+            "thinking_mode": self.config.model.thinking_mode,
             "chat_template_sha256": sha256_text(template),
             "chat_template_caps_sha256": sha256_text(
                 stable_json_dumps(props.get("chat_template_caps"), indent=None)
@@ -604,9 +639,7 @@ class LlamaCppClient:
         before = self._prompt_protocol_identity()
         response = requests.post(
             f"{self._base}/apply-template",
-            json={"messages": messages,
-                  **({"chat_template_kwargs": dict(self.config.model.chat_template_kwargs)}
-                     if self.config.model.chat_template_kwargs else {})},
+            json={"messages": messages, **self._chat_template_options()},
             timeout=(
                 self.config.model.connect_timeout_seconds,
                 min(self.config.model.timeout_seconds, 30),
@@ -639,6 +672,12 @@ class LlamaCppClient:
             raise ModelClientError(
                 "Model or chat template changed after context compilation"
             )
+
+    def server_slot_resolution(self) -> tuple[int, str]:
+        if self._uses_chat_transport:
+            # The standard chat API does not advertise admission capacity.
+            return 1, "conservative_fallback:openai_transport"
+        return self.server_slot_count(), "server_props:total_slots"
 
     def server_slot_count(self) -> int:
         if self._uses_chat_transport:
@@ -692,6 +731,24 @@ class LlamaCppClient:
             )
         return self.server_context_limit(), "server_props:n_ctx"
 
+    @contextmanager
+    def tokenization_scope(self) -> Iterator[None]:
+        """Reuse native tokenizer connections for one synchronous compilation.
+
+        Sessions belong to a client and OS thread, never to shared async context.
+        Nested scopes borrow the outer owner; errors/cancellation close its pool.
+        Generation, cancellation transport and backend probes are unaffected.
+        """
+        if self._uses_chat_transport or getattr(self._tokenization_transport, "session", None) is not None:
+            yield
+            return
+        with requests.Session() as session:
+            self._tokenization_transport.session = session
+            try:
+                yield
+            finally:
+                del self._tokenization_transport.session
+
     def tokenize(self, text: str) -> int:
         if self._uses_chat_transport:
             recorded = self._remote_prompt_tokens.get(sha256_text(text))
@@ -700,21 +757,27 @@ class LlamaCppClient:
             raise ModelClientError(
                 "Exact tokenization is unavailable for this opaque OpenAI-compatible prompt fragment"
             )
-        response = requests.post(
+        session = getattr(self._tokenization_transport, "session", None)
+        if session is not None:
+            # Match the previous per-request Session behavior: server cookies
+            # must not silently become cross-request authentication/state.
+            session.cookies.clear()
+        post = requests.post if session is None else session.post
+        response = post(
             f"{self._base}{self.config.model.tokenize_endpoint}",
             json={"content": text},
             timeout=(self.config.model.connect_timeout_seconds, self.config.model.timeout_seconds),
             **self._request_headers_kwargs(),
         )
-        response.raise_for_status()
-        payload = response.json()
-        if isinstance(payload.get("tokens"), list):
-            return len(payload["tokens"])
-        if isinstance(payload.get("token_ids"), list):
-            return len(payload["token_ids"])
-        if isinstance(payload.get("n_tokens"), int):
-            return int(payload["n_tokens"])
-        raise ModelClientError(f"Unexpected tokenize response: {payload!r}")
+        try:
+            response.raise_for_status()
+            payload = response.json()
+            return _tokenizer_response_count(
+                payload, count_field="n_tokens", token_fields=("tokens", "token_ids"),
+                has_content=bool(text.strip()),
+            )
+        finally:
+            response.close()
 
     def count_text(self, text: str) -> CountResult:
         if self._uses_chat_transport:
@@ -731,6 +794,34 @@ class LlamaCppClient:
             exact=True,
             strategy="llama_cpp_server",
         )
+
+    def tokenize_output(self, text: str) -> int:
+        """Count plain generated text without a chat template or special tokens.
+
+        Chat-fragment accounting remains separate from this verified vLLM
+        completion-tokenizer adapter. Other providers retain their fallback.
+        """
+        if not self._uses_chat_transport:
+            return self.tokenize(text)
+        if self.config.model.provider_name.lower() not in {"vllm", "vllm-openai", "vllm_openai"}:
+            raise ModelClientError("Exact output tokenization is unavailable for this provider")
+        response = requests.post(
+            self._remote_tokenize_url(),
+            json={"model": self.config.model.profile_name, "prompt": text,
+                  "add_special_tokens": False},
+            timeout=(self.config.model.connect_timeout_seconds,
+                     min(self.config.model.timeout_seconds, 30)),
+            **self._request_headers_kwargs(),
+        )
+        try:
+            response.raise_for_status()
+            payload = response.json()
+            return _tokenizer_response_count(
+                payload, count_field="count", token_fields=("tokens",),
+                has_content=bool(text.strip()),
+            )
+        finally:
+            response.close()
 
     def tokenize_selection(self, text: str) -> int:
         return self.tokenize(text)
@@ -822,8 +913,7 @@ class LlamaCppClient:
                     },
                 },
             }
-            if self.config.model.chat_template_kwargs:
-                request["chat_template_kwargs"] = dict(self.config.model.chat_template_kwargs)
+            request.update(self._chat_template_options())
             if self._is_openrouter:
                 request["provider"] = {"require_parameters": True}
             if self.config.model.stop:
@@ -886,6 +976,12 @@ class LlamaCppClient:
         )
         stream_payload = dict(payload)
         stream_payload["stream"] = True
+        if self._uses_chat_transport:
+            # Chat servers send aggregate usage after the final answer chunk.
+            stream_payload["stream_options"] = {
+                **stream_payload.get("stream_options", {}),
+                "include_usage": True,
+            }
         started = time.monotonic()
         request_kwargs: dict[str, Any] = {
             "json": stream_payload,
@@ -1025,6 +1121,10 @@ class LlamaCppClient:
         backend_prompt_tokens: int | None = None
         backend_completion_tokens: int | None = None
         first_token_seconds: float | None = None
+        prompt_tokens_source: str | None = None
+        completion_tokens_source = "stream_event_count"
+        finish_reason: str | None = None
+        chat_usage: dict[str, Any] | None = None
         # SSE is UTF-8 even when requests infers Latin-1 for text/event-stream.
         # Set the incremental decoder before consuming chunks so split multibyte
         # characters and providers without a charset retain their exact text.
@@ -1044,7 +1144,9 @@ class LlamaCppClient:
                     continue
                 if line.startswith("data:"):
                     line = line[5:].strip()
-                if not line or line == "[DONE]":
+                if line == "[DONE]":
+                    break
+                if not line:
                     continue
                 try:
                     item = json.loads(line)
@@ -1052,7 +1154,13 @@ class LlamaCppClient:
                     raise ModelClientError(f"Unexpected streamed completion line: {raw_line!r}") from exc
                 if not isinstance(item, dict):
                     raise ModelClientError(f"Unexpected streamed completion item: {item!r}")
+                if item.get("error"):
+                    raise ModelClientError(f"Streamed completion failed: {item['error']!r}")
                 last_body = item
+                finish_reason = _completion_finish_reason(item) or finish_reason
+                usage = item.get("usage")
+                if isinstance(usage, dict):
+                    chat_usage = usage
                 piece = _completion_piece(item)
                 token_count_changed = False
                 if piece:
@@ -1061,19 +1169,28 @@ class LlamaCppClient:
                     if first_token_seconds is None:
                         first_token_seconds = round(time.monotonic() - started, 3)
                     token_count_changed = True
-                raw_evaluated = item.get("tokens_evaluated")
-                if isinstance(raw_evaluated, int) and raw_evaluated >= 0:
+                raw_evaluated = _nonnegative_token_count(item.get("tokens_evaluated"))
+                evaluated_source = "tokens_evaluated"
+                if raw_evaluated is None and isinstance(usage, dict):
+                    raw_evaluated = _nonnegative_token_count(usage.get("prompt_tokens"))
+                    evaluated_source = "usage.prompt_tokens"
+                if raw_evaluated is not None:
                     if backend_prompt_tokens != raw_evaluated:
                         backend_prompt_tokens = raw_evaluated
                         token_count_changed = True
-                raw_predicted = item.get("tokens_predicted")
-                if isinstance(raw_predicted, int) and raw_predicted >= 0:
+                    prompt_tokens_source = evaluated_source
+                raw_predicted = _nonnegative_token_count(item.get("tokens_predicted"))
+                predicted_source = "tokens_predicted"
+                if raw_predicted is None and isinstance(usage, dict):
+                    raw_predicted = _nonnegative_token_count(usage.get("completion_tokens"))
+                    predicted_source = "usage.completion_tokens"
+                if raw_predicted is not None:
                     if backend_completion_tokens != raw_predicted:
                         backend_completion_tokens = raw_predicted
                         token_count_changed = True
-                    if raw_predicted >= reported_tokens:
-                        reported_tokens = raw_predicted
-                elif completion_events > reported_tokens:
+                    completion_tokens_source = predicted_source
+                    reported_tokens = raw_predicted
+                elif backend_completion_tokens is None and completion_events > reported_tokens:
                     reported_tokens = completion_events
                 if token_count_changed:
                     # Only semantic/model progress resets the native deadlock backstop.
@@ -1087,23 +1204,15 @@ class LlamaCppClient:
                             "completion_tokens": reported_tokens,
                             "backend_prompt_tokens": backend_prompt_tokens,
                             "backend_completion_tokens": backend_completion_tokens,
-                            "completion_tokens_source": (
-                                "tokens_predicted"
-                                if backend_completion_tokens is not None
-                                else "stream_event_count"
-                            ),
-                            "prompt_tokens_source": (
-                                "tokens_evaluated"
-                                if backend_prompt_tokens is not None
-                                else None
-                            ),
+                            "completion_tokens_source": completion_tokens_source,
+                            "prompt_tokens_source": prompt_tokens_source,
                             "elapsed_seconds": round(elapsed, 3),
                             "tokens_per_second": round(reported_tokens / elapsed, 3),
                             "first_token_seconds": first_token_seconds,
                             "token_timeout_seconds": token_timeout_seconds,
                         }
                     )
-                if item.get("stop") or _chat_finished(item):
+                if item.get("stop"):
                     break
         except requests.Timeout as exc:
             if fail_safe_observed.is_set():
@@ -1159,9 +1268,15 @@ class LlamaCppClient:
         if backend_monitor is not None:
             body["fail_safe_timeout_seconds"] = fail_safe_timeout_seconds
             body["backend_activity"] = backend_monitor.snapshot()
-        completion_tokens = body.get("tokens_predicted")
-        if not isinstance(completion_tokens, int):
-            completion_tokens = reported_tokens
+        if chat_usage is not None:
+            body["usage"] = chat_usage
+        body["finish_reason"] = finish_reason
+        body["prompt_tokens_source"] = prompt_tokens_source
+        body["completion_tokens_source"] = completion_tokens_source
+        completion_tokens = (
+            backend_completion_tokens
+            if backend_completion_tokens is not None else reported_tokens
+        )
         tokens_per_second = round(completion_tokens / max(elapsed_seconds, 1e-9), 3) if completion_tokens else 0.0
         body["elapsed_seconds"] = elapsed_seconds
         body["tokens_per_second"] = tokens_per_second
@@ -1170,9 +1285,9 @@ class LlamaCppClient:
             text=str(body.get("content", "")),
             raw_request=stream_payload,
             raw_response=body,
-            prompt_tokens=body.get("tokens_evaluated"),
+            prompt_tokens=backend_prompt_tokens,
             completion_tokens=completion_tokens,
-            finish_reason=_completion_finish_reason(body),
+            finish_reason=finish_reason,
             elapsed_seconds=elapsed_seconds,
             tokens_per_second=tokens_per_second,
             first_token_seconds=first_token_seconds,
@@ -1239,6 +1354,10 @@ def _http_error_detail(
     )
 
 
+def _nonnegative_token_count(value: Any) -> int | None:
+    return value if isinstance(value, int) and not isinstance(value, bool) and value >= 0 else None
+
+
 def _completion_piece(item: dict[str, Any]) -> str:
     if "content" in item:
         return str(item.get("content", ""))
@@ -1268,14 +1387,6 @@ def _chat_content(item: dict[str, Any]) -> str:
     if isinstance(message, dict) and isinstance(message.get("content"), str):
         return str(message["content"])
     return ""
-
-
-def _chat_finished(item: dict[str, Any]) -> bool:
-    choices = item.get("choices")
-    if not isinstance(choices, list) or not choices:
-        return False
-    first = choices[0]
-    return isinstance(first, dict) and bool(first.get("finish_reason"))
 
 
 def _completion_finish_reason(body: dict[str, Any]) -> str | None:

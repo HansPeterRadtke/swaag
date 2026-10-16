@@ -293,6 +293,29 @@ class ModelPreemptionCoordinator:
     def fail(self, preemption_id: str, reply: str) -> None:
         self._set(preemption_id, "failed", reply=reply)
 
+    def fail_if_requested(self, preemption_id: str, reply: str) -> PreemptionRequest:
+        """Fail only an unresolved request without clobbering a concurrent interruption."""
+        with self._connect() as connection:
+            current = connection.execute(
+                "SELECT * FROM preemptions WHERE preemption_id=?",
+                (preemption_id,),
+            ).fetchone()
+            if current is None:
+                raise FileNotFoundError(f"Unknown preemption id: {preemption_id}")
+            if current["status"] == "requested":
+                connection.execute(
+                    """
+                    UPDATE preemptions
+                    SET status='failed', reply=?, updated_at=?
+                    WHERE preemption_id=? AND status='requested'
+                    """,
+                    (reply, utc_now_iso(), preemption_id),
+                )
+        item = self.get(preemption_id)
+        if item is None:
+            raise FileNotFoundError(f"Unknown preemption id: {preemption_id}")
+        return item
+
     def wait_for_status(self, preemption_id: str, statuses: set[str], *, timeout_seconds: float, poll_seconds: float = 0.02) -> PreemptionRequest:
         deadline = time.monotonic() + max(0.01, timeout_seconds)
         while True:

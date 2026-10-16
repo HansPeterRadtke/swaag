@@ -446,13 +446,16 @@ def test_output_limit_rebuilds_action_with_more_headroom(make_config) -> None:
     assert result.assistant_text == "done"
     assert len(client.requests) == 2
     assert client.requests[1]["n_predict"] > client.requests[0]["n_predict"]
+    # Truncation changes capacity, not task authority or the history-reuse key.
+    assert client.requests[1]["prompt"] == client.requests[0]["prompt"]
     events = runtime.history.read_history(result.session_id)
     exhausted = [event for event in events if event.event_type == "model_output_budget_exhausted"]
     assert len(exhausted) == 1
 
 
+@pytest.mark.parametrize("projection_objective", [None, "same-task-fingerprint"])
 def test_history_compaction_creates_replayable_summary_with_exact_sources(
-    make_config,
+    make_config, projection_objective,
 ) -> None:
     config = make_config(model__context_limit=32_000)
     def compaction_response(payload: dict[str, Any]) -> str:
@@ -474,9 +477,10 @@ def test_history_compaction_creates_replayable_summary_with_exact_sources(
     ):
         runtime._record_message(state, Message(role=role, content=content, created_at="t"))
 
-    assert runtime._compact_once(state) is True
+    assert runtime._compact_once(state, projection_objective_sha256=projection_objective) is True
 
     assert state.messages[0].role == "summary"
+    assert state.messages[0].metadata.get("projection_objective_sha256") == projection_objective
     assert state.messages[0].metadata["source_event_references"]
     assert state.messages[0].metadata["projection_event_sequence"] > 0
     compressed = next(
@@ -570,17 +574,18 @@ def test_summary_structured_output_reserve_accounts_for_exact_spans() -> None:
     ) == 484
 
 
-@pytest.mark.parametrize("direct_projection", [False, True])
+@pytest.mark.parametrize("selector_level", ["ordinary", "important", "compressible"])
 def test_history_compaction_refines_semantic_summary_with_frozen_exact_spans(
-    make_config, direct_projection,
+    make_config, selector_level,
 ) -> None:
+    direct_projection = selector_level == "compressible"
     marker = "exact-preserved-marker-991"
 
     def response(payload: dict[str, Any]) -> str:
         contract = payload["contract"]
         if contract == "history_compaction_selection":
             return json.dumps(
-                {"criticality": "compressible" if direct_projection else "ordinary",
+                {"criticality": selector_level,
                  "reason_code": "redundant_progress" if direct_projection else "current_direction",
                  "projection": "verbose " * 3_000 if direct_projection else ""}
             )
@@ -2597,3 +2602,101 @@ def test_wakeup_preserves_semantic_reason_whitespace_verbatim(tmp_path) -> None:
         now=datetime(2026, 8, 6, 12, 0, tzinfo=timezone.utc),
     )
     assert item.reason == reason
+
+
+@pytest.mark.parametrize('kind', ['capability', 'tool', 'terminal'])
+def test_single_responsibility_recovers_measured_history_overflow(make_config, kind):
+    """All split action paths recover exact oversized history, never silently clip it."""
+    marker = 'exact-overflow-evidence-marker-30291'
+    selected = 0
+
+    def respond(payload):
+        nonlocal selected
+        contract = payload['contract']
+        if contract == 'history_verbatim_selection':
+            return json.dumps({'selected_line_ids': [], 'reason': 'redundant synthetic history'})
+        if contract == 'history_compaction_selection':
+            selected += 1
+            return json.dumps({'criticality': 'compressible', 'reason_code': 'redundant_progress',
+                               'projection': 'Initial derived history.' if selected == 1 else 'Fresh recovered evidence.'})
+        if contract == 'agent_capability_selection':
+            return json.dumps({'capability': 'none'})
+        if contract == 'agent_tool_call':
+            return json.dumps({'tool_calls': []})
+        if contract == 'agent_terminal_response':
+            return json.dumps({'assistant_message': 'Evidence retained.', 'silent_completion': False})
+        raise AssertionError(contract)
+
+    config = make_config(model__context_limit=32000, model__max_semantic_responsibilities_per_call=1)
+    client = FakeModelClient([respond for _ in range(256)])
+    runtime = AgentRuntime(config, model_client=client)
+    state = runtime.create_or_load_session()
+    request = 'Report the evidence and preserve the release hold.'
+    for role, content in [('user', 'large exact source ' * 4000 + marker),
+                          ('assistant', 'Earlier evidence acknowledged.'), ('user', request),
+                          ('assistant', 'Continuing.')]:
+        runtime._record_message(state, Message(role=role, content=content, created_at='t'))
+    assert runtime._compact_once(state)
+    config.model.context_limit = 2200
+    common = dict(original_request=request, pending_messages=[], validation_feedback='', seed_offset=0)
+    if kind == 'capability':
+        runtime._single_responsibility_capability_action(
+            state, capability_index=[('calculator', 'Calculate arithmetic.', '')],
+            loaded_tool_names=set(), **common)
+        prompt_kind = 'action_capability_selection'
+    elif kind == 'tool':
+        specs = [item for item in runtime.tools.prompt_tuples(config) if item[0] == 'calculator']
+        runtime._single_responsibility_tool_action(state, tool_specs=specs, capability_index=[], **common)
+        prompt_kind = 'action_tool_call'
+    else:
+        runtime._single_responsibility_terminal_action(state, allow_silent_completion=False, **common)
+        prompt_kind = 'action_terminal_response'
+    compilations = [e.payload for e in runtime.history.read_history(state.session_id)
+                    if e.event_type == 'context_compiled' and e.payload.get('kind') == prompt_kind]
+    assert any(e['candidate_only'] and e['accounting']['overflow_tokens'] > 0 for e in compilations)
+    assert compilations[-1]['candidate_only'] is False
+    assert 'Fresh recovered evidence.' in client.requests[-1]['prompt']
+    assert request in client.requests[-1]['prompt']
+    assert marker in '\n'.join(m.content for m in runtime.history.read_authoritative_messages(state.session_id))
+
+
+def test_single_responsibility_recovers_from_real_tool_error(make_config):
+    config = make_config(model__max_semantic_responsibilities_per_call=1, model__context_limit=32000)
+    config.tools.enabled = ['read_file', 'calculator']
+    client = FakeModelClient([
+        json.dumps({'tool_calls': [{'tool_name': 'read_file', 'arguments': {'path': 'missing-input.txt'}}]}),
+        json.dumps({'tool_calls': [{'tool_name': 'calculator', 'arguments': {'expression': '17 * 19'}}]}),
+        json.dumps({'tool_calls': []}),
+        json.dumps({'assistant_message': 'The file is missing. The product is 323.', 'silent_completion': False}),
+    ])
+    runtime = AgentRuntime(config, model_client=client)
+    result = runtime.run_turn('Read missing-input.txt if available, then calculate seventeen times nineteen.')
+    assert result.assistant_text == 'The file is missing. The product is 323.'
+    events = runtime.history.read_history(result.session_id)
+    recoveries = [e for e in events if e.event_type == 'tool_invocation_failed_recoverably']
+    assert len(recoveries) == 1
+    assert recoveries[0].payload['tool_name'] == 'read_file'
+    assert any(e.event_type == 'tool_result' and e.payload.get('tool_name') == 'calculator' for e in events)
+
+
+def test_history_protect_path_keeps_complete_literal_window(make_config) -> None:
+    def protect(payload):
+        assert payload["contract"] == "history_compaction_selection"
+        return json.dumps({"criticality": "protect", "reason_code": "exact_wording", "projection": ""})
+
+    client = FakeModelClient([protect for _ in range(16)])
+    runtime = AgentRuntime(make_config(model__context_limit=32_000), model_client=client)
+    state = runtime.create_or_load_session()
+    for role, content in [
+        ("user", "Retain this complete literal transcript; do not replace it with excerpts."),
+        ("assistant", "Repeated scope. " * 400),
+        ("user", "Do not publish release A. Release B still needs explicit approval."),
+        ("assistant", "Repeated scope. " * 400),
+    ]:
+        runtime._record_message(state, Message(role=role, content=content, created_at="t"))
+    before = [(m.role, m.content) for m in state.messages]
+    assert runtime._compact_once(state) is False
+    assert [(m.role, m.content) for m in state.messages] == before
+    assert not any(e.event_type in {"history_compressed", "history_reprojected"}
+                   for e in runtime.history.read_history(state.session_id))
+    assert all(r["contract"] == "history_compaction_selection" for r in client.requests)

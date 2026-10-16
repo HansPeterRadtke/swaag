@@ -41,3 +41,57 @@ The revision API reports `pending` and the committed outcome when available. Cal
 The inventory covers every outstanding question in configured worker stores, including archived workers, with no top-N truncation. It is sorted by blocking state, importance, creation time, and stable ID. Per-worker source sequences identify each observed snapshot; this is not a global transaction across all workers. Pending revisions remain explicit. The orchestrator action context receives the entire inventory and exact recovery locators. Measured overflow uses the existing all-source semantic projection path; it never applies a fixed question cutoff.
 
 Orchestrator instructions require reviewing every question, checking applicable guidelines and existing evidence before asking, presenting short inventories directly, and grouping large inventories only after review. Its default tools now include repository reading/search so this instruction is executable. Whether a model correctly interprets a guideline remains a semantic acceptance question, not a claim guaranteed by the schema.
+
+
+## Ordinary approval delivery and waiting-worker recovery
+
+An ordinary agent_control instruction is durably enqueued before dispatch is
+attempted. The owning configured worker manager can resume an input_required
+worker when that session has a pending foreground control. The transition lock
+also covers a control arriving while the worker is committing its wait state;
+periodic orchestration advancement recovers accepted controls after a dispatch
+interruption or capacity pressure. A pending delegated-tool result remains a
+separate wait, and this path does not revive archived, canceled or completed work.
+A receipt confirms durable acceptance, not that an effect already happened.
+
+Question resolution can cite the local processed-control event for an original
+user instruction forwarded by the orchestrator. The control must match its durable
+original-user authority by session, message and control identity. Routing prose,
+bare tool output, scheduler controls and unbacked processed records do not become
+user evidence. Creating a new question is distinct from resolving an existing
+answered question. Completion receives the current unresolved-question inventory
+and must account for applicable answered or superseded questions before declaring
+the task finished. These are source mechanics; live semantic acceptance and the
+installed release are separately recorded in the October fifteenth study.
+
+Managed workers use current replayed unresolved-question state for their durable
+status; question events merely occurring in the current run do not determine
+whether a question remains open. A worker terminal candidate with an existing
+blocking question is mechanically rejected before model completion review, with
+exact question IDs returned for evidence-backed reconciliation. This gate also
+operates when model completion review is disabled. It does not apply to ordinary
+foreground status turns, which may answer while background input is still needed.
+A question created and resolved during one run no longer falsely leaves the
+worker input_required. Older incorrectly completed sessions are not automatically
+resurrected by ordinary control dispatch; the experimental recovery explicitly
+resumes its known test worker without new authority or repeat file writes.
+
+
+## Interrupted foreground receipts and status retrieval
+
+A processed foreground receipt without a committed final answer can resume its
+original turn after process loss under the existing execution lock. Durable
+turn-start records explicitly link resumed control identities. Recovery preserves
+the original user message and committed tool evidence; it does not reissue a saved
+tool batch. Final-answer replay and stream cursors follow those explicit links,
+not an unrelated later turn. Canceled turns remain canceled, and newer pending
+user corrections still reach continuation before further effects.
+
+`agent_status_lookup` returns exact current semantic status and mechanical state
+by default. Its `status_history_reference` provides count, source sequences and
+hash; `include_history=true` retrieves the complete exact status trajectory.
+Omission, null or false selects current status. Existing consumers that need
+`status_history` must now request `include_history=true`. This is a retrieval interface,
+not deletion or a claim that historical evidence is irrelevant. Models should use
+the current supplied whole-system snapshot when it already answers the question.
+A status report and a processed receipt still do not by themselves verify effects.

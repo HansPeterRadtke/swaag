@@ -88,6 +88,7 @@ def test_server_slot_count_comes_from_props(make_config, monkeypatch):
 
     monkeypatch.setattr("swaag.model.requests.get", lambda *args, **kwargs: Response())
     assert client.server_slot_count() == 3
+    assert client.server_slot_resolution() == (3, "server_props:total_slots")
 
 
 @pytest.mark.parametrize("value", [None, True, False, 0, -1, "3"])
@@ -586,3 +587,72 @@ def test_invalid_template_options_are_rejected_at_config_boundary(bad):
     from swaag.config import load_config
     with pytest.raises(ValueError, match="chat_template_kwargs"):
         load_config(env={"SWAAG__MODEL__CHAT_TEMPLATE_KWARGS": json.dumps(bad)})
+
+@pytest.mark.parametrize("cached", [False, True])
+def test_chat_inference_capacity_is_reported_as_fallback(make_config, monkeypatch, cached):
+    from swaag.runtime import AgentRuntime
+    config = make_config(
+        model__base_url="https://inference.example/v1",
+        model__completion_endpoint="/chat/completions",
+        model__cache_enabled=cached,
+    )
+    def unexpected(*args, **kwargs):
+        raise AssertionError("Capacity fallback must not be reported as fetched server properties")
+    monkeypatch.setattr("swaag.model.requests.get", unexpected)
+    runtime = AgentRuntime(config)
+    assert runtime._inference_capacity() == (1, "conservative_fallback:openai_transport")
+
+@pytest.mark.parametrize("payload", [
+    {"tokens": []}, {"count": 0}, {"count": -1}, {"count": True},
+    {"tokens": [True]}, {"tokens": [-1]}, {"tokens": ["12"]},
+])
+def test_remote_invalid_tokenizer_response_cannot_admit_nonempty_request(
+    make_config, monkeypatch, payload
+):
+    class Response:
+        def raise_for_status(self): pass
+        def json(self): return payload
+    client = LlamaCppClient(make_config(
+        model__base_url="https://inference.example/v1",
+        model__profile_name="model-a",
+    ))
+    monkeypatch.setattr(client.__class__, "_prompt_protocol_identity",
+                        lambda self: {"serialization": "test"})
+    monkeypatch.setattr("swaag.model.requests.post", lambda *a, **kw: Response())
+    rendered = client.render_chat_prompt([
+        {"role": "system", "content": "Preserve all instructions."},
+        {"role": "user", "content": "Evidence " * 10000},
+    ])
+    assert rendered["input_token_count"] == ""
+    assert rendered["input_token_strategy"] == "conservative_estimator_required"
+    counted = client.count_text(rendered["prompt"])
+    assert not counted.exact and counted.tokens > 8192
+    with pytest.raises(ModelClientError):
+        client.tokenize(rendered["prompt"])
+
+@pytest.mark.parametrize("payload", [
+    {"tokens": []}, {"tokens": [True]}, {"tokens": [-1]},
+    {"n_tokens": 0}, {"n_tokens": -1}, {"n_tokens": True},
+])
+def test_native_tokenizer_rejects_invalid_counts(make_config, monkeypatch, payload):
+    class Response:
+        def raise_for_status(self): pass
+        def json(self): return payload
+        def close(self): pass
+    monkeypatch.setattr("swaag.model.requests.post", lambda *a, **kw: Response())
+    with pytest.raises(ModelClientError):
+        LlamaCppClient(make_config()).tokenize("nonempty")
+
+
+@pytest.mark.parametrize("payload", [{"count": 0}, {"tokens": []}, {"count": True}])
+def test_output_tokenizer_rejects_invalid_counts(make_config, monkeypatch, payload):
+    class Response:
+        def raise_for_status(self): pass
+        def json(self): return payload
+        def close(self): pass
+    monkeypatch.setattr("swaag.model.requests.post", lambda *a, **kw: Response())
+    client = LlamaCppClient(make_config(
+        model__base_url="https://inference.example/v1", model__provider_name="vllm"
+    ))
+    with pytest.raises(ModelClientError):
+        client.tokenize_output("nonempty")

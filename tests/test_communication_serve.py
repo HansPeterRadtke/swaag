@@ -99,7 +99,8 @@ def test_watchdog_interval_has_safe_default(monkeypatch):
 
 
 @pytest.mark.skipif(os.name != "posix", reason="system service signal contract is POSIX-only")
-def test_communication_serve_exits_cleanly_on_sigterm(tmp_path: Path) -> None:
+@pytest.mark.parametrize("keep_client_open", [False, True])
+def test_communication_serve_exits_cleanly_on_sigterm(tmp_path: Path, keep_client_open: bool) -> None:
     with socket.socket() as probe:
         probe.bind(("127.0.0.1", 0))
         port = int(probe.getsockname()[1])
@@ -131,6 +132,7 @@ def test_communication_serve_exits_cleanly_on_sigterm(tmp_path: Path) -> None:
         stderr=subprocess.PIPE,
         env=env,
     )
+    held_client = None
     try:
         deadline = time.monotonic() + 10
         while True:
@@ -140,8 +142,16 @@ def test_communication_serve_exits_cleanly_on_sigterm(tmp_path: Path) -> None:
                     f"communication service exited before listening: {stdout} {stderr}"
                 )
             try:
-                with socket.create_connection(("127.0.0.1", port), timeout=0.2):
-                    break
+                connection = socket.create_connection(("127.0.0.1", port), timeout=0.2)
+                if keep_client_open:
+                    held_client = connection
+                    # Prove the handler is live before asking the listener to stop.
+                    connection.sendall(b'{"op":"orchestration.supervision"}\n')
+                    connection.settimeout(3)
+                    assert connection.recv(8192)
+                else:
+                    connection.close()
+                break
             except OSError:
                 if time.monotonic() >= deadline:
                     raise AssertionError("communication service did not start")
@@ -149,6 +159,8 @@ def test_communication_serve_exits_cleanly_on_sigterm(tmp_path: Path) -> None:
         process.terminate()
         stdout, stderr = process.communicate(timeout=10)
     finally:
+        if held_client is not None:
+            held_client.close()
         if process.poll() is None:
             process.kill()
             process.wait(timeout=5)
@@ -2442,6 +2454,7 @@ def test_a2a_agent_card_signature_verifies(make_config, monkeypatch):
 
 def test_communication_endpoint_uses_its_own_model_identity(make_config) -> None:
     config = make_config(); config.communication.enabled = True
+    config.model.thinking_mode = "enabled"
     config.model.profile_name = "main-27b"; config.model.model_identity = "main-27b"; config.model.remote_context_limit_fallback = 8192
     config.communication.model_chat_template_kwargs = {"enable_thinking": False}
     config.communication.model_base_url = "http://127.0.0.1:14832/v1"; config.communication.model_profile_name = "fast-model"; config.communication.model_identity = "fast-model"; config.communication.remote_context_limit_fallback = 32768
@@ -2450,6 +2463,8 @@ def test_communication_endpoint_uses_its_own_model_identity(make_config) -> None
         model = service.orchestrator_runtime.config.model
         assert (model.base_url, model.profile_name, model.model_identity, model.remote_context_limit_fallback) == ("http://127.0.0.1:14832/v1", "fast-model", "fast-model", 32768)
         assert model.chat_template_kwargs == {"enable_thinking": False}
+        assert model.thinking_mode == "server_default"
+        assert config.model.thinking_mode == "enabled"
         assert service.assistant_runtime.config.model.chat_template_kwargs == {"enable_thinking": False}
         assert config.model.chat_template_kwargs == {}
     finally: service.workers.shutdown()

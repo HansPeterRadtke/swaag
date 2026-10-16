@@ -2,6 +2,7 @@ import tempfile
 import unittest
 import threading
 import asyncio
+import pytest
 from contextlib import nullcontext
 from pathlib import Path
 from concurrent.futures import ThreadPoolExecutor
@@ -100,5 +101,40 @@ class DurableVoiceOperationTests(unittest.TestCase):
                 {'op':'orchestrator.operation_status','params':{'operation_id':'voice-one'}})
             self.assertEqual('canceled',status['status'])
         asyncio.run(run())
+
+def test_cancel_before_run_identity_cannot_execute_or_poison_next_turn(make_config, monkeypatch):
+    from swaag.runtime import AgentRuntime
+    from swaag.preemption import RunCancellationRequested
+    from tests.test_agent_action_loop import FakeModelClient, _action
+    client = FakeModelClient([_action(message='The new request is answered.')])
+    runtime = AgentRuntime(make_config(model__context_limit=32000), model_client=client)
+    service = CommunicationService(runtime, orchestrator_runtime=runtime)
+    entered, release = threading.Event(), threading.Event()
+    original = runtime.run_turn_in_session
+    def delayed(*args, **kwargs):
+        entered.set()
+        assert release.wait(5)
+        return original(*args, **kwargs)
+    monkeypatch.setattr(runtime, 'run_turn_in_session', delayed)
+    try:
+        with ThreadPoolExecutor(max_workers=1) as pool:
+            future = pool.submit(service.orchestrator_message, 'Create the canceled file.', 'voice-gap')
+            assert entered.wait(5)
+            service.cancel_orchestrator_operation('voice-gap', 'Withdraw this request')
+            release.set()
+            with pytest.raises(RunCancellationRequested):
+                future.result(timeout=8)
+        assert not client.requests
+        assert service.orchestrator_operations.get('voice-gap')['status'] == 'canceled'
+        state = service._load_orchestrator_state()
+        assert runtime.history.list_pending_control_messages(state.session_id) == []
+        assert runtime.history.list_authoritative_control_messages(state.session_id) == []
+        monkeypatch.setattr(runtime, 'run_turn_in_session', original)
+        assert service.orchestrator_message('Answer the new request.')['answer'] == 'The new request is answered.'
+        assert len(client.requests) == 1
+    finally:
+        release.set()
+        service.close()
+
 
 if __name__=='__main__':unittest.main()

@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from contextlib import contextmanager
+from contextlib import contextmanager, nullcontext
 from dataclasses import asdict, dataclass
 import inspect
 import json
@@ -459,6 +459,11 @@ class RecordReplayModelClient:
             return health()
         return {"status": "ok", "mode": self.mode}
 
+    def tokenization_scope(self):
+        # Offline replay must not instantiate or contact live transports.
+        scope = getattr(self.delegate, "tokenization_scope", None) if self.mode != "replay" else None
+        return scope() if callable(scope) else nullcontext()
+
     def tokenize(self, text: str) -> int:
         return self._tokenize_record_replay(text, operation="tokenize")
 
@@ -489,6 +494,9 @@ class RecordReplayModelClient:
                 strategy=result.strategy,
             )
 
+    def tokenize_output(self, text: str) -> int:
+        return self._tokenize_record_replay(text, operation="tokenize_output")
+
     def tokenize_selection(self, text: str) -> int:
         return self._tokenize_record_replay(text, operation="tokenize_selection")
 
@@ -513,8 +521,10 @@ class RecordReplayModelClient:
                 f"No exact recorded {operation} result for {key}"
             )
         tokenizer = getattr(self.delegate, operation, None)
-        if not callable(tokenizer) and operation == "tokenize_selection":
+        if not callable(tokenizer) and operation in {"tokenize_selection", "tokenize_output"}:
             tokenizer = getattr(self.delegate, "tokenize", None)
+        if not callable(tokenizer) and operation == "tokenize_output":
+            raise RuntimeError("Exact output tokenizer unavailable")
         count = int(tokenizer(text)) if callable(tokenizer) else len(text.split()) if text.strip() else 0
         if count < 0:
             raise RuntimeError(f"Model client returned a negative {operation} count")
@@ -607,6 +617,17 @@ class RecordReplayModelClient:
         if not isinstance(value, int) or isinstance(value, bool) or value <= 0:
             raise ValueError("Model client has no context-capacity resolver or configured fallback")
         return int(value), "configured"
+
+    def server_slot_resolution(self) -> tuple[int, str]:
+        if self.mode == "replay":
+            return 128, "recorded_replay"
+        resolver = getattr(self.delegate, "server_slot_resolution", None)
+        if callable(resolver):
+            return resolver()
+        resolver = getattr(self.delegate, "server_slot_count", None)
+        if callable(resolver):
+            return int(resolver()), "client:server_slot_count"
+        return 1, "conservative_fallback"
 
     def server_slot_count(self) -> int:
         if self.mode == "replay":

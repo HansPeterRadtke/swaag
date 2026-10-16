@@ -31,11 +31,31 @@ why they stay mechanical.
   closed; bounded reads return offsets and completion flags; bounded tool/browser
   previews and external-process/provider errors retain integrity-linked raw
   artifacts before their reduced display text is recorded.
-- History compaction starts with the smallest oldest prefix that can mechanically
-  recover the measured deficit while leaving at least one exact message outside
-  the candidate. This chooses a replaceable storage region, not which facts to
-  retain: the summary LLM receives every exact candidate message and owns semantic
-  retention, including how many candidate-tail messages remain verbatim.
+- History compaction partitions exact contiguous source regions mechanically,
+  then a model ranks their semantic criticality without using age as relevance.
+  Protected regions cannot be crossed by composed candidates. Python measures
+  deficit/recovery; the model chooses retained meaning and exact source units.
+- Reusing a derived history view requires measured raw overflow, exact
+  source/projection provenance and unchanged task/authority/policy/tool identity.
+  Current state and new observations remain fresh. A changed key or unknown
+  legacy summary restores authoritative sources; source events are never deleted.
+- Current-status lookup is an explicit retrieval contract. Its default returns
+  the latest exact status event with count/range/hash and full-history recovery;
+  include_history=true returns every exact status. Event order identifies the
+  latest report, not its truth or the semantic relevance of older reports.
+- Completion evidence separates harness policy audit records and saved model
+  transport/compilation envelopes from canonical task observations using their
+  explicit schemas and provenance. These records have exact session/sequence/hash
+  references instead of reactivating stored instructions or unaccepted drafts.
+  Current scoped instructions, user messages, selected actions and actual tool
+  observations remain available. The model can request any advertised exact audit
+  source; recovery verifies its session, event integrity, hash and size. This
+  boundary does not inspect the meaning of the user's language or discard history.
+- Historical token/accounting/scheduling events use an explicit schema list and
+  one integrity-checked range source in completion context. This groups mechanical
+  telemetry without filtering user meaning or changing canonical task observations.
+  Exact re-expansion checks session, range, per-event integrity and the bundle hash,
+  size, count and boundary references; raw history remains unchanged.
 - Search result counts and protocol cursors are caller-visible retrieval bounds,
   not context-selection policy. Raw events remain addressable through exact
   windows, archive retrieval, artifacts, or another model-selected search.
@@ -68,6 +88,13 @@ why they stay mechanical.
 - Cancellation releases transport work. Unsupported true suspension is never
   claimed: an unchanged request is reconstructed and replayed exactly, while a
   changed source snapshot supersedes it.
+- Foreground worker-control retries derive receipt identity from exact originating
+  user event records and the resolved target session. Returning the first durable
+  receipt prevents duplicate delivery of that same instruction. A new event,
+  additional correction or different target remains distinct; unprovenanced
+  direct controls retain their existing identity behavior. This is protocol
+  idempotency, not a judgment that two differently worded requests mean the same
+  thing, and it does not suppress repeated read-only observations.
 - Continuous completion mode is an explicit caller contract. Normal completion,
   blocking-question criticality, status meaning, and escalation remain LLM
   decisions under closed schemas.
@@ -77,6 +104,17 @@ why they stay mechanical.
 - JSON/schema validation, protocol versions, cache TTLs, cursor bounds, IDs,
   transport locality, and deterministic lifecycle mappings enforce wire
   contracts. Adapters project canonical task/history state and do not own it.
+- The ordinary first finalized foreground action requires a nonempty
+  assistant_message, even when handing work to tools. Empty drafts enter bounded
+  validation repair before tool effects. Successful receipts precede progress
+  delivery; failed and superseded drafts are withheld. This checks message
+  presence and execution ordering, not truth, style, intent or semantic quality.
+  Worker, explicit-silent and experimental tool-only contracts are unchanged.
+- Completion-review scope follows the known operation role. Reviewer output
+  remains model-authored advice subordinate to original user authority and exact
+  observations. No string matcher decides whether an utterance is a quotation or
+  an action; the model interprets the complete message. A rejected candidate still
+  requires renewed evaluation after reconciliation.
 - Caller-declared structured-output bindings may fill only mechanical fields such
   as IDs, timestamps, and lifecycle state. Semantic fields come from a centrally
   compiled LLM operation.

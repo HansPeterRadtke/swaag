@@ -19,6 +19,18 @@ class TokenCounter(Protocol):
     def count_text(self, text: str) -> CountResult: ...
 
 
+def validated_token_count(value: object, *, has_content: bool) -> int:
+    """Reject malformed provider counts before caching or budget admission."""
+    if (
+        not isinstance(value, int)
+        or isinstance(value, bool)
+        or value < 0
+        or (has_content and value == 0)
+    ):
+        raise ValueError("Invalid provider token count for the supplied content")
+    return value
+
+
 class ExactTokenCounter:
     def __init__(self, tokenize_func):
         self._tokenize_func = tokenize_func
@@ -26,7 +38,9 @@ class ExactTokenCounter:
 
     def count_text(self, text: str) -> CountResult:
         if text not in self._cache:
-            self._cache[text] = int(self._tokenize_func(text))
+            self._cache[text] = validated_token_count(
+                self._tokenize_func(text), has_content=bool(text.strip())
+            )
         return CountResult(tokens=self._cache[text], exact=True, strategy="llama_cpp_server")
 
 
@@ -56,7 +70,9 @@ class FallbackTokenCounter:
                 strategy="provider_tokenizer",
             )
         try:
-            count = int(self._tokenize_func(text))
+            count = validated_token_count(
+                self._tokenize_func(text), has_content=bool(text.strip())
+            )
         except Exception:
             if not self._allow_fallback:
                 raise

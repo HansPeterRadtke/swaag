@@ -1,12 +1,16 @@
 from __future__ import annotations
 
+from collections import Counter
+from dataclasses import asdict
 from pathlib import Path
 from typing import Protocol
 
 from swaag.attachments import AttachmentStore, find_attachment
 from swaag.config import AgentConfig
 from swaag.environment.artifacts import TextArtifactStore
-from swaag.history import HistoryInvariantError
+from swaag.history import HistoryInvariantError, HistoryStore
+from swaag.events import verify_event_integrity
+from swaag.utils import stable_json_dumps, sha256_text
 from swaag.types import HistoryEvent, SessionState
 
 
@@ -46,6 +50,170 @@ class CompletionEvidenceSourceProvider(Protocol):
         state: SessionState,
         source: dict[str, object],
     ) -> dict[str, object]: ...
+
+
+def is_core_policy_audit_event(event: HistoryEvent) -> bool:
+    instruction = event.payload.get("instruction")
+    return (
+        event.event_type == "prompt_instruction_added"
+        and isinstance(instruction, dict)
+        and instruction.get("source_kind") == "swaag_core"
+        and instruction.get("authority") == "project_policy"
+    )
+
+
+RUNTIME_AUDIT_FIELDS = {
+    "turn_finished": ("budget_reports",),
+    "completion_evaluation_unavailable": ("budget_report",),
+    "completion_evaluated": (
+        "evidence_source_references", "historical_source_event_references",
+        "historical_projection_budget_report",
+    ),
+}
+
+
+def runtime_audit_fields(event: HistoryEvent) -> tuple[str, ...]:
+    return tuple(field for field in RUNTIME_AUDIT_FIELDS.get(event.event_type, ())
+                 if field in event.payload)
+
+
+def is_runtime_audit_event(event: HistoryEvent) -> bool:
+    return (is_core_policy_audit_event(event) or event.event_type in {
+        "prompt_built", "model_request_sent", "model_response_received",
+    } or bool(runtime_audit_fields(event)))
+
+
+# Their semantic payload fields remain inline; only nested accounting is replaced.
+RUNTIME_AUDIT_SEMANTIC_EVENT_TYPES = frozenset(RUNTIME_AUDIT_FIELDS)
+
+
+RUNTIME_TELEMETRY_EVENT_TYPES = frozenset({
+    "context_compiled", "budget_checked", "model_token_progress",
+    "inference_request_queued", "inference_request_started", "inference_request_finished",
+    "prompt_instructions_selected", "action_prompt_mode_fallback",
+    "prompt_built", "model_request_sent", "model_response_received",
+}) | RUNTIME_AUDIT_SEMANTIC_EVENT_TYPES
+
+
+def is_runtime_telemetry_event(event: HistoryEvent) -> bool:
+    return event.event_type in RUNTIME_TELEMETRY_EVENT_TYPES
+
+
+def runtime_telemetry_reference(events: list[HistoryEvent]) -> dict[str, object]:
+    """One exact audit range; semantic outcome fields also remain in their own views."""
+    selected = sorted((e for e in events if is_runtime_telemetry_event(e)),
+                      key=lambda e: e.sequence)
+    if not selected or len({e.session_id for e in selected}) != 1:
+        raise HistoryInvariantError("Runtime telemetry requires one nonempty session range")
+    first, last = selected[0], selected[-1]
+    text = stable_json_dumps([asdict(e) for e in selected], indent=None)
+    return {
+        "source_kind": "runtime_telemetry",
+        "source_id": f"{first.session_id}:{first.sequence}-{last.sequence}",
+        "session_id": first.session_id,
+        "first_sequence": first.sequence, "last_sequence": last.sequence,
+        "event_count": len(selected),
+        "event_types": dict(sorted(Counter(e.event_type for e in selected).items())),
+        "size_chars": len(text), "sha256": sha256_text(text),
+        "source_event_references": [_event_reference(first), _event_reference(last)],
+    }
+
+
+class RuntimeTelemetryEvidenceProvider:
+    source_kind = "runtime_telemetry"
+
+    def inventory(self, *, config: AgentConfig, state: SessionState,
+                  source_events: list[HistoryEvent], referenced_values: set[str]
+                  ) -> list[dict[str, object]]:
+        del config
+        selected = [e for e in source_events if e.session_id == state.session_id
+                    and is_runtime_telemetry_event(e)
+                    and f"{e.session_id}:{e.sequence}" in referenced_values]
+        return [runtime_telemetry_reference(selected)] if selected else []
+
+    def reexpand(self, *, config: AgentConfig, state: SessionState,
+                 source: dict[str, object]) -> dict[str, object]:
+        if source.get("session_id") != state.session_id:
+            raise HistoryInvariantError("Runtime telemetry cannot cross the operation session")
+        first, last = source.get("first_sequence"), source.get("last_sequence")
+        if (type(first) is not int or type(last) is not int or first < 1 or last < first):
+            raise HistoryInvariantError("Runtime telemetry has an invalid sequence range")
+        events = HistoryStore(config.sessions.root, write_projections=False).read_history_window(
+            state.session_id, start_sequence=first, limit=last-first+1)
+        # References freeze the event-type selection as well as the range/hash.
+        # Older references must not acquire newly supported audit event types.
+        event_types = source.get("event_types")
+        if (not isinstance(event_types, dict) or not event_types
+                or any(kind not in RUNTIME_TELEMETRY_EVENT_TYPES
+                       or type(count) is not int or count < 1
+                       for kind, count in event_types.items())):
+            raise HistoryInvariantError("Runtime telemetry has invalid event types")
+        selected = [e for e in events if e.event_type in event_types]
+        for event in selected:
+            verify_event_integrity(event, event.prev_hash)
+        observed = runtime_telemetry_reference(selected)
+        if any(source.get(key) != value for key, value in observed.items()):
+            raise HistoryInvariantError("Runtime telemetry differs from its exact source")
+        return {**source, "integrity_verified": True,
+                "text": stable_json_dumps([asdict(e) for e in selected], indent=None)}
+
+
+class RuntimeAuditEvidenceProvider:
+    """Recover harness policy/model envelopes separately from task observations."""
+
+    source_kind = "runtime_audit"
+
+    def inventory(
+        self, *, config: AgentConfig, state: SessionState,
+        source_events: list[HistoryEvent], referenced_values: set[str],
+    ) -> list[dict[str, object]]:
+        del config
+        rows = []
+        for event in source_events:
+            source_id = f"{event.session_id}:{event.sequence}"
+            if (event.session_id != state.session_id or not is_runtime_audit_event(event)
+                    or is_runtime_telemetry_event(event)
+                    or source_id not in referenced_values):
+                continue
+            text = stable_json_dumps(asdict(event), indent=None)
+            instruction = event.payload.get("instruction", {})
+            rows.append({
+                "source_kind": self.source_kind,
+                "source_id": f"{event.session_id}:{event.sequence}",
+                "event_type": event.event_type,
+                "operation_kind": event.payload.get("kind"),
+                "instruction_id": instruction.get("instruction_id"),
+                "instruction_title": instruction.get("title"),
+                "instruction_scopes": instruction.get("scopes"),
+                "size_chars": len(text), "sha256": sha256_text(text),
+                "source_event_references": [_event_reference(event)],
+            })
+        return rows
+
+    def reexpand(
+        self, *, config: AgentConfig, state: SessionState, source: dict[str, object],
+    ) -> dict[str, object]:
+        references = source.get("source_event_references", [])
+        if len(references) != 1:
+            raise HistoryInvariantError("Runtime audit requires one exact event reference")
+        reference = references[0]
+        if reference.get("session_id") != state.session_id:
+            raise HistoryInvariantError("Runtime audit cannot cross the operation session")
+        sequence = int(reference["sequence"])
+        if source.get("source_id") != f"{state.session_id}:{sequence}":
+            raise HistoryInvariantError("Runtime audit source identity mismatch")
+        events = HistoryStore(config.sessions.root, write_projections=False).read_history_window(
+            state.session_id, start_sequence=sequence, limit=1)
+        if len(events) != 1:
+            raise HistoryInvariantError("Runtime audit event is unavailable")
+        event = events[0]
+        verify_event_integrity(event, event.prev_hash)
+        text = stable_json_dumps(asdict(event), indent=None)
+        if (not is_runtime_audit_event(event) or event.hash != reference.get("hash")
+                or sha256_text(text) != source.get("sha256")
+                or len(text) != source.get("size_chars")):
+            raise HistoryInvariantError("Runtime audit differs from its exact source")
+        return {**source, "integrity_verified": True, "text": text}
 
 
 class TextArtifactEvidenceProvider:
@@ -192,4 +360,5 @@ class RawAttachmentEvidenceProvider:
 
 def default_completion_evidence_source_providers(
 ) -> tuple[CompletionEvidenceSourceProvider, ...]:
-    return (TextArtifactEvidenceProvider(), RawAttachmentEvidenceProvider())
+    return (TextArtifactEvidenceProvider(), RawAttachmentEvidenceProvider(),
+            RuntimeAuditEvidenceProvider(), RuntimeTelemetryEvidenceProvider())

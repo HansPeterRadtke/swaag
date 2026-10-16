@@ -36,6 +36,8 @@ max_semantic_responsibilities_per_call = 6
 model_identity = ""
 # OpenTelemetry GenAI provider discriminator; custom providers are permitted by the convention.
 provider_name = "llama.cpp"
+# vLLM chat-template policy; default preserves backend behavior.
+thinking_mode = "server_default"
 # Optional environment-variable name containing a bearer token. The secret is
 # read only at request time and is never included in config fingerprints.
 api_key_env = ""
@@ -101,7 +103,7 @@ tool_timeout_seconds = 10
 # allow_side_effect_tools: set true only if destructive writes are intended.
 # -----------------------------------------------------------
 [tools]
-enabled = ["echo", "time_now", "calculator", "agent_workspace", "list_files", "read_file", "read_text", "search_in_file", "search_repo", "history_search", "history_window", "history_analyze", "read_artifact", "list_attachments", "read_attachment", "inspect_image", "terminal", "notes", "prompt_instructions", "questions", "revise_question", "report_progress", "shared_state", "edit_text", "write_file", "run_tests", "shell_command", "poll_process", "kill_process", "wait_seconds", "schedule_wakeup", "list_wakeups", "cancel_wakeup"]
+enabled = ["echo", "time_now", "calculator", "agent_workspace", "tool_forge", "diane", "list_files", "read_file", "read_text", "search_in_file", "search_repo", "history_search", "history_window", "history_analyze", "read_artifact", "list_attachments", "read_attachment", "inspect_image", "terminal", "notes", "prompt_instructions", "questions", "revise_question", "report_progress", "shared_state", "edit_text", "write_file", "run_tests", "shell_command", "poll_process", "kill_process", "wait_seconds", "schedule_wakeup", "list_wakeups", "cancel_wakeup"]
 read_roots = ["."]
 allow_stateful_tools = true
 allow_side_effect_tools = false
@@ -155,6 +157,13 @@ sandbox_backend = "bwrap"
 python_executable = "/usr/bin/python3"
 command_timeout_seconds = 30
 max_capture_chars = 12000
+
+# Stop commands explicitly at this exact-output capture bound; never silently clip.
+max_output_bytes = 67108864
+max_list_files = 1000
+# Shared forge and Diane retained content; capacity refusal never evicts revisions.
+max_knowledge_bytes = 67108864
+max_knowledge_revisions = 10000
 
 [environment]
 shell_executable = "bash"
@@ -468,6 +477,11 @@ jwks_url = ""
 # model_chat_template_kwargs = { enable_thinking = false }
 # An empty table inherits the main model's options.
 model_chat_template_kwargs = {}
+
+# Admission priorities and explicit interruption policy; these do not add model slots.
+orchestrator_priority = 1000
+status_priority = 100
+preempt_shared_model = true
 enabled = false
 model_base_url = ""
 # Required when the communication endpoint advertises a different model ID than [model].
@@ -482,7 +496,7 @@ max_pending_requests = 128
 # Initial status/control response cap. Output-recovery may grow this only when
 # constrained generation actually exhausts the cap.
 status_max_output_tokens = 192
-enabled_tools = ["agent_workspace", "list_files", "read_file", "read_text", "search_in_file", "search_repo", "read_artifact", "time_now", "system_resources", "calculator", "history_search", "history_window", "agent_status_lookup", "agent_control", "orchestration_control", "background_work", "questions", "revise_question", "worker_questions", "report_progress"]
+enabled_tools = ["agent_workspace", "tool_forge", "diane", "list_files", "read_file", "read_text", "search_in_file", "search_repo", "read_artifact", "time_now", "system_resources", "calculator", "history_search", "history_window", "agent_status_lookup", "agent_control", "orchestration_control", "background_work", "questions", "revise_question", "worker_questions", "report_progress"]
 host = "127.0.0.1"
 port = 8765
 poll_seconds = 0.2

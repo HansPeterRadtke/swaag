@@ -315,3 +315,46 @@ def test_benchmark_execution_guard_enforces_action_budget(tmp_path, make_config)
     assert info["kind"] == "action_budget"
     assert info["action_count"] == 2
     assert runtime.preemption.cancellation_requested(state.session_id, "run-budget")
+
+
+def test_independent_probe_waits_for_dispatch_after_registration(monkeypatch):
+    import threading
+    from swaag.benchmark.benchmark_runner import _run_turn_with_communication_probe
+    registered = threading.Event()
+    answered = threading.Event()
+    dispatched = threading.Event()
+    polls = []
+    def run_turn(state, prompt):
+        registered.set()
+        assert answered.wait(2)
+        return 'main completed'
+    def history(session_id):
+        polls.append(session_id)
+        if len(polls) < 3:
+            return iter(())
+        dispatched.set()
+        return iter([SimpleNamespace(event_type='model_request_sent', payload={'call_id':'main-call'})])
+    class Communication:
+        def __init__(self, runtime, assistant_runtime=None):
+            assert assistant_runtime is assistant
+        def answer_status_question(self, session_id, question):
+            try:
+                assert dispatched.is_set(), 'Registered capacity is not backend dispatch'
+                return 'The main request is running.'
+            finally:
+                answered.set()
+        def close(self):
+            pass
+    assistant = object()
+    runtime = SimpleNamespace(run_turn_in_session=run_turn,
+        preemption=SimpleNamespace(active_call=lambda sid: SimpleNamespace(call_id='main-call') if registered.is_set() else None),
+        history=SimpleNamespace(iter_history_reverse=history))
+    scenario = SimpleNamespace(prompt='Work', communication_probe_question='Status?',
+        communication_probe_use_separate_assistant=True, communication_probe_wait_seconds=1)
+    monkeypatch.setattr('swaag.benchmark.benchmark_runner.CommunicationService', Communication)
+    metrics = {}
+    result = _run_turn_with_communication_probe(runtime, SimpleNamespace(session_id='main'),
+        scenario, resume_timeout_seconds=2, probe_metrics=metrics, assistant_runtime=assistant)
+    assert result == 'main completed'
+    assert len(polls) == 3
+    assert metrics['separate_assistant_runtime'] is True

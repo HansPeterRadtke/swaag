@@ -174,6 +174,16 @@ CASES = (
         setup="trusted_authority_conflict",
     ),
     PromptInstructionBehaviorCase(
+        case_id="current_user_overrides_trusted",
+        split="held_out",
+        prompt=(
+            "Do not modify durable instructions. For this current turn, reply exactly "
+            "CURRENT-USER-OVERRIDE-731. This explicit current instruction supersedes any "
+            "older durable benchmark-token instruction for this turn."
+        ),
+        setup="current_user_overrides_trusted",
+    ),
+    PromptInstructionBehaviorCase(
         case_id="erase_obsolete_rule",
         split="held_out",
         setup="obsolete_user_rule",
@@ -295,6 +305,18 @@ def _seed_case(
             lower.instruction.instruction_id,
             trusted.instruction.instruction_id,
         ]
+    if case.setup == "current_user_overrides_trusted":
+        trusted = store.add_trusted(
+            title="Older explicit correction benchmark token",
+            content="For this benchmark policy check, reply exactly OLDER-TRUSTED-731.",
+            scopes=["action"],
+            authority="explicit_user_correction",
+            source_kind="explicit_user_correction",
+            source_ref="benchmark:current-user-overrides-trusted",
+            origin_session_id=state.session_id,
+        )
+        assert trusted.instruction is not None
+        return [trusted.instruction.instruction_id]
     if case.setup == "obsolete_user_rule":
         mutation = store.add(
             title="Obsolete workaround",
@@ -628,6 +650,31 @@ def _verify_case(
             "both_injected_for_action": selected_both,
             "trusted_answer_wins": assistant_text.strip() == "HIGHER-AUTHORITY-731",
             "lower_answer_loses": "LOWER-AUTHORITY-731" not in assistant_text,
+            "session_store_unchanged": not session_instructions,
+        }
+    elif case.case_id == "current_user_overrides_trusted":
+        by_id = {item.instruction_id: item for item in user_instructions}
+        trusted_id = seeded_ids[0] if len(seeded_ids) == 1 else ""
+        trusted = by_id.get(trusted_id)
+        action_rows = [
+            item for item in (selection_events or [])
+            if item.get("kind") == "action"
+        ]
+        trusted_injected = any(
+            trusted_id in item.get("instruction_ids", [])
+            for item in action_rows
+        )
+        checks = {
+            "one_trusted_instruction_remains": len(user_instructions) == 1,
+            "store_unchanged": store_actions == ["add"],
+            "trusted_is_explicit_correction": trusted is not None
+            and trusted.authority == "explicit_user_correction",
+            "trusted_provenance_preserved": trusted is not None
+            and trusted.source_kind == "explicit_user_correction"
+            and trusted.source_ref == "benchmark:current-user-overrides-trusted",
+            "trusted_still_injected": trusted_injected,
+            "current_user_answer_wins": assistant_text.strip() == "CURRENT-USER-OVERRIDE-731",
+            "older_trusted_answer_loses": "OLDER-TRUSTED-731" not in assistant_text,
             "session_store_unchanged": not session_instructions,
         }
     else:

@@ -187,8 +187,11 @@ def _run_ask(runtime: AgentRuntime, prompt: str, session_ref: str | None) -> int
         return 0
     service = CommunicationService.from_runtime(runtime)
     try:
-        response = service.orchestrator_message(effective_prompt)
-        print(response["answer"])
+        for event in service.iter_orchestrator_message(effective_prompt):
+            if event["event"] == "assistant_progress":
+                print(event["assistant_text"], flush=True)
+            elif event["event"] == "completed":
+                print(event["result"]["answer"], flush=True)
         state = service.orchestrator_runtime.create_or_load_user_session("SWAAG Orchestrator")
         print(f"\n[session={state.session_id} name={state.session_name}]", file=sys.stderr)
         return 0
@@ -240,8 +243,11 @@ def _run_chat(runtime: AgentRuntime, session_ref: str | None) -> int:
             if line.strip() == "/session":
                 print(f"{state.session_id} ({state.session_name})")
                 continue
-            response = service.orchestrator_message(line)
-            print(response["answer"])
+            for event in service.iter_orchestrator_message(line):
+                if event["event"] == "assistant_progress":
+                    print(event["assistant_text"], flush=True)
+                elif event["event"] == "completed":
+                    print(event["result"]["answer"], flush=True)
         return 0
     finally:
         service.close()
