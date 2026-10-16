@@ -7,6 +7,55 @@ from tests.test_completion_evaluation import _completed_action
 from tests.test_question_lifecycle import ask
 
 
+def test_runtime_snapshot_serialization_preserves_exact_state_without_pretty_printing(make_config):
+    runtime = AgentRuntime(make_config(), model_client=object())
+    state = runtime.create_or_load_session()
+    snapshot = {
+        "captured_at": "2026-10-16T07:30:14Z",
+        "active_workers": [{"worker_id": "worker_1", "task": "  Keep\nall exact wording: café.  "}],
+        "worker_controls": [],
+        "orchestrator": {"pending_user_messages": [{"message": "Don't start it yet."}]},
+        "supervision": {"running": True, "heartbeat_is_computation_evidence": False},
+    }
+    runtime.bind_tool_runtime_capability(state.session_id, "system_snapshot_provider", lambda: snapshot)
+    source = next(s for s in runtime._runtime_context_sources(state)
+                  if s.name == "runtime_system_snapshot")
+    assert json.loads(source.text) == snapshot
+    assert len(source.text) < len(json.dumps(snapshot, indent=2))
+    event = next(e for e in runtime.history.read_history(state.session_id)
+                 if e.event_type == "runtime_system_snapshot")
+    assert event.payload["snapshot"] == snapshot
+
+
+def test_runtime_projection_accounting_is_recoverable_without_recursive_prompt_growth(make_config):
+    runtime = AgentRuntime(make_config(), model_client=object())
+    state = runtime.create_or_load_session()
+    events = [runtime.history.record_event(state, event_type, {
+        "source_name": "runtime_system_snapshot", "source_locator": {"sequence": 7},
+        "source_sha256": "source", "objective_sha256": "objective",
+        "source_tokens": 5000, "previous_tokens": 5000, "target_tokens": 800,
+        "projected_tokens": 100, "overflow_tokens": 39,
+        "projection": "Exact selected state: the worker is pending, not started.",
+        "reason": "Exact failed projection reason.",
+        field: {"measurements": ["RECURSIVE_PROJECTION_ACCOUNTING"] * 2000},
+    }) for event_type, field in [
+        ("runtime_context_projected", "projection_budget_report"),
+        ("runtime_context_projection_skipped", "budget_report"),
+    ]]
+    rows = runtime._completion_historical_evidence_rows(events)
+    assert "RECURSIVE_PROJECTION_ACCOUNTING" not in json.dumps(rows)
+    for event in events:
+        row = next(r for r in rows if r.get("sequence") == event.sequence)
+        for field in ["projection", "reason", "source_name", "source_locator"]:
+            assert row["payload"][field] == event.payload[field]
+    inventory = runtime._completion_evidence_source_inventory(
+        state, evidence_rows=[], historical_events=events)
+    assert len(inventory) == 1
+    exact = RuntimeTelemetryEvidenceProvider().reexpand(
+        config=runtime.config, state=state, source=inventory[0])
+    assert json.loads(exact["text"]) == [asdict(e) for e in events]
+
+
 def test_turn_completion_keeps_answer_exact_but_recovers_budget_audit_separately(make_config):
     runtime=AgentRuntime(make_config(),model_client=object());state=runtime.create_or_load_session()
     event=runtime.history.record_event(state,'turn_finished',{'turn_index':1,'assistant_text':'The checks passed; approval is still required.','tool_steps':2,

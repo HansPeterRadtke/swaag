@@ -63,6 +63,8 @@ def is_core_policy_audit_event(event: HistoryEvent) -> bool:
 
 
 RUNTIME_AUDIT_FIELDS = {
+    "runtime_context_projected": ("projection_budget_report",),
+    "runtime_context_projection_skipped": ("budget_report",),
     "turn_finished": ("budget_reports",),
     "completion_evaluation_unavailable": ("budget_report",),
     "completion_evaluated": (
