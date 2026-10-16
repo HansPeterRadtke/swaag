@@ -2,6 +2,23 @@
 from dataclasses import replace
 from swaag.types import Message
 from swaag.compression import message_source_event_references
+from swaag.utils import stable_json_dumps
+
+
+def render_foreground_completion_history(rows):
+    """Losslessly encode ordinary conversation rows with one explicit column map.
+
+    Extended messages and evidence objects retain every field. Mixed entries
+    stay in their original order, and JSON escaping preserves message boundaries.
+    """
+    columns = ('sequence', 'role', 'content')
+    return stable_json_dumps({
+        'conversation_array_columns': list(columns),
+        'ordered_history': [
+            [row[key] for key in columns] if set(row) == set(columns) else row
+            for row in rows
+        ],
+    })
 
 
 def fold_identical_prior_user_messages(messages, turn_sequence):

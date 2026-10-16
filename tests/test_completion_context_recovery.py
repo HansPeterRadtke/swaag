@@ -7,6 +7,40 @@ from tests.test_completion_evaluation import _completed_action
 from tests.test_question_lifecycle import ask
 
 
+def test_foreground_completion_can_reduce_history_with_large_exact_source_catalog(make_config):
+    from tests.test_agent_action_loop import FakeModelClient
+    from swaag.types import Message
+
+    class Client(FakeModelClient):
+        def tokenize(self, text):
+            return (len(text) + 3) // 4
+
+    def respond(payload):
+        if payload['contract'] == 'evidence_projection':
+            return json.dumps({'projection': 'Earlier user restriction: do not publish.'})
+        assert payload['contract'] == 'completion_evaluation'
+        return json.dumps({'complete': True, 'reason': 'Requested greeting supplied.',
+                           'remaining_work': [], 'evidence_requests': []})
+
+    client = Client([respond] * 30)
+    runtime = AgentRuntime(make_config(model__context_limit=8000,
+        tools__enabled=['runtime_snapshot_lookup']), model_client=client)
+    state = runtime.create_or_load_session()
+    for index in range(32):
+        runtime.history.record_event(state, 'turn_started', {'turn_index': index + 1, 'user_text': 'Earlier turn'})
+        runtime._record_message(state, Message(role='user', created_at='then',
+            content=f'Turn {index}: Do not publish. ' + ('Exact retained user evidence. ' * 40)))
+        runtime.history.record_event(state, 'runtime_system_snapshot', {'snapshot': {'captured_at': str(index)}})
+    runtime.history.record_event(state, 'turn_started', {'turn_index': 33, 'user_text': 'Say hello.'})
+    runtime.bind_tool_runtime_capability(state.session_id, 'system_snapshot_provider',
+        lambda: {'captured_at': 'now', 'active_workers': [], 'terminal_workers': []})
+    result = runtime._evaluate_completion(state, original_request='Say hello.',
+        selected_action=_completed_action(), tool_results=[])
+    assert result['complete'] is True
+    assert any(r['contract'] == 'evidence_projection' for r in client.requests)
+    assert client.requests[-1]['contract'] == 'completion_evaluation'
+
+
 def test_runtime_snapshot_serialization_preserves_exact_state_without_pretty_printing(make_config):
     runtime = AgentRuntime(make_config(), model_client=object())
     state = runtime.create_or_load_session()

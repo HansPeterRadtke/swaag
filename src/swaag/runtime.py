@@ -2708,11 +2708,12 @@ class AgentRuntime:
         if deferred_observations:
             historical_rows = self._foreground_completion_history_view(
                 historical_rows, deferred_observations, evidence_source_inventory)
-        historical_evidence = (
-            stable_json_dumps(historical_rows, indent=None)
-            if historical_rows
-            else ""
-        )
+            from swaag.foreground_history import render_foreground_completion_history
+            historical_evidence = render_foreground_completion_history(historical_rows)
+        else:
+            historical_evidence = (
+                stable_json_dumps(historical_rows, indent=None) if historical_rows else ""
+            )
         # This estimate bounds reduction work; target capacity is measured from
         # the full pending prompt independently below.
         historical_evidence_tokens = (
@@ -2766,6 +2767,10 @@ class AgentRuntime:
                     )
                     for item in available_sources
                 )
+            )
+            displayed_evidence_sources = (
+                self._foreground_evidence_catalog(available_sources)
+                if deferred_observations else available_sources
             )
             prompt_kwargs = dict(
                 original_request=original_request,
@@ -2833,9 +2838,7 @@ class AgentRuntime:
                 self.prompts.build_completion_verdict_prompt(**prompt_kwargs)
                 if single_verdict
                 else self.prompts.build_completion_evaluation_prompt(
-                    **prompt_kwargs, evidence_source_inventory=(
-                        self._foreground_evidence_catalog(available_sources)
-                        if deferred_observations else available_sources)
+                    **prompt_kwargs, evidence_source_inventory=displayed_evidence_sources
                 )
             )
             compilation = self._compile_context(
@@ -3178,7 +3181,7 @@ class AgentRuntime:
                     self.prompts.build_completion_verdict_prompt(**placeholder_kwargs)
                     if single_verdict
                     else self.prompts.build_completion_evaluation_prompt(
-                        **placeholder_kwargs, evidence_source_inventory=available_sources
+                        **placeholder_kwargs, evidence_source_inventory=displayed_evidence_sources
                     )
                 )
                 base_compilation = self._compile_context(

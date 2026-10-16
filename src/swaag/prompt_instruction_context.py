@@ -99,7 +99,7 @@ class PromptInstructionContextManager:
                     "source_event_hash", "source_event_sequence", "source_event_session_id", "source_event_type"}}
         # Whitespace is presentation, not instruction meaning. Keep all exact
         # content and authority/provenance fields without pretty-print overhead.
-        rendered = json.dumps(rendered_rows, sort_keys=True, ensure_ascii=True)
+        rendered = json.dumps(rendered_rows, sort_keys=True, ensure_ascii=True, separators=(",", ":"))
         component = PromptComponent(
             name="durable_prompt_instructions",
             category="system_prompt_instruction",

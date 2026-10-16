@@ -632,7 +632,8 @@ def test_user_prompt_instructions_cross_session_boundaries_and_remain_event_sour
         if item.name == "durable_prompt_instructions"
     )
     assert "User reporting correction" in exact.text
-    assert '"instruction_store": "user"' in exact.text
+    rendered_rows = json.loads(exact.text.rsplit('\n', 1)[-1])
+    assert rendered_rows[0]['instruction_store'] == 'user'
     selected = runtime.history.read_history(reader.session_id)[-1]
     assert selected.payload["instruction_sources"] == [
         {

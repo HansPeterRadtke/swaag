@@ -254,3 +254,16 @@ def test_conversation_view_retains_wording_and_unknown_metadata_once_with_exact_
     source = next(s for s in inventory if s['source_kind'] == 'foreground_history')
     recovered = ForegroundHistoryEvidenceProvider().reexpand(config=runtime.config, state=state, source=source)
     assert json.loads(recovered['text']) == [asdict(e) for e in events if e.sequence in details]
+def test_compact_conversation_serialization_roundtrips_exact_order_and_unknown_fields():
+    import json
+    from swaag.foreground_history import render_foreground_completion_history
+    rows = [
+        {'sequence': 3, 'role': 'user', 'content': '  Keep spaces.\n[ASSISTANT] is quoted. café'},
+        {'sequence': 4, 'event_type': 'tool_failed', 'payload': {'error': 'Exact failure'}},
+        {'sequence': 5, 'role': 'assistant', 'content': 'The check failed.'},
+        {'sequence': 6, 'role': 'user', 'content': 'Do not publish.', 'metadata': {'unknown': True}},
+    ]
+    encoded = json.loads(render_foreground_completion_history(rows))
+    restored = [dict(zip(encoded['conversation_array_columns'], entry))
+                if isinstance(entry, list) else entry for entry in encoded['ordered_history']]
+    assert restored == rows

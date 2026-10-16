@@ -199,15 +199,18 @@ class PromptBuilder:
             provenance = self.user_message_provenance(message)
             user_sequence = message.metadata.get("source_message_event_sequence")
             if compact_provenance and message.role == "user" and type(user_sequence) is int:
-                provenance = f"[event {user_sequence}]\n"
+                label += f" event {user_sequence}"
+                provenance = ""
             provenance += self.user_repetition_provenance(message)
             body = message.content
             component_name = f"{prefix}_{index}"
             if message.role == "tool" and isinstance(event_sequence, int):
                 component_name = f"{prefix}_tool_event_{event_sequence}"
-                provenance = (f"[event {event_sequence}]\n"
-                    if compact_provenance else
-                    f"[SOURCE EVENT sequence={event_sequence} hash={event_hash or 'unknown'}]\n")
+                if compact_provenance:
+                    label += f" event {event_sequence}"
+                    provenance = ""
+                else:
+                    provenance = f"[SOURCE EVENT sequence={event_sequence} hash={event_hash or 'unknown'}]\n"
                 if tool_result_projections and event_sequence in tool_result_projections:
                     body = (
                         "[SEMANTIC PROJECTION; raw source remains authoritative and retrievable "
