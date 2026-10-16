@@ -768,6 +768,42 @@ class LlamaCppClient:
             strategy="llama_cpp_server",
         )
 
+    def tokenize_output(self, text: str) -> int:
+        """Count plain generated text without a chat template or special tokens.
+
+        Chat-fragment accounting remains separate from this verified vLLM
+        completion-tokenizer adapter. Other providers retain their fallback.
+        """
+        if not self._uses_chat_transport:
+            return self.tokenize(text)
+        if self.config.model.provider_name.lower() not in {"vllm", "vllm-openai", "vllm_openai"}:
+            raise ModelClientError("Exact output tokenization is unavailable for this provider")
+        response = requests.post(
+            self._remote_tokenize_url(),
+            json={"model": self.config.model.profile_name, "prompt": text,
+                  "add_special_tokens": False},
+            timeout=(self.config.model.connect_timeout_seconds,
+                     min(self.config.model.timeout_seconds, 30)),
+            **self._request_headers_kwargs(),
+        )
+        try:
+            response.raise_for_status()
+            payload = response.json()
+            if not isinstance(payload, dict):
+                raise ModelClientError("Invalid output tokenizer response")
+            count = payload.get("count")
+            if not isinstance(count, int) or isinstance(count, bool) or count < 0:
+                tokens = payload.get("tokens")
+                if not isinstance(tokens, list) or any(
+                    not isinstance(token, int) or isinstance(token, bool) or token < 0
+                    for token in tokens
+                ):
+                    raise ModelClientError("Output tokenizer returned no valid exact count")
+                count = len(tokens)
+            return count
+        finally:
+            response.close()
+
     def tokenize_selection(self, text: str) -> int:
         return self.tokenize(text)
 

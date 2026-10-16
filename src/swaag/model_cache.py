@@ -460,6 +460,9 @@ class RecordReplayModelClient:
                 strategy=result.strategy,
             )
 
+    def tokenize_output(self, text: str) -> int:
+        return self._tokenize_record_replay(text, operation="tokenize_output")
+
     def tokenize_selection(self, text: str) -> int:
         return self._tokenize_record_replay(text, operation="tokenize_selection")
 
@@ -484,8 +487,10 @@ class RecordReplayModelClient:
                 f"No exact recorded {operation} result for {key}"
             )
         tokenizer = getattr(self.delegate, operation, None)
-        if not callable(tokenizer) and operation == "tokenize_selection":
+        if not callable(tokenizer) and operation in {"tokenize_selection", "tokenize_output"}:
             tokenizer = getattr(self.delegate, "tokenize", None)
+        if not callable(tokenizer) and operation == "tokenize_output":
+            raise RuntimeError("Exact output tokenizer unavailable")
         count = int(tokenizer(text)) if callable(tokenizer) else len(text.split()) if text.strip() else 0
         if count < 0:
             raise RuntimeError(f"Model client returned a negative {operation} count")

@@ -5660,6 +5660,27 @@ class AgentRuntime:
             return []
         return selected
 
+    def _selection_output_token_count(self, state: SessionState, text: str) -> int:
+        """Measure generated ID syntax independently of opaque chat fragments."""
+        tokenizer = getattr(self.client, "tokenize_output", None)
+        try:
+            if not callable(tokenizer):
+                raise ModelClientError("Output tokenizer unavailable")
+            count = tokenizer(text)
+            if not isinstance(count, int) or isinstance(count, bool) or count < 0:
+                raise ModelClientError("Invalid output token count")
+            measured = CountResult(count, True, "provider_output_tokenizer")
+        except (ModelCallStateChanged, RunCancellationRequested):
+            raise
+        except Exception:
+            measured = self._counter(state).count_text(text)
+        self.history.record_event(state, "selection_output_counted", {
+            "text_sha256": sha256_text(text), "text_chars": len(text),
+            "tokens": measured.tokens, "exact": measured.exact,
+            "strategy": measured.strategy,
+        })
+        return measured.tokens
+
     def _select_tool_result_verbatim_fragments(
         self,
         state: SessionState,
@@ -5736,7 +5757,7 @@ class AgentRuntime:
             # observed exhaustion raises the admission minimum.
             selection_output = stable_json_dumps({"has": True, "ids": ids}, indent=2)
             desired_selection_tokens = max(
-                64, self._counter(state).count_text(selection_output).tokens + 32
+                64, self._selection_output_token_count(state, selection_output) + 32
             )
             request = SemanticCallRequest(
                 kind="tool_result_verbatim_selection",
@@ -7766,7 +7787,7 @@ class AgentRuntime:
             # headroom, without turning desired output into an input quota.
             # Observed output exhaustion raises the minimum and can split input.
             complete_selection = stable_json_dumps({"selected_line_ids": ids, "reason": ""}, indent=2)
-            selection_output_tokens = max(48, self._counter(state).count_text(complete_selection).tokens + 32)
+            selection_output_tokens = max(48, self._selection_output_token_count(state, complete_selection) + 32)
             request = SemanticCallRequest(
                 kind="history_verbatim_selection",
                 system_instruction=(

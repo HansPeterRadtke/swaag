@@ -165,6 +165,7 @@ ALLOWED_EVENT_TYPES = frozenset(
         "model_retry_scheduled",
         "model_tokenize_requested",
         "model_tokenize_result",
+        "selection_output_counted",
         "model_tokenize_failed",
         "token_estimate_used",
         "decision_parsed",
@@ -768,6 +769,7 @@ REQUIRED_PAYLOAD_KEYS: dict[str, frozenset[str]] = {
     # and intentionally omit raw model-visible text.
     "model_tokenize_requested": frozenset({"text_hash"}),
     "model_tokenize_result": frozenset({"text_hash", "tokens", "exact"}),
+    "selection_output_counted": frozenset({"text_sha256", "text_chars", "tokens", "exact", "strategy"}),
     "model_tokenize_failed": frozenset({"text_hash", "error", "error_type"}),
     "token_estimate_used": frozenset({"text_hash", "tokens", "strategy"}),
     "decision_parsed": frozenset({"decision", "prompt_mode"}),
