@@ -85,3 +85,21 @@ def test_capacity_splitting_examines_every_complete_row_and_unions_exact_selecti
         target_tokens=0, return_rows=True)
     assert examined == [f'E{n}' for n in range(1, 9)]
     assert result == [rows[0], rows[6]]
+
+
+def test_prior_delivered_progress_is_selected_semantically_instead_of_forced_into_every_action(make_config):
+    from swaag.types import Message
+    def choose(payload):
+        assert 'An earlier unverified diagnosis.' in payload['prompt']
+        return json.dumps({'selected_line_ids': []})
+    runtime = AgentRuntime(make_config(), model_client=FakeModelClient([choose]))
+    state = runtime.create_or_load_session()
+    progress = Message(role='assistant', content='An earlier unverified diagnosis.', created_at='then',
+        metadata={'source_message_event_sequence': 8, 'source_message_event_type': 'assistant_progress',
+                  'delivered_progress': True})
+    current = Message(role='user', content='Please say hello quickly.', created_at='now',
+        metadata={'source_message_event_sequence': 9})
+    selected = runtime._select_foreground_action_context(state, messages=[progress, current],
+        turn_sequence=10, original_request=current.content)
+    assert selected == [current]
+    assert progress.content == 'An earlier unverified diagnosis.'

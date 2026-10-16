@@ -201,7 +201,9 @@ class LlamaCppClient:
             parsed = urlparse(self._base)
             local = parsed.hostname in {"127.0.0.1", "localhost", "::1"}
             if provider not in {"vllm", "vllm-openai", "vllm_openai"} or not local:
-                return {"supported": False, "state": "unavailable", "source": "provider_without_activity_adapter"}
+                return {"supported": False, "state": "unsupported",
+                        "source": "provider_without_activity_adapter",
+                        "service_availability": "unknown"}
             metrics_url = f"{parsed.scheme}://{parsed.netloc}/metrics"
             response = requests.get(metrics_url, timeout=(2.0, 2.0), **self._request_headers_kwargs())
             try:
@@ -1031,7 +1033,8 @@ class LlamaCppClient:
                         try:
                             snapshot = backend_monitor.snapshot()
                         except Exception:
-                            snapshot = {"supported": False, "state": "unavailable", "stale": True}
+                            snapshot = {"supported": False, "state": "observation_failed",
+                                        "service_availability": "unknown", "stale": True}
                         progress_age = snapshot.get("progress_age_seconds")
                         if (
                             snapshot.get("supported")

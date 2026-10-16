@@ -3369,7 +3369,11 @@ class AgentRuntime:
             if message.role in {"user", "assistant"} and message.name is None
             and type(message.metadata.get("source_message_event_sequence")) is int
             and message.metadata["source_message_event_sequence"] < cutoff
-            and set(message.metadata) <= provenance]
+            and (set(message.metadata) <= provenance
+                 or (message.role == "assistant"
+                     and message.metadata.get("source_message_event_type") == "assistant_progress"
+                     and message.metadata.get("delivered_progress") is True
+                     and set(message.metadata) <= provenance | {"delivered_progress"}))]
         if not candidates:
             return None
         rows = [{"sequence": message.metadata["source_message_event_sequence"],
@@ -9183,13 +9187,15 @@ class AgentRuntime:
                 raw_activity = probe()
                 activity = dict(raw_activity) if isinstance(raw_activity, dict) else {
                     "supported": False,
-                    "state": "unavailable",
+                    "state": "observation_failed",
+                    "service_availability": "unknown",
                     "reason": "backend_activity_not_mapping",
                 }
             except Exception as exc:  # noqa: BLE001 - an unavailable backend cannot retain usable capacity.
                 activity = {
                     "supported": False,
-                    "state": "unavailable",
+                    "state": "observation_failed",
+                    "service_availability": "unknown",
                     "error": f"{type(exc).__name__}: {exc}",
                 }
             samples += 1
