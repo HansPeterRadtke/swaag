@@ -3409,7 +3409,9 @@ class AgentRuntime:
                 "runtime state are supplied separately to the checker: do not restate them. Prior "
                 "runtime/model failures are not automatically failures of this turn. Select no rows "
                 "when none adds needed evidence. Return compact JSON containing only selected IDs. The "
-                "harness copies selected rows exactly; other rows remain recoverable by the checker."
+                "harness copies selected rows exactly; other rows remain recoverable by the checker. "
+                "If this is a source fragment, retain constraints or unresolved references that may "
+                "need neighboring context; do not declare them irrelevant merely because it is absent."
             ),
             components=[
                 PromptComponent(name="selection_request", category="current_user", text=original_request),
@@ -3427,16 +3429,47 @@ class AgentRuntime:
             minimum_output_tokens=32, desired_output_tokens=256,
             include_prompt_instructions=False,
         )
-        try:
-            payload = self._execute_tool_semantic_call(state, request)
-        except (ModelCallStateChanged, RunCancellationRequested):
-            raise
-        except Exception:
-            return None
-        identifiers = payload.get("selected_line_ids")
-        if (not isinstance(identifiers, list)
-                or any(not isinstance(key, str) or key not in indexed for key in identifiers)):
-            return None
+        pending = [list(indexed)]
+        identifiers = set()
+        notices = [row for row in rows if "sequence" not in row]
+        remaining = max(1, int(self.config.context.semantic_reduction_max_calls))
+        while pending:
+            if remaining <= 0:
+                return None
+            remaining -= 1
+            chunk = pending.pop(0)
+            fragment = copy.deepcopy(request)
+            fragment.components[-1].text = (
+                "Each E<number> identifies that row's sequence. Exact earlier history rows; "
+                "other fragments are processed separately without sampling:\n"
+                + render_foreground_completion_history([*(indexed[key] for key in chunk), *notices]))
+            fragment.contract.json_schema["properties"]["selected_line_ids"]["items"]["enum"] = chunk
+            try:
+                payload = self._execute_tool_semantic_call(state, fragment)
+            except (ModelCallStateChanged, RunCancellationRequested):
+                raise
+            except (SemanticCallContextOverflow, OutputBudgetExhaustedError):
+                if len(chunk) < 2:
+                    return None
+                # Split only after measured capacity failure, on whole-record
+                # boundaries. Every original row is examined, in source order.
+                sizes = [len(stable_json_dumps(indexed[key])) for key in chunk]
+                total = sum(sizes)
+                prefix = 0
+                candidates = []
+                for index, size in enumerate(sizes[:-1], 1):
+                    prefix += size
+                    candidates.append((abs(total - 2 * prefix), index))
+                split = min(candidates)[1]
+                pending[0:0] = [chunk[:split], chunk[split:]]
+                continue
+            except Exception:
+                return None
+            selected_ids = payload.get("selected_line_ids")
+            if (not isinstance(selected_ids, list)
+                    or any(not isinstance(key, str) or key not in chunk for key in selected_ids)):
+                return None
+            identifiers.update(selected_ids)
         selected_sequences = {indexed[key]["sequence"] for key in identifiers}
         selected_rows = [row for row in rows
                          if "sequence" not in row or row["sequence"] in selected_sequences]

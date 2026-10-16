@@ -127,3 +127,10 @@ Measured overflow in the initial foreground action now uses the same constrained
 A reproduction from retained production state through sequence 3863, including the three prior full snapshot reads, reduced the initial action from 121031 tokens (original deployed failure) to 8660 with read references alone, then to 5838 with semantic selection. That selection took 3.809 seconds; the full pending action compiled within the unchanged 8192-token model limit without executing the action (`phone-action-current-selection.log`). The original source history was neither reset nor truncated.
 
 The combined action, snapshot, history-selection and completion regression suite passed 181 tests in 59.47 seconds (`phone-action-selection-tests.log`).
+
+
+### Phone failure follow-up: bounded exact history selection (2026-10-16)
+
+The Android run against `5db2bd2` generated the correct greeting, but did not finish playback within the unchanged test deadline. Its independent completion history required 17,918 tokens; selecting that history also overflowed at 14,248 tokens. The prior fallback entered slow recursive summaries. This failed run is retained in `android-chain-history-selection16.log`; it is not a playback pass.
+
+Exact-row selection now splits only after a measured capacity failure, on whole-record boundaries, processes every fragment in source order, and unions selected identifiers before copying original records. No sampling, fixed recency window, canonical history deletion, or completion-check bypass is introduced. Invalid output, a single oversized record, or exhausted existing call budget still falls back conservatively. Current input and fresh state remain separate. Sixty focused completion/history/recovery checks passed in 11.60 seconds (`phone-batched-selection-tests.log`); live Android validation is pending.

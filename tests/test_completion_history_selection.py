@@ -62,3 +62,26 @@ def test_action_selection_preserves_current_authority_tool_receipts_and_unknown_
         turn_sequence=10, original_request=current.content)
     assert selected == [prior, unknown, receipt, current, correction]
     assert messages == [prior, irrelevant, unknown, receipt, current, correction]
+
+
+def test_capacity_splitting_examines_every_complete_row_and_unions_exact_selections(make_config, monkeypatch):
+    from swaag.tools.base import SemanticCallContextOverflow
+    runtime = AgentRuntime(make_config(), model_client=object())
+    state = runtime.create_or_load_session()
+    rows = [{'sequence': n, 'role': 'user', 'content': f'Complete constraint {n}. ' * n}
+            for n in range(1, 9)]
+    examined = []
+    def select(_state, request):
+        ids = request.contract.json_schema['properties']['selected_line_ids']['items']['enum']
+        if len(ids) > 2:
+            raise SemanticCallContextOverflow(None)
+        examined.extend(ids)
+        for key in ids:
+            assert rows[int(key[1:]) - 1]['content'].strip() in request.components[-1].text
+        return {'selected_line_ids': [key for key in ids if key in {'E1', 'E7'}]}
+    monkeypatch.setattr(runtime, '_execute_tool_semantic_call', select)
+    result = runtime._select_foreground_completion_history(state, rows=rows,
+        original_request='Continue with applicable constraints.', candidate=None,
+        target_tokens=0, return_rows=True)
+    assert examined == [f'E{n}' for n in range(1, 9)]
+    assert result == [rows[0], rows[6]]
