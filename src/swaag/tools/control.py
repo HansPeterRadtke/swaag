@@ -66,12 +66,15 @@ def _originating_user_authority(context: ToolContext) -> list[dict[str, Any]]:
 class AgentStatusLookupTool(Tool):
     name = "agent_status_lookup"
     description = "Read durable status for another SWAAG session without changing it."
-    usage_guidance = "Use an exact worker ID or session id/name. Returns active goal, waiting/running state, pending controls, turn/event counts, and the complete durable semantic status history."
+    usage_guidance = "Use an exact worker ID or session id/name when current status is missing from the supplied system snapshot. Returns active goal, waiting/running state, pending controls, counts and the exact latest semantic status. Set include_history=true only when the full status trajectory is needed; its exact events remain recoverable."
     kind = "pure"
     input_schema = {
         "type": "object",
-        "properties": {"session_ref": {"anyOf": [{"type": "string"}, {"type": "null"}]}},
-        "required": ["session_ref"],
+        "properties": {
+            "session_ref": {"anyOf": [{"type": "string"}, {"type": "null"}]},
+            "include_history": {"anyOf": [{"type": "boolean"}, {"type": "null"}]},
+        },
+        "required": ["session_ref", "include_history"],
         "additionalProperties": False,
     }
 
@@ -79,16 +82,18 @@ class AgentStatusLookupTool(Tool):
         ref = raw_input.get("session_ref")
         if ref is not None and not isinstance(ref, str):
             raise ToolValidationError("agent_status_lookup.session_ref must be a string or null")
-        return {"session_ref": (ref or "").strip()}
+        include_history = raw_input.get("include_history")
+        if include_history is not None and not isinstance(include_history, bool):
+            raise ToolValidationError("agent_status_lookup.include_history must be a boolean or null")
+        return {"session_ref": (ref or "").strip(), "include_history": include_history is True}
 
     def execute(self, validated_input: dict[str, Any], context: ToolContext) -> ToolExecutionResult:
         ref = validated_input["session_ref"] or context.session_state.session_id
         store, session_id = _resolve_control_target(context, ref)
         state = store.rebuild_from_history(session_id, write_projections=False)
         latest_user = next((m.content for m in reversed(state.messages) if m.role == "user"), "")
-        status_history = [
-            event.payload
-            for event in store.iter_history(session_id)
+        status_events = [
+            event for event in store.iter_history(session_id)
             if event.event_type == "agent_status"
         ]
         active_run = store.read_active_run(session_id)
@@ -105,8 +110,19 @@ class AgentStatusLookupTool(Tool):
             "pending_control_count": len(store.list_pending_control_messages(session_id)),
             "turn_count": state.turn_count,
             "event_count": state.event_count,
-            "status_history": status_history,
+            "latest_status": status_events[-1].payload if status_events else None,
+            "status_history_reference": {
+                "session_id": session_id,
+                "event_type": "agent_status",
+                "count": len(status_events),
+                "first_sequence": status_events[0].sequence if status_events else None,
+                "last_sequence": status_events[-1].sequence if status_events else None,
+                "last_event_hash": status_events[-1].hash if status_events else None,
+                "recovery": "agent_status_lookup with include_history=true returns all exact statuses",
+            },
         }
+        if validated_input.get("include_history", False):
+            output["status_history"] = [event.payload for event in status_events]
         return ToolExecutionResult(self.name, output, f"agent_status_lookup result: {stable_json_dumps(output, indent=2)}")
 
 
