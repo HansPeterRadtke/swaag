@@ -3411,11 +3411,14 @@ class AgentRuntime:
                 "when none adds needed evidence. Return compact JSON containing only selected IDs. The "
                 "harness copies selected rows exactly; other rows remain recoverable by the checker. "
                 "If this is a source fragment, retain constraints or unresolved references that may "
-                "need neighboring context; do not declare them irrelevant merely because it is absent."
+                "need neighboring context; do not declare them irrelevant merely because it is absent.\n"
+                "Serialize the result as one minified JSON line. Never emit indentation, blank "
+                "lines, or whitespace outside strings. For an empty selection output exactly "
+                '{"selected_line_ids":[]}.'
             ),
             components=[
-                PromptComponent(name="selection_request", category="current_user", text=original_request),
-                PromptComponent(name="selection_candidate", category="turn_context", text=candidate or "No candidate yet; select context for the action controller."),
+                PromptComponent(name="selection_request", category="current_user", text="Current request:\n" + original_request + "\n\n"),
+                PromptComponent(name="selection_candidate", category="turn_context", text="Candidate reply:\n" + (candidate or "No candidate yet; select context for the action controller.") + "\n\n"),
                 PromptComponent(name="selection_history", category="history",
                     text="Each E<number> identifies that row's sequence. Complete earlier history:\n"
                          + render_foreground_completion_history(rows)),
