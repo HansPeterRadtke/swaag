@@ -1453,3 +1453,19 @@ The final outcome is recorded separately rather than conflated with the failed
 first deadline.
 
 The complete final 33fd178 source suite on Thor passes **1,311 tests with three optional skips in 221.63 seconds**. This includes the unchanged production code from 66d3a65 plus the isolated CLI regression test. The old cache is preserved, and no production model lifecycle operation is performed.
+
+The continued Q3 trace identifies one further unnecessary recovery boundary.
+Its first actor exhausts 306 output tokens. The automatic output-budget feedback
+then changes the history objective fingerprint, so the next attempt abandons the
+already eligible history view and repeats source projections despite unchanged
+user authority. `output-budget-history-reuse-counterexample.json` records the
+rejection and subsequent compilations. Candidate 86170ad keeps that mechanical
+reason in the durable audit event while increasing output capacity; it does not
+replace semantic validation guidance with a capacity-only instruction. The
+existing output-recovery regression now also requires an identical semantic prompt
+for that unchanged task. It fails before the fix and passes afterward; fourteen
+output/reuse/changed-authority cases pass in 17.97 seconds. A full immutable-source
+Thor run follows. Real changed instructions, validation requirements and source
+identity continue to invalidate reuse.
+
+The full 86170ad suite passes **1,311 tests with three optional skips in 223.73 seconds** on Thor. The further live continuation is gated on this result and the end of the earlier Q3 run. It uses the already-running production BF16 endpoint with the same original receipt, accumulated history, exact approval evidence and file/control oracle; this backend change is not a paired speed comparison.
