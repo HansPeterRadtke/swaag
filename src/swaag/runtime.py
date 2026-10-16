@@ -3216,7 +3216,9 @@ class AgentRuntime:
                             state,
                             source_text=historical_evidence,
                             source_label=(
-                                "exact durable history events before the current user turn"
+                                f"Durable evidence; current turn execution begins at sequence {current_user_sequence}. "
+                                "The current request can be the immediately preceding user-message row; other earlier "
+                                "rows are historical. Rows at or after this boundary are current-turn observations."
                             ),
                             target_tokens=historical_projection_target_tokens,
                             contract=evidence_projection_contract(),
@@ -3224,8 +3226,13 @@ class AgentRuntime:
                             build_assembly=lambda text, label, target: (
                                 self.prompts.build_evidence_projection_prompt(
                                     purpose=(
-                                        "Evaluate whether this user objective is complete: "
+                                        "Evaluate whether this current user objective is complete: "
                                         + original_request
+                                        + "\nThe candidate reply is supplied separately to the verifier; "
+                                        "its absence from history is not evidence of failure. Preserve applicable "
+                                        "earlier constraints and material uncertainty. Distinguish historical "
+                                        "failures from current evidence using the source turn boundary. "
+                                        "Use the shortest sufficient evidence, not a catalogue of similar past requests."
                                     ),
                                     source_label=label,
                                     raw_evidence=text,

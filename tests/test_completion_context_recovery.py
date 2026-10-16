@@ -1,6 +1,6 @@
 """Mechanical audit bulk must remain recoverable without crowding out task state."""
 import json
-from dataclasses import asdict
+from dataclasses import asdict, replace
 from swaag.runtime import AgentRuntime
 from swaag.evidence_sources import RuntimeTelemetryEvidenceProvider, RuntimeAuditEvidenceProvider, runtime_telemetry_reference
 from tests.test_completion_evaluation import _completed_action
@@ -17,6 +17,8 @@ def test_foreground_completion_can_reduce_history_with_large_exact_source_catalo
 
     def respond(payload):
         if payload['contract'] == 'evidence_projection':
+            assert f'current turn execution begins at sequence {current_turn.sequence}' in payload['prompt']
+            assert 'candidate reply is supplied separately' in payload['prompt']
             return json.dumps({'projection': 'Earlier user restriction: do not publish.'})
         assert payload['contract'] == 'completion_evaluation'
         return json.dumps({'complete': True, 'reason': 'Requested greeting supplied.',
@@ -31,11 +33,11 @@ def test_foreground_completion_can_reduce_history_with_large_exact_source_catalo
         runtime._record_message(state, Message(role='user', created_at='then',
             content=f'Turn {index}: Do not publish. ' + ('Exact retained user evidence. ' * 40)))
         runtime.history.record_event(state, 'runtime_system_snapshot', {'snapshot': {'captured_at': str(index)}})
-    runtime.history.record_event(state, 'turn_started', {'turn_index': 33, 'user_text': 'Say hello.'})
+    current_turn = runtime.history.record_event(state, 'turn_started', {'turn_index': 33, 'user_text': 'Say hello.'})
     runtime.bind_tool_runtime_capability(state.session_id, 'system_snapshot_provider',
         lambda: {'captured_at': 'now', 'active_workers': [], 'terminal_workers': []})
     result = runtime._evaluate_completion(state, original_request='Say hello.',
-        selected_action=_completed_action(), tool_results=[])
+        selected_action=replace(_completed_action(), assistant_message='Hello.'), tool_results=[])
     assert result['complete'] is True
     assert any(r['contract'] == 'evidence_projection' for r in client.requests)
     assert client.requests[-1]['contract'] == 'completion_evaluation'
