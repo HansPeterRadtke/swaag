@@ -451,8 +451,9 @@ def test_output_limit_rebuilds_action_with_more_headroom(make_config) -> None:
     assert len(exhausted) == 1
 
 
+@pytest.mark.parametrize("projection_objective", [None, "same-task-fingerprint"])
 def test_history_compaction_creates_replayable_summary_with_exact_sources(
-    make_config,
+    make_config, projection_objective,
 ) -> None:
     config = make_config(model__context_limit=32_000)
     def compaction_response(payload: dict[str, Any]) -> str:
@@ -474,9 +475,10 @@ def test_history_compaction_creates_replayable_summary_with_exact_sources(
     ):
         runtime._record_message(state, Message(role=role, content=content, created_at="t"))
 
-    assert runtime._compact_once(state) is True
+    assert runtime._compact_once(state, projection_objective_sha256=projection_objective) is True
 
     assert state.messages[0].role == "summary"
+    assert state.messages[0].metadata.get("projection_objective_sha256") == projection_objective
     assert state.messages[0].metadata["source_event_references"]
     assert state.messages[0].metadata["projection_event_sequence"] > 0
     compressed = next(

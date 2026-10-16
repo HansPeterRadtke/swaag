@@ -1780,7 +1780,7 @@ class HistoryStore:
             for index, raw_message in enumerate(payload["projected_messages"]):
                 message_payload = dict(raw_message)
                 message_metadata = dict(message_payload.get("metadata", {}))
-                if index == 0 and message_payload.get("role") == "summary":
+                if index == int(payload.get("source_message_start", 0)) and message_payload.get("role") == "summary":
                     message_metadata.setdefault(
                         "projection_event_sequence", event.sequence
                     )

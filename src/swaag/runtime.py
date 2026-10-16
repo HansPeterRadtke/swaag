@@ -2180,6 +2180,8 @@ class AgentRuntime:
         )
         history_source = "authoritative_message_events"
         prompt_mode = "standard"
+        history_reuse_checked = False
+        history_projection_objective = ""
         # System-owned context contributors begin at full fidelity. Semantic
         # contributor reduction is attempted only after measured overflow.
         system_context_state: dict[str, object] = {}
@@ -2383,6 +2385,75 @@ class AgentRuntime:
                         contract=contract,
                         runtime_snapshot=system_context_state.get("runtime_system_snapshot"),
                     )
+            # A prior reduction is only a derived view for the same objective and
+            # authority. Exact source history wins whenever it fits. Rebuild the
+            # current snapshot and retain newly appended messages even on reuse.
+            history_projection_objective = sha256_text(stable_json_dumps({
+                "version": 1,
+                "original_request": original_request,
+                "pending_messages": pending_messages,
+                "validation_feedback": validation_feedback,
+                "latest_user_source": next((
+                    message_source_event_references([message])
+                    for message in reversed(authoritative_messages)
+                    if message.role == "user"
+                ), []),
+                "system_instructions": [
+                    (component.name, component.text)
+                    for component in assembly.components
+                    if component.category in {"system_prompt", "system_prompt_instruction"}
+                ],
+                "kind": assembly.kind,
+                "prompt_mode": prompt_mode,
+                "tool_specs": tool_specs,
+                "capability_index": capability_index,
+                "contract": asdict(contract),
+                "require_user_acknowledgement": require_user_acknowledgement,
+            }, indent=None))
+            if not history_reuse_checked and self.config.context.compact_on_overflow:
+                history_reuse_checked = True
+                summaries = [message for message in projected_messages if message.role == "summary"]
+                if has_derived_history and summaries and all(
+                    message.metadata.get("projection_objective_sha256") == history_projection_objective
+                    and message.metadata.get("source_event_references")
+                    and message.metadata.get("projection_event_hash")
+                    for message in summaries
+                ):
+                    original_candidate = (history_messages, history_source, assembly, compilation, report)
+                    original_instructions = [
+                        (component.name, component.text)
+                        for component in assembly.components
+                        if component.category in {"system_prompt", "system_prompt_instruction"}
+                    ]
+                    history_messages = projected_messages
+                    history_source = "reused_goal_history_projection"
+                    assembly = build_action_assembly(history_messages, context_components, mode=prompt_mode)
+                    compilation = self._compile_context(
+                        state, assembly, contract, minimum_output_tokens=effective_minimum
+                    )
+                    candidate_instructions = [
+                        (component.name, component.text)
+                        for component in assembly.components
+                        if component.category in {"system_prompt", "system_prompt_instruction"}
+                    ]
+                    if candidate_instructions != original_instructions:
+                        # Semantic instruction selection can depend on the view.
+                        # A changed instruction set invalidates the reuse attempt.
+                        history_messages, history_source, assembly, compilation, report = original_candidate
+                    else:
+                        report = compilation.report
+                        last_report = report
+                        record_action_compilation(
+                            compilation, history_source=history_source,
+                            candidate_only=not report.fits, mode=prompt_mode,
+                        )
+                        if report.fits:
+                            self._record_prompt_built(state, assembly, contract, report)
+                            return PreparedCall(
+                                assembly=assembly, report=report, prompt_mode=prompt_mode,
+                                contract=contract,
+                                runtime_snapshot=system_context_state.get("runtime_system_snapshot"),
+                            )
             if not self.config.context.compact_on_overflow or compaction_round >= max_rounds:
                 recovered_call = recover_instruction_call()
                 if recovered_call is not None:
@@ -2432,11 +2503,13 @@ class AgentRuntime:
                     state,
                     required_recovery_tokens=compilation.overflow_tokens,
                     authoritative_messages=authoritative_messages,
+                    projection_objective_sha256=history_projection_objective,
                 )
             else:
                 compacted = self._compact_once(
                     state,
                     required_recovery_tokens=compilation.overflow_tokens,
+                    projection_objective_sha256=history_projection_objective,
                 )
             if not compacted:
                 break
@@ -7740,6 +7813,7 @@ class AgentRuntime:
         *,
         required_recovery_tokens: int = 1,
         authoritative_messages: list[Message] | None = None,
+        projection_objective_sha256: str | None = None,
     ) -> bool:
         complete_source_messages = list(
             state.messages
@@ -7980,6 +8054,8 @@ class AgentRuntime:
                 )
             if recovered_tokens < required_recovery:
                 continue
+            if projection_objective_sha256:
+                summary_payload["metadata"]["projection_objective_sha256"] = projection_objective_sha256
             self.history.record_event(
                 state,
                 "history_compaction_span_selected",
