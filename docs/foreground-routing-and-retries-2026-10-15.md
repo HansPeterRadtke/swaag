@@ -1596,3 +1596,33 @@ mirrored byte-for-byte on Jetson with their SHA-256 identities. The native-outpu
 continuation starts at sequence 4436 only after both earlier jobs have stopped
 and the full-suite gate passes. Private rollback copies on both machines match
 all 195 files of the prior installed 525ef45 package before replacement.
+
+## Identical evidence selection within one preparation
+
+The durable tool messages from source events 993 and 2014 are byte-identical
+19,309-character status results despite distinct source-event identities. The
+partial-history trace sends identical selector message/schema/model inputs twice
+at both output allowances; `duplicate-selector-inputs.json` records hashes and
+sequences. Source equality alone does not authorize dropping either event.
+
+Candidate 4501764 shares only successful pure verbatim-selection results within
+one action preparation, keyed by tool name, exact objective hash (including later
+user interventions), and exact source-text hash. Each projection retains its own
+source event/hash and target validation. A separate audit event links selection
+reuse to both original sources. Target-dependent anchor selection, failed semantic
+selection, changed inputs and subsequent preparations remain independent. There
+is no global response cache or cross-turn instruction reuse.
+
+The red full-preparation regression observes four selector calls where two are
+needed over two preparations. Seventeen focused checks pass after the correction
+in 125.57 seconds on Jetson. Four further negative cases pass in 1.98 seconds,
+covering changed objective, source bytes, tool identity and failed selection; the
+latter is neither cached nor recorded as reused. An immutable full Thor suite
+gates any further original-receipt continuation. If the preceding native-output
+trial already completes successfully, the original receipt will not be executed
+again merely to create another benchmark result.
+
+The complete 4501764 suite passes **1,329 tests with three optional skips in
+237.69 seconds** on Thor. The merged main package is byte-identical across all
+195 files to the tested immutable source. Its continuation remains gated on the
+preceding fixed-source live trial; no concurrent inference trial is introduced.
