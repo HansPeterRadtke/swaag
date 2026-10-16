@@ -2783,7 +2783,13 @@ class AgentRuntime:
                             'receipt-stage reply. An explicit user request to wait for or verify an effect still '
                             'requires evidence of that effect. A claim that work started or a restriction took '
                             'effect is false when only a pending receipt is observed. An undelivered genuine '
-                            'instruction cannot be satisfied by a status reply alone.\n\n'
+                            'instruction cannot be satisfied by a status reply alone. '
+                            'Use the shortest sufficient verdict reason: a routine successful reply '
+                            'usually needs only two to six words. Preserve material uncertainty, '
+                            'failure and actionable remaining work when more detail is necessary.\n\n'
+                            'Serialize the result object as compact single-line JSON, without '
+                            'indentation or formatting whitespace outside string values. '
+                            'Preserve required whitespace inside strings.\n\n'
                         ),
                     )] if completion_snapshot is not None else []),
                     *self._current_authority_components(state, original_request),

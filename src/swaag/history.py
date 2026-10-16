@@ -8,7 +8,9 @@ import re
 import sqlite3
 from dataclasses import asdict
 from pathlib import Path
+from threading import Lock
 from typing import Any, Callable, Iterable, Iterator
+from weakref import WeakValueDictionary
 
 from swaag.capacity import positive_capacity, require_capacity
 from swaag.session_lock import exclusive_control_mutation
@@ -233,6 +235,28 @@ def _bounded_search_preview(
 
 
 
+class _VerifiedJsonlStats(dict[str, tuple[int, tuple[int, int, int, int, int]]]):
+    """Verified file observations shared only by live stores in one process."""
+
+
+_VERIFIED_JSONL_POOLS: WeakValueDictionary[tuple[int, Path], _VerifiedJsonlStats] = WeakValueDictionary()
+_VERIFIED_JSONL_POOLS_LOCK = Lock()
+
+
+def _verified_jsonl_stats_for(root: Path) -> _VerifiedJsonlStats:
+    # Stores for the worker runtime, orchestrator and status reader use the
+    # same journal. Their own validated appends must not look like unrelated
+    # external edits to one another. Weak ownership releases unused roots;
+    # process identity avoids inheriting another process's pool after a fork.
+    key = (os.getpid(), root.resolve())
+    with _VERIFIED_JSONL_POOLS_LOCK:
+        stats = _VERIFIED_JSONL_POOLS.get(key)
+        if stats is None:
+            stats = _VerifiedJsonlStats()
+            _VERIFIED_JSONL_POOLS[key] = stats
+        return stats
+
+
 class HistoryStore:
     def __init__(
         self,
@@ -254,7 +278,7 @@ class HistoryStore:
         # conversations previously spent minutes rescanning 300+ MB journals.
         # File identity includes mtime_ns, inode, size and device. External
         # edits invalidate this cache and trigger full integrity validation.
-        self._verified_jsonl_stats: dict[str, tuple[int, tuple[int, int, int, int, int]]] = {}
+        self._verified_jsonl_stats = _verified_jsonl_stats_for(self.root)
         _ensure_directory(self.root)
         self._init_sqlite_history()
 

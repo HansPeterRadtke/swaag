@@ -156,3 +156,41 @@ def test_external_history_tampering_is_still_detected_with_file_stat_cache(make_
     path.write_text(source.replace("original_token", "modified_token", 1) + "\n", encoding="utf-8")
     with pytest.raises(HistoryCorruptionError):
         list(history.iter_history(state.session_id))
+
+
+def test_peer_history_readers_reuse_verified_local_appends(tmp_path) -> None:
+    from unittest.mock import patch
+    from swaag.history import HistoryStore
+
+    writer = HistoryStore(tmp_path / 'sessions')
+    state = writer.create(config_fingerprint='cfg', model_base_url='http://model')
+    reader = HistoryStore(writer.root, write_projections=False)
+    reader.read_history(state.session_id)
+    with patch.object(reader, '_iter_history_jsonl', wraps=reader._iter_history_jsonl) as scan:
+        for n in range(5):
+            writer.record_event(state, 'error', {
+                'operation': 'peer_append', 'error': f'exact_event_{n}', 'error_type': 'Test'})
+            events = reader.read_history(state.session_id)
+            assert len(events) == n + 2
+            assert events[-1].payload['error'] == f'exact_event_{n}'
+        assert scan.call_count == 0, 'peer reads must reuse verified in-process appends'
+
+
+def test_peer_reader_still_rejects_same_size_external_tampering(tmp_path) -> None:
+    import pytest
+    from swaag.history import HistoryStore, HistoryCorruptionError
+
+    writer = HistoryStore(tmp_path / 'sessions')
+    state = writer.create(config_fingerprint='cfg', model_base_url='http://model')
+    reader = HistoryStore(writer.root, write_projections=False)
+    writer.record_event(state, 'error', {
+        'operation': 'external_tamper', 'error': 'original_token', 'error_type': 'Test'})
+    reader.read_history(state.session_id)
+    path = writer.history_path(state.session_id)
+    before = path.read_bytes()
+    after = before.replace(b'original_token', b'modified_token', 1)
+    assert len(after) == len(before) and after != before
+    path.write_bytes(after)
+    for store in (writer, reader, HistoryStore(writer.root, write_projections=False)):
+        with pytest.raises(HistoryCorruptionError):
+            store.read_history(state.session_id)
