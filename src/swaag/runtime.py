@@ -1102,7 +1102,10 @@ class AgentRuntime:
                     break
                 except OutputBudgetExhaustedError as exc:
                     action_minimum_output_tokens = self._expanded_output_minimum(prepared)
-                    validation_feedback = (
+                    # Output truncation changes the required capacity, not the
+                    # semantic task or prior validation guidance. Keep its audit
+                    # reason separate so a retry can reuse goal-matched history.
+                    output_budget_reason = (
                         f"The previous constrained action exhausted its {exc.reserved_tokens}-token output budget "
                         f"with finish reason {exc.finish_reason!r}. Be concise and emit one complete valid JSON action. "
                         f"The reconstructed call now requires at least {action_minimum_output_tokens} output tokens."
@@ -1110,7 +1113,7 @@ class AgentRuntime:
                     self.history.record_event(
                         state, "agent_action_rejected",
                         {"action_index": action_index, "validation_attempt": validation_attempt,
-                         "reason": validation_feedback, "finish_reason": exc.finish_reason,
+                         "reason": output_budget_reason, "finish_reason": exc.finish_reason,
                          "previous_output_tokens": exc.reserved_tokens,
                          "next_minimum_output_tokens": action_minimum_output_tokens},
                     )

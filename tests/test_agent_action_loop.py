@@ -446,6 +446,8 @@ def test_output_limit_rebuilds_action_with_more_headroom(make_config) -> None:
     assert result.assistant_text == "done"
     assert len(client.requests) == 2
     assert client.requests[1]["n_predict"] > client.requests[0]["n_predict"]
+    # Truncation changes capacity, not task authority or the history-reuse key.
+    assert client.requests[1]["prompt"] == client.requests[0]["prompt"]
     events = runtime.history.read_history(result.session_id)
     exhausted = [event for event in events if event.event_type == "model_output_budget_exhausted"]
     assert len(exhausted) == 1
