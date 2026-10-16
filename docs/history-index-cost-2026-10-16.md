@@ -28,8 +28,9 @@ equality artifact rather than inferred from the system Python.
 
 All 28 focused history-tool tests pass in 8.44 seconds, including idempotent replay,
 repair of a missing search row, transactional rollback after an injected search
-write failure, and exact retry. The existing full-suite gate is required before
-installation. The active installed model probe keeps its previous package until
+write failure, and exact retry. The complete immutable 95a022a suite passes 1,332 tests with three optional skips
+in 230.61 seconds on Thor. Installation remains gated on the active probe ending
+and the combined release checks. The active installed model probe keeps its previous package until
 it stops; no running environment is replaced.
 
 Evidence is retained under

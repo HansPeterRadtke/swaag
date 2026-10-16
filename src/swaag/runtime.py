@@ -1032,9 +1032,25 @@ class AgentRuntime:
                     detail=f"preparing action {action_index}", active_kind="action",
                     active_id=str(action_index), operation_kind="agent_action",
                 )
+                # Loading a schema changes the action's wire contract, not the
+                # task's available authority. Key derived history to the complete
+                # currently permitted catalogue, while executing only loaded tools.
+                history_tool_specs = self.tools.staged_prompt_tuples(
+                    self.config, available_capability_names, delegated_specs,
+                    runtime_capabilities=runtime_capabilities,
+                )
+                history_action_scope = sha256_text(stable_json_dumps({
+                    "tool_specs": history_tool_specs,
+                    "capability_index": capability_index,
+                    "delegated_specs": [asdict(spec) for spec in delegated_specs],
+                    "contract": asdict(agent_action_contract(
+                        history_tool_specs, allow_silent_completion=allow_silent_completion,
+                    )),
+                }, indent=None))
                 prepared = self._prepare_action_call(
                     state, original_request=original_request, pending_messages=pending_messages,
                     tool_specs=tool_specs,
+                    history_action_scope=history_action_scope,
                     capability_index=(
                         capability_index if self.config.tools.staged_discovery else None
                     ),
@@ -2154,6 +2170,7 @@ class AgentRuntime:
         validation_feedback: str,
         minimum_output_tokens: int | None = None,
         require_user_acknowledgement: bool = False,
+        history_action_scope: str | None = None,
         assembly_builder: Callable[
             [list[Message], list[PromptComponent], dict[int, str], str], PromptAssembly
         ] | None = None,
@@ -2393,8 +2410,19 @@ class AgentRuntime:
             # A prior reduction is only a derived view for the same objective and
             # authority. Exact source history wins whenever it fits. Rebuild the
             # current snapshot and retain newly appended messages even on reuse.
+            # The ordinary action loop supplies its full permitted capability
+            # scope. Schema loading and the initial acknowledgement requirement
+            # are presentation changes; both remain enforced on the real action.
+            # Other callers retain their exact operation-specific contract scope.
+            capability_scope = ({"history_action_scope": history_action_scope}
+                if history_action_scope is not None else {
+                    "tool_specs": tool_specs,
+                    "capability_index": capability_index,
+                    "contract": asdict(contract),
+                    "require_user_acknowledgement": require_user_acknowledgement,
+                })
             history_projection_objective = sha256_text(stable_json_dumps({
-                "version": 1,
+                "version": 2 if history_action_scope is not None else 1,
                 "original_request": original_request,
                 "pending_messages": pending_messages,
                 "validation_feedback": validation_feedback,
@@ -2410,10 +2438,7 @@ class AgentRuntime:
                 ],
                 "kind": assembly.kind,
                 "prompt_mode": prompt_mode,
-                "tool_specs": tool_specs,
-                "capability_index": capability_index,
-                "contract": asdict(contract),
-                "require_user_acknowledgement": require_user_acknowledgement,
+                **capability_scope,
             }, indent=None))
             if not history_reuse_checked and self.config.context.compact_on_overflow:
                 history_reuse_checked = True

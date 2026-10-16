@@ -96,12 +96,13 @@ def test_same_task_reuses_derived_history_after_raw_overflow(reduction_case):
     assert compiled[-1].payload["history_source"] == "reused_goal_history_projection"
 
 
+@pytest.mark.parametrize("history_scope", [None, "available-catalog"])
 @pytest.mark.parametrize("change", ["request", "pending", "feedback", "user_event", "system", "policy", "tools", "unkeyed", "missing_provenance"])
-def test_changed_authority_or_unknown_summary_requires_fresh_source_reduction(reduction_case, change):
+def test_changed_authority_or_unknown_summary_requires_fresh_source_reduction(reduction_case, change, history_scope):
     runtime, state, compacted, current, prepare = reduction_case
-    assert prepare().report.fits
+    assert prepare(history_action_scope=history_scope).report.fits
     previous_objective = compacted[0]["projection_objective_sha256"]
-    changes = {}
+    changes = {"history_action_scope": history_scope}
     if change == "request":
         changes["original_request"] = "Explain the earlier details."
     elif change == "pending":
@@ -117,6 +118,8 @@ def test_changed_authority_or_unknown_summary_requires_fresh_source_reduction(re
             title="Output", content="Preserve each source date.", scopes=["action"]))
     elif change == "tools":
         changes["tool_specs"] = [("new_read_tool", "Read evidence", {}, "Evidence")]
+        if history_scope is not None:
+            changes["history_action_scope"] = "changed-available-catalog"
     else:
         summary = next(m for m in state.messages if m.role == "summary")
         summary.metadata.pop("projection_objective_sha256" if change == "unkeyed" else "source_event_references")
@@ -211,3 +214,72 @@ def test_disjoint_safe_history_reductions_combine_across_protected_direction(mak
     assert len(reductions) == 2
     assert 0 < reductions[0].payload["actual_recovered_tokens"] < reductions[0].payload["required_recovery_tokens"]
     assert runtime.history.rebuild_from_history(state.session_id, prefer_checkpoint=False).messages == state.messages
+
+
+@pytest.mark.parametrize("change", ["schema_load", "acknowledgement", "both"])
+def test_same_available_capabilities_reuse_history_across_action_presentation(reduction_case, change):
+    from dataclasses import asdict
+    from swaag.grammar import agent_action_contract
+    from swaag.utils import sha256_text, stable_json_dumps
+    runtime, state, compacted, current, prepare = reduction_case
+    schema = {"type": "object", "properties": {}, "required": [], "additionalProperties": False}
+    loader = ("load_tools", "Load an available tool schema", schema, "Discovery")
+    questions = ("questions", "Inspect and reconcile questions", schema, "Durable questions")
+    catalog = [loader, questions]
+    scope = sha256_text(stable_json_dumps({"tool_specs": catalog,
+        "contract": asdict(agent_action_contract(catalog))}, indent=None))
+    before = dict(tool_specs=[loader], contract=agent_action_contract([loader]),
+        history_action_scope=scope, require_user_acknowledgement=True)
+    assert prepare(**before).report.fits
+    runtime._record_message(state, Message(role="tool", name="load_tools",
+        content="questions schema loaded; the approval question remains open.", created_at="later"))
+    after = dict(before)
+    if change in {"schema_load", "both"}:
+        after.update(tool_specs=catalog, contract=agent_action_contract(catalog))
+    if change in {"acknowledgement", "both"}:
+        after['require_user_acknowledgement'] = False
+    prepared = prepare(**after)
+    assert prepared.report.fits
+    assert len(compacted) == 1
+    assert 'approval question remains open' in prepared.assembly.prompt_text
+    assert 'WORKER_RUNNING' in prepared.assembly.prompt_text
+    assert runtime.history.rebuild_from_history(state.session_id, prefer_checkpoint=False).messages == state.messages
+
+
+def test_changed_available_capability_scope_still_requires_fresh_history(reduction_case):
+    runtime, state, compacted, current, prepare = reduction_case
+    assert prepare(history_action_scope='catalog-before').report.fits
+    assert prepare(history_action_scope='catalog-after').report.fits
+    assert len(compacted) == 2
+    assert compacted[-1]['authoritative_messages']
+
+
+@pytest.mark.parametrize("catalog_changes", [False, True])
+def test_ordinary_action_scope_tracks_available_catalog_not_loaded_schemas(make_config, monkeypatch, catalog_changes):
+    import json
+    from tests.test_agent_action_loop import FakeModelClient
+    from tests.test_workers import _action
+    load = json.loads(_action('I will inspect the open question.'))
+    load.update(continue_loop=True, tool_calls=[{'tool_name':'load_tools','arguments':{'tool_names':['questions']}}])
+    client = FakeModelClient([json.dumps(load), _action('There is no open question.')])
+    runtime = AgentRuntime(make_config(model__context_limit=32000, tools__staged_discovery=True,
+        tools__enabled=['questions', 'calculator']), model_client=client)
+    state = runtime.create_or_load_user_session('Report the open questions.')
+    seen = []
+    prepare = runtime._prepare_action_call
+    def observe(*args, **kwargs):
+        seen.append((kwargs['history_action_scope'], [spec[0] for spec in kwargs['tool_specs']]))
+        return prepare(*args, **kwargs)
+    monkeypatch.setattr(runtime, '_prepare_action_call', observe)
+    execute = runtime.tools.execute_prepared
+    def execute_then_change(*args, **kwargs):
+        result = execute(*args, **kwargs)
+        if catalog_changes:
+            runtime.config.tools.enabled = ['questions']
+        return result
+    monkeypatch.setattr(runtime.tools, 'execute_prepared', execute_then_change)
+    result = runtime.resume_turn_in_session(state, 'Report the open questions.')
+    assert result.assistant_text == 'There is no open question.'
+    assert len(seen) == 2
+    assert 'questions' not in seen[0][1] and 'questions' in seen[1][1]
+    assert (seen[0][0] != seen[1][0]) is catalog_changes
