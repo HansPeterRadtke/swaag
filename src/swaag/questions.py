@@ -111,6 +111,9 @@ def question_inventory(manager):
     """Complete exact inventory across configured worker stores, with no top-N cut."""
     from swaag.progress import worker_progress
     questions, pending, workers, seen = [], [], [], set()
+    # Each history owner contributes one fresh independent-status observation.
+    # This cache is local to the inventory, including for terminal workers.
+    independent_statuses = {}
     for route, candidate in manager.worker_managers.items():
         for worker in candidate.list(include_archived=True):
             identity = (str(candidate.runtime.config.sessions.root), worker.worker_id)
@@ -119,11 +122,14 @@ def question_inventory(manager):
             seen.add(identity)
             owner = manager.worker_managers.get(worker.model_key, candidate)
             history = owner.runtime.history
+            if history not in independent_statuses:
+                independent_statuses[history] = history.latest_communication_statuses()
             state = history.rebuild_from_history(worker.session_id, write_projections=False)
             workers.append({'worker_id': worker.worker_id, 'session_id': worker.session_id,
                             'model_key': worker.model_key, 'status': worker.status,
                             'objective': worker.objective, 'progress': worker_progress(worker, state),
-                            'latest_model_status': owner.runtime.latest_semantic_status_payload(state),
+                            'latest_model_status': owner.runtime.latest_semantic_status_payload(
+                                state, communication_statuses=independent_statuses[history]),
                             'through_sequence': state.event_count})
             for item in state.open_questions:
                 questions.append({**normalize_question(item), 'worker_id': worker.worker_id,

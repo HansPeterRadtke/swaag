@@ -10758,12 +10758,13 @@ class AgentRuntime:
         }
 
     def latest_semantic_status_payload(
-        self, state: SessionState
+        self, state: SessionState, *,
+        communication_statuses: dict[str, HistoryEvent] | None = None,
     ) -> dict[str, Any] | None:
         candidates: list[tuple[str, dict[str, Any]]] = []
-        for event in reversed(self.history.read_history(state.session_id)):
-            if event.event_type != "agent_status":
-                continue
+        for event in self.history.iter_history_reverse(
+            state.session_id, event_types=("agent_status",)
+        ):
             candidates.append(
                 (
                     event.timestamp,
@@ -10779,7 +10780,9 @@ class AgentRuntime:
 
         # Independent status calls use their own append-only operation session,
         # so they never race with or mutate the target worker history.
-        event = self.history.latest_communication_status(state.session_id)
+        event = (self.history.latest_communication_status(state.session_id)
+                 if communication_statuses is None
+                 else communication_statuses.get(state.session_id))
         if event is not None:
             status = event.payload.get("status")
             if isinstance(status, dict):

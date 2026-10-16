@@ -1072,8 +1072,18 @@ class HistoryStore:
         self, target_session_id: str
     ) -> HistoryEvent | None:
         """Read the newest independent status without touching target history."""
+        return self.latest_communication_statuses().get(target_session_id)
+
+    def latest_communication_statuses(self) -> dict[str, HistoryEvent]:
+        """One fresh cross-session observation, shared by a worker inventory.
+
+        Reconcile external journals once per inventory, not once per worker.
+        Do not retain this mapping across snapshots: newly rejected statuses
+        and new independent operation sessions must be observed next time.
+        """
         for entry in self.list_session_entries(include_internal=True):
             self._ensure_session_indexed(str(entry["session_id"]))
+        latest: dict[str, HistoryEvent] = {}
         with self._sqlite_connect() as connection:
             rows = connection.execute(
                 """
@@ -1095,9 +1105,10 @@ class HistoryStore:
             )
             for row in rows:
                 payload = json.loads(str(row["payload_json"]))
-                if payload.get("target_session_id") != target_session_id:
+                target = payload.get("target_session_id")
+                if not isinstance(target, str) or target in latest:
                     continue
-                return HistoryEvent(
+                latest[target] = HistoryEvent(
                     id=str(row["event_id"]),
                     session_id=str(row["session_id"]),
                     sequence=int(row["sequence"]),
@@ -1109,7 +1120,7 @@ class HistoryStore:
                     prev_hash=row["prev_hash"],
                     hash=str(row["event_hash"]),
                 )
-        return None
+        return latest
 
     def read_history_window(self, session_id: str, *, start_sequence: int, limit: int) -> list[HistoryEvent]:
         if start_sequence <= 0:
