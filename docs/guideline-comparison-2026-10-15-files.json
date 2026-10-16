@@ -4764,9 +4764,9 @@
   "unique_contents": 234,
   "exact_duplicate_aliases": 12,
   "physical_files": 246,
-  "last_verified_at": "2026-10-16T03:40:07.448651+00:00",
+  "last_verified_at": "2026-10-16T05:13:59.728252+00:00",
   "verification": {
-    "integrity_artifact": "/data/var/swaag-benchmarks/foreground-routing-20261015/full-reread/history-scope-release-integrity.json",
+    "integrity_artifact": "/data/var/swaag-benchmarks/foreground-routing-20261015/token-count-guideline-integrity.json",
     "new": [],
     "missing": [],
     "changed": [],

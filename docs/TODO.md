@@ -13,11 +13,20 @@ Current source includes native selector-output counting, positive partial-histor
 recovery, preparation-scoped reuse of identical successful evidence selections,
 linear new-event search indexing, and history reuse keyed to available capabilities
 rather than schema-loading/acknowledgement presentation.
-The complete combined 275dce1 source suite passes 1,347 tests with three optional skips;
-main's 195 package files are byte-identical to that immutable test source.
-Both installed packages now match all 195 source files and each other; two
-installed smoke checks pass on each host. No active test environment was changed
-while its process was running.
+The combined tokenizer/message-boundary and history-level release passes 1,378
+tests with three optional skips. Both installed packages match all 195 files in
+the immutable tested source and each other, and two installed smoke checks pass
+on each host. No active test environment was changed while its process ran.
+
+The [history-level correction](history-selector-levels-2026-10-16.md) explains
+supported summaries with selected exact passages; it passes eleven live path
+checks but the accumulated BF16 turn still times out. The [tokenizer correction](tokenizer-admission-correction-2026-10-16.md)
+rejects invalid/zero nonempty counts before admission and preserves native
+message-boundary whitespace in the actual counted/generated prompt. Both native
+real-shell checks now pass, with first message/tool progress around nineteen to
+twenty-three seconds. Complex small-model scoped routing, concise wording and
+durable foreground-question reconciliation remain separate failed/open gates.
+The installed full-context reduction diagnostic is recorded in that study.
 
 Real preservation batching reduces four calls to one while retaining eight critical
 facts; native output counting is verified against both deployed tokenizers. A fitting

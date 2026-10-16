@@ -1,3 +1,22 @@
+# October sixteenth tokenizer admission and small-model follow-up
+
+The [tokenizer correction](tokenizer-admission-correction-2026-10-16.md) fixes a
+reproduced empty-token response that admitted a nonempty 406,884-token request.
+The exact saved request is now rejected by both compatible fallback accounting
+and exact native counting, without generation. The complete combined source
+passes 1,378 tests with three optional skips and is installed byte-for-byte on
+both hosts. Native message-boundary preservation also passes real success/failure
+shell tests, with first message/tool progress around nineteen to twenty-three
+seconds. The [history-level and small-model
+study](history-selector-levels-2026-10-16.md) distinguishes eleven successful
+classification checks from a failed long-turn deadline. A guarded genuine
+nine-billion GPU model executes real message-plus-shell actions in about nineteen
+seconds, but fails multiple complex routing/closure cases and is not promoted.
+The earlier compatibility probes inherited inappropriate provider settings; a
+correct native follow-up and installed verification are reported in the tokenizer
+study. No production model selection, context configuration or admission reserve
+is changed.
+
 # October fifteenth and sixteenth foreground correctness and history recovery
 
 The [foreground study](foreground-routing-and-retries-2026-10-15.md) and

@@ -5,7 +5,7 @@
 The complete current /data/infra/docs/guidlines corpus was reread, including all
 167 original recordings. Infra revision:
 867200e2c493f0c38c06e1121db3ad620f585b79. The latest integrity check at
-03:40:07 UTC on October 16 accounts for 246 physical files, 234 unique whole-file contents,
+05:13:59 UTC on October 16 accounts for 246 physical files, 234 unique whole-file contents,
 12 byte-identical aliases, and all 108 reading pages. No new unread files,
 missing files or changed source hashes were found. Infra's canonical preservation
 checker reports originals=167 coverage=167 preserved=167 errors=0.
@@ -29,6 +29,16 @@ This updates the **current comparison**, not the historical contents of the
 [October 14 correction record](guideline-corrections-2026-10-14.md).
 The current implementation and experimental trajectory are documented in
 [foreground-routing-and-retries-2026-10-15.md](foreground-routing-and-retries-2026-10-15.md).
+
+The October sixteenth follow-up reproduces and corrects a violation of the hard
+context-admission requirement: an invalid empty tokenizer response previously
+counted a substantial prompt as zero. The exact oversized request now fails
+admission under both compatible fallback and native exact counting. Complete
+regression results, the native behavioral follow-up and deployment are recorded
+in [the tokenizer study](tokenizer-admission-correction-2026-10-16.md). The
+[small-model/controller results](history-selector-levels-2026-10-16.md) retain
+both actual command success and semantic routing failures; they authorize no
+model-topology redesign or small-model promotion.
 
 ## Current comparison
 

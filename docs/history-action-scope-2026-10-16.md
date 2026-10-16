@@ -60,3 +60,34 @@ foreground question still open. All worker/control/file negative checks pass.
 The combined source is eligible for installation after the stopped-process and
 private rollback gates; the next installed original-receipt trial is separately
 recorded in the foreground study.
+
+
+The combined code is installed on Jetson and Thor from main 07f8b5d. All 195
+package files match the immutable tested source and match across hosts. The final
+installed smoke checks pass two cases per host (Jetson 2.52 seconds; Thor 0.51
+seconds). The canonical installer temporarily removes test-only packages; their
+previous exact versions are restored before final smoke testing. Both model
+services retain their original PIDs and zero restarts. The installed original-receipt
+continuation starts at sequence 6168 on the existing production BF16 endpoint with
+staged discovery and the explicitly diagnostic twelve-round allowance. It is a
+functional gate, not a paired latency comparison or a production-default change.
+
+The installed BF16 continuation fails with `BudgetExceededError` after 1,151.63
+seconds (supervisor 1,156.02), sequences 6168–6504. Thirteen returned calls consume
+1,082.65 model seconds. Its last ordinary action compilation requires 19,363
+tokens against the actual 8,192-token server limit. It performs no new actor or
+tool action, emits no new semantic progress, and leaves the already answered
+foreground question open. Worker inventory/run counts, controls and both file
+hashes remain unchanged. The schema/acknowledgement reuse correction is not
+reached: no version-two history projection is produced in this turn.
+
+The trace isolates earlier semantic selection failures. The tool-result selector
+retains almost every line of a 19,309-character historical status record, including
+punctuation and repetitive history; its initial wide output truncates, followed by
+two successful but nearly all-preserving splits. All four history windows then
+receive `protect/unresolved_work`. The history selector prompt describes factual
+material as protected while failing to explain the already supported `important`
+and `ordinary` summary-plus-verbatim paths. Frozen read-only prompt studies test
+these two decisions separately; neither candidate is adopted merely because it
+produces valid JSON. Evidence is in `installed-history-scope-long-status-analysis.json`,
+`selector-relevance-study`, and `history-selector-levels-study` under the study root.
