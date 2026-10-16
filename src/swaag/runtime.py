@@ -7742,10 +7742,9 @@ class AgentRuntime:
 
         selected_ids: list[str] = []
         semantic_ok = True
-        pending: list[list[tuple[str, str, str]]] = [
-            candidates[offset : offset + 16]
-            for offset in range(0, len(candidates), 16)
-        ]
+        # Start with every exact unit. The semantic call measures the complete
+        # input and output allowance; only actual overflow splits this source.
+        pending: list[list[tuple[str, str, str]]] = [candidates]
         while pending:
             chunk = pending.pop(0)
             ids = [line_id for line_id, _role, _line in chunk]
@@ -7753,6 +7752,10 @@ class AgentRuntime:
                 f"{line_id} [{role}] {line}"
                 for line_id, role, line in chunk
             )
+            # Every ID may legitimately be necessary. Reserve a measured all-ID
+            # response plus concise reason framing before admitting a larger batch.
+            complete_selection = stable_json_dumps({"selected_line_ids": ids, "reason": ""}, indent=2)
+            selection_output_tokens = max(48, self._counter(state).count_text(complete_selection).tokens + 32)
             request = SemanticCallRequest(
                 kind="history_verbatim_selection",
                 system_instruction=(
@@ -7777,8 +7780,8 @@ class AgentRuntime:
                     )
                 ],
                 contract=history_verbatim_selection_contract(ids),
-                minimum_output_tokens=48,
-                desired_output_tokens=192,
+                minimum_output_tokens=selection_output_tokens,
+                desired_output_tokens=max(192, selection_output_tokens),
                 include_prompt_instructions=False,
             )
             try:
