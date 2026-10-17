@@ -344,16 +344,24 @@ def completion_verdict_contract() -> ContractSpec:
 def completion_evaluation_contract(
     evidence_sources: Iterable[tuple[str, str]] = (),
 ) -> ContractSpec:
+    # Factor identical branches without widening the allowed (kind, id) pairs.
+    # Repeating the full object schema per historical source made retained
+    # conversations pay an ever-growing grammar and context-budget cost.
+    sources_by_kind: dict[str, list[str]] = {}
+    for source_kind, source_id in evidence_sources:
+        identifiers = sources_by_kind.setdefault(source_kind, [])
+        if source_id not in identifiers:
+            identifiers.append(source_id)
     request_variants = [
         _closed_object(
             {
                 "source_kind": {"type": "string", "enum": [source_kind]},
-                "source_id": {"type": "string", "enum": [source_id]},
+                "source_id": {"type": "string", "enum": source_ids},
                 "purpose": _string(),
                 "literal_query": _string(),
             }
         )
-        for source_kind, source_id in evidence_sources
+        for source_kind, source_ids in sources_by_kind.items()
     ]
     properties: dict[str, dict[str, Any]] = {
         "complete": _boolean(),

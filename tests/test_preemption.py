@@ -1130,7 +1130,7 @@ def test_orchestrator_lightweight_interaction_is_one_model_call_and_starts_no_wo
     assert "Hello, can you hear me?" in prompt
     assert "central SWAAG orchestrator" in prompt
     assert "Ordinary conversation is your own job" in prompt
-    assert "Current whole-system state" in prompt
+    assert '"active_workers"' in prompt
     state = orchestrator.create_or_load_user_session("SWAAG Orchestrator")
     visible = [
         message

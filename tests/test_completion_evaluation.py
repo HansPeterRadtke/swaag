@@ -31,6 +31,23 @@ def test_completion_contract_exposes_only_real_evidence_source_identities():
     assert "literal_query" in request_item["required"]
 
 
+def test_completion_sources_share_schema_without_allowing_cross_kind_identifiers():
+    sources = [("foreground_history", f"session:{n}") for n in range(120)]
+    sources += [("runtime_telemetry", "audit:1"), ("foreground_history", "session:0")]
+    schema = completion_evaluation_contract(iter(sources)).json_schema
+    variants = schema["properties"]["evidence_requests"]["items"]["anyOf"]
+    assert len(variants) == 2
+    allowed = {(kind, source_id) for variant in variants
+        for kind in variant["properties"]["source_kind"]["enum"]
+        for source_id in variant["properties"]["source_id"]["enum"]}
+    assert allowed == set(sources)
+    assert ("runtime_telemetry", "session:0") not in allowed
+    assert ("foreground_history", "audit:1") not in allowed
+    for variant in variants:
+        assert variant["additionalProperties"] is False
+        assert set(variant["required"]) == {"source_kind", "source_id", "purpose", "literal_query"}
+
+
 def test_completion_prompt_contains_goal_candidate_and_evidence(make_config):
     builder = PromptBuilder(make_config())
     assembly = builder.build_completion_evaluation_prompt(
