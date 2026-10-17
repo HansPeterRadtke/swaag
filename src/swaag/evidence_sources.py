@@ -99,6 +99,10 @@ RUNTIME_TELEMETRY_EVENT_TYPES = frozenset({
     "model_tokenize_requested", "model_tokenize_result", "token_estimate_used",
     "inference_request_requeued", "model_retry_scheduled", "model_backend_activity",
     "agent_action_rejected", "model_call_failed", "model_call_preempted",
+    # These describe context preparation, not new tool observations or effects.
+    # The immutable originals remain available through the exact audit source.
+    "selection_output_counted", "semantic_reduction_output_exhausted",
+    "tool_result_projected", "tool_result_projection_reused",
 }) | RUNTIME_AUDIT_SEMANTIC_EVENT_TYPES
 
 

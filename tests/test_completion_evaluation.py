@@ -1208,3 +1208,51 @@ def test_both_completion_modes_preserve_task_lifecycle_and_scope(make_config):
         assert 'foreground status answer' in lifecycle[0].text
         assert 'Hold the release until I explicitly approve it.' in assembly.prompt_text
         assert ''.join(c.text for c in assembly.components) == assembly.prompt_text
+
+
+def test_context_preparation_audit_is_recoverable_without_replaying_it_as_task_evidence(make_config):
+    from dataclasses import asdict
+    from swaag.evidence_sources import RuntimeTelemetryEvidenceProvider, runtime_telemetry_reference
+    runtime = AgentRuntime(make_config(model__context_limit=32000), model_client=_CompletionClient([]))
+    state = runtime.create_or_load_user_session('Do not publish until I approve.')
+    first = runtime.history.record_event(state, 'budget_checked', {
+        'kind':'action', 'prompt_mode':'standard', 'cap_error':'', 'budget_report':{'tokens':123}})
+    payloads = {
+        'selection_output_counted': {'text_sha256':'a'*64, 'text_chars':20, 'tokens':7,
+            'exact':True, 'strategy':'provider'},
+        'semantic_reduction_output_exhausted': {'kind':'history_verbatim_selection',
+            'hierarchical_depth':2, 'input_tokens':100, 'reserved_response_tokens':32,
+            'finish_reason':'length'},
+        'tool_result_projected': {'source_event_sequence':first.sequence,
+            'source_event_hash':first.hash, 'tool_name':'runtime_snapshot_lookup',
+            'target_tokens':64, 'original_tokens':1000, 'projected_tokens':50,
+            'overflow_tokens':200, 'projection':'DERIVED_CONTEXT_VIEW_819'},
+        'tool_result_projection_reused': {'source_event_sequence':first.sequence,
+            'source_event_hash':first.hash, 'projection_event_sequence':first.sequence,
+            'target_tokens':64, 'projected_tokens':50},
+    }
+    audits = [runtime.history.record_event(state, kind, payload) for kind,payload in payloads.items()]
+    user = runtime.history.record_event(state, 'message_added', {'message':{
+        'role':'user', 'content':'Do not publish until I approve.',
+        'created_at':first.timestamp, 'metadata':{}}})
+    effect = runtime.history.record_event(state, 'tool_result', {
+        'tool_name':'shell', 'raw_input':{}, 'validated_input':{},
+        'output':{'receipt':'EXACT_EFFECT_RECEIPT_820'}, 'success':True})
+    last = runtime.history.record_event(state, 'budget_checked', {
+        'kind':'action', 'prompt_mode':'standard', 'cap_error':'', 'budget_report':{'tokens':456}})
+    events = runtime.history.read_history(state.session_id)
+    rows = runtime._completion_historical_evidence_rows(events)
+    assert 'DERIVED_CONTEXT_VIEW_819' not in json.dumps(rows)
+    assert 'Do not publish until I approve.' in json.dumps(rows)
+    assert 'EXACT_EFFECT_RECEIPT_820' in json.dumps(rows)
+    assert all(any(row.get('sequence') == event.sequence for row in rows) for event in (user,effect))
+    inventory = runtime._completion_evidence_source_inventory(state, evidence_rows=[], historical_events=events)
+    source = next(x for x in inventory if x['source_kind'] == 'runtime_telemetry')
+    provider = RuntimeTelemetryEvidenceProvider()
+    recovered = provider.reexpand(config=runtime.config, state=state, source=source)
+    assert json.loads(recovered['text']) == [asdict(e) for e in [first,*audits,last]]
+    # Old references freeze their event types and must not silently absorb new audits.
+    old_source = runtime_telemetry_reference([first,last])
+    old = provider.reexpand(config=runtime.config, state=state, source=old_source)
+    assert json.loads(old['text']) == [asdict(first),asdict(last)]
+    assert runtime.history.read_history(state.session_id) == events
