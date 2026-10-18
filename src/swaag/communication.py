@@ -36,6 +36,7 @@ from cryptography.hazmat.primitives.asymmetric.utils import decode_dss_signature
 from cryptography.hazmat.primitives.ciphers.aead import AESGCM
 
 from swaag.orchestrator_stream import OrchestratorEventCursor
+from swaag.orchestrator_delivery import current_started_worker_status, status_suffix
 from swaag.preemption import RunCancellationRequested
 from swaag.orchestrator_operations import OrchestratorOperations, OperationCanceled
 from swaag.capacity import QueueCapacityError, positive_capacity, require_capacity
@@ -2187,7 +2188,11 @@ class CommunicationService:
                             if event.payload.get("control_id") == receipt["control_id"]:
                                 seen = True
                         elif seen and event.event_type == "turn_finished":
-                            return {"session_id": state.session_id, "answer": str(event.payload["assistant_text"])}
+                            return self._deliver_orchestrator_reply(
+                                state, str(event.payload["assistant_text"]),
+                                turn_finished_sequence=event.sequence,
+                                fresh=False,
+                            )
                         elif seen and event.event_type == "turn_cancelled":
                             cancelled = True
                     if not seen or turn is None:
@@ -2269,14 +2274,76 @@ class CommunicationService:
                         target_changed=False,
                         reply=result.assistant_text,
                     )
-                return {
-                    "session_id": state.session_id,
-                    "answer": result.assistant_text,
-                }
+                return self._deliver_orchestrator_reply(
+                    state, result.assistant_text, fresh=True,
+                )
             except Exception as exc:
                 for runtime, request in preemptions:
                     self._fail_runtime_preemption(runtime, request, exc)
                 raise
+
+    def _deliver_orchestrator_reply(
+        self, state, answer: str, *, turn_finished_sequence: int | None = None,
+        fresh: bool = False,
+    ) -> dict[str, Any]:
+        """Persist a final read-only worker-state update and replay it exactly.
+
+        Only the actual successful worker-start tool receipts in this turn can
+        contribute. The independent model evaluation and originally committed
+        assistant answer are not changed. A terminal lifecycle observation
+        is never presented as proof of an unverified external side effect.
+        """
+        runtime = self.orchestrator_runtime
+        history = runtime.history
+        if turn_finished_sequence is None:
+            terminal = next(history.iter_history_reverse(
+                state.session_id, event_types=("turn_finished",)
+            ), None)
+            if terminal is None:
+                raise RuntimeError("No durable turn_finished before orchestrator delivery")
+            turn_finished_sequence = terminal.sequence
+        for event in history.iter_history(
+            state.session_id, start_sequence=turn_finished_sequence + 1,
+        ):
+            if event.event_type == "turn_started":
+                break
+            if (event.event_type == "orchestrator_worker_status_delivery"
+                    and event.payload.get("turn_finished_sequence") == turn_finished_sequence):
+                return {"session_id": state.session_id,
+                        "answer": answer + str(event.payload["suffix"])}
+        if not fresh or not answer.strip():
+            return {"session_id": state.session_id, "answer": answer}
+        # Do not append prose that would invalidate a model-selected exact-word
+        # response contract or change an explicitly silent completion.
+        for event in history.iter_history_reverse(
+            state.session_id, end_sequence=turn_finished_sequence,
+            event_types=("agent_action_selected", "turn_started"),
+        ):
+            if event.event_type == "turn_started":
+                break
+            action = event.payload.get("action", {})
+            if isinstance(action, dict) and (
+                action.get("silent_completion") or
+                (isinstance(action.get("response_constraints"), dict)
+                 and action["response_constraints"].get("exact_word_count") is not None)
+            ):
+                return {"session_id": state.session_id, "answer": answer}
+        observations = current_started_worker_status(
+            history.iter_history_reverse(
+                state.session_id, end_sequence=turn_finished_sequence,
+                event_types=("tool_result", "turn_started"),
+            ),
+            self.workers.store.get,
+        )
+        suffix = status_suffix(observations)
+        if not suffix:
+            return {"session_id": state.session_id, "answer": answer}
+        history.record_event(state, "orchestrator_worker_status_delivery", {
+            "turn_finished_sequence": turn_finished_sequence,
+            "suffix": suffix,
+            "observations": observations,
+        })
+        return {"session_id": state.session_id, "answer": answer + suffix}
 
     def submit(self, session_ref: str | None, message: str, *, source: str = "communication") -> CommunicationRequest:
         session_id = self.runtime.resolve_session_ref(session_ref, latest_if_none=True)
