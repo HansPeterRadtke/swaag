@@ -240,8 +240,10 @@ def _validate_plan_spec(raw: Any) -> dict[str, Any] | None:
 class OrchestrationControlTool(Tool):
     name = "orchestration_control"
     description = (
-        "Create, inspect, revise, execute, and cancel the durable background-worker "
-        "dependency graph owned by the user-facing SWAAG orchestrator."
+        "Manage the user-facing orchestrator's durable background-worker graph. "
+        "For a complete plan_spec with workers, use operation=plan.apply to create and "
+        "optionally start the graph in one call. The create operation only creates "
+        "an EMPTY draft without plan_spec; use node.add for incremental nodes."
     )
     usage_guidance = (
         "Use this for orchestration, not ordinary worker task work. Semantically decide "
