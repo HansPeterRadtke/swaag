@@ -1,7 +1,7 @@
 [project]
 name = "swaag"
 version = "0.1.0"
-description = "SWAAG: a selfhosted working autonomous agent for a local llama.cpp server"
+description = "SWAAG: self-hosted autonomous agent with configurable model serving"
 readme = "README.md"
 requires-python = ">=3.11"
 authors = [{ name = "Hans-Peter Radtke" }]
