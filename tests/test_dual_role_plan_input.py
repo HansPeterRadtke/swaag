@@ -89,3 +89,18 @@ def test_plan_apply_empty_node_list_never_accepted():
     args["plan_spec"]["nodes"] = []
     with pytest.raises(ToolValidationError, match="non-empty"):
         OrchestrationControlTool().validate(args)
+
+
+def test_model_visible_catalog_explains_complete_plan_apply_without_schema_extension(make_config):
+    from swaag.prompts import PromptBuilder
+    from swaag.schema_portability import assert_portable_json_schema
+
+    tool = OrchestrationControlTool()
+    rendered = PromptBuilder(make_config()).render_tool_catalog(
+        [(tool.name, tool.description, tool.input_schema, tool.usage_guidance)]
+    )
+    assert "operation=plan.apply" in rendered
+    assert "EMPTY draft" in rendered
+    assert "never use create to apply" in rendered
+    assert "description" not in tool.input_schema["properties"]["operation"]
+    assert_portable_json_schema(tool.input_schema, schema_name="orchestration_control")
