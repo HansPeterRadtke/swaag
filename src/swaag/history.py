@@ -399,6 +399,7 @@ class HistoryStore:
         *,
         start_sequence: int = 1,
         end_sequence: int | None = None,
+        event_types: Iterable[str] = (),
     ) -> Iterator[HistoryEvent]:
         sql = (
             "SELECT session_id, sequence, event_id, timestamp, event_type, payload_json, "
@@ -408,6 +409,10 @@ class HistoryStore:
         if end_sequence is not None:
             sql += " AND sequence<=?"
             params.append(end_sequence)
+        selected_types = tuple(dict.fromkeys(event_types))
+        if selected_types:
+            sql += " AND event_type IN (" + ",".join("?" for _ in selected_types) + ")"
+            params.extend(selected_types)
         sql += " ORDER BY sequence"
         with self._sqlite_connect() as connection:
             for row in connection.execute(sql, params):
@@ -1153,6 +1158,44 @@ class HistoryStore:
             raise ValueError("limit must be positive")
         end_sequence = start_sequence + limit - 1
         return list(self.iter_history(session_id, start_sequence=start_sequence, end_sequence=end_sequence))
+
+    def read_history_event_page(self, session_id: str, *, start_sequence: int,
+                                limit: int, event_types: Iterable[str]) -> tuple[list[HistoryEvent], int]:
+        """Read selected event types while advancing across one exact sequence page.
+
+        Filter before decoding payloads: transport cursors do not consume the
+        large model prompts and responses stored between their delivery events.
+        Capture the indexed end before querying so an append racing the read is
+        left for the next page, never skipped. Canonical integrity is still
+        reconciled by the same journal/index fence used by full history reads.
+        """
+        if start_sequence <= 0 or limit <= 0:
+            raise ValueError("start_sequence and limit must be positive")
+        selected_types = tuple(dict.fromkeys(event_types))
+        if not selected_types:
+            raise ValueError("event_types must not be empty")
+        if not self.history_path(session_id).exists():
+            # Archived history retains its existing integrity-checked reader.
+            events = self.read_history_window(session_id, start_sequence=start_sequence, limit=limit)
+            return ([event for event in events if event.event_type in selected_types],
+                    events[-1].sequence + 1 if events else start_sequence)
+        self._ensure_session_indexed(session_id)
+        through = self._sqlite_complete_through(session_id)
+        if through < start_sequence:
+            return [], start_sequence
+        page_end = min(through, start_sequence + limit - 1)
+        events = list(self._iter_history_sqlite(session_id, start_sequence=start_sequence,
+            end_sequence=page_end, event_types=selected_types))
+        return events, page_end + 1
+
+    def has_history_at_or_after(self, session_id: str, sequence: int) -> bool:
+        """Check a live cursor without loading an unrelated event payload."""
+        if sequence <= 0:
+            raise ValueError("sequence must be positive")
+        if not self.history_path(session_id).exists():
+            return bool(self.read_history_window(session_id, start_sequence=sequence, limit=1))
+        self._ensure_session_indexed(session_id)
+        return self._sqlite_complete_through(session_id) >= sequence
 
     def latest_tool_result_projection(
         self,

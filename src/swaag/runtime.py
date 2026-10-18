@@ -859,6 +859,16 @@ class AgentRuntime:
         )
 
         runtime_capabilities = self.tool_runtime_capabilities(state.session_id)
+        compact_foreground_action = (
+            self.config.communication.compact_foreground_actions
+            and not allow_silent_completion and not self._single_responsibility_mode()
+            and "runtime_snapshot_lookup" in self.config.tools.enabled
+            and callable(runtime_capabilities.get("system_snapshot_provider"))
+            and self.config.prompts.action_template == "agent_action_user.txt"
+            and self.config.prompts.lean_action_template == "agent_action_lean_user.txt"
+            and self.config.prompts.standard_system_template == "system_standard.txt"
+            and self.config.prompts.lean_system_template == "system_lean.txt"
+        )
         base_capability_index = self.tools.capability_index(
             self.config,
             runtime_capabilities=runtime_capabilities,
@@ -1036,7 +1046,8 @@ class AgentRuntime:
                     continue
 
                 contract = agent_action_contract(
-                    tool_specs, allow_silent_completion=allow_silent_completion
+                    tool_specs, allow_silent_completion=allow_silent_completion,
+                    compact_foreground=compact_foreground_action,
                 )
                 self._heartbeat(
                     state, phase="context_compilation", substate="collecting_inputs",
@@ -1056,6 +1067,7 @@ class AgentRuntime:
                     "delegated_specs": [asdict(spec) for spec in delegated_specs],
                     "contract": asdict(agent_action_contract(
                         history_tool_specs, allow_silent_completion=allow_silent_completion,
+                        compact_foreground=compact_foreground_action,
                     )),
                 }, indent=None))
                 prepared = self._prepare_action_call(
@@ -1068,10 +1080,14 @@ class AgentRuntime:
                     contract=contract, validation_feedback=validation_feedback,
                     minimum_output_tokens=action_minimum_output_tokens,
                     require_user_acknowledgement=require_user_acknowledgement,
+                    compact_foreground=compact_foreground_action,
                 )
                 budget_reports.append(prepared.report)
 
                 def validate(payload: dict[str, Any]) -> AgentAction:
+                    if compact_foreground_action:
+                        from swaag.action import expand_compact_foreground_action
+                        payload = expand_compact_foreground_action(payload)
                     payload = self._repair_question_disclosures(payload)
                     payload = self._repair_declared_response_constraints(
                         state,
@@ -1237,19 +1253,20 @@ class AgentRuntime:
                     "occurrence": occurrence,
                 },
             )
-            self.history.record_event(
-                state,
-                "agent_status",
-                {
-                    "action_index": action_index,
-                    "just_happened": selected_action.status.just_happened,
-                    "situation": selected_action.status.situation,
-                    "action": selected_action.status.action,
-                    "reason": selected_action.status.reason,
-                    "importance": selected_action.status.importance,
-                    "importance_rank": selected_action.status.importance_rank,
-                },
-            )
+            if not compact_foreground_action:
+                self.history.record_event(
+                    state,
+                    "agent_status",
+                    {
+                        "action_index": action_index,
+                        "just_happened": selected_action.status.just_happened,
+                        "situation": selected_action.status.situation,
+                        "action": selected_action.status.action,
+                        "reason": selected_action.status.reason,
+                        "importance": selected_action.status.importance,
+                        "importance_rank": selected_action.status.importance_rank,
+                    },
+                )
             for question in selected_action.questions:
                 self.history.record_event(
                     state,
@@ -2200,6 +2217,7 @@ class AgentRuntime:
         validation_feedback: str,
         minimum_output_tokens: int | None = None,
         require_user_acknowledgement: bool = False,
+        compact_foreground: bool = False,
         history_action_scope: str | None = None,
         assembly_builder: Callable[
             [list[Message], list[PromptComponent], dict[int, str], str], PromptAssembly
@@ -2284,6 +2302,7 @@ class AgentRuntime:
                 require_user_acknowledgement=require_user_acknowledgement,
                 foreground=("runtime_snapshot_lookup" in self.config.tools.enabled
                     and callable(self.tool_runtime_capabilities(state.session_id).get("system_snapshot_provider"))),
+                compact_foreground=compact_foreground,
             )
 
         def record_action_compilation(

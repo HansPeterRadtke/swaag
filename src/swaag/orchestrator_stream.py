@@ -27,8 +27,9 @@ class OrchestratorEventCursor:
         if self.finished:
             return []
         visible = []
-        events = self.history.read_history_window(
+        events, next_sequence = self.history.read_history_event_page(
             self.session_id, start_sequence=self.next_sequence, limit=128,
+            event_types=("control_message_processed", "turn_started", "turn_finished", "assistant_progress"),
         )
         for event in events:
             self.next_sequence = event.sequence + 1
@@ -52,9 +53,9 @@ class OrchestratorEventCursor:
                     "control_id": self.control_id, "sequence": event.sequence,
                     "assistant_text": str(event.payload["assistant_text"]),
                 })
+        if not self.finished:
+            self.next_sequence = next_sequence
         return visible
 
     def caught_up(self):
-        return self.finished or not self.history.read_history_window(
-            self.session_id, start_sequence=self.next_sequence, limit=1,
-        )
+        return self.finished or not self.history.has_history_at_or_after(self.session_id, self.next_sequence)

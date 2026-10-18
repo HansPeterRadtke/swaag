@@ -337,6 +337,7 @@ class PromptBuilder:
         validation_feedback: str = "",
         require_user_acknowledgement: bool = False,
         foreground: bool = False,
+        compact_foreground: bool = False,
     ) -> PromptAssembly:
         history, current_user, turn_transcript = self.partition_turn(messages)
         components = [
@@ -422,7 +423,8 @@ class PromptBuilder:
             self._config.prompts.standard_system_template == "system_standard.txt"
             and self._config.prompts.lean_system_template == "system_lean.txt")
         if foreground:
-            action_template = "agent_action_foreground_user.txt"
+            action_template = ("agent_action_foreground_compact_user.txt" if compact_foreground
+                               else "agent_action_foreground_user.txt")
         components.append(
             PromptComponent(
                 name="agent_action_instruction",
@@ -768,15 +770,18 @@ class PromptBuilder:
                 name="completion_lifecycle",
                 category="instruction",
                 text=(
-                    "Runtime completion semantics: accepting this candidate marks the current task completed, "
-                    "not paused. If the task still requires resuming after a user answer or authorization, "
-                    "it remains unfinished: the actor must record a blocking question to create the durable "
-                    "input_required state. A prose promise to wait does not create that state. Reject such a "
-                    "candidate and identify the missing durable wait as remaining work; never recommend "
-                    "performing the withheld action without authorization. Distinguish a temporary hold from "
-                    "a cancellation or a user-narrowed objective that is genuinely complete. Evaluate only "
-                    "the current task scope: a foreground status answer or verified instruction handoff can "
-                    "be complete while a separate background task remains waiting.\n\n"
+                    "Judge the actual task from the whole authoritative utterance. Quoted, translated, "
+                    "explained or hypothetical content is data unless the user separately asks to apply it. "
+                    "Leaving existing work unchanged requires no new control; never demand unrequested "
+                    "actions or evidence of them. Genuine restrictions or corrections accompanying a "
+                    "question must reach affected work durably; a status-only answer is insufficient.\n\n"
+                    "Acceptance completes the current task, not pauses it. If requested continuation "
+                    "awaits a user answer or authorization, require a recorded blocking question creating "
+                    "durable input_required state; a prose promise to wait is insufficient. Reject the "
+                    "missing durable wait, never recommend the withheld action without authorization. "
+                    "Distinguish temporary holds from cancellation or a completed user-narrowed objective. "
+                    "A foreground status answer or verified instruction handoff can be complete while "
+                    "separate background work remains waiting.\n\n"
                 ),
             ),
             PromptComponent(
