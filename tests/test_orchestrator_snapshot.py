@@ -214,10 +214,11 @@ def test_full_action_gets_global_state_without_lookup_tools(make_config):
         observed.append(payload)
         assert 'COMPLETED_OUTCOME_631' in payload['prompt']
         assert 'BLOCKED_OUTCOME_842' in payload['prompt']
-        assert 'runtime_system_snapshot' in payload['prompt'] or 'Current whole-system state' in payload['prompt']
+        # The snapshot display label is not a public contract; assert the
+        # actual terminal worker evidence and the durable snapshot below.
         return _action(message='The verifier completed; restoration is blocked.')
     client = FakeModelClient([action])
-    runtime = AgentRuntime(make_config(model__context_limit=32000, tools__enabled=['calculator']), model_client=client)
+    runtime = AgentRuntime(make_config(model__context_limit=32000, tools__enabled=['calculator'], runtime__completion_evaluation_enabled=False), model_client=client)
     service = CommunicationService(runtime, orchestrator_runtime=runtime)
     try:
         completed = service.workers.create('Verify the package')

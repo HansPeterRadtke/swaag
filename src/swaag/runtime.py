@@ -2903,6 +2903,7 @@ class AgentRuntime:
                             'requires evidence of that effect. A claim that work started or a restriction took '
                             'effect is false when only a pending receipt is observed. An undelivered genuine '
                             'instruction cannot be satisfied by a status reply alone. '
+                            'For a verified asynchronous handoff, prefer the current task receipt to old administrative audit records. '
                             'Use the shortest sufficient verdict reason: a routine successful reply '
                             'usually needs only two to six words. Preserve material uncertainty, '
                             'failure and actionable remaining work when more detail is necessary.\n\n'
