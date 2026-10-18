@@ -270,3 +270,108 @@ def test_invalid_fair_weight_is_rejected_before_enqueue(tmp_path, weight):
     coordinator = _coordinator(tmp_path)
     with pytest.raises(ValueError, match="finite and positive"):
         _enqueue(coordinator, "invalid-weight", fair_weight=weight)
+
+def test_secondary_backend_admission_waits_for_foreground_and_preserves_queue(tmp_path):
+    """A foreground turn blocks new worker prefill without canceling its queued request."""
+    busy = threading.Event()
+    busy.set()
+    coordinator = InferenceRequestCoordinator(
+        tmp_path, backend_key="qwen38-secondary",
+        capacity_resolver=lambda: (1, "test"), poll_seconds=0.005,
+        admission_guard=busy.is_set,
+    )
+    item = _enqueue(coordinator, "deferred-worker")
+    outcomes = []
+    thread = threading.Thread(target=lambda: outcomes.append(
+        coordinator.acquire(item.request_id, timeout_seconds=2)
+    ))
+    thread.start()
+    time.sleep(0.035)
+    assert thread.is_alive()
+    assert coordinator.get(item.request_id).status == "queued"
+    assert coordinator.active_count() == 0
+    busy.clear()
+    thread.join(timeout=2)
+    assert not thread.is_alive()
+    assert len(outcomes) == 1 and outcomes[0].status == "running"
+    assert outcomes[0].queue_wait_seconds >= 0.03
+    coordinator.complete(item.request_id)
+
+
+def test_secondary_backend_admission_observes_cancellation_while_foreground_busy(tmp_path):
+    busy = threading.Event()
+    busy.set()
+    coordinator = InferenceRequestCoordinator(
+        tmp_path, backend_key="qwen38-secondary",
+        capacity_resolver=lambda: (1, "test"), poll_seconds=0.005,
+        admission_guard=busy.is_set,
+    )
+    item = _enqueue(coordinator, "cancel-during-foreground")
+    cancellation = threading.Event()
+    failures = []
+    def waiting():
+        try:
+            coordinator.acquire(item.request_id, cancel_check=cancellation.is_set,
+                                timeout_seconds=2)
+        except ModelCallPreempted as exc:
+            failures.append(str(exc))
+    thread = threading.Thread(target=waiting)
+    thread.start()
+    time.sleep(0.03)
+    cancellation.set()
+    thread.join(timeout=2)
+    assert len(failures) == 1
+    assert coordinator.get(item.request_id).status == "queued"
+    coordinator.cancel(item.request_id, reason="test cancellation")
+
+
+def test_secondary_backend_admission_guard_timeout_is_terminal(tmp_path):
+    coordinator = InferenceRequestCoordinator(
+        tmp_path, backend_key="qwen38-secondary",
+        capacity_resolver=lambda: (1, "test"), poll_seconds=0.005,
+        admission_guard=lambda: True,
+    )
+    item = _enqueue(coordinator, "timed-out")
+    with pytest.raises(TimeoutError, match="Timed out waiting for inference request"):
+        coordinator.acquire(item.request_id, timeout_seconds=0.025)
+    assert coordinator.get(item.request_id).status == "failed"
+
+def test_priority_wait_notices_external_queue_cancellation(tmp_path):
+    foreground = threading.Event()
+    foreground.set()
+    coordinator = InferenceRequestCoordinator(
+        tmp_path, backend_key="qwen38-secondary",
+        capacity_resolver=lambda: (1, "test"), poll_seconds=0.005,
+        admission_guard=foreground.is_set,
+    )
+    item = _enqueue(coordinator, "external-cancel")
+    failures = []
+    def waiting():
+        try:
+            coordinator.acquire(item.request_id, timeout_seconds=2)
+        except RuntimeError as exc:
+            failures.append(str(exc))
+    thread = threading.Thread(target=waiting)
+    thread.start()
+    time.sleep(0.025)
+    coordinator.cancel(item.request_id, reason="test cancellation")
+    thread.join(timeout=1)
+    assert not thread.is_alive()
+    assert len(failures) == 1 and "cancelled" in failures[0]
+    assert coordinator.get(item.request_id).status == "cancelled"
+
+
+def test_priority_guard_failure_is_recorded_in_worker_queue(tmp_path):
+    def broken_foreground_state():
+        raise OSError("unavailable foreground state")
+    coordinator = InferenceRequestCoordinator(
+        tmp_path, backend_key="qwen38-secondary",
+        capacity_resolver=lambda: (1, "test"), poll_seconds=0.005,
+        admission_guard=broken_foreground_state,
+    )
+    item = _enqueue(coordinator, "failed-guard")
+    with pytest.raises(OSError, match="unavailable foreground state"):
+        coordinator.acquire(item.request_id, timeout_seconds=1)
+    after = coordinator.get(item.request_id)
+    assert after.status == "failed"
+    assert "model admission guard failed" in after.error

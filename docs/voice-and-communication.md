@@ -240,3 +240,35 @@ tool results, newer corrections, invented counts, and a valid current numeric
 requirement. Passing backend tests are not proof of acceptable end-to-end
 latency or physical-phone operation; a fresh real transport test is needed
 after deployment.
+
+## October eighteenth: cooperative foreground priority across Thor model processes
+
+The user-facing Coder model and Qwen3.8 Q8 worker model occupy different
+llama.cpp servers but share Thor's GPU. SWAAG previously prioritized model
+requests only within an individual model URL. The communication service now
+installs an optional inference-admission guard on each configured worker
+backend *different from the foreground backend*. The guard checks pending
+accepted foreground operations and waits before starting the next worker
+model call. It does not cancel running inference, stop model servers, change
+worker objectives, or replay tools. Existing queued inference identity,
+priority, cancellation, queue-time accounting and worker durability remain.
+The foreground Coder coordinator is never guarded by worker status.
+
+The guard reads process-local accepted foreground stream futures and the
+active ordinary foreground operation. This prevents an abandoned persisted
+operation left by an older process from permanently freezing workers. A
+foreground text/voice turn that is accepted before a worker's next model
+call fences that new call; an already-running Qwen3.8 inference is not
+preempted by this change. The final concurrency race before admission is
+not a cross-process atomic transaction. Actual cross-backend cancellation
+and replay remain a separate, measured requirement.
+
+Regressions cover wait/release, queue retention, cancellation while waiting,
+finite timeout, foreground bypass, and same-backend backward compatibility.
+An isolated real-backend smoke test on Thor held an accepted foreground
+future while a genuine Qwen3.8 SWAAG worker queued. No worker model slot
+started until the foreground future completed; the same worker then
+finished a five-answer arithmetic request successfully, around twenty-eight
+seconds after release. The user-facing inference server was never stopped.
+This is verified cooperative admission, *not* yet maximum-speed real-time
+preemption or end-to-end physical-phone acceptance.

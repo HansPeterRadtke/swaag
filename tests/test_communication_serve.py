@@ -2468,3 +2468,51 @@ def test_communication_endpoint_uses_its_own_model_identity(make_config) -> None
         assert service.assistant_runtime.config.model.chat_template_kwargs == {"enable_thinking": False}
         assert config.model.chat_template_kwargs == {}
     finally: service.workers.shutdown()
+
+
+def test_cross_backend_foreground_gate_only_blocks_default_workers(make_config):
+    """A confirmed communication job fences Qwen3.8 without stalling its own Coder."""
+    from concurrent.futures import Future
+    cfg = make_config()
+    cfg.communication.enabled = True
+    cfg.model.base_url = "http://127.0.0.1:14835/v1"
+    cfg.model.model_identity = "qwen38-27b-q8-full-262k"
+    cfg.communication.model_base_url = "http://127.0.0.1:14833/v1"
+    cfg.communication.model_identity = "qwen3-coder-30b-a3b-instruct-q4-k-m"
+    service = CommunicationService.from_runtime(AgentRuntime(cfg, model_client=object()))
+    try:
+        worker_guard = service.workers.runtime.inference.admission_guard
+        assert callable(worker_guard)
+        assert service.orchestrator_runtime.inference.admission_guard is None
+        assert worker_guard() is False
+        accepted = Future()
+        with service._orchestrator_stream_lock:
+            service._orchestrator_stream_jobs["operation:test"] = (
+                {"message": "Hello", "operation_id": "test"}, accepted,
+            )
+        assert worker_guard() is True
+        accepted.set_result({"answer": "Hello"})
+        assert worker_guard() is False
+        with service._orchestrator_stream_lock:
+            service._orchestrator_stream_jobs.clear()
+        with service._orchestrator_operation_lock:
+            service._active_orchestrator_operation = "a_durable_voice_operation"
+        assert worker_guard() is True
+        with service._orchestrator_operation_lock:
+            service._active_orchestrator_operation = ""
+        assert worker_guard() is False
+    finally:
+        service.close()
+
+
+def test_coincident_worker_foreground_backend_does_not_install_guard(make_config):
+    cfg = make_config()
+    cfg.communication.enabled = True
+    cfg.model.base_url = "http://127.0.0.1:14833/v1"
+    cfg.communication.model_base_url = "http://127.0.0.1:14833/v1"
+    service = CommunicationService.from_runtime(AgentRuntime(cfg, model_client=object()))
+    try:
+        assert service.workers.runtime.inference.admission_guard is None
+        assert service.orchestrator_runtime.inference.admission_guard is None
+    finally:
+        service.close()

@@ -1349,6 +1349,15 @@ class CommunicationService:
         }
         self._validate_model_routes = bool(validate_model_routes)
         self._model_route_capability_cache: dict[str, tuple[bool, str]] = {}
+        # Cooperative GPU priority across independent llama.cpp servers:
+        # the Qwen3.8 worker backend must not *start another* inference while a
+        # foreground Coder turn is pending. Do not assume separate backend
+        # addresses represent separate physical GPUs; this is one Thor.
+        # Already-running workers finish normally; this is not cancellation.
+        foreground_backend = self.orchestrator_runtime.config.model.base_url.rstrip("/")
+        for manager in (self.workers, *self.worker_model_managers.values()):
+            if manager.runtime.config.model.base_url.rstrip("/") != foreground_backend:
+                manager.runtime.inference.admission_guard = self._foreground_model_inference_pending
         self.orchestration = OrchestrationManager(
             self.workers,
             worker_managers=self.worker_model_managers,
@@ -6043,6 +6052,20 @@ class CommunicationService:
         while True:
             systemd_notify("WATCHDOG=1", "STATUS=swaag communication service healthy")
             await asyncio.sleep(interval)
+
+    def _foreground_model_inference_pending(self) -> bool:
+        """Fence new secondary-model calls during an accepted foreground turn.
+
+        This is process-local accepted-work evidence: completed jobs are never
+        treated as outstanding, and a stale persisted operation from before a
+        restart cannot freeze unrelated workers. The stream lock also fences
+        admission while an incoming durable voice receipt is being prepared.
+        """
+        with self._orchestrator_stream_lock:
+            if any(not future.done() for _receipt, future in self._orchestrator_stream_jobs.values()):
+                return True
+        with self._orchestrator_operation_lock:
+            return bool(self._active_orchestrator_operation)
 
     def _foreground_work_busy(self) -> bool:
         if any(manager.store.list(statuses={"queued", "working", "cancellation_requested", "input_required"})
