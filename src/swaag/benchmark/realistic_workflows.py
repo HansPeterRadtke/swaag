@@ -30,6 +30,7 @@ def _spoken_quality(
     workspace: Path, prompt: str, *, necessary: list[str], alternatives: list[list[str]] | None = None,
     prior: list[Message] | None = None, min_calls: int = 0, max_calls: int | None = None,
     required_events: list[str] | None = None,
+    observed: list[str] | None = None,
 ) -> TaskScenario:
     return TaskScenario(
         prompt=prompt,
@@ -41,6 +42,7 @@ def _spoken_quality(
             expected_answer_any_of=list(alternatives or []),
             required_history_events=["agent_action_selected", *(required_events or [])],
             forbidden_tools_used=["write_file", "edit_text", "run_tests"],
+            required_tool_observations=list(observed or []),
             min_tool_calls=min_calls,
             max_tool_calls=max_calls,
             forbid_unexpected_workspace_changes=True,
@@ -72,6 +74,7 @@ def _project_recon(workspace: Path) -> TaskScenario:
         "Just get me an overview, what it does, where it stores data, and why imports aren't going through. "
         "Don't change anything yet.",
         necessary=["Harborboard", "SQLite", "SCHEMA_HOLD_42"], min_calls=2,
+        observed=["sqlite:///data/harborboard.sqlite", "SCHEMA_HOLD_42"],
         required_events=["tool_called"],
     )
 
@@ -139,7 +142,7 @@ def _larger_project_recon(workspace: Path) -> TaskScenario:
         "with? Also why isn't the current release published? Don't make changes, "
         "I just need to understand what is actually there, not the old docs.",
         necessary=["WorkshopOps", "FastAPI", "PostgreSQL", "Redis", "Svelte", "ARTIFACT_MISSING_29"],
-        min_calls=1, required_events=["tool_called"],
+        min_calls=1, observed=["ARTIFACT_MISSING_29", "PostgreSQL", "Redis", "svelte"], required_events=["tool_called"],
     )
 
 
@@ -154,6 +157,7 @@ def _project_followup(workspace: Path) -> TaskScenario:
         "Yeah, that *newer* Orion one, not the old tiny app. Check what database it uses and "
         "what's holding up the sensor feed. Just look, don't fix it.",
         necessary=["OrionStack", "PostgreSQL", "QUEUE_PAUSED_17"], min_calls=2,
+        observed=["QUEUE_PAUSED_17", "PostgreSQL"],
         required_events=["tool_called"],
         prior=[
             _history("user", "I have an old project called Orion Lite, and a current one called OrionStack. I only want read-only inspection for now.", 1),
@@ -171,6 +175,7 @@ def _source_freshness(workspace: Path) -> TaskScenario:
         "So, are the checks already green now? I saw a passing log yesterday but I don't "
         "remember if it was for this build. Have a look and tell me. No changes.",
         necessary=["queued", "release-12"], alternatives=[["unknown", "not finished", "not yet", "pending"]],
+        observed=["release-12", "queued"],
         min_calls=1, required_events=["tool_called"],
     )
 
@@ -181,7 +186,7 @@ def _corrected_instruction(workspace: Path) -> TaskScenario:
         workspace,
         "Actually, no, don't change it yet. How many days is that retention value right now? "
         "Just tell me what's in the file, that's all.",
-        necessary=["7"], min_calls=1, required_events=["tool_called"],
+        necessary=["7"], min_calls=1, required_events=["tool_called"], observed=["retention_days=7"],
         prior=[
             _history("user", "Later I want to set retention_days to 30 in configs/retention.ini.", 1),
             _history("assistant", "That proposed retention change has not been made.", 2),
@@ -269,14 +274,33 @@ def _ui_project(workspace: Path) -> TaskScenario:
         "    // BUG: selected remains the initial value, although the display changes.\n"
         "  });\n"
         "  saveButton.addEventListener('click', () => persist(selected));\n"
-        "}\nmodule.exports = { mountStatusEditor };\n"
+        "}\nif (typeof module !== 'undefined' && module.exports) { module.exports = { mountStatusEditor }; }\n"
+    ))
+    _file(workspace, "work/operator-portal/src/bootstrap.js", (
+        "document.addEventListener('DOMContentLoaded', () => {\n"
+        "  const picker = document.getElementById('jobStatus');\n"
+        "  const savedStatus = document.getElementById('savedStatus');\n"
+        "  mountStatusEditor({ picker, currentLabel: document.getElementById('statusLabel'),\n"
+        "    saveButton: document.getElementById('saveButton'),\n"
+        "    persist: value => { localStorage.setItem('operatorStatus', value);\n"
+        "      savedStatus.textContent = 'Saved: ' + value; } });\n"
+        "});\n"
     ))
     _file(workspace, "work/operator-portal/index.html", (
-        '<!doctype html><html><body><label for="jobStatus">Job status</label>'
+        '<!doctype html><html lang="en"><head><meta charset="utf-8">'
+        '<meta name="viewport" content="width=device-width, initial-scale=1">'
+        '<title>Operator Portal</title><style>'
+        'body{font:18px system-ui,sans-serif;margin:32px;max-width:600px}'
+        'label,select,button,output{display:block;margin:12px 0}'
+        'button{min-height:44px;min-width:110px}'
+        '</style></head><body><main><h1>Operator Portal</h1>'
+        '<label for="jobStatus">Job status</label>'
         '<select id="jobStatus"><option>queued</option><option>running</option><option>finished</option></select>'
-        '<div id="statusLabel" role="status" aria-live="polite"></div>'
+        '<output id="statusLabel" role="status" aria-live="polite"></output>'
         '<button id="saveButton" type="button">Save</button>'
-        '<script src="src/status-editor.js"></script></body></html>\n'
+        '<output id="savedStatus" role="status" aria-live="polite"></output>'
+        '</main><script src="src/status-editor.js"></script>'
+        '<script src="src/bootstrap.js"></script></body></html>\n'
     ))
     _file(workspace, "work/operator-portal/tests/status-editor.test.cjs", (
         "const assert = require('node:assert/strict');\n"

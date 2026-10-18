@@ -36,17 +36,28 @@ def _snapshot(workspace: Path) -> dict[str, str]:
     }
 
 
-def _events(*tools):
+def _events(*tools, observations=()):
     return [SimpleNamespace(event_type="agent_action_selected", payload={}), *(
         SimpleNamespace(event_type="tool_called", payload={"tool_name": tool})
         for tool in tools
+    ), *(
+        SimpleNamespace(event_type="tool_result", payload={"tool_name": "read_file", "output": observed})
+        for observed in observations
     )]
 
 
-def _verify(scenario, answer: str, *, before: dict[str, str], after: dict[str, str], tools=()):
+def _actual_files(scenario, *paths):
+    """Simulate observed tool output from actual fixture bytes, never the assistant's claim."""
+    return [
+        {"path": name, "text": (scenario.workspace / name).read_text(encoding="utf-8")}
+        for name in paths
+    ]
+
+
+def _verify(scenario, answer: str, *, before: dict[str, str], after: dict[str, str], tools=(), observed=()):
     return verify_benchmark_contract(
         scenario.verification_contract, assistant_text=answer, state=_state(),
-        events=_events(*tools), workspace_before=before, workspace_after=after,
+        events=_events(*tools, observations=observed), workspace_before=before, workspace_after=after,
         workspace_root=str(scenario.workspace),
     )
 
@@ -98,7 +109,8 @@ def test_typos_and_deeper_project_are_scored_from_source_not_user_prompt(tmp_pat
     assert "harbrbord" in typo.prompt and "Harborboard" not in typo.prompt
     before = _snapshot(typo.workspace)
     truth = "Harborboard uses SQLite, and imports are held for SCHEMA_HOLD_42."
-    assert _verify(typo, truth, before=before, after=before, tools=["read_file", "read_file"]).passed
+    read = _actual_files(typo, "apps/harborboard/api/storage.py", "apps/harborboard/jobs/last_run.log")
+    assert _verify(typo, truth, before=before, after=before, tools=["read_file", "read_file"], observed=read).passed
     assert not _verify(typo, "Unknown application.", before=before, after=before, tools=["read_file"]).passed
 
     deep = _catalog()["realistic_complex_project_overview"].create(tmp_path / "complex")
@@ -108,7 +120,10 @@ def test_typos_and_deeper_project_are_scored_from_source_not_user_prompt(tmp_pat
     before = _snapshot(deep.workspace)
     answer = ("WorkshopOps uses FastAPI with PostgreSQL storage, Redis workers, and a "
               "Svelte frontend. Current release is held for ARTIFACT_MISSING_29.")
-    result = _verify(deep, answer, before=before, after=before, tools=["read_file", "search_repo"])
+    observed = _actual_files(deep, "projects/workshopops/server/app.py", "projects/workshopops/server/storage.py",
+                             "projects/workshopops/worker/consumer.py", "projects/workshopops/web/package.json",
+                             "projects/workshopops/deploy/release/current.json")
+    result = _verify(deep, answer, before=before, after=before, tools=["read_file", "search_repo"], observed=observed)
     assert result.passed, result.reason
     assert not _verify(deep, "It uses Django and MySQL.", before=before, after=before, tools=["read_file"]).passed
 
@@ -122,13 +137,16 @@ def test_referent_and_correction_keep_previous_authority_without_modifying_files
         assert scenario.verification_contract.allowed_modified_files == []
         before = _snapshot(scenario.workspace)
         answer = "OrionStack uses PostgreSQL. The sensor queue is paused because of QUEUE_PAUSED_17." if "followup" in task_id else "The retention value is 7 days. I did not edit it."
-        report = _verify(scenario, answer, before=before, after=before, tools=["read_file", "read_file"])
+        relevant = (["work/orionstack/server/db.py", "work/orionstack/queue/last_state.json"]
+                    if "followup" in task_id else ["configs/retention.ini"])
+        source_evidence = _actual_files(scenario, *relevant)
+        report = _verify(scenario, answer, before=before, after=before, tools=["read_file", "read_file"], observed=source_evidence)
         assert report.passed is True
-        forbidden = _verify(scenario, answer, before=before, after=before, tools=["read_file", "edit_text"])
+        forbidden = _verify(scenario, answer, before=before, after=before, tools=["read_file", "edit_text"], observed=source_evidence)
         assert forbidden.passed is False
         assert forbidden.checks["forbidden_tools_used"] is False
         altered = before | {"unknown-project.txt": "unauthorized"}
-        corrupt = _verify(scenario, answer, before=before, after=altered, tools=["read_file", "read_file"])
+        corrupt = _verify(scenario, answer, before=before, after=altered, tools=["read_file", "read_file"], observed=source_evidence)
         assert corrupt.passed is False and corrupt.checks["allowed_modified_files"] is False
 
 
@@ -142,7 +160,12 @@ def test_inspection_oracle_rejects_plausible_but_unverified_project_summary(tmp_
     still_bad = _verify(scenario, correct, before=before, after=before, tools=[])
     assert still_bad.passed is False
     assert still_bad.checks["min_tool_calls"] is False
-    good = _verify(scenario, correct, before=before, after=before, tools=["list_files", "read_file"])
+    # A correct-sounding claim with real-but-unrelated tool results still fails.
+    irrelevant = _actual_files(scenario, "notes/old-onboarding.txt")
+    unrelated = _verify(scenario, correct, before=before, after=before, tools=["list_files", "read_file"], observed=irrelevant)
+    assert unrelated.passed is False and unrelated.checks["required_tool_observations"] is False
+    good = _verify(scenario, correct, before=before, after=before, tools=["list_files", "read_file"],
+                   observed=_actual_files(scenario, "apps/harborboard/api/storage.py", "apps/harborboard/jobs/last_run.log"))
     assert good.passed is True
 
 
@@ -151,7 +174,8 @@ def test_older_green_log_is_not_current_deployment_success(tmp_path):
     before = _snapshot(scenario.workspace)
     bad = _verify(scenario, "The release-12 checks passed yesterday.", before=before, after=before, tools=["read_file"])
     assert not bad.passed
-    good = _verify(scenario, "release-12 is still queued; the current result is unknown.", before=before, after=before, tools=["read_file"])
+    good = _verify(scenario, "release-12 is still queued; the current result is unknown.", before=before, after=before,
+                   tools=["read_file"], observed=_actual_files(scenario, "runbooks/current-status.json"))
     assert good.passed
 
 
@@ -205,7 +229,7 @@ def test_ui_fixture_is_red_then_tests_verify_real_save_behavior(tmp_path):
     report = _verify(scenario, "The Save action now persists the selected job status. Checks pass.", before=before, after=after, tools=["read_file"] * 3)
     assert report.passed, report.reason
     assert report.evidence["workspace_changes"]["changed_files"] == ["work/operator-portal/src/status-editor.js"]
-    assert (scenario.workspace / "work/operator-portal/index.html").read_text().count('aria-live="polite"') == 1
+    assert (scenario.workspace / "work/operator-portal/index.html").read_text().count('aria-live="polite"') == 2
 
 
 def test_realistic_project_read_through_actual_runtime_without_any_model_server(make_config, tmp_path):
@@ -245,3 +269,51 @@ def test_realistic_project_read_through_actual_runtime_without_any_model_server(
         workspace_root=str(scenario.workspace),
     )
     assert check.passed, check.reason
+
+
+def test_read_evidence_requires_successful_tool_output_not_model_arguments(tmp_path):
+    """An action that merely mentions the secret cannot authenticate it."""
+    scenario = _catalog()["realistic_find_project_overview"].create(tmp_path)
+    before = _snapshot(scenario.workspace)
+    answer = "Harborboard uses SQLite, and the last import is blocked by SCHEMA_HOLD_42."
+    forged = [
+        SimpleNamespace(event_type="agent_action_selected", payload={"assistant_message": answer}),
+        SimpleNamespace(event_type="tool_called", payload={"tool_name": "echo", "tool_input": {"text": "SCHEMA_HOLD_42"}}),
+        SimpleNamespace(event_type="tool_called", payload={"tool_name": "read_file", "tool_input": {"path": "README.md"}}),
+        SimpleNamespace(event_type="tool_result", payload={
+            "tool_name": "echo", "raw_input": {"text": "SCHEMA_HOLD_42", "memo": "sqlite:///data/harborboard.sqlite"},
+            "output": {"text": "unrelated"},
+        }),
+        SimpleNamespace(event_type="tool_error", payload={"error": "SCHEMA_HOLD_42"}),
+    ]
+    result = verify_benchmark_contract(
+        scenario.verification_contract, assistant_text=answer, state=_state(), events=forged,
+        workspace_before=before, workspace_after=before, workspace_root=str(scenario.workspace),
+    )
+    assert result.checks["expected_answer_contains"]
+    assert result.checks["min_tool_calls"]
+    assert not result.checks["required_tool_observations"]
+    assert sorted(result.evidence["required_tool_observations"]["missing"]) == sorted(
+        ["SCHEMA_HOLD_42", "sqlite:///data/harborboard.sqlite"]
+    )
+
+    # The actual tool output, not a new model claim, supplies both facts.
+    observed = _actual_files(scenario, "apps/harborboard/api/storage.py", "apps/harborboard/jobs/last_run.log")
+    complete = _verify(scenario, answer, before=before, after=before,
+                       tools=["read_file", "read_file"], observed=observed)
+    assert complete.passed, complete.reason
+    assert complete.evidence["required_tool_observations"]["missing"] == []
+
+
+def test_ui_browser_fixture_wires_controls_without_model_and_has_dual_import(tmp_path):
+    scenario = _catalog()["realistic_operator_portal_ui"].create(tmp_path)
+    source = (scenario.workspace / "work/operator-portal/src/status-editor.js").read_text()
+    bootstrap = (scenario.workspace / "work/operator-portal/src/bootstrap.js").read_text()
+    page = (scenario.workspace / "work/operator-portal/index.html").read_text()
+    assert "typeof module !== 'undefined'" in source
+    assert "localStorage.setItem('operatorStatus', value)" in bootstrap
+    assert "DOMContentLoaded" in bootstrap
+    assert 'src="src/status-editor.js"' in page
+    assert 'src="src/bootstrap.js"' in page
+    assert page.index('src="src/status-editor.js"') < page.index('src="src/bootstrap.js"')
+    assert 'role="status" aria-live="polite"' in page

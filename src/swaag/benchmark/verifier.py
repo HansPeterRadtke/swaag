@@ -219,6 +219,28 @@ def verify_benchmark_contract(
     if required_tools:
         checks["required_tools_used"] = all(tool in tool_names for tool in required_tools)
         evidence["required_tools_used"] = {"required": required_tools, "actual": tool_names}
+    required_observations = list(getattr(contract, "required_tool_observations", []) or [])
+    if required_observations:
+        # Only executed tools can supply evidence. Do not inspect assistant prose,
+        # model-selected arguments, or model-authored progress/summary messages.
+        raw_observations = [
+            event.payload["output"] for event in events
+            if event.event_type == "tool_result" and "output" in event.payload
+        ]
+        actual_observations = [stable_json_dumps(value, indent=None) for value in raw_observations]
+        checks["required_tool_observations"] = all(
+            any(fragment in source for source in actual_observations)
+            for fragment in required_observations
+        )
+        # Do not duplicate raw tool output into the benchmark summary; it may be
+        # large or contain private fixture material. The append-only event log is
+        # the provenance source for the underlying observations.
+        evidence["required_tool_observations"] = {
+            "required": required_observations,
+            "observed_tool_results": len(raw_observations),
+            "missing": [fragment for fragment in required_observations
+                        if not any(fragment in source for source in actual_observations)],
+        }
     forbidden_tools = list(getattr(contract, "forbidden_tools_used", []) or [])
     if forbidden_tools:
         checks["forbidden_tools_used"] = all(tool not in tool_names for tool in forbidden_tools)

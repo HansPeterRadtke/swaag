@@ -60,6 +60,9 @@ class BenchmarkVerificationContract:
     forbidden_history_events: list[str] = field(default_factory=list)
     required_event_counts: dict[str, int] = field(default_factory=dict)
     required_tools_used: list[str] = field(default_factory=list)
+    # Genuine tool observations must contain these exact, workspace-generated facts.
+    # A plausible assistant answer or a synthetic action is not source evidence.
+    required_tool_observations: list[str] = field(default_factory=list)
     forbidden_tools_used: list[str] = field(default_factory=list)
     min_tool_calls: int | None = None
     max_tool_calls: int | None = None
