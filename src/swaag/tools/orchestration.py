@@ -241,9 +241,9 @@ class OrchestrationControlTool(Tool):
     name = "orchestration_control"
     description = (
         "Manage the user-facing orchestrator's durable background-worker graph. "
-        "For a complete plan_spec with workers, use operation=plan.apply to create and "
+        "For a complete worker graph, use operation=plan.apply to create and "
         "optionally start the graph in one call. The create operation only creates "
-        "an EMPTY draft without plan_spec; use node.add for incremental nodes."
+        "an EMPTY draft; use node.add for incremental nodes."
     )
     usage_guidance = (
         "Use this for orchestration, not ordinary worker task work. Semantically decide "
