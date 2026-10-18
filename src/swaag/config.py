@@ -336,6 +336,7 @@ class CommunicationConfig:
     stream_heartbeat_seconds: float = 5.0
     initial_foreground_output_tokens: int = 0
     compact_foreground_actions: bool = False
+    direct_reply_verification: bool = False
     max_active_workers: int = 128
     max_pending_requests: int = 128
     idle_work_mode: str = "finish_only"
@@ -817,6 +818,7 @@ def _coerce_config(
         stream_heartbeat_seconds=float(data["communication"]["stream_heartbeat_seconds"]),
         initial_foreground_output_tokens=int(data["communication"]["initial_foreground_output_tokens"]),
         compact_foreground_actions=data["communication"]["compact_foreground_actions"],
+        direct_reply_verification=data["communication"]["direct_reply_verification"],
         max_active_workers=data["communication"].get("max_active_workers", 128),
         max_pending_requests=data["communication"].get("max_pending_requests", 128),
         orchestrator_priority=int(data["communication"]["orchestrator_priority"]),
@@ -1084,6 +1086,8 @@ def _coerce_config(
                            communication.initial_foreground_output_tokens)
     if not isinstance(communication.compact_foreground_actions, bool):
         raise ValueError("communication.compact_foreground_actions must be a boolean")
+    if not isinstance(communication.direct_reply_verification, bool):
+        raise ValueError("communication.direct_reply_verification must be a boolean")
     artifact_serving = communication.open_webui_artifacts
     if artifact_serving.enabled:
         parsed_artifact_url = urlparse(artifact_serving.public_base_url)
@@ -1467,6 +1471,10 @@ def _parameter_semantics(
         "communication.compact_foreground_actions": (
             "Generate only reply, tool calls, questions and response constraints for the standard foreground controller.",
             "Continuation follows validated tool presence; silent completion is disabled. No generated status report is fabricated. Worker/custom prompts, authority fences and completion verification retain their existing behavior.",
+        ),
+        "communication.direct_reply_verification": (
+            "Independently verify a first tool-free conversational reply using its already selected context and a fresh snapshot.",
+            "Requires compact_foreground_actions. Any non-approval, missing evidence, overflow or invalid verdict falls back to full completion evaluation; workers, tool actions, resumed turns and questions retain that full evaluator.",
         ),
         "communication.status_priority": (
             "Inference admission priority of status queries and finalized targeted controls.",

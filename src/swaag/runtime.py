@@ -1530,7 +1530,18 @@ class AgentRuntime:
             if has_blocking_question:
                 self._heartbeat(state, phase="waiting_for_user", detail="blocking user question", active_kind="question", active_id=str(action_index))
             try:
-                completion = (
+                completion = None
+                if (self.config.runtime.completion_evaluation_enabled
+                        and self.config.communication.direct_reply_verification
+                        and compact_foreground_action and accepted_actions == 1
+                        and not resumed_control_ids and not tool_results
+                        and not selected_action.questions and not state.open_questions
+                        and self.config.prompts.completion_evaluation_system_template == "completion_evaluation_system.txt"
+                        and self.config.prompts.completion_evaluation_template == "completion_evaluation_user.txt"):
+                    from swaag.foreground_reply_check import check_direct_reply
+                    completion = check_direct_reply(self, state, action_context=prepared,
+                        original_request=original_request, candidate=selected_action.assistant_message)
+                completion = completion or (
                     {"complete": True, "reason": "blocking user input requested", "remaining_work": []}
                     if has_blocking_question
                     else self._evaluate_completion(state, original_request=original_request, selected_action=selected_action, tool_results=tool_results)
