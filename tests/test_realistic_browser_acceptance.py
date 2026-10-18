@@ -15,7 +15,6 @@ from pathlib import Path
 
 import pytest
 
-from swaag.benchmark.realistic_workflows import realistic_benchmark_tasks
 
 
 @pytest.mark.skipif(os.environ.get("SWAAG_BROWSER_ACCEPTANCE") != "1", reason="optional physical browser acceptance")
@@ -30,9 +29,18 @@ def test_operator_portal_real_chromium_interaction(tmp_path: Path):
     driver_path = os.getenv("SWAAG_CHROMEDRIVER") or shutil.which("chromedriver")
     if not browser_path or not driver_path:
         pytest.skip("Local Chrome binary and chromedriver not both available")
-    tasks = {task.task_id: task for task in realistic_benchmark_tasks()}
-    scenario = tasks["realistic_operator_portal_ui"].create(tmp_path)
-    root = scenario.workspace / "work/operator-portal"
+    explicit_fixture = os.environ.get("SWAAG_REALISTIC_UI_FIXTURE")
+    if explicit_fixture:
+        # Use a byte-preserved fixture copied from the source host when this
+        # machine has Selenium/Chromium but not all SWAAG Python dependencies.
+        root = Path(explicit_fixture).resolve() / "work/operator-portal"
+    else:
+        from swaag.benchmark.realistic_workflows import realistic_benchmark_tasks
+        tasks = {task.task_id: task for task in realistic_benchmark_tasks()}
+        scenario = tasks["realistic_operator_portal_ui"].create(tmp_path)
+        root = scenario.workspace / "work/operator-portal"
+    assert (root / "src/status-editor.js").is_file()
+    assert (root / "src/bootstrap.js").is_file()
     handler = functools.partial(SimpleHTTPRequestHandler, directory=str(root))
     server = ThreadingHTTPServer(("127.0.0.1", 0), handler)
     server_thread = threading.Thread(target=server.serve_forever, daemon=True)
@@ -40,6 +48,10 @@ def test_operator_portal_real_chromium_interaction(tmp_path: Path):
     options = ChromeOptions()
     options.binary_location = browser_path
     options.add_argument("--headless=new")
+    if os.environ.get("SWAAG_CHROME_NO_SANDBOX") == "1":
+        # Only for isolated test binaries on machines where Chromium's own
+        # sandbox cannot be enabled; never a production browser setting.
+        options.add_argument("--no-sandbox")
     options.add_argument("--disable-dev-shm-usage")
     options.add_argument("--window-size=1000,800")
     options.add_argument("--no-first-run")
@@ -49,6 +61,10 @@ def test_operator_portal_real_chromium_interaction(tmp_path: Path):
         with tempfile.TemporaryDirectory(prefix="swaag-chrome-", dir=profile_parent) as profile:
             options.add_argument("--user-data-dir=" + profile)
             driver = Chrome(service=Service(executable_path=driver_path), options=options)
+            # A same-path JavaScript edit must be reloaded from source, not
+            # hidden behind Chromium's HTTP/script cache.
+            driver.execute_cdp_cmd("Network.enable", {})
+            driver.execute_cdp_cmd("Network.setCacheDisabled", {"cacheDisabled": True})
             target = "http://127.0.0.1:" + str(server.server_port) + "/"
 
             def run_ui_round(status: str) -> tuple[str, str, str]:

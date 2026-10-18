@@ -77,7 +77,7 @@ def test_scenarios_are_real_model_tasks_in_standard_benchmark_catalog(tmp_path):
         "realistic_find_project_with_typos", "realistic_complex_project_overview",
         "realistic_followup_project_referent", "realistic_old_log_is_not_current_status",
         "realistic_changed_mind_no_edit", "realistic_invoicehub_multifile",
-        "realistic_operator_portal_ui",
+        "realistic_operator_portal_ui", "realistic_wrenflow_large_cross_stack",
     }
     registered = {task.task_id: task for task in get_benchmark_tasks()}
     assert set(tasks) <= set(registered)
@@ -317,3 +317,49 @@ def test_ui_browser_fixture_wires_controls_without_model_and_has_dual_import(tmp
     assert 'src="src/bootstrap.js"' in page
     assert page.index('src="src/status-editor.js"') < page.index('src="src/bootstrap.js"')
     assert 'role="status" aria-live="polite"' in page
+
+
+def test_wrenflow_large_cross_stack_is_red_then_two_real_repairs_pass(tmp_path):
+    scenario = _catalog()["realistic_wrenflow_large_cross_stack"].create(tmp_path)
+    before = _snapshot(scenario.workspace)
+    assert len(before) >= 35
+    assert "projects/old-wrenflow/README.md" in before
+    assert not _command(scenario).returncode == 0
+    backend, frontend = (Path(path) for path in scenario.verification_contract.expected_file_patterns)
+    claim = "Both Python reservations and browser confirmation were repaired and all checks pass."
+    premature = _verify(scenario, claim, before=before, after=before, tools=["read_file"] * 5)
+    assert not premature.passed and premature.checks["command"] is False
+
+    py = backend.read_text()
+    assert py.count("return available - requested - 1") == 1
+    backend.write_text(py.replace("return available - requested - 1", "return available - requested"))
+    js = frontend.read_text()
+    assert js.count("    chosen.textContent = picker.value;\n") == 1
+    frontend.write_text(js.replace(
+        "    chosen.textContent = picker.value;\n",
+        "    chosen.textContent = picker.value;\n    current = picker.value;\n",
+    ))
+    assert _command(scenario).returncode == 0
+    after = _snapshot(scenario.workspace)
+    good = _verify(scenario, claim, before=before, after=after, tools=["read_file"] * 5)
+    assert good.passed, good.reason
+    assert good.evidence["workspace_changes"]["changed_files"] == [
+        "projects/wrenflow/server/reservation.py", "projects/wrenflow/web/reservation-control.js"
+    ]
+    after["projects/wrenflow/operations/production.toml"] = "unauthorized"
+    invalid = _verify(scenario, claim, before=before, after=after, tools=["read_file"] * 5)
+    assert not invalid.passed and invalid.checks["allowed_modified_files"] is False
+
+
+def test_both_action_system_prompts_are_backend_neutral_and_have_actual_agent_identity(make_config):
+    from swaag.prompts import PromptBuilder
+
+    for mode in ("standard", "lean"):
+        builder = PromptBuilder(make_config())
+        template = builder.system_text(mode)
+        assert "SWAAG" in template
+        assert "llama.cpp server" not in template
+        assert "runtime" in template.lower()
+        assert "model" in template.lower()
+        assert "guess" in template.lower() or "verified" in template.lower()
+        assert "user" in template.lower()

@@ -14,6 +14,7 @@ from swaag.benchmark.task_definitions import (
     BenchmarkVerificationContract,
     TaskScenario,
 )
+from swaag.benchmark.realistic_large_project import warehouse_scenario
 from swaag.fsops import write_text
 from swaag.types import Message
 
@@ -384,6 +385,10 @@ def realistic_benchmark_tasks() -> list[BenchmarkTaskDefinition]:
          "Find an existing invoice service, fix two related financial calculation defects, and run regression tests."),
         ("realistic_operator_portal_ui", "coding", "hard", ("programming", "realistic-code", "multifile", "ui", "repository"), _ui_project,
          "Find an existing browser UI, fix a state/save bug, and preserve accessibility checks."),
+        ("realistic_wrenflow_large_cross_stack", "coding", "extremely_hard",
+         ("programming", "realistic-code", "multifile", "ui", "cross-language", "large-source", "repository"),
+         warehouse_scenario,
+         "Explore a substantial Python/JavaScript warehouse repo and repair two independent defects."),
     )
     definitions = []
     for task_id, family, difficulty, tags, builder, description in specs:
