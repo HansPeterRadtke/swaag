@@ -210,3 +210,33 @@ The second setting was enabled on the idle production communication service at 0
 A subsequent warm authenticated public text-to-agent/TTS check returned the same correct greeting, began receiving PCM after 36.322 seconds and received the complete stream after 37.945 seconds. Its pre-snapshot preparation gap was 8.712 seconds. This separate probe consumed PCM without rendering it and deliberately sent no playback acknowledgement. It establishes public transport/agent/TTS output, not Android or physical acoustic playback. No percentile or general latency acceptance follows from either single trial. Conversational response time, cold preparation overhead, full two-stage handoff and physical-device qualification remain open. The actual speech-recognition/automatic-send/background-playback path passed in the emulator; no claim of complete guideline compliance is made.
 
 Nitro evidence is `live/android-chain-direct18.log`, `live/android-result-direct18.json`, `live/warm-public-voice18.log` and `live/warm-public-voice18.json`; Jetson evidence is `live/android-server-direct18.json`, `live/warm-public-server18.json` and `live/final-health18.json`. The production flags are also retained in the Infra host configuration. Test forwarding and ADB reverse were removed and the isolated test app was stopped. The normal phone APK remains 1.7.17 in Nitro WEB Explorer uploads; these server-only repairs require no newer app build.
+
+## October 18: spurious word-count metadata caused a multi-minute voice stall
+
+The first live test after the Qwen3-Coder model switch confirmed that Jetson
+received the audio, resident Whisper large-v3 transcribed the exact greeting,
+the turn classifier accepted the completed utterance, and SWAAG durably
+accepted it. SWAAG's action model produced a correct concise reply but also
+invented response_constraints.exact_word_count=13, despite no active user
+word-count requirement. The runtime correctly treated this model field as a
+proposal rather than authority; however, verifying the proposal replayed all
+historical messages, including three unrelated prior tool results of roughly
+one hundred thousand characters each. Its exact_word_count_repair model call
+assembled about one hundred and twenty thousand input tokens, spent minutes
+prefilling them and did not return before the isolated smoke-test timeout.
+The synthetic operation was canceled by its own durable ID; existing live
+voice services and other sessions were not canceled.
+
+Repair: send the complete original user-message history and only the most
+recent assistant dialogue needed to interpret references to the exact-count
+verifier. Do not include unrelated historical tool results as if they were
+word-count authority. The original messages and tool evidence remain
+recoverable in SWAAG's append-only history. Active user corrections and
+current request text are still included; genuine exact numeric word-count
+requirements still use the existing structured one-word-per-field enforcement.
+This addresses the large-prompt stall without silently enforcing a count
+invented by the action model. The fix has regressions covering massive stored
+tool results, newer corrections, invented counts, and a valid current numeric
+requirement. Passing backend tests are not proof of acceptable end-to-end
+latency or physical-phone operation; a fresh real transport test is needed
+after deployment.

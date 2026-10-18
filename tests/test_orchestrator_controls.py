@@ -180,6 +180,95 @@ def test_word_count_repair_receives_pending_authoritative_correction(make_config
     assert runtime._repair_exact_word_count(state,original_request=state.messages[-1].content,draft='Exact current response.',target_word_count=25)==('Exact current response.',None)
 
 
+def test_response_word_count_repair_keeps_authoritative_user_messages_without_bulky_tool_history(make_config):
+    """A hallucinated word count must not replay enormous unrelated tool output."""
+    import json
+    from swaag.types import Message
+    original = "Can you hear me? Please say hello."
+    draft = "Yes, I can hear you. Hello."
+    earlier_requirement = "Answer the earlier calculation in exactly 25 words."
+    now_removed = "That was for the earlier calculation only; return to normal answers."
+    tool_payload = "UNRELATED_PRIVATE_TOOL_OUTPUT_NOT_RESPONSE_AUTHORITY:" + ("Q" * 110_000)
+
+    def verify(payload):
+        prompt = payload["prompt"]
+        assert original in prompt
+        assert earlier_requirement in prompt
+        assert now_removed in prompt
+        assert "Yes, I can hear you. Hello." in prompt
+        assert tool_payload not in prompt
+        assert "UNRELATED_PRIVATE_TOOL_OUTPUT_NOT_RESPONSE_AUTHORITY" not in prompt
+        assert len(prompt) < 25_000, "The scoped checker must not grow with historical tool payloads"
+        return json.dumps({
+            "reason": "No active instruction requires exactly thirteen words for this new greeting.",
+            "words": None,
+        })
+
+    client = FakeModelClient([verify])
+    runtime = AgentRuntime(make_config(model__context_limit=262144), model_client=client)
+    state = runtime.create_or_load_session()
+    for text in (earlier_requirement, now_removed):
+        runtime._record_message(
+            state, Message(role="user", content=text, created_at="2026-10-13T00:00:00Z")
+        )
+    for index in range(3):
+        runtime._record_message(
+            state, Message(
+                role="tool", name="some_old_tool", content=tool_payload + str(index),
+                created_at="2026-10-13T00:00:00Z"
+            ),
+        )
+    runtime._record_message(
+        state, Message(
+            role="assistant", content="The earlier calculation is complete.",
+            created_at="2026-10-13T00:00:00Z"
+        ),
+    )
+    runtime._record_message(
+        state, Message(role="user", content=original, created_at="2026-10-18T12:16:29Z")
+    )
+    proposed = {
+        "assistant_message": draft,
+        "response_constraints": {"exact_word_count": 13},
+    }
+    result = runtime._repair_declared_response_constraints(
+        state, original_request=original, payload=proposed,
+    )
+    assert result["assistant_message"] == draft
+    assert result["response_constraints"] == {"exact_word_count": None}
+    assert len(client.requests) == 1
+    assert client.requests[0]["contract"] == "response_word_count_repair_13"
+    assert sum(1 for message in state.messages if message.role == "tool") == 3
+    assert all(tool_payload in message.content for message in state.messages if message.role == "tool")
+
+
+def test_response_word_count_repair_preserves_a_real_current_count(make_config):
+    """Scoping out tool results must not disable an exact numeric user instruction."""
+    import json
+    from swaag.types import Message
+    original = "Reply in exactly four words."
+    def verify(payload):
+        assert original in payload["prompt"]
+        return json.dumps({
+            "reason": "The current user explicitly requested four words.",
+            "words": {f"word_{i:03d}": word for i, word in
+                      enumerate(("One", "two", "three", "four"), start=1)},
+        })
+
+    runtime = AgentRuntime(make_config(model__context_limit=32000),
+                           model_client=FakeModelClient([verify]))
+    state = runtime.create_or_load_session()
+    runtime._record_message(
+        state, Message(role="user", content=original, created_at="2026-10-18T12:16:29Z")
+    )
+    result = runtime._repair_declared_response_constraints(
+        state, original_request=original,
+        payload={"assistant_message": "One two.", "response_constraints": {"exact_word_count": 4}},
+    )
+    assert result["assistant_message"] == "One two three four"
+    assert result["response_constraints"] == {"exact_word_count": 4}
+
+
 @pytest.mark.parametrize('responsibilities',[1,6])
 def test_completion_checker_receives_latest_user_correction(make_config,responsibilities):
     import json
