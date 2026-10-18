@@ -1,3 +1,7 @@
+# October eighteenth: realistic user-usage acceptance without model inference
+
+The new [realistic acceptance matrix](realistic-acceptance-2026-10-18.md) adds nine synthetic but user-style benchmark cases to the standard live-capable catalog. Offline fixtures and oracle tests prove that wrong/unobserved results fail and actual known-good coding/UI repairs pass their executable tests, **not** that SWAAG can solve them by itself. Real-model execution, held-out natural utterances, bigger programming/UI projects, actual cross-machine project inspection, and real-phone acceptance remain open. Do not equate full pytest success with those missing model-semantic and physical-device gates. Previously identified foreground latency, long-history, correction and independent-completion failures remain prior work; do not erase them from this backlog.
+
 # October fifteenth foreground delivery and review authority
 
 The [complete current guideline comparison](guideline-comparison-2026-10-15.md)

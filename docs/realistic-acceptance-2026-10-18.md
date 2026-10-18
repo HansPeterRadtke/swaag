@@ -1,0 +1,35 @@
+# Realistic usage acceptance: runnable fixtures and evidence boundary — October 18, 2026
+
+## Outcome and scope
+
+The existing catalog has meaningful live model tests for file editing, tool use, orchestration, citations, missing information and multi-step programming. It does **not** establish reliable natural conversation, large real-project takeover, remote-machine discovery, or physical-phone user experience. Legacy catalog scores with response caching, old model versions or synthetic worker states cannot be promoted to current production acceptance. Do not combine software-regression pass counts with independent LLM success rates.
+
+This change introduces nine **synthetic but natural-language** benchmark tasks in the standard `swaag.benchmark` catalog, with actual source trees and independent verifiers. They are runnable by the existing benchmark runner with a real configured model, but **no model has been called for these new tasks**. There is no `llama.cpp`, vLLM, cloud service or network dependency for their fixture/oracle unit tests. They do not require or silently start a SWAAG daemon.
+
+| Task | User-facing difficulty | Independent pass/fail evidence |
+| --- | --- | --- |
+| `realistic_identity_casual` | Casual “what are you” with no work request | Explicit SWAAG identity; no tools/worker orchestration; no writes |
+| `realistic_find_project_overview` | Inexact folder description, existing app, misleading archived prototype | Exact storage engine, production import hold, project identity from separate files; tool use and no writes |
+| `realistic_find_project_with_typos` | Misspelt project name, casual fragmented instruction | Recover exact application and import hold from files despite multiple typos, not from user-provided filename |
+| `realistic_complex_project_overview` | Find a larger multi-component web/backend/worker project amid stale docs | Source-backed FastAPI, PostgreSQL, Redis and Svelte facts, plus exact current release hold; no writes |
+| `realistic_followup_project_referent` | Follow-up reference to newer of two similarly named projects | Actual current database and queue hold, original conversational referent retained, no edits |
+| `realistic_old_log_is_not_current_status` | Previous successful run versus current queued verification | Exact current revision and queued/unknown status; cannot promote yesterday's log to current success |
+| `realistic_changed_mind_no_edit` | Earlier proposed modification withdrawn in casual follow-up | Current value from file; all write/edit/test tools forbidden and zero changed files |
+| `realistic_invoicehub_multifile` | Locate service, repair coupled VAT/preview bugs across two modules | Original unit suite demonstrably fails; after real source repair it passes; tests, migrations, archived app must stay unchanged |
+| `realistic_operator_portal_ui` | Find UI code and repair an event/state/save defect | Original Node integration suite demonstrably fails; selected status must reach Save and a11y markup checks must pass; deployment/tests immutable |
+
+All nine tasks are registered through `get_benchmark_tasks()`. The user requests omit exact file locations and hidden expected status markers. Real-model trials must use the actual production agent loop and report retained response, evidence, side effects, independent checks, model/backend identity, context, latency, seed, and failures. The benchmarks are isolated from user projects.
+
+## Offline checks completed
+
+`tests/test_realistic_workflows.py` exercises catalog registration, synthetic source layout, hidden-evidence separation, history/correction preservation, strict no-write oracles, current-versus-archived status, and both deliberately failing code/UI fixtures. For both programming tasks, an independently applied known-good repair makes the actual verification command pass; an unmodified or falsely claimed repair fails, and unrelated edits are rejected. This checks that a later live benchmark can distinguish completion from an agent's claim, not that a model can discover or implement the fix. A separate offline test injects explicitly scripted model choices through the actual `AgentRuntime` for a two-file read-only exploration, observes the real read tool results and resulting durable events, and checks the final benchmark contract. That test uses no model server; scripted choices are mechanical tool-wiring evidence, never semantic quality evidence.
+
+The frozen offline regression run on Thor passes **1,387 tests with three optional skips** after the nine scenarios and the model-free real-tool-loop test were added. Its complete captured stdout is `/data/tmp/swaag-realistic-acceptance-full-expanded-20261018.log`. Environment explicitly sets `SWAAG_RUN_LIVE=0` and a non-listening live-model URL; no model generation is involved. The two intentionally broken application fixtures failed before their known-good test repairs and passed after them. This is a software/harness gate, not a claim of real-model behavior.
+
+Python's standard library is sufficient for fixture construction and invoice verification. The UI fixture also uses the installed Node runtime (Node 18 was available on Thor), plus Python's HTMLParser for an accessibility-markup check. Neither a browser screenshot nor a physical device is part of that UI test; true layout, keyboard, and screen-reader behavior remain unqualified.
+
+## Explicitly missing acceptance, even after a clean offline test run
+
+A real model must execute these nine cases without a canned response, on fresh held-out variations, with independent scoring and adequate repeated trials. Expand the natural-utterance corpus with anonymized actual voice transcriptions, misspellings, interruptions, speech recognition errors, ambiguous pronouns, changes of mind, and mixed status/action requests. Do not publish raw private audio/transcriptions into this repository. Expand coding to larger existing repositories with issue specification, multiple defects, tests, and conflicting historical docs. Add actual browser visual/interaction checks instead of relying on the current DOM/Node checks alone. Add real multi-machine discovery: target only permitted machines, verify which host and source were inspected, handle unreachable hosts honestly, and forbid changing other projects. Add real persistent orchestrator/worker trajectories with multiple conversations, interruptions, corrections and versioned work artifacts. Cover regression of first-token, final-text and physical-phone audio latency independently.
+
+No results from this new suite should be labelled *live model success* until source-backed benchmark artifacts show actual inference, real permitted tool effects, correct source contents and independent verification. Raw tool traces, scripted completion fakes, fixture validity and successful compilation are not semantic acceptance.
