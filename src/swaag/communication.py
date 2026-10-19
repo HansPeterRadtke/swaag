@@ -1265,6 +1265,14 @@ class CommunicationService:
         # invalidates the cache using the persisted event count/hash.
         self._orchestrator_cached_state = None
         self._orchestrator_cache_lock = threading.Lock()
+        # Foreground inference copies already prepared world-state facts.
+        # Background refresh owns the expensive cross-worker durable reads.
+        self._foreground_snapshot_lock = threading.Lock()
+        self._foreground_snapshot: dict[str, Any] | None = None
+        self._foreground_snapshot_started_monotonic = 0.0
+        self._foreground_snapshot_refreshed_monotonic = 0.0
+        self._foreground_snapshot_revision: tuple | None = None
+        self._foreground_snapshot_max_age_seconds = 3.0
         artifact_cfg = runtime.config.communication.open_webui_artifacts
         self._open_webui_artifact_secret: bytes | None = None
         if artifact_cfg.enabled:
@@ -1717,6 +1725,141 @@ class CommunicationService:
         return state
 
     def _orchestrator_runtime_snapshot(self) -> dict[str, Any]:
+        """Copy the preassembled snapshot, preserving its actual observation time.
+
+        During normal service operation, background refresh performs the costly
+        history and inventory reads. Expired or unavailable snapshots force
+        a new validated observation instead of publishing unobserved facts.
+        """
+        now = time.monotonic()
+        with self._foreground_snapshot_lock:
+            cached = self._foreground_snapshot
+            refreshed = self._foreground_snapshot_refreshed_monotonic
+        if cached is not None and now - refreshed <= self._foreground_snapshot_max_age_seconds:
+            # Worker/plan terminal changes must invalidate even a one-second-old
+            # model-facing cache. Two short indexed SQLite reads are cheaper
+            # than replaying 39+ worker histories and prevent stale completion
+            # claims on the fast path.
+            if self._foreground_snapshot_revision == self._foreground_task_revision():
+                return self._foreground_live_turn_overlay(copy.deepcopy(cached))
+        fresh = self._refresh_orchestrator_snapshot()
+        return copy.deepcopy(fresh)
+
+    def _foreground_live_turn_overlay(self, snapshot: dict[str, Any]) -> dict[str, Any]:
+        """Overlay current user control and active-turn facts without replay.
+
+        Voice input can arrive while a background worker snapshot is being
+        refreshed. Controls and phase observations are a few indexed rows,
+        not a reason to read every historical worker file synchronously.
+        """
+        orchestrator = snapshot.get("orchestrator")
+        if not isinstance(orchestrator, dict) or not hasattr(self, "orchestrator_runtime"):
+            return snapshot
+        session_id = orchestrator.get("session_id")
+        if not isinstance(session_id, str) or not session_id:
+            return snapshot
+        history = self.orchestrator_runtime.history
+        active = history.read_active_run(session_id)
+        orchestrator["active_turn"] = None if active is None else {
+            key: active.get(key) for key in (
+                "run_id", "user_text", "started_at", "phase",
+                "substate", "detail", "operation_kind"
+            )
+        }
+        orchestrator["pending_user_messages"] = [
+            item for item in history.list_pending_control_messages(session_id)
+            if item.get("source") == "orchestrator_user"
+        ]
+        return snapshot
+
+    def _foreground_task_revision(self) -> tuple:
+        if not hasattr(self, "workers") or not hasattr(self, "orchestration"):
+            # Lightweight test services without canonical stores still get a
+            # copied cache; expiry always triggers their verified builder.
+            return ()
+        with self.workers.store._connect() as connection:
+            worker = connection.execute(
+                "SELECT COUNT(*), MAX(updated_at) FROM workers"
+            ).fetchone()
+            worker_rows = connection.execute(
+                "SELECT session_id, model_key FROM workers ORDER BY session_id"
+            ).fetchall()
+        with self.orchestration.store._connect() as connection:
+            plans = connection.execute(
+                "SELECT COUNT(*), MAX(updated_at), SUM(revision) FROM orchestration_plans"
+            ).fetchone()
+        # Progress and questions can change through append-only worker events
+        # without a WorkerStore status transition. Query only their *indexed
+        # cursors*, never replay the history file in the foreground thread.
+        managers = {"default": self.workers, **self.worker_model_managers}
+        groups: dict[str, tuple[object, list[str]]] = {}
+        for row in worker_rows:
+            owner = managers.get(str(row["model_key"]), self.workers)
+            history = owner.runtime.history
+            key = str(history.root)
+            if key not in groups:
+                groups[key] = (history, [])
+            groups[key][1].append(str(row["session_id"]))
+        through: list[tuple[str, int]] = []
+        worker_controls_revision: list[tuple[str, str, str, str]] = []
+        for root, (history, sessions) in sorted(groups.items()):
+            if not sessions:
+                continue
+            placeholders = ",".join("?" for _ in sessions)
+            with history._sqlite_connect() as connection:
+                cursors = connection.execute(
+                    "SELECT session_id, complete_through FROM indexed_sessions WHERE session_id IN ("
+                    + placeholders + ")", sessions
+                ).fetchall()
+                # A worker control's status can change from pending to
+                # processed without appending a history event or changing
+                # WorkerStore.updated_at. Cache invalidation must cover the
+                # exact durable receipt revisions too, not just event cursors.
+                controls = connection.execute(
+                    "SELECT session_id, control_id, status, processed_at "
+                    "FROM control_messages WHERE session_id IN ("
+                    + placeholders + ") ORDER BY session_id, control_id", sessions
+                ).fetchall()
+            # Include exact per-worker cursors, not just a sum (two changes
+            # to different sessions could cancel out).
+            cursors_by_session = {str(row["session_id"]): int(row["complete_through"]) for row in cursors}
+            through.extend((f"{root}:{sid}", cursors_by_session.get(sid, 0))
+                           for sid in sessions)
+            worker_controls_revision.extend((
+                f"{root}:{row['session_id']}", str(row["control_id"]),
+                str(row["status"]), str(row["processed_at"])
+            ) for row in controls)
+        return (int(worker[0]), str(worker[1]), int(plans[0]), str(plans[1]),
+                int(plans[2] or 0), tuple(through), tuple(worker_controls_revision))
+
+    def _refresh_orchestrator_snapshot(self) -> dict[str, Any]:
+        started = time.monotonic()
+        revision_before = self._foreground_task_revision()
+        snapshot = self._build_orchestrator_runtime_snapshot()
+        revision_after = self._foreground_task_revision()
+        with self._foreground_snapshot_lock:
+            if started >= self._foreground_snapshot_started_monotonic:
+                self._foreground_snapshot = snapshot
+                self._foreground_snapshot_started_monotonic = started
+                self._foreground_snapshot_refreshed_monotonic = time.monotonic()
+                self._foreground_snapshot_revision = (
+                    revision_before if revision_before == revision_after else None
+                )
+        return snapshot
+
+    async def _foreground_snapshot_refresh_loop(self) -> None:
+        """Precompute current worker/world data independently of voice calls."""
+        while True:
+            try:
+                await asyncio.to_thread(self._refresh_orchestrator_snapshot)
+            except asyncio.CancelledError:
+                raise
+            except Exception as exc:
+                print(f"SWAAG foreground snapshot refresh failed: {type(exc).__name__}: {exc}",
+                      file=sys.stderr, flush=True)
+            await asyncio.sleep(0.75)
+
+    def _build_orchestrator_runtime_snapshot(self) -> dict[str, Any]:
         """Exact current records, collected after any backend preemption wait.
 
         Sources are individually consistent reads, not a cross-store transaction.
@@ -6235,6 +6378,9 @@ class CommunicationService:
         try:
             self.supervisor.start()
             self.workers.reconcile_orphans()
+            # Do the first full durable read before advertising readiness.
+            # Subsequent foreground turns only copy the verified cached view.
+            await asyncio.to_thread(self._refresh_orchestrator_snapshot)
             server = await asyncio.start_server(self.handle_client, host, port)
             bound_port = (
                 int(server.sockets[0].getsockname()[1])
@@ -6256,6 +6402,10 @@ class CommunicationService:
                 asyncio.create_task(
                     self._prewarm_existing_orchestrator(),
                     name="swaag-orchestrator-history-prewarm",
+                ),
+                asyncio.create_task(
+                    self._foreground_snapshot_refresh_loop(),
+                    name="swaag-foreground-snapshot-refresh",
                 ),
                 asyncio.create_task(
                     self._watchdog_loop(), name="swaag-systemd-watchdog"

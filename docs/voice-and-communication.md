@@ -378,3 +378,45 @@ call**. Nevertheless the foreground model's request preparation and
 output-verification remained slow. This establishes the safe optimization in
 both a direct WebSocket test and an Android UI/service/audio test; it does
 not establish production-ready real-time latency.
+
+## October 19: move deterministic worker-state assembly off the voice hot path
+
+Production-backed profiling identified expensive deterministic work in
+CommunicationService._orchestrator_runtime_snapshot. It rebuilt the full
+worker/question inventory on every foreground turn. Cold profiling took
+39.334 seconds with 27.6 million Python calls: question_inventory used
+38.745 seconds, latest_communication_statuses 34.637 seconds and
+_ensure_session_indexed 31.720 seconds while 21,169 journal events were
+reverified. Warm profiler observations took 3.522 and 0.718 seconds.
+Those numbers include profiler overhead. A separate uninstrumented
+full refresh of the real production-shaped 39-worker store took 5.0 seconds.
+
+The new foreground architecture creates an exact, full read-only worker,
+plan, question, control and supervision snapshot on an independent service
+task. Initial history prewarm completes before serving user requests.
+The user-facing thread copies the already prepared snapshot, preserving
+authoritative original source records.
+
+Each cache hit performs small SQLite index checks to detect worker/plan
+status changes, exact per-worker history cursors (progress and questions),
+and exact worker control receipt state including pending versus processed.
+Foreground active-run state and pending user controls are overlaid from
+their small own canonical store. A revision change or expiry causes a fresh
+validated snapshot rather than unverified stale status assertions.
+No model call or semantic intent decision is introduced by this code.
+
+Unprofiled real-store verification: a full worker snapshot cost about
+five seconds on this run. Twenty-five subsequent foreground snapshot
+reads took 0.0586 seconds total, median 2.33 milliseconds each INCLUDING
+the canonical revision check. Copy-only median for a 100 KB prepared
+snapshot was 0.617 milliseconds over two hundred reads. These are
+component timings, not complete voice-turn latency.
+
+The previously attempted persistent filesystem timestamp shortcut for
+history validation remains rejected: Thor files can show identical
+mtime/ctime after immediate same-size alterations, so trusting those
+timestamps allowed tamper tests to fail. This version retains complete
+integrity checks and moves costly work off the user request path. The
+foregoing numbers require offline regression and live deployed validation
+before the entire voice app can be called responsive. Model choice and
+quantization are unchanged.
