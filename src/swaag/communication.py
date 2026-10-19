@@ -1585,9 +1585,6 @@ class CommunicationService:
                     "questions": inventory.get("questions", []),
                     "pending_revisions": inventory.get("pending_revisions", []),
                 })(self.orchestration_api.execute("questions.list")["inventory"]),
-                "supervision": self.orchestration_api.execute("supervision")[
-                    "supervision"
-                ],
             }
             preemptions: list[tuple[AgentRuntime, object]] = []
             orchestrator_backend = self.orchestrator_runtime.config.model.base_url.rstrip("/")
