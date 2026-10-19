@@ -573,3 +573,77 @@ class OrchestrationControlTool(Tool):
 
 
 ORCHESTRATION_TOOLS = [OrchestrationControlTool()]
+
+
+class OrchestrationDelegateTool(Tool):
+    """Model-chosen single finite worker, using the same durable plan API."""
+
+    name = "orchestration_delegate"
+    description = (
+        "Delegate one finite background worker in a compact action. Specify "
+        "the overall plan and a complete imperative worker instruction explicitly "
+        "(for example, 'Reply with exactly MARKER', not merely 'MARKER'). For multiple "
+        "workers, dependencies, continuous work or plan revisions choose "
+        "orchestration_control instead."
+    )
+    usage_guidance = (
+        "The result proves durable worker dispatch, never completion or an "
+        "external effect. Do not wait for a worker to finish merely to answer."
+    )
+    kind = "side_effect"
+    required_runtime_capability = "orchestration"
+    input_schema = {
+        "type": "object",
+        "properties": {
+            "plan_objective": {"type": "string"},
+            "worker_objective": {"type": "string"},
+            "model_key": _nullable({"type": "string"}),
+            "priority": {"type": "number"},
+            "finish_criteria": _nullable({"type": "string"}),
+            "abort_criteria": _nullable({"type": "string"}),
+            "reporting_mode": {"type": "string", "enum": ["all", "terminal", "important", "completion_only", "manual"]},
+        },
+        "required": ["plan_objective", "worker_objective", "model_key", "priority", "finish_criteria", "abort_criteria", "reporting_mode"],
+        "additionalProperties": False,
+    }
+
+    def validate(self, raw_input: dict[str, Any]) -> dict[str, Any]:
+        if not isinstance(raw_input, dict) or set(raw_input) != set(self.input_schema['required']):
+            raise ToolValidationError('Invalid compact delegation fields')
+        data = dict(raw_input)
+        for key in ('plan_objective', 'worker_objective'):
+            if not isinstance(data[key], str) or not data[key].strip():
+                raise ToolValidationError(f'{key} must be nonempty text')
+        for key in ('model_key', 'finish_criteria', 'abort_criteria'):
+            if data[key] is not None and (not isinstance(data[key], str) or not data[key].strip()):
+                raise ToolValidationError(f'{key} must be text or null')
+        if type(data['priority']) not in (int, float) or data['priority'] <= 0:
+            raise ToolValidationError('priority must be positive')
+        if data['reporting_mode'] not in ('all', 'terminal', 'important', 'completion_only', 'manual'):
+            raise ToolValidationError('invalid reporting mode')
+        data['priority'] = float(data['priority'])
+        return data
+
+    def execute(self, validated_input: dict[str, Any], context: ToolContext) -> ToolExecutionResult:
+        api = context.runtime_capabilities.get('orchestration')
+        if api is None:
+            raise RuntimeError('No orchestration capability bound')
+        data = validated_input
+        spec = _validate_plan_spec({
+            'objective': data['plan_objective'],
+            'scheduling_mode': 'sequential',
+            'max_parallel': 1,
+            'reporting_mode': data['reporting_mode'],
+            'resource_limits_json': '{}',
+            'nodes': [{'key': 'primary', 'completion_mode': 'natural',
+                       'objective': data['worker_objective'], 'priority': data['priority'],
+                       'model_key': data['model_key'], 'finish_criteria': data['finish_criteria'],
+                       'abort_criteria': data['abort_criteria'], 'resources_json': '{}'}],
+            'edges': [], 'start': True,
+        })
+        output = cast(OrchestrationApi, api).execute('plan.apply', {'plan_spec': spec})
+        return ToolExecutionResult(self.name, output,
+                                   'orchestration_delegate result: ' + stable_json_dumps(output, indent=2))
+
+
+ORCHESTRATION_TOOLS.append(OrchestrationDelegateTool())
