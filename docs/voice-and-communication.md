@@ -304,3 +304,40 @@ invented numerical word count, so it did not exercise the fused-count branch
 in live inference. That branch has fake-model regression coverage and still
 requires a full production-history smoke test before latency improvements can
 be claimed. This change is server-side; no Android APK rebuild is required.
+
+### October 19 actual production-history audio acceptance
+
+After deploying the integrated source, an isolated synthetic microphone
+utterance was streamed to the live Jetson WebSocket, passed the resident
+Whisper large-v3 final transcription, the natural silence detector,
+semantic turn-completion classifier and automatic user-turn commit. The
+retained production SWAAG orchestrator replied through Qwen3-Coder and
+LuxTTS returned actual PCM frames, the correct final answer and terminal
+audio events. Total session-to-audio-complete time was **53.633 seconds**;
+first returned PCM began at **52.046 seconds** and the exact final
+transcription arrived at **4.9 seconds**. The result is in
+`/data/tmp/voice-basic-check-20261018/result.json` on Jetson. This
+shows functioning live server communication, not acceptable conversational
+latency or physical-phone microphone/speaker acceptance.
+
+The real production-history trace is especially important: the Coder again
+invented exact_word_count=13 for “Can you hear me? Please say hello.”
+The new independent combined checker responded with
+`direct_reply_sufficient=true` and `declared_word_count_supported=false`.
+The durable event `response_constraint_repaired` rejected this unsupported
+model-authored count without an additional model call. The first action
+prompt still contained about 13,268 estimated tokens and took 13.377
+seconds of model time. The independent combined check used about 8,381
+input tokens and took 9.051 seconds. Preparation and transport remained
+substantial; the goal of genuinely responsive speech is not met.
+
+A separate isolated test of the previously dormant one-call
+`generate_orchestrator_interaction` gate demonstrated a promising
+1.69-second simple greeting and 0.82-second explicit worker-start routing,
+but it **incorrectly returned route=respond** for the mixed request
+“Can you hear me, and also create a worker to fix the Android voice app?”
+It falsely promised to initiate that work without performing a handoff.
+A hypothetical request also exhausted its output budget. Therefore this
+gate is **not safe to enable as a bypass** for the authoritative full
+action controller without stronger semantic acceptance tests, reliable
+operation receipts, and independent fallbacks. No router bypass was deployed.
