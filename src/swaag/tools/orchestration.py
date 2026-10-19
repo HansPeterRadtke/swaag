@@ -251,7 +251,11 @@ class OrchestrationControlTool(Tool):
         "current plan before revising it. For plan.apply, supply the complete "
         "plan_spec, set the unrelated top-level completion_mode to null, and "
         "never use create to apply an existing plan_spec. Node completion "
-        "modes belong inside plan_spec.nodes. Mechanical dependency predicates "
+        "modes belong inside plan_spec.nodes. For each node, model_key means "
+        "the exact configured worker ROUTE KEY: use null or 'default' for the "
+        "default worker, or a named key in the system model_routing inventory. "
+        "Never put a model ID/alias from requested_model_id into model_key. "
+        "Mechanical dependency predicates "
         "may be executed directly; semantic branch conditions remain your decision."
     )
     kind = "stateful"

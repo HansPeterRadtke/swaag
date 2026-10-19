@@ -1764,6 +1764,15 @@ class CommunicationService:
             "captured_at": utc_now_iso(),
             "consistency": "per-source observations; workers may change during collection or generation",
             "model_routing": {
+                "available_worker_model_keys": ["default", *sorted(
+                    key for key in self.worker_model_managers if key != "default"
+                )],
+                "worker_model_key_rule": (
+                    "For a background plan node, model_key is a configured route key, "
+                    "never requested_model_id. Use null or 'default' for the "
+                    "default_worker model, or one of available_worker_model_keys "
+                    "for an explicitly configured named route."
+                ),
                 # Distinguish this very foreground Coder session from the
                 # Qwen3.8 default worker: a model answering 'which model?'
                 # must not infer an unknown model name from an opaque URL or
