@@ -341,3 +341,40 @@ A hypothetical request also exhausted its output budget. Therefore this
 gate is **not safe to enable as a bypass** for the authoritative full
 action controller without stronger semantic acceptance tests, reliable
 operation receipts, and independent fallbacks. No router bypass was deployed.
+
+### October 19 full Android emulator chain against deployed SWAAG
+
+A real Android instrumentation test was repeated after deployment, using the
+existing version 1.7.17 application, a synthetic PCM microphone fixture,
+the actual started foreground service and backgrounded Activity, an
+isolated local TLS/SSH test transport, Jetson's production ASR and WebSocket
+server, the live Coder foreground orchestrator, and Nitro's LuxTTS output
+played through emulator AudioTrack. The test passed: transcription matched
+"Can you hear me? Please say hello.", the automatic edit/commit/ACK path
+cleared the composer, background playback completed, and the returned
+assistant said "Yes, I can hear you. Hello." All generated emulator
+transport helpers were shut down and the ADB reverse mapping removed.
+The test report is on Nitro at
+`/data/tmp/voice-guideline-repair-20261019/live-emulator/result.json`.
+
+This was **not** a fast interaction. Android reported 56.035 seconds to its
+acknowledged-submission screen condition and 118.986 seconds from its test
+starting point until successful background playback and UI confirmation.
+The server's own logged session (identified by its privacy-preserving
+conversation hash) reached ASR final after about ten seconds from WebSocket
+session opening, and recorded about 56.326 seconds of SWAAG/model wall time
+before LuxTTS. Android's system ActivityTaskManager logged approximately
+24.646 seconds to display the test app's MainActivity on this emulator,
+compared with shorter but still multi-second display times on previous test
+runs. The UI timing is an emulator observation, not evidence of equivalent
+latency on the user's physical phone. No new phone APK is necessary for the
+server-side verifier repair; the physical phone still needs acceptance.
+
+The live SWAAG durable trace also showed the model inventing
+`exact_word_count=10`, and the fused independent verifier correctly
+returned `direct_reply_sufficient=true` and
+`declared_word_count_supported=false`. There was **no third word-count model
+call**. Nevertheless the foreground model's request preparation and
+output-verification remained slow. This establishes the safe optimization in
+both a direct WebSocket test and an Android UI/service/audio test; it does
+not establish production-ready real-time latency.
