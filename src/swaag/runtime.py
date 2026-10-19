@@ -6747,12 +6747,18 @@ class AgentRuntime:
         disclosure = snapshot is not None and "runtime_snapshot_lookup" in self.config.tools.enabled
         if disclosure:
             from swaag.snapshot_view import snapshot_prompt_view
+            from swaag.foreground_world_view import foreground_world_view
             current_user = next((message for message in reversed(state.messages)
                                  if message.role == "user"), None)
-            prompt_snapshot = snapshot_prompt_view(snapshot, local["runtime_system_snapshot_sequence"],
-                current_user_text=current_user.content if current_user is not None else None,
-                current_user_sequence=(current_user.metadata.get("source_message_event_sequence")
-                                       if current_user is not None else None))
+            is_foreground = (self.config.communication.compact_foreground_actions
+                             and callable(self.tool_runtime_capabilities(state.session_id).get("orchestration")))
+            if is_foreground:
+                prompt_snapshot = foreground_world_view(snapshot, local["runtime_system_snapshot_sequence"])
+            else:
+                prompt_snapshot = snapshot_prompt_view(snapshot, local["runtime_system_snapshot_sequence"],
+                    current_user_text=current_user.content if current_user is not None else None,
+                    current_user_sequence=(current_user.metadata.get("source_message_event_sequence")
+                                           if current_user is not None else None))
             local["worker_question_inventory_prompt_view"] = prompt_snapshot.get("worker_question_inventory")
         else:
             prompt_snapshot = snapshot

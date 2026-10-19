@@ -1884,6 +1884,9 @@ class CommunicationService:
         }
         pending = self.orchestrator_runtime.history.list_pending_control_messages(state.session_id)
         managers = {"default": self.workers, **self.worker_model_managers}
+        from swaag.foreground_world_builder import build_active_worker_reports, build_active_plan_graphs
+        active_worker_reports = build_active_worker_reports(workers, managers)
+        active_plan_graphs = build_active_plan_graphs(plans, self.orchestration.store)
         worker_controls = []
         for worker in workers:
             owner = managers.get(worker.model_key, self.workers)
@@ -1944,6 +1947,8 @@ class CommunicationService:
                 "or completion of the requested effect. latest_model_status is a worker report, not verified effects."
             ),
             "worker_controls": worker_controls,
+            "active_worker_reports": active_worker_reports,
+            "active_plan_graphs": active_plan_graphs,
             "active_workers": [
                 asdict(worker) for worker in workers
                 if worker.status not in WORKER_TERMINAL_STATES
