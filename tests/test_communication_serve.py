@@ -2516,3 +2516,65 @@ def test_coincident_worker_foreground_backend_does_not_install_guard(make_config
         assert service.orchestrator_runtime.inference.admission_guard is None
     finally:
         service.close()
+
+
+def test_foreground_snapshot_is_assembled_once_and_copied_during_voice_turn():
+    """The model-facing hot path must not rebuild worker journals each read."""
+    import threading
+    from swaag.communication import CommunicationService
+    service = object.__new__(CommunicationService)
+    service._foreground_snapshot_lock = threading.Lock()
+    service._foreground_snapshot = None
+    service._foreground_snapshot_started_monotonic = 0.0
+    service._foreground_snapshot_refreshed_monotonic = 0.0
+    service._foreground_snapshot_max_age_seconds = 3.0
+    called = []
+    def build():
+        called.append(True)
+        return {"captured_at": "observed", "workers": [{"worker_id": "worker-1", "status": "completed"}]}
+    service._build_orchestrator_runtime_snapshot = build
+    first = service._orchestrator_runtime_snapshot()
+    assert len(called) == 1
+    first["workers"][0]["status"] = "fabricated"
+    for _ in range(15):
+        current = service._orchestrator_runtime_snapshot()
+        assert current["workers"][0]["status"] == "completed"
+    assert len(called) == 1, "Cached status reads must only copy, not rebuild"
+
+
+def test_foreground_snapshot_expiration_rechecks_verified_facts():
+    import threading
+    import time
+    from swaag.communication import CommunicationService
+    service = object.__new__(CommunicationService)
+    service._foreground_snapshot_lock = threading.Lock()
+    service._foreground_snapshot = None
+    service._foreground_snapshot_started_monotonic = 0.0
+    service._foreground_snapshot_refreshed_monotonic = 0.0
+    service._foreground_snapshot_max_age_seconds = 3.0
+    observed = []
+    service._build_orchestrator_runtime_snapshot = lambda: (
+        observed.append(len(observed) + 1) or {"revision": observed[-1]}
+    )
+    assert service._orchestrator_runtime_snapshot()["revision"] == 1
+    assert service._orchestrator_runtime_snapshot()["revision"] == 1
+    service._foreground_snapshot_refreshed_monotonic = time.monotonic() - 4
+    assert service._orchestrator_runtime_snapshot()["revision"] == 2
+    assert len(observed) == 2
+
+
+def test_failed_foreground_snapshot_rebuild_never_reuses_expired_state():
+    import threading
+    import time
+    from swaag.communication import CommunicationService
+    service = object.__new__(CommunicationService)
+    service._foreground_snapshot_lock = threading.Lock()
+    service._foreground_snapshot = {"status": "old"}
+    service._foreground_snapshot_started_monotonic = 1
+    service._foreground_snapshot_refreshed_monotonic = time.monotonic() - 6
+    service._foreground_snapshot_max_age_seconds = 3.0
+    def failed():
+        raise OSError("worker observation unavailable")
+    service._build_orchestrator_runtime_snapshot = failed
+    with pytest.raises(OSError, match="worker observation unavailable"):
+        service._orchestrator_runtime_snapshot()
