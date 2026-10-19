@@ -2454,10 +2454,127 @@ def test_a2a_agent_card_signature_verifies(make_config, monkeypatch):
 
 def test_communication_endpoint_uses_its_own_model_identity(make_config) -> None:
     config = make_config(); config.communication.enabled = True
+    config.model.thinking_mode = "enabled"
     config.model.profile_name = "main-27b"; config.model.model_identity = "main-27b"; config.model.remote_context_limit_fallback = 8192
+    config.communication.model_chat_template_kwargs = {"enable_thinking": False}
     config.communication.model_base_url = "http://127.0.0.1:14832/v1"; config.communication.model_profile_name = "fast-model"; config.communication.model_identity = "fast-model"; config.communication.remote_context_limit_fallback = 32768
     service = CommunicationService.from_runtime(AgentRuntime(config, model_client=object()))
     try:
         model = service.orchestrator_runtime.config.model
         assert (model.base_url, model.profile_name, model.model_identity, model.remote_context_limit_fallback) == ("http://127.0.0.1:14832/v1", "fast-model", "fast-model", 32768)
+        assert model.chat_template_kwargs == {"enable_thinking": False}
+        assert model.thinking_mode == "server_default"
+        assert config.model.thinking_mode == "enabled"
+        assert service.assistant_runtime.config.model.chat_template_kwargs == {"enable_thinking": False}
+        assert config.model.chat_template_kwargs == {}
     finally: service.workers.shutdown()
+
+
+def test_cross_backend_foreground_gate_only_blocks_default_workers(make_config):
+    """A confirmed communication job fences Qwen3.8 without stalling its own Coder."""
+    from concurrent.futures import Future
+    cfg = make_config()
+    cfg.communication.enabled = True
+    cfg.model.base_url = "http://127.0.0.1:14835/v1"
+    cfg.model.model_identity = "qwen38-27b-q8-full-262k"
+    cfg.communication.model_base_url = "http://127.0.0.1:14833/v1"
+    cfg.communication.model_identity = "qwen3-coder-30b-a3b-instruct-q4-k-m"
+    service = CommunicationService.from_runtime(AgentRuntime(cfg, model_client=object()))
+    try:
+        worker_guard = service.workers.runtime.inference.admission_guard
+        assert callable(worker_guard)
+        assert service.orchestrator_runtime.inference.admission_guard is None
+        assert worker_guard() is False
+        accepted = Future()
+        with service._orchestrator_stream_lock:
+            service._orchestrator_stream_jobs["operation:test"] = (
+                {"message": "Hello", "operation_id": "test"}, accepted,
+            )
+        assert worker_guard() is True
+        accepted.set_result({"answer": "Hello"})
+        assert worker_guard() is False
+        with service._orchestrator_stream_lock:
+            service._orchestrator_stream_jobs.clear()
+        with service._orchestrator_operation_lock:
+            service._active_orchestrator_operation = "a_durable_voice_operation"
+        assert worker_guard() is True
+        with service._orchestrator_operation_lock:
+            service._active_orchestrator_operation = ""
+        assert worker_guard() is False
+    finally:
+        service.close()
+
+
+def test_coincident_worker_foreground_backend_does_not_install_guard(make_config):
+    cfg = make_config()
+    cfg.communication.enabled = True
+    cfg.model.base_url = "http://127.0.0.1:14833/v1"
+    cfg.communication.model_base_url = "http://127.0.0.1:14833/v1"
+    service = CommunicationService.from_runtime(AgentRuntime(cfg, model_client=object()))
+    try:
+        assert service.workers.runtime.inference.admission_guard is None
+        assert service.orchestrator_runtime.inference.admission_guard is None
+    finally:
+        service.close()
+
+
+def test_foreground_snapshot_is_assembled_once_and_copied_during_voice_turn():
+    """The model-facing hot path must not rebuild worker journals each read."""
+    import threading
+    from swaag.communication import CommunicationService
+    service = object.__new__(CommunicationService)
+    service._foreground_snapshot_lock = threading.Lock()
+    service._foreground_snapshot = None
+    service._foreground_snapshot_started_monotonic = 0.0
+    service._foreground_snapshot_refreshed_monotonic = 0.0
+    service._foreground_snapshot_max_age_seconds = 3.0
+    called = []
+    def build():
+        called.append(True)
+        return {"captured_at": "observed", "workers": [{"worker_id": "worker-1", "status": "completed"}]}
+    service._build_orchestrator_runtime_snapshot = build
+    first = service._orchestrator_runtime_snapshot()
+    assert len(called) == 1
+    first["workers"][0]["status"] = "fabricated"
+    for _ in range(15):
+        current = service._orchestrator_runtime_snapshot()
+        assert current["workers"][0]["status"] == "completed"
+    assert len(called) == 1, "Cached status reads must only copy, not rebuild"
+
+
+def test_foreground_snapshot_expiration_rechecks_verified_facts():
+    import threading
+    import time
+    from swaag.communication import CommunicationService
+    service = object.__new__(CommunicationService)
+    service._foreground_snapshot_lock = threading.Lock()
+    service._foreground_snapshot = None
+    service._foreground_snapshot_started_monotonic = 0.0
+    service._foreground_snapshot_refreshed_monotonic = 0.0
+    service._foreground_snapshot_max_age_seconds = 3.0
+    observed = []
+    service._build_orchestrator_runtime_snapshot = lambda: (
+        observed.append(len(observed) + 1) or {"revision": observed[-1]}
+    )
+    assert service._orchestrator_runtime_snapshot()["revision"] == 1
+    assert service._orchestrator_runtime_snapshot()["revision"] == 1
+    service._foreground_snapshot_refreshed_monotonic = time.monotonic() - 4
+    assert service._orchestrator_runtime_snapshot()["revision"] == 2
+    assert len(observed) == 2
+
+
+def test_failed_foreground_snapshot_rebuild_never_reuses_expired_state():
+    import threading
+    import time
+    from swaag.communication import CommunicationService
+    service = object.__new__(CommunicationService)
+    service._foreground_snapshot_lock = threading.Lock()
+    service._foreground_snapshot = {"status": "old"}
+    service._foreground_snapshot_started_monotonic = 1
+    service._foreground_snapshot_refreshed_monotonic = time.monotonic() - 6
+    service._foreground_snapshot_max_age_seconds = 3.0
+    def failed():
+        raise OSError("worker observation unavailable")
+    service._build_orchestrator_runtime_snapshot = failed
+    with pytest.raises(OSError, match="worker observation unavailable"):
+        service._orchestrator_runtime_snapshot()

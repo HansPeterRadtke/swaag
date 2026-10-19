@@ -1,10 +1,143 @@
 """Mechanical audit bulk must remain recoverable without crowding out task state."""
 import json
-from dataclasses import asdict
+from dataclasses import asdict, replace
 from swaag.runtime import AgentRuntime
 from swaag.evidence_sources import RuntimeTelemetryEvidenceProvider, RuntimeAuditEvidenceProvider, runtime_telemetry_reference
 from tests.test_completion_evaluation import _completed_action
 from tests.test_question_lifecycle import ask
+
+
+def test_history_reduction_cannot_replace_fresh_controls_and_receipts(make_config):
+    from tests.test_agent_action_loop import FakeModelClient
+    from swaag.types import Message
+
+    class Client(FakeModelClient):
+        def tokenize(self, text):
+            return (len(text) + 3) // 4
+
+    def respond(payload):
+        prompt = payload['prompt']
+        if payload['contract'] == 'evidence_projection':
+            assert 'FRESH_PENDING_CONTROL_943' not in prompt
+            assert 'FRESH_DELIVERY_RECEIPT_944' not in prompt
+            assert 'CURRENT_REQUEST_945' not in prompt.split('Exact durable evidence:', 1)[1]
+            assert 'Do not repeat or summarize those separately supplied inputs' in prompt
+            assert 'Do not issue a completion verdict' in prompt
+            return json.dumps({'projection': 'Earlier restriction: keep the report private.'})
+        assert payload['contract'] == 'completion_evaluation'
+        assert 'FRESH_PENDING_CONTROL_943' in prompt
+        assert 'FRESH_DELIVERY_RECEIPT_944' in prompt
+        assert 'CURRENT_REQUEST_945' in prompt
+        return json.dumps({'complete': False, 'reason': 'The control is still pending.',
+                           'remaining_work': ['Report its pending state accurately.'],
+                           'evidence_requests': []})
+
+    client = Client([respond] * 30)
+    runtime = AgentRuntime(make_config(model__context_limit=8000,
+        tools__enabled=['runtime_snapshot_lookup']), model_client=client)
+    state = runtime.create_or_load_session()
+    for index in range(24):
+        runtime._record_message(state, Message(role='user', created_at='then',
+            content=f'Turn {index}: Keep the report private. ' + ('Exact earlier evidence. ' * 60)))
+        runtime.history.record_event(state, 'turn_started', {'turn_index': index + 1, 'user_text': 'Earlier turn'})
+        runtime.history.record_event(state, 'runtime_system_snapshot', {'snapshot': {'captured_at': str(index)}})
+    request = 'Did the control take effect? CURRENT_REQUEST_945'
+    runtime._record_message(state, Message(role='user', created_at='now', content=request))
+    runtime.history.record_event(state, 'turn_started', {'turn_index': 25, 'user_text': request})
+    snapshot = {'captured_at': 'now', 'active_workers': [], 'worker_controls': [{
+        'worker_id': 'active', 'pending_controls': [{'message': 'FRESH_PENDING_CONTROL_943'}],
+        'delivery_receipts': [{'receipt_id': 'FRESH_DELIVERY_RECEIPT_944', 'status': 'pending'}]}]}
+    runtime.bind_tool_runtime_capability(state.session_id, 'system_snapshot_provider', lambda: snapshot)
+    result = runtime._evaluate_completion(state, original_request=request,
+        selected_action=replace(_completed_action(), assistant_message='The control took effect.'), tool_results=[])
+    assert result['complete'] is False
+    assert any(r['contract'] == 'evidence_projection' for r in client.requests)
+    assert client.requests[-1]['contract'] == 'completion_evaluation'
+
+
+def test_foreground_completion_can_reduce_history_with_large_exact_source_catalog(make_config):
+    from tests.test_agent_action_loop import FakeModelClient
+    from swaag.types import Message
+
+    class Client(FakeModelClient):
+        def tokenize(self, text):
+            return (len(text) + 3) // 4
+
+    def respond(payload):
+        if payload['contract'] == 'evidence_projection':
+            assert f'current turn execution begins at sequence {current_turn.sequence}' in payload['prompt']
+            assert 'candidate reply is supplied separately' in payload['prompt']
+            return json.dumps({'projection': 'Earlier user restriction: do not publish.'})
+        assert payload['contract'] == 'completion_evaluation'
+        return json.dumps({'complete': True, 'reason': 'Requested greeting supplied.',
+                           'remaining_work': [], 'evidence_requests': []})
+
+    client = Client([respond] * 30)
+    runtime = AgentRuntime(make_config(model__context_limit=8000,
+        tools__enabled=['runtime_snapshot_lookup']), model_client=client)
+    state = runtime.create_or_load_session()
+    for index in range(32):
+        runtime.history.record_event(state, 'turn_started', {'turn_index': index + 1, 'user_text': 'Earlier turn'})
+        runtime._record_message(state, Message(role='user', created_at='then',
+            content=f'Turn {index}: Do not publish. ' + ('Exact retained user evidence. ' * 40)))
+        runtime.history.record_event(state, 'runtime_system_snapshot', {'snapshot': {'captured_at': str(index)}})
+    current_turn = runtime.history.record_event(state, 'turn_started', {'turn_index': 33, 'user_text': 'Say hello.'})
+    runtime.bind_tool_runtime_capability(state.session_id, 'system_snapshot_provider',
+        lambda: {'captured_at': 'now', 'active_workers': [], 'terminal_workers': []})
+    result = runtime._evaluate_completion(state, original_request='Say hello.',
+        selected_action=replace(_completed_action(), assistant_message='Hello.'), tool_results=[])
+    assert result['complete'] is True
+    assert any(r['contract'] == 'evidence_projection' for r in client.requests)
+    assert client.requests[-1]['contract'] == 'completion_evaluation'
+
+
+def test_runtime_snapshot_serialization_preserves_exact_state_without_pretty_printing(make_config):
+    runtime = AgentRuntime(make_config(), model_client=object())
+    state = runtime.create_or_load_session()
+    snapshot = {
+        "captured_at": "2026-10-16T07:30:14Z",
+        "active_workers": [{"worker_id": "worker_1", "task": "  Keep\nall exact wording: café.  "}],
+        "worker_controls": [],
+        "orchestrator": {"pending_user_messages": [{"message": "Don't start it yet."}]},
+        "supervision": {"running": True, "heartbeat_is_computation_evidence": False},
+    }
+    runtime.bind_tool_runtime_capability(state.session_id, "system_snapshot_provider", lambda: snapshot)
+    source = next(s for s in runtime._runtime_context_sources(state)
+                  if s.name == "runtime_system_snapshot")
+    assert json.loads(source.text) == snapshot
+    assert len(source.text) < len(json.dumps(snapshot, indent=2))
+    event = next(e for e in runtime.history.read_history(state.session_id)
+                 if e.event_type == "runtime_system_snapshot")
+    assert event.payload["snapshot"] == snapshot
+
+
+def test_runtime_projection_accounting_is_recoverable_without_recursive_prompt_growth(make_config):
+    runtime = AgentRuntime(make_config(), model_client=object())
+    state = runtime.create_or_load_session()
+    events = [runtime.history.record_event(state, event_type, {
+        "source_name": "runtime_system_snapshot", "source_locator": {"sequence": 7},
+        "source_sha256": "source", "objective_sha256": "objective",
+        "source_tokens": 5000, "previous_tokens": 5000, "target_tokens": 800,
+        "projected_tokens": 100, "overflow_tokens": 39,
+        "projection": "Exact selected state: the worker is pending, not started.",
+        "reason": "Exact failed projection reason.",
+        field: {"measurements": ["RECURSIVE_PROJECTION_ACCOUNTING"] * 2000},
+    }) for event_type, field in [
+        ("runtime_context_projected", "projection_budget_report"),
+        ("runtime_context_projection_skipped", "budget_report"),
+    ]]
+    rows = runtime._completion_historical_evidence_rows(events)
+    assert "RECURSIVE_PROJECTION_ACCOUNTING" not in json.dumps(rows)
+    for event in events:
+        row = next(r for r in rows if r.get("sequence") == event.sequence)
+        for field in ["projection", "reason", "source_name", "source_locator"]:
+            assert row["payload"][field] == event.payload[field]
+    inventory = runtime._completion_evidence_source_inventory(
+        state, evidence_rows=[], historical_events=events)
+    assert len(inventory) == 1
+    exact = RuntimeTelemetryEvidenceProvider().reexpand(
+        config=runtime.config, state=state, source=inventory[0])
+    assert json.loads(exact["text"]) == [asdict(e) for e in events]
 
 
 def test_turn_completion_keeps_answer_exact_but_recovers_budget_audit_separately(make_config):
@@ -158,3 +291,23 @@ def test_review_verdict_keeps_semantics_but_recovers_full_source_catalogues(make
     assert len(inventory)==1
     exact=RuntimeTelemetryEvidenceProvider().reexpand(config=runtime.config,state=state,source=inventory[0])
     assert json.loads(exact['text'])==[asdict(event)]
+
+
+def test_telemetry_manifest_avoids_copying_payload_and_reads_legacy_references(make_config, monkeypatch):
+    import swaag.evidence_sources as sources
+    runtime = AgentRuntime(make_config(), model_client=object())
+    state = runtime.create_or_load_session()
+    event = runtime.history.record_event(state, 'token_estimate_used', {
+        'text_hash':'original', 'tokens':123, 'strategy':'chars_per_token',
+        'retained_audit_detail':'EXACT_DETAIL_' * 10000})
+    legacy = runtime_telemetry_reference([event], legacy_content_digest=True)
+    with monkeypatch.context() as patch:
+        def forbid_copy(value):
+            raise AssertionError('Index construction copied an entire telemetry payload')
+        patch.setattr(sources, 'asdict', forbid_copy)
+        manifest = runtime_telemetry_reference([event])
+    assert manifest['integrity_scheme'] == 'event_manifest_v1'
+    assert len(json.dumps(manifest)) < 2000
+    for source in (manifest, legacy):
+        exact = RuntimeTelemetryEvidenceProvider().reexpand(config=runtime.config, state=state, source=source)
+        assert json.loads(exact['text']) == [asdict(event)]

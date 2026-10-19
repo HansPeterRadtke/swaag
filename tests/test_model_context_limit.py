@@ -547,6 +547,47 @@ def test_completion_request_only_sends_explicit_model_stop_sequences(
     )["stop"] == ["MODEL_STOP"]
 
 
+def test_template_options_reach_generation_and_tokenizer_and_change_cache_identity(make_config, monkeypatch):
+    config = make_config(model__base_url="http://127.0.0.1:14831/v1",
+                         model__completion_endpoint="/chat/completions",
+                         model__chat_template_kwargs={"enable_thinking": False})
+    client = LlamaCppClient(config)
+    messages = [{"role": "user", "content": "hello"}]
+    request = client.build_completion_request("accounting", max_tokens=64,
+                                              contract=yes_no_contract(), messages=messages)
+    assert request["chat_template_kwargs"] == {"enable_thinking": False}
+    captured = []
+    class Response:
+        def raise_for_status(self): pass
+        def json(self): return {"count": 7, "max_model_len": 32768}
+    def post(*args, **kwargs):
+        captured.append(kwargs["json"])
+        return Response()
+    monkeypatch.setattr("swaag.model.requests.post", post)
+    monkeypatch.setattr(LlamaCppClient, "_remote_model", lambda self: {"id": "test-model"})
+    assert client._remote_tokenize_messages(messages) == (7, 32768)
+    assert captured[0]["chat_template_kwargs"] == request["chat_template_kwargs"]
+    before = client.cache_identity()
+    protocol_before = client._prompt_protocol_identity()
+    config.model.chat_template_kwargs = {"enable_thinking": True}
+    assert before != client.cache_identity()
+    assert protocol_before != client._prompt_protocol_identity()
+
+
+def test_default_template_options_do_not_change_request(make_config):
+    client = LlamaCppClient(make_config(model__base_url="http://127.0.0.1:14831/v1",
+                                       model__completion_endpoint="/chat/completions"))
+    assert "chat_template_kwargs" not in client.build_completion_request(
+        "hello", max_tokens=64, contract=yes_no_contract())
+
+
+@pytest.mark.parametrize("bad", [[], "disabled", {"enable_thinking": "false"}])
+def test_invalid_template_options_are_rejected_at_config_boundary(bad):
+    import json
+    from swaag.config import load_config
+    with pytest.raises(ValueError, match="chat_template_kwargs"):
+        load_config(env={"SWAAG__MODEL__CHAT_TEMPLATE_KWARGS": json.dumps(bad)})
+
 @pytest.mark.parametrize("cached", [False, True])
 def test_chat_inference_capacity_is_reported_as_fallback(make_config, monkeypatch, cached):
     from swaag.runtime import AgentRuntime

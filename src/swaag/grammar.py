@@ -344,16 +344,24 @@ def completion_verdict_contract() -> ContractSpec:
 def completion_evaluation_contract(
     evidence_sources: Iterable[tuple[str, str]] = (),
 ) -> ContractSpec:
+    # Factor identical branches without widening the allowed (kind, id) pairs.
+    # Repeating the full object schema per historical source made retained
+    # conversations pay an ever-growing grammar and context-budget cost.
+    sources_by_kind: dict[str, list[str]] = {}
+    for source_kind, source_id in evidence_sources:
+        identifiers = sources_by_kind.setdefault(source_kind, [])
+        if source_id not in identifiers:
+            identifiers.append(source_id)
     request_variants = [
         _closed_object(
             {
                 "source_kind": {"type": "string", "enum": [source_kind]},
-                "source_id": {"type": "string", "enum": [source_id]},
+                "source_id": {"type": "string", "enum": source_ids},
                 "purpose": _string(),
                 "literal_query": _string(),
             }
         )
-        for source_kind, source_id in evidence_sources
+        for source_kind, source_ids in sources_by_kind.items()
     ]
     properties: dict[str, dict[str, Any]] = {
         "complete": _boolean(),
@@ -439,7 +447,10 @@ def agent_terminal_response_contract(*, allow_silent_completion: bool = False) -
         ),
     )
 
-def agent_action_contract(tool_specs: Iterable[tuple], *, allow_silent_completion: bool = False) -> ContractSpec:
+def agent_action_contract(tool_specs: Iterable[tuple], *, allow_silent_completion: bool = False,
+                          compact_foreground: bool = False) -> ContractSpec:
+    if compact_foreground and allow_silent_completion:
+        raise ValueError("Compact foreground actions require a user-facing response")
     tool_call_variants: list[dict[str, Any]] = []
     seen: set[str] = set()
     for item in sorted(tool_specs, key=lambda value: str(value[0])):
@@ -466,7 +477,7 @@ def agent_action_contract(tool_specs: Iterable[tuple], *, allow_silent_completio
         # name can be enabled. Never use enum: []: llama.cpp turns an impossible
         # enum into a zero-width grammar production that can emit malformed JSON.
         tool_call_schema = _closed_object({})
-    return _contract(
+    contract = _contract(
         "agent_action",
         _closed_object(
             {
@@ -507,6 +518,11 @@ def agent_action_contract(tool_specs: Iterable[tuple], *, allow_silent_completio
             }
         ),
     )
+    if compact_foreground:
+        for field in ("status", "continue_loop", "silent_completion"):
+            del contract.json_schema["properties"][field]
+            contract.json_schema["required"].remove(field)
+    return contract
 
 
 def history_analysis_contract() -> ContractSpec:

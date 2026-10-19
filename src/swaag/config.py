@@ -44,6 +44,8 @@ class ModelConfig:
     cache_max_bytes: int = 134217728
     cache_max_entries: int = 16384
     cache_lock_stripes: int = 128
+    chat_template_kwargs: dict[str, Any] = field(default_factory=dict)
+
     thinking_mode: str = "server_default"
 
 
@@ -331,6 +333,10 @@ class CommunicationConfig:
     host: str
     port: int
     poll_seconds: float
+    stream_heartbeat_seconds: float = 5.0
+    initial_foreground_output_tokens: int = 0
+    compact_foreground_actions: bool = False
+    direct_reply_verification: bool = False
     max_active_workers: int = 128
     max_pending_requests: int = 128
     idle_work_mode: str = "finish_only"
@@ -340,6 +346,7 @@ class CommunicationConfig:
     preempt_shared_model: bool = True
     autonomous_idea_interval_seconds: float = 300.0
     model_routes: dict[str, str] = field(default_factory=dict)
+    model_chat_template_kwargs: dict[str, Any] = field(default_factory=dict)
     open_webui_artifacts: OpenWebUiArtifactServingConfig = field(
         default_factory=lambda: OpenWebUiArtifactServingConfig(False, "", "", 900)
     )
@@ -800,6 +807,7 @@ def _coerce_config(
         model_base_url=str(data["communication"]["model_base_url"]),
         model_profile_name=str(data["communication"].get("model_profile_name", "")),
         model_identity=str(data["communication"].get("model_identity", "")),
+        model_chat_template_kwargs=data["communication"].get("model_chat_template_kwargs", {}),
         remote_context_limit_fallback=int(data["communication"].get("remote_context_limit_fallback", 0)),
         max_concurrent_requests=int(data["communication"]["max_concurrent_requests"]),
         status_max_output_tokens=int(data["communication"].get("status_max_output_tokens", 192)),
@@ -807,6 +815,10 @@ def _coerce_config(
         host=str(data["communication"]["host"]),
         port=int(data["communication"]["port"]),
         poll_seconds=float(data["communication"]["poll_seconds"]),
+        stream_heartbeat_seconds=float(data["communication"]["stream_heartbeat_seconds"]),
+        initial_foreground_output_tokens=int(data["communication"]["initial_foreground_output_tokens"]),
+        compact_foreground_actions=data["communication"]["compact_foreground_actions"],
+        direct_reply_verification=data["communication"]["direct_reply_verification"],
         max_active_workers=data["communication"].get("max_active_workers", 128),
         max_pending_requests=data["communication"].get("max_pending_requests", 128),
         orchestrator_priority=int(data["communication"]["orchestrator_priority"]),
@@ -897,6 +909,12 @@ def _coerce_config(
         },
     )
 
+    for name, options in (("model.chat_template_kwargs", model.chat_template_kwargs),
+                          ("communication.model_chat_template_kwargs", communication.model_chat_template_kwargs)):
+        if not isinstance(options, dict) or any(not isinstance(key, str) for key in options):
+            raise ValueError(name + " must be a table of template options")
+        if "enable_thinking" in options and not isinstance(options["enable_thinking"], bool):
+            raise ValueError(name + ".enable_thinking must be a boolean")
     _validate_positive("model.context_limit", model.context_limit)
     _validate_positive(
         "model.max_semantic_responsibilities_per_call",
@@ -917,6 +935,9 @@ def _coerce_config(
         raise ValueError("model.progress_poll_seconds must be positive")
     if model.thinking_mode not in {"server_default", "enabled", "disabled"}:
         raise ValueError("model.thinking_mode must be server_default, enabled or disabled")
+    if (model.thinking_mode != "server_default" and "enable_thinking" in model.chat_template_kwargs
+            and model.chat_template_kwargs["enable_thinking"] != (model.thinking_mode == "enabled")):
+        raise ValueError("model.thinking_mode conflicts with model.chat_template_kwargs.enable_thinking")
     if model.thinking_mode != "server_default" and model.provider_name.lower() not in {"vllm", "vllm-openai", "vllm_openai", "llama.cpp", "llama_cpp"}:
         raise ValueError("Explicit thinking_mode requires a verified vLLM or llama.cpp chat-template adapter")
     if model.structured_output_mode != "server_schema":
@@ -1059,6 +1080,14 @@ def _coerce_config(
         raise ValueError("communication.port must be between 1 and 65535")
     if communication.poll_seconds <= 0:
         raise ValueError("communication.poll_seconds must be positive")
+    if not 0 < communication.stream_heartbeat_seconds <= 30:
+        raise ValueError("communication.stream_heartbeat_seconds must be positive and at most 30")
+    _validate_non_negative("communication.initial_foreground_output_tokens",
+                           communication.initial_foreground_output_tokens)
+    if not isinstance(communication.compact_foreground_actions, bool):
+        raise ValueError("communication.compact_foreground_actions must be a boolean")
+    if not isinstance(communication.direct_reply_verification, bool):
+        raise ValueError("communication.direct_reply_verification must be a boolean")
     artifact_serving = communication.open_webui_artifacts
     if artifact_serving.enabled:
         parsed_artifact_url = urlparse(artifact_serving.public_base_url)
@@ -1434,6 +1463,18 @@ def _parameter_semantics(
         "communication.orchestrator_priority": (
             "Inference admission priority of finalized foreground user turns; larger values are admitted first.",
             "Changing it changes ordering against workers and status queries, not capacity or permission; extreme priorities can starve lower-priority work.",
+        ),
+        "communication.initial_foreground_output_tokens": (
+            "Initial minimum output reservation for foreground actions; zero uses the contract's structural floor.",
+            "The call still receives available safe output headroom. Actual output exhaustion expands the reservation and recompiles before any partial action can execute; workers keep context.reserved_response_tokens.",
+        ),
+        "communication.compact_foreground_actions": (
+            "Generate only reply, tool calls, questions and response constraints for the standard foreground controller.",
+            "Continuation follows validated tool presence; silent completion is disabled. No generated status report is fabricated. Worker/custom prompts, authority fences and completion verification retain their existing behavior.",
+        ),
+        "communication.direct_reply_verification": (
+            "Independently verify a first tool-free conversational reply using its already selected context and a fresh snapshot.",
+            "Requires compact_foreground_actions. Any non-approval, missing evidence, overflow or invalid verdict falls back to full completion evaluation; workers, tool actions, resumed turns and questions retain that full evaluator.",
         ),
         "communication.status_priority": (
             "Inference admission priority of status queries and finalized targeted controls.",

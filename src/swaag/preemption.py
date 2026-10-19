@@ -10,7 +10,7 @@ from pathlib import Path
 from typing import Any
 
 from swaag.sqlite_schema import apply_sqlite_migrations, managed_sqlite_connection
-from swaag.utils import new_id, sha256_text, stable_json_dumps, utc_now_iso
+from swaag.utils import new_id, sha256_text, utc_now_iso
 
 
 _PREEMPTION_STORE_MIGRATIONS = (
@@ -136,7 +136,10 @@ class ModelPreemptionCoordinator:
 
     @staticmethod
     def _request_json(request: dict[str, Any]) -> str:
-        return stable_json_dumps(request, indent=None)
+        # This is the actual outbound request and its exact replay, not a
+        # canonicalized comparison. Schema property order affects constrained
+        # decoding; sorting it here also defeats the model cache's order guard.
+        return json.dumps(request, ensure_ascii=True, separators=(",", ":"))
 
     def register_active(self, session_id: str, call_id: str, kind: str, request: dict[str, Any]) -> ActiveModelCall:
         request_json = self._request_json(request)

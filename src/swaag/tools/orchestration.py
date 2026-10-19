@@ -240,14 +240,23 @@ def _validate_plan_spec(raw: Any) -> dict[str, Any] | None:
 class OrchestrationControlTool(Tool):
     name = "orchestration_control"
     description = (
-        "Create, inspect, revise, execute, and cancel the durable background-worker "
-        "dependency graph owned by the user-facing SWAAG orchestrator."
+        "Manage the user-facing orchestrator's durable background-worker graph. "
+        "For a complete worker graph, use operation=plan.apply to create and "
+        "optionally start the graph in one call. The create operation only creates "
+        "an EMPTY draft; use node.add for incremental nodes."
     )
     usage_guidance = (
         "Use this for orchestration, not ordinary worker task work. Semantically decide "
         "the plan first. When the complete graph is already known, prefer plan.apply with symbolic node keys so the full draft can be validated and optionally started in one call; otherwise encode nodes and dependencies incrementally. Read the "
-        "current plan before revising it. Mechanical dependency predicates may be "
-        "executed directly; semantic branch conditions remain your decision."
+        "current plan before revising it. For plan.apply, supply the complete "
+        "plan_spec, set the unrelated top-level completion_mode to null, and "
+        "never use create to apply an existing plan_spec. Node completion "
+        "modes belong inside plan_spec.nodes. For each node, model_key means "
+        "the exact configured worker ROUTE KEY: use null or 'default' for the "
+        "default worker, or a named key in the system model_routing inventory. "
+        "Never put a model ID/alias from requested_model_id into model_key. "
+        "Mechanical dependency predicates "
+        "may be executed directly; semantic branch conditions remain your decision."
     )
     kind = "stateful"
     required_runtime_capability = "orchestration"
@@ -467,6 +476,23 @@ class OrchestrationControlTool(Tool):
                 "orchestration_control.replace_worker must be boolean or null"
             )
         result["plan_spec"] = _validate_plan_spec(result["plan_spec"])
+        # Live Qwen3-Coder emitted completion_mode='natural' both at the
+        # operation root and in every node of a plan.apply graph. It is only
+        # meaningful for node.add. Accept the redundant *identical* assertion
+        # without a wasted model retry; never reinterpret a conflicting mode
+        # or infer another operation from the plan_spec. Keep raw model output
+        # intact in durable tool-call history.
+        if result["completion_mode"] is not None and operation != "node.add":
+            if operation != "plan.apply" or not isinstance(result["plan_spec"], dict):
+                raise ToolValidationError(
+                    "completion_mode is only for node.add or a redundant matching plan.apply mode"
+                )
+            modes = [node["completion_mode"] for node in result["plan_spec"]["nodes"]]
+            if not modes or any(mode != result["completion_mode"] for mode in modes):
+                raise ToolValidationError(
+                    "plan.apply completion_mode conflicts with a plan_spec.nodes completion_mode"
+                )
+            result["completion_mode"] = None
         for key in (
             "condition_json",
             "input_mapping_json",

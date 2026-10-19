@@ -201,7 +201,9 @@ class LlamaCppClient:
             parsed = urlparse(self._base)
             local = parsed.hostname in {"127.0.0.1", "localhost", "::1"}
             if provider not in {"vllm", "vllm-openai", "vllm_openai"} or not local:
-                return {"supported": False, "state": "unavailable", "source": "provider_without_activity_adapter"}
+                return {"supported": False, "state": "unsupported",
+                        "source": "provider_without_activity_adapter",
+                        "service_availability": "unknown"}
             metrics_url = f"{parsed.scheme}://{parsed.netloc}/metrics"
             response = requests.get(metrics_url, timeout=(2.0, 2.0), **self._request_headers_kwargs())
             try:
@@ -339,11 +341,16 @@ class LlamaCppClient:
 
     def _chat_template_options(self) -> dict[str, Any]:
         mode = self.config.model.thinking_mode
+        options = dict(self.config.model.chat_template_kwargs)
         if mode == "server_default":
-            return {}
+            return {"chat_template_kwargs": options} if options else {}
         if self.config.model.provider_name.lower() not in {"vllm", "vllm-openai", "vllm_openai", "llama.cpp", "llama_cpp"}:
             raise ModelClientError("Explicit thinking_mode requires a verified vLLM or llama.cpp adapter")
-        return {"chat_template_kwargs": {"enable_thinking": mode == "enabled"}}
+        enabled = mode == "enabled"
+        if "enable_thinking" in options and options["enable_thinking"] != enabled:
+            raise ModelClientError("thinking_mode conflicts with chat_template_kwargs.enable_thinking")
+        options["enable_thinking"] = enabled
+        return {"chat_template_kwargs": options}
 
     def _remote_tokenize_messages(
         self,
@@ -446,6 +453,8 @@ class LlamaCppClient:
             "profile_name": self.config.model.profile_name,
             "thinking_mode": self.config.model.thinking_mode,
         }
+        if self.config.model.chat_template_kwargs:
+            identity["chat_template_kwargs"] = dict(self.config.model.chat_template_kwargs)
         if self._uses_chat_transport:
             try:
                 model = self._remote_model()
@@ -523,10 +532,14 @@ class LlamaCppClient:
         return int(n_ctx)
 
     def _prompt_protocol_identity(self) -> dict[str, str]:
+        template_identity = ({"chat_template_kwargs_sha256": sha256_text(
+            stable_json_dumps(self.config.model.chat_template_kwargs, indent=None))}
+            if self.config.model.chat_template_kwargs else {})
         if self._uses_chat_transport:
             model = self._remote_model()
             stable_model = stable_openai_model_metadata(model)
             return {
+                **template_identity,
                 "serialization": "provider_opaque_openai_chat_v1",
                 "thinking_mode": self.config.model.thinking_mode,
                 "model_metadata_sha256": sha256_text(
@@ -565,6 +578,7 @@ class LlamaCppClient:
         generation = props.get("default_generation_settings")
         n_ctx = generation.get("n_ctx") if isinstance(generation, dict) else None
         return {
+            **template_identity,
             "serialization": "llama_cpp_exact_message_boundaries_v1",
             "thinking_mode": self.config.model.thinking_mode,
             "chat_template_sha256": sha256_text(template),
@@ -1049,7 +1063,8 @@ class LlamaCppClient:
                         try:
                             snapshot = backend_monitor.snapshot()
                         except Exception:
-                            snapshot = {"supported": False, "state": "unavailable", "stale": True}
+                            snapshot = {"supported": False, "state": "observation_failed",
+                                        "service_availability": "unknown", "stale": True}
                         progress_age = snapshot.get("progress_age_seconds")
                         if (
                             snapshot.get("supported")

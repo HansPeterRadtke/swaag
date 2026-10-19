@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import copy
+import json
 from dataclasses import asdict
 from typing import TYPE_CHECKING, Any
 
@@ -88,7 +89,17 @@ class PromptInstructionContextManager:
             {"instruction_store": instruction_store, **asdict(item)}
             for instruction_store, item in selected_sources
         ]
-        rendered = stable_json_dumps(rendered_rows, indent=2)
+        # Integrity bindings stay in the authoritative store and the selected
+        # source audit below. They are not instruction content or precedence.
+        # Preserve unknown metadata instead of guessing what might be semantic.
+        for row in rendered_rows:
+            metadata = row.get("metadata")
+            if isinstance(metadata, dict):
+                row["metadata"] = {key: value for key, value in metadata.items() if key not in {
+                    "source_event_hash", "source_event_sequence", "source_event_session_id", "source_event_type"}}
+        # Whitespace is presentation, not instruction meaning. Keep all exact
+        # content and authority/provenance fields without pretty-print overhead.
+        rendered = json.dumps(rendered_rows, sort_keys=True, ensure_ascii=True, separators=(",", ":"))
         component = PromptComponent(
             name="durable_prompt_instructions",
             category="system_prompt_instruction",

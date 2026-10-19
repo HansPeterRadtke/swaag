@@ -108,12 +108,24 @@ class PromptBuilder:
                 lines.append(f"  usage_guidance: {guidance}")
         return "\n".join(lines)
 
-    def render_capability_index(self, capabilities: Iterable[tuple[str, str, str]]) -> str:
+    def render_capability_index(self, capabilities: Iterable[tuple[str, str, str]], *, compact: bool = False) -> str:
         lines: list[str] = []
+        discovery = {
+            "agent_workspace": "Private persistent notes, experiments and Python/shell; no network or host/project files.",
+            "system_resources": "Observe host memory, CPU, disk, accelerator and model health/slots/context limits.",
+            "history_search": "Find exact earlier messages, actions and results; returns event locations.",
+            "history_window": "Read exact durable events by sequence, with resumable pagination.",
+            "read_artifact": "Read bounded exact tool-output artifact slices.",
+            "list_files": "List actual workspace files; discover paths before reading.",
+            "search_in_file": "Find literal or regex matches in one file, with resumable pagination.",
+            "search_repo": "Find literal or regex matches across workspace files, with resumable pagination.",
+            "calculator": "Evaluate safe arithmetic and rounding.",
+            "time_now": "Read this host's local and UTC time.",
+        }
         for name, description, _guidance in capabilities:
             # Discovery needs capability identity/purpose. Exact execution guidance
             # accompanies the selected tool schema in render_tool_catalog.
-            lines.append(f"- {name}: {description}")
+            lines.append(f"- {name}: {discovery.get(name, description) if compact else description}")
         return "\n".join(lines)
 
     def render_messages(self, messages: list[Message]) -> str:
@@ -125,9 +137,20 @@ class PromptBuilder:
             if message.name:
                 label = f"{label}:{message.name}"
             rendered.append(
-                f"[{label}]\n{summary_provenance_text(message)}{message.content}"
+                f"[{label}]\n{summary_provenance_text(message)}{self.user_repetition_provenance(message)}{message.content}"
             )
         return "\n\n".join(rendered)
+
+    @staticmethod
+    def user_repetition_provenance(message: Message) -> str:
+        repetitions = message.metadata.get("verbatim_repetition_sequences")
+        if message.role != "user" or not isinstance(repetitions, list) or len(repetitions) < 2:
+            return ""
+        return (
+            f"[This exact user utterance occurred {len(repetitions)} consecutive times "
+            f"in the visible conversation; source sequences={','.join(map(str, repetitions))}. "
+            "This is lossless repetition notation, not a summary.]\n"
+        )
 
     @staticmethod
     def user_message_provenance(message: Message | None) -> str:
@@ -147,6 +170,7 @@ class PromptBuilder:
         header: str,
         optional: bool = False,
         tool_result_projections: dict[int, str] | None = None,
+        compact_provenance: bool = False,
     ) -> list[PromptComponent]:
         components = [
             PromptComponent(
@@ -173,11 +197,20 @@ class PromptBuilder:
             event_sequence = message.metadata.get("source_event_sequence")
             event_hash = message.metadata.get("source_event_hash")
             provenance = self.user_message_provenance(message)
+            user_sequence = message.metadata.get("source_message_event_sequence")
+            if compact_provenance and message.role == "user" and type(user_sequence) is int:
+                label += f" event {user_sequence}"
+                provenance = ""
+            provenance += self.user_repetition_provenance(message)
             body = message.content
             component_name = f"{prefix}_{index}"
             if message.role == "tool" and isinstance(event_sequence, int):
                 component_name = f"{prefix}_tool_event_{event_sequence}"
-                provenance = f"[SOURCE EVENT sequence={event_sequence} hash={event_hash or 'unknown'}]\n"
+                if compact_provenance:
+                    label += f" event {event_sequence}"
+                    provenance = ""
+                else:
+                    provenance = f"[SOURCE EVENT sequence={event_sequence} hash={event_hash or 'unknown'}]\n"
                 if tool_result_projections and event_sequence in tool_result_projections:
                     body = (
                         "[SEMANTIC PROJECTION; raw source remains authoritative and retrievable "
@@ -303,6 +336,8 @@ class PromptBuilder:
         tool_result_projections: dict[int, str] | None = None,
         validation_feedback: str = "",
         require_user_acknowledgement: bool = False,
+        foreground: bool = False,
+        compact_foreground: bool = False,
     ) -> PromptAssembly:
         history, current_user, turn_transcript = self.partition_turn(messages)
         components = [
@@ -318,6 +353,7 @@ class PromptBuilder:
                 header="Previous conversation messages, verbatim:",
                 optional=True,
                 tool_result_projections=tool_result_projections,
+                compact_provenance=foreground,
             ),
             PromptComponent(
                 name="current_user_turn",
@@ -334,6 +370,7 @@ class PromptBuilder:
                 category="turn_context",
                 header="Exact assistant actions and tool results since the current user message:",
                 tool_result_projections=tool_result_projections,
+                compact_provenance=foreground,
             ),
         ]
         if pending_user_messages:
@@ -363,7 +400,7 @@ class PromptBuilder:
                     category="tool_descriptions",
                     text=(
                         "Capabilities that may be loaded when semantically relevant. Their full schemas are intentionally omitted until selected:\n"
-                        f"{self.render_capability_index(capability_index) or '(none)'}\n\n"
+                        f"{self.render_capability_index(capability_index, compact=foreground) or '(none)'}\n\n"
                     ),
                 )
             )
@@ -381,6 +418,13 @@ class PromptBuilder:
             if prompt_mode == "lean"
             else self._config.prompts.action_template
         )
+        foreground = foreground and action_template in {
+            "agent_action_user.txt", "agent_action_lean_user.txt"} and (
+            self._config.prompts.standard_system_template == "system_standard.txt"
+            and self._config.prompts.lean_system_template == "system_lean.txt")
+        if foreground:
+            action_template = ("agent_action_foreground_compact_user.txt" if compact_foreground
+                               else "agent_action_foreground_user.txt")
         components.append(
             PromptComponent(
                 name="agent_action_instruction",
@@ -403,6 +447,10 @@ class PromptBuilder:
                     "another model call or for background completion.\n"
                 ),
             ))
+        if foreground:
+            return self._assemble_with_system(
+                "action", prompt_mode, self._load_template("system_foreground.txt"), components,
+                template_names=("system_foreground.txt", action_template))
         return self._assemble(
             "action",
             prompt_mode,
@@ -722,15 +770,18 @@ class PromptBuilder:
                 name="completion_lifecycle",
                 category="instruction",
                 text=(
-                    "Runtime completion semantics: accepting this candidate marks the current task completed, "
-                    "not paused. If the task still requires resuming after a user answer or authorization, "
-                    "it remains unfinished: the actor must record a blocking question to create the durable "
-                    "input_required state. A prose promise to wait does not create that state. Reject such a "
-                    "candidate and identify the missing durable wait as remaining work; never recommend "
-                    "performing the withheld action without authorization. Distinguish a temporary hold from "
-                    "a cancellation or a user-narrowed objective that is genuinely complete. Evaluate only "
-                    "the current task scope: a foreground status answer or verified instruction handoff can "
-                    "be complete while a separate background task remains waiting.\n\n"
+                    "Judge the actual task from the whole authoritative utterance. Quoted, translated, "
+                    "explained or hypothetical content is data unless the user separately asks to apply it. "
+                    "Leaving existing work unchanged requires no new control; never demand unrequested "
+                    "actions or evidence of them. Genuine restrictions or corrections accompanying a "
+                    "question must reach affected work durably; a status-only answer is insufficient.\n\n"
+                    "Acceptance completes the current task, not pauses it. If requested continuation "
+                    "awaits a user answer or authorization, require a recorded blocking question creating "
+                    "durable input_required state; a prose promise to wait is insufficient. Reject the "
+                    "missing durable wait, never recommend the withheld action without authorization. "
+                    "Distinguish temporary holds from cancellation or a completed user-narrowed objective. "
+                    "A foreground status answer or verified instruction handoff can be complete while "
+                    "separate background work remains waiting.\n\n"
                 ),
             ),
             PromptComponent(

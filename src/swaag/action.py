@@ -58,6 +58,22 @@ class AgentAction:
         return bool(self.tool_calls)
 
 
+def expand_compact_foreground_action(payload: dict[str, Any]) -> dict[str, Any]:
+    """Restore mechanically implied fields without inventing a semantic status.
+
+    The ordinary validator already requires continuation exactly when tools are
+    present. This foreground-only contract never permits silent completion.
+    Questions, exact response constraints and every tool argument remain model
+    outputs and pass through the normal validators and completion evaluator.
+    """
+    required = {"assistant_message", "tool_calls", "response_constraints", "questions"}
+    if not isinstance(payload, dict) or set(payload) != required:
+        raise ActionValidationError("Compact foreground action requires exactly its declared fields")
+    if not isinstance(payload["tool_calls"], list):
+        raise ActionValidationError("tool_calls must be an array")
+    return {**payload, "continue_loop": bool(payload["tool_calls"]), "silent_completion": False}
+
+
 def action_from_payload(payload: dict[str, Any], *, enabled_tool_names: Iterable[str]) -> AgentAction:
     if not isinstance(payload, dict):
         raise ActionValidationError("Agent action payload must be an object")

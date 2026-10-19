@@ -65,7 +65,7 @@ def _exclusive_file_lock(path: Path) -> Iterator[None]:
 def _normalize_json(value: Any) -> Any:
     """Benchmark-only normalization for intentionally replayable dynamic run state."""
     if isinstance(value, dict):
-        return {str(key): _normalize_json(value[key]) for key in sorted(value)}
+        return {str(key): _normalize_json(item) for key, item in value.items()}
     if isinstance(value, (list, tuple)):
         return [_normalize_json(item) for item in value]
     if isinstance(value, Path):
@@ -81,14 +81,43 @@ def _normalize_json(value: Any) -> Any:
 
 
 def _stable_json(value: Any) -> Any:
-    """Convert values to stable JSON without changing model-visible strings."""
+    """Convert values to JSON without changing strings or schema declaration order."""
     if isinstance(value, dict):
-        return {str(key): _stable_json(value[key]) for key in sorted(value)}
+        return {str(key): _stable_json(item) for key, item in value.items()}
     if isinstance(value, (list, tuple)):
         return [_stable_json(item) for item in value]
     if isinstance(value, Path):
         return str(value)
     return value
+
+
+def _schema_property_orders(payload: dict[str, Any]) -> list[dict[str, Any]]:
+    """Record grammar-relevant ordering that sorted JSON hashing would erase.
+
+    Constrained decoders can emit object fields in declaration order. Changing
+    that order can change the generated answer even with identical JSON Schema
+    validation semantics. Ordinary transport/envelope key order is irrelevant.
+    """
+    orders: list[dict[str, Any]] = []
+
+    def visit(value: Any, path: list[str | int]) -> None:
+        if isinstance(value, dict):
+            properties = value.get("properties")
+            if isinstance(properties, dict):
+                orders.append({"path": path, "properties": list(properties)})
+            for key in sorted(value):
+                visit(value[key], [*path, key])
+        elif isinstance(value, list):
+            for index, item in enumerate(value):
+                visit(item, [*path, index])
+
+    visit(payload.get("json_schema"), ["json_schema"])
+    response_format = payload.get("response_format")
+    if isinstance(response_format, dict):
+        wrapper = response_format.get("json_schema")
+        if isinstance(wrapper, dict):
+            visit(wrapper.get("schema"), ["response_format", "json_schema", "schema"])
+    return orders
 
 
 def _completion_result_payload(result: CompletionResult, canonicalize) -> dict[str, Any]:
@@ -352,7 +381,7 @@ class RecordReplayModelClient:
         payload = {
             "mode": "record_replay",
             "request_metadata": self._canonicalize(self.request_metadata),
-            "hash_basis": "request_metadata_plus_payload",
+            "hash_basis": "request_metadata_plus_payload_plus_schema_property_order",
             "transport_metadata_not_in_hash": ["send_completion_timeout_seconds"],
             "prompt_renderings": {
                 key: self._prompt_renderings[key]
@@ -364,7 +393,9 @@ class RecordReplayModelClient:
             },
             "entries": [asdict(entry) for entry in sorted(self._entries.values(), key=lambda item: item.request_hash)],
         }
-        return stable_json_dumps(payload, indent=2) + "\n"
+        # Preserve the original schema order in request evidence as well as its
+        # cache identity. Sorting a saved request changes a later live replay.
+        return json.dumps(payload, ensure_ascii=True, indent=2) + "\n"
 
     def _write_entries_atomic(self) -> None:
         """Write a complete cassette atomically; caller must hold the cache lock."""
@@ -399,9 +430,8 @@ class RecordReplayModelClient:
 
     def _request_envelope(self, payload: dict[str, Any], *, timeout_seconds: int | None = None) -> dict[str, Any]:
         return {
-            "request_metadata": self._canonicalize(self.request_metadata),
+            **self._hash_envelope(payload),
             "send_completion_timeout_seconds": timeout_seconds,
-            "payload": self._canonicalize(payload),
         }
 
     def _hash_envelope(self, payload: dict[str, Any]) -> dict[str, Any]:
@@ -409,10 +439,14 @@ class RecordReplayModelClient:
         # seed, temperature, top-p, token limit, and stop sequences. Transport
         # timeouts are deliberately excluded because they cannot change a
         # successfully completed model output.
-        return {
+        envelope = {
             "request_metadata": self._canonicalize(self.request_metadata),
             "payload": self._canonicalize(payload),
         }
+        orders = _schema_property_orders(payload)
+        if orders:
+            envelope["schema_property_order"] = orders
+        return envelope
 
     def _request_hash(self, payload: dict[str, Any], *, timeout_seconds: int | None = None) -> tuple[str, dict[str, Any]]:
         envelope = self._request_envelope(payload, timeout_seconds=timeout_seconds)

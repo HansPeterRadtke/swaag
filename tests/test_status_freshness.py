@@ -4,6 +4,49 @@ from swaag.communication import CommunicationService
 from swaag.runtime import AgentRuntime
 from tests.test_preemption import _ImmediateClient
 
+
+def test_inventory_batches_status_scan_and_refreshes_external_rejection(make_config, monkeypatch):
+    from swaag.history import HistoryStore
+    runtime = AgentRuntime(make_config(), model_client=_ImmediateClient('unused'))
+    service = CommunicationService(runtime, orchestrator_runtime=runtime)
+    try:
+        workers = [service.workers.create('Inspect evidence') for _ in range(4)]
+        operations = []
+        for index, worker in enumerate(workers):
+            operation = runtime.create_or_load_session(session_id=f'operation_status_{index}')
+            runtime.history.record_event(operation, 'communication_status_generated', {
+                'target_session_id': worker.session_id, 'question': 'Status?',
+                'status': status_result(f'Observed worker {index}'),
+                'mechanical_status': {}, 'source_event_references': [], 'evidence_projected': False})
+            operations.append(operation)
+        calls = []
+        original = runtime.history.list_session_entries
+        def counted(**kwargs):
+            calls.append(kwargs)
+            return original(**kwargs)
+        monkeypatch.setattr(runtime.history, 'list_session_entries', counted)
+        def inventory():
+            return service.orchestration_api.execute('questions.list')['inventory']
+        first = inventory()
+        assert len(calls) == 1
+        assert {w['latest_model_status']['answer'] for w in first['workers']} == {
+            f'Observed worker {index}' for index in range(4)}
+        # A different writer invalidates one observation. No batch cache may
+        # survive into the next inventory or erase other workers' evidence.
+        external = HistoryStore(runtime.config.sessions.root)
+        external.record_event(operations[0], 'communication_status_reply_rejected', {
+            'target_session_id': workers[0].session_id, 'question': 'Status?',
+            'attempt': 1, 'reason': 'changed', 'observed_fingerprint': 'before',
+            'current_fingerprint': 'after', 'next_action': 'refresh'})
+        second = inventory()
+        assert len(calls) == 2
+        statuses = {w['worker_id']: w['latest_model_status'] for w in second['workers']}
+        assert statuses[workers[0].worker_id] is None
+        assert all(statuses[w.worker_id]['answer'] == f'Observed worker {i}'
+                   for i, w in enumerate(workers) if i)
+    finally:
+        service.close()
+
 def status_result(answer):
     return {'answer':answer,'situation':'Observed','action':'Report','reason':'Evidence','importance':'normal','importance_rank':1,'evidence_sequences':[],'uncertainty':'Observed snapshot','escalate_to_stronger_model':False,'escalation_reason':'','evidence_projected':False,'source_event_references':[]}
 

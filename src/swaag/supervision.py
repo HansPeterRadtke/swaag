@@ -127,7 +127,8 @@ class BackendActivityMonitor:
         self._references = 0
         self._thread: threading.Thread | None = None
         self._first_sample = threading.Event()
-        self._sample: dict[str, Any] = {"supported": False, "state": "unobserved"}
+        self._sample: dict[str, Any] = {"supported": False, "state": "unobserved",
+                                        "service_availability": "unknown"}
         self._sample_time: float | None = None
         self._progress_time: float | None = None
         self._progress_at: str | None = None
@@ -178,7 +179,8 @@ class BackendActivityMonitor:
                 sample = dict(self.probe())
             except Exception as exc:
                 # Errors describe observation failure, never a proved hung model.
-                sample = {"supported": False, "state": "unavailable", "error_type": type(exc).__name__}
+                sample = {"supported": False, "state": "observation_failed",
+                          "service_availability": "unknown", "error_type": type(exc).__name__}
             observed = utc_now_iso()
             counters = {("llama_slot", row.get("id"), row.get("id_task")):
                         (row.get("n_prompt_tokens_processed"), row.get("n_decoded"))

@@ -411,9 +411,25 @@ def test_remote_vllm_does_not_disable_transport_timeout(make_config):
     ))
     assert client.backend_activity() == {
         'supported': False,
-        'state': 'unavailable',
+        'state': 'unsupported',
         'source': 'provider_without_activity_adapter',
+        'service_availability': 'unknown',
     }
+
+
+def test_failed_activity_probe_does_not_claim_service_is_unavailable():
+    def failed_probe():
+        raise requests.ConnectionError('metrics endpoint unreachable')
+
+    monitor = BackendActivityMonitor(failed_probe, interval=.01)
+    with monitor.observing():
+        assert monitor.wait_for_sample(1)
+        sample = monitor.snapshot()
+        assert sample['supported'] is False
+        assert sample['state'] == 'observation_failed'
+        assert sample['service_availability'] == 'unknown'
+        assert sample['error_type'] == 'ConnectionError'
+        assert sample['progress_observed_at'] is None
 
 
 def test_vllm_explicit_cancellation_interrupts_before_headers(make_config, local_vllm_backend):

@@ -42,6 +42,9 @@ thinking_mode = "server_default"
 # read only at request time and is never included in config fingerprints.
 api_key_env = ""
 structured_output_mode = "server_schema"
+# Explicit backend-supported chat template options; empty preserves provider defaults.
+# Applied to generation and token accounting, and included in cache identity.
+chat_template_kwargs = {}
 # Cache-first record mode is the normal runtime default. Set cache_enabled=false for an explicitly uncached live run.
 cache_enabled = true
 cache_mode = "record"
@@ -470,6 +473,11 @@ jwks_url = ""
 # Empty model_base_url reuses the main configured model endpoint.
 # -----------------------------------------------------------
 [communication]
+# Override template options only for communication runtimes, e.g.
+# model_chat_template_kwargs = { enable_thinking = false }
+# An empty table inherits the main model's options.
+model_chat_template_kwargs = {}
+
 # Admission priorities and explicit interruption policy; these do not add model slots.
 orchestrator_priority = 1000
 status_priority = 100
@@ -488,10 +496,17 @@ max_pending_requests = 128
 # Initial status/control response cap. Output-recovery may grow this only when
 # constrained generation actually exhausts the cap.
 status_max_output_tokens = 192
-enabled_tools = ["agent_workspace", "tool_forge", "diane", "list_files", "read_file", "read_text", "search_in_file", "search_repo", "read_artifact", "time_now", "system_resources", "calculator", "history_search", "history_window", "agent_status_lookup", "agent_control", "orchestration_control", "background_work", "questions", "revise_question", "worker_questions", "report_progress"]
+# Minimum initial foreground reservation; zero uses the schema's structural floor.
+# Actual output truncation expands this before retry; partial actions never execute.
+initial_foreground_output_tokens = 0
+compact_foreground_actions = false
+direct_reply_verification = false
+enabled_tools = ["agent_workspace", "tool_forge", "diane", "list_files", "read_file", "read_text", "search_in_file", "search_repo", "read_artifact", "time_now", "system_resources", "calculator", "history_search", "history_window", "agent_status_lookup", "runtime_snapshot_lookup", "agent_control", "orchestration_control", "background_work", "questions", "revise_question", "worker_questions", "report_progress"]
 host = "127.0.0.1"
 port = 8765
 poll_seconds = 0.2
+# Connection liveness only; never evidence of model progress or tool completion.
+stream_heartbeat_seconds = 5.0
 # Explicit opt-in: finish_only does not dispatch queued background plans.
 # authorized_backlog starts user-authorized plans only when foreground work is idle.
 # autonomous_continue additionally permits one history-grounded model-proposed task at a time.

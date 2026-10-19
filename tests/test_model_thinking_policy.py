@@ -27,3 +27,14 @@ def test_unsupported_thinking_override_is_explicit(make_config):
     client=LlamaCppClient(make_config(model__thinking_mode='enabled',model__provider_name='unqualified'))
     with pytest.raises(ModelClientError,match='vLLM'):client._chat_template_options()
     assert LlamaCppClient(make_config())._chat_template_options()=={}
+
+
+def test_conflicting_template_and_thinking_policy_are_rejected(make_config):
+    with pytest.raises(ValueError, match="conflicts"):
+        load_config(env={"SWAAG__MODEL__PROVIDER_NAME":"vllm",
+                         "SWAAG__MODEL__THINKING_MODE":"enabled",
+                         "SWAAG__MODEL__CHAT_TEMPLATE_KWARGS":'{"enable_thinking":false}'})
+    client = LlamaCppClient(make_config(model__provider_name="vllm", model__thinking_mode="enabled",
+                                      model__chat_template_kwargs={"enable_thinking":False}))
+    with pytest.raises(ModelClientError, match="conflicts"):
+        client._chat_template_options()

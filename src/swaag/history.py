@@ -8,9 +8,12 @@ import re
 import sqlite3
 from dataclasses import asdict
 from pathlib import Path
+from threading import Lock
 from typing import Any, Callable, Iterable, Iterator
+from weakref import WeakValueDictionary
 
 from swaag.capacity import positive_capacity, require_capacity
+from swaag.session_lock import exclusive_control_mutation
 from swaag.questions import question_record, normalize_question, QUESTION_FIELDS
 from swaag.redaction import redact_for_persistence
 from swaag.environment.state import EnvironmentState, ProcessRecord, ShellSessionState, WorkspaceState
@@ -232,6 +235,28 @@ def _bounded_search_preview(
 
 
 
+class _VerifiedJsonlStats(dict[str, tuple[int, tuple[int, int, int, int, int]]]):
+    """Verified file observations shared only by live stores in one process."""
+
+
+_VERIFIED_JSONL_POOLS: WeakValueDictionary[tuple[int, Path], _VerifiedJsonlStats] = WeakValueDictionary()
+_VERIFIED_JSONL_POOLS_LOCK = Lock()
+
+
+def _verified_jsonl_stats_for(root: Path) -> _VerifiedJsonlStats:
+    # Stores for the worker runtime, orchestrator and status reader use the
+    # same journal. Their own validated appends must not look like unrelated
+    # external edits to one another. Weak ownership releases unused roots;
+    # process identity avoids inheriting another process's pool after a fork.
+    key = (os.getpid(), root.resolve())
+    with _VERIFIED_JSONL_POOLS_LOCK:
+        stats = _VERIFIED_JSONL_POOLS.get(key)
+        if stats is None:
+            stats = _VerifiedJsonlStats()
+            _VERIFIED_JSONL_POOLS[key] = stats
+        return stats
+
+
 class HistoryStore:
     def __init__(
         self,
@@ -253,7 +278,7 @@ class HistoryStore:
         # conversations previously spent minutes rescanning 300+ MB journals.
         # File identity includes mtime_ns, inode, size and device. External
         # edits invalidate this cache and trigger full integrity validation.
-        self._verified_jsonl_stats: dict[str, tuple[int, tuple[int, int, int, int, int]]] = {}
+        self._verified_jsonl_stats = _verified_jsonl_stats_for(self.root)
         _ensure_directory(self.root)
         self._init_sqlite_history()
 
@@ -374,6 +399,7 @@ class HistoryStore:
         *,
         start_sequence: int = 1,
         end_sequence: int | None = None,
+        event_types: Iterable[str] = (),
     ) -> Iterator[HistoryEvent]:
         sql = (
             "SELECT session_id, sequence, event_id, timestamp, event_type, payload_json, "
@@ -383,6 +409,10 @@ class HistoryStore:
         if end_sequence is not None:
             sql += " AND sequence<=?"
             params.append(end_sequence)
+        selected_types = tuple(dict.fromkeys(event_types))
+        if selected_types:
+            sql += " AND event_type IN (" + ",".join("?" for _ in selected_types) + ")"
+            params.extend(selected_types)
         sql += " ORDER BY sequence"
         with self._sqlite_connect() as connection:
             for row in connection.execute(sql, params):
@@ -766,6 +796,7 @@ class HistoryStore:
             return None
         return payload if isinstance(payload, dict) else None
 
+    @exclusive_control_mutation
     def enqueue_control_message(self, session_id: str, text: str, *, source: str = "cli", control_id: str | None = None, authority: list[dict[str, Any]] | None = None) -> dict[str, Any]:
         control_id = control_id or new_id("control")
         if not isinstance(text, str) or not text.strip():
@@ -893,6 +924,23 @@ class HistoryStore:
         if inbox_path.exists():
             _ensure_directory(processed_path.parent)
             os.replace(inbox_path, processed_path)
+
+    @exclusive_control_mutation
+    def cancel_pending_control_message(self, session_id: str, control_id: str) -> bool:
+        """Withdraw an unconsumed receipt atomically with action acceptance.
+
+        The canonical row retains the exact accepted input. A consumed receipt
+        is never described as unexecuted; run/tool cancellation keeps its own
+        durable outcome and the caller must not replay uncertain effects.
+        """
+        with self._sqlite_connect() as connection:
+            cursor = connection.execute(
+                "UPDATE control_messages SET status='canceled' WHERE session_id=? AND control_id=? AND status='pending'",
+                (session_id, control_id),
+            )
+        if cursor.rowcount:
+            (self.control_inbox_dir(session_id) / f"{control_id}.json").unlink(missing_ok=True)
+        return bool(cursor.rowcount)
 
     def _iter_history_jsonl(
         self,
@@ -1053,8 +1101,18 @@ class HistoryStore:
         self, target_session_id: str
     ) -> HistoryEvent | None:
         """Read the newest independent status without touching target history."""
+        return self.latest_communication_statuses().get(target_session_id)
+
+    def latest_communication_statuses(self) -> dict[str, HistoryEvent]:
+        """One fresh cross-session observation, shared by a worker inventory.
+
+        Reconcile external journals once per inventory, not once per worker.
+        Do not retain this mapping across snapshots: newly rejected statuses
+        and new independent operation sessions must be observed next time.
+        """
         for entry in self.list_session_entries(include_internal=True):
             self._ensure_session_indexed(str(entry["session_id"]))
+        latest: dict[str, HistoryEvent] = {}
         with self._sqlite_connect() as connection:
             rows = connection.execute(
                 """
@@ -1076,9 +1134,10 @@ class HistoryStore:
             )
             for row in rows:
                 payload = json.loads(str(row["payload_json"]))
-                if payload.get("target_session_id") != target_session_id:
+                target = payload.get("target_session_id")
+                if not isinstance(target, str) or target in latest:
                     continue
-                return HistoryEvent(
+                latest[target] = HistoryEvent(
                     id=str(row["event_id"]),
                     session_id=str(row["session_id"]),
                     sequence=int(row["sequence"]),
@@ -1090,7 +1149,7 @@ class HistoryStore:
                     prev_hash=row["prev_hash"],
                     hash=str(row["event_hash"]),
                 )
-        return None
+        return latest
 
     def read_history_window(self, session_id: str, *, start_sequence: int, limit: int) -> list[HistoryEvent]:
         if start_sequence <= 0:
@@ -1099,6 +1158,44 @@ class HistoryStore:
             raise ValueError("limit must be positive")
         end_sequence = start_sequence + limit - 1
         return list(self.iter_history(session_id, start_sequence=start_sequence, end_sequence=end_sequence))
+
+    def read_history_event_page(self, session_id: str, *, start_sequence: int,
+                                limit: int, event_types: Iterable[str]) -> tuple[list[HistoryEvent], int]:
+        """Read selected event types while advancing across one exact sequence page.
+
+        Filter before decoding payloads: transport cursors do not consume the
+        large model prompts and responses stored between their delivery events.
+        Capture the indexed end before querying so an append racing the read is
+        left for the next page, never skipped. Canonical integrity is still
+        reconciled by the same journal/index fence used by full history reads.
+        """
+        if start_sequence <= 0 or limit <= 0:
+            raise ValueError("start_sequence and limit must be positive")
+        selected_types = tuple(dict.fromkeys(event_types))
+        if not selected_types:
+            raise ValueError("event_types must not be empty")
+        if not self.history_path(session_id).exists():
+            # Archived history retains its existing integrity-checked reader.
+            events = self.read_history_window(session_id, start_sequence=start_sequence, limit=limit)
+            return ([event for event in events if event.event_type in selected_types],
+                    events[-1].sequence + 1 if events else start_sequence)
+        self._ensure_session_indexed(session_id)
+        through = self._sqlite_complete_through(session_id)
+        if through < start_sequence:
+            return [], start_sequence
+        page_end = min(through, start_sequence + limit - 1)
+        events = list(self._iter_history_sqlite(session_id, start_sequence=start_sequence,
+            end_sequence=page_end, event_types=selected_types))
+        return events, page_end + 1
+
+    def has_history_at_or_after(self, session_id: str, sequence: int) -> bool:
+        """Check a live cursor without loading an unrelated event payload."""
+        if sequence <= 0:
+            raise ValueError("sequence must be positive")
+        if not self.history_path(session_id).exists():
+            return bool(self.read_history_window(session_id, start_sequence=sequence, limit=1))
+        self._ensure_session_indexed(session_id)
+        return self._sqlite_complete_through(session_id) >= sequence
 
     def latest_tool_result_projection(
         self,

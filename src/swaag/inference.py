@@ -110,12 +110,17 @@ class InferenceRequestCoordinator:
         aging_seconds_per_priority: float = 1.0,
         max_running_seconds: float | None = None,
         max_pending_requests: int = 256,
+        admission_guard: Callable[[], bool] | None = None,
     ):
         self.path = Path(root).expanduser() / "inference_requests.sqlite3"
         self.path.parent.mkdir(parents=True, exist_ok=True)
         self.max_pending_requests = positive_capacity(max_pending_requests, "max_pending_requests")
         self.backend_key = str(backend_key)
         self.capacity_resolver = capacity_resolver
+        # A service owner may defer the start of *new* calls when another
+        # backend has foreground priority. Running calls are never killed here.
+        # This hook is intentionally absent from the user-facing coordinator.
+        self.admission_guard = admission_guard
         self.poll_seconds = max(0.005, float(poll_seconds))
         self.aging_seconds_per_priority = max(
             0.001, float(aging_seconds_per_priority)
@@ -310,6 +315,28 @@ class InferenceRequestCoordinator:
         while True:
             if cancel_check is not None and cancel_check():
                 raise ModelCallPreempted("model call preempted while queued")
+            # Consult the foreground admission gate outside our SQLite write
+            # transaction. A long prompt must not hold a model slot or a
+            # database lock merely because a foreground turn is executing.
+            # A canceled/superseded queued request can still leave immediately.
+            try:
+                deferred = self.admission_guard is not None and self.admission_guard()
+            except Exception as exc:
+                self.fail(request_id, error=f"model admission guard failed: {type(exc).__name__}: {exc}")
+                raise
+            if deferred:
+                current = self.get(request_id)
+                if current is None:
+                    raise FileNotFoundError(f"Unknown inference request: {request_id}")
+                if current.status != "queued":
+                    raise RuntimeError(f"Inference request {request_id} is {current.status}; expected queued")
+                if deadline is not None and time.monotonic() >= deadline:
+                    self.fail(request_id, error="inference queue admission timed out")
+                    raise TimeoutError(
+                        f"Timed out waiting for inference request {request_id} admission"
+                    )
+                time.sleep(self.poll_seconds)
+                continue
             self.reconcile_orphans()
             now_epoch = time.time()
             now = utc_now_iso()
