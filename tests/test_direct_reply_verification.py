@@ -112,3 +112,32 @@ def test_complete_looking_but_truncated_verdict_never_grants_approval(make_confi
     assert any(e.event_type == "model_output_budget_exhausted" for e in events)
     assert not any(e.event_type == "completion_evaluated" and e.payload.get("verification_scope")
                    == "direct_conversation_only" for e in events)
+
+
+def test_direct_reply_fuses_invented_word_count_check(make_config):
+    def check(request):
+        assert '13' in request['prompt']
+        return json.dumps({'direct_reply_sufficient': True, 'declared_word_count_supported': False})
+    runtime, state, client = runtime_for(make_config, [
+        action('Yes, I can hear you. Hello.', count=13), check,
+    ], communication__direct_reply_verification=True)
+    result = runtime.run_turn_in_session(state, 'Can you hear me? Please say hello.')
+    assert result.assistant_text == 'Yes, I can hear you. Hello.'
+    assert [r['contract'] for r in client.requests] == ['agent_action', 'direct_conversational_reply_check']
+    assert any(e.event_type == 'response_constraint_repaired' for e in runtime.history.read_history(state.session_id))
+
+
+def test_direct_reply_required_count_falls_back(make_config):
+    words = {'word_%03d' % i: w for i,w in enumerate(('One','two','three','four'),1)}
+    support = json.dumps({'direct_reply_sufficient': False, 'declared_word_count_supported': True})
+    repair = json.dumps({'reason':'The current user requires four words.','words':words})
+    runtime,state,client = runtime_for(make_config,[action('Hello.',count=4),support,repair,verdict()],communication__direct_reply_verification=True)
+    assert runtime.run_turn_in_session(state,'Reply in exactly four words.').assistant_text == 'One two three four'
+    assert [r['contract'] for r in client.requests] == ['agent_action','direct_conversational_reply_check','response_word_count_repair_4','completion_evaluation']
+
+
+def test_direct_reply_bad_combined_verdict_falls_back(make_config):
+    repair = json.dumps({'reason':'No numerical word constraint.','words':None})
+    runtime,state,client = runtime_for(make_config,[action('Hello.',count=13),'{"direct_reply_sufficient":true}',repair,verdict()],communication__direct_reply_verification=True)
+    assert runtime.run_turn_in_session(state,'Say hello.').assistant_text == 'Hello.'
+    assert [r['contract'] for r in client.requests] == ['agent_action','direct_conversational_reply_check','response_word_count_repair_13','completion_evaluation']

@@ -272,3 +272,35 @@ finished a five-answer arithmetic request successfully, around twenty-eight
 seconds after release. The user-facing inference server was never stopped.
 This is verified cooperative admission, *not* yet maximum-speed real-time
 preemption or end-to-end physical-phone acceptance.
+
+## October 19: fuse independent direct reply and proposed word-count verification
+
+Production voice logs repeatedly showed the Coder model attaching a fabricated
+numerical reply-word constraint to a simple "Can you hear me?" turn. The runtime
+correctly refused to treat that claim as user authority, but resolving it
+required an extra expensive LLM call before the independent direct-conversation
+completion check. This change merges the two independent semantic judgments
+into one strictly validated, structured direct-conversation verdict *only*
+for the first accepted, tool-free, question-free foreground action. The direct
+checker receives the model-proposed number as explicitly **untrusted** data
+and returns both `direct_reply_sufficient` and
+`declared_word_count_supported`. The checker may approve the candidate only
+when no real numeric count was required and the entire reply is supported.
+
+A real numeric requirement, an incorrect or incomplete candidate, unsupported
+claims, invalid JSON/schema, missing live state, concurrent user correction,
+missing evidence, or a checker refusal instead uses the original independent
+exact-count repair and full completion evaluator; an action with tool calls is
+never eligible. Every proposed constraint and its disposition remains in the
+durable audit, and the canonical original user request is untouched. No
+regex-based intent router or text-as-shell-command mechanism was introduced.
+
+The focused direct-reply tests passed (13), including fabricated constraints,
+explicit genuine word counts and invalid combined verdicts. Broader action,
+communication, inference and question tests passed (194). A fresh isolated
+real-model Coder greeting test completed with an independently verified
+answer in about eight seconds, but that particular model output contained no
+invented numerical word count, so it did not exercise the fused-count branch
+in live inference. That branch has fake-model regression coverage and still
+requires a full production-history smoke test before latency improvements can
+be claimed. This change is server-side; no Android APK rebuild is required.
