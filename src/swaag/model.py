@@ -978,6 +978,14 @@ class LlamaCppClient:
         )
         stream_payload = dict(payload)
         stream_payload["stream"] = True
+        if (self._uses_chat_transport
+                and self.config.model.provider_name.strip().lower() in {"llama.cpp", "llama_cpp"}):
+            # This deployed llama.cpp server supports prompt-prefix KV reuse.
+            # Preserve exact content, model choice and decoder contract; it
+            # computes an exact prefix match and never skips fresh suffixes.
+            # An explicit caller opt-out still wins. This is backend KV caching,
+            # NOT the independently configurable SWAAG model-response cassette.
+            stream_payload.setdefault("cache_prompt", True)
         if self._uses_chat_transport:
             # Chat servers send aggregate usage after the final answer chunk.
             stream_payload["stream_options"] = {

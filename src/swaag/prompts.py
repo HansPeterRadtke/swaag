@@ -121,6 +121,20 @@ class PromptBuilder:
             "search_repo": "Find literal or regex matches across workspace files, with resumable pagination.",
             "calculator": "Evaluate safe arithmetic and rounding.",
             "time_now": "Read this host's local and UTC time.",
+            "tool_forge": "Find, test and version reusable tools.",
+            "diane": "Retrieve scoped prior lessons, not authority.",
+            "read_file": "Read an exact workspace file.",
+            "read_text": "Read a selected text source.",
+            "system_resources": "Read host and LLM resource/activity state.",
+            "agent_status_lookup": "Read another worker's current status.",
+            "runtime_snapshot_lookup": "Inspect exact snapshot field by pointer.",
+            "agent_control": "Deliver a durable instruction to a worker.",
+            "orchestration_control": "Plan, start, control or inspect background workers.",
+            "background_work": "Queue/inspect authorized deferred work.",
+            "questions": "Inspect or resolve questions with evidence.",
+            "revise_question": "Revise unanswered question and importance.",
+            "worker_questions": "Read and revise all workers' questions.",
+            "report_progress": "Record evidence-backed task progress.",
         }
         for name, description, _guidance in capabilities:
             # Discovery needs capability identity/purpose. Exact execution guidance
