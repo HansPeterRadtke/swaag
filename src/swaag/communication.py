@@ -1763,6 +1763,24 @@ class CommunicationService:
             "collection_started_at": started_at,
             "captured_at": utc_now_iso(),
             "consistency": "per-source observations; workers may change during collection or generation",
+            "model_routing": {
+                # Distinguish this very foreground Coder session from the
+                # Qwen3.8 default worker: a model answering 'which model?'
+                # must not infer an unknown model name from an opaque URL or
+                # invent that it lacks configuration evidence. This is an
+                # observed local route, not an attestation of backend weights.
+                "foreground": {
+                    "requested_model_id": self.orchestrator_runtime.config.model.model_identity,
+                    "configured_profile": self.orchestrator_runtime.config.model.profile_name,
+                    "base_url": self.orchestrator_runtime.config.model.base_url,
+                },
+                "default_worker": {
+                    "requested_model_id": self.workers.runtime.config.model.model_identity,
+                    "configured_profile": self.workers.runtime.config.model.profile_name,
+                    "base_url": self.workers.runtime.config.model.base_url,
+                },
+                "evidence_scope": "configured SWAAG runtime routes, not verified remote model binaries",
+            },
             "orchestrator": {
                 "session_id": state.session_id,
                 "active_turn": active_turn,

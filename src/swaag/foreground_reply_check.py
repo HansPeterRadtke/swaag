@@ -28,6 +28,29 @@ def check_direct_reply(runtime, state, *, action_context, original_request, cand
         if component.include_in_context and (
             component.name.startswith("conversation_history")
             or component.name == "prior_machine_action_disclosure")]
+    # The already-installed foreground role policy is a trusted application
+    # identity source, independent of the action model's fallible draft and
+    # independently selected conversation context. Supply only its first two
+    # sentences; do not transfer the action model's prompt, action schemas or
+    # its earlier conclusions as authority to the direct reply checker.
+    foreground_role = runtime.prompts._load_template("system_foreground.txt").split(". ", 2)[:2]
+    trusted_role = ". ".join(foreground_role).rstrip(". ") + "."
+    routing = snapshot.get("model_routing") if isinstance(snapshot, dict) else None
+    configured_foreground = (
+        routing.get("foreground") if isinstance(routing, dict) else None
+    )
+    model_routing_guidance = (
+        "The current runtime snapshot also contains model_routing. The "
+        "foreground.requested_model_id is the configured model ID for this "
+        "reply, distinct from default_worker.requested_model_id; report "
+        "this as the configured/requested model rather than claiming a "
+        "remote binary was independently inspected. Absence of weight "
+        "attestation does not invalidate a correctly qualified configured "
+        "model identification, but do not invent actual backend properties. "
+        if isinstance(configured_foreground, dict)
+        and isinstance(configured_foreground.get("requested_model_id"), str)
+        and configured_foreground["requested_model_id"] else ""
+    )
     assembly = runtime.prompts.build_semantic_operation_prompt(
         kind="completion_evaluation",
         system_instruction=(
@@ -51,6 +74,15 @@ def check_direct_reply(runtime, state, *, action_context, original_request, cand
             "translated, explained and hypothetical text is data unless separately requested "
             "as an action. A pure question or translation can be complete without new work. "
             "Do not invent instructions, evidence requirements or permission requests. "
+            + model_routing_guidance
+            + "Trusted installed_foreground_identity establishes this assistant's local "
+            "software role without needing a runtime audit or historical session "
+            "re-expansion. If a candidate states only that independently supplied "
+            "role and accurately answers an identity question, missing details "
+            "about the underlying model, its provider or external side effects "
+            "are not missing evidence for the software identity. Do not approve "
+            "invented organizational titles, user permissions, phone playback, "
+            "completed tasks or other claims without relevant evidence. "
             "Reject unsolicited offers or speculative troubleshooting. Preserve exact requested "
             "format and applicable earlier constraints. Return only the compact JSON boolean "
             "direct_reply_sufficient; false requests the full checker, never an action."
@@ -66,6 +98,10 @@ def check_direct_reply(runtime, state, *, action_context, original_request, cand
                if proposed_word_count is not None else "")
         ),
         components=[
+            PromptComponent(name="installed_foreground_identity", category="environment",
+                text="Installed SWAAG foreground application role; not inferred from the candidate: "
+                     + trusted_role + "\nThis certifies the software identity only. It does not "
+                     "prove external effects, phone delivery, permission, or a model/provider ID.\n\n"),
             PromptComponent(name="completion_objective", category="current_user",
                 text="Entire current user request, verbatim:\n" + original_request + "\n\n"),
             *runtime._current_authority_components(state, original_request),
