@@ -7,7 +7,7 @@ import sys
 import threading
 import time
 from contextlib import contextmanager, nullcontext
-from dataclasses import asdict, dataclass, fields
+from dataclasses import asdict, dataclass, fields, replace
 from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any, Callable, Iterable, Iterator
@@ -1083,12 +1083,35 @@ class AgentRuntime:
                     compact_foreground=compact_foreground_action,
                 )
                 budget_reports.append(prepared.report)
+                deferred_direct_word_count: int | None = None
 
                 def validate(payload: dict[str, Any]) -> AgentAction:
+                    nonlocal deferred_direct_word_count
+                    deferred_direct_word_count = None
                     if compact_foreground_action:
                         from swaag.action import expand_compact_foreground_action
                         payload = expand_compact_foreground_action(payload)
                     payload = self._repair_question_disclosures(payload)
+                    declared_constraints = payload.get("response_constraints")
+                    proposed = (declared_constraints.get("exact_word_count") if isinstance(declared_constraints, dict) else None)
+                    reply = payload.get("assistant_message")
+                    if (compact_foreground_action
+                            and self.config.runtime.completion_evaluation_enabled
+                            and self.config.communication.direct_reply_verification
+                            and accepted_actions == 0 and not resumed_control_ids
+                            and not tool_results and not state.open_questions
+                            and not payload.get("tool_calls") and not payload.get("questions")
+                            and self.config.prompts.completion_evaluation_system_template == "completion_evaluation_system.txt"
+                            and self.config.prompts.completion_evaluation_template == "completion_evaluation_user.txt"
+                            and isinstance(proposed, int) and not isinstance(proposed, bool)
+                            and proposed > 0 and isinstance(reply, str) and reply.strip()
+                            and len(reply.split()) != proposed):
+                        # Only defer tool-free first-turn metadata. The
+                        # independent model must verify whether the user
+                        # actually requested this word count before approval.
+                        deferred_direct_word_count = proposed
+                        payload = copy.deepcopy(payload)
+                        payload["response_constraints"]["exact_word_count"] = None
                     payload = self._repair_declared_response_constraints(
                         state,
                         original_request=original_request,
@@ -1540,7 +1563,38 @@ class AgentRuntime:
                         and self.config.prompts.completion_evaluation_template == "completion_evaluation_user.txt"):
                     from swaag.foreground_reply_check import check_direct_reply
                     completion = check_direct_reply(self, state, action_context=prepared,
-                        original_request=original_request, candidate=selected_action.assistant_message)
+                        original_request=original_request, candidate=selected_action.assistant_message,
+                        proposed_word_count=deferred_direct_word_count)
+                    if deferred_direct_word_count is not None:
+                        if completion is not None:
+                            # A separate model verified that the action model
+                            # invented this count. The original action output
+                            # remains in the audit log; no reply text changed.
+                            self.history.record_event(state, "response_constraint_repaired", {
+                                "constraint": "exact_word_count",
+                                "target_word_count": deferred_direct_word_count,
+                                "source_word_count": len(selected_action.assistant_message.split()),
+                                "source_sha256": sha256_text(selected_action.assistant_message),
+                                "repaired_sha256": sha256_text(selected_action.assistant_message),
+                                "constraint_required": False,
+                                "contract": "direct_conversational_reply_check",
+                                "reason": "Independent direct reply verification rejected a model-authored numeric count.",
+                                "verification_scope": "direct_conversation_only",
+                            })
+                        else:
+                            # Insufficient, unavailable or changed verification
+                            # cannot silently drop a real numeric user rule.
+                            # Use the existing full semantic count-repair path.
+                            repaired, confirmed = self._repair_exact_word_count(
+                                state, original_request=original_request,
+                                draft=selected_action.assistant_message,
+                                target_word_count=deferred_direct_word_count,
+                            )
+                            if confirmed is not None:
+                                from swaag.action import AgentResponseConstraints
+                                selected_action = replace(selected_action,
+                                    assistant_message=repaired,
+                                    response_constraints=AgentResponseConstraints(confirmed))
                 completion = completion or (
                     {"complete": True, "reason": "blocking user input requested", "remaining_work": []}
                     if has_blocking_question
