@@ -403,6 +403,61 @@ def test_vllm_v1_base_uses_server_root_metrics(make_config, local_vllm_backend):
     assert sample['source'] == 'vllm:/metrics'
 
 
+@pytest.mark.parametrize(
+    ("base_url", "expected_url"),
+    [
+        ("http://10.8.0.7:14833/v1", "http://10.8.0.7:14833/slots"),
+        ("http://10.8.0.7:14833", "http://10.8.0.7:14833/slots"),
+        ("https://example.invalid/proxy/v1", "https://example.invalid/proxy/slots"),
+    ],
+)
+@pytest.mark.parametrize("provider", ["llama.cpp", "llama_cpp"])
+def test_llama_cpp_chat_transport_retains_native_slot_observation(
+    make_config, monkeypatch, base_url, expected_url, provider,
+):
+    requests_seen = []
+
+    class Response:
+        def raise_for_status(self):
+            pass
+
+        def json(self):
+            return slots(True, 4)
+
+        def close(self):
+            pass
+
+    def fake_get(url, **kwargs):
+        requests_seen.append(url)
+        assert kwargs["timeout"] == (2.0, 2.0)
+        return Response()
+
+    monkeypatch.setattr("swaag.model.requests.get", fake_get)
+    client = LlamaCppClient(make_config(
+        model__base_url=base_url,
+        model__completion_endpoint="/chat/completions",
+        model__provider_name=provider,
+    ))
+    sample = client.backend_activity()
+    assert requests_seen == [expected_url]
+    assert sample["supported"] is True
+    assert sample["source"] == "llama.cpp:/slots"
+    assert sample["state"] == "processing"
+    assert sample["slots"][0]["phase"] == "prefill"
+
+
+def test_unknown_chat_provider_never_assumes_llama_slots(make_config, monkeypatch):
+    def unexpected_request(*_args, **_kwargs):
+        raise AssertionError("opaque chat provider must not be queried for llama slots")
+    monkeypatch.setattr("swaag.model.requests.get", unexpected_request)
+    client = LlamaCppClient(make_config(
+        model__base_url="https://example.invalid/v1",
+        model__completion_endpoint="/chat/completions",
+        model__provider_name="openai",
+    ))
+    assert client.backend_activity()["state"] == "unsupported"
+
+
 def test_remote_vllm_does_not_disable_transport_timeout(make_config):
     client = LlamaCppClient(make_config(
         model__base_url='https://example.invalid',

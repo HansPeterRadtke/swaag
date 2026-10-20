@@ -197,7 +197,14 @@ class LlamaCppClient:
 
     def backend_activity(self) -> dict[str, Any]:
         provider = self.config.model.provider_name.strip().lower()
-        if self._uses_chat_transport:
+        # An OpenAI-compatible /v1/chat/completions transport does not turn a
+        # known llama.cpp server into an opaque provider. Its native /slots
+        # telemetry lives next to /v1, not under /v1/slots. Retain any proxy
+        # path prefix rather than assuming the service is at the URL origin.
+        if provider in {"llama.cpp", "llama_cpp", "llamacpp"}:
+            base = self._base
+            slots_base = base[:-3] if base.lower().endswith("/v1") else base
+        elif self._uses_chat_transport:
             parsed = urlparse(self._base)
             local = parsed.hostname in {"127.0.0.1", "localhost", "::1"}
             if provider not in {"vllm", "vllm-openai", "vllm_openai"} or not local:
@@ -211,7 +218,9 @@ class LlamaCppClient:
                 return vllm_metrics_activity(response.text)
             finally:
                 response.close()
-        response = requests.get(f"{self._base}/slots", timeout=(2.0, 2.0), **self._request_headers_kwargs())
+        else:
+            slots_base = self._base
+        response = requests.get(f"{slots_base}/slots", timeout=(2.0, 2.0), **self._request_headers_kwargs())
         try:
             response.raise_for_status()
             return llama_slot_activity(response.json())

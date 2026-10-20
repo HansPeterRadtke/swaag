@@ -477,3 +477,16 @@ a combined question/action request. A fresh authoritative worker-state
 sample allowed a direct, truthful worker-status reply without fabricating
 a completion percentage or ETA. These are representative trials, not
 proof of perfect semantic routing.
+
+## Llama.cpp activity observation with OpenAI-compatible chat transport
+
+A configured `llama.cpp` model keeps its native `/slots` activity observation even when
+SWAAG sends model requests to `/v1/chat/completions`. The observer removes only a
+terminal `/v1` path segment before querying `/slots`, preserving a reverse-proxy
+path prefix. The live worker and Coder configurations both use this layout.
+`/slots` is backend-level liveness and token-progress evidence, not proof that a
+specific SWAAG request has completed or that an unrelated tool effect succeeded.
+Other remote OpenAI-compatible providers must not be probed as llama.cpp.
+This implementation needs a communication-service restart before its live
+supervision snapshot changes; follow the independent idle/active-task gate and
+never interrupt active sessions merely to load the telemetry correction.
