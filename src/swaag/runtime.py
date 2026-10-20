@@ -1586,6 +1586,7 @@ class AgentRuntime:
                     and not resumed_control_ids and not tool_results
                     and not selected_action.questions and not state.open_questions
                     and selected_action.response_constraints.exact_word_count is None
+                    and deferred_direct_word_count is None
                     and bool(selected_action.assistant_message.strip())
                     and not self.history.list_pending_control_messages(state.session_id)
                 )

@@ -26,6 +26,23 @@ def test_one_model_call_for_simple_direct_reply_even_with_verifier_configured(ma
     assert not any(e.event_type == "assistant_progress" for e in events)
 
 
+def test_mismatched_model_word_count_cannot_bypass_semantic_count_validation(make_config):
+    """An invented numeric constraint is not user authority and cannot silently escape checking."""
+    runtime, state, client = runtime_for(
+        make_config, [action("Hello.", count=9),
+                      '{"direct_reply_sufficient":true,"declared_word_count_supported":false}'],
+        communication__single_pass_direct_replies=True,
+        communication__direct_reply_verification=True,
+    )
+    result = runtime.run_turn_in_session(state, "Please say hello.")
+    assert result.assistant_text == "Hello."
+    assert [request["contract"] for request in client.requests] == [
+        "agent_action", "direct_conversational_reply_check"]
+    assert not any(e.payload.get("verification_scope") == "foreground_single_pass_unreviewed"
+                   for e in runtime.history.read_history(state.session_id)
+                   if e.event_type == "completion_evaluated")
+
+
 def test_deeper_tool_work_retains_normal_independent_completion(make_config):
     runtime, state, client = runtime_for(make_config, [
         action("I'll calculate it.", [{"tool_name": "calculator", "arguments": {"expression": "6 * 7"}}]),

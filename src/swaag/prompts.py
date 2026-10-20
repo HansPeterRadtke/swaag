@@ -442,9 +442,10 @@ class PromptBuilder:
                     "Give a brief useful acknowledgement and already-observed status, respecting "
                     "the user's requested format; otherwise use natural spoken prose. "
                     "Describe unobserved actions as intentions, not completed facts. "
-                    "Keep the authorized tool calls in this same action. The runtime delivers "
-                    "the acknowledgement only after successful receipts, without waiting for "
-                    "another model call or for background completion.\n"
+                    "Keep the authorized tool calls in this same action. The runtime records "
+                    "your acknowledgement as a provisional intention when early speech is enabled; "
+                    "it must never imply the tool has succeeded. Later receipts and the verified "
+                    "outcome are separate messages, regardless of speech playback.\n"
                 ),
             ))
         if foreground:
