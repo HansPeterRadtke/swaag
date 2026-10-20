@@ -9,13 +9,33 @@ def build_active_worker_reports(workers, managers):
         if worker.status in ('completed', 'failed', 'canceled'):
             continue
         owner = managers.get(worker.model_key, managers['default'])
-        event = next(owner.runtime.history.iter_history_reverse(
-            worker.session_id, event_types=('agent_status','agent_progress','assistant_progress','worker_input_required')), None)
-        if event is not None:
+        # The most recent status is not necessarily the most recent explicit
+        # progress assessment. Preserve each independently, so a later agent
+        # status update cannot erase a worker's measured step plan and ETA.
+        history = owner.runtime.history
+        latest = next(history.iter_history_reverse(
+            worker.session_id,
+            event_types=('agent_status', 'agent_progress', 'assistant_progress', 'worker_input_required'),
+        ), None)
+        latest_status = next(history.iter_history_reverse(
+            worker.session_id, event_types=('agent_status', 'worker_input_required'),
+        ), None)
+        latest_progress = next(history.iter_history_reverse(
+            worker.session_id, event_types=('agent_progress',),
+        ), None)
+        if latest is not None:
             reports[worker.worker_id] = {
-                'event_type': event.event_type, 'event_sequence': event.sequence,
-                'timestamp': event.timestamp, 'payload': deepcopy(event.payload),
+                'event_type': latest.event_type, 'event_sequence': latest.sequence,
+                'timestamp': latest.timestamp, 'payload': deepcopy(latest.payload),
                 'evidence_scope': 'worker-authored status, not externally verified effects',
+                'latest_status': ({
+                    'event_type': latest_status.event_type, 'event_sequence': latest_status.sequence,
+                    'timestamp': latest_status.timestamp, 'payload': deepcopy(latest_status.payload),
+                } if latest_status is not None else None),
+                'latest_progress': ({
+                    'event_type': latest_progress.event_type, 'event_sequence': latest_progress.sequence,
+                    'timestamp': latest_progress.timestamp, 'payload': deepcopy(latest_progress.payload),
+                } if latest_progress is not None else None),
             }
     return reports
 

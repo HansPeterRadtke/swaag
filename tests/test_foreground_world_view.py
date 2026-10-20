@@ -95,15 +95,16 @@ def test_many_terminal_records_do_not_replace_live_workers_or_hide_source():
     assert snapshot_value(source, '/terminal_workers/0/result')=='OLD_RESULT_0'
 
 
-def test_report_builder_reads_last_real_worker_event_once():
+def test_report_builder_reads_latest_status_and_progress_independently():
     from types import SimpleNamespace
     from swaag.foreground_world_builder import build_active_worker_reports
     class History:
         def __init__(self):self.calls=[]
         def iter_history_reverse(self,session_id,*,event_types):
             self.calls.append((session_id,tuple(event_types)))
-            return iter([SimpleNamespace(event_type='agent_progress',sequence=81,timestamp='now',
-                                         payload={'status':'Checking exact files','progress':{'completed':3,'total':5}})])
+            event = SimpleNamespace(event_type='agent_progress',sequence=81,timestamp='now',
+                                    payload={'status':'Checking exact files','progress':{'completed':3,'total':5}})
+            return iter([event] if event.event_type in event_types else [])
     history=History()
     worker=SimpleNamespace(worker_id='worker_one',session_id='s-one',model_key='default',status='working')
     terminal=SimpleNamespace(worker_id='worker_old',session_id='s-old',model_key='default',status='completed')
@@ -112,4 +113,7 @@ def test_report_builder_reads_last_real_worker_event_once():
     assert list(result)==['worker_one']
     assert result['worker_one']['payload']['status']=='Checking exact files'
     assert result['worker_one']['event_sequence']==81
-    assert len(history.calls)==1 and history.calls[0][0]=='s-one'
+    assert len(history.calls)==3
+    assert all(call[0]=='s-one' for call in history.calls)
+    assert result['worker_one']['latest_status'] is None
+    assert result['worker_one']['latest_progress']['event_sequence']==81

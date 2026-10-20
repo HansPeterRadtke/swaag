@@ -88,9 +88,10 @@ def generate_fast_foreground_response(
     }
     if current and isinstance(current.get("captured_at"), str):
         state_view["world_snapshot_captured_at"] = current["captured_at"]
+        now = datetime.now(timezone.utc)
         try:
             instant = datetime.fromisoformat(current["captured_at"].replace("Z", "+00:00"))
-            age = (datetime.now(timezone.utc) - instant.astimezone(timezone.utc)).total_seconds()
+            age = (now - instant.astimezone(timezone.utc)).total_seconds()
         except ValueError:
             age = float("inf")
         fresh = 0 <= age <= 3.0
@@ -107,17 +108,19 @@ def generate_fast_foreground_response(
                 model = default_worker.get("requested_model_id")
                 if isinstance(model, str) and model:
                     description["default_worker_configured_model"] = model
-        for label in ("active_workers", "active_plans") if fresh else ():
-            items = current.get(label)
-            if isinstance(items, list):
-                state_view[label + "_count_at_capture"] = len(items)
-                # Short metadata-only state. Never copy arbitrary untrusted
-                # worker objectives or output as new system instructions.
-                row_key = "worker_id" if label == "active_workers" else "plan_id"
-                state_view[label + "_sample"] = [
-                    {"id": row.get(row_key), "status": row.get("status")}
-                    for row in items[:4] if isinstance(row, dict)
-                ]
+        if fresh:
+            from swaag.fast_worker_state import (build_fast_worker_state,
+                                                 fast_worker_state_at_prompt,
+                                                 compact_worker_prompt_view)
+            compact = (current if "snapshot_complete" in current
+                       else build_fast_worker_state(current))
+            if compact.get("snapshot_complete") is True:
+                state_view["worker_world"] = compact_worker_prompt_view(
+                    fast_worker_state_at_prompt(compact, now=now)
+                )
+            else:
+                state_view["worker_world"] = {"snapshot_complete": False,
+                                              "reason": "worker inventory unavailable"}
     # Never insert large or unverified source content into the quick prompt.
     assembly = runtime.prompts.build_semantic_operation_prompt(
         kind="orchestrator_interaction",
@@ -166,7 +169,7 @@ def generate_fast_foreground_response(
         if mode == "answer":
             if re.search(
                 r"\b(?:I\s+(?:will|need to|am going to|shall)|I['’]ll|let me|"
-                r"checking|starting|stopping|running|investigating)\b",
+                r"I\s*(?:am|'m)\s+(?:checking|starting|stopping|running|investigating))\b",
                 result, flags=re.IGNORECASE,
             ):
                 # This is a consistency/fail-closed gate over the model's own

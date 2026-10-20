@@ -1272,6 +1272,8 @@ class CommunicationService:
         # Background refresh owns the expensive cross-worker durable reads.
         self._foreground_snapshot_lock = threading.Lock()
         self._foreground_snapshot: dict[str, Any] | None = None
+        self._fast_foreground_state: dict[str, Any] | None = None
+        self._fast_foreground_state_revision: tuple | None = None
         self._foreground_snapshot_started_monotonic = 0.0
         self._foreground_snapshot_refreshed_monotonic = 0.0
         self._foreground_snapshot_revision: tuple | None = None
@@ -1839,10 +1841,17 @@ class CommunicationService:
         started = time.monotonic()
         revision_before = self._foreground_task_revision()
         snapshot = self._build_orchestrator_runtime_snapshot()
+        from swaag.fast_worker_state import build_fast_worker_state
+        fast_state = build_fast_worker_state(snapshot)
         revision_after = self._foreground_task_revision()
         with self._foreground_snapshot_lock:
             if started >= self._foreground_snapshot_started_monotonic:
                 self._foreground_snapshot = snapshot
+                self._fast_foreground_state = fast_state
+                self._fast_foreground_state_revision = (
+                    revision_before[:5] if revision_before[:5] == revision_after[:5]
+                    else None
+                )
                 self._foreground_snapshot_started_monotonic = started
                 self._foreground_snapshot_refreshed_monotonic = time.monotonic()
                 self._foreground_snapshot_revision = (
@@ -2428,7 +2437,17 @@ class CommunicationService:
         if len(pending) != 1 or pending[0]["control_id"] != receipt["control_id"]:
             return None
         with self._foreground_snapshot_lock:
-            observed = copy.deepcopy(self._foreground_snapshot)
+            # Precomputed in the background: do not copy the full worker
+            # journal/plan graph into the user's latency-critical path.
+            observed = copy.deepcopy(self._fast_foreground_state)
+            observed_revision = self._fast_foreground_state_revision
+        if observed is not None:
+            try:
+                if (observed_revision is None
+                        or observed_revision != self._foreground_task_revision()[:5]):
+                    observed = None
+            except (OSError, ValueError, TypeError):
+                observed = None
         try:
             candidate = generate_fast_foreground_response(
                 runtime, state, str(receipt["message"]), observed_world=observed,
@@ -2443,6 +2462,17 @@ class CommunicationService:
             return None
         if candidate is None:
             return None
+        if candidate.mode == "answer" and observed is not None:
+            from swaag.fast_worker_state import meaningful_worker_state_revision
+            try:
+                if (observed_revision != self._foreground_task_revision()[:5]):
+                    return None
+                with self._foreground_snapshot_lock:
+                    latest_world = self._fast_foreground_state
+                if meaningful_worker_state_revision(latest_world) != meaningful_worker_state_revision(observed):
+                    return None
+            except (OSError, TypeError, ValueError):
+                return None
         with session_control_lock(runtime.history, state.session_id):
             pending = runtime.history.list_pending_control_messages(state.session_id)
             if len(pending) != 1 or pending[0]["control_id"] != receipt["control_id"]:
