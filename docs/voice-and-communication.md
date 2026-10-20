@@ -434,3 +434,16 @@ SWAAG's compact Coder foreground can now finish a simple question after the sing
 ## Fast user-facing world state, October 20
 
 The fast Coder user-facing context now receives the background-precomputed current worker and plan *content*, not merely worker counts or a few IDs. It includes all active worker task summaries, finite/continuous mode, start and elapsed time, latest reported action, last-report age, model inference status, explicitly assessed percent/ETA (or unknown), worker/plan node progress kept separate, and blocker/question counts. This is a compact typed view of the canonical runtime snapshot, freshness- and task-revision-checked without extra synchronous project reads or model calls. A fully current simple status question should be answered immediately; missing evidence goes to the unchanged full orchestrator. See `docs/fast-worker-world-context-2026-10-20.md`.
+
+## Llama.cpp activity observation with OpenAI-compatible chat transport
+
+A configured `llama.cpp` model keeps its native `/slots` activity observation even when
+SWAAG sends model requests to `/v1/chat/completions`. The observer removes only a
+terminal `/v1` path segment before querying `/slots`, preserving a reverse-proxy
+path prefix. The live worker and Coder configurations both use this layout.
+`/slots` is backend-level liveness and token-progress evidence, not proof that a
+specific SWAAG request has completed or that an unrelated tool effect succeeded.
+Other remote OpenAI-compatible providers must not be probed as llama.cpp.
+This implementation needs a communication-service restart before its live
+supervision snapshot changes; follow the independent idle/active-task gate and
+never interrupt active sessions merely to load the telemetry correction.
