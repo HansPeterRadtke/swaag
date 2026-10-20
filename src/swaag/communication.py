@@ -2597,6 +2597,12 @@ class CommunicationService:
                 for runtime, request in preemptions:
                     self._fail_runtime_preemption(runtime, request, exc)
                 raise
+            finally:
+                # Direct fast answers bypass run_turn_in_session, which otherwise
+                # clears this supervisor registration in its own finally block.
+                # Releasing it here also covers failures before the deep turn;
+                # retaining it would expose a phantom active inference forever.
+                self.supervisor.finish_session(state.session_id)
 
     def _run_authoritative_orchestrator_turn(
         self, state, text, receipt, resume_request, resumed_control_ids,

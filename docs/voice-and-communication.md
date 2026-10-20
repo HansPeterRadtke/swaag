@@ -447,3 +447,15 @@ Other remote OpenAI-compatible providers must not be probed as llama.cpp.
 This implementation needs a communication-service restart before its live
 supervision snapshot changes; follow the independent idle/active-task gate and
 never interrupt active sessions merely to load the telemetry correction.
+
+## Completed fast-reply supervision cleanup
+
+Every completed ordinary orchestrator message now clears the corresponding
+supervisor registration on both direct-fast and full-controller branches,
+including exceptions. Previously a direct one-model answer bypassed the deep
+controller's `run_turn_in_session` cleanup and left a false `validating_model_output`
+active session indefinitely. That ghost session could prevent the independent
+idle-safe activation gate from acknowledging quiescence. The regression proves
+the prior failure and checks cleanup after a direct answer and a delegated turn.
+The live communication process needs an idle-safe restart to load this fix;
+background workers and model servers must not be interrupted to do so.
