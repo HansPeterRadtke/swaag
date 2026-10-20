@@ -1312,6 +1312,25 @@ class AgentRuntime:
             accepted_actions += 1
 
             if selected_action.tool_calls:
+                early_tool_acknowledged = (
+                    bool(user_control_id)
+                    and self.config.communication.early_tool_acknowledgement
+                    and accepted_actions == 1
+                    and not selected_action.questions
+                    and not state.open_questions
+                    and bool(selected_action.assistant_message.strip())
+                    and not self.history.list_pending_control_messages(state.session_id)
+                )
+                if early_tool_acknowledged:
+                    # The action is durably selected and tool arguments validated,
+                    # but no tool has run. Speech consumes this intention while
+                    # execution and later evidence checks proceed independently.
+                    self.history.record_event(state, "assistant_progress", {
+                        "action_index": action_index,
+                        "assistant_text": selected_action.assistant_message,
+                        "delivery_phase": "after_action_acceptance_before_tools",
+                        "planned_tool_names": [call.tool_name for call in selected_action.tool_calls],
+                    })
                 self._record_message(
                     state,
                     Message(
@@ -1486,7 +1505,8 @@ class AgentRuntime:
                             pending_payloads=pending_during_action,
                         )
                         break
-                if (not interrupted_by_control and all_tool_receipts_succeeded
+                if (not early_tool_acknowledged and not interrupted_by_control
+                        and all_tool_receipts_succeeded
                         and selected_action.assistant_message.strip()
                         and not self.history.list_pending_control_messages(state.session_id)):
                     # The action model has not observed these results when drafting
@@ -1554,7 +1574,30 @@ class AgentRuntime:
                 self._heartbeat(state, phase="waiting_for_user", detail="blocking user question", active_kind="question", active_id=str(action_index))
             try:
                 completion = None
-                if (self.config.runtime.completion_evaluation_enabled
+                # The same capable model that generated the compact foreground
+                # action decides whether this was ordinary conversation. A
+                # tool-free first reply can finish immediately: forcing a
+                # second semantic model call before speaking adds latency and
+                # can itself introduce new errors. Work, questions, controls,
+                # resumption and exact-count requests retain their normal gates.
+                single_pass_direct_reply = (
+                    self.config.communication.single_pass_direct_replies
+                    and compact_foreground_action and accepted_actions == 1
+                    and not resumed_control_ids and not tool_results
+                    and not selected_action.questions and not state.open_questions
+                    and selected_action.response_constraints.exact_word_count is None
+                    and bool(selected_action.assistant_message.strip())
+                    and not self.history.list_pending_control_messages(state.session_id)
+                )
+                if single_pass_direct_reply:
+                    completion = {
+                        "complete": True,
+                        "reason": "First compact foreground action selected a direct reply without tools or questions.",
+                        "remaining_work": [],
+                        "verification_scope": "foreground_single_pass_unreviewed",
+                    }
+                    self.history.record_event(state, "completion_evaluated", completion)
+                elif (self.config.runtime.completion_evaluation_enabled
                         and self.config.communication.direct_reply_verification
                         and compact_foreground_action and accepted_actions == 1
                         and not resumed_control_ids and not tool_results

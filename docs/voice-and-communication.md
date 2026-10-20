@@ -420,3 +420,9 @@ integrity checks and moves costly work off the user request path. The
 foregoing numbers require offline regression and live deployed validation
 before the entire voice app can be called responsive. Model choice and
 quantization are unchanged.
+
+## October 20, 2026: single-pass foreground and spoken tool acknowledgement (opt-in)
+
+SWAAG's compact Coder foreground can now finish a simple question after the single model-authored action, without a separate direct-reply or completion-evaluation LLM. `communication.single_pass_direct_replies` is deliberately off by default; when enabled, only a first tool-free, question-free, nonresumed reply without pending controls, prior effects or explicit exact-word-count metadata takes this path. It is not independent semantic verification, and real model quality remains necessary. Worker results and tool effects retain the independent evaluator.
+
+`communication.early_tool_acknowledgement` permits an initial tool-bearing action's spoken `assistant_progress` to be durably emitted immediately after selection and argument validation, before tool execution. The message must be an intention, not a claim of execution or success. Execution then continues on a separate stream executor while the receiver plays the reply; later errors and the final answer remain visible. The first action does not emit an additional late duplicate. The existing receipt fencing, preemption and state replay rules remain in force. Timing data and exact evidence: `docs/foreground-single-pass-2026-10-20.md`.
