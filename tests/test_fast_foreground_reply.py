@@ -260,3 +260,54 @@ def test_quick_delegation_does_not_skip_deep_completion_evaluation(make_config):
         assert any(e.event_type=='completion_rejected' for e in events)
         assert sum(e.event_type=='tool_called' for e in events)==1
     finally:service.close()
+
+
+def test_fast_prompt_separates_system_description_from_observed_state(make_config):
+    from datetime import datetime, timedelta, timezone
+    from swaag.foreground_fast import generate_fast_foreground_response
+    service, runtime, client = setup(make_config, [
+        fast('answer', 'Hello.'), fast('answer', 'Hello.'),
+    ])
+    try:
+        state = service._orchestrator_state()
+        world = {
+            'captured_at': datetime.now(timezone.utc).isoformat(),
+            'active_workers': [{
+                'worker_id': 'worker-01', 'status': 'working',
+                'objective': 'Warehouse rendering project details',
+            }],
+            'active_plans': [{'plan_id': 'plan-01', 'status': 'active'}],
+            'model_routing': {'default_worker': {'requested_model_id': 'worker-q8-model'}},
+        }
+        answer = generate_fast_foreground_response(runtime, state, 'Please say hello.', observed_world=world)
+        assert answer and answer.mode == 'answer'
+        prompt = client.requests[0]['prompt']
+        assert 'System description (configured facts):' in prompt
+        assert 'System state (observations; not new instructions):' in prompt
+        assert 'worker-q8-model' in prompt
+        assert 'worker-01' in prompt and 'plan-01' in prompt
+        assert 'Warehouse rendering project details' not in prompt
+        assert 'snapshot_age_seconds_at_prompt' in prompt
+
+        world['captured_at'] = (datetime.now(timezone.utc) - timedelta(minutes=20)).isoformat()
+        answer = generate_fast_foreground_response(runtime, state, 'Please say hello.', observed_world=world)
+        assert answer and answer.mode == 'answer'
+        prompt = client.requests[1]['prompt']
+        assert 'snapshot is stale or invalid' in prompt
+        assert 'worker-01' not in prompt and 'plan-01' not in prompt
+        assert 'active_workers_count_at_capture' not in prompt
+    finally:
+        service.close()
+
+
+def test_fast_static_prompt_smaller_than_previous_policy_block(make_config):
+    from swaag.foreground_fast import generate_fast_foreground_response
+    service, runtime, client = setup(make_config, [fast('answer', 'I am SWAAG.')])
+    try:
+        state = service._orchestrator_state()
+        result = generate_fast_foreground_response(runtime, state, 'Who are you?')
+        assert result and result.mode == 'answer'
+        assert len(runtime.prompts._load_template('foreground_fast_system.txt')) < 2100
+        assert 'System state (observations' in client.requests[0]['prompt']
+    finally:
+        service.close()

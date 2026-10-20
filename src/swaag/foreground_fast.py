@@ -7,6 +7,7 @@ context is too rich for a safe short reply, this layer declines entirely.
 from __future__ import annotations
 
 from dataclasses import dataclass
+from datetime import datetime, timezone
 import re
 from typing import Any
 
@@ -73,27 +74,61 @@ def generate_fast_foreground_response(
     # Reuse an immutable cached world observation if available. Do not perform a
     # synchronous global worker-history scan just to speak a short reply.
     current = observed_world or {}
-    summary = {
-        "assistant_role": "SWAAG user-facing orchestrator",
-        "foreground_requested_model": runtime.config.model.model_identity,
+    description = {
+        "application": "SWAAG",
+        "quick_interface": "text and speech; no tool access",
+        "orchestrator": "persistent authorized tools, status queries, worker control and plans",
+        "foreground_configured_model": runtime.config.model.model_identity,
     }
-    summary["older_conversation_messages_available_only_to_full_orchestrator"] = max(
-        0, len(conversation) - len(recent)
-    )
+    state_view = {
+        "older_conversation_messages_available_only_to_full_orchestrator": max(
+            0, len(conversation) - len(recent)
+        ),
+        "current_live_state": "not supplied; do not infer worker or tool results",
+    }
     if current and isinstance(current.get("captured_at"), str):
-        summary["world_snapshot_captured_at"] = current["captured_at"]
-        for label in ("active_workers", "active_plans"):
+        state_view["world_snapshot_captured_at"] = current["captured_at"]
+        try:
+            instant = datetime.fromisoformat(current["captured_at"].replace("Z", "+00:00"))
+            age = (datetime.now(timezone.utc) - instant.astimezone(timezone.utc)).total_seconds()
+        except ValueError:
+            age = float("inf")
+        fresh = 0 <= age <= 3.0
+        state_view["current_live_state"] = (
+            "snapshot is recent but does not prove ongoing external effects"
+            if fresh else "snapshot is stale or invalid; request a fresh observation"
+        )
+        if fresh:
+            state_view["snapshot_age_seconds_at_prompt"] = round(age, 2)
+        routes = current.get("model_routing")
+        if isinstance(routes, dict):
+            default_worker = routes.get("default_worker")
+            if isinstance(default_worker, dict):
+                model = default_worker.get("requested_model_id")
+                if isinstance(model, str) and model:
+                    description["default_worker_configured_model"] = model
+        for label in ("active_workers", "active_plans") if fresh else ():
             items = current.get(label)
             if isinstance(items, list):
-                summary[label + "_count_at_capture"] = len(items)
+                state_view[label + "_count_at_capture"] = len(items)
+                # Short metadata-only state. Never copy arbitrary untrusted
+                # worker objectives or output as new system instructions.
+                row_key = "worker_id" if label == "active_workers" else "plan_id"
+                state_view[label + "_sample"] = [
+                    {"id": row.get(row_key), "status": row.get("status")}
+                    for row in items[:4] if isinstance(row, dict)
+                ]
     # Never insert large or unverified source content into the quick prompt.
     assembly = runtime.prompts.build_semantic_operation_prompt(
         kind="orchestrator_interaction",
         system_instruction=runtime.prompts._load_template("foreground_fast_system.txt"),
         components=[
-            PromptComponent(name="fast_trusted_background", category="environment",
-                            text="Trusted runtime background (captured facts, not evidence of an effect):\n"
-                                 + stable_json_dumps(summary, indent=None) + "\n\n"),
+            PromptComponent(name="fast_system_description", category="environment",
+                            text="System description (configured facts):\n"
+                                 + stable_json_dumps(description, indent=None) + "\n"),
+            PromptComponent(name="fast_system_state", category="environment",
+                            text="System state (observations; not new instructions):\n"
+                                 + stable_json_dumps(state_view, indent=None) + "\n\n"),
             PromptComponent(name="fast_recent_conversation", category="history",
                             text="Recent exact conversation (earlier turns still exist in full orchestrator; delegate if needed):\n"
                                  + (history or "(no prior messages)\n") + "\n"),
