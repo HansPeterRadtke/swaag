@@ -39,6 +39,9 @@ def test_simple_direct_answer_uses_only_one_llm_and_commits_one_turn(make_config
         assert sum(e.event_type == "control_message_processed" for e in events) == 1
         assert not any(e.event_type == "tool_called" for e in events)
         assert not runtime.history.list_pending_control_messages(sid)
+        # A completed direct fast reply must not leave a phantom supervisor
+        # operation that blocks idle-safe deployment for hours afterwards.
+        assert service.supervisor.snapshot()["active_sessions"] == []
         again = list(service.iter_orchestrator_message("Who are you?", control_id="fast_simple"))
         assert again[-1]["result"]["answer"] == "I am SWAAG."
         assert len(client.requests) == 1
@@ -75,6 +78,7 @@ def test_delegate_speaks_before_deep_model_or_tool_and_keeps_original(make_confi
         assert sum(e.event_type == "tool_called" for e in events) == 1
         assert sum(e.event_type == "assistant_progress" for e in events) == 1
         assert len(client.requests) == 3
+        assert service.supervisor.snapshot()["active_sessions"] == []
         reconnect = list(service.iter_orchestrator_message(
             "Use calculator to compute six times seven.", control_id="fast_deep",
             after_sequence=progress["sequence"]))
