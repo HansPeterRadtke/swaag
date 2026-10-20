@@ -434,3 +434,46 @@ SWAAG's compact Coder foreground can now finish a simple question after the sing
 ## Fast user-facing world state, October 20
 
 The fast Coder user-facing context now receives the background-precomputed current worker and plan *content*, not merely worker counts or a few IDs. It includes all active worker task summaries, finite/continuous mode, start and elapsed time, latest reported action, last-report age, model inference status, explicitly assessed percent/ETA (or unknown), worker/plan node progress kept separate, and blocker/question counts. This is a compact typed view of the canonical runtime snapshot, freshness- and task-revision-checked without extra synchronous project reads or model calls. A fully current simple status question should be answered immediately; missing evidence goes to the unchanged full orchestrator. See `docs/fast-worker-world-context-2026-10-20.md`.
+
+## October 20: guard against multi-hour worker model generation and stalled fast foreground activation
+
+A live 3D warehouse worker on Qwen3.8 Q8 produced more than 113,000
+generated tokens in one constrained action (over six hours), then exhausted
+a 78,643-token output allocation. The runtime automatically expanded that
+action's allowed output to 117,965 tokens, effectively turning JSON action
+selection into unlimited generation. The output had not committed a new
+tool effect; the worker remained marked working and the idle-safe SWAAG
+activation timer correctly refused to restart its process.
+
+A full 262,144-token **input context** does not justify a 117,965-token
+**JSON action output**. Output exhaustion can mean a model is stuck in
+an unclosed JSON string, not that still more generation is required.
+
+The worker's action recovery is now bounded by the configurable context
+max_action_output_tokens setting (default 8,192). Valid requests with
+larger initial contract admission still run unchanged; the cap governs
+repeated auto-expansion of incomplete background-worker actions only.
+When the ceiling is exhausted, the worker fails explicitly with its
+durable session intact and can be resumed rather than endlessly emitting
+tokens. Foreground Coder direct conversation and unrelated semantic
+summary outputs retain their normal capacity rules.
+
+A second safeguard bounds every continuously streaming model generation
+by model.max_generation_wall_seconds (default 600 seconds), independently
+of idle/token timeouts. A model that continues to report progress
+but never closes its JSON response now has its transport terminated
+with a visible timeout; partial model output is never executed as a
+completed action. Actual externally executed tool work is not subject
+to this model-inference deadline. Normal user-directed cancellation
+still takes precedence; active model slots must be observed during
+maintenance before initiating a replay.
+
+The newly clarified fast-frontend static prompt explicitly distinguishes
+its **Coder foreground model** from the **Qwen3.8 background worker
+model**. A read-only live Coder trial previously confused the two
+despite both identities appearing in structured facts. With the clarified
+prompt, a fresh model trial answered its identity correctly and delegated
+a combined question/action request. A fresh authoritative worker-state
+sample allowed a direct, truthful worker-status reply without fabricating
+a completion percentage or ETA. These are representative trials, not
+proof of perfect semantic routing.

@@ -9127,14 +9127,25 @@ class AgentRuntime:
 
         raise AssertionError("unreachable output-recovery loop")
 
-    @staticmethod
-    def _expanded_output_minimum(prepared: PreparedCall) -> int:
+    def _expanded_output_minimum(self, prepared: PreparedCall) -> int:
         current = int(prepared.report.reserved_response_tokens)
-        ceiling = max(
-            current,
-            int(prepared.report.context_limit)
-            - int(prepared.report.safety_margin_tokens),
-        )
+        ceiling = max(current, int(prepared.report.context_limit)
+                      - int(prepared.report.safety_margin_tokens))
+        if (prepared.assembly.kind == "action"
+                and self._current_inference_priority()[1].startswith("worker:")):
+            output_limit = int(self.config.context.max_action_output_tokens)
+            if output_limit < 128:
+                raise ValueError("context.max_action_output_tokens must be at least 128")
+            if current >= output_limit:
+                # The last attempt already exhausted the maximum valid output
+                # budget. More generation cannot fix an endlessly open string
+                # or schema: fail the resumable worker and retain all evidence.
+                raise ModelClientError(
+                    f"Action model exhausted its {output_limit}-token output "
+                    "ceiling. Preserved worker/task state; no further unbounded "
+                    "output recovery permitted."
+                )
+            ceiling = min(ceiling, output_limit)
         return min(ceiling, max(current + 64, (current * 3 + 1) // 2))
 
     def _record_inference_started(
