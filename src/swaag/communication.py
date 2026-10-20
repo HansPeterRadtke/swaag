@@ -58,7 +58,10 @@ from swaag.protocol_adapters import (
     AgUiRunInput,
     OpenWebUiProjectionAdapter,
 )
-from swaag.runtime import AgentRuntime
+from swaag.runtime import AgentRuntime, BudgetExceededError
+from swaag.model import ModelClientError
+from swaag.foreground_fast import generate_fast_foreground_response
+from swaag.action import AgentAction, AgentStatus
 from swaag.session_lock import session_execution_lock, session_control_lock
 from swaag.shared_state import (
     SharedStateChannel,
@@ -2399,6 +2402,90 @@ class CommunicationService:
                 if pending[0]["control_id"] == receipt["control_id"]:
                     return result
 
+    def _try_fast_foreground_reply(self, state, receipt: dict[str, Any]):
+        """Fast speech decision, with unchanged durable authority and safe fallback.
+
+        Returning a direct answer is allowed only if this receipt is the sole
+        pending controller message and the semantic stage found no work. The
+        full model/controller receives every delegated message unchanged.
+        """
+        runtime = self.orchestrator_runtime
+        if not runtime.config.communication.fast_initial_reply:
+            return None
+        # Reconnect/daemon recovery may revisit the same accepted receipt.
+        # Replay the originally committed first speech rather than generating
+        # another, potentially inconsistent acknowledgement and wasting an LLM.
+        for position, observed in enumerate(runtime.history.iter_history_reverse(
+            state.session_id, event_types=("assistant_progress",),
+        )):
+            if position >= 64:
+                break  # Bounded indexed history read; never scan the whole journal here.
+            if (observed.payload.get("control_id") == receipt["control_id"]
+                    and observed.payload.get("delivery_phase") == "fast_before_deep_orchestration"):
+                return {"mode": "delegate", "reply": observed.payload["assistant_text"],
+                        "reused": True}
+        pending = runtime.history.list_pending_control_messages(state.session_id)
+        if len(pending) != 1 or pending[0]["control_id"] != receipt["control_id"]:
+            return None
+        with self._foreground_snapshot_lock:
+            observed = copy.deepcopy(self._foreground_snapshot)
+        try:
+            candidate = generate_fast_foreground_response(
+                runtime, state, str(receipt["message"]), observed_world=observed,
+            )
+        except (ValueError, ModelClientError, BudgetExceededError) as exc:
+            # A failed optional fast layer never loses the original request.
+            # The full orchestrator is the safe fallback for the same receipt.
+            runtime.history.record_event(state, "orchestrator_interaction_unavailable", {
+                "message": str(receipt["message"]), "error": str(exc),
+                "error_type": type(exc).__name__,
+            })
+            return None
+        if candidate is None:
+            return None
+        with session_control_lock(runtime.history, state.session_id):
+            pending = runtime.history.list_pending_control_messages(state.session_id)
+            if len(pending) != 1 or pending[0]["control_id"] != receipt["control_id"]:
+                return None  # A later authoritative user correction arrived.
+            if candidate.mode == "answer":
+                # The answer uses one semantic model request and no tools.
+                # Persist an ordinary turn and consume the exact authoritative
+                # control under the same short lock as the normal controller.
+                runtime.history.record_event(state, "turn_started", {
+                    "turn_index": state.turn_count + 1,
+                    "user_text": str(receipt["message"]),
+                    "execution_loop": "fast_direct_foreground",
+                    "run_id": "",
+                    "resumed_control_ids": [],
+                })
+                decision = AgentAction(
+                    assistant_message=candidate.reply,
+                    tool_calls=[], continue_loop=False, silent_completion=False,
+                    status=AgentStatus("Direct conversation.", "Reply to user.",
+                                       "A self-contained question needs no work.", "normal"),
+                    questions=[],
+                )
+                runtime._consume_pending_control_messages_locked(
+                    state, pending_payloads=pending, selected_action=decision,
+                )
+                runtime.history.record_event(state, "completion_evaluated", {
+                    "complete": True, "reason": "Fast direct reply; no tools requested by the model.",
+                    "remaining_work": [], "verification_scope": "fast_foreground_unreviewed",
+                })
+                runtime._finish_turn(state, candidate.reply, [], [])
+                return {"mode": "answer", "reply": candidate.reply,
+                        "input_tokens": candidate.budget_input_tokens}
+            # The control is not consumed yet: full orchestration still owns
+            # the semantic task and subsequent tool/external effects.
+            runtime.history.record_event(state, "assistant_progress", {
+                "action_index": 0,
+                "control_id": str(receipt["control_id"]),
+                "assistant_text": candidate.reply,
+                "delivery_phase": "fast_before_deep_orchestration",
+            })
+            return {"mode": "delegate", "reply": candidate.reply,
+                    "input_tokens": candidate.budget_input_tokens}
+
     def _orchestrator_message_locked(
         self, receipt: dict[str, Any], *, resume_request: str | None = None,
         resumed_control_ids: tuple[str, ...] = (),
@@ -2435,21 +2522,36 @@ class CommunicationService:
                 with self.orchestrator_runtime.inference_priority(
                     self.runtime.config.communication.orchestrator_priority, source="user_orchestrator"
                 ):
-                    # Every finalized foreground utterance reaches the same action
-                    # controller. A separate semantic router repeatedly lost mixed
-                    # prohibitions in live trials; English claim regexes also changed
-                    # semantic intent incorrectly. The full action may answer directly
-                    # or issue tools, with current state, ordered authority and the
-                    # configured completion verifier. No second dispatcher can consume
-                    # a user instruction without this controller seeing it.
-                    if resume_request is None:
-                        result = self.orchestrator_runtime.run_turn_in_session(
-                            state, text, user_control_id=str(receipt["control_id"])
+                    fast_result = (
+                        self._try_fast_foreground_reply(state, receipt)
+                        if resume_request is None else None
+                    )
+                    if fast_result is not None and fast_result["mode"] == "answer":
+                        for runtime, request in preemptions:
+                            self._complete_runtime_preemption(
+                                runtime, request, target_changed=False,
+                                reply=fast_result["reply"],
+                            )
+                        return self._deliver_orchestrator_reply(
+                            state, fast_result["reply"], fresh=False,
                         )
-                    else:
-                        result = self.orchestrator_runtime.resume_turn_in_session(
-                            state, resume_request, resumed_control_ids=resumed_control_ids,
+                    fast_acknowledged = (fast_result is not None and fast_result["mode"] == "delegate")
+                    if fast_acknowledged:
+                        self.orchestrator_runtime.bind_tool_runtime_capability(
+                            state.session_id, "fast_foreground_reply_committed", True,
                         )
+                    try:
+                        result = self._run_authoritative_orchestrator_turn(
+                            state, text, receipt, resume_request, resumed_control_ids,
+                        )
+                    finally:
+                        if fast_acknowledged:
+                            self.orchestrator_runtime.bind_tool_runtime_capability(
+                                state.session_id, "fast_foreground_reply_committed", None,
+                            )
+                    # Every delegated request reaches the unchanged authoritative
+                    # action controller, with its full tools, user authority and
+                    # evidence checks. The optional fast model cannot execute tools.
                 self.orchestration.advance_active_plans()
                 for runtime, request in preemptions:
                     self._complete_runtime_preemption(
@@ -2465,6 +2567,17 @@ class CommunicationService:
                 for runtime, request in preemptions:
                     self._fail_runtime_preemption(runtime, request, exc)
                 raise
+
+    def _run_authoritative_orchestrator_turn(
+        self, state, text, receipt, resume_request, resumed_control_ids,
+    ):
+        if resume_request is None:
+            return self.orchestrator_runtime.run_turn_in_session(
+                state, text, user_control_id=str(receipt["control_id"])
+            )
+        return self.orchestrator_runtime.resume_turn_in_session(
+            state, resume_request, resumed_control_ids=resumed_control_ids,
+        )
 
     def _deliver_orchestrator_reply(
         self, state, answer: str, *, turn_finished_sequence: int | None = None,

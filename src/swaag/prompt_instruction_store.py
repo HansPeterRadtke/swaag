@@ -210,6 +210,13 @@ class PromptInstructionStore:
                 )
         return [current[instruction_id] for instruction_id in order]
 
+    def has_any_events(self) -> bool:
+        """Cheap conservative gate for calls that intentionally omit user policy."""
+        with self._connect() as connection:
+            return connection.execute(
+                "SELECT 1 FROM prompt_instruction_events LIMIT 1"
+            ).fetchone() is not None
+
     def list(self) -> list[PromptInstruction]:
         with self._connect() as connection:
             return self._rebuild(self._read_events(connection))

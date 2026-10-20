@@ -505,6 +505,8 @@ direct_reply_verification = false
 single_pass_direct_replies = false
 # Stream an accepted first tool-action acknowledgement before calling the tools.
 early_tool_acknowledgement = false
+# Opt-in separate short initial semantic response; deep execution is asynchronous.
+fast_initial_reply = false
 enabled_tools = ["agent_workspace", "tool_forge", "diane", "list_files", "read_file", "read_text", "search_in_file", "search_repo", "read_artifact", "time_now", "system_resources", "calculator", "history_search", "history_window", "agent_status_lookup", "runtime_snapshot_lookup", "agent_control", "orchestration_control", "background_work", "questions", "revise_question", "worker_questions", "report_progress"]
 host = "127.0.0.1"
 port = 8765

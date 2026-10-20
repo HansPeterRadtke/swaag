@@ -859,6 +859,9 @@ class AgentRuntime:
         )
 
         runtime_capabilities = self.tool_runtime_capabilities(state.session_id)
+        initial_reply_already_delivered = bool(user_control_id) and bool(
+            runtime_capabilities.get("fast_foreground_reply_committed")
+        )
         compact_foreground_action = (
             self.config.communication.compact_foreground_actions
             and not allow_silent_completion and not self._single_responsibility_mode()
@@ -968,6 +971,7 @@ class AgentRuntime:
             action_index = accepted_actions + 1
             require_user_acknowledgement = (
                 bool(user_control_id) and accepted_actions == 0
+                and not initial_reply_already_delivered
                 and not allow_silent_completion and not self._single_responsibility_mode()
             )
             pending_payloads = self.history.list_pending_control_messages(state.session_id)
@@ -1316,6 +1320,7 @@ class AgentRuntime:
                     bool(user_control_id)
                     and self.config.communication.early_tool_acknowledgement
                     and accepted_actions == 1
+                    and not initial_reply_already_delivered
                     and not selected_action.questions
                     and not state.open_questions
                     and bool(selected_action.assistant_message.strip())
@@ -1505,8 +1510,8 @@ class AgentRuntime:
                             pending_payloads=pending_during_action,
                         )
                         break
-                if (not early_tool_acknowledged and not interrupted_by_control
-                        and all_tool_receipts_succeeded
+                if (not early_tool_acknowledged and not initial_reply_already_delivered
+                        and not interrupted_by_control and all_tool_receipts_succeeded
                         and selected_action.assistant_message.strip()
                         and not self.history.list_pending_control_messages(state.session_id)):
                     # The action model has not observed these results when drafting
@@ -1582,6 +1587,7 @@ class AgentRuntime:
                 # resumption and exact-count requests retain their normal gates.
                 single_pass_direct_reply = (
                     self.config.communication.single_pass_direct_replies
+                    and not initial_reply_already_delivered
                     and compact_foreground_action and accepted_actions == 1
                     and not resumed_control_ids and not tool_results
                     and not selected_action.questions and not state.open_questions

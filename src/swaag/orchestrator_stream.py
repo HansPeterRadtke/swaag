@@ -46,8 +46,14 @@ class OrchestratorEventCursor:
                 self.finished = True
                 self.final_sequence = event.sequence
                 break
-            elif (self.active and event.event_type == "assistant_progress"
-                    and event.sequence > self.after_sequence):
+            elif (event.event_type == "assistant_progress"
+                    and event.sequence > self.after_sequence
+                    and (self.active or event.payload.get("control_id") == self.control_id)):
+                # Before the deep controller processes a finalized request, a
+                # fast reply is already committed against that exact receipt.
+                # Never leak any other turn's progress during replay.
+                if not self.active and event.payload.get("control_id") != self.control_id:
+                    continue
                 visible.append({
                     "event": "assistant_progress", "session_id": self.session_id,
                     "control_id": self.control_id, "sequence": event.sequence,

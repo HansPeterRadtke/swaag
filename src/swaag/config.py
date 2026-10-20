@@ -339,6 +339,7 @@ class CommunicationConfig:
     direct_reply_verification: bool = False
     single_pass_direct_replies: bool = False
     early_tool_acknowledgement: bool = False
+    fast_initial_reply: bool = False
     max_active_workers: int = 128
     max_pending_requests: int = 128
     idle_work_mode: str = "finish_only"
@@ -823,6 +824,7 @@ def _coerce_config(
         direct_reply_verification=data["communication"]["direct_reply_verification"],
         single_pass_direct_replies=data["communication"].get("single_pass_direct_replies", False),
         early_tool_acknowledgement=data["communication"].get("early_tool_acknowledgement", False),
+        fast_initial_reply=data["communication"].get("fast_initial_reply", False),
         max_active_workers=data["communication"].get("max_active_workers", 128),
         max_pending_requests=data["communication"].get("max_pending_requests", 128),
         orchestrator_priority=int(data["communication"]["orchestrator_priority"]),
@@ -1096,6 +1098,8 @@ def _coerce_config(
         raise ValueError("communication.single_pass_direct_replies must be a boolean")
     if not isinstance(communication.early_tool_acknowledgement, bool):
         raise ValueError("communication.early_tool_acknowledgement must be a boolean")
+    if not isinstance(communication.fast_initial_reply, bool):
+        raise ValueError("communication.fast_initial_reply must be a boolean")
     if communication.single_pass_direct_replies and not communication.compact_foreground_actions:
         raise ValueError("communication.single_pass_direct_replies requires compact_foreground_actions")
     artifact_serving = communication.open_webui_artifacts
@@ -1493,6 +1497,10 @@ def _parameter_semantics(
         "communication.early_tool_acknowledgement": (
             "Publish the first foreground tool-action acknowledgement to the speech stream immediately after durable action acceptance, before executing tools.",
             "The acknowledgement is provisional and must describe intent, not unobserved results. Tools and verification run independently of speech playback; later outcomes and failures remain visible. Requires streaming consumers to distinguish assistant_progress from final completion.",
+        ),
+        "communication.fast_initial_reply": (
+            "Run one small, semantically capable quick reply/optional delegation inference before full orchestration.",
+            "Experimental opt-in. The quick reply is durably bound to its original finalized control receipt and can be spoken before deeper execution. Direct replies skip full orchestration only with sufficient current authority and no new user control; ambiguous, history-heavy, unavailable or invalid results fall back safely. Tool execution always stays in the full orchestrator.",
         ),
         "communication.status_priority": (
             "Inference admission priority of status queries and finalized targeted controls.",
