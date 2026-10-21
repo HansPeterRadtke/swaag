@@ -18,10 +18,20 @@ def apply(trace:Path, checks:Path, output:Path) -> dict:
     items=[json.loads(line) for line in trace.read_text().splitlines()]
     evidence=json.loads(checks.read_text())
     marked=[]
+    seen_ids=set()
+    seen_claims=set()
     for row in evidence:
-        assert isinstance(row,dict) and row['verdict'] in VERDICTS
+        if not isinstance(row,dict) or row.get('verdict') not in VERDICTS:
+            raise ValueError('evidence verdict must be one of the explicitly limited review outcomes')
         for key in ('id','source_file','source_phrase','owner','implementation','tests','observation','remaining'):
             if not row.get(key):raise ValueError(f'missing or empty {key} in {row.get("id")}')
+        if row['id'] in seen_ids:
+            raise ValueError('duplicate evidence ID: ' + row['id'])
+        seen_ids.add(row['id'])
+        claim=(row['source_file'],row['source_phrase'].casefold())
+        if claim in seen_claims:
+            raise ValueError('duplicate source evidence claim: ' + row['id'])
+        seen_claims.add(claim)
         candidates=[item for item in items if item['source_file']==row['source_file']
                     and row['source_phrase'].casefold() in item['source_text'].casefold()]
         if len(candidates)!=1:

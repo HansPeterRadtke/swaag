@@ -60,3 +60,31 @@ def test_overlay_requires_one_exact_source_and_never_certifies_whole_paragraph(t
     src.write_text(json.dumps(records))
     with pytest.raises(ValueError,match='nonexistent'):
         apply(output/'requirement_source_trace.jsonl',src,tmp_path/'joined')
+
+
+def test_overlay_rejects_duplicate_evidence_and_unearned_full_certification(tmp_path):
+    guide=tmp_path/'guidlines';guide.mkdir()
+    (guide/'agents.md').write_text('# Agent\n\nPreserve original user authority.\n')
+    originals=guide/'original-recordings';originals.mkdir()
+    (originals/'first.txt').write_text('Original user statement.')
+    output=tmp_path/'index';generate(guide,output)
+    template={
+        'id':'task-authority','verdict':'MECHANISM_TESTED_SCOPE_LIMITED',
+        'source_file':'agents.md','source_phrase':'Preserve original user authority.',
+        'owner':'SWAAG','implementation':'src/swaag/communication.py',
+        'tests':'tests/test_control_authority.py',
+        'observation':'One tested narrow receipt path.',
+        'remaining':'Further model and real-world effects unverified.',
+    }
+    source=tmp_path/'checks.json'
+    source.write_text(json.dumps([template,template]))
+    with pytest.raises(ValueError,match='duplicate evidence ID'):
+        apply(output/'requirement_source_trace.jsonl',source,tmp_path/'applied')
+    duplicate={**template,'id':'second-review'}
+    source.write_text(json.dumps([template,duplicate]))
+    with pytest.raises(ValueError,match='duplicate source evidence claim'):
+        apply(output/'requirement_source_trace.jsonl',source,tmp_path/'applied')
+    unsupported={**template,'verdict':'FULLY_COMPLIANT'}
+    source.write_text(json.dumps([unsupported]))
+    with pytest.raises(ValueError,match='verdict'):
+        apply(output/'requirement_source_trace.jsonl',source,tmp_path/'applied')
