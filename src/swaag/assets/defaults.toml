@@ -166,6 +166,11 @@ max_capture_chars = 12000
 
 # Stop commands explicitly at this exact-output capture bound; never silently clip.
 max_output_bytes = 67108864
+# Bound each direct text write in bytes, not Unicode characters.
+max_workspace_write_bytes = 16777216
+# Refuse new workspace allocations when filesystem user-available headroom is low.
+# Does not replace host-level quotas on shell, Python or downloaded packages.
+min_free_disk_bytes = 2147483648
 max_list_files = 1000
 # Shared forge and Diane retained content; capacity refusal never evicts revisions.
 max_knowledge_bytes = 67108864

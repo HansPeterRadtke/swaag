@@ -153,6 +153,10 @@ class AgentWorkspaceTool(Tool):
     def execute(self, validated_input: dict[str, Any], context: ToolContext) -> ToolExecutionResult:
         root, workspace, home, venv = _ensure_layout(context)
         operation = validated_input["operation"]
+        if operation in {"python", "shell", "pip_install"}:
+            # Admission only: the sandboxed process can still allocate disk
+            # after startup, so do not claim an OS-enforced disk quota.
+            _require_workspace_headroom(root, context.config.agent_data.min_free_disk_bytes)
         events: list[ToolGeneratedEvent] = []
         max_chars = min(
             validated_input["max_chars"] or context.config.agent_data.max_capture_chars,
@@ -184,7 +188,16 @@ class AgentWorkspaceTool(Tool):
             }
         elif operation == "write_text":
             target = _resolve_workspace_path(workspace, validated_input["path"])
+            exact_bytes = validated_input["text"].encode("utf-8")
+            if len(exact_bytes) > context.config.agent_data.max_workspace_write_bytes:
+                raise ToolValidationError("Agent workspace write exceeds configured write byte limit; no file changed")
             with _workspace_lock(root, "writes", context.config.agent_data.command_timeout_seconds):
+                # Atomic replacement writes a *second* full file first; reserve
+                # enough space for it rather than subtracting the old bytes.
+                _require_workspace_headroom(
+                    root, context.config.agent_data.min_free_disk_bytes,
+                    allocating_bytes=len(exact_bytes),
+                )
                 expected = validated_input["expected_sha256"]
                 actual = TextArtifactStore._measure(target, errors="strict")[2] if target.exists() else ""
                 if expected is not None and expected != actual:
@@ -201,6 +214,7 @@ class AgentWorkspaceTool(Tool):
                     Path(temporary).unlink(missing_ok=True)
             output = {"operation": operation, "path": _relative_name(workspace, target),
                       "chars": len(validated_input["text"]),
+                      "bytes": len(exact_bytes),
                       "sha256": sha256_text(validated_input["text"])}
         elif operation == "list_files":
             target = _resolve_workspace_path(workspace, validated_input["path"])
@@ -289,6 +303,26 @@ class AgentWorkspaceTool(Tool):
             display_text=f"agent_workspace result: {stable_json_dumps(output, indent=2)}",
             generated_events=events,
         )
+
+
+def _require_workspace_headroom(root: Path, minimum_free_bytes: int,
+                                *, allocating_bytes: int = 0) -> None:
+    """Fail closed for admission when the host's shared disk is nearly full.
+
+    This is a cheap statvfs measurement, NOT a promise that concurrently
+    running processes cannot later exhaust the filesystem. Kernel-enforced
+    workspace/process quotas remain a separate operating-system requirement.
+    """
+    try:
+        stats = os.statvfs(root)
+        unit = int(stats.f_frsize)
+        available = int(stats.f_bavail)
+        if unit <= 0 or available < 0:
+            raise ValueError("invalid filesystem free-space counters")
+    except (OSError, ValueError, TypeError) as exc:
+        raise ToolValidationError("Agent workspace free disk cannot be verified; no new write accepted") from exc
+    if available * unit - allocating_bytes < minimum_free_bytes:
+        raise ToolValidationError("Agent workspace insufficient free disk; no new write accepted")
 
 
 def _ensure_layout(context: ToolContext) -> tuple[Path, Path, Path, Path]:

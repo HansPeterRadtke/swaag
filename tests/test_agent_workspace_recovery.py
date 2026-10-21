@@ -137,3 +137,63 @@ def test_directory_paging_recovers_all_files_beyond_old_cap(make_config, tmp_pat
         if page["finished"]:break
         cursor = page["next_path"]
     assert seen == expected
+
+
+def test_workspace_text_write_enforces_utf8_byte_ceiling_without_mutating_files(make_config, tmp_path):
+    config = make_config(agent_data__root=tmp_path/'agent',
+                         agent_data__max_workspace_write_bytes=6,
+                         agent_data__min_free_disk_bytes=1)
+    accepted = workspace_call(config, 'write_text', path='note.txt', text='ä中')
+    assert accepted.output['chars'] == 2
+    assert (config.agent_data.root/'workspace/note.txt').read_text() == 'ä中'
+    with pytest.raises(ToolValidationError, match='write.*byte limit'):
+        workspace_call(config, 'write_text', path='note.txt', text='over-limit')
+    assert (config.agent_data.root/'workspace/note.txt').read_text() == 'ä中'
+    with pytest.raises(ToolValidationError, match='write.*byte limit'):
+        workspace_call(config, 'write_text', path='new/sub/over-limit.txt', text='1234567')
+    assert not (config.agent_data.root/'workspace/new').exists()
+
+
+def test_workspace_write_refuses_low_free_space_before_change(make_config, tmp_path, monkeypatch):
+    import os
+    import swaag.tools.agent_workspace as aw
+    config = make_config(agent_data__root=tmp_path/'agent',
+                         agent_data__min_free_disk_bytes=120,
+                         agent_data__max_workspace_write_bytes=50)
+    workspace_call(config, 'write_text', path='keep.txt', text='original')
+    native = os.statvfs
+    class LowSpace:
+        f_frsize = 1
+        f_bavail = 125
+    monkeypatch.setattr(aw.os, 'statvfs', lambda path: LowSpace())
+    with pytest.raises(ToolValidationError, match='insufficient free disk'):
+        workspace_call(config, 'write_text', path='keep.txt', text='something longer')
+    assert (config.agent_data.root/'workspace/keep.txt').read_text() == 'original'
+    with pytest.raises(ToolValidationError, match='insufficient free disk'):
+        workspace_call(config, 'write_text', path='new-folder/new.txt', text='sixteen bytes!')
+    assert not (config.agent_data.root/'workspace/new-folder').exists()
+    monkeypatch.setattr(aw.os,'statvfs',native)
+
+
+def test_workspace_writable_process_is_not_started_if_headroom_is_unknown(make_config, tmp_path, monkeypatch):
+    import swaag.tools.agent_workspace as aw
+    config=make_config(agent_data__root=tmp_path/'agent',
+                       agent_data__min_free_disk_bytes=1024)
+    def cannot_observe(_root):
+        raise OSError('simulated inaccessible filesystem counter')
+    monkeypatch.setattr(aw.os,'statvfs',cannot_observe)
+    untouched=tmp_path/'marker'
+    with pytest.raises(ToolValidationError,match='free disk cannot be verified'):
+        workspace_call(config,'shell',command=f'touch {untouched}')
+    assert not untouched.exists()
+    with pytest.raises(ToolValidationError,match='free disk cannot be verified'):
+        workspace_call(config,'write_text',path='no.txt',text='new content')
+    assert not (config.agent_data.root/'workspace/no.txt').exists()
+
+
+def test_workspace_storage_admission_settings_reject_invalid_values():
+    from swaag.config import load_config
+    for name in ('MAX_WORKSPACE_WRITE_BYTES', 'MIN_FREE_DISK_BYTES'):
+        for invalid in ('0','-1'):
+            with pytest.raises(ValueError,match='must be positive'):
+                load_config(env={'SWAAG__AGENT_DATA__'+name:invalid})

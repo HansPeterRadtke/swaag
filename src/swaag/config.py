@@ -94,6 +94,8 @@ class AgentDataConfig:
     command_timeout_seconds: int
     max_capture_chars: int
     max_output_bytes: int = 67108864
+    max_workspace_write_bytes: int = 16777216
+    min_free_disk_bytes: int = 2147483648
     max_list_files: int = 1000
     max_knowledge_bytes: int = 67108864
     max_knowledge_revisions: int = 10000
@@ -643,6 +645,8 @@ def _coerce_config(
         command_timeout_seconds=int(data["agent_data"]["command_timeout_seconds"]),
         max_capture_chars=int(data["agent_data"]["max_capture_chars"]),
         max_output_bytes=int(data["agent_data"]["max_output_bytes"]),
+        max_workspace_write_bytes=int(data["agent_data"]["max_workspace_write_bytes"]),
+        min_free_disk_bytes=int(data["agent_data"]["min_free_disk_bytes"]),
         max_list_files=int(data["agent_data"]["max_list_files"]),
         max_knowledge_bytes=int(data["agent_data"]["max_knowledge_bytes"]),
         max_knowledge_revisions=int(data["agent_data"]["max_knowledge_revisions"]),
@@ -1305,6 +1309,8 @@ def _coerce_config(
     )
     _validate_positive("agent_data.max_capture_chars", agent_data.max_capture_chars)
     _validate_positive("agent_data.max_output_bytes", agent_data.max_output_bytes)
+    _validate_positive("agent_data.max_workspace_write_bytes", agent_data.max_workspace_write_bytes)
+    _validate_positive("agent_data.min_free_disk_bytes", agent_data.min_free_disk_bytes)
     _validate_positive("agent_data.max_list_files", agent_data.max_list_files)
     _validate_positive("agent_data.max_knowledge_bytes", agent_data.max_knowledge_bytes)
     _validate_positive("agent_data.max_knowledge_revisions", agent_data.max_knowledge_revisions)
@@ -1508,6 +1514,14 @@ def _parameter_semantics(
         "agent_data.max_output_bytes": (
             "Maximum combined exact stdout and stderr bytes retained by one agent-workspace command.",
             "Exceeding this bound stops the owned command and reports an explicit incomplete capture with recoverable retained output; it never reports success or discards a tail silently.",
+        ),
+        "agent_data.max_workspace_write_bytes": (
+            "Maximum UTF-8 bytes accepted by one atomic agent_workspace.write_text operation.",
+            "Requests over the limit fail without replacing files. This does NOT enforce an aggregate disk quota for shell, Python or installed packages.",
+        ),
+        "agent_data.min_free_disk_bytes": (
+            "Reserved filesystem headroom required before agent workspace operations that may write data.",
+            "The read-only statvfs admission refuses operations when free bytes cannot be verified or a direct write would consume the reserve. Other processes and shell commands may still use space after admission; this is not a host-wide quota.",
         ),
         "agent_data.max_list_files": (
             "Maximum file entries returned by one agent-workspace directory page.",
@@ -1718,6 +1732,7 @@ def _parameter_semantics(
 
 def _parameter_range(dotted: str, value: Any) -> str | None:
     if dotted in {"agent_data.max_capture_chars", "agent_data.max_output_bytes",
+                  "agent_data.max_workspace_write_bytes", "agent_data.min_free_disk_bytes",
                   "agent_data.max_list_files", "agent_data.command_timeout_seconds",
                   "communication.max_concurrent_requests", "agent_data.max_knowledge_bytes",
                   "agent_data.max_knowledge_revisions"}:

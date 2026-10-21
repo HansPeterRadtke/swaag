@@ -210,9 +210,9 @@
     "verdict": "TESTED_BUT_FAILING",
     "owner": "KnowMoreDiRT on Nitro and Raspi, SWAAG retrieval integration",
     "implementation": "KnowMoreDiRT src/knowmoredirt/{engine,store,index,query,relations}.py",
-    "tests": "Nitro KnowMoreDiRT tests/unit and tests/evaluation; Raspi later revision tests/evaluation",
-    "observation": "Nitro old May version passes forty-one unit/smoke tests but fails four evaluation cases; hard corpus seventy-one of one hundred thirty-four, messy corpus twenty-nine of sixty. Raspi newer July version passes eight evaluation tests with a hard fixture target of one hundred thirty-one of one hundred thirty-four, not flawless semantic reasoning.",
-    "remaining": "Reconcile branch versions; independent unseen discourse-scope, negation, referent and cross-chunk heldouts; production quality.",
+    "tests": "Nitro KnowMoreDiRT tests/unit and tests/evaluation; Raspi later revision tests/evaluation; Nitro current upstream worktree tests/evaluation (8 pytest cases passed Oct 21); Raspi current public master tests/evaluation (8 cases passed Oct 21). Do not conflate these fixture tests with live model reasoning.",
+    "observation": "Nitro old May version passes forty-one unit/smoke tests but fails four evaluation cases; hard corpus seventy-one of one hundred thirty-four, messy corpus twenty-nine of sixty. Raspi newer July version passes eight evaluation tests with a hard fixture target of one hundred thirty-one of one hundred thirty-four, not flawless semantic reasoning. Additional Oct 21 read-only Nitro checkout of the newer upstream KMD code passed eight local evaluation harness tests. Its hard fixture deliberately accepts 131 of 134 correct no-model questions, retaining three unresolved actor/reviewer identifier failures. The latest Raspi master has passed eight evaluation tests but the human-readable docs/evaluation.md carries older model-free scores; treat its metadata as revision-specific and do not equate harness pass with perfect semantic accuracy.",
+    "remaining": "A real configured localhost semantic model was not reachable for fresh KMD live evaluation on Nitro at the checked endpoints; independent, unseen DRT/DRS context, role, negation and long-distance referent holdouts and actual end-to-end production queries remain unproven. Retain all three known semantic failure examples, compare KMD revisions and require model-backed evaluation before acceptance.",
     "source_block_sha256": "2204c5df61307abfa3cf57a6e597e1523a226991aa272c41f2c62b8f994cbfff"
   },
   {
@@ -258,21 +258,21 @@
     "verdict": "PARTIALLY_TESTED",
     "owner": "Nitro Games",
     "implementation": "games/godot_llm_generated_game_lab runtime and systemic simulation tests",
-    "tests": "tests/test_systemic_simulation.py; test_systemic_adapter_contract.py; test_rpg_contracts.py",
-    "observation": "Eighteen isolated systemic/adapter/RPG tests passed. The Games working tree currently contains many unrelated changes.",
-    "remaining": "Independently accepted authoritative 3D engine, cross-presentation equivalence, physical collision, full save/reload, usability and player testing.",
+    "tests": "tests/test_systemic_simulation.py; test_systemic_adapter_contract.py; test_rpg_contracts.py; Nitro Games browser_physics_prototype/tests/run-game-tests.sh (22 modules), tests/modality-contract.mjs, tests/llm-region-physical-integration.mjs, tests/gameplay-journey.mjs (read-only log /data/var/game-guideline-acceptance-20261021.log)",
+    "observation": "Eighteen isolated systemic/adapter/RPG tests passed. The Games working tree currently contains many unrelated changes. On Oct 21 the current Nitro working tree completed 22 local browser-physics test modules, with source-linked Rapier simulation, text/2D and common 3D state evidence; this was not a cross-browser production certification.",
+    "remaining": "Current Games source has extensive concurrent uncommitted changes, so the tested working-tree revision is not an immutable release. Verify the deployed headless PRSE service, browser/Android clients, save/interruption boundaries, visual physics fidelity and actual equivalent state across front ends.",
     "source_block_sha256": "e581bde2edb2efd4d66ad78c4c90bfa74f2eb3da4bdd9bbd8901f9c52516393d"
   },
   {
     "id": "save-at-any-moment",
     "source_file": "games/playability_realism_and_saving.md",
     "source_phrase": "Every game must be saveable at any moment",
-    "verdict": "NOT_ACCEPTED",
+    "verdict": "PARTIALLY_TESTED",
     "owner": "Nitro Games",
     "implementation": "Separate Games project's game modes and persistent state systems",
-    "tests": "No full save-anywhere mixed semantic/physical activity acceptance observed",
-    "observation": "Guideline explicitly requires saving during active/interrupted work; a simple start/stop smoke is not proof.",
-    "remaining": "Save/reload open quests, active physics, time state, generated world and ongoing goals with exact resumed state.",
+    "tests": "Nitro Games current working tree: browser_physics_prototype/tests/run-game-tests.sh; tests/save-migration.mjs; tests/event-journal.mjs; tests/llm-branch-world.mjs; tests/llm-region-physical-integration.mjs. Read-only test log: /data/var/game-guideline-acceptance-20261021.log",
+    "observation": "Oct 21 Nitro full local browser physics suite: 22 named test modules completed successfully, including atomic invalid-save rejection, timed-goal resume, old-to-new save migration, event-journal continuity and four reviewed/generated region materializations with saved world state. Current Games worktree was dirty; exact runner SHA-256 1c4927b1d53ec7263d6e74f10bebd8a20d17e64ba1408f9ab22ad26916d7afeb.",
+    "remaining": "Tested save/reload covers these specific fixtures, NOT arbitrary in-flight physics/voice/quests across device/browser crashes, real mobile suspend, every source mutation, nor physical phone user acceptance. Save-anywhere remains open until adversarial cut-at-every-state and live reconnect tests.",
     "source_block_sha256": "f99bc87a1d40b79ef5b439280471204dae8a421d0173839ba266d1f59c2f79a5"
   },
   {
@@ -382,5 +382,41 @@
     "source_file": "constraint_decoding.txt",
     "source_phrase": "Use this portable schema subset:",
     "source_block_sha256": "16a90a4caf6258a5e1830d91916e3389e1e5aa69f1daaa762325ec6d0ff8e8ab"
+  },
+  {
+    "id": "cross-modalities-physics-shared",
+    "source_file": "games/core_and_modalities.md",
+    "source_phrase": "A game must have an authoritative internal state",
+    "source_block_sha256": "3d52cc0f57b2068b1b382ca5e71417f56392bab5e72b1ef6c31f9364982ab205",
+    "owner": "Nitro Games project",
+    "verdict": "PARTIALLY_TESTED",
+    "implementation": "Nitro Games browser_physics_prototype/physics-core.js, text-adapter.js, side-view-renderer.js and prse_runtime server",
+    "tests": "Oct 21 Nitro current uncommitted Games worktree: tests/modality-contract.mjs, tests/gameplay-journey.mjs and tests/event-journal.mjs (run-game-tests.sh, log /data/var/game-guideline-acceptance-20261021.log)",
+    "observation": "The headless text and Canvas 2D fixtures exercised state from the shared Rapier three-dimensional core, with event-journal continuity. The complete local test script ran 22 modules successfully.",
+    "remaining": "Cross-framework interactive browser release, real physical contact behavior on all devices and actual public service behavior were not validated by this local suite."
+  },
+  {
+    "id": "semantic-physical-world-reconciliation",
+    "source_file": "games/core_and_modalities.md",
+    "source_phrase": "The off-screen PRSE world remains mostly semantic",
+    "source_block_sha256": "9c69f5c6d16fe9cb3f443a79026ff863a2e728c525503f04dc0b8dca722a6a60",
+    "owner": "Nitro Games project",
+    "verdict": "PARTIALLY_TESTED",
+    "implementation": "Nitro Games browser_physics_prototype/semantic-world.js, world-bridge.js, scene-translation.js, world-consequences.js and prse_runtime",
+    "tests": "Oct 21 Nitro tests/causal-world.mjs, tests/llm-region-physical-integration.mjs, tests/llm-branch-world.mjs, tests/narrative-roundtrip.mjs; log /data/var/game-guideline-acceptance-20261021.log",
+    "observation": "Suite passed selected causal off-screen fire stages, subsequent discovery, reviewed model-produced 3D region fixtures, four causal scene variants and semantic/physical save/reload consistency.",
+    "remaining": "No proof of universal physically plausible transitions, arbitrary generated scene complexity or fresh local-model generation during the suite; source working tree remains uncommitted."
+  },
+  {
+    "id": "workspace-min-free-disk-admission",
+    "source_file": "performance_reliability.md",
+    "source_phrase": "Set and enforce host-specific limits",
+    "source_block_sha256": "627c44b5b1b6ac54dc3755b7003bc7216f95a2824bad9b9142d771d233f4586e",
+    "owner": "Thor SWAAG agent-owned workspace",
+    "verdict": "PARTIALLY_TESTED",
+    "implementation": "src/swaag/tools/agent_workspace.py; src/swaag/config.py; src/swaag/assets/defaults.toml",
+    "tests": "tests/test_agent_workspace_recovery.py; tests/test_config.py; full SWAAG suite 1690 pass and 3 optional skips, Oct 21",
+    "observation": "Isolated workspace tests prove byte-accurate UTF-8 direct text-write limit, atomic file preservation when oversized/low disk, fail-closed statvfs errors, no execution of writable commands with unknown disk headroom, and positive configurable bounds. No stored user source files or large models were deleted.",
+    "remaining": "A free-space check is an admission floor, NOT cgroup/project quota. Arbitrary sandboxed shell/Python processes, pip-installed packages, concurrent writers, RAM/VRAM, downloaded weights and total retained workspace bytes can still grow past available storage after admission. Host-wide cross-service limits and independent failure tests remain open."
   }
 ]
