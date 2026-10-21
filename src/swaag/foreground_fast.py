@@ -146,6 +146,8 @@ def generate_fast_foreground_response(
                 state_view["worker_world"] = compact_worker_prompt_view(
                     fast_worker_state_at_prompt(compact, now=now)
                 )
+                if isinstance(compact.get("host_storage"), dict):
+                    state_view["host_storage"] = compact["host_storage"]
             else:
                 state_view["worker_world"] = {"snapshot_complete": False,
                                               "reason": "worker inventory unavailable"}

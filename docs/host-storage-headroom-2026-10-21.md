@@ -1,0 +1,15 @@
+# Read-only filesystem headroom in SWAAG's current-state snapshot
+
+## Purpose and source
+
+Thor's `/data` filesystem was observed at approximately ninety-eight percent usage, with about twenty-five gigabytes available to ordinary processes. The large usage includes model weights, video/image models, service environments and potentially protected history and production data. Arbitrary deletion is not an authorized optimization. The Infra guidelines require the assistant to know what state is genuinely observed, distinguish actual capacity from speculative future work, and manage resource limits without destroying user evidence.
+
+## Source implementation
+
+`host_storage.capture_host_storage` takes one read-only `statvfs` observation for the filesystem holding SWAAG's session history. It calculates available GiB from `f_bavail` (excluding filesystem-reserved blocks) and usage percentage from actual used plus nonprivileged available space, not an invented quota. Errors/invalid filesystem counters return `observation_available=false`, never a fake zero or guaranteed available amount. Every sample is timestamped and explicitly scoped to the shared filesystem—not the project's own artifact allowance and not a guarantee that a future write will succeed.
+
+The already-running background `_build_orchestrator_runtime_snapshot` adds that observation to its ordinary worker/plan state; it is available to the full controller and, when the snapshot is fresh, the compact fast Coder state. No synchronous directory walk, repeated LLM call, file write or model-service restart is necessary to answer a simple question about remaining space. Disk bytes change as other applications work, so the previously recorded snapshot timestamp qualifies the answer. Storage counters do **not** enter the task-revision fingerprint; a small log append must not preempt a legitimate user action or make a worker result obsolete. The implementation does not restrict tool execution, delete models, perform GC, mutate disk quotas, or claim resource enforcement where none exists.
+
+## Evidence
+
+Unit tests cover kernel capacity calculations, reserved blocks, unavailable or impossible `statvfs` counters, background snapshot integration and one fake-model fast reply containing the observed amount without tool calls. A read-only capture on Thor returned approximately **24.1 GiB available**, **97.3 percent of user-accessible capacity used**, and **935.2 GiB total filesystem capacity**, consistent with `df` reporting approximately **25 GiB available** and **98 percent usage** after rounding. The latter difference reflects display units and rounding. In an additional isolated real Qwen Coder query using the same read-only storage snapshot, the fast interface replied **directly** that approximately **23.8 GiB** remained available, with **1,607 input tokens** and about **five seconds** total elapsed; it needed no tool call and did not modify the live SWAAG conversation. This feature does **not** fix cross-host worker disk quotas, historical evidence retention or physical Android validation; those remain separate requirements.

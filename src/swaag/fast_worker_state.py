@@ -228,6 +228,7 @@ def build_fast_worker_state(snapshot: dict[str, Any]) -> dict[str, Any]:
             if isinstance(snapshot.get("orchestrator"), dict) else None
         ),
         "model_routing": snapshot.get("model_routing") or {},
+        "host_storage": snapshot.get("host_storage") if isinstance(snapshot.get("host_storage"), dict) else None,
     }
 
 
@@ -331,6 +332,7 @@ def compact_worker_prompt_view(full_view: dict[str, Any]) -> dict[str, Any]:
         "open_questions": full_view.get("open_worker_question_count"),
         "question_inventory_complete": full_view.get("worker_question_inventory_complete"),
         "question_samples": full_view.get("worker_question_summaries"),
+        "host_storage": full_view.get("host_storage"),
         "source_limits": "worker reports are model-authored; percent/ETA null means unknown; node percent is not individual task progress",
     }
 

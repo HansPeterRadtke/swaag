@@ -1882,6 +1882,8 @@ class CommunicationService:
         view loses precisely the evidence needed to answer completion questions.
         """
         started_at = utc_now_iso()
+        from swaag.host_storage import capture_host_storage
+        host_storage = capture_host_storage(self.orchestrator_runtime.history.root)
         workers = self.workers.list()
         plans = self.orchestration.store.list_plans()
         inventory = self.orchestration_api.execute("questions.list")["inventory"]
@@ -1923,6 +1925,7 @@ class CommunicationService:
         return {
             "collection_started_at": started_at,
             "captured_at": utc_now_iso(),
+            "host_storage": host_storage,
             "consistency": "per-source observations; workers may change during collection or generation",
             "model_routing": {
                 "available_worker_model_keys": ["default", *sorted(
