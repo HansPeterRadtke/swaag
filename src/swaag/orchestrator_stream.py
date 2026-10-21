@@ -18,7 +18,10 @@ class OrchestratorEventCursor:
         self.session_id = str(receipt["session_id"])
         self.control_id = str(receipt["control_id"])
         self.after_sequence = after_sequence
-        self.next_sequence = 1
+        anchor = receipt.get("history_anchor_sequence", 1)
+        if (isinstance(anchor, bool) or not isinstance(anchor, int) or anchor < 1):
+            raise ValueError("history_anchor_sequence must be a positive integer")
+        self.next_sequence = anchor
         self.active = False
         self.finished = False
         self.final_sequence = None

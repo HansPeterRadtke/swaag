@@ -94,3 +94,47 @@ def test_cursor_crosses_ignored_pages_without_replaying_another_turn(make_config
         pages += 1
         assert pages < 10
     assert pages == 3 and cursor.final_sequence == final.sequence
+
+
+def test_delivery_anchor_uses_exact_control_event_and_preserves_legacy_replay(make_config):
+    runtime, state = setup_history(make_config)
+    history = runtime.history
+    for index in range(275):
+        history.record_event(state, "error", {
+            "operation": "test", "error_type": "Fixture", "error": str(index),
+        })
+    next_sequence = state.event_count + 1
+    assert history.orchestrator_delivery_anchor(state.session_id, "new-control") == next_sequence
+    assert history.orchestrator_delivery_anchor(
+        state.session_id, "legacy-control", replay_existing=True,
+    ) == 1
+    progress = history.record_event(state, "assistant_progress", {
+        "control_id": "new-control", "action_index": 0,
+        "assistant_text": "I have received the instruction.",
+    })
+    history.record_event(state, "control_message_processed", {
+        "control_id": "new-control", "session_id": state.session_id,
+        "message": "Hello.", "decision": {},
+    })
+    assert history.orchestrator_delivery_anchor(state.session_id, "new-control") == progress.sequence
+    assert history.orchestrator_delivery_anchor(
+        state.session_id, "new-control", replay_existing=True,
+    ) == progress.sequence
+    cursor = OrchestratorEventCursor(history, {
+        "session_id": state.session_id, "control_id": "new-control",
+        "history_anchor_sequence": progress.sequence,
+    })
+    items = cursor.poll()
+    assert items[0]["assistant_text"] == "I have received the instruction."
+    assert cursor.active is True
+
+
+def test_stream_cursor_rejects_invalid_receipt_anchor(make_config):
+    runtime, state = setup_history(make_config)
+    for bad in (False, True, 0, -1, "42", 1.2):
+        with pytest.raises(ValueError, match="history_anchor_sequence"):
+            OrchestratorEventCursor(runtime.history, {
+                "session_id": state.session_id,
+                "control_id": "only-this-control",
+                "history_anchor_sequence": bad,
+            })

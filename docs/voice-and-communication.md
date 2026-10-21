@@ -519,3 +519,43 @@ are changed. This is deterministic duplicate elimination, not semantic
 source summarization or loss of the original result. The actual installed
 model's latency still needs an idle-safe deployment and separate measurements;
 no speedup is claimed from an unrun production comparison.
+
+## October 21: exact receipt anchor for live voice event streaming
+
+The October 20 and October 21 synthetic audio tests both passed speech
+recognition, automatic semantic end-of-turn commit, Coder response,
+LuxTTS synthesis, PCM delivery, and terminal audio confirmation, but
+took 45.651 and 48.138 seconds. Their durable SWAAG operations lasted
+only 6.963 and 9.075 seconds respectively; Qwen3-Coder used 2.961
+model seconds on the latter. Most extra latency was after SWAAG had
+committed the response and before speech synthesis began.
+
+The OrchestratorEventCursor unnecessarily began at event sequence 1
+for every fresh voice request. The durable orchestrator currently has
+more than 6,200 events and a 458 MB canonical JSONL history. Each
+filtered event page advanced 128 sequence slots, requiring roughly
+49 cursor polls to reach a newly accepted receipt near the tail.
+Each poll also reconciles the history index and crosses an async
+transport thread boundary. This is unnecessary request-time work.
+
+New accepted requests now pin history_anchor_sequence at the current
+durable indexed cursor BEFORE submitting model work. Duplicate,
+reconnected, or already processed controls use one indexed SQL query
+to locate the earliest exact assistant_progress/control_message_processed
+event with their immutable control ID. Legacy completed receipts without
+such a matched event retain the full replay fallback. The same hash-chain
+integrity-checked page reader and control linkage checks still run.
+No source messages, tool side effects, status evidence or history are
+discarded, and a reconnect does not rerun a model or tool.
+
+On the exact production history, anchor selection took 0.9 ms.
+A completed receipt needed ONE cursor poll instead of forty-nine.
+Cold revalidation of the large journal still took 4.598 s in an
+isolated process; an already warm reader traversed all legacy pages
+in 0.073 s, with additional async scheduling cost in production.
+These component figures do not yet establish the end-to-end benefit.
+Repeat the live Jetson/Thor/LuxTTS test after deployment.
+
+Regression tests cover new controls, progress committed before control
+processing, exact completed replay, duplicates, reconnect, and invalid
+anchors. The complete source suite must pass before activation.

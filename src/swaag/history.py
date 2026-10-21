@@ -354,6 +354,44 @@ class HistoryStore:
             ).fetchone()
             return int(row[0]) if row is not None else 0
 
+    def orchestrator_delivery_anchor(
+        self, session_id: str, control_id: str, *, replay_existing: bool = False,
+    ) -> int:
+        """Locate the first relevant committed event without replaying old turns.
+
+        The caller has durably accepted the finalized control but has NOT yet
+        scheduled new execution. For a new receipt, begin immediately after
+        the current exact committed event cursor, before any progress can race
+        into existence. For a repeat/reconnect, reuse the earliest previously
+        committed control/progress event for that exact immutable control ID.
+        Integrity verification remains in read_history_event_page: this query
+        only chooses a starting sequence and never serves unverified content.
+        """
+        if not isinstance(control_id, str) or not control_id:
+            raise ValueError("control_id is required")
+        if not self.history_path(session_id).exists():
+            return 1
+        with self._sqlite_connect() as connection:
+            first = connection.execute(
+                """
+                SELECT MIN(sequence) FROM events
+                WHERE session_id=?
+                  AND event_type IN ('control_message_processed','assistant_progress')
+                  AND json_extract(payload_json, '$.control_id')=?
+                """, (session_id, control_id),
+            ).fetchone()
+            indexed = connection.execute(
+                "SELECT complete_through FROM indexed_sessions WHERE session_id=?",
+                (session_id,),
+            ).fetchone()
+        if first and first[0] is not None:
+            return int(first[0])
+        if replay_existing:
+            # Legacy completed receipts may not carry a control ID in their
+            # events. Retain their old exact full-history replay semantics.
+            return 1
+        return (int(indexed[0]) if indexed else 0) + 1
+
     @staticmethod
     def _jsonl_file_stamp(path: Path) -> tuple[int, int, int, int, int]:
         stat = path.stat()
