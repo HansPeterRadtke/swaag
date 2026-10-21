@@ -19,3 +19,13 @@ For the inspected Thor state, the read-only tool returned **not passed**, with *
 The standalone preflight and existing deployment-asset regressions passed eleven source tests. Existing source tests on Thor passed sixty-eight focused status, orchestration, context and presentation cases earlier in this run. The initial Nitro checkout's twenty-five status tests also passed against an isolated official SQLite 3.51.3 library.
 
 This new preflight must be rerun and return zero after an explicitly authorized, idle-safe release. Even a zero result proves package byte equality *only*, not active-process freshness, safe backend cancellation, correct model routing, voice-device behavior or end-to-end user action acceptance. Independent process, endpoint and behavioral checks remain mandatory. Do not hot-restart, overwrite active voice-agent changes, or claim live deployment convergence based solely on this report.
+
+## Staged installation acceptance — same night
+
+The original current Thor main source completed an uncached model-free regression run with **1,690 passed, 3 skipped, zero failed** in 344.77 seconds. The three skips are optional tests, not production or voice-device acceptance. The new separate preflight plus deployment-asset regressions passed eleven further checks, including after fast-forward integration to main.
+
+A new, isolated, non-service candidate was produced under the SWAAG runtime-data directory with the repository's own install script, overriding only the runtime destination. The installed candidate has SQLite 3.53.1 and exactly **212 of 212 source/package files byte-identical**, with no missing or changed files. **Sixty-eight focused status, orchestration, foreground context and presentation tests passed when imported from the non-editable candidate package** with the source-tree Python path disabled. Its CLI smoke test and FTS5 preflight also passed.
+
+The configured model identity separates **Qwen3 Coder** for the communication/foreground role from **Qwen3.8 Q8** for worker/default role. Both corresponding model health endpoints returned HTTP 200. A model health response proves only endpoint health, not correct semantic routing or generation under contention.
+
+The currently *deployed* SWAAG virtual environment was **not** changed: the live preflight still reports package drift. The existing communication process, voice gateway and model service were **not restarted or reinstalled**. Releasing the candidate to live services is a separate, idle-safe coordination step requiring process version and voice-agent regression evidence, not something to infer from source/package tests.
