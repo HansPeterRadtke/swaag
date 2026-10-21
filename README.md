@@ -21,7 +21,9 @@ Swaag is a standard `pyproject.toml` package. Development environments may live 
 
 The implementation is intentionally small while the intended harness architecture is broader. Read these before architectural changes:
 
-- `docs/guideline-comparison-2026-10-15.md` — complete current guideline audit, verified corrections and remaining acceptance limits.
+- `doc/infra-guideline-engineering-handover-2026-10-21.md` — latest SWAAG-specific Infra guideline implementation, exact deployed/tested scope, unresolved engineering gates and source-linked cross-project handover.
+- `/data/infra/docs/infra-guideline-cross-project-status-2026-10-21.md` — companion Infra-owned full-topic ownership, historical source, verification and open-project status ledger.
+- `docs/guideline-comparison-2026-10-15.md` — historical October fifteenth audit; read the newer handover before claiming a present-day compliance status.
 - `docs/design-principles.md` — semantic/deterministic boundary, agent behavior, tools, communication, interfaces, and current-versus-target scope.
 - `docs/tool-architecture.md` — enforced three-layer boundary between the core harness, repository-owned system tools, and unbounded external capabilities.
 - `docs/context-management.md` — primary implementation contract for per-call context calculation, output reservation, history projection, summaries, and tool-result sizing.
@@ -43,7 +45,7 @@ Repository-owned system tools are registered centrally and exposed with closed J
 
 Task callers may opt into separately compiled `visual` and `audio` response presentations. The raw verified worker result remains authoritative; relevance selection and listenable rendering are distinct semantic calls, and independent constrained evaluation rejects information loss or operational spam before a variant is exposed. No extra presentation call runs by default. For voice clients, use the verified `audio` presentation as TTS input rather than speaking the raw worker result.
 
-A separately qualified communication/orchestrator backend may run alongside the worker backend. Setting communication.model_base_url selects that runtime for ordinary orchestration as well as communication operations; it does not introduce a small reader that forwards work to a stronger planner. Every finalized ordinary message reaches the persistent full action controller with current system context. That controller can answer directly or issue authorized tools, and committed progress streams independently of the speech consumer. Targeted worker status/history interpretation remains a separate operation. See docs/voice-and-communication.md and the measured foreground study in docs/foreground-routing-and-retries-2026-10-15.md.
+A separately qualified communication/orchestrator backend may run alongside the worker backend. On Thor, the human-facing quick-response stage and the full authoritative orchestrator both use Qwen Coder; substantive workers use Qwen3.8 Q8. With `communication.fast_initial_reply=true`, a finalized ordinary message first enters the same durable orchestrator session, where a constrained fast inference may answer a fully evidenced simple question without a second full-controller call. Actual actions, inadequate evidence or missing governing context delegate the **unchanged original request** to the full controller, which alone chooses and authorizes workers and tools. The quick interface has no independent tool authority. A speech acknowledgement proves only communication acceptance, not a worker started, a tool executed or physical audio playback. Both stages use verified policy and observed worker state; committed progress streams independently of the speech consumer. For the full current contract and limitations, see `doc/infra-guideline-engineering-handover-2026-10-21.md`, `docs/voice-and-communication.md` and the preserved October fifteenth routing study.
 
 ## Installation
 
