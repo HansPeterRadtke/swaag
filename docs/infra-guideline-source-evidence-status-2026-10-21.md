@@ -4,6 +4,13 @@ The earlier report covered agent infrastructure, not every required topic. This 
 
 There are **2,230 recorded source passages** from **78 guideline documents** and **168 originals**. Only **30 passages** have manually reviewed evidence links, and **no complete passage** has universal compliance proof. Evidence outcomes: two scope-limited tested mechanisms, sixteen partly tested, ten not accepted, one tested but failing, and one preserved-source-only.
 
+
+## Complete original line coverage and quoted examples
+
+The source-line audit was strengthened after two reproduced failures. The original body trace had excluded **591 normalized Markdown heading lines**, some containing terms like `MUST` and `NEVER`, and it could split fenced illustrative code into apparent active instructions. A second check found that the trace also completely excluded **two plain-text guideline files** and the Infra repository's root `AGENTS.md` and `README.md`. One of the older files adds detailed testing requirements; the other specifies provider-specific strict structured-output contracts. Their precedence and domain applicability are now explicitly labeled rather than being promoted to universal authority.
+
+The corrected audited set covers **82 source documents**: 78 normalized Markdown files, two supplementary plain-text rules files and two Infra root operating documents. It records **2,471 source body passages** and **593 separate heading records**. Every nonblank source line is accounted for exactly once, fenced examples remain intact, and all **30 previously pinned evidence links** still resolve without any changes to the original **168 preserved recordings**. A paragraph or section header being indexed is not certification that any real program complies. The reproducible read-only full-source trace and evidence overlay are under the October twenty-first audit directory on Thor.
+
 ## Per-project review boundaries
 
 | Responsible domain | Passages | Limited evidence links | Not yet linked |

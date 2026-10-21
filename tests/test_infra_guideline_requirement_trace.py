@@ -113,3 +113,65 @@ def test_review_evidence_requires_exact_unchanged_source_block(tmp_path):
     generate(guides,index)
     with pytest.raises(ValueError,match='source changed since evidence review'):
         apply(index/'requirement_source_trace.jsonl',checks,tmp_path/'joined')
+
+
+def test_fenced_markdown_is_not_interpreted_as_new_guideline_or_heading():
+    text = '# Rules\n\n## Examples\n\n```markdown\n# Quoted material, not a real heading\n- this is example data, not another rule\n```\n\n- Preserve original user instructions.\n'
+    rows = blocks(text, 'agents.md')
+    assert [(x['source_start_line'],x['source_end_line']) for x in rows] == [(5,8),(10,10)]
+    assert rows[0]['source_text'] == '```markdown\n# Quoted material, not a real heading\n- this is example data, not another rule\n```'
+    assert rows[0]['section'] == ['Rules','Examples']
+
+
+def test_heading_ledger_preserves_all_source_lines_without_claiming_compliance(tmp_path):
+    from infra_guideline_requirement_trace import heading_records
+    guides=tmp_path/'guidelines';guides.mkdir();(guides/'original-recordings').mkdir()
+    (guides/'original-recordings'/'voice.txt').write_text('Exact original recording')
+    source='# Rules\n\n## MUST NOT alter the original history\n\nTest details.\n\n~~~markdown\n# quoted, not policy\n~~~\n'
+    (guides/'agents.md').write_text(source)
+    rows=blocks(source,'agents.md')
+    headings=heading_records(source,'agents.md')
+    assert [row['source_start_line'] for row in headings]==[1,3]
+    assert 'MUST NOT alter' in headings[1]['source_text']
+    assert all(x['acceptance']=='NOT_VERIFIED' for x in headings)
+    described={i for row in rows+headings for i in range(row['source_start_line'],row['source_end_line']+1)}
+    substantive={i for i,line in enumerate(source.splitlines(),1) if line.strip()}
+    assert described==substantive
+    out=tmp_path/'out';summary=generate(guides,out)
+    assert summary['heading_records']==2
+    saved=[json.loads(s) for s in (out/'source_headings.jsonl').read_text().splitlines()]
+    assert len(saved)==2 and all(item['semantic_kind']=='section heading, not independent feature proof' for item in saved)
+
+
+def test_full_infra_trace_includes_supplemental_txt_and_explicit_owner_instructions(tmp_path):
+    guides = tmp_path/'infra'/'docs'/'guidlines'; guides.mkdir(parents=True)
+    (guides/'original-recordings').mkdir()
+    (guides/'original-recordings'/'original.txt').write_text('Recorded source.')
+    (guides/'agents.md').write_text('# Agent rules\n\nUse exact user message.\n')
+    (guides/'tests.txt').write_text('NO STEP MAY BE SKIPPED.\n')
+    (guides/'constraint_decoding.txt').write_text('Every property must be required.\n')
+    (guides/'unrelated.txt').write_text('Arbitrary content unrelated to source instructions.\n')
+    infra = tmp_path/'infra'
+    (infra/'AGENTS.md').write_text('# Scope\n\nKeep Google services in Infra.\n')
+    (infra/'README.md').write_text('# Infra\n\nCheck deployed state.\n')
+    out = tmp_path/'out'
+    result = generate(guides, out, infra_root=infra)
+    manifest=json.loads((out/'source_manifest.json').read_text())
+    paths={x['path'] for x in manifest['guideline_files']}
+    assert paths == {'agents.md','tests.txt','constraint_decoding.txt','infra/AGENTS.md','infra/README.md'}
+    assert result['documents']==5
+    evidence=(out/'requirement_source_trace.jsonl').read_text()
+    assert 'NO STEP MAY BE SKIPPED' in evidence
+    assert 'Every property must be required' in evidence
+    assert 'Keep Google services in Infra' in evidence
+    assert 'Arbitrary content unrelated' not in evidence
+
+
+def test_supplementary_guidelines_are_not_promoted_to_universal_authority():
+    from infra_guideline_requirement_trace import source_scope, owner, category
+    assert 'current testing.md' in source_scope('tests.txt')
+    assert 'OpenRouter' in source_scope('constraint_decoding.txt')
+    assert 'only for operations inside the Infra repository' in source_scope('infra/AGENTS.md')
+    assert owner('infra/AGENTS.md')=='Infra repository/workflow'
+    assert owner('constraint_decoding.txt')=='OpenAI-compatible structured-output provider integration'
+    assert category([], 'infra/README.md').startswith('supporting evidence')
