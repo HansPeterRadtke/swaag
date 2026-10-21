@@ -2474,14 +2474,20 @@ class CommunicationService:
         # Reconnect/daemon recovery may revisit the same accepted receipt.
         # Replay the originally committed first speech rather than generating
         # another, potentially inconsistent acknowledgement and wasting an LLM.
-        # This is an indexed event-type-only traversal, not a full-history
-        # materialization. A hard count cutoff previously missed accepted
-        # receipts after unrelated progress events and generated duplicate
-        # acknowledgements. Keep exact receipt identity authoritative.
-        for observed in runtime.history.iter_history_reverse(
-            state.session_id, event_types=("assistant_progress",),
-        ):
-            if (observed.payload.get("control_id") == receipt["control_id"]
+        # Indexed exact-control anchor: neither a fixed last-N cutoff nor a
+        # Python scan of every unrelated model progress event. Pending receipts
+        # can have an initial speech event but not a processed control event;
+        # the first event for this immutable ID is then precisely that speech.
+        anchor = runtime.history.orchestrator_delivery_anchor(
+            state.session_id, str(receipt["control_id"]), replay_existing=False,
+        )
+        previous = runtime.history.read_history_window(
+            state.session_id, start_sequence=anchor, limit=1,
+        )
+        if previous:
+            observed = previous[0]
+            if (observed.event_type == "assistant_progress"
+                    and observed.payload.get("control_id") == receipt["control_id"]
                     and observed.payload.get("delivery_phase") == "fast_before_deep_orchestration"):
                 return {"mode": "delegate", "reply": observed.payload["assistant_text"],
                         "reused": True}
