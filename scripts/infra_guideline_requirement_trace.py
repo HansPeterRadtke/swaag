@@ -210,6 +210,14 @@ def generate(guidelines: Path, target: Path, *, infra_root: Path | None = None) 
             source = infra_root / name
             if source.is_file():
                 source_files.append((source, 'infra/' + name))
+    if infra_root is not None:
+        required_files = (guidelines/'constraint_decoding.txt', guidelines/'tests.txt',
+                          infra_root/'AGENTS.md', infra_root/'README.md')
+        for path in required_files:
+            if path.is_symlink():
+                raise ValueError('symlinked authoritative guideline source: ' + str(path))
+            if not path.is_file():
+                raise ValueError('missing required Infra guideline source: ' + str(path))
     source_files.sort(key=lambda row: row[1])
     if len({alias for _,alias in source_files}) != len(source_files):
         raise ValueError('duplicate guideline source aliases')

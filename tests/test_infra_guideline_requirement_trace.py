@@ -175,3 +175,19 @@ def test_supplementary_guidelines_are_not_promoted_to_universal_authority():
     assert owner('infra/AGENTS.md')=='Infra repository/workflow'
     assert owner('constraint_decoding.txt')=='OpenAI-compatible structured-output provider integration'
     assert category([], 'infra/README.md').startswith('supporting evidence')
+
+
+def test_explicit_full_infra_scope_refuses_missing_authority_sources(tmp_path):
+    guides=tmp_path/'infra'/'docs'/'guidlines'; guides.mkdir(parents=True)
+    original=guides/'original-recordings';original.mkdir()
+    (original/'sample.txt').write_text('Original statement')
+    (guides/'agents.md').write_text('# Agent rules\n\nPreserve source.\n')
+    (guides/'tests.txt').write_text('Older testing supplemental policy.')
+    root=tmp_path/'infra'
+    (root/'AGENTS.md').write_text('# Owner rules\n')
+    (root/'README.md').write_text('# Infra repository\n')
+    with pytest.raises(ValueError,match='missing required Infra guideline source'):
+        generate(guides,tmp_path/'trace',infra_root=root)
+    (guides/'constraint_decoding.txt').symlink_to(root/'AGENTS.md')
+    with pytest.raises(ValueError,match='symlinked authoritative guideline source'):
+        generate(guides,tmp_path/'trace',infra_root=root)
