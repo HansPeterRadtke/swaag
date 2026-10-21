@@ -74,6 +74,11 @@ def fast_authority_context(
         if store.has_any_events():
             instructions.extend(("user", item) for item in prompt_instructions_for_kind(
                 store.list(), "orchestrator_interaction"))
+    # A categorized model-learned instruction is untrusted and may require
+    # relevance selection by the full controller. Never upgrade it to a
+    # high-priority fast *system* directive just to save an inference call.
+    if any(item.authority == "learned_model" for _, item in instructions):
+        return None
     ranked = sort_prompt_instructions_by_authority([item for _, item in instructions])
     entries = []
     for item in ranked:

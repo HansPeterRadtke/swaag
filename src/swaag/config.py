@@ -348,6 +348,13 @@ class CommunicationConfig:
     fast_initial_reply: bool = False
     fast_policy_max_chars: int = 4500
     fast_notes_max_chars: int = 2500
+    fast_max_input_tokens: int = 4096
+    fast_max_user_message_chars: int = 2500
+    fast_recent_message_count: int = 6
+    fast_recent_history_chars: int = 3500
+    fast_snapshot_max_age_seconds: float = 3.0
+    fast_min_output_tokens: int = 64
+    fast_desired_output_tokens: int = 144
     max_active_workers: int = 128
     max_pending_requests: int = 128
     idle_work_mode: str = "finish_only"
@@ -835,6 +842,13 @@ def _coerce_config(
         fast_initial_reply=data["communication"].get("fast_initial_reply", False),
         fast_policy_max_chars=int(data["communication"].get("fast_policy_max_chars", 4500)),
         fast_notes_max_chars=int(data["communication"].get("fast_notes_max_chars", 2500)),
+        fast_max_input_tokens=int(data["communication"].get("fast_max_input_tokens", 4096)),
+        fast_max_user_message_chars=int(data["communication"].get("fast_max_user_message_chars", 2500)),
+        fast_recent_message_count=int(data["communication"].get("fast_recent_message_count", 6)),
+        fast_recent_history_chars=int(data["communication"].get("fast_recent_history_chars", 3500)),
+        fast_snapshot_max_age_seconds=float(data["communication"].get("fast_snapshot_max_age_seconds", 3.0)),
+        fast_min_output_tokens=int(data["communication"].get("fast_min_output_tokens", 64)),
+        fast_desired_output_tokens=int(data["communication"].get("fast_desired_output_tokens", 144)),
         max_active_workers=data["communication"].get("max_active_workers", 128),
         max_pending_requests=data["communication"].get("max_pending_requests", 128),
         orchestrator_priority=int(data["communication"]["orchestrator_priority"]),
@@ -1112,6 +1126,15 @@ def _coerce_config(
         raise ValueError("communication.fast_initial_reply must be a boolean")
     _validate_positive("communication.fast_policy_max_chars", communication.fast_policy_max_chars)
     _validate_positive("communication.fast_notes_max_chars", communication.fast_notes_max_chars)
+    _validate_positive("communication.fast_max_input_tokens", communication.fast_max_input_tokens)
+    for name in ("fast_max_user_message_chars", "fast_recent_message_count",
+                 "fast_recent_history_chars", "fast_min_output_tokens",
+                 "fast_desired_output_tokens"):
+        _validate_positive(f"communication.{name}", getattr(communication, name))
+    _validate_positive("communication.fast_snapshot_max_age_seconds",
+                       communication.fast_snapshot_max_age_seconds)
+    if communication.fast_desired_output_tokens < communication.fast_min_output_tokens:
+        raise ValueError("communication.fast_desired_output_tokens must be at least fast_min_output_tokens")
     if communication.single_pass_direct_replies and not communication.compact_foreground_actions:
         raise ValueError("communication.single_pass_direct_replies requires compact_foreground_actions")
     artifact_serving = communication.open_webui_artifacts
@@ -1517,6 +1540,34 @@ def _parameter_semantics(
         "communication.fast_policy_max_chars": (
             "Maximum exact character budget for applicable durable user instructions in the fast communication context.",
             "If the complete scoped rules do not fit, decline the fast call and use the full authoritative controller; never silently truncate user policy.",
+        ),
+        "communication.fast_max_input_tokens": (
+            "Maximum measured input tokens admitted to one fast user-facing Coder call.",
+            "If exact system state, policy, user message and needed history exceed this limit, skip the shortcut and use the full authoritative controller without dropping required facts.",
+        ),
+        "communication.fast_max_user_message_chars": (
+            "Maximum unchanged user-message length admitted to the short foreground stage, measured in Unicode characters.",
+            "Longer messages go to the complete authoritative controller, never silently truncated or partially acted on.",
+        ),
+        "communication.fast_recent_message_count": (
+            "Maximum number of recent whole conversational messages admitted to the short foreground input.",
+            "More turns provide context at additional prefill cost; distant history remains retrievable by the complete controller.",
+        ),
+        "communication.fast_recent_history_chars": (
+            "Maximum number of characters allocated for exact recent conversation in a quick call.",
+            "Only whole messages are admitted; increasing it provides more history but raises first-response latency.",
+        ),
+        "communication.fast_snapshot_max_age_seconds": (
+            "Maximum age in seconds for calling the precomputed worker/plan snapshot fresh in the quick context.",
+            "Older observations are explicitly stale and cannot support current-state claims; this is not a model execution timeout.",
+        ),
+        "communication.fast_min_output_tokens": (
+            "Minimum response-token reservation for the structured fast communication response.",
+            "Values too small can invalidate JSON output; it cannot exceed the desired reservation.",
+        ),
+        "communication.fast_desired_output_tokens": (
+            "Requested output-token reservation for the fast structured reply when capacity permits.",
+            "Higher values may permit longer answers and consume context/decoding time; never below the configured minimum.",
         ),
         "communication.fast_notes_max_chars": (
             "Maximum exact character budget for relevant durable session notes in the fast communication context.",

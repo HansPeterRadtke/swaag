@@ -612,3 +612,7 @@ response still includes STT, end-of-turn classification, model inference,
 TTS and network/transport overhead. Physical Android phone testing,
 interruption/reconnection under actual phone audio, and further latency
 optimization remain open acceptance work.
+
+## October twenty-first fast foreground source and evidence guard
+
+The short Coder stage retains all relevant scoped trusted user rules and compact complete goal notes when under explicit token/character limits. It never promotes untrusted learned pseudo-instructions into system authority. Fast context selection preserves whole messages; a fresh typed current-world card after recent dialogue overrules contradictory old assistant guesses. The user message remains unchanged and last. An evidence-bound normalization layer prevents a finalized *text* message from becoming a claim of actual microphone listening or playback, and prevents initial action-intention speech from claiming work that has not executed. Pure numeric exact-word-count requirements are checked mechanically before a self-contained fast answer is accepted. Missing or ambiguous context, changing authority, time-stale worker state or failed input admission returns control to the complete orchestrator. See `infra-guideline-closure-2026-10-21.md` for test evidence and remaining scope.

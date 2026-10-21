@@ -1,3 +1,7 @@
+# October twenty-first integrated guideline correction
+
+The current main-line follow-up to the Infra requirement audit is recorded in [October twenty-first guideline closure](infra-guideline-closure-2026-10-21.md). It incorporates complete current user authority in the fast-stage context, indexed lifecycle replay, exact bounded configuration metadata, genuine worker world state, evidence-safe first speech, and source-level regressions without restarting active workers. The Android emulator accepted the production audio chain in separate same-day verification; physical phone delivery and natural interruptions remain open. The full semantic reliability of arbitrary action requests, history retrieval, and external-effect completion requires distinct heldout or device evidence; do not treat unit tests or a machine-readable schema as proof of those effects.
+
 # Current audit and release boundary — October twentieth
 
 The most recent source comparison, test evidence, corrected fast user-policy handling, one-call conversational semantics and indexed control replay are recorded in [the full Infra-to-SWAAG compliance audit](infra-guidelines-swaag-compliance-audit-2026-10-20.md). Historical October fourteenth–nineteenth comparisons below remain preserved as evidence for their actual software revisions and do **not** claim the latest Thor running process is already using a newly committed foreground change. Check the active process, exact model routes and idle-safe release gate before declaring live deployment.
