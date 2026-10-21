@@ -98,11 +98,54 @@ def runtime_system_context_sources(
                 "read_first": str(guide / "README.md"),
                 "agent_rules": str(guide / "agents.md"),
                 "families": (
-                    "agents, programming, testing, networking, GUI/voice/Android, "
-                    "knowledge/KMD, games, trading, robotics, projects, source recordings"
+                    "agents/orchestration and user authority; programming/algorithms and testing; "
+                    "configuration, logging, security/privacy and performance; "
+                    "networking/media transport; GUI/HMI on Android/web/desktop, voice, "
+                    "bidirectional contextual feedback and financial screens; "
+                    "knowledge/KMD, games/3D world and habits, trading/point-in-time options, "
+                    "robotics/sensors/learning; recording conversion and original evidence"
                 ),
                 "role": "trusted owner project guidance, not an executable tool grant",
             }
+            # Distinct policy sources outside the normalized Markdown corpus
+            # were previously absent from the worker's navigable pointers.
+            # Reveal only canonical paths the configured read capability can
+            # actually access; do not turn a project-specific note into a
+            # universal directive or copy its entire text into every prompt.
+            def permitted_existing_file(candidate: Path) -> bool:
+                try:
+                    target = candidate.resolve(strict=True)
+                    return target.is_file() and any(
+                        target == allowed.resolve() or allowed.resolve() in target.parents
+                        for allowed in config.tools.read_roots
+                    )
+                except (OSError, RuntimeError):
+                    return False
+
+            owner_rules = guide.parent.parent / "AGENTS.md"
+            if permitted_existing_file(owner_rules):
+                manifest["infra_repo_scope_rules"] = {
+                    "read": str(owner_rules),
+                    "scope": "only for Infra-owned operations; not general SWAAG project policy",
+                }
+            repo_overview = guide.parent.parent / "README.md"
+            if permitted_existing_file(repo_overview):
+                manifest["infra_repo_overview"] = {
+                    "read": str(repo_overview),
+                    "scope": "Infra repository navigation only",
+                }
+            older_testing = guide / "tests.txt"
+            if permitted_existing_file(older_testing):
+                manifest["supplementary_testing_rules"] = {
+                    "read": str(older_testing),
+                    "precedence": "testing.md takes precedence when these older rules conflict",
+                }
+            provider_schema = guide / "constraint_decoding.txt"
+            if permitted_existing_file(provider_schema):
+                manifest["provider_specific_json_schema_guidance"] = {
+                    "read": str(provider_schema),
+                    "scope": "OpenRouter/OpenAI-compatible strict structured output; verify local backend support separately",
+                }
             runbook = guide.parent / "google-operations.md"
             if runbook.is_file() and any(
                 runbook.resolve() == root.resolve() or root.resolve() in runbook.resolve().parents
