@@ -47,6 +47,7 @@ def test_overlay_requires_one_exact_source_and_never_certifies_whole_paragraph(t
     output = tmp_path/'trace'; generate(guide,output)
     records=[{'id':'source-preservation','verdict':'MECHANISM_TESTED_SCOPE_LIMITED',
               'owner':'SWAAG', 'source_file':'agents.md','source_phrase':'Preserve source.',
+              'source_block_sha256':json.loads((output/'requirement_source_trace.jsonl').read_text().splitlines()[0])['source_block_sha256'],
               'implementation':'files/source.py','tests':'tests/test_source.py',
               'observation':'Test passed on isolated source copy.',
               'remaining':'All other source contexts are unverified.'}]
@@ -71,6 +72,7 @@ def test_overlay_rejects_duplicate_evidence_and_unearned_full_certification(tmp_
     template={
         'id':'task-authority','verdict':'MECHANISM_TESTED_SCOPE_LIMITED',
         'source_file':'agents.md','source_phrase':'Preserve original user authority.',
+        'source_block_sha256':json.loads((output/'requirement_source_trace.jsonl').read_text().splitlines()[0])['source_block_sha256'],
         'owner':'SWAAG','implementation':'src/swaag/communication.py',
         'tests':'tests/test_control_authority.py',
         'observation':'One tested narrow receipt path.',
@@ -88,3 +90,26 @@ def test_overlay_rejects_duplicate_evidence_and_unearned_full_certification(tmp_
     source.write_text(json.dumps([unsupported]))
     with pytest.raises(ValueError,match='verdict'):
         apply(output/'requirement_source_trace.jsonl',source,tmp_path/'applied')
+
+
+def test_review_evidence_requires_exact_unchanged_source_block(tmp_path):
+    guides=tmp_path/'guidelines';guides.mkdir()
+    original=guides/'original-recordings';original.mkdir()
+    (original/'source.txt').write_text('Unmodified source recording')
+    p=guides/'agents.md';p.write_text('# Agents\n\nPreserve the original user request.\n')
+    index=tmp_path/'index';generate(guides,index)
+    source=json.loads((index/'requirement_source_trace.jsonl').read_text().splitlines()[0])
+    review={'id':'precise-proof','source_file':'agents.md',
+            'source_phrase':'Preserve the original user request.',
+            'source_block_sha256':source['source_block_sha256'],
+            'verdict':'MECHANISM_TESTED_SCOPE_LIMITED','owner':'SWAAG',
+            'implementation':'src/swaag/communication.py',
+            'tests':'tests/test_control_authority.py',
+            'observation':'Narrow source-level test passed.',
+            'remaining':'No physical deployment acceptance.'}
+    checks=tmp_path/'evidence.json';checks.write_text(json.dumps([review]))
+    assert apply(index/'requirement_source_trace.jsonl',checks,tmp_path/'joined')['reviewed_evidence_links']==1
+    p.write_text('# Agents\n\nPreserve the original user request. Additional rule added.\n')
+    generate(guides,index)
+    with pytest.raises(ValueError,match='source changed since evidence review'):
+        apply(index/'requirement_source_trace.jsonl',checks,tmp_path/'joined')

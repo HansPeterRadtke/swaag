@@ -8,7 +8,8 @@
     "implementation": "src/swaag/history.py; src/swaag/runtime.py; src/swaag/communication.py",
     "tests": "tests/test_orchestrator_stream.py; tests/test_orchestrator_indexed_receipt_replay.py; main-source full suite",
     "observation": "Exact source message receipts, event indexes, durable work and replay verified in source tests. Running production service on main observed active, not a proof of every live side effect.",
-    "remaining": "Semantic correctness, cross-service exactly-once effects and all failure paths unproven."
+    "remaining": "Semantic correctness, cross-service exactly-once effects and all failure paths unproven.",
+    "source_block_sha256": "50c629e8457d92a346b5e2caa81e41b4cc320b9ef2439fe7a8afe77889a5bfe3"
   },
   {
     "id": "cancel-preemption",
@@ -19,7 +20,8 @@
     "implementation": "src/swaag/preemption.py; src/swaag/session_lock.py; src/swaag/communication.py",
     "tests": "tests/test_orchestrator_stream.py; tests/test_control_authority.py",
     "observation": "Durable cancellation and replay tests pass on tested paths.",
-    "remaining": "Concurrent hardware and model-slot cancellation under worker contention not fully accepted."
+    "remaining": "Concurrent hardware and model-slot cancellation under worker contention not fully accepted.",
+    "source_block_sha256": "4f3246132a8e45669629147fbb4a33abfc92fa4cbee9e8dbca1b77e0e62b9e45"
   },
   {
     "id": "context-limit",
@@ -30,7 +32,8 @@
     "implementation": "src/swaag/context.py; src/swaag/runtime.py",
     "tests": "tests/test_context_compiler.py; tests/test_context_order_benchmark.py",
     "observation": "Structured context admission and budget tests exist and pass.",
-    "remaining": "Native/tokenizer accuracy and arbitrary long-history semantic relevance require more model-specific trials."
+    "remaining": "Native/tokenizer accuracy and arbitrary long-history semantic relevance require more model-specific trials.",
+    "source_block_sha256": "a2699743c4e4cb90069fa7b88737ce4b28a8282336c8274200974f004d63450b"
   },
   {
     "id": "supervisor-and-backend",
@@ -41,7 +44,8 @@
     "implementation": "src/swaag/supervision.py; src/swaag/communication.py; src/swaag/model.py",
     "tests": "tests/test_supervision.py; tests/test_model_streaming.py",
     "observation": "Independent supervisor and model-stream activity implementation tested; live dual Qwen services observed active.",
-    "remaining": "Concurrent inference under heavy GPU pressure and actual backend slot release after complex interruption unverified."
+    "remaining": "Concurrent inference under heavy GPU pressure and actual backend slot release after complex interruption unverified.",
+    "source_block_sha256": "2e0bb03f0c15833749e2a22f5b05363b1bfb9f0ee5ea0050c8ca82c23c47a0a5"
   },
   {
     "id": "fast-reply-current-world",
@@ -52,7 +56,8 @@
     "implementation": "src/swaag/foreground_fast.py; src/swaag/fast_worker_state.py; src/swaag/foreground_reply_evidence.py",
     "tests": "tests/test_fast_worker_state.py; tests/test_fast_foreground_reply.py; tests/test_fast_reply_evidence_guard.py",
     "observation": "Fast source context, worker status and guarded text claims tested against real Coder in limited cases.",
-    "remaining": "Arbitrary semantic request interpretation, low user-perceived audio latency, and physical Android playback unproven."
+    "remaining": "Arbitrary semantic request interpretation, low user-perceived audio latency, and physical Android playback unproven.",
+    "source_block_sha256": "ab07ed48f3f5326339002203247b8975b22481a0481cacc428fe834df2321abd"
   },
   {
     "id": "goal-first",
@@ -63,7 +68,8 @@
     "implementation": "src/swaag/fast_authority_context.py; src/swaag/foreground_fast.py",
     "tests": "tests/test_fast_policy_context.py; tests/test_fast_foreground_reply.py",
     "observation": "Applicable durable explicit policies and notes included without silent truncation in tested fast calls.",
-    "remaining": "Long-term inferred/explicit goals and user-reference resolution across projects not fully proven."
+    "remaining": "Long-term inferred/explicit goals and user-reference resolution across projects not fully proven.",
+    "source_block_sha256": "370d2d9da3da4af24b35bcb3ce80545f73f680c8758ce920b7ce7bdab727e071"
   },
   {
     "id": "agent-workspace",
@@ -74,7 +80,8 @@
     "implementation": "src/swaag/tools/agent_workspace.py; src/swaag/tools/tool_forge.py; src/swaag/shared_knowledge.py",
     "tests": "tests/test_shared_knowledge.py; tests/test_agent_workspace_recovery.py",
     "observation": "Typed agent workspace, revisions and pinned reusable tools have source tests.",
-    "remaining": "Cross-host sandbox/OS quotas, actual resource ceilings and tool safety for arbitrary helper scripts not fully accepted."
+    "remaining": "Cross-host sandbox/OS quotas, actual resource ceilings and tool safety for arbitrary helper scripts not fully accepted.",
+    "source_block_sha256": "f97ce034594777ef9890714d9e932f94806c32b092cd2099f41750cbc73858f0"
   },
   {
     "id": "local-action-acknowledgement",
@@ -85,7 +92,8 @@
     "implementation": "SWAAG source src/swaag/communication.py; Android repo apps/voicebutton; Infra libexec/web portal",
     "tests": "SWAAG tests/test_orchestrator_stream.py; Nitro Infra GUI focused tests",
     "observation": "Server accepted/progress/completed transitions tested; real browser GUI initial run had driver errors and was under repair.",
-    "remaining": "Immediate local device feedback, every UI button and physical phone timings remain unverified."
+    "remaining": "Immediate local device feedback, every UI button and physical phone timings remain unverified.",
+    "source_block_sha256": "ac2027e90aa832d4607eac994777429eb3a91c810c02b90f9553518f1842e44e"
   },
   {
     "id": "voice-editor-and-manual",
@@ -96,7 +104,8 @@
     "implementation": "/data/src/github/android/apps/voicebutton (dirty working tree; not modified by this audit)",
     "tests": "Android emulator integration record in Thor SWAAG docs/infra-guideline-closure-2026-10-21.md",
     "observation": "Emulator audio chain previously passed; manual text editing and all player controls have no verified physical-device acceptance.",
-    "remaining": "Actual Android source and UI checks across selection/cut/paste, auto-send disable, full playback/seek controls."
+    "remaining": "Actual Android source and UI checks across selection/cut/paste, auto-send disable, full playback/seek controls.",
+    "source_block_sha256": "6a1ecd548a6cb018d889665dd2c146397cd21533a9a26219e8bfef6b767cc227"
   },
   {
     "id": "question-first-gui",
@@ -107,7 +116,8 @@
     "implementation": "/data/infra/libexec/web_portal.py; tests/test_gallery_viewport.py",
     "tests": "Nitro Infra GUI focused test run initially seven passes and nine driver errors",
     "observation": "Some pure-code UI contracts pass; browser environment initially prevented viewport acceptance.",
-    "remaining": "Real rendered viewport geometry, responsive touch/zoom behavior, all empty/stale/error states remain open."
+    "remaining": "Real rendered viewport geometry, responsive touch/zoom behavior, all empty/stale/error states remain open.",
+    "source_block_sha256": "719d47dffc96a9d853ee6d019035805368fade1b40005f783d090562114f69be"
   },
   {
     "id": "bidirectional-referents",
@@ -118,7 +128,8 @@
     "implementation": "SWAAG context and UI client event handling exist in separate repos",
     "tests": "SWAAG tests/test_fast_foreground_reply.py (conversation-only representative cases)",
     "observation": "No demonstrated end-to-end clicked/selected/scrolled/voice multimodal referent corpus with exact UI revision.",
-    "remaining": "Selection, pointer, screen/build state, ambiguous deictic requests, reversible UI preview and tests."
+    "remaining": "Selection, pointer, screen/build state, ambiguous deictic requests, reversible UI preview and tests.",
+    "source_block_sha256": "d59fd48166d538b65704e3b671c41e54324fe0d83afb04a11b5465e2a0c2cd1a"
   },
   {
     "id": "reconnect-idempotence",
@@ -129,7 +140,8 @@
     "implementation": "src/swaag/orchestrator_stream.py; src/swaag/history.py; Nitro Infra client transports",
     "tests": "tests/test_orchestrator_stream.py; tests/test_orchestrator_indexed_receipt_replay.py",
     "observation": "Durable conversation replay and duplicate control rejection tested.",
-    "remaining": "Full WAN loss/jitter/reorder/battery, all audio continuity and every cross-host transport not tested."
+    "remaining": "Full WAN loss/jitter/reorder/battery, all audio continuity and every cross-host transport not tested.",
+    "source_block_sha256": "0e39b0e681be8f4d91c3df3a3bfe61703a3a0c58105c78ed905c4227abb7ac1b"
   },
   {
     "id": "network-stream-semantics",
@@ -140,7 +152,8 @@
     "implementation": "Transport implementations differ by service and require individual ownership",
     "tests": "No complete recorded per-stream mixed-media degraded-network acceptance was reviewed",
     "observation": "Only source guidance reviewed in this audit.",
-    "remaining": "Profile and test durable files vs live media vs replaceable telemetry vs exact control receipts."
+    "remaining": "Profile and test durable files vs live media vs replaceable telemetry vs exact control receipts.",
+    "source_block_sha256": "833361b2d3f0df6211b544d9c29ad413039b68667f292b5ae867611734f32581"
   },
   {
     "id": "configurable-parameters",
@@ -151,7 +164,8 @@
     "implementation": "src/swaag/config.py; src/swaag/assets/defaults.toml",
     "tests": "tests/test_fast_parameter_contract.py; tests/test_config.py",
     "observation": "Fast context settings and validation tested in SWAAG; not every runtime-affecting literal has been classified.",
-    "remaining": "Complete per-project numeric/string decision audit, source precedence and config metadata verification."
+    "remaining": "Complete per-project numeric/string decision audit, source precedence and config metadata verification.",
+    "source_block_sha256": "969d6dca138742a8c65aab3b6a8f14edce85eee6c78d1d7d45f751f93e70364b"
   },
   {
     "id": "least-privilege",
@@ -162,7 +176,8 @@
     "implementation": "src/swaag/tools/agent_workspace.py; tool capability scope config; Infra service permissions",
     "tests": "tests/test_shared_knowledge.py; tests/test_agent_workspace_recovery.py",
     "observation": "Selected paths prevent unauthorized writes and enforce pinned CAS revisions in synthetic tests.",
-    "remaining": "Host-level privilege, symlink escapes, subprocess/mount/cgroup quotas, credentials and actual network listener isolation."
+    "remaining": "Host-level privilege, symlink escapes, subprocess/mount/cgroup quotas, credentials and actual network listener isolation.",
+    "source_block_sha256": "574e2ef014f1744918a5633544e2d1d7ce3a60e39e2cd4c9448df3c71067dfba"
   },
   {
     "id": "meaningful-testing",
@@ -173,7 +188,8 @@
     "implementation": "SWAAG tests/; KnowMoreDiRT tests/; Games tests/; Trading and Infra tests",
     "tests": "SWAAG full regression; KMD/Nitro unit and evaluation; Nitro Games physics tests; Nitro trading provenance tests",
     "observation": "Source unit tests pass in several projects, but KMD older Nitro revision fails four semantic evaluation tests, exposing a test/result mismatch.",
-    "remaining": "Independent holdouts, no shared test leakage, hardware and real-world integration, every meaningful branch/error case."
+    "remaining": "Independent holdouts, no shared test leakage, hardware and real-world integration, every meaningful branch/error case.",
+    "source_block_sha256": "2bd9253deebd76d28e4278c13ee81d589f043fb802e0fdd6a50414723a79cb8b"
   },
   {
     "id": "purpose-before-code",
@@ -184,7 +200,8 @@
     "implementation": "Generic process requirement; SWAAG worker plans and project READMEs only partially expose it",
     "tests": "No universal audit of every implemented function's input/output/purpose/branch guarantees",
     "observation": "Source guideline exists, but cannot be proved by a passing smoke suite.",
-    "remaining": "Review concrete project/module purposes, invariants, failure branches, algorithm choice and expected side effects individually."
+    "remaining": "Review concrete project/module purposes, invariants, failure branches, algorithm choice and expected side effects individually.",
+    "source_block_sha256": "66694293bfc21183c0d2b1f7b86c19d1fe2948211ff41bcf9a922ef26033f66c"
   },
   {
     "id": "kmd-source-provenance",
@@ -195,7 +212,8 @@
     "implementation": "KnowMoreDiRT src/knowmoredirt/{engine,store,index,query,relations}.py",
     "tests": "Nitro KnowMoreDiRT tests/unit and tests/evaluation; Raspi later revision tests/evaluation",
     "observation": "Nitro old May version passes forty-one unit/smoke tests but fails four evaluation cases; hard corpus seventy-one of one hundred thirty-four, messy corpus twenty-nine of sixty. Raspi newer July version passes eight evaluation tests with a hard fixture target of one hundred thirty-one of one hundred thirty-four, not flawless semantic reasoning.",
-    "remaining": "Reconcile branch versions; independent unseen discourse-scope, negation, referent and cross-chunk heldouts; production quality."
+    "remaining": "Reconcile branch versions; independent unseen discourse-scope, negation, referent and cross-chunk heldouts; production quality.",
+    "source_block_sha256": "2204c5df61307abfa3cf57a6e597e1523a226991aa272c41f2c62b8f994cbfff"
   },
   {
     "id": "financial-point-in-time-evidence",
@@ -206,7 +224,8 @@
     "implementation": "financial_database/point_in_time.py; financial_database/observations.py",
     "tests": "financial_database/tests/test_foundation.py selected four focused tests",
     "observation": "Four focused tests passed for migrations, point-in-time identities, availability and canonical evidence; Trading working tree has hundreds of concurrent changes.",
-    "remaining": "Complete original market-data vintage coverage, after-cost trade simulation and untouched chronological evaluation for actual strategies."
+    "remaining": "Complete original market-data vintage coverage, after-cost trade simulation and untouched chronological evaluation for actual strategies.",
+    "source_block_sha256": "daca7d6fc2ff81cea65be07eb261d7aa109771ed101dcef6d97a219b1a3d1ac9"
   },
   {
     "id": "financial-reconciliation",
@@ -217,7 +236,8 @@
     "implementation": "financial_database/src/financial_database/{catalog,observations,point_in_time,quality}.py",
     "tests": "financial_database/tests/test_foundation.py (limited representative pass)",
     "observation": "Source and quality, point-in-time evidence machinery has unit tests; no all-provider acceptance.",
-    "remaining": "Vendor disagreements, dates of first publication, revision history, and all instruments tested end to end."
+    "remaining": "Vendor disagreements, dates of first publication, revision history, and all instruments tested end to end.",
+    "source_block_sha256": "3bf43a89c3a7fcae4a7bd83e6092c9ba2afeda685eb91baeab00382c8986c407"
   },
   {
     "id": "options-collateral",
@@ -228,7 +248,8 @@
     "implementation": "trading/options; backtest; financial_database",
     "tests": "No current full original-chain fills/collateral/assignment/stock-liquidation acceptance in this audit",
     "observation": "Original research already documents unrealistic quote depth and incorrect settlement assumptions in older options simulations.",
-    "remaining": "Do not promote past profit claims until exact live/broker-equivalent settlement and original-bid-size tests pass."
+    "remaining": "Do not promote past profit claims until exact live/broker-equivalent settlement and original-bid-size tests pass.",
+    "source_block_sha256": "3f90664bf210bf874b3e8772105958f7738959a46ad5aa290852717a67591c09"
   },
   {
     "id": "three-dimensional-simulation-authority",
@@ -239,7 +260,8 @@
     "implementation": "games/godot_llm_generated_game_lab runtime and systemic simulation tests",
     "tests": "tests/test_systemic_simulation.py; test_systemic_adapter_contract.py; test_rpg_contracts.py",
     "observation": "Eighteen isolated systemic/adapter/RPG tests passed. The Games working tree currently contains many unrelated changes.",
-    "remaining": "Independently accepted authoritative 3D engine, cross-presentation equivalence, physical collision, full save/reload, usability and player testing."
+    "remaining": "Independently accepted authoritative 3D engine, cross-presentation equivalence, physical collision, full save/reload, usability and player testing.",
+    "source_block_sha256": "e581bde2edb2efd4d66ad78c4c90bfa74f2eb3da4bdd9bbd8901f9c52516393d"
   },
   {
     "id": "save-at-any-moment",
@@ -250,7 +272,8 @@
     "implementation": "Separate Games project's game modes and persistent state systems",
     "tests": "No full save-anywhere mixed semantic/physical activity acceptance observed",
     "observation": "Guideline explicitly requires saving during active/interrupted work; a simple start/stop smoke is not proof.",
-    "remaining": "Save/reload open quests, active physics, time state, generated world and ongoing goals with exact resumed state."
+    "remaining": "Save/reload open quests, active physics, time state, generated world and ongoing goals with exact resumed state.",
+    "source_block_sha256": "f99bc87a1d40b79ef5b439280471204dae8a421d0173839ba266d1f59c2f79a5"
   },
   {
     "id": "trained-habits-real-world-rollouts",
@@ -261,7 +284,8 @@
     "implementation": "Separate Games project, optional learned movement controllers",
     "tests": "No complete heldout physical skill rollout experiment inspected",
     "observation": "Source requirement reviewed; no reliable production learned-skill demonstration established.",
-    "remaining": "Real task-boundary examples, training, different scenes, physical success/failure, manual fallback and ability to reject/retrain."
+    "remaining": "Real task-boundary examples, training, different scenes, physical success/failure, manual fallback and ability to reject/retrain.",
+    "source_block_sha256": "a903bd6579f294b7c989d56b79d49009aa10a170897d1e8beb61c1257d9abc35"
   },
   {
     "id": "robot-sensors-and-clock",
@@ -272,7 +296,8 @@
     "implementation": "User robotics repositories not independently benchmarked for this audit",
     "tests": "No completed sensor synchronization and leakage adversarial benchmark observed",
     "observation": "Source rule reviewed; no production robotic hardware claim established.",
-    "remaining": "Test calibration, timestamps, frames, action constraints, model-free versus model-based planners with heldout simulator and physical safety."
+    "remaining": "Test calibration, timestamps, frames, action constraints, model-free versus model-based planners with heldout simulator and physical safety.",
+    "source_block_sha256": "7c70401858904502695501f452ed6c28894c24451e1f2eae6cad211ac449b9ab"
   },
   {
     "id": "preserve-recorded-instructions",
@@ -283,7 +308,8 @@
     "implementation": "/data/infra/docs/guidlines/original-recordings and appendix/source-preservation.md",
     "tests": "scripts/infra_guideline_requirement_trace.py manifest (hash and file coverage)",
     "observation": "Seventy-eight normalized Markdown/source documents and one hundred sixty-eight original recording files present and hashed; two thousand two hundred thirty source blocks linked with exact line references.",
-    "remaining": "Proposition-level human/semantic reconciliation of every original recording against its rules, possibilities and questions has not been executed here."
+    "remaining": "Proposition-level human/semantic reconciliation of every original recording against its rules, possibilities and questions has not been executed here.",
+    "source_block_sha256": "9c7571d727d742d58d381cafab6d173385a37af9aaab6e1c0c3cbf27bd96a091"
   },
   {
     "id": "audio-style-every-response",
@@ -294,7 +320,8 @@
     "implementation": "src/swaag/assets/prompts/foreground_fast_system.txt and communication rendering",
     "tests": "tests/test_fast_foreground_reply.py, model text evaluations",
     "observation": "Some constrained speech-style outputs verified; no universal gate proves every generated report uses audio style.",
-    "remaining": "Run complete spoken text/number/hash/list correctness tests on actual model and Android outputs."
+    "remaining": "Run complete spoken text/number/hash/list correctness tests on actual model and Android outputs.",
+    "source_block_sha256": "2becd51e40004f93a2fd5b17dcc569c84bfb39d35d426915f656181bce92f429"
   },
   {
     "id": "grounded-retrieval-context",
@@ -305,7 +332,8 @@
     "implementation": "src/swaag/fast_history_candidates.py and KMD context/discourse model",
     "tests": "tests/test_fast_history_candidates.py; KMD evaluations",
     "observation": "Indexed literal old-history retrieval tested, but lexical navigation is not a complete semantic/discourse selector.",
-    "remaining": "Negated/dream/conditional scope across distant source records, supersession and exact quote provenance on heldout cases."
+    "remaining": "Negated/dream/conditional scope across distant source records, supersession and exact quote provenance on heldout cases.",
+    "source_block_sha256": "5e7097e8dc5f438e806a546175e8079a2c2c04d979a551dc743beab3574c8758"
   },
   {
     "id": "warning-color-contract",
@@ -316,7 +344,8 @@
     "implementation": "Infra web GUI CSS and Android UI modules",
     "tests": "Browser geometry tests and synthetic GUI tests only partial",
     "observation": "No cross-client screenshot/color-semantic audit was completed.",
-    "remaining": "Warn only on true severity; test accessibility, colorblind behavior and the actual error/ready states."
+    "remaining": "Warn only on true severity; test accessibility, colorblind behavior and the actual error/ready states.",
+    "source_block_sha256": "74681b985301b0573f9f4d96d996d262dcaa72135c44a1b7d8d573df5d0020b7"
   },
   {
     "id": "backtest-results-ui",
@@ -327,6 +356,7 @@
     "implementation": "trading_gui/widgets.py and model adapters",
     "tests": "test_guideline_acceptance.py long-running test was interrupted after approximately four minutes; no success claim",
     "observation": "Hard-coded browser path was a separate Infra test failure; trading GUI fixture data load is currently too slow for quick audit acceptance.",
-    "remaining": "Real screens must answer robustness and validity first; measure loads and test tooltips/charts/parameters, source data and stale/failed states."
+    "remaining": "Real screens must answer robustness and validity first; measure loads and test tooltips/charts/parameters, source data and stale/failed states.",
+    "source_block_sha256": "02ffb5feafc263c2f14438131f90336e381e7efb1a48b885272fc979136c9b39"
   }
 ]

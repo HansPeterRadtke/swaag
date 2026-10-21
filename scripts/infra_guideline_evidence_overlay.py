@@ -23,7 +23,7 @@ def apply(trace:Path, checks:Path, output:Path) -> dict:
     for row in evidence:
         if not isinstance(row,dict) or row.get('verdict') not in VERDICTS:
             raise ValueError('evidence verdict must be one of the explicitly limited review outcomes')
-        for key in ('id','source_file','source_phrase','owner','implementation','tests','observation','remaining'):
+        for key in ('id','source_file','source_phrase','source_block_sha256','owner','implementation','tests','observation','remaining'):
             if not row.get(key):raise ValueError(f'missing or empty {key} in {row.get("id")}')
         if row['id'] in seen_ids:
             raise ValueError('duplicate evidence ID: ' + row['id'])
@@ -37,6 +37,8 @@ def apply(trace:Path, checks:Path, output:Path) -> dict:
         if len(candidates)!=1:
             raise ValueError(f"ambiguous/nonexistent source phrase {row['id']}: {len(candidates)}")
         source=candidates[0]
+        if row['source_block_sha256'] != source['source_block_sha256']:
+            raise ValueError(f"source changed since evidence review: {row['id']}")
         entry={k:row[k] for k in ('id','verdict','owner','implementation','tests','observation','remaining')}
         source['proof'].append(entry)
         # The original paragraph may include several independent obligations.
