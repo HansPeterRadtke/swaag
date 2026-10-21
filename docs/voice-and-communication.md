@@ -559,3 +559,56 @@ Repeat the live Jetson/Thor/LuxTTS test after deployment.
 Regression tests cover new controls, progress committed before control
 processing, exact completed replay, duplicates, reconnect, and invalid
 anchors. The complete source suite must pass before activation.
+
+### Verified live outcome after the exact-receipt cursor deployment
+
+On October 21, 2026, the integration was qualified with the complete
+SWAAG test suite: **1,579 passed, 3 skipped**. After verifying that no
+user operations or background workers were running, the exact tested
+source was fast-forwarded into SWAAG main and the communication service
+alone was restarted at 06:48 CEST. Qwen3-Coder, Qwen3.8 Q8, the Jetson
+voice service and Nitro LuxTTS remained running.
+
+The same synthetic spoken greeting, without changes to the audio fixture,
+produced these complete client-observed wall-clock measurements:
+
+- Before the event-anchor fix: **48.138 seconds total**, first valid
+  16-kHz audio at **46.568 seconds**.
+- After the event-anchor fix: **11.458 seconds total**, first valid
+  16-kHz audio at **9.659 seconds**.
+- Accurate resident Whisper large-v3 transcription at **4.534 seconds**;
+  semantic turn proposal / automatic final commit at **5.033 / 5.042**.
+- The correct SWAAG answer, “Hello! I can hear you.”, arrived with
+  valid streamed LuxTTS PCM and final audio-end event by **11.454 seconds**.
+- Measured improvement: **36.680 seconds** total, about **4.2× faster**,
+  entirely on the identical server/audio chain. The exact newly accepted
+  SWAAG operation completed in **3.835 seconds**.
+
+A separate real Android emulator instrumentation pass succeeded after
+deployment. It started the application's foreground voice service,
+streamed the actual test PCM, used resident STT, automatic semantic
+submission, the same production SWAAG Coder endpoint and real LuxTTS
+audio played through Android AudioTrack while the activity was backgrounded.
+All expected flags passed. The emulator harness took approximately
+**86.8 seconds** wall clock including test setup, APK/app startup,
+background/rebind checks and cleanup; the instrumented application
+reported **58.846 seconds** through its final UI/reconciliation assertion.
+The corresponding SWAAG operation finished in **4.192 seconds**.
+This emulator-run duration is NOT comparable to the standalone
+11.458-second server/audio duration because it includes UI and
+instrumentation steps; it is not a physical phone acceptance test.
+
+The Jetson voice service and the Thor voice gateway reported all
+components healthy after the rollout. Both configured model services
+remained active, with user-facing Coder on port 14833 and Qwen3.8 Q8
+workers on 14835. There were no nonterminal workers at the final check.
+The earlier warehouse worker was preserved but is in a FAILED state
+with recorded error model_unavailable; do not call it completed or
+automatically repeat its prior tool effects.
+
+The streaming/transport bottleneck is corrected and its improvement
+measured. The remaining total approximately eleven-second speech
+response still includes STT, end-of-turn classification, model inference,
+TTS and network/transport overhead. Physical Android phone testing,
+interruption/reconnection under actual phone audio, and further latency
+optimization remain open acceptance work.
