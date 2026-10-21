@@ -346,6 +346,8 @@ class CommunicationConfig:
     single_pass_direct_replies: bool = False
     early_tool_acknowledgement: bool = False
     fast_initial_reply: bool = False
+    fast_policy_max_chars: int = 4500
+    fast_notes_max_chars: int = 2500
     max_active_workers: int = 128
     max_pending_requests: int = 128
     idle_work_mode: str = "finish_only"
@@ -831,6 +833,8 @@ def _coerce_config(
         single_pass_direct_replies=data["communication"].get("single_pass_direct_replies", False),
         early_tool_acknowledgement=data["communication"].get("early_tool_acknowledgement", False),
         fast_initial_reply=data["communication"].get("fast_initial_reply", False),
+        fast_policy_max_chars=int(data["communication"].get("fast_policy_max_chars", 4500)),
+        fast_notes_max_chars=int(data["communication"].get("fast_notes_max_chars", 2500)),
         max_active_workers=data["communication"].get("max_active_workers", 128),
         max_pending_requests=data["communication"].get("max_pending_requests", 128),
         orchestrator_priority=int(data["communication"]["orchestrator_priority"]),
@@ -1106,6 +1110,8 @@ def _coerce_config(
         raise ValueError("communication.early_tool_acknowledgement must be a boolean")
     if not isinstance(communication.fast_initial_reply, bool):
         raise ValueError("communication.fast_initial_reply must be a boolean")
+    _validate_positive("communication.fast_policy_max_chars", communication.fast_policy_max_chars)
+    _validate_positive("communication.fast_notes_max_chars", communication.fast_notes_max_chars)
     if communication.single_pass_direct_replies and not communication.compact_foreground_actions:
         raise ValueError("communication.single_pass_direct_replies requires compact_foreground_actions")
     artifact_serving = communication.open_webui_artifacts
@@ -1507,6 +1513,14 @@ def _parameter_semantics(
         "communication.fast_initial_reply": (
             "Run one small, semantically capable quick reply/optional delegation inference before full orchestration.",
             "Experimental opt-in. The quick reply is durably bound to its original finalized control receipt and can be spoken before deeper execution. Direct replies skip full orchestration only with sufficient current authority and no new user control; ambiguous, history-heavy, unavailable or invalid results fall back safely. Tool execution always stays in the full orchestrator.",
+        ),
+        "communication.fast_policy_max_chars": (
+            "Maximum exact character budget for applicable durable user instructions in the fast communication context.",
+            "If the complete scoped rules do not fit, decline the fast call and use the full authoritative controller; never silently truncate user policy.",
+        ),
+        "communication.fast_notes_max_chars": (
+            "Maximum exact character budget for relevant durable session notes in the fast communication context.",
+            "Notes are lower-trust evidence, not executable commands. If complete notes do not fit, fall back to the full controller instead of dropping one silently.",
         ),
         "communication.status_priority": (
             "Inference admission priority of status queries and finalized targeted controls.",

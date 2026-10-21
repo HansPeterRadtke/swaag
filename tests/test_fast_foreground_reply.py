@@ -130,21 +130,22 @@ def test_fast_unavailable_uses_complete_original_controller(make_config):
     finally:service.close()
 
 
-def test_short_fast_context_does_not_discard_persistent_user_policy(make_config):
+def test_short_fast_context_preserves_applicable_policy_without_second_call(make_config):
     from swaag.prompt_instructions import make_prompt_instruction
     from dataclasses import asdict
-    service, runtime, client = setup(make_config, [_action(message="Full policy-respecting answer.")])
+    service, runtime, client = setup(make_config, [fast("answer", "Policy-respecting answer.")])
     try:
         state = service._orchestrator_state()
         rule = make_prompt_instruction(runtime.config, title="User rule", content="Reply as instructed.",
-                                       scopes=["action"], categories=["style"],
+                                       scopes=["all"], categories=["style"],
                                        source_kind="user", source_ref="conversation",authority="durable_user_policy")
         runtime.history.record_event(state,'prompt_instruction_added',
                                      {'instruction':asdict(rule),'instruction_store':'session'})
         reply = service.orchestrator_message('Hello.')
-        assert reply['answer'] == "Full policy-respecting answer."
+        assert reply['answer'] == "Policy-respecting answer."
         assert len(client.requests) == 1
-        assert client.requests[0]['contract'] == 'agent_action'
+        assert client.requests[0]['contract'] == 'fast_foreground_response'
+        assert 'Reply as instructed.' in client.requests[0]['prompt']
     finally:service.close()
 
 
@@ -164,18 +165,19 @@ def test_promise_is_not_direct_completion_and_still_dispatches_full_controller(m
     finally:service.close()
 
 
-def test_user_wide_policy_is_not_omitted_from_short_fast_context(make_config):
-    service, runtime, client = setup(make_config, [_action(message='Full instruction-preserving answer.')])
+def test_user_wide_policy_is_present_in_short_fast_context(make_config):
+    service, runtime, client = setup(make_config, [fast('answer', 'Policy-preserving answer.')])
     try:
         store = runtime.system_prompt_contributors[0].store
         store.add_trusted(title='Retain format', content='Respond in German.',
-                          scopes=['action'], categories=['style'],
+                          scopes=['all'], categories=['style'],
                           authority='durable_user_policy', source_kind='user',
                           source_ref='confirmed request', origin_session_id='global-policy-check')
         assert store.has_any_events()
         reply=service.orchestrator_message('Hello.')
-        assert reply['answer']=='Full instruction-preserving answer.'
-        assert [r['contract'] for r in client.requests] == ['agent_action']
+        assert reply['answer']=='Policy-preserving answer.'
+        assert [r['contract'] for r in client.requests] == ['fast_foreground_response']
+        assert 'Respond in German.' in client.requests[0]['prompt']
     finally:service.close()
 
 

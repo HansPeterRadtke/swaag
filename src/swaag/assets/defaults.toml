@@ -513,6 +513,10 @@ single_pass_direct_replies = false
 early_tool_acknowledgement = false
 # Opt-in separate short initial semantic response; deep execution is asynchronous.
 fast_initial_reply = false
+# Exact immutable user policy and note budgets for quick semantic turns.
+# Overflow declines fast inference; the complete controller remains authoritative.
+fast_policy_max_chars = 4500
+fast_notes_max_chars = 2500
 enabled_tools = ["agent_workspace", "tool_forge", "diane", "list_files", "read_file", "read_text", "search_in_file", "search_repo", "read_artifact", "time_now", "system_resources", "calculator", "history_search", "history_window", "agent_status_lookup", "runtime_snapshot_lookup", "agent_control", "orchestration_control", "background_work", "questions", "revise_question", "worker_questions", "report_progress"]
 host = "127.0.0.1"
 port = 8765

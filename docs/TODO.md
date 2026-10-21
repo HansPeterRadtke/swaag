@@ -1,3 +1,9 @@
+# Current audit and release boundary — October twentieth
+
+The most recent source comparison, test evidence, corrected fast user-policy handling, one-call conversational semantics and indexed control replay are recorded in [the full Infra-to-SWAAG compliance audit](infra-guidelines-swaag-compliance-audit-2026-10-20.md). Historical October fourteenth–nineteenth comparisons below remain preserved as evidence for their actual software revisions and do **not** claim the latest Thor running process is already using a newly committed foreground change. Check the active process, exact model routes and idle-safe release gate before declaring live deployment.
+
+Current open acceptance gates: semantic relevance and supersession of distant history, fully scoped goal memory, replayable model-slot cancellation under concurrent load, Android microphone-to-speaker and barge-in behavior, true worker progress/ETA versus heartbeat, and bounded storage across the host. Never infer user-visible success from a passing source test alone. The physical `/data` filesystem is close to capacity and must be managed without deleting protected user evidence or interrupting jobs.
+
 # October fifteenth foreground delivery and review authority
 
 The [complete current guideline comparison](guideline-comparison-2026-10-15.md)

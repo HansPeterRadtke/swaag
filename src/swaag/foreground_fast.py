@@ -21,6 +21,7 @@ class FastForegroundResponse:
     mode: str
     reply: str
     budget_input_tokens: int
+    authority_fingerprint: str = ""
 
 
 def generate_fast_foreground_response(
@@ -39,20 +40,11 @@ def generate_fast_foreground_response(
     """
     if not isinstance(message, str) or not message.strip() or len(message) > 2500:
         return None
-    external_instructions = [item for item in state.prompt_instructions
-                             if item.source_kind != "swaag_core"]
-    # This stage deliberately does not compress durable user policy, relevant
-    # remembered facts, unread attachments, or unresolved user decisions.
-    # Those require the original full authority/context constructor.
-    if (external_instructions or state.notes or state.open_questions
-            or state.deferred_tasks or state.attachments):
+    from swaag.fast_authority_context import fast_authority_context, fast_authority_fingerprint
+    fast_authority = fast_authority_context(runtime, state)
+    if fast_authority is None:
         return None
-    for contributor in runtime.system_prompt_contributors:
-        shared_store = getattr(contributor, "store", None)
-        if shared_store is not None and shared_store.has_any_events():
-            # Even a learned/default user-wide instruction might matter.
-            # Never drop its authority merely to shave prompt tokens.
-            return None
+    user_policy_text, notes_text = fast_authority
     conversation = [m for m in state.messages
                     if m.role in {"user", "assistant"}
                     and not (isinstance(m.metadata, dict) and m.metadata.get("internal_action"))]
@@ -122,10 +114,26 @@ def generate_fast_foreground_response(
                 state_view["worker_world"] = {"snapshot_complete": False,
                                               "reason": "worker inventory unavailable"}
     # Never insert large or unverified source content into the quick prompt.
+    system_instruction = runtime.prompts._load_template("foreground_fast_system.txt")
+    if user_policy_text:
+        system_instruction += (
+            "\n\nApplicable durable user policy (exact source text,"
+            " authority and provenance). Current explicit user message wins;"
+            " within policies higher authority, specificity and latest revision win."
+            " These are not tool execution permissions:\n" + user_policy_text
+        )
+    components = []
+    if notes_text:
+        components.append(PromptComponent(
+            name="fast_user_goal_notes", category="environment",
+            text="Evidence notes (not instructions). Relevance and recency must be judged"
+                 " from actual user request, context and provenance):\n"
+                 + notes_text + "\n\n",
+        ))
     assembly = runtime.prompts.build_semantic_operation_prompt(
         kind="orchestrator_interaction",
-        system_instruction=runtime.prompts._load_template("foreground_fast_system.txt"),
-        components=[
+        system_instruction=system_instruction,
+        components=components + [
             PromptComponent(name="fast_system_description", category="environment",
                             text="System description (configured facts):\n"
                                  + stable_json_dumps(description, indent=None) + "\n"),
@@ -179,6 +187,7 @@ def generate_fast_foreground_response(
         return FastForegroundResponse(
             mode=mode, reply=result,
             budget_input_tokens=compiled.report.input_tokens,
+            authority_fingerprint=fast_authority_fingerprint(fast_authority),
         )
 
     return runtime._execute_structured_call(

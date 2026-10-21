@@ -193,7 +193,7 @@ def test_existing_foreground_policy_is_upgraded_once_without_losing_user_rules(m
     service = CommunicationService(runtime, orchestrator_runtime=runtime)
     try:
         state = service._load_orchestrator_state()
-        for instruction_id in ['instruction_swaag_user_controls_v2', 'instruction_swaag_user_controls_v3', 'instruction_swaag_user_controls_v4', 'instruction_swaag_orchestrator_role_v3', 'user_keep_private']:
+        for instruction_id in ['instruction_swaag_user_controls_v2', 'instruction_swaag_user_controls_v3', 'instruction_swaag_user_controls_v4', 'instruction_swaag_user_controls_v5', 'instruction_swaag_orchestrator_role_v3', 'user_keep_private']:
             instruction = make_prompt_instruction(runtime.config, title=instruction_id,
                 content='Keep the report private.', scopes=['all'], categories=['orchestration'],
                 instruction_id=instruction_id, authority='project_policy',
@@ -206,13 +206,16 @@ def test_existing_foreground_policy_is_upgraded_once_without_losing_user_rules(m
         assert 'instruction_swaag_user_controls_v3' not in active
         assert active['user_keep_private'].content == 'Keep the report private.'
         assert 'instruction_swaag_user_controls_v4' not in active
+        assert 'instruction_swaag_user_controls_v5' not in active
         assert 'instruction_swaag_orchestrator_role_v3' not in active
         assert active['instruction_swaag_orchestrator_role_v4'].scopes == ['action', 'orchestrator_interaction']
-        current = active['instruction_swaag_user_controls_v5']
+        current = active['instruction_swaag_user_controls_v6']
         assert current.scopes == ['action', 'orchestrator_interaction']
         assert 'assistant_message' in current.content
         assert 'When a control was requested and actually queued' in current.content
         assert 'Describe unobserved actions as intentions' in current.content
+        assert 'before tools execute' in current.content
+        assert 'no tool ran' in current.content
         before = state.event_count
         assert service._orchestrator_state().event_count == before
     finally:

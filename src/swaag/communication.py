@@ -48,6 +48,7 @@ from swaag.heartbeat import systemd_notify, watchdog_interval_seconds
 from swaag.operations_log import emit_operation_event
 from swaag.mcp import McpAdapter, McpHttpResponse, McpHttpSubscription, McpOAuthResourceServer
 from swaag.prompt_instructions import make_prompt_instruction
+from swaag.prompt_instruction_store import PromptInstructionStoreError
 from swaag.protocol_adapters import (
     A2AContentTypeNotSupportedError,
     A2AProtocolError,
@@ -1672,11 +1673,12 @@ class CommunicationService:
                 "prompt_instruction_added",
                 {"instruction": asdict(instruction), "instruction_store": "session"},
             )
-        control_instruction_id = "instruction_swaag_user_controls_v5"
+        control_instruction_id = "instruction_swaag_user_controls_v6"
         for previous in list(state.prompt_instructions):
             if previous.instruction_id in {
                 "instruction_swaag_user_controls_v1", "instruction_swaag_user_controls_v2",
                 "instruction_swaag_user_controls_v3", "instruction_swaag_user_controls_v4",
+                "instruction_swaag_user_controls_v5",
             }:
                 runtime.history.record_event(state, "prompt_instruction_removed", {
                     "instruction_id": previous.instruction_id, "instruction_store": "session",
@@ -1697,8 +1699,9 @@ class CommunicationService:
                     "updating background work, include a brief useful acknowledgement in that "
                     "action's assistant_message, together with status already supported by the "
                     "snapshot. Describe unobserved actions as intentions, not completed results. "
-                    "The runtime releases this text after successful tool receipts; do not defer "
-                    "the acknowledgement to another model call or background completion. "
+                    "Early foreground speech may deliver the accepted acknowledgement before tools execute. "
+                    "Intention proves no tool ran, control queued, or worker started; claims of "
+                    "effects require receipts. Acknowledge without waiting for completion. "
                     "A successful agent_control "
                     "result with queued=true is the durable queue receipt. It permits saying the "
                     "instruction is queued; it does not prove worker acknowledgement or completed "
@@ -2375,6 +2378,34 @@ class CommunicationService:
         future.add_done_callback(lambda done: None if done.cancelled() else done.exception())
         return await asyncio.shield(future)
 
+    @staticmethod
+    def _receipt_recovery_events(history, session_id: str, control_id: str):
+        """Read only exact lifecycle records around a processed receipt.
+
+        The completed/recovered reply must never require loading all model
+        prompts, tool bytes and token progress from a large durable journal.
+        Walk indexed lifecycle events backwards until reaching this control and
+        the turn that initially accepted it, then replay that small selection
+        in chronological order. Do not impose a recency cutoff on durable user
+        receipts: an old recorded request must remain recoverable.
+        """
+        recorded = []
+        found = False
+        for event in history.iter_history_reverse(
+            session_id,
+            event_types=("turn_started", "turn_finished", "turn_cancelled",
+                         "control_message_processed"),
+        ):
+            recorded.append(event)
+            if (event.event_type == "control_message_processed"
+                    and event.payload.get("control_id") == control_id):
+                found = True
+            elif found and event.event_type == "turn_started":
+                break
+        if not found:
+            return iter(())
+        return reversed(recorded)
+
     def _process_orchestrator_receipt(self, receipt: dict[str, Any], *, allow_resume: bool = True) -> dict[str, str]:
         runtime = self.orchestrator_runtime
         with session_execution_lock(runtime.history, str(receipt["session_id"])):
@@ -2389,7 +2420,9 @@ class CommunicationService:
                     turn = None
                     controls: set[str] = set()
                     cancelled = False
-                    for event in runtime.history.read_history(state.session_id):
+                    for event in self._receipt_recovery_events(
+                        runtime.history, state.session_id, str(receipt["control_id"])
+                    ):
                         if event.event_type == "turn_started":
                             resumed = event.payload.get("resumed_control_ids", [])
                             if seen and receipt["control_id"] not in resumed:
@@ -2469,7 +2502,8 @@ class CommunicationService:
             candidate = generate_fast_foreground_response(
                 runtime, state, str(receipt["message"]), observed_world=observed,
             )
-        except (ValueError, ModelClientError, BudgetExceededError) as exc:
+        except (ValueError, ModelClientError, BudgetExceededError,
+                sqlite3.Error, OSError, PromptInstructionStoreError) as exc:
             # A failed optional fast layer never loses the original request.
             # The full orchestrator is the safe fallback for the same receipt.
             runtime.history.record_event(state, "orchestrator_interaction_unavailable", {
@@ -2479,7 +2513,7 @@ class CommunicationService:
             return None
         if candidate is None:
             return None
-        if candidate.mode == "answer" and observed is not None:
+        if observed is not None:
             from swaag.fast_worker_state import meaningful_worker_state_revision
             try:
                 if (observed_revision != self._foreground_task_revision()[:5]):
@@ -2494,6 +2528,20 @@ class CommunicationService:
             pending = runtime.history.list_pending_control_messages(state.session_id)
             if len(pending) != 1 or pending[0]["control_id"] != receipt["control_id"]:
                 return None  # A later authoritative user correction arrived.
+            # Global user-wide policy changes need not share this session's
+            # execution lock. Re-read the small exact authority set immediately
+            # before committing speech: no old model answer may overrule a
+            # later durable user correction saved during inference.
+            from swaag.fast_authority_context import (
+                fast_authority_context, fast_authority_fingerprint,
+            )
+            try:
+                current_authority = fast_authority_context(runtime, state)
+            except (OSError, ValueError, sqlite3.Error, PromptInstructionStoreError):
+                return None  # Complete controller remains responsible.
+            if (current_authority is None or
+                    fast_authority_fingerprint(current_authority) != candidate.authority_fingerprint):
+                return None
             if candidate.mode == "answer":
                 # The answer uses one semantic model request and no tools.
                 # Persist an ordinary turn and consume the exact authoritative
