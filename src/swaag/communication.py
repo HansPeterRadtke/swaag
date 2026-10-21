@@ -2202,11 +2202,22 @@ class CommunicationService:
                     future = Future()
                     future.set_result({**operation["result"], "operation_id": operation_id, "duplicate": True})
                     receipt["duplicate"] = True
+                    receipt["history_anchor_sequence"] = (
+                        self.orchestrator_runtime.history.orchestrator_delivery_anchor(
+                            receipt["session_id"], receipt["control_id"], replay_existing=True
+                        )
+                    )
                     self._orchestrator_stream_slots.release()
                     return receipt, future
                 # Persist finalized authority before executor/session admission.
                 # A running action can now observe a correction immediately.
                 receipt.update(self._prepare_voice_operation_receipt(message, operation_id))
+                receipt["history_anchor_sequence"] = (
+                    self.orchestrator_runtime.history.orchestrator_delivery_anchor(
+                        receipt["session_id"], receipt["control_id"],
+                        replay_existing=receipt.get("status") == "processed",
+                    )
+                )
                 future = self._orchestrator_stream_executor.submit(
                     copy_context().run, self._execute_claimed_orchestrator_operation, message, operation_id,
                 )
@@ -2247,6 +2258,12 @@ class CommunicationService:
                 raise QueueCapacityError("Foreground streaming capacity reached; request not accepted")
             try:
                 receipt = self._receive_orchestrator_message(message, control_id=control_id)
+                receipt["history_anchor_sequence"] = (
+                    self.orchestrator_runtime.history.orchestrator_delivery_anchor(
+                        receipt["session_id"], receipt["control_id"],
+                        replay_existing=receipt.get("status") == "processed",
+                    )
+                )
                 future = self._orchestrator_stream_executor.submit(
                     copy_context().run, self._process_orchestrator_receipt, receipt,
                 )

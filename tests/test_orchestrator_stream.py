@@ -291,3 +291,51 @@ def test_resumed_receipt_reconciles_newer_pending_correction(make_config):
         assert len(client.requests) == 3
     finally:
         service.close()
+
+
+@pytest.mark.parametrize("identity", ["control_id", "operation_id"])
+def test_long_history_stream_starts_near_new_receipt_and_reconnects_without_replaying_work(
+    make_config, monkeypatch, identity,
+):
+    from tests.test_agent_action_loop import FakeModelClient, _action
+    runtime = AgentRuntime(
+        make_config(
+            model__context_limit=32000,
+            runtime__completion_evaluation_enabled=False,
+            communication__poll_seconds=.005,
+        ),
+        model_client=FakeModelClient([_action(message="Hello from Coder.")]),
+    )
+    service = CommunicationService(runtime, orchestrator_runtime=runtime)
+    try:
+        state = service._orchestrator_state()
+        for index in range(300):
+            runtime.history.record_event(state, "error", {
+                "operation": "unrelated_history",
+                "error_type": "PreviousTask", "error": str(index),
+            })
+        before = state.event_count
+        calls = []
+        original = runtime.history.read_history_event_page
+        def observed(*args, **kwargs):
+            calls.append(kwargs.get("start_sequence"))
+            return original(*args, **kwargs)
+        monkeypatch.setattr(runtime.history, "read_history_event_page", observed)
+        first = list(service.iter_orchestrator_message(
+            "Say hello.", **{identity: "unrelated-300-events"}
+        ))
+        assert [event["event"] for event in first] == ["accepted", "completed"]
+        assert first[-1]["result"]["answer"] == "Hello from Coder."
+        assert calls and min(calls) > before, (
+            "A new accepted request must never page through old model/tool event history"
+        )
+        calls.clear()
+        second = list(service.iter_orchestrator_message(
+            "Say hello.", **{identity: "unrelated-300-events"},
+        ))
+        assert [event["event"] for event in second] == ["accepted", "completed"]
+        assert second[-1]["result"]["answer"] == "Hello from Coder."
+        assert calls and min(calls) > before
+        assert len(runtime.client.requests) == 1, "Replay must not rerun model or tools"
+    finally:
+        service.close()
