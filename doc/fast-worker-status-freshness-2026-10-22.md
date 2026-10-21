@@ -29,3 +29,7 @@ A separate read-only inspection of two Thor SWAAG runtime worker databases obser
 ## Unresolved production checks
 
 Before an idle-safe live deployment, compare installed source/package bytes and active-process revision separately. Under real concurrent worker/foreground Qwen load, measure fast-turn admission, index query latency, stale-reply rejection frequency, fallback latency, active worker status fidelity and actual slot preemption. Such tests must not invent worker completion percentages or treat an HTTP health check as end-to-end acceptance.
+
+## Installed candidate acceptance after main integration
+
+The complete regression was followed by a clean fast-forward of the isolated correction into Thor main. The repository status remained clean, locally ahead of remote tracking. A **second, separate** installation candidate was built with the repository's normal runtime installer under an explicitly overridden runtime-data root, not over the running SWAAG environment. The read-only preflight reported **212 source files and 212 exact installed file matches**, with zero missing/extra/changed package contents and SQLite **3.53.1**. **Eighty focused regression tests passed while importing from this installed candidate package with the source-tree Python path disabled**. The preexisting live SWAAG package still differs from current source; voice gateway, communication daemon and model servers were not restarted or replaced. No remote push or Nitro merge is asserted.

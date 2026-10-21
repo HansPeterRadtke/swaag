@@ -22,6 +22,7 @@ Swaag is a standard `pyproject.toml` package. Development environments may live 
 The implementation is intentionally small while the intended harness architecture is broader. Read these before architectural changes:
 
 - `doc/infra-guideline-engineering-handover-2026-10-21.md` — latest SWAAG-specific Infra guideline implementation, exact deployed/tested scope, unresolved engineering gates and source-linked cross-project handover.
+- doc/fast-worker-status-freshness-2026-10-22.md — tested question/progress semantic-cursor freshness fence for first speech; live-model release checks remain open.
 - `/data/infra/docs/infra-guideline-cross-project-status-2026-10-21.md` — companion Infra-owned full-topic ownership, historical source, verification and open-project status ledger.
 - `docs/guideline-comparison-2026-10-15.md` — historical October fifteenth audit; read the newer handover before claiming a present-day compliance status.
 - `docs/design-principles.md` — semantic/deterministic boundary, agent behavior, tools, communication, interfaces, and current-versus-target scope.
