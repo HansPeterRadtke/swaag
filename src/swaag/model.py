@@ -1015,6 +1015,9 @@ class LlamaCppClient:
         fail_safe_timeout_seconds = max(
             1.0, float(self.config.model.fail_safe_timeout_seconds)
         )
+        hard_generation_seconds = float(self.config.model.max_generation_wall_seconds)
+        if not 1.0 <= hard_generation_seconds <= 86400.0:
+            raise ValueError("model.max_generation_wall_seconds must be in [1, 86400]")
         stream_payload = dict(payload)
         stream_payload["stream"] = True
         if self._uses_chat_transport:
@@ -1043,13 +1046,29 @@ class LlamaCppClient:
             response = requests.post(url, **request_kwargs)
         cancel_observed = threading.Event()
         fail_safe_observed = threading.Event()
+        hard_deadline_observed = threading.Event()
         stop_watcher = threading.Event()
         watcher: threading.Thread | None = None
         last_model_activity = [started]
-        if cancel_check is not None or backend_monitor is not None:
+        # The watcher is mandatory even for unsupported backends: native
+        # progress can continue indefinitely without ever closing JSON output.
+        if hard_generation_seconds > 0:
             def watch_for_cancel() -> None:
                 last_observation = 0.0
                 while not stop_watcher.wait(max(0.005, float(cancel_poll_seconds))):
+                    if time.monotonic() - started >= hard_generation_seconds:
+                        hard_deadline_observed.set()
+                        shutdown = getattr(getattr(response, "raw", None), "shutdown", None)
+                        if callable(shutdown):
+                            try:
+                                shutdown()
+                            except (OSError, RuntimeError, ValueError):
+                                pass
+                        else:
+                            close = getattr(response, "close", None)
+                            if callable(close):
+                                close()
+                        return
                     try:
                         should_cancel = bool(cancel_check()) if cancel_check is not None else False
                     except Exception:
@@ -1147,6 +1166,11 @@ class LlamaCppClient:
             response.close()
             if watcher is not None:
                 watcher.join()
+            if hard_deadline_observed.is_set():
+                raise requests.ReadTimeout(
+                    f"Generation exceeded absolute {hard_generation_seconds:.1f}s wall deadline; "
+                    "the incomplete model output is not a committed action"
+                ) from exc
             if fail_safe_observed.is_set():
                 raise requests.ReadTimeout(
                     f"No trustworthy native backend or streamed model progress for {fail_safe_timeout_seconds:.1f} seconds"
@@ -1257,6 +1281,11 @@ class LlamaCppClient:
                 if item.get("stop"):
                     break
         except requests.Timeout as exc:
+            if hard_deadline_observed.is_set():
+                raise requests.ReadTimeout(
+                    f"Generation exceeded absolute {hard_generation_seconds:.1f}s wall deadline; "
+                    "the incomplete model output is not a committed action"
+                ) from exc
             if fail_safe_observed.is_set():
                 raise requests.ReadTimeout(
                     f"No trustworthy native backend or streamed model progress for {fail_safe_timeout_seconds:.1f} seconds"
@@ -1265,6 +1294,11 @@ class LlamaCppClient:
                 raise ModelCallPreempted("model call preempted for communication") from exc
             raise requests.ReadTimeout(f"No streamed model token/event for {token_timeout_seconds:.1f} seconds") from exc
         except (requests.RequestException, OSError, ValueError) as exc:
+            if hard_deadline_observed.is_set():
+                raise requests.ReadTimeout(
+                    f"Generation exceeded absolute {hard_generation_seconds:.1f}s wall deadline; "
+                    "the incomplete model output is not a committed action"
+                ) from exc
             if fail_safe_observed.is_set():
                 raise requests.ReadTimeout(
                     f"No trustworthy native backend or streamed model progress for {fail_safe_timeout_seconds:.1f} seconds"
@@ -1273,6 +1307,11 @@ class LlamaCppClient:
                 raise ModelCallPreempted("model call preempted for communication") from exc
             raise
         except Exception as exc:
+            if hard_deadline_observed.is_set():
+                raise requests.ReadTimeout(
+                    f"Generation exceeded absolute {hard_generation_seconds:.1f}s wall deadline; "
+                    "the incomplete model output is not a committed action"
+                ) from exc
             if fail_safe_observed.is_set():
                 raise requests.ReadTimeout(
                     f"No trustworthy native backend or streamed model progress for {fail_safe_timeout_seconds:.1f} seconds"
@@ -1290,6 +1329,11 @@ class LlamaCppClient:
             close = getattr(response, "close", None)
             if callable(close):
                 close()
+        if hard_deadline_observed.is_set():
+            raise requests.ReadTimeout(
+                f"Generation exceeded absolute {hard_generation_seconds:.1f}s wall deadline; "
+                "the incomplete model output is not a committed action"
+            )
         if fail_safe_observed.is_set():
             raise requests.ReadTimeout(
                 f"No trustworthy native backend or streamed model progress for {fail_safe_timeout_seconds:.1f} seconds"

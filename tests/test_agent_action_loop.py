@@ -2700,3 +2700,29 @@ def test_history_protect_path_keeps_complete_literal_window(make_config) -> None
     assert not any(e.event_type in {"history_compressed", "history_reprojected"}
                    for e in runtime.history.read_history(state.session_id))
     assert all(r["contract"] == "history_compaction_selection" for r in client.requests)
+
+def test_model_action_output_reserve_cannot_grow_to_entire_context(make_config):
+    """Persisted context may be huge; one model action's JSON must be bounded."""
+    from types import SimpleNamespace
+    from swaag.model import ModelClientError
+    cfg = make_config(
+        model__context_limit=262144,
+        context__max_action_output_tokens=2048,
+    )
+    runtime = AgentRuntime(cfg, model_client=FakeModelClient([]))
+    def action_at(tokens, kind="action"):
+        return SimpleNamespace(
+            assembly=SimpleNamespace(kind=kind),
+            report=SimpleNamespace(
+                reserved_response_tokens=tokens, context_limit=262144,
+                safety_margin_tokens=64),
+        )
+    # The hard ceiling belongs to background worker inference. A legitimate
+    # foreground reply with complex schemas retains the existing behavior.
+    assert runtime._expanded_output_minimum(action_at(2048)) > 2048
+    with runtime.inference_priority(0, source="worker:test", weight=1):
+        assert runtime._expanded_output_minimum(action_at(1024)) <= 2048
+        assert runtime._expanded_output_minimum(action_at(2000)) == 2048
+        with pytest.raises(ModelClientError, match="output ceiling"):
+            runtime._expanded_output_minimum(action_at(2048))
+        assert runtime._expanded_output_minimum(action_at(2048, "semantic_summary")) > 2048

@@ -47,6 +47,9 @@ class ModelConfig:
     chat_template_kwargs: dict[str, Any] = field(default_factory=dict)
 
     thinking_mode: str = "server_default"
+    # Unlike per-token idle timeout, this limits continuously streaming
+    # generations that never close their JSON output for hours.
+    max_generation_wall_seconds: float = 600.0
 
 
 @dataclass(slots=True)
@@ -60,6 +63,9 @@ class ContextConfig:
     semantic_reduction_max_input_tokens: int = 0
     semantic_reduction_max_calls: int = 256
     max_token_count_cache_entries: int = 4096
+    # Portable JSON actions must never expand output to the entire context.
+    # Large tool data belongs in durable files/artifacts, not one reply string.
+    max_action_output_tokens: int = 8192
 
 
 @dataclass(slots=True)

@@ -384,3 +384,36 @@ def test_chat_without_usage_trailer_or_done_can_finish_at_eof(make_config, monke
     assert result.finish_reason == "stop"
     assert result.prompt_tokens is None
     assert result.raw_response["completion_tokens_source"] == "stream_event_count"
+
+def test_live_stream_has_absolute_deadline_even_with_frequent_tokens(make_config, monkeypatch):
+    """A six-hour continuously progressing unclosed JSON response must stop."""
+    class _HardDeadlineResponse(_CloseInterruptedResponse):
+        def iter_lines(self, *, decode_unicode: bool):
+            import time
+            assert decode_unicode
+            index = 0
+            while not self.closed.is_set():
+                time.sleep(.005)
+                index += 1
+                # Real model progress never stops; inactivity watchdog alone
+                # would permit unbounded multi-hour output.
+                yield 'data: ' + json.dumps({"content":"x", "tokens_predicted":index})
+            raise AttributeError("stream reader disappeared after deadline")
+
+    response = _HardDeadlineResponse()
+    config = make_config(model__max_generation_wall_seconds=1.0)
+    client = LlamaCppClient(config)
+    monkeypatch.setattr("swaag.model.requests.post", lambda *args, **kwargs: response)
+    with pytest.raises(requests.ReadTimeout, match="absolute 1.0s wall deadline"):
+        client.send_completion(
+            {"prompt": "x", "n_predict": 100000},
+            cancel_poll_seconds=.005,
+        )
+    assert response.closed.is_set()
+
+
+def test_generation_deadline_is_validated(make_config, monkeypatch):
+    config = make_config(model__max_generation_wall_seconds=-2)
+    client = LlamaCppClient(config)
+    with pytest.raises(ValueError, match="max_generation_wall_seconds"):
+        client._send_completion({"prompt": "x"}, cancel_poll_seconds=.005)
