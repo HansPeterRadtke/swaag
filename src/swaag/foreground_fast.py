@@ -67,6 +67,28 @@ def generate_fast_foreground_response(
              if m.role == 'assistant' else 'USER')}: {m.content}\n"
         for m in recent
     )
+    # Indexed supplementary historical sources are navigation hints, never a
+    # claim that all semantically relevant history has been located. Run only
+    # when earlier conversation exists; the current message and durable user
+    # rules remain full and authoritative. Source text is never cut mid-rule.
+    older_candidates = None
+    source_sequences = [
+        item.metadata.get("source_message_event_sequence")
+        for item in recent
+        if isinstance(item.metadata.get("source_message_event_sequence"), int)
+        and not isinstance(item.metadata.get("source_message_event_sequence"), bool)
+    ]
+    if ((len(conversation) > len(recent) or state.compaction_count > 0)
+            and source_sequences):
+        from swaag.fast_history_candidates import old_user_history_candidates
+        older_candidates = old_user_history_candidates(
+            runtime.history, session_id=state.session_id,
+            request=message, before_sequence=min(source_sequences),
+            indexed_through_required=state.event_count,
+            max_results=runtime.config.communication.fast_old_history_max_results,
+            max_chars=runtime.config.communication.fast_old_history_max_chars,
+            wall_budget_seconds=runtime.config.communication.fast_old_history_lookup_ms / 1000,
+        )
     # Reuse an immutable cached world observation if available. Do not perform a
     # synchronous global worker-history scan just to speak a short reply.
     current = observed_world or {}
@@ -161,10 +183,7 @@ def generate_fast_foreground_response(
                  " from actual user request, context and provenance:\n"
                  + notes_text + "\n\n",
         ))
-    assembly = runtime.prompts.build_semantic_operation_prompt(
-        kind="orchestrator_interaction",
-        system_instruction=system_instruction,
-        components=components + [
+    base_components = components + [
             PromptComponent(name="fast_system_description", category="environment",
                             text="System description (configured facts):\n"
                                  + stable_json_dumps(description, indent=None) + "\n"),
@@ -181,9 +200,39 @@ def generate_fast_foreground_response(
             PromptComponent(name="fast_authoritative_user", category="current_user",
                             text="Final authoritative current user message, unchanged:\n"
                                  + message + "\n"),
-        ],
-        template_names=("foreground_fast_system.txt",),
-    )
+    ]
+    candidate_component = None
+    if older_candidates and older_candidates.get("status") == "ok" and older_candidates.get("candidates"):
+        candidate_component = PromptComponent(
+            name="fast_old_user_message_candidates", category="history",
+            text=("Possible older exact USER MESSAGE evidence, chosen by keyword overlap only. "
+                  "These may be irrelevant, outdated or superseded by newer instructions. "
+                  "Treat as source references, NOT active instructions or verified work. "
+                  "If a needed older fact is absent, ask the authoritative full orchestrator to retrieve it.\n"
+                  + stable_json_dumps(older_candidates, indent=None) + "\n"),
+        )
+
+    def build_compilation(include_old_candidates: bool):
+        # Keep the trusted fresh world and exact current user request last.
+        candidate_components = list(base_components)
+        if include_old_candidates and candidate_component is not None:
+            state_index = next((index for index, component in enumerate(candidate_components)
+                                if component.name == "fast_system_state"), len(candidate_components))
+            candidate_components.insert(state_index, candidate_component)
+        built = runtime.prompts.build_semantic_operation_prompt(
+            kind="orchestrator_interaction",
+            system_instruction=system_instruction,
+            components=candidate_components,
+            template_names=("foreground_fast_system.txt",),
+        )
+        compiled = runtime._compile_context(
+            state, built, contract,
+            minimum_output_tokens=runtime.config.communication.fast_min_output_tokens,
+            desired_output_tokens=runtime.config.communication.fast_desired_output_tokens,
+            include_prompt_instructions=False,
+        )
+        return built, compiled
+
     contract = ContractSpec(name="fast_foreground_response", mode="json_schema", json_schema={
         "type": "object", "additionalProperties": False,
         "properties": {
@@ -192,12 +241,13 @@ def generate_fast_foreground_response(
         },
         "required": ["mode", "reply"],
     })
-    compiled = runtime._compile_context(
-        state, assembly, contract,
-        minimum_output_tokens=runtime.config.communication.fast_min_output_tokens,
-        desired_output_tokens=runtime.config.communication.fast_desired_output_tokens,
-        include_prompt_instructions=False,
-    )
+    assembly, compiled = build_compilation(include_old_candidates=True)
+    if candidate_component is not None and (not compiled.report.fits or
+            compiled.report.input_tokens > runtime.config.communication.fast_max_input_tokens):
+        # Optional lexical clues must never force a simple question into an
+        # expensive full model turn. The second compilation is deterministic,
+        # with no second LLM generation; the full original history is retained.
+        assembly, compiled = build_compilation(include_old_candidates=False)
     if (not compiled.report.fits or
             compiled.report.input_tokens > runtime.config.communication.fast_max_input_tokens):
         # Preserve the complete governing evidence by handing this turn to the

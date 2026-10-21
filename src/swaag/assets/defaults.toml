@@ -522,6 +522,10 @@ fast_max_input_tokens = 4096
 fast_max_user_message_chars = 2500
 fast_recent_message_count = 6
 fast_recent_history_chars = 3500
+# Only supplemental old USER utterance candidates; never replace semantic context selection.
+fast_old_history_max_results = 4
+fast_old_history_max_chars = 1400
+fast_old_history_lookup_ms = 75
 fast_snapshot_max_age_seconds = 3.0
 fast_min_output_tokens = 64
 fast_desired_output_tokens = 144

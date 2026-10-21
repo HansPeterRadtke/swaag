@@ -352,6 +352,9 @@ class CommunicationConfig:
     fast_max_user_message_chars: int = 2500
     fast_recent_message_count: int = 6
     fast_recent_history_chars: int = 3500
+    fast_old_history_max_results: int = 4
+    fast_old_history_max_chars: int = 1400
+    fast_old_history_lookup_ms: int = 75
     fast_snapshot_max_age_seconds: float = 3.0
     fast_min_output_tokens: int = 64
     fast_desired_output_tokens: int = 144
@@ -846,6 +849,9 @@ def _coerce_config(
         fast_max_user_message_chars=int(data["communication"].get("fast_max_user_message_chars", 2500)),
         fast_recent_message_count=int(data["communication"].get("fast_recent_message_count", 6)),
         fast_recent_history_chars=int(data["communication"].get("fast_recent_history_chars", 3500)),
+        fast_old_history_max_results=int(data["communication"].get("fast_old_history_max_results", 4)),
+        fast_old_history_max_chars=int(data["communication"].get("fast_old_history_max_chars", 1400)),
+        fast_old_history_lookup_ms=int(data["communication"].get("fast_old_history_lookup_ms", 75)),
         fast_snapshot_max_age_seconds=float(data["communication"].get("fast_snapshot_max_age_seconds", 3.0)),
         fast_min_output_tokens=int(data["communication"].get("fast_min_output_tokens", 64)),
         fast_desired_output_tokens=int(data["communication"].get("fast_desired_output_tokens", 144)),
@@ -1128,7 +1134,9 @@ def _coerce_config(
     _validate_positive("communication.fast_notes_max_chars", communication.fast_notes_max_chars)
     _validate_positive("communication.fast_max_input_tokens", communication.fast_max_input_tokens)
     for name in ("fast_max_user_message_chars", "fast_recent_message_count",
-                 "fast_recent_history_chars", "fast_min_output_tokens",
+                 "fast_recent_history_chars", "fast_old_history_max_results",
+                 "fast_old_history_max_chars", "fast_old_history_lookup_ms",
+                 "fast_min_output_tokens",
                  "fast_desired_output_tokens"):
         _validate_positive(f"communication.{name}", getattr(communication, name))
     _validate_positive("communication.fast_snapshot_max_age_seconds",
@@ -1556,6 +1564,18 @@ def _parameter_semantics(
         "communication.fast_recent_history_chars": (
             "Maximum number of characters allocated for exact recent conversation in a quick call.",
             "Only whole messages are admitted; increasing it provides more history but raises first-response latency.",
+        ),
+        "communication.fast_old_history_max_results": (
+            "Maximum exact previous-user message candidates supplied as low-trust historical evidence in the fast conversation prompt.",
+            "Candidate ranking is lexical, not semantic; original request, durable policies and current state outrank older utterances. The authoritative orchestrator can retrieve older exact records when needed.",
+        ),
+        "communication.fast_old_history_max_chars": (
+            "Maximum aggregate verbatim characters for selected exact earlier user-message candidates in a fast call.",
+            "Whole message text is included or replaced by an exact event reference without truncation. Larger values add prefill and cannot certify relevance.",
+        ),
+        "communication.fast_old_history_lookup_ms": (
+            "Maximum host-side SQLite search time budget in milliseconds for optional old-message candidates.",
+            "Search timeout or stale index fails closed without blocking initial speech; it is not the model response timeout.",
         ),
         "communication.fast_snapshot_max_age_seconds": (
             "Maximum age in seconds for calling the precomputed worker/plan snapshot fresh in the quick context.",
