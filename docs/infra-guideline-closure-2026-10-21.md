@@ -25,6 +25,10 @@ The unmodified later-main integration completed its full deterministic regressio
 
 The current source's complete final regression must be rerun after all changes. A passing deterministic regression does not prove phone microphone-to-speaker quality, actual external effects or arbitrary semantic routing. Do not describe code as deployed until the process PID/revision, installed profile and actual service health confirm restart.
 
+## Complete-topic correction to earlier audit scope
+
+The earlier SWAAG-specific audit and its extensive source inventory did not individually cover the entire Infra **topic** space. `infra-guideline-full-topic-coverage-2026-10-21.md` now inventories every normalized document, including the previously omitted GUI/HMI, programming/algorithm selection, testing/holdout, networking/transport, KMD, trading, games, robotics, recording conversion and Infra-owned account-service families. The guideline tree contains separate SWAAG-core obligations and downstream project obligations. Domain-specific features cannot be called implemented or tested just because a SWAAG source suite passes. No family-level perfection is claimed without feature-specific source and real-world effect evidence.
+
 ## Requirements that still need distinct independent proof
 
 The Infra requirement for **correct relevance selection from very old exact history** is only partially satisfied. SWAAG preserves old history and retrieves/semantically selects portions on demand or when context overflows, but an always-good semantic selection independent of the final model's ability is not provable by a fixed recent-message window. Full instruction provenance and relevant notes improve high-recall context but do not establish automatic full goal-memory lifecycle, user-scope supersession, long-distance discourse or correct interpretation of every historical negation. Those deserve independent adversarial, untrained holdout experiments, not a general-purpose regex router or silent deletion.
