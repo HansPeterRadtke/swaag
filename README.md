@@ -60,6 +60,12 @@ Run the agent CLI with `python -m swaag --help`. Run the benchmark CLI with `pyt
 
 ## Validation
 
+Before declaring a deployed runtime current, run the read-only, host-independent package and SQLite preflight:
+
+    python3 scripts/verify-installed-package.py --repo /data/src/github/swaag --venv /data/var/swaag/venv
+
+This compares on-disk source and installed package contents, and rejects stale installations. It does not validate code already loaded by a running service; see docs/installed-package-preflight-2026-10-22.md for interpretation and safe release conditions.
+
 The authoritative deterministic regression command is:
 
 ```text
