@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from dataclasses import asdict, dataclass
+from pathlib import Path
 from typing import TYPE_CHECKING, Any
 
 from swaag.config import AgentConfig
@@ -12,6 +13,10 @@ from swaag.utils import stable_json_dumps
 
 if TYPE_CHECKING:
     from swaag.runtime import AgentRuntime
+
+# Installed owner-supplied project policy is a source locator, not a giant
+# permanent copy of the guideline corpus in every model context.
+INFRA_GUIDELINES_ROOT = Path("/data/infra/docs/guidlines")
 
 NOTE_SELECTED_IDS = "durable_notes.selected_ids"
 NOTE_SELECTION_ATTEMPTED = "durable_notes.selection_attempted"
@@ -75,6 +80,52 @@ def runtime_system_context_sources(
     context_state: dict[str, object] | None = None,
 ) -> list[SystemContextSource]:
     sources: list[SystemContextSource] = []
+    if _tool_enabled(config, "read_file", "read_text"):
+        # Only advertise a concrete accessible owner source. Resolve symlinks
+        # before checking tool read roots, otherwise a path that *looks* under
+        # an approved root could point outside its capability boundary.
+        try:
+            guide = INFRA_GUIDELINES_ROOT.resolve(strict=True)
+            readable = any(
+                guide == root.resolve() or root.resolve() in guide.parents
+                for root in config.tools.read_roots
+            )
+            available = (readable and (guide / "README.md").is_file())
+        except (OSError, RuntimeError):
+            available = False
+        if available:
+            manifest = {
+                "read_first": str(guide / "README.md"),
+                "agent_rules": str(guide / "agents.md"),
+                "families": (
+                    "agents, programming, testing, networking, GUI/voice/Android, "
+                    "knowledge/KMD, games, trading, robotics, projects, source recordings"
+                ),
+                "role": "trusted owner project guidance, not an executable tool grant",
+            }
+            runbook = guide.parent / "google-operations.md"
+            if runbook.is_file() and any(
+                runbook.resolve() == root.resolve() or root.resolve() in runbook.resolve().parents
+                for root in config.tools.read_roots
+            ):
+                manifest["google_mail_calendar_runbook"] = str(runbook)
+            sources.append(SystemContextSource(
+                name="infra_guideline_navigation", category="environment",
+                text=stable_json_dumps(manifest, indent=None),
+                introduction=(
+                    "Trusted owner-provided policy navigation for real work: first inspect the "
+                    "index, then read the rules relevant to this task and its actual "
+                    "domain BEFORE implementing, delegating, or asserting compliance. "
+                    "Follow the current user request over conflicting defaults; "
+                    "separate mandatory rules from examples, research and project "
+                    "hypotheses. For mail/Google/Calendar tasks read the separate "
+                    "runbook first. These pointers are sources, not tool permissions:\n"
+                ),
+                locator={"authoritative_source":"installed_infra_guideline_files",
+                         "read_root":str(guide),"recovery_tool":"read_file"},
+                projection_source_label="owner task-specific guideline index",
+                projection_header="", optional=False, projectable=False,
+            ))
     if _tool_enabled(config, "tool_forge", "diane"):
         from swaag.shared_knowledge import SharedKnowledgeStore
         manifest = {"revision": 0, "active_entries": {},
