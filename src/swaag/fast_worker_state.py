@@ -338,19 +338,44 @@ def compact_worker_prompt_view(full_view: dict[str, Any]) -> dict[str, Any]:
 
 
 def meaningful_worker_state_revision(state: dict[str, Any] | None) -> tuple | None:
-    """Ignore capture clock/token telemetry, fence substantive job changes."""
+    """Fence changes to facts available to the fast spoken status.
+
+    This is compared after model generation. Two inventories with the same
+    number of questions can have different questions; preserving only the count
+    could publish an answer to a question that is no longer pending. Include
+    explicitly reported work and assessment values but not polling clocks,
+    heartbeat ages or transient streaming substates, which would invalidate
+    unrelated conversational replies during routine progress updates.
+    """
     if not isinstance(state, dict) or state.get("snapshot_complete") is not True:
         return None
     workers = tuple(sorted((
         str(w.get("worker_id")), str(w.get("status")), str(w.get("task")),
-        str(w.get("latest_report_at")), str((w.get("progress") or {}).get("assessment_at")),
+        str(w.get("model_route")), str(w.get("completion_mode")),
+        str(w.get("latest_report_at")),
+        str(w.get("reported_activity")), str(w.get("reported_next_action")),
+        str((w.get("progress") or {}).get("assessment_at")),
         str((w.get("progress") or {}).get("overall_percent")),
+        str((w.get("progress") or {}).get("cycle_percent")),
+        str((w.get("progress") or {}).get("remaining_seconds_at_assessment")),
     ) for w in state.get("workers", [])))
     plans = tuple(sorted((
         str(p.get("plan_id")), str(p.get("status")), str(p.get("updated_at")),
-        tuple(sorted((str(n.get("node_id")),str(n.get("state")),str(n.get("worker_id")))
+        tuple(sorted((str(n.get("node_id")), str(n.get("state")), str(n.get("worker_id")))
                      for n in p.get("nodes") or [])),
     ) for p in state.get("plans", [])))
-    terminal = tuple((str(w.get("worker_id")),str(w.get("status")),str(w.get("updated_at")))
-                     for w in state.get("recent_terminal_workers", []))
-    return workers, plans, terminal, state.get("open_worker_question_count")
+    terminal = tuple((
+        str(w.get("worker_id")), str(w.get("status")),
+        str(w.get("updated_at")), str(w.get("task")),
+    ) for w in state.get("recent_terminal_workers", []))
+    questions = tuple((
+        str(q.get("worker_id")), str(q.get("criticality")),
+        str(q.get("question")), bool(q.get("question_is_excerpt")),
+    ) for q in state.get("worker_question_summaries", []) if isinstance(q, dict))
+    return (
+        workers, plans, terminal,
+        state.get("open_worker_question_count"),
+        state.get("worker_question_inventory_complete"),
+        questions,
+        state.get("orchestrator_active_turn"),
+    )

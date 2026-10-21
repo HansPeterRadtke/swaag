@@ -1810,6 +1810,15 @@ class CommunicationService:
             groups[key][1].append(str(row["session_id"]))
         through: list[tuple[str, int]] = []
         worker_controls_revision: list[tuple[str, str, str, str]] = []
+        # These are the events that alter the fast worker progress/report or
+        # question inventory. Model token telemetry and tool bookkeeping are
+        # not semantic status changes and must not starve quick speech.
+        semantic_events = (
+            "agent_status", "agent_progress", "agent_question",
+            "agent_question_resolved", "agent_question_revised",
+            "worker_input_required",
+        )
+        semantic_revision: list[tuple[str, str, int]] = []
         for root, (history, sessions) in sorted(groups.items()):
             if not sessions:
                 continue
@@ -1828,6 +1837,17 @@ class CommunicationService:
                     "FROM control_messages WHERE session_id IN ("
                     + placeholders + ") ORDER BY session_id, control_id", sessions
                 ).fetchall()
+                # The covering (session_id,event_type,sequence) index supports
+                # this bounded per-worker latest-event lookup without reading
+                # or decoding the model/tool event payloads.
+                semantics = connection.execute(
+                    "SELECT session_id, event_type, MAX(sequence) AS last_sequence "
+                    "FROM events INDEXED BY events_session_type_sequence "
+                    "WHERE session_id IN (" + placeholders + ") AND event_type IN ("
+                    + ",".join("?" for _ in semantic_events)
+                    + ") GROUP BY session_id, event_type",
+                    (*sessions, *semantic_events),
+                ).fetchall()
             # Include exact per-worker cursors, not just a sum (two changes
             # to different sessions could cancel out).
             cursors_by_session = {str(row["session_id"]): int(row["complete_through"]) for row in cursors}
@@ -1837,8 +1857,24 @@ class CommunicationService:
                 f"{root}:{row['session_id']}", str(row["control_id"]),
                 str(row["status"]), str(row["processed_at"])
             ) for row in controls)
+            semantic_revision.extend((
+                f"{root}:{row['session_id']}", str(row["event_type"]),
+                int(row["last_sequence"])
+            ) for row in semantics)
         return (int(worker[0]), str(worker[1]), int(plans[0]), str(plans[1]),
-                int(plans[2] or 0), tuple(through), tuple(worker_controls_revision))
+                int(plans[2] or 0), tuple(through), tuple(worker_controls_revision),
+                tuple(semantic_revision))
+
+    @staticmethod
+    def _foreground_status_revision(revision: tuple) -> tuple:
+        """Durable semantic status fence without busy per-token event cursors.
+
+        The first five slots are worker/plan lifecycle and plan revisions.
+        Worker control and meaningful status/question event cursors follow the
+        full per-session event cursor. Legacy lightweight tests use shorter
+        synthetic tuples, for which preserve the supplied revision unchanged.
+        """
+        return revision[:5] + revision[6:] if len(revision) >= 8 else revision[:5]
 
     def _refresh_orchestrator_snapshot(self) -> dict[str, Any]:
         started = time.monotonic()
@@ -1852,7 +1888,9 @@ class CommunicationService:
                 self._foreground_snapshot = snapshot
                 self._fast_foreground_state = fast_state
                 self._fast_foreground_state_revision = (
-                    revision_before[:5] if revision_before[:5] == revision_after[:5]
+                    self._foreground_status_revision(revision_before)
+                    if self._foreground_status_revision(revision_before)
+                    == self._foreground_status_revision(revision_after)
                     else None
                 )
                 self._foreground_snapshot_started_monotonic = started
@@ -2505,7 +2543,7 @@ class CommunicationService:
         if observed is not None:
             try:
                 if (observed_revision is None
-                        or observed_revision != self._foreground_task_revision()[:5]):
+                        or observed_revision != self._foreground_status_revision(self._foreground_task_revision())):
                     observed = None
             except (OSError, ValueError, TypeError):
                 observed = None
@@ -2527,7 +2565,7 @@ class CommunicationService:
         if observed is not None:
             from swaag.fast_worker_state import meaningful_worker_state_revision
             try:
-                if (observed_revision != self._foreground_task_revision()[:5]):
+                if (observed_revision != self._foreground_status_revision(self._foreground_task_revision())):
                     return None
                 with self._foreground_snapshot_lock:
                     latest_world = self._fast_foreground_state
