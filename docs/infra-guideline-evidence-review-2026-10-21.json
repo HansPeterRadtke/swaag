@@ -358,5 +358,29 @@
     "observation": "Hard-coded browser path was a separate Infra test failure; trading GUI fixture data load is currently too slow for quick audit acceptance.",
     "remaining": "Real screens must answer robustness and validity first; measure loads and test tooltips/charts/parameters, source data and stale/failed states.",
     "source_block_sha256": "02ffb5feafc263c2f14438131f90336e381e7efb1a48b885272fc979136c9b39"
+  },
+  {
+    "id": "strict-openrouter-json-envelope",
+    "verdict": "MECHANISM_TESTED_SCOPE_LIMITED",
+    "owner": "SWAAG hosted-model request transport",
+    "implementation": "src/swaag/model.py; src/swaag/schema_portability.py",
+    "tests": "tests/test_model_context_limit.py::test_openrouter_strict_portable_json_schema_contract_rejects_nonportable_provider_payload",
+    "observation": "Isolated chat request builder produced response_format json_schema with strict true, provider.require_parameters true and requested output allowance; no external provider request was sent.",
+    "remaining": "Live OpenRouter/provider behavior, credentials, latency and heterogeneous model acceptance are unverified for this revision.",
+    "source_file": "constraint_decoding.txt",
+    "source_phrase": "Required request shape:",
+    "source_block_sha256": "e02d505a531479c4ab857f8e5d92c4613338954710ba96f7b52a957ad7225846"
+  },
+  {
+    "id": "portable-closed-json-contract",
+    "verdict": "MECHANISM_TESTED_SCOPE_LIMITED",
+    "owner": "SWAAG schema validation",
+    "implementation": "src/swaag/schema_portability.py; src/swaag/grammar.py; src/swaag/model.py",
+    "tests": "tests/test_model_context_limit.py::test_openrouter_strict_portable_json_schema_contract_rejects_nonportable_provider_payload; tests/test_orchestration.py",
+    "observation": "Portable schema validator checks root-object shape and recursively closed required object properties. Isolated contract test accepted the closed yes/no schema and rejected nonportable bare const.",
+    "remaining": "Provider-dependent support for complex nested live schemas and independent real-model behavior remain unverified.",
+    "source_file": "constraint_decoding.txt",
+    "source_phrase": "Use this portable schema subset:",
+    "source_block_sha256": "16a90a4caf6258a5e1830d91916e3389e1e5aa69f1daaa762325ec6d0ff8e8ab"
   }
 ]

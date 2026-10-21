@@ -4,7 +4,7 @@ This replaces the incomplete earlier coverage count, which indexed only the seve
 
 **Current source inventory:** 82 policy and supporting documents, 2,471 body source passages, 593 independently indexed Markdown headings, and 168 unchanged original recording files. The separate preservation checker reports 168 originals, 168 ledger entries, 168 verbatim appendix sections and zero integrity errors.
 
-**Evidence:** Thirty narrow reviewed source claims remain attached to their exact original source content hashes. No complete passage has been certified for all possible implementations or inputs. Two have tested mechanisms with limited scope, sixteen are partly tested, ten remain unaccepted, one is tested and failing, and one has source preservation only. The other 2,441 body passages lack a source-specific effect-acceptance record. This is not a compliance percentage: many passages are illustrations, past research, examples or bundled rules rather than independent binary features.
+**Evidence:** Thirty-two narrow reviewed source claims remain attached to their exact original source content hashes. No complete passage has been certified for all possible implementations or inputs. Four have tested mechanisms with limited scope, sixteen are partly tested, ten remain unaccepted, one is tested and failing, and one has source preservation only. The other 2,439 body passages lack a source-specific effect-acceptance record. This is not a compliance percentage: many passages are illustrations, past research, examples or bundled rules rather than independent binary features.
 
 ## Original source and authority boundaries
 
@@ -21,7 +21,7 @@ The owner-provided root Infra instructions apply to Infra-owned repositories and
 | Infra project/workflow | 14 | 1 | 13 |
 | Infra repository/workflow | 53 | 0 | 53 |
 | KnowMoreDiRT / SWAAG integration | 16 | 1 | 15 |
-| OpenAI-compatible structured-output provider integration | 8 | 0 | 8 |
+| OpenAI-compatible structured-output provider integration | 8 | 2 | 6 |
 | Robot controller project | 13 | 1 | 12 |
 | SWAAG + every applicable project | 486 | 11 | 475 |
 | SWAAG agent/runtime | 177 | 4 | 173 |

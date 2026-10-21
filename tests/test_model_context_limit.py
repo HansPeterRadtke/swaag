@@ -689,3 +689,28 @@ def test_native_template_rejects_nonboundary_content_changes(make_config, monkey
             {"role": "system", "content": "SYS"},
             {"role": "user", "content": "  Original instruction\n"}
         ])
+
+
+def test_openrouter_strict_portable_json_schema_contract_rejects_nonportable_provider_payload(make_config):
+    from swaag.types import ContractSpec
+    client = LlamaCppClient(make_config(
+        model__base_url='https://openrouter.ai/api/v1',
+        model__completion_endpoint='/chat/completions',
+    ))
+    requested = client.build_completion_request(
+        'constrained portable output',max_tokens=96,
+        contract=yes_no_contract(),messages=[{'role':'user','content':'Answer yes or no.'}],
+    )
+    assert requested['response_format']['type'] == 'json_schema'
+    envelope = requested['response_format']['json_schema']
+    assert envelope['strict'] is True
+    assert envelope['schema']['type'] == 'object'
+    assert set(envelope['schema']['required']) == set(envelope['schema']['properties'])
+    assert envelope['schema']['additionalProperties'] is False
+    assert requested['provider'] == {'require_parameters':True}
+    assert requested['max_tokens'] == 96
+    invalid = ContractSpec(name='unsupported_enum_shape',mode='json_schema',
+        json_schema={'type':'object','properties':{'answer':{'const':'yes'}},
+                     'required':['answer'],'additionalProperties':False})
+    with pytest.raises(ModelClientError,match='not portable'):
+        client.build_completion_request('task',max_tokens=96,contract=invalid)
