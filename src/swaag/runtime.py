@@ -7019,6 +7019,22 @@ class AgentRuntime:
         )
         return source_name, RuntimeContextProjection(source_hash, projection)
 
+    @staticmethod
+    def _process_context_view(record: Any) -> dict[str, Any]:
+        """Display terminal process metadata without replaying stdout in every prompt.
+
+        Full process records remain in durable environment state, and their tool
+        results and output artifacts remain separately recoverable. The process
+        listing is live metadata, not a second copy of historical tool output.
+        In-flight process output remains visible for live scheduling decisions.
+        """
+        row = to_jsonable(record)
+        if row.get("status") in {"completed", "failed", "killed", "timed_out"}:
+            for stream in ("stdout", "stderr"):
+                payload = row.pop(stream, "")
+                row[stream + "_chars_omitted_from_state_view"] = len(payload)
+        return row
+
     def _runtime_context_components(
         self,
         state: SessionState,
@@ -7061,7 +7077,7 @@ class AgentRuntime:
             "waiting": state.environment.waiting,
             "waiting_reason": state.environment.waiting_reason,
             "processes": {
-                process_id: to_jsonable(record)
+                process_id: self._process_context_view(record)
                 for process_id, record in sorted(state.environment.processes.items())
             },
             "scheduled_wakeups": [
@@ -7070,6 +7086,12 @@ class AgentRuntime:
             "latest_handles": latest_handles,
             "tool_context": tool_context_updates,
         }
+        if any(record.status in {"completed", "failed", "killed", "timed_out"}
+               for record in state.environment.processes.values()):
+            environment["terminal_process_output_recovery"] = (
+                "Completed process stdout/stderr omitted from this prompt view; "
+                "recover exact output from stored process state, tool results or artifacts."
+            )
         components = [
             PromptComponent(
                 name="environment_state",

@@ -1877,6 +1877,66 @@ def test_action_prompt_requires_explicit_decision_not_only_evidence(make_config)
     assert "final assistant_message must explicitly state that decision/conclusion" in prompt
 
 
+def test_terminal_process_output_is_recoverable_but_not_duplicated_in_every_prompt(make_config) -> None:
+    from swaag.environment.state import ProcessRecord
+    config = make_config(model__context_limit=32_000)
+    runtime = AgentRuntime(config, model_client=FakeModelClient([]))
+    state = runtime.create_or_load_session()
+    original_stdout = "terminal stdout retained verbatim: " + "distinct-data-" * 350
+    original_stderr = "stderr retained: " + "diagnostic-" * 80
+    done = ProcessRecord(
+        process_id="proc_completed", command=["bash", "-c", "echo verified"],
+        cwd="/data", status="completed", return_code=0,
+        stdout=original_stdout, stderr=original_stderr,
+    )
+    running = ProcessRecord(
+        process_id="proc_running", command=["sleep", "100"],
+        cwd="/data", status="running", stdout="live partial output",
+    )
+    state.environment.processes[done.process_id] = done
+    state.environment.processes[running.process_id] = running
+    runtime.history.record_event(state, "tool_result", {
+        "tool_name": "shell_command", "raw_input": {}, "validated_input": {},
+        "output": {"stdout": original_stdout,
+                                             "stderr": original_stderr,
+                                             "stdout_artifact_id": "artifact_test_001"},
+    })
+    components = runtime._runtime_context_components(state, runtime._counter(state))
+    environment = next(item.text for item in components if item.name == "environment_state")
+    environment_json = json.loads(environment.split("\n", 1)[1])
+    terminal = environment_json["processes"]["proc_completed"]
+    assert "stdout" not in terminal and "stderr" not in terminal
+    assert terminal["stdout_chars_omitted_from_state_view"] == len(original_stdout)
+    assert terminal["stderr_chars_omitted_from_state_view"] == len(original_stderr)
+    assert terminal["return_code"] == 0
+    assert terminal["process_id"] == done.process_id
+    assert "terminal_process_output_recovery" in environment_json
+    assert original_stdout not in environment and original_stderr not in environment
+    assert environment_json["processes"]["proc_running"]["stdout"] == "live partial output"
+    assert state.environment.processes[done.process_id].stdout == original_stdout
+    assert state.environment.processes[done.process_id].stderr == original_stderr
+    assert next(runtime.history.iter_history_reverse(
+        state.session_id, event_types=("tool_result",)
+    )).payload["output"]["stdout"] == original_stdout
+
+
+def test_completed_process_history_does_not_accumulate_prompt_sized_stdout(make_config) -> None:
+    from swaag.environment.state import ProcessRecord
+    runtime = AgentRuntime(make_config(), model_client=FakeModelClient([]))
+    state = runtime.create_or_load_session()
+    for index in range(35):
+        state.environment.processes[f"proc_{index}"] = ProcessRecord(
+            process_id=f"proc_{index}", command=["true"], cwd="/data",
+            status="failed" if index % 10 == 0 else "completed",
+            stdout="repeated-source-marker-" * 250,
+        )
+    components = runtime._runtime_context_components(state, runtime._counter(state))
+    environment = next(item.text for item in components if item.name == "environment_state")
+    assert len(environment) < 18_000
+    assert "repeated-source-marker" not in environment
+    assert sum(len(x.stdout) for x in state.environment.processes.values()) > 170_000
+
+
 def test_environment_state_exposes_authoritative_active_session(make_config) -> None:
     config = make_config(model__context_limit=32_000)
     runtime = AgentRuntime(config)

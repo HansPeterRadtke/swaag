@@ -503,3 +503,19 @@ idle-safe activation gate from acknowledging quiescence. The regression proves
 the prior failure and checks cleanup after a direct answer and a delegated turn.
 The live communication process needs an idle-safe restart to load this fix;
 background workers and model servers must not be interrupted to do so.
+
+## Completed process output is no longer repeated in environment-state prompts
+
+A read-only production worker prompt inspection on October 21 found that
+thirty-nine terminal process records were re-serializing about 194 kilobytes
+of environment text into every worker action. The terminal stdout/stderr had
+already been observed through exact tool-result records and retained artifacts.
+For context construction only, completed/failed/killed/timed-out process rows
+now carry statuses, commands, timestamps, return codes, output byte-independent
+character counts and a recovery notice, not duplicate stdout and stderr bodies.
+Running process output remains visible. Neither environment process state,
+durable tool-result history, artifact bytes nor on-demand process inspection
+are changed. This is deterministic duplicate elimination, not semantic
+source summarization or loss of the original result. The actual installed
+model's latency still needs an idle-safe deployment and separate measurements;
+no speedup is claimed from an unrun production comparison.
