@@ -29,3 +29,9 @@ These results measure only the particular SQLite worker-row query and Python rev
 ## Release boundary
 
 This is a source/test-level correction on a separate worktree until independent regression and integration checks complete. Before production acceptance, verify a clean source revision, all relevant offline regressions, installed-package byte parity, and a stable idempotent runtime update when parallel voice-agent work permits it. Active Thor SWAAG communication/voice model services have not been restarted, and source tests are not evidence of real phone audio or real-model concurrency behavior.
+
+## Completed offline and installed-candidate acceptance
+
+The complete isolated Thor source regression suite finished with **1,706 passed, three optional skipped, zero failed in 366.96 seconds**. The new two-worker stale-revision reproduction failed on original source before implementation and passed afterward. The unchanged installed-package candidate was built with the project's runtime installer under a dedicated test-only runtime directory, not the active service path. A read-only byte comparison reported **212 of 212 packaged source files matching**, no added/changed files and SQLite **3.53.1**. A separate focused suite imported from this **installed candidate**, not the source tree, and passed **33 tests**.
+
+A point-in-time read-only Thor live inspection showed both configured model health endpoints responding HTTP 200, each server advertising one inference slot with no in-flight inference at that instant, and no nonterminal worker in either inspected SWAAG worker database. Those observations were insufficient to authorize or certify production service replacement, Android device playback or actual code in the already-running gateway. Thor's installed production environment was left unchanged and remains a different source revision.
