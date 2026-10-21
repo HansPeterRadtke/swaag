@@ -4,7 +4,7 @@ This replaces the incomplete earlier coverage count, which indexed only the seve
 
 **Current source inventory:** 82 policy and supporting documents, 2,471 body source passages, 593 independently indexed Markdown headings, and 168 unchanged original recording files. The separate preservation checker reports 168 originals, 168 ledger entries, 168 verbatim appendix sections and zero integrity errors.
 
-**Evidence:** 35 narrow source-linked reviews remain pinned to exact passage hashes. No whole passage is certified for arbitrary use. Reviewed verdicts: 4 mechanism tested scope limited, 9 not accepted, 20 partially tested, 1 source preserved only, 1 tested but failing. The other 2436 body passages have no linked effect acceptance. This is not a compliance percentage: source paragraphs differ in meaning, size and scope.
+**Evidence:** 37 narrowly scoped, content-hash-pinned source reviews; none certifies arbitrary whole-passage compliance. Review outcomes: 4 mechanism tested scope limited, 9 not accepted, 22 partially tested, 1 source preserved only, 1 tested but failing. The other 2434 passages have no linked observed effect. Counts are not compliance percentages.
 
 ## Original source and authority boundaries
 
@@ -25,7 +25,7 @@ The owner-provided root Infra instructions apply to Infra-owned repositories and
 | Robot controller project | 13 | 1 | 12 |
 | SWAAG + every applicable project | 486 | 12 | 474 |
 | SWAAG agent/runtime | 177 | 4 | 173 |
-| Trading project | 123 | 3 | 120 |
+| Trading project | 123 | 5 | 118 |
 
 ## Known negative and unaccepted outcomes
 

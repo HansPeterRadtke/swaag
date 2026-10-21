@@ -418,5 +418,29 @@
     "tests": "tests/test_agent_workspace_recovery.py; tests/test_config.py; full SWAAG suite 1690 pass and 3 optional skips, Oct 21",
     "observation": "Isolated workspace tests prove byte-accurate UTF-8 direct text-write limit, atomic file preservation when oversized/low disk, fail-closed statvfs errors, no execution of writable commands with unknown disk headroom, and positive configurable bounds. No stored user source files or large models were deleted.",
     "remaining": "A free-space check is an admission floor, NOT cgroup/project quota. Arbitrary sandboxed shell/Python processes, pip-installed packages, concurrent writers, RAM/VRAM, downloaded weights and total retained workspace bytes can still grow past available storage after admission. Host-wide cross-service limits and independent failure tests remain open."
+  },
+  {
+    "id": "trading-isolated-put-intrinsic-math",
+    "source_file": "trading/options.md",
+    "source_phrase": "The relevant downside begins when the market falls below the strike",
+    "source_block_sha256": "194cc994c74d7da14c960feeb5baafd8c403e1fc1b62faab9320037b2c2b6894",
+    "verdict": "PARTIALLY_TESTED",
+    "owner": "Nitro Trading isolated repair",
+    "implementation": "Nitro Trading isolated worktree fix/put-intrinsic-liability-20261021 at 602f4db: options/numba_kernel.py; Research/306_put_intrinsic_and_quote_gate_candidate_20261021.md",
+    "tests": "Nitro isolated options/tests/test_hypothetical_intrinsic_liability.py, options/tests/test_smoke.py, options/tests/test_quote_depth_admission.py; full options/tests 138 passing, log /data/var/options-full-isolated-suite-20261021.log",
+    "observation": "A failing original production Numba-kernel test for a $50 strike, $2 opening premium, and $49 settlement was reproduced. The corrected isolated source recognizes $100 intrinsic liability independent of premium and prevents duplicate fee deductions; four hypothetical scenario variants and all 138 options tests passed.",
+    "remaining": "Not integrated into live Trading main because an active capital-sweep worker and extensive unrelated dirty working tree were observed. Original historical traces/profit claims are not retroactively corrected; real broker exercise, index cash settlement and instrument-specific nuances still require acceptance."
+  },
+  {
+    "id": "trading-isolated-put-observed-buyer-depth",
+    "source_file": "trading/options.md",
+    "source_phrase": "historical option-chain data with point-in-time provenance",
+    "source_block_sha256": "cbdd14c9e573374a0a75cd8ff7ec03a7706f96aecdd7a744f81fe23328604ab5",
+    "verdict": "PARTIALLY_TESTED",
+    "owner": "Nitro Trading isolated repair",
+    "implementation": "Nitro Trading isolated worktree fix/put-intrinsic-liability-20261021 at 602f4db: options/backtest_core.py, options/numba_kernel.py; original ORC first-party source data unchanged",
+    "tests": "options/tests/test_quote_depth_admission.py, test_smoke.py and test_drawdown_filter.py; 27 initial quote integration passes plus 138/138 full isolated options tests; logs /data/var/options-quote-depth-integration-20261021-v2.log and /data/var/options-full-isolated-suite-20261021.log",
+    "observation": "The isolated source preserves observed per-contract bid_size with -1 unknown versus 0 observed no buyers, rejects bids above strike, caps simulated trades to source displayed size and excludes named cash-settled index roots from the physical assignment model. Four loader fixtures and the complete options test suite passed.",
+    "remaining": "Local synthetic source tests do not prove realizable fills, true consolidated order-book depth, bid/ask execution timing, capital/wash constraints, original ORC vintage or production equivalence. Code remains only on a committed isolated Trading branch, not integrated into current live run."
   }
 ]
