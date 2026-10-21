@@ -102,9 +102,9 @@
     "verdict": "NOT_ACCEPTED",
     "owner": "Nitro Android voice client",
     "implementation": "/data/src/github/android/apps/voicebutton (dirty working tree; not modified by this audit)",
-    "tests": "Android emulator integration record in Thor SWAAG docs/infra-guideline-closure-2026-10-21.md",
-    "observation": "Emulator audio chain previously passed; manual text editing and all player controls have no verified physical-device acceptance.",
-    "remaining": "Actual Android source and UI checks across selection/cut/paste, auto-send disable, full playback/seek controls.",
+    "tests": "Android emulator integration record in Thor SWAAG docs/infra-guideline-closure-2026-10-21.md; Nitro Android dirty main: offline Gradle :apps:android03:testDebugUnitTest and :apps:voicebutton:testDebugUnitTest were successful (21 + 89 unit cases); isolated emulator-5556 am instrument -w myapp.app.test/androidx.test.runner.AndroidJUnitRunner executed four UI cases with four failures due SystemUI focus loss; log /data/var/android03-isolated-ui-test-20261021.log",
+    "observation": "Emulator audio chain previously passed; manual text editing and all player controls have no verified physical-device acceptance. On Oct 21, source unit tests for Android03 and Voicebutton produced 110 passing cases with no failures, using the concurrently modified Nitro checkout. The existing shared emulator rejected Android03 version 5 due to a newer installed version 22; a separate disposable Android-34 emulator allowed installation but SystemUI showed Application Not Responding during Espresso, so four connected tests all failed RootViewWithoutFocusException. The disposable emulator and temporary AVD were removed; the original user emulator and installed app were not replaced.",
+    "remaining": "Physical-phone and stable Android emulator acceptance remain open. Correct the test-environment SystemUI ANR/focus issue on a new isolated compatible emulator without downgrading or overwriting the user app, then rerun settings, editability, draft/recording persistence and playback controls; separately test true microphone-to-speaker timing, interrupts, auto-send and reconnection.",
     "source_block_sha256": "6a1ecd548a6cb018d889665dd2c146397cd21533a9a26219e8bfef6b767cc227"
   },
   {
