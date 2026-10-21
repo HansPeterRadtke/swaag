@@ -174,8 +174,9 @@ def test_indexed_semantic_cursor_changes_only_for_meaningful_history(make_config
         owner = service.workers.runtime
         worker_state = owner.create_or_load_session(session_id=worker.session_id)
         first = service._foreground_task_revision()
-        assert len(first) == 8
-        assert len(first[-1]) == 0
+        assert len(first) == 9
+        assert len(first[-2]) == 0  # No semantic worker-history changes.
+        assert len(first[-1]) == 1  # Exact per-worker lifecycle identity.
         owner.history.record_event(worker_state, "model_tokenize_result", {
             "text_hash": "test-message", "tokens": 50, "exact": True,
         })
@@ -189,8 +190,8 @@ def test_indexed_semantic_cursor_changes_only_for_meaningful_history(make_config
             "estimate_conditions": "",
         })
         meaningful = service._foreground_task_revision()
-        assert meaningful[-1] != telemetry[-1]
-        assert any(entry[1] == "agent_progress" for entry in meaningful[-1])
+        assert meaningful[-2] != telemetry[-2]
+        assert any(entry[1] == "agent_progress" for entry in meaningful[-2])
         assert service._foreground_status_revision(meaningful) != service._foreground_status_revision(telemetry)
     finally:
         service.close()

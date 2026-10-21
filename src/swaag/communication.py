@@ -1786,12 +1786,27 @@ class CommunicationService:
             # copied cache; expiry always triggers their verified builder.
             return ()
         with self.workers.store._connect() as connection:
-            worker = connection.execute(
-                "SELECT COUNT(*), MAX(updated_at) FROM workers"
-            ).fetchone()
+            # One consistent, ordered row view serves both the worker history
+            # group discovery and the per-worker lifecycle revision. A global
+            # MAX(updated_at) alone can remain unchanged when an older worker
+            # commits a transition after a newer worker was updated (or after
+            # a clock adjustment). Never infer worker state from that maximum.
             worker_rows = connection.execute(
-                "SELECT session_id, model_key FROM workers ORDER BY session_id"
+                "SELECT worker_id, session_id, model_key, status, "
+                "updated_at, archived_at, run_count, completion_mode "
+                "FROM workers ORDER BY session_id"
             ).fetchall()
+        worker_count = len(worker_rows)
+        latest_worker_update = max(
+            (str(row["updated_at"]) for row in worker_rows), default=None
+        )
+        worker_lifecycle_revision = tuple(
+            (str(row["worker_id"]), str(row["session_id"]),
+             str(row["status"]), str(row["updated_at"]),
+             str(row["archived_at"]), int(row["run_count"]),
+             str(row["completion_mode"]), str(row["model_key"]))
+            for row in worker_rows
+        )
         with self.orchestration.store._connect() as connection:
             plans = connection.execute(
                 "SELECT COUNT(*), MAX(updated_at), SUM(revision) FROM orchestration_plans"
@@ -1861,17 +1876,18 @@ class CommunicationService:
                 f"{root}:{row['session_id']}", str(row["event_type"]),
                 int(row["last_sequence"])
             ) for row in semantics)
-        return (int(worker[0]), str(worker[1]), int(plans[0]), str(plans[1]),
+        return (worker_count, str(latest_worker_update), int(plans[0]), str(plans[1]),
                 int(plans[2] or 0), tuple(through), tuple(worker_controls_revision),
-                tuple(semantic_revision))
+                tuple(semantic_revision), worker_lifecycle_revision)
 
     @staticmethod
     def _foreground_status_revision(revision: tuple) -> tuple:
         """Durable semantic status fence without busy per-token event cursors.
 
         The first five slots are worker/plan lifecycle and plan revisions.
-        Worker control and meaningful status/question event cursors follow the
-        full per-session event cursor. Legacy lightweight tests use shorter
+        Worker control and meaningful status/question event cursors, followed
+        by exact individual worker lifecycles, follow the full per-session event
+        cursor. Legacy lightweight tests use shorter
         synthetic tuples, for which preserve the supplied revision unchanged.
         """
         return revision[:5] + revision[6:] if len(revision) >= 8 else revision[:5]
