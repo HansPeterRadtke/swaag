@@ -2474,11 +2474,13 @@ class CommunicationService:
         # Reconnect/daemon recovery may revisit the same accepted receipt.
         # Replay the originally committed first speech rather than generating
         # another, potentially inconsistent acknowledgement and wasting an LLM.
-        for position, observed in enumerate(runtime.history.iter_history_reverse(
+        # This is an indexed event-type-only traversal, not a full-history
+        # materialization. A hard count cutoff previously missed accepted
+        # receipts after unrelated progress events and generated duplicate
+        # acknowledgements. Keep exact receipt identity authoritative.
+        for observed in runtime.history.iter_history_reverse(
             state.session_id, event_types=("assistant_progress",),
-        )):
-            if position >= 64:
-                break  # Bounded indexed history read; never scan the whole journal here.
+        ):
             if (observed.payload.get("control_id") == receipt["control_id"]
                     and observed.payload.get("delivery_phase") == "fast_before_deep_orchestration"):
                 return {"mode": "delegate", "reply": observed.payload["assistant_text"],

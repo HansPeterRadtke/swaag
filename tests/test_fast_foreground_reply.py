@@ -318,3 +318,27 @@ def test_fast_static_prompt_smaller_than_previous_policy_block(make_config):
         assert 'System state (observations' in client.requests[0]['prompt']
     finally:
         service.close()
+
+
+def test_fast_acknowledgement_replay_after_many_intervening_progress_events(make_config):
+    """Old pending receipt survives more than sixty-four progress events."""
+    service, runtime, client = setup(make_config, [fast('delegate', 'I will examine it.')])
+    try:
+        state = service._orchestrator_state()
+        receipt = service._receive_orchestrator_message('Use the calculator tool.', control_id='older_pending')
+        first = service._try_fast_foreground_reply(state, receipt)
+        assert first['mode'] == 'delegate'
+        for index in range(85):
+            runtime.history.record_event(state, 'assistant_progress', {
+                'action_index': index, 'control_id': 'unrelated_receipt',
+                'assistant_text': 'Unrelated progress', 'delivery_phase': 'fast_before_deep_orchestration',
+            })
+        replay = service._try_fast_foreground_reply(state, receipt)
+        assert replay['mode'] == 'delegate' and replay['reused'] is True
+        assert replay['reply'] == first['reply']
+        assert len(client.requests) == 1
+        events = runtime.history.read_history(state.session_id)
+        assert sum(e.event_type == 'assistant_progress' and e.payload.get('control_id') == 'older_pending'
+                   for e in events) == 1
+    finally:
+        service.close()
