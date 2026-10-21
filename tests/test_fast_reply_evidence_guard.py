@@ -175,3 +175,26 @@ def test_a_blocked_worker_cannot_be_reported_as_actively_computing():
         'The worker is waiting for a required user answer.',
         'What is its status?',current_world=blocked)
     assert mode=='answer'
+
+
+def test_combined_hearing_check_and_greeting_can_finish_as_grounded_one_call(make_config):
+    # The user did not ask for a tool or a worker. We must not manufacture
+    # auditory evidence from text, but "Hello" and confirmed text receipt
+    # are both supported without a slow orchestrator handoff.
+    service, runtime, client = setup(make_config, [
+        fast('answer', 'Hello. I received your message; audio is unverified.'),
+    ])
+    try:
+        state = service._orchestrator_state()
+        result = generate_fast_foreground_response(
+            runtime, state, 'Can you hear me? Please say hello.'
+        )
+        assert result and result.mode == 'answer'
+        assert result.reply.startswith('Hello.')
+        assert 'received' in result.reply.lower()
+        assert 'hear you' not in result.reply.lower()
+        assert len(client.requests) == 1
+        assert 'Can you hear me? Please say hello.' in client.requests[0]['prompt']
+        assert client.requests[0]['contract'] == 'fast_foreground_response'
+    finally:
+        service.close()
