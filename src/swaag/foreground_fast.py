@@ -63,8 +63,8 @@ def generate_fast_foreground_response(
         recent_chars += len(previous.content)
     recent = list(reversed(newest))
     history = "".join(
-        f"{('PRIOR ASSISTANT RESPONSE (not verified current-state evidence)'
-             if m.role == 'assistant' else 'USER')}: {m.content}\n"
+        ("PRIOR ASSISTANT RESPONSE (not verified current-state evidence)"
+         if m.role == "assistant" else "USER") + f": {m.content}\n"
         for m in recent
     )
     # Indexed supplementary historical sources are navigation hints, never a
