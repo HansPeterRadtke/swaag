@@ -2578,17 +2578,6 @@ class CommunicationService:
             return None
         if candidate is None:
             return None
-        if observed is not None:
-            from swaag.fast_worker_state import meaningful_worker_state_revision
-            try:
-                if (observed_revision != self._foreground_status_revision(self._foreground_task_revision())):
-                    return None
-                with self._foreground_snapshot_lock:
-                    latest_world = self._fast_foreground_state
-                if meaningful_worker_state_revision(latest_world) != meaningful_worker_state_revision(observed):
-                    return None
-            except (OSError, TypeError, ValueError):
-                return None
         with session_control_lock(runtime.history, state.session_id):
             pending = runtime.history.list_pending_control_messages(state.session_id)
             if len(pending) != 1 or pending[0]["control_id"] != receipt["control_id"]:
@@ -2607,6 +2596,25 @@ class CommunicationService:
             if (current_authority is None or
                     fast_authority_fingerprint(current_authority) != candidate.authority_fingerprint):
                 return None
+            # The worker store is independent of the orchestrator control
+            # lock. A worker can change while the fast inference returns or
+            # while this thread waits to acquire the final receipt lock.
+            # Recheck the observed semantic revision as late as possible,
+            # immediately before committing direct speech or delegation.
+            # Do not add a second read of all worker histories to this path.
+            if observed is not None:
+                from swaag.fast_worker_state import meaningful_worker_state_revision
+                try:
+                    if (observed_revision != self._foreground_status_revision(
+                            self._foreground_task_revision())):
+                        return None
+                    with self._foreground_snapshot_lock:
+                        latest_world = self._fast_foreground_state
+                    if (meaningful_worker_state_revision(latest_world) !=
+                            meaningful_worker_state_revision(observed)):
+                        return None
+                except (OSError, TypeError, ValueError):
+                    return None
             if candidate.mode == "answer":
                 # The answer uses one semantic model request and no tools.
                 # Persist an ordinary turn and consume the exact authoritative
