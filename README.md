@@ -26,6 +26,7 @@ The implementation is intentionally small while the intended harness architectur
 - doc/worker-revision-timestamp-collision-2026-10-22.md — independently reproduced and tested durable worker lifecycle freshness correction.
 - doc/fast-worker-claim-evidence-2026-10-22.md — source-verified live worker count claims and graceful full-controller fallback.
 - doc/fast-final-receipt-worker-state-fence-2026-10-22.md — final receipt-lock worker snapshot freshness correction; no live deployment claim.
+- doc/fast-worker-revision-sqlite-lock-admission-2026-10-22.md — bounded read-only SQLite freshness checks for responsive first speech under database contention.
 - `/data/infra/docs/infra-guideline-cross-project-status-2026-10-21.md` — companion Infra-owned full-topic ownership, historical source, verification and open-project status ledger.
 - `docs/guideline-comparison-2026-10-15.md` — historical October fifteenth audit; read the newer handover before claiming a present-day compliance status.
 - `docs/design-principles.md` — semantic/deterministic boundary, agent behavior, tools, communication, interfaces, and current-versus-target scope.

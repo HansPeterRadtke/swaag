@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from contextlib import AbstractContextManager, nullcontext
+from contextlib import AbstractContextManager, contextmanager, nullcontext
 from concurrent.futures import Future, ThreadPoolExecutor
 from contextvars import copy_context
 
@@ -1780,12 +1780,31 @@ class CommunicationService:
         ]
         return snapshot
 
+    @staticmethod
+    @contextmanager
+    def _foreground_revision_connection(path: Path):
+        """Short, strictly read-only metadata query for the fast user path.
+
+        The ordinary writable SQLite helpers intentionally wait longer for
+        durable writes. First-speech freshness reads are optional observations:
+        a busy or unavailable database must cause the fast path to fall back,
+        not block the user behind a thirty-second writer timeout. Do not alter
+        journal modes or initialize/migrate schemas from this read-only path.
+        """
+        uri = Path(path).resolve().as_uri() + "?mode=ro"
+        connection = sqlite3.connect(uri, uri=True, timeout=0.04)
+        try:
+            connection.row_factory = sqlite3.Row
+            yield connection
+        finally:
+            connection.close()
+
     def _foreground_task_revision(self) -> tuple:
         if not hasattr(self, "workers") or not hasattr(self, "orchestration"):
             # Lightweight test services without canonical stores still get a
             # copied cache; expiry always triggers their verified builder.
             return ()
-        with self.workers.store._connect() as connection:
+        with self._foreground_revision_connection(self.workers.store.path) as connection:
             # One consistent, ordered row view serves both the worker history
             # group discovery and the per-worker lifecycle revision. A global
             # MAX(updated_at) alone can remain unchanged when an older worker
@@ -1807,7 +1826,7 @@ class CommunicationService:
              str(row["completion_mode"]), str(row["model_key"]))
             for row in worker_rows
         )
-        with self.orchestration.store._connect() as connection:
+        with self._foreground_revision_connection(self.orchestration.store.path) as connection:
             plans = connection.execute(
                 "SELECT COUNT(*), MAX(updated_at), SUM(revision) FROM orchestration_plans"
             ).fetchone()
@@ -1838,7 +1857,7 @@ class CommunicationService:
             if not sessions:
                 continue
             placeholders = ",".join("?" for _ in sessions)
-            with history._sqlite_connect() as connection:
+            with self._foreground_revision_connection(history.sqlite_history_path()) as connection:
                 cursors = connection.execute(
                     "SELECT session_id, complete_through FROM indexed_sessions WHERE session_id IN ("
                     + placeholders + ")", sessions
