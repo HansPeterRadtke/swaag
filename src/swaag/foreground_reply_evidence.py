@@ -72,6 +72,17 @@ _CURRENT_WORKER_CLAIM_WITHOUT_WORKER = re.compile(
     re.IGNORECASE,
 )
 
+# This is a claim *in proposed speech*, not parsing the user's intent. Only
+# count a narrowly recognizable present-tense inventory assertion, never an
+# estimate based on a historical assistant utterance or absent observations.
+_LIVE_ACTIVE_WORKER_COUNT_CLAIM = re.compile(
+    r"^\s*(?:there\s+(?:are|is)\s+|(?:we|i)\s+have\s+)?"
+    r"(?P<count>no|zero|one|two|three|four|five|six|seven|eight|nine|"
+    r"ten|eleven|twelve|thirteen|fourteen|fifteen|sixteen|seventeen|"
+    r"eighteen|nineteen|twenty|\d{1,5})\s+active\s+workers?\b",
+    re.IGNORECASE,
+)
+
 
 def normalize_fast_foreground_claim(
     mode: str, reply: str, authoritative_message: str,
@@ -113,9 +124,45 @@ def normalize_fast_foreground_claim(
         return "delegate", _DELEGATED_UNCERTAIN
     if _UNPERFORMED_ACTION.search(reply):
         return "delegate", _DELEGATED_UNCERTAIN
-    if isinstance(current_world, dict) and current_world.get("snapshot_complete") is True:
-        workers = current_world.get("workers")
+    worker_claim = _LIVE_ACTIVE_WORKER_COUNT_CLAIM.match(reply)
+    live_world = (current_world if isinstance(current_world, dict)
+                  and current_world.get("snapshot_complete") is True else None)
+    if live_world is None:
+        # A fast model might confidently report an old or imaginary inventory
+        # despite being told the source was unavailable. Do not bless an
+        # explicit present-tense count or worker-is-running claim as observed.
+        # Past-tense quotations remain the semantic model's responsibility.
+        if worker_claim or _CURRENT_WORKER_CLAIM_WITHOUT_WORKER.search(reply):
+            return "delegate", _DELEGATED_UNCERTAIN
+    else:
+        workers = live_world.get("workers")
+        count = live_world.get("active_worker_count")
+        # A snapshot_complete label is not itself evidence: the compact world
+        # must have a well-formed inventory and a matching independently
+        # exposed count. Fail closed only for live worker claims; ordinary
+        # conceptual or historical answers do not depend on this inventory.
+        valid_inventory = (
+            isinstance(workers, list)
+            and type(count) is int
+            and count == len(workers)
+            and all(isinstance(w, dict) and isinstance(w.get("status"), str)
+                    and bool(w["status"]) for w in workers)
+        )
+        if (worker_claim or _CURRENT_WORKER_CLAIM_WITHOUT_WORKER.search(reply)) and not valid_inventory:
+            return "delegate", _DELEGATED_UNCERTAIN
         if isinstance(workers, list):
+            if worker_claim:
+                raw = worker_claim.group("count").lower()
+                claimed = int(raw) if raw.isdigit() else (
+                    0 if raw in {"zero", "no"} else _NUMBER_WORDS[raw]
+                )
+                explicit_count = live_world.get("active_worker_count")
+                # The compact worker-world builder produces the count from
+                # exactly these rows. If that invariant is broken, never
+                # certify the generated claim against contradictory evidence.
+                if (claimed != len(workers)
+                        or (type(explicit_count) is int and explicit_count != len(workers))):
+                    return "delegate", _DELEGATED_UNCERTAIN
             # These are narrow factual contradiction checks on output, not a
             # semantic intent router: they can only reject an unsupported
             # first-stage answer, never execute a tool or mutate worker state.
