@@ -1,0 +1,59 @@
+{
+  "environment": {
+    "python": "3.12.3",
+    "opencv": "4.12.0"
+  },
+  "glb": {
+    "path": "/data/src/3d-commercial-asset-publish/outputs/forklift_publish_candidate/forklift_publish_candidate.glb",
+    "bytes": 9699944,
+    "glb_version": 2,
+    "declared_bytes": 9699944,
+    "nodes": 479,
+    "meshes": 281,
+    "checked_position_accessors": 281,
+    "invalid_bbox_count": 0,
+    "flat_axis_bbox_count": 4,
+    "example_named_nodes": [
+      "battery_body",
+      "battery_top_pad",
+      "beacon",
+      "beacon_base",
+      "control_console",
+      "control_knob_0",
+      "control_knob_1",
+      "control_knob_2"
+    ],
+    "seconds": 0.065,
+    "limits": "valid accessor bounds do not establish correct machinery proportions, contacts, topology, motion or photorealism"
+  },
+  "video": {
+    "path": "/data/var/3d-video-investigation-20261014/v4/forklift_steering_and_continuous_motion_v4.mp4",
+    "bytes": 4873819,
+    "fps": 30.0,
+    "frame_count": 842,
+    "size": [
+      1920,
+      1080
+    ],
+    "sampled_frames": 180,
+    "sampled_adjacent_pairs": 178,
+    "mean_absolute_pixel_difference_quantiles": [
+      0.026,
+      0.044,
+      0.095,
+      0.132,
+      0.142
+    ],
+    "upper_outlier_rule_q75_plus_3iqr": 0.305,
+    "candidate_change_outliers": [],
+    "exact_duplicate_frame_indices": [],
+    "flow_median_px_per_frame_quantiles": [
+      0.0,
+      0.0,
+      0.001,
+      0.001
+    ],
+    "seconds": 30.09,
+    "limits": "no timestamp ground truth; cuts, camera motion, holds and transitions may cause outliers; cannot assert stutter or quality from threshold alone"
+  }
+}

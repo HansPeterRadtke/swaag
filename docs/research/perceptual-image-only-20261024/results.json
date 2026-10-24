@@ -1,0 +1,372 @@
+{
+  "versions": {
+    "python": "3.12.3",
+    "numpy": "2.2.6",
+    "opencv": "4.12.0",
+    "Pillow": "12.2.0"
+  },
+  "scope": "CPU-only synthetic pixel comparisons plus separate 3D scene geometry check; no VLM, no real production media evaluation",
+  "gui": {
+    "cases": [
+      {
+        "case": "clean",
+        "gold": "none",
+        "change_detector": "none",
+        "low_contrast_flag": false,
+        "reference_mean_abs_difference": 0.0,
+        "seconds": 0.02337
+      },
+      {
+        "case": "clipped_text",
+        "gold": "defect",
+        "change_detector": "none",
+        "low_contrast_flag": false,
+        "reference_mean_abs_difference": 0.411,
+        "seconds": 0.06126
+      },
+      {
+        "case": "overlap",
+        "gold": "defect",
+        "change_detector": "none",
+        "low_contrast_flag": false,
+        "reference_mean_abs_difference": 1.483,
+        "seconds": 0.09322
+      },
+      {
+        "case": "low_contrast",
+        "gold": "defect",
+        "change_detector": "none",
+        "low_contrast_flag": true,
+        "reference_mean_abs_difference": 1.161,
+        "seconds": 0.1195
+      },
+      {
+        "case": "legitimate_dark_theme",
+        "gold": "none",
+        "change_detector": "defect",
+        "low_contrast_flag": false,
+        "reference_mean_abs_difference": 207.945,
+        "seconds": 0.17698
+      },
+      {
+        "case": "legitimate_text_revision",
+        "gold": "none",
+        "change_detector": "none",
+        "low_contrast_flag": false,
+        "reference_mean_abs_difference": 1.383,
+        "seconds": 0.01117
+      },
+      {
+        "case": "legitimate_spacing",
+        "gold": "none",
+        "change_detector": "none",
+        "low_contrast_flag": false,
+        "reference_mean_abs_difference": 1.368,
+        "seconds": 0.01093
+      },
+      {
+        "case": "legitimate_right_align",
+        "gold": "none",
+        "change_detector": "defect",
+        "low_contrast_flag": true,
+        "reference_mean_abs_difference": 1.841,
+        "seconds": 0.01093
+      }
+    ],
+    "change_detector": {
+      "defect": {
+        "tp": 0,
+        "fp": 2,
+        "fn": 3,
+        "precision": 0.0,
+        "recall": 0.0
+      },
+      "none": {
+        "tp": 3,
+        "fp": 3,
+        "fn": 2,
+        "precision": 0.5,
+        "recall": 0.6
+      }
+    }
+  },
+  "ocr_contract": {
+    "method": "Tesseract OCR of image pixels compared to independently defined text contract; contract NOT image-only",
+    "cases": [
+      {
+        "case": "clean",
+        "gold": "none",
+        "predicted": "none",
+        "expected_text": "System ready",
+        "ocr": "Operations control\nSystem ready\nPressure: 240 kPa",
+        "seconds": 3.079
+      },
+      {
+        "case": "clipped_text",
+        "gold": "defect",
+        "predicted": "defect",
+        "expected_text": "System ready for maintenance",
+        "ocr": "Operations control\nSystem ready for mi\nPressure: 240 kPa",
+        "seconds": 1.724
+      },
+      {
+        "case": "overlap",
+        "gold": "defect",
+        "predicted": "defect",
+        "expected_text": "System ready",
+        "ocr": "Operations control\nPRAHREHERR@alert\nPressure: 240 kPa",
+        "seconds": 1.217
+      },
+      {
+        "case": "low_contrast",
+        "gold": "defect",
+        "predicted": "defect",
+        "expected_text": "System ready",
+        "ocr": "Operations control\nPressure: 240 kPa",
+        "seconds": 3.252
+      },
+      {
+        "case": "legitimate_dark_theme",
+        "gold": "none",
+        "predicted": "none",
+        "expected_text": "System ready",
+        "ocr": "Operations control\nSystem ready\nPressure: 240 kPa",
+        "seconds": 4.154
+      },
+      {
+        "case": "legitimate_text_revision",
+        "gold": "none",
+        "predicted": "none",
+        "expected_text": "Pump ready",
+        "ocr": "Operations control\nPump ready\nPressure: 240 kPa",
+        "seconds": 2.299
+      },
+      {
+        "case": "legitimate_spacing",
+        "gold": "none",
+        "predicted": "none",
+        "expected_text": "System ready",
+        "ocr": "Operations control\nSystem ready\nPressure: 240 kPa",
+        "seconds": 1.21
+      },
+      {
+        "case": "legitimate_right_align",
+        "gold": "none",
+        "predicted": "defect",
+        "expected_text": "Ready",
+        "ocr": "Operations control\nPressure: 240 kPa",
+        "seconds": 1.906
+      }
+    ],
+    "classification": {
+      "defect": {
+        "tp": 3,
+        "fp": 1,
+        "fn": 0,
+        "precision": 0.75,
+        "recall": 1.0
+      },
+      "none": {
+        "tp": 4,
+        "fp": 0,
+        "fn": 1,
+        "precision": 1.0,
+        "recall": 0.8
+      }
+    }
+  },
+  "diagram": {
+    "cases": [
+      {
+        "case": "clean",
+        "gold": "none",
+        "predicted": "none",
+        "line_occupancy": 1.0,
+        "seconds": 0.06627
+      },
+      {
+        "case": "broken_connection",
+        "gold": "broken",
+        "predicted": "broken",
+        "line_occupancy": 0.65,
+        "seconds": 0.00626
+      },
+      {
+        "case": "legitimate_recolor",
+        "gold": "none",
+        "predicted": "none",
+        "line_occupancy": 1.0,
+        "seconds": 0.01179
+      },
+      {
+        "case": "overprinted_connection",
+        "gold": "overprint",
+        "predicted": "none",
+        "line_occupancy": 1.0,
+        "seconds": 0.08036
+      }
+    ],
+    "classification": {
+      "broken": {
+        "tp": 1,
+        "fp": 0,
+        "fn": 0,
+        "precision": 1.0,
+        "recall": 1.0
+      },
+      "none": {
+        "tp": 2,
+        "fp": 1,
+        "fn": 0,
+        "precision": 0.6666666666666666,
+        "recall": 1.0
+      },
+      "overprint": {
+        "tp": 0,
+        "fp": 0,
+        "fn": 1,
+        "precision": null,
+        "recall": 0.0
+      }
+    }
+  },
+  "mechanical": {
+    "measurement": "geometry-only lower z against z=0 floor; no texture or semantic understanding",
+    "cases": [
+      {
+        "case": "door_above_floor",
+        "gold": "none",
+        "predicted": "none",
+        "penetration_m": 0,
+        "seconds": 6e-06
+      },
+      {
+        "case": "door_inside_floor",
+        "gold": "penetration",
+        "predicted": "penetration",
+        "penetration_m": 0.16,
+        "seconds": 3e-06
+      },
+      {
+        "case": "legitimate_recessed_track",
+        "gold": "none",
+        "predicted": "penetration",
+        "penetration_m": 0.05,
+        "seconds": 1e-06
+      },
+      {
+        "case": "fork_above_floor",
+        "gold": "none",
+        "predicted": "none",
+        "penetration_m": 0,
+        "seconds": 1e-06
+      }
+    ],
+    "classification": {
+      "none": {
+        "tp": 2,
+        "fp": 0,
+        "fn": 1,
+        "precision": 1.0,
+        "recall": 0.6666666666666666
+      },
+      "penetration": {
+        "tp": 1,
+        "fp": 1,
+        "fn": 0,
+        "precision": 0.5,
+        "recall": 1.0
+      }
+    }
+  },
+  "video": {
+    "cases": [
+      {
+        "case": "smooth",
+        "gold": "none",
+        "predicted": "none",
+        "naive_global_spike": false,
+        "mean_step": 3.0,
+        "max_frame_change": 0.833,
+        "seconds": 0.14625
+      },
+      {
+        "case": "jump",
+        "gold": "jump",
+        "predicted": "jump",
+        "naive_global_spike": false,
+        "mean_step": 3.0,
+        "max_frame_change": 4.444,
+        "seconds": 0.04787
+      },
+      {
+        "case": "freeze",
+        "gold": "freeze",
+        "predicted": "freeze",
+        "naive_global_spike": false,
+        "mean_step": 3.0,
+        "max_frame_change": 1.667,
+        "seconds": 0.01969
+      },
+      {
+        "case": "cut",
+        "gold": "none",
+        "predicted": "none",
+        "naive_global_spike": true,
+        "mean_step": 3.0,
+        "max_frame_change": 191.75,
+        "seconds": 0.11755
+      },
+      {
+        "case": "stationary",
+        "gold": "none",
+        "predicted": "none",
+        "naive_global_spike": false,
+        "mean_step": 0.0,
+        "max_frame_change": 0.0,
+        "seconds": 0.02099
+      },
+      {
+        "case": "valid_hold",
+        "gold": "none",
+        "predicted": "freeze",
+        "naive_global_spike": false,
+        "mean_step": 3.0,
+        "max_frame_change": 0.833,
+        "seconds": 0.01525
+      },
+      {
+        "case": "camera_cut",
+        "gold": "none",
+        "predicted": "jump",
+        "naive_global_spike": true,
+        "mean_step": 3.0,
+        "max_frame_change": 191.75,
+        "seconds": 0.06301
+      }
+    ],
+    "classification": {
+      "freeze": {
+        "tp": 1,
+        "fp": 1,
+        "fn": 0,
+        "precision": 0.5,
+        "recall": 1.0
+      },
+      "jump": {
+        "tp": 1,
+        "fp": 1,
+        "fn": 0,
+        "precision": 0.5,
+        "recall": 1.0
+      },
+      "none": {
+        "tp": 3,
+        "fp": 0,
+        "fn": 2,
+        "precision": 1.0,
+        "recall": 0.6
+      }
+    }
+  }
+}

@@ -1,0 +1,230 @@
+{
+  "date": "2026-10-24",
+  "host": "nitro CPU; previous model benchmark on thor",
+  "acceptance": "NO GENERAL-USE ACCEPTANCE",
+  "notes": "Constructed labels are independent from predicted pixel features, but synthetic fixtures are not blinded human labels and several thresholds were evaluated on development data; do not infer population confidence",
+  "analyzers": [
+    {
+      "task": "GUI layout/contrast with known boxes",
+      "method": "source geometry + explicit colors",
+      "version": "perceptual_cpu_fixtures.py",
+      "scope": "synthetic metadata oracle, not image-only",
+      "n": 6,
+      "correct": 6,
+      "status": "narrow_validated_only"
+    },
+    {
+      "task": "GUI image-only pixel-reference differencing",
+      "method": "OpenCV/Pillow frame MAE",
+      "version": {
+        "python": "3.12.3",
+        "numpy": "2.2.6",
+        "opencv": "4.12.0",
+        "Pillow": "12.2.0"
+      },
+      "scope": "eight synthesized PNG, independent constructed labels, threshold tuned on development",
+      "n": 8,
+      "correct": 3,
+      "scores": {
+        "defect": {
+          "tp": 0,
+          "fp": 2,
+          "fn": 3,
+          "precision": 0.0,
+          "recall": 0.0
+        },
+        "none": {
+          "tp": 3,
+          "fp": 3,
+          "fn": 2,
+          "precision": 0.5,
+          "recall": 0.6
+        }
+      },
+      "status": "rejected"
+    },
+    {
+      "task": "GUI screenshot OCR against intended text",
+      "method": "Tesseract OCR PSM 6",
+      "version": "Tesseract 5.3.4",
+      "scope": "eight synthesized PNG, expected text from independent UI content contract",
+      "n": 8,
+      "correct": 7,
+      "scores": {
+        "defect": {
+          "tp": 3,
+          "fp": 1,
+          "fn": 0,
+          "precision": 0.75,
+          "recall": 1.0
+        },
+        "none": {
+          "tp": 4,
+          "fp": 0,
+          "fn": 1,
+          "precision": 1.0,
+          "recall": 0.8
+        }
+      },
+      "status": "promising_unvalidated"
+    },
+    {
+      "task": "Diagram visual connection continuity",
+      "method": "pixel line corridor occupancy",
+      "version": "4.12.0",
+      "scope": "four development diagram PNGs after bug fix; not heldout",
+      "n": 4,
+      "correct": 3,
+      "scores": {
+        "broken": {
+          "tp": 1,
+          "fp": 0,
+          "fn": 0,
+          "precision": 1.0,
+          "recall": 1.0
+        },
+        "none": {
+          "tp": 2,
+          "fp": 1,
+          "fn": 0,
+          "precision": 0.6666666666666666,
+          "recall": 1.0
+        },
+        "overprint": {
+          "tp": 0,
+          "fp": 0,
+          "fn": 1,
+          "precision": null,
+          "recall": 0.0
+        }
+      },
+      "status": "rejected_overprint_missed"
+    },
+    {
+      "task": "Mechanical contact/penetration",
+      "method": "world-space z-bound bound test",
+      "version": "python procedural",
+      "scope": "four procedural mechanic objects; no rendered image perception",
+      "n": 4,
+      "correct": 3,
+      "scores": {
+        "none": {
+          "tp": 2,
+          "fp": 0,
+          "fn": 1,
+          "precision": 1.0,
+          "recall": 0.6666666666666666
+        },
+        "penetration": {
+          "tp": 1,
+          "fp": 1,
+          "fn": 0,
+          "precision": 0.5,
+          "recall": 1.0
+        }
+      },
+      "status": "rejected_false_positive_recess"
+    },
+    {
+      "task": "Video motion freeze/jump",
+      "method": "pixel-derived color marker centroid velocity",
+      "version": "4.12.0",
+      "scope": "seven short synthetic clips, false positives on pause and camera cut",
+      "n": 7,
+      "correct": 5,
+      "scores": {
+        "freeze": {
+          "tp": 1,
+          "fp": 1,
+          "fn": 0,
+          "precision": 0.5,
+          "recall": 1.0
+        },
+        "jump": {
+          "tp": 1,
+          "fp": 1,
+          "fn": 0,
+          "precision": 0.5,
+          "recall": 1.0
+        },
+        "none": {
+          "tp": 3,
+          "fp": 0,
+          "fn": 2,
+          "precision": 1.0,
+          "recall": 0.6
+        }
+      },
+      "status": "rejected"
+    },
+    {
+      "task": "Real forklift GLB header/accessor validity",
+      "method": "read-only metadata min/max validation",
+      "version": "glTF 2; python struct/json",
+      "scope": "one real GLB, 281 accessor bounds; no independently labeled defects",
+      "n": 281,
+      "correct": null,
+      "status": "structural_smoke_only"
+    },
+    {
+      "task": "Real completed forklift video frame continuity",
+      "method": "OpenCV sample frame MAE / exact duplicate / sparse LK optical flow",
+      "version": "4.12.0",
+      "scope": "180/842 1080p frames decoded downscaled, two sparse windows; no gold",
+      "n": 180,
+      "correct": null,
+      "status": "signal_probe_only"
+    },
+    {
+      "task": "GUI VLM classification",
+      "method": "Thor Qwen3-VL 8B",
+      "version": "qwen3-vl-8b-hires",
+      "scope": "original 2026-10-09 four GUI screenshot benchmark; clipped failed",
+      "n": 4,
+      "correct": 3,
+      "status": "rejected_clipped_text_false_negative",
+      "seconds_per_case": [
+        3.43,
+        3.57,
+        3.3,
+        3.77
+      ]
+    },
+    {
+      "task": "general GUI and 3D VLM",
+      "method": "Qwen3-VL-2B/4B",
+      "version": "unverified local install",
+      "reference": "https://github.com/QwenLM/Qwen3-VL",
+      "n": 0,
+      "correct": null,
+      "status": "candidate_not_benchmarked"
+    },
+    {
+      "task": "OCR with region and visual grounding",
+      "method": "Florence-2-large",
+      "version": "unverified local install",
+      "reference": "https://huggingface.co/microsoft/Florence-2-large",
+      "n": 0,
+      "correct": null,
+      "status": "candidate_not_benchmarked"
+    },
+    {
+      "task": "video understanding candidate",
+      "method": "SmolVLM2-2.2B-Instruct",
+      "version": "unverified local install",
+      "reference": "https://huggingface.co/HuggingFaceTB/SmolVLM2-2.2B-Instruct",
+      "n": 0,
+      "correct": null,
+      "status": "candidate_not_benchmarked"
+    },
+    {
+      "task": "OCR candidate",
+      "method": "PP-OCRv6-small/tiny",
+      "version": "unverified local install",
+      "reference": "https://www.paddleocr.ai/main/en/version3.x/module_usage/text_recognition.html",
+      "n": 0,
+      "correct": null,
+      "status": "candidate_not_benchmarked"
+    }
+  ]
+}
