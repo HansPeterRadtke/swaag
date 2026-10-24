@@ -1,0 +1,313 @@
+{
+  "source_revisions": {
+    "uijudgebench": "v0.4.0",
+    "mvtec_loco_subset": "saiphyohein/spec2inspect-images main as observed 2026-10-24"
+  },
+  "scope": "new independent real-site screenshots, externally labeled machine photographs; no real annotated 3D render or video defect evaluation",
+  "inputs_are_in_local_var_not_this_git_commit": true,
+  "sha256_manifest": {
+    "uijudge_real_websites": "cd239f5fea195cd908708de5024e10dd209010995701709e02c5101fefe567c3",
+    "uijudge_raw_labels": "bae0c0cbe18cf20f51577906716bea5eee7b1547fb52dbfe001641fe3741850f",
+    "uijudge_tesseract_predictions": "ec09e822e503e2712dc9be1d1adb71a1721714d2a3690b2943558e87efac65b0",
+    "mvtec_loco_18_image_receipts": "e67c9ee7203a2117dc3465a6fd3cceedcb30c82c21c2cafead6137eee02f5c22",
+    "clip_raw_predictions": "37b9503513b5f75280e8b3bdac821a7d2c147ea9dd700d787e668c4be2fba6f0"
+  },
+  "image_modality_audit": {
+    "unique_web_png_hashes": 69,
+    "duplicate_hash_page_groups": [
+      [
+        "real-irs-newsroom--clip-overflow",
+        "real-irs-newsroom--protrude-viewport"
+      ]
+    ],
+    "externally_labeled_defect_anchor_visibility": {
+      "fully_outside_png": 12,
+      "at_least_partly_in_png": 4,
+      "unknown_bounds": 0,
+      "outside_examples": [
+        {
+          "page_id": "real-energy-home--protrude-viewport",
+          "split": "dev",
+          "criterion": "redecheck:viewport-protrusion",
+          "bbox": [
+            267,
+            4009,
+            3000,
+            49
+          ],
+          "image_size": [
+            1280,
+            1600
+          ]
+        },
+        {
+          "page_id": "real-epa-recycle--clip-overflow",
+          "split": "dev",
+          "criterion": "redecheck:element-protrusion",
+          "bbox": [
+            753,
+            1753,
+            156,
+            16
+          ],
+          "image_size": [
+            1280,
+            1600
+          ]
+        },
+        {
+          "page_id": "real-irs-newsroom--clip-overflow",
+          "split": "dev",
+          "criterion": "redecheck:element-protrusion",
+          "bbox": [
+            1088,
+            2505,
+            209,
+            16
+          ],
+          "image_size": [
+            1280,
+            1600
+          ]
+        },
+        {
+          "page_id": "real-irs-newsroom--protrude-viewport",
+          "split": "dev",
+          "criterion": "redecheck:viewport-protrusion",
+          "bbox": [
+            390,
+            2645,
+            3000,
+            40
+          ],
+          "image_size": [
+            1280,
+            1600
+          ]
+        },
+        {
+          "page_id": "real-nasa-earth--clip-overflow",
+          "split": "dev",
+          "criterion": "redecheck:element-protrusion",
+          "bbox": [
+            1290,
+            1290,
+            330,
+            16
+          ],
+          "image_size": [
+            1280,
+            1600
+          ]
+        },
+        {
+          "page_id": "real-nasa-moon--protrude-viewport",
+          "split": "dev",
+          "criterion": "redecheck:viewport-protrusion",
+          "bbox": [
+            767,
+            6835,
+            3000,
+            33
+          ],
+          "image_size": [
+            1280,
+            1600
+          ]
+        },
+        {
+          "page_id": "real-python-datastructures--clip-overflow",
+          "split": "dev",
+          "criterion": "redecheck:element-protrusion",
+          "bbox": [
+            385,
+            2734,
+            1224,
+            16
+          ],
+          "image_size": [
+            1280,
+            1600
+          ]
+        },
+        {
+          "page_id": "real-section508-manage--clip-overflow",
+          "split": "test",
+          "criterion": "redecheck:element-protrusion",
+          "bbox": [
+            480,
+            2015,
+            216,
+            16
+          ],
+          "image_size": [
+            1280,
+            1600
+          ]
+        },
+        {
+          "page_id": "real-usagov-benefits--protrude-viewport",
+          "split": "dev",
+          "criterion": "redecheck:viewport-protrusion",
+          "bbox": [
+            662,
+            1767,
+            3000,
+            157
+          ],
+          "image_size": [
+            1280,
+            1600
+          ]
+        },
+        {
+          "page_id": "real-usagov-car-complaints--clip-overflow",
+          "split": "dev",
+          "criterion": "redecheck:element-protrusion",
+          "bbox": [
+            398,
+            2086,
+            232,
+            16
+          ],
+          "image_size": [
+            1280,
+            1600
+          ]
+        },
+        {
+          "page_id": "real-weathergov-about--protrude-viewport",
+          "split": "dev",
+          "criterion": "redecheck:viewport-protrusion",
+          "bbox": [
+            0,
+            3382,
+            3000,
+            143
+          ],
+          "image_size": [
+            1280,
+            1600
+          ]
+        },
+        {
+          "page_id": "real-weathergov-safety--protrude-viewport",
+          "split": "test",
+          "criterion": "redecheck:viewport-protrusion",
+          "bbox": [
+            810,
+            1607,
+            3000,
+            18
+          ],
+          "image_size": [
+            1280,
+            1600
+          ]
+        }
+      ]
+    },
+    "warning": "most labeled L1 full-page layout defect anchors lie entirely outside the input screenshot; scores below cannot legitimately be interpreted as standalone screenshot-visible defect classifier accuracy"
+  },
+  "sample_sizes": {
+    "website_pngs": 70,
+    "external_ui_labels": 89,
+    "industrial_photos": 18,
+    "industrial_normal": 8,
+    "industrial_anomalies": 10
+  },
+  "uijudge_tesseract_psm11_vs_pixel_contrast": {
+    "version": "Tesseract 5.3.4",
+    "image_only": true,
+    "single_core": true,
+    "total_seconds": 308.95,
+    "scores": {
+      "dev_layout": {
+        "n_items": 26,
+        "n_pages": 25,
+        "counts": {
+          "TP": 7,
+          "FP": 6,
+          "TN": 7,
+          "FN": 6,
+          "ABSTAIN": 0
+        },
+        "precision": 0.5384615384615384,
+        "recall": 0.5384615384615384
+      },
+      "test_layout": {
+        "n_items": 6,
+        "n_pages": 6,
+        "counts": {
+          "TP": 3,
+          "FP": 3,
+          "TN": 0,
+          "FN": 0,
+          "ABSTAIN": 0
+        },
+        "precision": 0.5,
+        "recall": 1.0
+      },
+      "dev_contrast": {
+        "n_items": 41,
+        "n_pages": 39,
+        "counts": {
+          "TP": 2,
+          "FP": 23,
+          "TN": 14,
+          "FN": 2,
+          "ABSTAIN": 0
+        },
+        "precision": 0.08,
+        "recall": 0.5
+      },
+      "test_contrast": {
+        "n_items": 16,
+        "n_pages": 15,
+        "counts": {
+          "TP": 2,
+          "FP": 10,
+          "TN": 3,
+          "FN": 0,
+          "ABSTAIN": 1
+        },
+        "precision": 0.16666666666666666,
+        "recall": 1.0
+      }
+    }
+  },
+  "clip_vision_frozen_zero_shot": {
+    "model": "openai/clip-vit-base-patch32 PyTorch CPU",
+    "images": 18,
+    "scores": {
+      "TP": 2,
+      "FP": 3,
+      "FN": 8,
+      "TN": 5,
+      "precision": 0.4,
+      "recall": 0.2
+    },
+    "AUROC": 0.4625,
+    "wall_seconds": 17.93
+  },
+  "clip_normal_exemplar_anomaly": {
+    "calibration_normal": 4,
+    "heldout_normal": 4,
+    "heldout_anomaly": 10,
+    "scores": {
+      "TP": 3,
+      "FP": 1,
+      "FN": 7,
+      "TN": 3,
+      "precision": 0.75,
+      "recall": 0.3
+    },
+    "AUROC": 0.65
+  },
+  "rapidocr_status": {
+    "completed_page_records_at_this_snapshot": 22,
+    "full_scores_ready": false,
+    "note": "intermediate status is not accuracy evidence; another owned-process termination attempt was explicitly denied"
+  },
+  "caveat": "LABEL-IN-IMAGE MISMATCH: 12/16 layout anomalies not in frozen PNG, and two different mutated pages share identical screenshot pixels. These full-page gold labels are NOT complete screenshot-only ground truth. Multiple items per source webpage; class imbalance; public (non-private) benchmark; labels created by independent dataset authors, most deliberate real-site mutations; 18 photos one industrial subcategory only; no licensed third-party images in Git; no model chosen as accepted for production"
+}
