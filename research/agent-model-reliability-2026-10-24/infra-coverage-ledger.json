@@ -12,7 +12,9 @@
           "sha256": "0832872f3de94abbd8eee19faeb9ad552d63bcadd63832ba00b73e00e296c789"
         }
       ],
-      "read_mode": "mechanical byte inventory only; semantic review not claimed"
+      "read_mode": "direct_full_text_passages_visible_in_current_conversation; semantic review scoped to this research question",
+      "reviewed_on": "2026-10-24",
+      "sha256_at_review": "56553de05a6e5d4ece604ffb0ef48493204e1f2bf632a6f89e764edcea310c00"
     },
     {
       "file": "README.md",
@@ -157,7 +159,9 @@
           "sha256": "0601a9591faaa0d6819d69ff5e8df9e5a5632ef1e73d683b515284b2b7225239"
         }
       ],
-      "read_mode": "mechanical byte inventory only; semantic review not claimed"
+      "read_mode": "direct_full_text_passages_visible_in_current_conversation; semantic review scoped to this research question",
+      "reviewed_on": "2026-10-24",
+      "sha256_at_review": "0601a9591faaa0d6819d69ff5e8df9e5a5632ef1e73d683b515284b2b7225239"
     },
     {
       "file": "docs/guidlines/RESEARCH_2026-08-30.md",
@@ -206,7 +210,9 @@
           "sha256": "b99e69720d47371dd59d450b66c7e4f66fcd03f7d6c66125b678cbb5e914477a"
         }
       ],
-      "read_mode": "mechanical byte inventory only; semantic review not claimed"
+      "read_mode": "direct_full_text_passages_visible_in_current_conversation; semantic review scoped to this research question",
+      "reviewed_on": "2026-10-24",
+      "sha256_at_review": "94401fb6f4db320f98cd8af84b23153565735349a796cec13adf91c9f1beaf74"
     },
     {
       "file": "docs/guidlines/agents/architecture.md",
@@ -232,7 +238,9 @@
           "sha256": "05656cfcc9239c23a0ef7e1cc9c929a7d213a52e3b20168f4df26fe7f2555a1d"
         }
       ],
-      "read_mode": "mechanical byte inventory only; semantic review not claimed"
+      "read_mode": "direct_full_text_passages_visible_in_current_conversation; semantic review scoped to this research question",
+      "reviewed_on": "2026-10-24",
+      "sha256_at_review": "05656cfcc9239c23a0ef7e1cc9c929a7d213a52e3b20168f4df26fe7f2555a1d"
     },
     {
       "file": "docs/guidlines/agents/fast_user_facing_dispatch_and_preemption.md",
@@ -245,7 +253,9 @@
           "sha256": "799e7b4633107e6b22dde77b6e2f562a40d0effa659663566004ad7731a2f8bd"
         }
       ],
-      "read_mode": "mechanical byte inventory only; semantic review not claimed"
+      "read_mode": "direct_full_text_passages_visible_in_current_conversation; semantic review scoped to this research question",
+      "reviewed_on": "2026-10-24",
+      "sha256_at_review": "799e7b4633107e6b22dde77b6e2f562a40d0effa659663566004ad7731a2f8bd"
     },
     {
       "file": "docs/guidlines/agents/history_storage_and_deletion.md",
@@ -284,7 +294,9 @@
           "sha256": "21fa109c534a38e7d8a38640688007dd26458b6824dac9d299b5526288e6a0fa"
         }
       ],
-      "read_mode": "mechanical byte inventory only; semantic review not claimed"
+      "read_mode": "direct_full_text_passages_visible_in_current_conversation; semantic review scoped to this research question",
+      "reviewed_on": "2026-10-24",
+      "sha256_at_review": "21fa109c534a38e7d8a38640688007dd26458b6824dac9d299b5526288e6a0fa"
     },
     {
       "file": "docs/guidlines/agents/reusable_workspace_and_tool_forge.md",
@@ -349,7 +361,9 @@
           "sha256": "168482d40a7f902d38d426aabeb350ef886c7f1751f3a664c61cc93320de9749"
         }
       ],
-      "read_mode": "mechanical byte inventory only; semantic review not claimed"
+      "read_mode": "direct_full_text_passages_visible_in_current_conversation; semantic review scoped to this research question",
+      "reviewed_on": "2026-10-24",
+      "sha256_at_review": "168482d40a7f902d38d426aabeb350ef886c7f1751f3a664c61cc93320de9749"
     },
     {
       "file": "docs/guidlines/appendix/recording-research-2026-10-24.md",
@@ -362,7 +376,9 @@
           "sha256": "e8815f0230499bb628f6a9769aaab39d0b657678d43584f7cced122013ca5622"
         }
       ],
-      "read_mode": "mechanical byte inventory only; semantic review not claimed"
+      "read_mode": "direct_full_text_passages_visible_in_current_conversation; semantic review scoped to this research question",
+      "reviewed_on": "2026-10-24",
+      "sha256_at_review": "e8815f0230499bb628f6a9769aaab39d0b657678d43584f7cced122013ca5622"
     },
     {
       "file": "docs/guidlines/appendix/research-and-alternatives.md",
@@ -797,7 +813,9 @@
           "sha256": "f4bab777990d08dbf2f8ca5c63dfcc25f6ea5b25822db8363f6c9816a03a252a"
         }
       ],
-      "read_mode": "mechanical byte inventory only; semantic review not claimed"
+      "read_mode": "direct_full_text_passages_visible_in_current_conversation; semantic review scoped to this research question",
+      "reviewed_on": "2026-10-24",
+      "sha256_at_review": "f4bab777990d08dbf2f8ca5c63dfcc25f6ea5b25822db8363f6c9816a03a252a"
     },
     {
       "file": "docs/guidlines/games/core_and_modalities.md",
@@ -2170,7 +2188,9 @@
           "sha256": "0c2338bba4e7c951557e2f23d20a7bba21f81d6bb8d0eb83f056a3ef24d72186"
         }
       ],
-      "read_mode": "mechanical byte inventory only; semantic review not claimed"
+      "read_mode": "direct_full_text_passages_visible_in_current_conversation; semantic review scoped to this research question",
+      "reviewed_on": "2026-10-24",
+      "sha256_at_review": "0c2338bba4e7c951557e2f23d20a7bba21f81d6bb8d0eb83f056a3ef24d72186"
     },
     {
       "file": "docs/guidlines/original-recordings/agents/Recording 2026-10-15 17-41-19-190.txt",
@@ -2196,7 +2216,9 @@
           "sha256": "a872dcd3df12f8dc36792cee5560eefc6a23c84c0c79d226cfea561faa1a25b6"
         }
       ],
-      "read_mode": "mechanical byte inventory only; semantic review not claimed"
+      "read_mode": "direct_full_text_passages_visible_in_current_conversation; semantic review scoped to this research question",
+      "reviewed_on": "2026-10-24",
+      "sha256_at_review": "a872dcd3df12f8dc36792cee5560eefc6a23c84c0c79d226cfea561faa1a25b6"
     },
     {
       "file": "docs/guidlines/original-recordings/agents/Recording 2026-10-17 23-00-29-387.txt",
@@ -2209,7 +2231,9 @@
           "sha256": "8f11584b194ec6fe5cad93c1b9093324824656be08f4642f6e9c305ffc2bc28d"
         }
       ],
-      "read_mode": "mechanical byte inventory only; semantic review not claimed"
+      "read_mode": "direct_full_text_passages_visible_in_current_conversation; semantic review scoped to this research question",
+      "reviewed_on": "2026-10-24",
+      "sha256_at_review": "8f11584b194ec6fe5cad93c1b9093324824656be08f4642f6e9c305ffc2bc28d"
     },
     {
       "file": "docs/guidlines/original-recordings/agents/Recording 2026-10-18 18-38-21-960.txt",
@@ -2222,7 +2246,9 @@
           "sha256": "107223d43cf20d14673b98bd7242e1723cd89a4e6028180a6b2d1a125db20eb5"
         }
       ],
-      "read_mode": "mechanical byte inventory only; semantic review not claimed"
+      "read_mode": "direct_full_text_passages_visible_in_current_conversation; semantic review scoped to this research question",
+      "reviewed_on": "2026-10-24",
+      "sha256_at_review": "107223d43cf20d14673b98bd7242e1723cd89a4e6028180a6b2d1a125db20eb5"
     },
     {
       "file": "docs/guidlines/original-recordings/agents/Recording 2026-10-19 17-53-10-580.txt",
@@ -2248,7 +2274,9 @@
           "sha256": "0ac96a1c8f1ac34a044519ed96798dd01a81b6a353309e658f3d6f4a0f5ccd17"
         }
       ],
-      "read_mode": "mechanical byte inventory only; semantic review not claimed"
+      "read_mode": "direct_full_text_passages_visible_in_current_conversation; semantic review scoped to this research question",
+      "reviewed_on": "2026-10-24",
+      "sha256_at_review": "0ac96a1c8f1ac34a044519ed96798dd01a81b6a353309e658f3d6f4a0f5ccd17"
     },
     {
       "file": "docs/guidlines/original-recordings/games/Recording 2026-08-13 17-37-45-601.txt",
@@ -2897,7 +2925,9 @@
           "sha256": "0c9e1e6b24f7e4dcb7d1f18121e764a181945bd8885b7dde8cc66f7a6e362441"
         }
       ],
-      "read_mode": "mechanical byte inventory only; semantic review not claimed"
+      "read_mode": "direct_full_text_passages_visible_in_current_conversation; semantic review scoped to this research question",
+      "reviewed_on": "2026-10-24",
+      "sha256_at_review": "7fab4fde783f287c51f7c68b4e1453b58c76d0e86c5672747d23603e58758bb9"
     },
     {
       "file": "docs/guidlines/original-recordings/general/programming/Recording 2026-09-27 12-45-39-038.txt",
@@ -2910,7 +2940,9 @@
           "sha256": "83898544f9b2062829981c42bf4170e9c1d8c229761151edc31bba8c212c708f"
         }
       ],
-      "read_mode": "mechanical byte inventory only; semantic review not claimed"
+      "read_mode": "direct_full_text_passages_visible_in_current_conversation; semantic review scoped to this research question",
+      "reviewed_on": "2026-10-24",
+      "sha256_at_review": "83898544f9b2062829981c42bf4170e9c1d8c229761151edc31bba8c212c708f"
     },
     {
       "file": "docs/guidlines/original-recordings/general/programming/Recording 2026-09-27 19-44-45-736.txt",
@@ -2923,7 +2955,9 @@
           "sha256": "42cf7156137d97528037432d9a529413d7a5f7fbc3ba3db05451c3fe1c94781c"
         }
       ],
-      "read_mode": "mechanical byte inventory only; semantic review not claimed"
+      "read_mode": "direct_full_text_passages_visible_in_current_conversation; semantic review scoped to this research question",
+      "reviewed_on": "2026-10-24",
+      "sha256_at_review": "42cf7156137d97528037432d9a529413d7a5f7fbc3ba3db05451c3fe1c94781c"
     },
     {
       "file": "docs/guidlines/original-recordings/general/programming/Recording 2026-09-27 20-56-31-463.txt",
@@ -2936,7 +2970,9 @@
           "sha256": "6fb4c3b01f1e853bb85cc418aadd5e52910393bf7b6c899516e957159f121f00"
         }
       ],
-      "read_mode": "mechanical byte inventory only; semantic review not claimed"
+      "read_mode": "direct_full_text_passages_visible_in_current_conversation; semantic review scoped to this research question",
+      "reviewed_on": "2026-10-24",
+      "sha256_at_review": "6fb4c3b01f1e853bb85cc418aadd5e52910393bf7b6c899516e957159f121f00"
     },
     {
       "file": "docs/guidlines/original-recordings/general/programming/Recording 2026-10-07 18-02-02-878.txt",
@@ -3869,7 +3905,9 @@
           "sha256": "48b0173163d91ec1bf139949ceb73f3f963000f7dcc77d81f123adcc4a75db64"
         }
       ],
-      "read_mode": "mechanical byte inventory only; semantic review not claimed"
+      "read_mode": "direct_full_text_passages_visible_in_current_conversation; semantic review scoped to this research question",
+      "reviewed_on": "2026-10-24",
+      "sha256_at_review": "48b0173163d91ec1bf139949ceb73f3f963000f7dcc77d81f123adcc4a75db64"
     },
     {
       "file": "docs/guidlines/projects/recording_to_guideline_conversion.md",
@@ -3895,7 +3933,9 @@
           "sha256": "2f5487151c19a4251b6aa29e1b0916b319da1a9251a89d6ab42811acc23cef56"
         }
       ],
-      "read_mode": "mechanical byte inventory only; semantic review not claimed"
+      "read_mode": "direct_full_text_passages_visible_in_current_conversation; semantic review scoped to this research question",
+      "reviewed_on": "2026-10-24",
+      "sha256_at_review": "2f5487151c19a4251b6aa29e1b0916b319da1a9251a89d6ab42811acc23cef56"
     },
     {
       "file": "docs/guidlines/security_privacy.md",
@@ -3908,7 +3948,9 @@
           "sha256": "168c9f7cefbbe5429914866eff25b6d52150706e80754e2fbefa44f66cfcbd7c"
         }
       ],
-      "read_mode": "mechanical byte inventory only; semantic review not claimed"
+      "read_mode": "direct_full_text_passages_visible_in_current_conversation; semantic review scoped to this research question",
+      "reviewed_on": "2026-10-24",
+      "sha256_at_review": "168c9f7cefbbe5429914866eff25b6d52150706e80754e2fbefa44f66cfcbd7c"
     },
     {
       "file": "docs/guidlines/source_traceability.md",
@@ -3921,7 +3963,9 @@
           "sha256": "8ced5659c817ac963f15381636e37b14ad5e069e0980b8524e036be2278dfec7"
         }
       ],
-      "read_mode": "mechanical byte inventory only; semantic review not claimed"
+      "read_mode": "direct_full_text_passages_visible_in_current_conversation; semantic review scoped to this research question",
+      "reviewed_on": "2026-10-24",
+      "sha256_at_review": "8ced5659c817ac963f15381636e37b14ad5e069e0980b8524e036be2278dfec7"
     },
     {
       "file": "docs/guidlines/testing.md",
@@ -3934,7 +3978,9 @@
           "sha256": "3fe6c3f86c138adf9ec073fd9d63a1b1f98f5f9aa7b87a2f9f255f15880d0d16"
         }
       ],
-      "read_mode": "mechanical byte inventory only; semantic review not claimed"
+      "read_mode": "direct_full_text_passages_visible_in_current_conversation; semantic review scoped to this research question",
+      "reviewed_on": "2026-10-24",
+      "sha256_at_review": "3fe6c3f86c138adf9ec073fd9d63a1b1f98f5f9aa7b87a2f9f255f15880d0d16"
     },
     {
       "file": "docs/guidlines/tests.txt",
@@ -4978,5 +5024,14 @@
       ],
       "read_mode": "mechanical byte inventory only; semantic review not claimed"
     }
-  ]
+  ],
+  "semantic_review_summary": {
+    "reviewed_files": 23,
+    "recordings_reviewed": 9,
+    "other_tracked_files_remain_byte_inventory_only": 321,
+    "changed_after_original_inventory": [
+      "AGENTS.md"
+    ],
+    "caution": "read_mode is a researcher scope assertion, not mechanical proof that every sentence was interpreted; all other files retain mechanical-only inventory."
+  }
 }

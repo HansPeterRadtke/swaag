@@ -649,3 +649,7 @@ The supported hardening principle is narrower:
 **Move only mechanically knowable information out of the model's output burden; constrain choices over already-existing identities; preserve rich semantic context where it demonstrably helps; and simplify individual model-call representations only when replicated tests show that the simpler representation is actually more reliable.**
 
 For this tiny model, some important general-agent capabilities remain beyond reliable performance regardless of the tested decomposition. The harness should bound those failures mechanically and preserve evidence/history for recovery, but should not pretend deterministic code can detect or repair arbitrary semantic mistakes. A stronger model is still necessary for reliable general history analysis, semantic compression, multi-step planning, and evidence reconciliation.
+
+## October twenty-fourth continuation
+
+The bounded Qwen Coder/Qwen3.8 relevance and semantic-extraction pilot, its incomplete split-call matrix, raw model responses, capacity-related refusals, independent fixtures and reproducible scorer are retained in `../research/agent-model-reliability-2026-10-24/REPORT.md`. These pilot observations do not establish a production decomposition policy or a reliable quantization/ensemble winner. The original hypotheses above remain unchanged.
