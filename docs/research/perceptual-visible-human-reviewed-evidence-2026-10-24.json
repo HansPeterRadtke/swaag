@@ -1,0 +1,239 @@
+{
+  "date": "2026-10-24",
+  "status": "PARTIAL: no tested image-only or vision-language judge qualified for reliable autonomous GUI/3D/video defect acceptance",
+  "new_source_receipt_hashes_sha256": {
+    "UIJudge_reanchored_real_site_manifest": "b0ddb3fbc724c1e7280e6abc9919705a13bc91aab20f577b97dcc8ea6f09fdb2",
+    "CLIP_blind_pixels": "901e2b5bd016fa4cfb4110f9bd222ab36376a7fa10c97294baeb8cb443701451",
+    "Scry_shard_manifest": "c04bcf049acba915a0dbe010c0d7245252d66c1dcd5ce901316aa3b158b8b15d",
+    "Scry_frozen_pixel_predictions_before_gold": "65d01a3a8519d6bfc10f163488dd742bc2712c3eb2b88e9667e9dc813e3dd2fc",
+    "Scry_externally_human_annotated_scores": "04b173d712f336fd83605b0fce97005455ae3e1154a4422e9539336f83dc69d3",
+    "W3C_ACT_min_contrast_official_manifest": "c5b61dd1c6051734928d7a9d81b679f0bba0604b09909d0e10ddd1474cbbdbfd",
+    "W3C_independent_flat_color_checker": "ebe7d4994b109cf09c3fdf195f77c9e9f080711df41318f39d3e34fbca495203"
+  },
+  "real_site_target_visible_capture": {
+    "screenshots": 32,
+    "actual_external_layout_defects": 16,
+    "clean_controls": 16,
+    "all_element_rectangles_intersect_capture": true,
+    "not_all_defects_necessarily_visually_decidable": true,
+    "crop_raw_pngs_external": true
+  },
+  "real_site_image_only_CLIP": {
+    "model": "OpenAI CLIP-ViT-B/32 pretrained local, fp32 CPU",
+    "fixed_prompts": [
+      "A screenshot of a normal readable software user interface with fully visible text and correctly placed buttons and labels.",
+      "A screenshot of a broken software user interface with cut-off or clipped text, overlapping labels, or elements extending beyond the window edge."
+    ],
+    "run_seconds": 24.0,
+    "scores": {
+      "dev_redecheck:element-protrusion": {
+        "n": 14,
+        "TP": 3,
+        "FP": 2,
+        "FN": 4,
+        "TN": 5,
+        "precision": 0.6,
+        "recall": 0.42857142857142855
+      },
+      "dev_redecheck:viewport-protrusion": {
+        "n": 12,
+        "TP": 2,
+        "FP": 2,
+        "FN": 4,
+        "TN": 4,
+        "precision": 0.5,
+        "recall": 0.3333333333333333
+      },
+      "test_redecheck:element-protrusion": {
+        "n": 4,
+        "TP": 0,
+        "FP": 0,
+        "FN": 2,
+        "TN": 2,
+        "precision": null,
+        "recall": 0.0
+      },
+      "test_redecheck:viewport-protrusion": {
+        "n": 2,
+        "TP": 0,
+        "FP": 0,
+        "FN": 1,
+        "TN": 1,
+        "precision": null,
+        "recall": 0.0
+      }
+    },
+    "status": "REJECTED on this task: heldout recall zero of three"
+  },
+  "human_annotated_paired_UI_Scry": {
+    "dataset": "Scry Design Diff Eval 311 pairs, 557 human-tagged individual issues, 77 no-tagged control pairs, 52 app groups",
+    "download_bytes": 198677141,
+    "calibration_and_heldout_grouped_by_app": {
+      "calibration_rows": 62,
+      "calibration_app_groups": 14,
+      "heldout_rows": 249,
+      "heldout_app_groups": 38
+    },
+    "frozen_pixel_metrics": {
+      "mae": {
+        "threshold": 0.06,
+        "calibration_balanced_accuracy": 0.7440476190476191,
+        "calibration": {
+          "TP": 44,
+          "FP": 6,
+          "TN": 8,
+          "FN": 4,
+          "sensitivity": 0.9166666666666666,
+          "no_tagged_control_acceptance": 0.5714285714285714,
+          "balanced_accuracy": 0.7440476190476191,
+          "screen_precision_against_nonexhaustive_tags": 0.88
+        },
+        "heldout": {
+          "TP": 145,
+          "FP": 38,
+          "TN": 25,
+          "FN": 41,
+          "sensitivity": 0.7795698924731183,
+          "no_tagged_control_acceptance": 0.3968253968253968,
+          "balanced_accuracy": 0.5881976446492575,
+          "screen_precision_against_nonexhaustive_tags": 0.7923497267759563
+        },
+        "heldout_group_bootstrap_balanced_accuracy_interval95": [
+          0.4655053398727668,
+          0.6696540499401576
+        ]
+      },
+      "ssim_difference": {
+        "threshold": 0.26,
+        "calibration_balanced_accuracy": 0.7946428571428572,
+        "calibration": {
+          "TP": 42,
+          "FP": 4,
+          "TN": 10,
+          "FN": 6,
+          "sensitivity": 0.875,
+          "no_tagged_control_acceptance": 0.7142857142857143,
+          "balanced_accuracy": 0.7946428571428572,
+          "screen_precision_against_nonexhaustive_tags": 0.9130434782608695
+        },
+        "heldout": {
+          "TP": 157,
+          "FP": 41,
+          "TN": 22,
+          "FN": 29,
+          "sensitivity": 0.8440860215053764,
+          "no_tagged_control_acceptance": 0.3492063492063492,
+          "balanced_accuracy": 0.5966461853558628,
+          "screen_precision_against_nonexhaustive_tags": 0.7929292929292929
+        },
+        "heldout_group_bootstrap_balanced_accuracy_interval95": [
+          0.47851613735020976,
+          0.6709921820189014
+        ]
+      }
+    },
+    "chosen_using_calibration_only": "ssim_difference",
+    "heldout_localization_without_defect_tag": {
+      "issues_with_box": 458,
+      "bbox_iou_recovered_issues_no_tag_check": 253,
+      "localization_only_recall": 0.5524017467248908,
+      "predicted_boxes": 4138,
+      "no_tagged_control_mean_candidate_boxes": 14.555555555555555,
+      "no_tagged_control_any_box_flag_fraction": 0.9365079365079365,
+      "per_category_loc_only": {
+        "Spacing/Layout": {
+          "matches": 54,
+          "total": 89
+        },
+        "Shape/Size": {
+          "matches": 48,
+          "total": 87
+        },
+        "other": {
+          "matches": 0,
+          "total": 2
+        },
+        "Color/Background": {
+          "matches": 85,
+          "total": 142
+        },
+        "Selected/Disabled State": {
+          "matches": 5,
+          "total": 5
+        },
+        "Separator": {
+          "matches": 3,
+          "total": 14
+        },
+        "Typography": {
+          "matches": 56,
+          "total": 82
+        },
+        "Icon/Nav": {
+          "matches": 72,
+          "total": 153
+        },
+        "Missing Content": {
+          "matches": 25,
+          "total": 69
+        },
+        "Image/Asset": {
+          "matches": 15,
+          "total": 21
+        },
+        "Extra Element": {
+          "matches": 1,
+          "total": 4
+        },
+        "badimage": {
+          "matches": 1,
+          "total": 1
+        }
+      }
+    },
+    "total_prediction_cpu_seconds": 118.72,
+    "no_tagged_caveat": "No-tagged controls are NOT independently certified defect-free; no-tagged flag rate is diagnostic rather than proven false-positive rate",
+    "localization_caveat": "Spatial IoU >= 0.10 against human boxes without predicting issue class, so cannot be compared with the official category-and-location recall reported for contemporary VLMs"
+  },
+  "W3C_ACT_color_contrast": {
+    "rule": "afw4f7 WCAG 1.4.3 Minimum, independent W3C ACT testcases",
+    "testcase_count": 34,
+    "expected_counts": {
+      "passed": 12,
+      "failed": 11,
+      "inapplicable": 11
+    },
+    "checker": "Firefox 146 computed CSS colors, opacity/background approximation; no axe-core; frozen rule before expected outcomes scored",
+    "three_way_confusion": {
+      "passed->passed": 6,
+      "failed->failed": 5,
+      "inapplicable->inapplicable": 7,
+      "passed->inapplicable": 2,
+      "passed->undetermined": 3,
+      "inapplicable->failed": 2,
+      "failed->undetermined": 5,
+      "inapplicable->passed": 2,
+      "failed->inapplicable": 1,
+      "passed->failed": 1
+    },
+    "aggregate_counts": {
+      "TP": 5,
+      "FP": 1,
+      "FN": 0,
+      "TN": 6,
+      "ABSTAIN": 11,
+      "INAPPLICABLE_CORRECT": 7,
+      "INAPPLICABLE_WRONG": 4
+    },
+    "decision": "CANNOT serve as complete contrast checker: abstentions and false applicability decisions, despite correct decisions on some flat-color cases",
+    "limitations": "No reliable checking of CSS gradients/background images, pseudo element text, icon text, active scripts or rendered font pixels. ACT labels for document semantic applicability may not match static style approximation; abstention preferred. Case-specific text can be below viewport but its CSS still computed."
+  },
+  "research_necessary_next": [
+    "Human-adjudicated overlap and low-contrast screenshots across natural apps where defect is definitely observable",
+    "Head-to-head ScreenVLM (element parsing) and specialized UI-UX (reasoning) using frozen source + variant images with separate independent labels",
+    "CAD mechanical correctness from authoritative real 3D simulation geometry plus externally verified good/bad physically plausible actual renders",
+    "Naturally occurring defective and correct final 3D animation/video clips with independently marked frame-time defects, not only controlled injections",
+    "Source-specific model latency, GPU/VRAM/license limits under demonstrably free production capacity"
+  ],
+  "raw_media_policy": "All Scry third-party app screenshot pairs, public W3C HTML, and reanchored real-site PNGs remain under /data/var, NOT tracked in Git. Reproduction files and source hashes are in the project research folder."
+}

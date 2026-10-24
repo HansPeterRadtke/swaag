@@ -256,5 +256,21 @@
     "Real_3D_videos": "48 controlled real-source frame-edit cases, no-reference signal thresholds unreliable; exact original timeline perfect only on nonapproved edits with a trusted matching source; valid holds pixel-identical to freeze",
     "primary_paper_findings": "ScreenVLM ICML 2026 is element-parser; Diagram-MMU reports Qwen3-VL 8B DQA 47.12%; official PatchCore 99.6 image AUROC is on different MVTec AD classes; EfficientAD is pretrained industrial specialist; CGVQM matched-reference rendered-quality metric",
     "reliability_verdict": "Unqualified until externally independently visible verified defects plus real CG machinery/video heldouts and actual model comparisons are complete"
+  },
+  "human_reviewed_visible_screens_continuation_2026_10_24": {
+    "status": "PARTIAL: no validated universal visual acceptance gate",
+    "report": "perceptual-analyzers-human-review-continuation-2026-10-24.md",
+    "aggregate": "perceptual-visible-human-reviewed-evidence-2026-10-24.json",
+    "independent_sources": [
+      "UIJudgeBench v0.4.0 reanchored 32 true website screenshots",
+      "Scry Design Diff Eval 311 human-reviewed mobile pairs and 557 issue boxes",
+      "W3C ACT afw4f7 official minimum contrast 34 cases"
+    ],
+    "local_results": {
+      "CLIP_image_only_on_real_site_targets": "development 5 of 13 defects found with 4 of 13 control false alarms, 0 of 3 test defects found",
+      "W3C_style_checker": "5 correct failures, 6 correct passes, 1 false failure, 11 undecided pass/fail, inapplicable seven correct/four wrong",
+      "Scry_holdout_SSIM": "157 of 186 tagged screens flagged, 41 of 63 no-tagged controls flagged, heldout balanced accuracy 59.7%, broad group-bootstrap uncertainty"
+    },
+    "candidate_gap": "ScreenVLM, UI-UX, trained PatchCore/EfficientAD, CGVQM not locally measured on relevant independent heldout cases; no human-verifiable machine/video general acceptance"
   }
 }
