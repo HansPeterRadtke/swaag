@@ -1,0 +1,223 @@
+{
+  "method": "known DOM-style bounding boxes + WCAG contrast formula; not image understanding",
+  "cases": [
+    {
+      "case": "clean",
+      "ground_truth": "none",
+      "predicted": "none",
+      "correct": true,
+      "seconds": 0.020318,
+      "geometry": [
+        [
+          15,
+          15,
+          180,
+          45
+        ],
+        [
+          15,
+          60,
+          220,
+          90
+        ]
+      ],
+      "foreground": [
+        0,
+        0,
+        0
+      ],
+      "background": [
+        255,
+        255,
+        255
+      ]
+    },
+    {
+      "case": "clipped",
+      "ground_truth": "clipped_text",
+      "predicted": "clipped_text",
+      "correct": true,
+      "seconds": 0.005299,
+      "geometry": [
+        [
+          15,
+          15,
+          360,
+          45
+        ],
+        [
+          15,
+          60,
+          220,
+          90
+        ]
+      ],
+      "foreground": [
+        0,
+        0,
+        0
+      ],
+      "background": [
+        255,
+        255,
+        255
+      ]
+    },
+    {
+      "case": "overlap",
+      "ground_truth": "overlap",
+      "predicted": "overlap",
+      "correct": true,
+      "seconds": 0.006048,
+      "geometry": [
+        [
+          15,
+          15,
+          190,
+          45
+        ],
+        [
+          95,
+          30,
+          260,
+          60
+        ]
+      ],
+      "foreground": [
+        0,
+        0,
+        0
+      ],
+      "background": [
+        255,
+        255,
+        255
+      ]
+    },
+    {
+      "case": "low_contrast_error",
+      "ground_truth": "low_contrast_error",
+      "predicted": "low_contrast_error",
+      "correct": true,
+      "seconds": 0.004813,
+      "geometry": [
+        [
+          15,
+          15,
+          180,
+          45
+        ],
+        [
+          15,
+          60,
+          220,
+          90
+        ]
+      ],
+      "foreground": [
+        242,
+        242,
+        242
+      ],
+      "background": [
+        255,
+        255,
+        255
+      ]
+    },
+    {
+      "case": "near_touch",
+      "ground_truth": "none",
+      "predicted": "none",
+      "correct": true,
+      "seconds": 0.004896,
+      "geometry": [
+        [
+          15,
+          15,
+          190,
+          45
+        ],
+        [
+          191,
+          15,
+          295,
+          45
+        ]
+      ],
+      "foreground": [
+        0,
+        0,
+        0
+      ],
+      "background": [
+        255,
+        255,
+        255
+      ]
+    },
+    {
+      "case": "dark_legible",
+      "ground_truth": "none",
+      "predicted": "none",
+      "correct": true,
+      "seconds": 0.016085,
+      "geometry": [
+        [
+          15,
+          15,
+          180,
+          45
+        ],
+        [
+          15,
+          60,
+          220,
+          90
+        ]
+      ],
+      "foreground": [
+        255,
+        255,
+        255
+      ],
+      "background": [
+        20,
+        20,
+        20
+      ]
+    }
+  ],
+  "scores": {
+    "clipped_text": {
+      "tp": 1,
+      "fp": 0,
+      "fn": 0,
+      "precision": 1.0,
+      "recall": 1.0
+    },
+    "low_contrast_error": {
+      "tp": 1,
+      "fp": 0,
+      "fn": 0,
+      "precision": 1.0,
+      "recall": 1.0
+    },
+    "none": {
+      "tp": 3,
+      "fp": 0,
+      "fn": 0,
+      "precision": 1.0,
+      "recall": 1.0
+    },
+    "overlap": {
+      "tp": 1,
+      "fp": 0,
+      "fn": 0,
+      "precision": 1.0,
+      "recall": 1.0
+    }
+  },
+  "passed": 6,
+  "total": 6
+}
