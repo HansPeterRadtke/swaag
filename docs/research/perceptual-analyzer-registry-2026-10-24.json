@@ -226,5 +226,22 @@
       "correct": null,
       "status": "candidate_not_benchmarked"
     }
-  ]
+  ],
+  "second_continuation_2026_10_24": {
+    "source": "perceptual-browser-20261024/firefox_ocr_results.json",
+    "browser": "Firefox 146.0, eight source-authored true browser PNGs; seven command timeouts after image writes",
+    "ocr": "Tesseract 5.3.4 PSM6",
+    "initial_binary_correct": 6,
+    "total": 8,
+    "false_positives": [
+      "intentional_ellipsis",
+      "large_text_reflow"
+    ],
+    "posthoc_whitespace_normalized_correct": 7,
+    "posthoc_remains_false_positive": [
+      "intentional_ellipsis"
+    ],
+    "vlm_cpu": "SmolVLM2 500M Q4 single request timed out without confirmed response; ambiguous and not replayed",
+    "acceptance": "not_accepted"
+  }
 }

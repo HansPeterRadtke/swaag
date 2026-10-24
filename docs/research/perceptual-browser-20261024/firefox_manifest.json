@@ -1,0 +1,137 @@
+{
+  "date": "2026-10-24",
+  "gold_is_from_authorized_fixture_source_not_prediction": true,
+  "browser": "Firefox 146.0 headless isolated profiles",
+  "viewport_px": [
+    540,
+    310
+  ],
+  "cases": [
+    {
+      "case": "clean",
+      "gold": "none",
+      "expected_text": "System ready",
+      "source": "clean.html",
+      "image": "clean-firefox.png",
+      "ground_reason": "baseline visible text",
+      "action": "existing_not_repeated",
+      "image_pixels": [
+        540,
+        310
+      ],
+      "bytes": 13578
+    },
+    {
+      "case": "clipped",
+      "gold": "clipped_text",
+      "expected_text": "System ready for maintenance",
+      "source": "clipped.html",
+      "image": "clipped-firefox.png",
+      "ground_reason": "white-space nowrap extends beyond fixed-width clipped panel without alternate access",
+      "action": "timeout",
+      "seconds": 16.36,
+      "error": "Command '['nice', '-n', '15', 'firefox', '--headless', '--no-remote', '--profile', '/data/var/tmp/vi",
+      "image_pixels": [
+        540,
+        310
+      ],
+      "bytes": 14279
+    },
+    {
+      "case": "overlap",
+      "gold": "overlap",
+      "expected_text": "System ready",
+      "source": "overlap.html",
+      "image": "overlap-firefox.png",
+      "ground_reason": "two absolute-positioned texts share painted region",
+      "action": "timeout",
+      "seconds": 16.38,
+      "error": "Command '['nice', '-n', '15', 'firefox', '--headless', '--no-remote', '--profile', '/data/var/tmp/vi",
+      "image_pixels": [
+        540,
+        310
+      ],
+      "bytes": 14795
+    },
+    {
+      "case": "low_contrast",
+      "gold": "low_contrast",
+      "expected_text": "System ready",
+      "source": "low_contrast.html",
+      "image": "low_contrast-firefox.png",
+      "ground_reason": "near-white foreground on white background",
+      "action": "timeout",
+      "seconds": 16.33,
+      "error": "Command '['nice', '-n', '15', 'firefox', '--headless', '--no-remote', '--profile', '/data/var/tmp/vi",
+      "image_pixels": [
+        540,
+        310
+      ],
+      "bytes": 11562
+    },
+    {
+      "case": "dark_theme",
+      "gold": "none",
+      "expected_text": "System ready",
+      "source": "dark_theme.html",
+      "image": "dark_theme-firefox.png",
+      "ground_reason": "white-on-dark retains contrast",
+      "action": "timeout",
+      "seconds": 16.47,
+      "error": "Command '['nice', '-n', '15', 'firefox', '--headless', '--no-remote', '--profile', '/data/var/tmp/vi",
+      "image_pixels": [
+        540,
+        310
+      ],
+      "bytes": 13561
+    },
+    {
+      "case": "right_aligned",
+      "gold": "none",
+      "expected_text": "Ready",
+      "source": "right_aligned.html",
+      "image": "right_aligned-firefox.png",
+      "ground_reason": "valid right-aligned visible short text",
+      "action": "timeout",
+      "seconds": 16.31,
+      "error": "Command '['nice', '-n', '15', 'firefox', '--headless', '--no-remote', '--profile', '/data/var/tmp/vi",
+      "image_pixels": [
+        540,
+        310
+      ],
+      "bytes": 12995
+    },
+    {
+      "case": "intentional_ellipsis",
+      "gold": "none",
+      "expected_text": "System ready for maintenance",
+      "source": "intentional_ellipsis.html",
+      "image": "intentional_ellipsis-firefox.png",
+      "ground_reason": "explicit visual truncation with title attribute exposing complete text",
+      "action": "timeout",
+      "seconds": 16.16,
+      "error": "Command '['nice', '-n', '15', 'firefox', '--headless', '--no-remote', '--profile', '/data/var/tmp/vi",
+      "image_pixels": [
+        540,
+        310
+      ],
+      "bytes": 13930
+    },
+    {
+      "case": "large_text_reflow",
+      "gold": "none",
+      "expected_text": "System ready for maintenance",
+      "source": "large_text_reflow.html",
+      "image": "large_text_reflow-firefox.png",
+      "ground_reason": "larger text fully wraps into taller box",
+      "action": "timeout",
+      "seconds": 16.37,
+      "error": "Command '['nice', '-n', '15', 'firefox', '--headless', '--no-remote', '--profile', '/data/var/tmp/vi",
+      "image_pixels": [
+        540,
+        310
+      ],
+      "bytes": 18302
+    }
+  ]
+}

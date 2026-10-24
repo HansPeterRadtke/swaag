@@ -1,0 +1,106 @@
+{
+  "method": "Firefox 146.0 captured screenshots; Tesseract 5.3.4 PSM6; separate intended text contract; 8 cases; not blinded holdout",
+  "cases": [
+    {
+      "case": "clean",
+      "gold": "none",
+      "binary_gold": "none",
+      "ocr_prediction": "none",
+      "correct": true,
+      "ocr": "Operations control\nSystem ready\nPressure: 240 kPa",
+      "region_dynamic_range": 222.0,
+      "seconds": 3.055,
+      "whitespace_normalized_prediction": "none",
+      "whitespace_normalized_correct": true
+    },
+    {
+      "case": "clipped",
+      "gold": "clipped_text",
+      "binary_gold": "defect",
+      "ocr_prediction": "defect",
+      "correct": true,
+      "ocr": "Operations control\nSystem ready for mair)\nPressure: 240 kPa",
+      "region_dynamic_range": 230.0,
+      "seconds": 4.198,
+      "whitespace_normalized_prediction": "defect",
+      "whitespace_normalized_correct": true
+    },
+    {
+      "case": "overlap",
+      "gold": "overlap",
+      "binary_gold": "defect",
+      "ocr_prediction": "defect",
+      "correct": true,
+      "ocr": "Operations control\nAMPRERANERSM\nPressure: 240 kPa",
+      "region_dynamic_range": 232.0,
+      "seconds": 1.522,
+      "whitespace_normalized_prediction": "defect",
+      "whitespace_normalized_correct": true
+    },
+    {
+      "case": "low_contrast",
+      "gold": "low_contrast",
+      "binary_gold": "defect",
+      "ocr_prediction": "defect",
+      "correct": true,
+      "ocr": "Operations control",
+      "region_dynamic_range": 17.0,
+      "seconds": 2.19,
+      "whitespace_normalized_prediction": "defect",
+      "whitespace_normalized_correct": true
+    },
+    {
+      "case": "dark_theme",
+      "gold": "none",
+      "binary_gold": "none",
+      "ocr_prediction": "none",
+      "correct": true,
+      "ocr": "a\nOperations control\nSystem ready\nPressure: 240 kPa",
+      "region_dynamic_range": 205.0,
+      "seconds": 4.901,
+      "whitespace_normalized_prediction": "none",
+      "whitespace_normalized_correct": true
+    },
+    {
+      "case": "right_aligned",
+      "gold": "none",
+      "binary_gold": "none",
+      "ocr_prediction": "none",
+      "correct": true,
+      "ocr": "Operations control\nReady\nPressure: 240 kPa",
+      "region_dynamic_range": 148.1,
+      "seconds": 4.39,
+      "whitespace_normalized_prediction": "none",
+      "whitespace_normalized_correct": true
+    },
+    {
+      "case": "intentional_ellipsis",
+      "gold": "none",
+      "binary_gold": "none",
+      "ocr_prediction": "defect",
+      "correct": false,
+      "ocr": "Operations control\nSystem ready for\nPressure: 240 kPa",
+      "region_dynamic_range": 227.0,
+      "seconds": 2.73,
+      "whitespace_normalized_prediction": "defect",
+      "whitespace_normalized_correct": false
+    },
+    {
+      "case": "large_text_reflow",
+      "gold": "none",
+      "binary_gold": "none",
+      "ocr_prediction": "defect",
+      "correct": false,
+      "ocr": "Operations control\nSystem ready for\nmaintenance\nPressure: 240 kPa",
+      "region_dynamic_range": 232.0,
+      "seconds": 3.877,
+      "whitespace_normalized_prediction": "none",
+      "whitespace_normalized_correct": true
+    }
+  ],
+  "accuracy": 0.75,
+  "seconds_sum": 26.863,
+  "whitespace_normalized_correct": 7,
+  "whitespace_normalized_total": 8,
+  "normalization_note": "Whitespace folding added after viewing initial eight predictions; development-set diagnostic only, not heldout accuracy"
+}
