@@ -1,0 +1,317 @@
+{
+  "task_receipt_date": "2026-10-24",
+  "conclusion": "NO universally qualified GUI/diagram/3D/video visual acceptance model; several narrow instrumented deterministic methods promising but require genuine independent verification",
+  "raw_local_evidence_sha256": {
+    "rapidocr": "47d7406b38b9ef79d742aeb5135d2bc5f2a14be1994722947e2d18c5c3fec51e",
+    "firefox_dom": "f10c1a86eed775426eef81e44442b618537c60e2e714cc68e03476e5b773f7fc",
+    "real_video_frame_continuity": "43add0499daf0abc730188a088f53a1530ee4d844dee7266d7799019e3c1fab7",
+    "independent_diagram_source_ocr": "aa39fbb662e53f44e097d49b9dc1d08904c9eab9116e48406a17493ea5a4df10",
+    "CLIP_patch_memory": "9c767701b389734a09a93396c1fac9be8e711c2207e443cb4c8f75202799b511"
+  },
+  "rapidocr_vs_tesseract": {
+    "rapidocr_version": {
+      "model": "RapidOCR ONNXRuntime 1.2.3",
+      "numpy": "1.26.4",
+      "onnxruntime_version": "1.17.0",
+      "engine": "RapidOCR default text detection recognition models",
+      "min_text_chars": 2,
+      "flag_median_confidence_below": 65,
+      "flag_any_region_contrast_below_ratio": 4.5,
+      "minimum_words_for_confidence": 2,
+      "tuning": "none: previous Tesseract comparator exact thresholds, locked before predictions",
+      "inference": "CPU single-thread native ONNX"
+    },
+    "evaluated_screenshots": 70,
+    "cpu_wall_s": 2309.504,
+    "scores": {
+      "dev_layout": {
+        "counts": {
+          "TP": 7,
+          "FP": 3,
+          "TN": 10,
+          "FN": 6,
+          "ABSTAIN": 0
+        },
+        "precision": 0.7,
+        "recall": 0.5384615384615384
+      },
+      "dev_contrast": {
+        "counts": {
+          "TP": 4,
+          "FP": 10,
+          "TN": 27,
+          "FN": 0,
+          "ABSTAIN": 0
+        },
+        "precision": 0.2857142857142857,
+        "recall": 1.0
+      },
+      "test_layout": {
+        "counts": {
+          "TP": 2,
+          "FP": 1,
+          "TN": 2,
+          "FN": 1,
+          "ABSTAIN": 0
+        },
+        "precision": 0.6666666666666666,
+        "recall": 0.6666666666666666
+      },
+      "test_contrast": {
+        "counts": {
+          "TP": 2,
+          "FP": 6,
+          "TN": 8,
+          "FN": 0,
+          "ABSTAIN": 0
+        },
+        "precision": 0.25,
+        "recall": 1.0
+      }
+    },
+    "prior_warning": "benchmark labels often refer to offscreen full-page DOM; scores are not screenshot-visible classification reliability"
+  },
+  "firefox_dom_real_site_l1": {
+    "browser": "Firefox 146/geckodriver 0.36.0, real static archived UIJudgeBench website snapshots, locator given to predictor",
+    "cases": 32,
+    "split_scores": {
+      "dev": {
+        "n": 26,
+        "counts": {
+          "TP": 9,
+          "FP": 0,
+          "TN": 13,
+          "FN": 4,
+          "ABSTAIN": 0
+        },
+        "precision": 1.0,
+        "recall": 0.6923076923076923
+      },
+      "test": {
+        "n": 6,
+        "counts": {
+          "TP": 2,
+          "FP": 0,
+          "TN": 3,
+          "FN": 1,
+          "ABSTAIN": 0
+        },
+        "precision": 1.0,
+        "recall": 0.6666666666666666
+      }
+    },
+    "criterion_scores": {
+      "dev_redecheck:element-protrusion": {
+        "TP": 7,
+        "FP": 0,
+        "TN": 7,
+        "FN": 0
+      },
+      "dev_redecheck:viewport-protrusion": {
+        "TP": 2,
+        "FP": 0,
+        "TN": 6,
+        "FN": 4
+      },
+      "test_redecheck:element-protrusion": {
+        "TP": 2,
+        "FP": 0,
+        "TN": 2,
+        "FN": 0
+      },
+      "test_redecheck:viewport-protrusion": {
+        "TP": 0,
+        "FP": 0,
+        "TN": 1,
+        "FN": 1
+      }
+    },
+    "model_style": "Browser computed-scroll geometry, no vision model",
+    "failure": "documentElement.scrollWidth misses target protrusion if ancestor clips it; element getBoundingClientRect proves those lengths, but post-hoc rule not heldout verified",
+    "not_image_only": true
+  },
+  "diagram_mmu_literal_labels": {
+    "source": "Diagram-MMU testmini, 300 independently curated source/code diagrams in 6 categories",
+    "syntax_eligible_diagrams": 37,
+    "gold_literal_node_labels": 134,
+    "psm6": {
+      "sampled_diagrams": 37,
+      "scored_diagrams": 37,
+      "source_label_instances": 134,
+      "exact_labels_recovered": 42,
+      "micro_recall": 0.31343283582089554,
+      "all_labels_found_diagram_fraction": 0.21621621621621623,
+      "mean_per_diagram_recall": 0.2868404118404118,
+      "total_inference_seconds": 28.34
+    },
+    "psm11": {
+      "sampled_diagrams": 37,
+      "scored_diagrams": 37,
+      "source_label_instances": 134,
+      "exact_labels_recovered": 30,
+      "micro_recall": 0.22388059701492538,
+      "all_labels_found_diagram_fraction": 0.08108108108108109,
+      "mean_per_diagram_recall": 0.20141570141570142,
+      "total_inference_seconds": 24.84
+    },
+    "limit": "Source code parsed with strict simple-label matcher; labels may not be legible at rendered resolution; not an entire diagram correctness test"
+  },
+  "real_render_video_controlled_frame_edits": {
+    "source_media_families": 2,
+    "delivery_encodings": 4,
+    "windows": 8,
+    "cases": 48,
+    "approved_hold_vs_freeze_identical_pixel_pairs": 8,
+    "scores": {
+      "has_three_or_more_identical_frames": {
+        "all": {
+          "n_cases": 48,
+          "TP": 8,
+          "FP": 8,
+          "FN": 16,
+          "TN": 16,
+          "precision": 0.5,
+          "recall": 0.3333333333333333
+        },
+        "observable_only_excluding_approved_cuts_and_holds": {
+          "n_cases": 32,
+          "TP": 8,
+          "FP": 0,
+          "FN": 16,
+          "TN": 8,
+          "precision": 1.0,
+          "recall": 0.3333333333333333
+        }
+      },
+      "has_diff_spike_six_mad": {
+        "all": {
+          "n_cases": 48,
+          "TP": 24,
+          "FP": 24,
+          "FN": 0,
+          "TN": 0,
+          "precision": 0.5,
+          "recall": 1.0
+        },
+        "observable_only_excluding_approved_cuts_and_holds": {
+          "n_cases": 32,
+          "TP": 24,
+          "FP": 8,
+          "FN": 0,
+          "TN": 0,
+          "precision": 0.75,
+          "recall": 1.0
+        }
+      },
+      "reference_changed": {
+        "all": {
+          "n_cases": 48,
+          "TP": 24,
+          "FP": 16,
+          "FN": 0,
+          "TN": 8,
+          "precision": 0.6,
+          "recall": 1.0
+        },
+        "observable_only_excluding_approved_cuts_and_holds": {
+          "n_cases": 32,
+          "TP": 24,
+          "FP": 0,
+          "FN": 0,
+          "TN": 8,
+          "precision": 1.0,
+          "recall": 1.0
+        }
+      }
+    },
+    "source_receipts": [
+      {
+        "name": "forklift_fullhd",
+        "sha256": "bfb0619f114b2aa5bbc5a385614cc4d33ad330e5b94124d8140ead6ee169de96",
+        "bytes": 4873819,
+        "decoded_window_offsets": [
+          30,
+          160
+        ]
+      },
+      {
+        "name": "industrial_pack_fullhd",
+        "sha256": "4176447d01ad9692211b755dc7f299ce6b9250234c94763ab4cb3a7696f065ce",
+        "bytes": 9777757,
+        "decoded_window_offsets": [
+          30,
+          160
+        ]
+      },
+      {
+        "name": "forklift_published_720",
+        "sha256": "a84ad910f05f9e1f2487bdadd44fe48b2923cfd5a5416792f58ad7a9cf64e0ec",
+        "bytes": 730148,
+        "decoded_window_offsets": [
+          30,
+          160
+        ]
+      },
+      {
+        "name": "industrial_pack_published_720",
+        "sha256": "90d1e14bfab23841299cee1feb0377f62b9d7773b56ed30903f6c37d232655aa",
+        "bytes": 2014016,
+        "decoded_window_offsets": [
+          30,
+          160
+        ]
+      }
+    ],
+    "ground_truth": "known exact deliberate frame edits plus explicitly approved editorial exceptions, NOT human judgements of authentic quality",
+    "runtime_s": 30.61
+  },
+  "clip_local_patches_on_real_industrial_photos": {
+    "vision_checkpoint": "openai/clip-vit-base-patch32 CPU fp32",
+    "technique": "CLIP vision last_hidden_state patch tokens 95th percentile one-class nearest normal; NOT PatchCore",
+    "calibration_normals": 4,
+    "heldout_normals": 4,
+    "anomalies": 10,
+    "TP": 1,
+    "FP": 0,
+    "TN": 4,
+    "FN": 9,
+    "precision": 1.0,
+    "recall": 0.1,
+    "AUROC": 0.725,
+    "runtime_seconds": 36.227,
+    "limit": "not official PatchCore; CLIP patches with four reference samples, and MVTec one category not rendered 3D mechanical physical correctness"
+  },
+  "primary_evidence": [
+    {
+      "source": "ScreenParse ICML 2026",
+      "url": "https://proceedings.mlr.press/v306/gurbuz26a.html",
+      "status": "author-reported; ScreenVLM untested locally"
+    },
+    {
+      "source": "Diagram-MMU ECCV 2026",
+      "url": "https://vi-ocean.github.io/projects/diagram-mmu/index.html",
+      "status": "benchmark results author-reported"
+    },
+    {
+      "source": "PatchCore CVPR 2022",
+      "url": "https://openaccess.thecvf.com/content/CVPR2022/html/Roth_Towards_Total_Recall_in_Industrial_Anomaly_Detection_CVPR_2022_paper.html",
+      "status": "official method untested here"
+    },
+    {
+      "source": "EfficientAD WACV 2024",
+      "url": "https://openaccess.thecvf.com/content/WACV2024/html/Batzner_EfficientAD_Accurate_Visual_Anomaly_Detection_at_Millisecond-Level_Latencies_WACV_2024_paper.html",
+      "status": "official method untested here"
+    },
+    {
+      "source": "CGVQM+D Intel 2025",
+      "url": "https://www.intel.com/content/www/us/en/developer/articles/technical/cgvqm-d-computer-graphics-video-quality.html",
+      "status": "matched-reference perceptual rendered video metric untested here"
+    },
+    {
+      "source": "NR frame freezing LIVE Mobile 2019",
+      "url": "https://pmc.ncbi.nlm.nih.gov/articles/PMC6864624/",
+      "status": "subjective video evidence not downloaded; original dataset requires request"
+    }
+  ],
+  "data_retention": "External licensed/raw images and videos are not included in this Git commit. Input SHA stored, rerun scripts independent of published report."
+}

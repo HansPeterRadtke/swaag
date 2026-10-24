@@ -243,5 +243,18 @@
     ],
     "vlm_cpu": "SmolVLM2 500M Q4 single request timed out without confirmed response; ambiguous and not replayed",
     "acceptance": "not_accepted"
+  },
+  "next_continuation_2026_10_24": {
+    "status": "PARTIAL - no universal accepted visual QA gate",
+    "detailed_report": "perceptual-analyzers-real-media-continuation-2026-10-24.md",
+    "aggregate_evidence": "perceptual-visual-continuation-evidence-2026-10-24.json",
+    "Tesseract_and_RapidOCR": "Both OCR image-only confidence/contrast heuristics mislabel external real-site benchmark, with 12/16 positive targets offscreen; metrics not standalone fair screenshot perception.",
+    "Firefox_dom_clipping": "nine real externally labelled clipped controls found, nine clean accepted; target selector provided; no proof beyond small browser/site set",
+    "Firefox_dom_viewport_protrusion": "two of seven protrusions detected; five misses from ancestor clipping despite target bounds over window; no false positives on seven controls",
+    "Diagram_MMUTikZ_labels": "37 externally sourced eligible diagrams, 134 source labels; Tesseract PSM6 42 matched, PSM11 30; source/parser limitation, not full diagram correctness",
+    "CLIP_patch_memory": "one of ten real industrial anomalies detected, zero false alarms among four normal holdouts; not official PatchCore",
+    "Real_3D_videos": "48 controlled real-source frame-edit cases, no-reference signal thresholds unreliable; exact original timeline perfect only on nonapproved edits with a trusted matching source; valid holds pixel-identical to freeze",
+    "primary_paper_findings": "ScreenVLM ICML 2026 is element-parser; Diagram-MMU reports Qwen3-VL 8B DQA 47.12%; official PatchCore 99.6 image AUROC is on different MVTec AD classes; EfficientAD is pretrained industrial specialist; CGVQM matched-reference rendered-quality metric",
+    "reliability_verdict": "Unqualified until externally independently visible verified defects plus real CG machinery/video heldouts and actual model comparisons are complete"
   }
 }
