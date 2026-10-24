@@ -1,0 +1,353 @@
+{
+  "revision": "2026-10-24-grammar-aux-predeclared-v1",
+  "training_environment": {
+    "torch": "2.10.0+cpu",
+    "device": "CPU",
+    "available_threads": 1
+  },
+  "model": "single-layer GRU 16d embed 32d hidden, LM+aux heads all conditions",
+  "corpus": "fixed eight-token generated agreement language, disjoint lemma-pair splits",
+  "splits": {
+    "train": 192,
+    "validation": 48,
+    "test": 60
+  },
+  "split_pairs": {
+    "train": [
+      [
+        "horse",
+        "fox"
+      ],
+      [
+        "dog",
+        "bird"
+      ],
+      [
+        "bird",
+        "bird"
+      ],
+      [
+        "cat",
+        "fox"
+      ],
+      [
+        "cat",
+        "horse"
+      ],
+      [
+        "horse",
+        "bird"
+      ],
+      [
+        "bird",
+        "dog"
+      ],
+      [
+        "horse",
+        "cat"
+      ],
+      [
+        "fox",
+        "fox"
+      ],
+      [
+        "bird",
+        "fox"
+      ],
+      [
+        "fox",
+        "dog"
+      ],
+      [
+        "bird",
+        "horse"
+      ],
+      [
+        "bird",
+        "cat"
+      ],
+      [
+        "dog",
+        "horse"
+      ],
+      [
+        "fox",
+        "horse"
+      ],
+      [
+        "fox",
+        "bird"
+      ]
+    ],
+    "validation": [
+      [
+        "cat",
+        "dog"
+      ],
+      [
+        "horse",
+        "dog"
+      ],
+      [
+        "dog",
+        "dog"
+      ],
+      [
+        "cat",
+        "cat"
+      ]
+    ],
+    "test": [
+      [
+        "fox",
+        "cat"
+      ],
+      [
+        "dog",
+        "fox"
+      ],
+      [
+        "cat",
+        "bird"
+      ],
+      [
+        "dog",
+        "cat"
+      ],
+      [
+        "horse",
+        "horse"
+      ]
+    ]
+  },
+  "conditions": "plain no aux loss; syntax real generated labels; shuffled random syntax labels, same histogram",
+  "optimizer": "AdamW lr 0.006 weight_decay 0",
+  "epochs": 5,
+  "batch": 32,
+  "aux_weight": 0.3,
+  "predeclared_seeds": [
+    11,
+    23,
+    41
+  ],
+  "results": [
+    {
+      "mode": "plain",
+      "seed": 11,
+      "train_examples": 192,
+      "epochs": 5,
+      "updates": 30,
+      "total_tokens_seen": 6720,
+      "architecture_parameters": 6110,
+      "train_seconds": 0.059,
+      "validation": {
+        "next_token_cross_entropy": 1.51017,
+        "verb_number_accuracy": 0.5
+      },
+      "heldout_test": {
+        "next_token_cross_entropy": 1.35485,
+        "verb_number_accuracy": 0.5
+      }
+    },
+    {
+      "mode": "syntax",
+      "seed": 11,
+      "train_examples": 192,
+      "epochs": 5,
+      "updates": 30,
+      "total_tokens_seen": 6720,
+      "architecture_parameters": 6110,
+      "train_seconds": 0.051,
+      "validation": {
+        "next_token_cross_entropy": 1.53331,
+        "verb_number_accuracy": 0.5
+      },
+      "heldout_test": {
+        "next_token_cross_entropy": 1.38781,
+        "verb_number_accuracy": 0.5
+      }
+    },
+    {
+      "mode": "shuffled",
+      "seed": 11,
+      "train_examples": 192,
+      "epochs": 5,
+      "updates": 30,
+      "total_tokens_seen": 6720,
+      "architecture_parameters": 6110,
+      "train_seconds": 0.051,
+      "validation": {
+        "next_token_cross_entropy": 1.52862,
+        "verb_number_accuracy": 0.625
+      },
+      "heldout_test": {
+        "next_token_cross_entropy": 1.38105,
+        "verb_number_accuracy": 0.5
+      }
+    },
+    {
+      "mode": "plain",
+      "seed": 23,
+      "train_examples": 192,
+      "epochs": 5,
+      "updates": 30,
+      "total_tokens_seen": 6720,
+      "architecture_parameters": 6110,
+      "train_seconds": 0.051,
+      "validation": {
+        "next_token_cross_entropy": 1.36772,
+        "verb_number_accuracy": 0.5
+      },
+      "heldout_test": {
+        "next_token_cross_entropy": 1.28326,
+        "verb_number_accuracy": 0.5
+      }
+    },
+    {
+      "mode": "syntax",
+      "seed": 23,
+      "train_examples": 192,
+      "epochs": 5,
+      "updates": 30,
+      "total_tokens_seen": 6720,
+      "architecture_parameters": 6110,
+      "train_seconds": 0.052,
+      "validation": {
+        "next_token_cross_entropy": 1.33566,
+        "verb_number_accuracy": 0.5
+      },
+      "heldout_test": {
+        "next_token_cross_entropy": 1.23849,
+        "verb_number_accuracy": 0.5
+      }
+    },
+    {
+      "mode": "shuffled",
+      "seed": 23,
+      "train_examples": 192,
+      "epochs": 5,
+      "updates": 30,
+      "total_tokens_seen": 6720,
+      "architecture_parameters": 6110,
+      "train_seconds": 0.054,
+      "validation": {
+        "next_token_cross_entropy": 1.3458,
+        "verb_number_accuracy": 0.5
+      },
+      "heldout_test": {
+        "next_token_cross_entropy": 1.27289,
+        "verb_number_accuracy": 0.5
+      }
+    },
+    {
+      "mode": "plain",
+      "seed": 41,
+      "train_examples": 192,
+      "epochs": 5,
+      "updates": 30,
+      "total_tokens_seen": 6720,
+      "architecture_parameters": 6110,
+      "train_seconds": 0.049,
+      "validation": {
+        "next_token_cross_entropy": 1.37407,
+        "verb_number_accuracy": 0.5
+      },
+      "heldout_test": {
+        "next_token_cross_entropy": 1.25961,
+        "verb_number_accuracy": 0.5
+      }
+    },
+    {
+      "mode": "syntax",
+      "seed": 41,
+      "train_examples": 192,
+      "epochs": 5,
+      "updates": 30,
+      "total_tokens_seen": 6720,
+      "architecture_parameters": 6110,
+      "train_seconds": 0.053,
+      "validation": {
+        "next_token_cross_entropy": 1.39198,
+        "verb_number_accuracy": 0.5
+      },
+      "heldout_test": {
+        "next_token_cross_entropy": 1.27129,
+        "verb_number_accuracy": 0.5
+      }
+    },
+    {
+      "mode": "shuffled",
+      "seed": 41,
+      "train_examples": 192,
+      "epochs": 5,
+      "updates": 30,
+      "total_tokens_seen": 6720,
+      "architecture_parameters": 6110,
+      "train_seconds": 0.053,
+      "validation": {
+        "next_token_cross_entropy": 1.39527,
+        "verb_number_accuracy": 0.5
+      },
+      "heldout_test": {
+        "next_token_cross_entropy": 1.27471,
+        "verb_number_accuracy": 0.5
+      }
+    }
+  ],
+  "summary": {
+    "plain": {
+      "next_token_cross_entropy": {
+        "mean": 1.29924,
+        "values": [
+          1.35485,
+          1.28326,
+          1.25961
+        ]
+      },
+      "verb_number_accuracy": {
+        "mean": 0.5,
+        "values": [
+          0.5,
+          0.5,
+          0.5
+        ]
+      }
+    },
+    "syntax": {
+      "next_token_cross_entropy": {
+        "mean": 1.2992,
+        "values": [
+          1.38781,
+          1.23849,
+          1.27129
+        ]
+      },
+      "verb_number_accuracy": {
+        "mean": 0.5,
+        "values": [
+          0.5,
+          0.5,
+          0.5
+        ]
+      }
+    },
+    "shuffled": {
+      "next_token_cross_entropy": {
+        "mean": 1.30955,
+        "values": [
+          1.38105,
+          1.27289,
+          1.27471
+        ]
+      },
+      "verb_number_accuracy": {
+        "mean": 0.5,
+        "values": [
+          0.5,
+          0.5,
+          0.5
+        ]
+      }
+    }
+  }
+}

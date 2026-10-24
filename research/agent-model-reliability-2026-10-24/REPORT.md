@@ -1,5 +1,7 @@
 # Agent Model Relevance and Reliability Research — measured continuation, 2026-10-24
 
+**October twenty-fourth second-pass continuation:** `SECOND_PASS_2026-10-24.md` is the latest measured conclusion and explicitly supersedes earlier counts and the earlier statement that no training-level auxiliary experiment had run. Original first-pass figures below remain a dated historical checkpoint and are not silently overwritten.
+
 ## Status and scope
 
 **PARTIAL.** The original checkpoint committed this morning had eight fixed cases and zero model judgments. The continuation executed a **bounded live pilot on the two existing Thor llama.cpp endpoints**, retained full request/output/usage evidence, implemented resource admission, and independently checked the evaluator. The continuation has **seven completed scored model trials** (six relevance, one fused factual extraction), **one separate unscored pilot**, and **five safety-gate refusals before a request**. No model was loaded, restarted, evicted, modified or trained. No new Calendar events were created. The research remains incomplete: one meaningful numeric/category paired difference is not a statistically valid ranking, and there are no completed local split-call pairs or error-correlation estimates.
