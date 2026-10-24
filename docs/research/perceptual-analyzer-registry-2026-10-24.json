@@ -272,5 +272,35 @@
       "Scry_holdout_SSIM": "157 of 186 tagged screens flagged, 41 of 63 no-tagged controls flagged, heldout balanced accuracy 59.7%, broad group-bootstrap uncertainty"
     },
     "candidate_gap": "ScreenVLM, UI-UX, trained PatchCore/EfficientAD, CGVQM not locally measured on relevant independent heldout cases; no human-verifiable machine/video general acceptance"
+  },
+  "w3c_axe_real_3d_VLM_and_screenvlm_2026_10_24": {
+    "status": "PARTIAL: no universal visual acceptance gate qualifies",
+    "source_report": "perceptual-model-and-standards-continuation-2026-10-24.md",
+    "aggregate": "perceptual-source-calibrated-evidence-2026-10-24.json",
+    "new_actual_local_models": {
+      "axe-core-4.14.0": "32 executed of 34 official W3C ACT contrast cases; seven correct failed, seven correct passed, nine correct inapplicable, one passed called inapplicable, eight executed inconclusive; two original scripted cases excluded",
+      "docling-project/ScreenVLM-v2": "pinned checkpoint CPU-only 316M parser, four actual real-site cropped UI targets with expected source text; zero of four expected texts recovered, two of four wellformed closing tags, average 273 seconds CPU, not trained as a defect classifier"
+    },
+    "independent_reanalysed_PUBLISHED_3D_judges": {
+      "source": "3D-DefectBench pinned external released model predictions and human silver/expert labels; author inference, NOT local VLM inference",
+      "five_matched_models": [
+        "claude-sonnet-4",
+        "gemini-2.5-pro",
+        "gpt-4.1",
+        "gpt-5",
+        "qwen3-vl-235b"
+      ],
+      "silver_mechanical_missing_parts": "47 positives in 368 assets; five model recalls 25.5\u201351.1%, precision 17.9\u201334.3%; FPs high",
+      "expert_adjudicated_missing_parts": "99 common assets with 31 positives; Gemini2.5 18 TP/19 FP, Qwen3VL235B 4 TP/9 FP, others worse tradeoffs",
+      "expert_original_dual_rater_agreement": "missing parts 76.8% over 99 dual-rater assets; label ceiling is itself uncertain"
+    },
+    "untested_candidates": [
+      "official trained PatchCore/EfficientAD on owner-generated renders",
+      "full-page ScreenVLM/OmniParser UI parsing with gold box/text coverage",
+      "full context GUI defect classifier UI-UX",
+      "NVIDIA physical-plausibility video evaluator on owner videos with H100-compatible runtime",
+      "CGVQM+D with approved reference and human-rated defects"
+    ],
+    "physically_plausible_3d_render_and_natural_video_motion_claims": "unverified, models are not accepted as standalone gates"
   }
 }

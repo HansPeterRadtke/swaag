@@ -1,0 +1,525 @@
+{
+  "date": "2026-10-24",
+  "state": "PARTIAL; no model qualifies for automatic GUI/video/industrial 3D approval",
+  "kind": "independent recomputation of released original VLM predictions versus external human defect reference, plus local version-pinned real axe-core and local ScreenVLM source parsing cases",
+  "source_sha256": {
+    "axe_run": "583a1c709320a640ea29e37c660752df1096adb37ee089c5504bf2238ceb5773",
+    "earlier_custom_checker": "ebe7d4994b109cf09c3fdf195f77c9e9f080711df41318f39d3e34fbca495203",
+    "ScreenVLM_model_file_manifest": "34698527c10ad127da05dce1bd18531f49c0da8fe405e4be6b146451e7a97850",
+    "ScreenVLM_input_run": "f208a3b3f9ae7b3d75f77099056aa495014ead50dc63fe15c091b3352930759c",
+    "3D_silver_comparable_runs": "b2d9e73c0e20de6bf5218eb04425861ff7a81c2b1dbdeee41b46d8dfa4731182",
+    "3D_expert_adjudicated": "adb5efaaa4405860b97e3e1519f3744000d10ae00b5e05d54ec0b9a312ed924a",
+    "3D_expert_prompt_cluster_bootstrap": "9d66337b31155c30daba61e74f1596c4f3408bbc8bd0e7eadbd95eace5a2c0e0"
+  },
+  "W3C_ACT_axe_core": {
+    "pin_version": "axe-core 4.14.0",
+    "source_bundle_sha256": "20c09fe157a8a34a30e241aaa1fcdade657734f08ab379ecfbeb7d45cc46e878",
+    "official_cases": 34,
+    "executed": 32,
+    "scripts_safely_excluded": 2,
+    "truth_to_reported": {
+      "passed->passed": 7,
+      "failed->failed": 7,
+      "inapplicable->inapplicable": 9,
+      "passed->inapplicable": 1,
+      "failed->cannot_tell": 4,
+      "passed->cannot_tell": 4,
+      "inapplicable->cannot_tell": 2
+    },
+    "correct_decided_cases": 23,
+    "pass_misclassified_inapplicable": 1,
+    "cannot_tell_including_excluded": 10,
+    "note": "Color-contrast is a real standard browser analyzer. Eight executed cases inconclusive, plus two script-bearing source cases intentionally excluded. No false violation in determinate reported cases; not a full WCAG certification."
+  },
+  "W3C_ACT_custom_previous": {
+    "counts": {
+      "TP": 5,
+      "FP": 1,
+      "FN": 0,
+      "TN": 6,
+      "ABSTAIN": 11,
+      "INAPPLICABLE_CORRECT": 7,
+      "INAPPLICABLE_WRONG": 4
+    },
+    "testcases": 34,
+    "purpose": "compare coverage against off-the-shelf ACT-aware axe engine, not certify custom checker"
+  },
+  "ScreenVLM_real_input_task_limited": {
+    "model": "docling-project/ScreenVLM v2 Apache2",
+    "repository_revision": "78df0cc8498bbea1a03eb2816056fc0a76d2f63d",
+    "source_model_bytes": 756008824,
+    "CPU_only": true,
+    "instruction": "Generate the screen representation for this UI:",
+    "cases": [
+      {
+        "source_item_sha256": "20e7b10e161f43b4c216ef082b39ee8bb81bec7367a6d89f29ed592ae2308dd7",
+        "status": "completed",
+        "seconds": 260.39,
+        "generated_plain_text": "",
+        "recovered_full_expected_label": false,
+        "well_formed_complete_screentag": true,
+        "predicted_location_tokens": 4,
+        "output_chars": 85,
+        "external_gold_violation": true
+      },
+      {
+        "source_item_sha256": "89d5e10f05cb7e393307418d2482ba785e5763e286a0efda4e11ff7fb01776b4",
+        "status": "completed",
+        "seconds": 242.72,
+        "generated_plain_text": "",
+        "recovered_full_expected_label": false,
+        "well_formed_complete_screentag": true,
+        "predicted_location_tokens": 4,
+        "output_chars": 83,
+        "external_gold_violation": false
+      },
+      {
+        "source_item_sha256": "fcd162afd4003f9e2e82706e8e24494c1d911c6d8a29ca66dba47340807a8642",
+        "status": "completed",
+        "seconds": 276.07,
+        "generated_plain_text": "<loc_400",
+        "recovered_full_expected_label": false,
+        "well_formed_complete_screentag": false,
+        "predicted_location_tokens": 94,
+        "output_chars": 1161,
+        "external_gold_violation": true
+      },
+      {
+        "source_item_sha256": "8416f76ad94bce1b35884d7249610467821839a2778441b681a1211234c0bca7",
+        "status": "completed",
+        "seconds": 312.64,
+        "generated_plain_text": "<loc_400",
+        "recovered_full_expected_label": false,
+        "well_formed_complete_screentag": false,
+        "predicted_location_tokens": 94,
+        "output_chars": 1164,
+        "external_gold_violation": false
+      }
+    ],
+    "test_cases": 4,
+    "gold_clipped": 2,
+    "gold_clean": 2,
+    "expected_labels_recovered": 0,
+    "complete_closed_screen_tags": 2,
+    "sum_CPU_seconds": 1091.82,
+    "mean_CPU_seconds": 272.95,
+    "observed_peak_rss_kb": 2929100,
+    "correctness": "Parse outputs are screen elements, not defect classifications; real small target crops outside full-web distribution. Only completed cases analyzed. CPU latency important."
+  },
+  "3D_DefectBench_human": {
+    "source": "3D-DefectBench aieval2026 pinned commit",
+    "revision": "94a1ce5b7fe4b46e0388b2593d4a6f3cd3421b77",
+    "silver_n_assets": 998,
+    "expert_adjudicated_n_assets": 99,
+    "categories_mechanical": [
+      "Land Vehicles",
+      "Air Vehicles",
+      "Robots",
+      "Water Vehicles",
+      "Tools",
+      "Technology & Electronics"
+    ],
+    "published_model_predictions_recomputed_locally_NOT_new_inference": true,
+    "comparability": "identical raw eight-view binary per-aspect seed-one prompt/evidence protocol for five models; Gemini3Pro excluded because duplicated configs cannot be fairly isolated",
+    "models": {
+      "claude-sonnet-4": {
+        "protocol": "8-view binary per-aspect released author predictions (historic provider versions)",
+        "silver_mechanical_missing": {
+          "n": 368,
+          "TP": 15,
+          "FP": 46,
+          "TN": 275,
+          "FN": 32,
+          "precision": 0.2459016393442623,
+          "recall": 0.3191489361702128,
+          "specificity": 0.8566978193146417,
+          "mcc": 0.15783441305300966
+        },
+        "expert_all_asset_missing": {
+          "n": 99,
+          "positive_gold": 31,
+          "TP": 7,
+          "FP": 11,
+          "FN": 24,
+          "TN": 57,
+          "precision": 0.3888888888888889,
+          "recall": 0.22580645161290322,
+          "specificity": 0.8382352941176471,
+          "mcc": 0.07700513795421217
+        },
+        "expert_mechanical_missing": {
+          "n": 30,
+          "positive_gold": 9,
+          "TP": 2,
+          "FP": 3,
+          "FN": 7,
+          "TN": 18,
+          "precision": 0.4,
+          "recall": 0.2222222222222222,
+          "specificity": 0.8571428571428571,
+          "mcc": 0.09759000729485331
+        },
+        "silver_geometry_macro_MCC": 0.07009134038120286,
+        "expert_geometry_macro_MCC": 0.08951653118388589
+      },
+      "gemini-2.5-pro": {
+        "protocol": "8-view binary per-aspect released author predictions (historic provider versions)",
+        "silver_mechanical_missing": {
+          "n": 368,
+          "TP": 24,
+          "FP": 110,
+          "TN": 211,
+          "FN": 23,
+          "precision": 0.1791044776119403,
+          "recall": 0.5106382978723404,
+          "specificity": 0.6573208722741433,
+          "mcc": 0.11650507331069615
+        },
+        "expert_all_asset_missing": {
+          "n": 99,
+          "positive_gold": 31,
+          "TP": 18,
+          "FP": 19,
+          "FN": 13,
+          "TN": 49,
+          "precision": 0.4864864864864865,
+          "recall": 0.5806451612903226,
+          "specificity": 0.7205882352941176,
+          "mcc": 0.288763113117719
+        },
+        "expert_mechanical_missing": {
+          "n": 30,
+          "positive_gold": 9,
+          "TP": 4,
+          "FP": 7,
+          "FN": 5,
+          "TN": 14,
+          "precision": 0.36363636363636365,
+          "recall": 0.4444444444444444,
+          "specificity": 0.6666666666666666,
+          "mcc": 0.10566112966540278
+        },
+        "silver_geometry_macro_MCC": 0.11163186903296615,
+        "expert_geometry_macro_MCC": 0.247034104817995
+      },
+      "gpt-4.1": {
+        "protocol": "8-view binary per-aspect released author predictions (historic provider versions)",
+        "silver_mechanical_missing": {
+          "n": 368,
+          "TP": 21,
+          "FP": 70,
+          "TN": 251,
+          "FN": 26,
+          "precision": 0.23076923076923078,
+          "recall": 0.44680851063829785,
+          "specificity": 0.7819314641744548,
+          "mcc": 0.17696318795852137
+        },
+        "expert_all_asset_missing": {
+          "n": 99,
+          "positive_gold": 31,
+          "TP": 14,
+          "FP": 19,
+          "FN": 17,
+          "TN": 49,
+          "precision": 0.42424242424242425,
+          "recall": 0.45161290322580644,
+          "specificity": 0.7205882352941176,
+          "mcc": 0.16941130349926678
+        },
+        "expert_mechanical_missing": {
+          "n": 30,
+          "positive_gold": 9,
+          "TP": 3,
+          "FP": 5,
+          "FN": 6,
+          "TN": 16,
+          "precision": 0.375,
+          "recall": 0.3333333333333333,
+          "specificity": 0.7619047619047619,
+          "mcc": 0.09869275424396536
+        },
+        "silver_geometry_macro_MCC": 0.08178068173484612,
+        "expert_geometry_macro_MCC": 0.11623452348208299
+      },
+      "gpt-5": {
+        "protocol": "8-view binary per-aspect released author predictions (historic provider versions)",
+        "silver_mechanical_missing": {
+          "n": 368,
+          "TP": 16,
+          "FP": 42,
+          "TN": 279,
+          "FN": 31,
+          "precision": 0.27586206896551724,
+          "recall": 0.3404255319148936,
+          "specificity": 0.8691588785046729,
+          "mcc": 0.19198423903878953
+        },
+        "expert_all_asset_missing": {
+          "n": 99,
+          "positive_gold": 31,
+          "TP": 6,
+          "FP": 5,
+          "FN": 25,
+          "TN": 63,
+          "precision": 0.5454545454545454,
+          "recall": 0.1935483870967742,
+          "specificity": 0.9264705882352942,
+          "mcc": 0.177111817294688
+        },
+        "expert_mechanical_missing": {
+          "n": 30,
+          "positive_gold": 9,
+          "TP": 1,
+          "FP": 1,
+          "FN": 8,
+          "TN": 20,
+          "precision": 0.5,
+          "recall": 0.1111111111111111,
+          "specificity": 0.9523809523809523,
+          "mcc": 0.11664236870396086
+        },
+        "silver_geometry_macro_MCC": 0.082072421974746,
+        "expert_geometry_macro_MCC": 0.10818691937587126
+      },
+      "qwen3-vl-235b": {
+        "protocol": "8-view binary per-aspect released author predictions (historic provider versions)",
+        "silver_mechanical_missing": {
+          "n": 368,
+          "TP": 12,
+          "FP": 23,
+          "TN": 298,
+          "FN": 35,
+          "precision": 0.34285714285714286,
+          "recall": 0.2553191489361702,
+          "specificity": 0.9283489096573209,
+          "mcc": 0.20896759366122578
+        },
+        "expert_all_asset_missing": {
+          "n": 99,
+          "positive_gold": 31,
+          "TP": 4,
+          "FP": 9,
+          "FN": 27,
+          "TN": 59,
+          "precision": 0.3076923076923077,
+          "recall": 0.12903225806451613,
+          "specificity": 0.8676470588235294,
+          "mcc": -0.004559758430471804
+        },
+        "expert_mechanical_missing": {
+          "n": 30,
+          "positive_gold": 9,
+          "TP": 0,
+          "FP": 2,
+          "FN": 9,
+          "TN": 19,
+          "precision": 0.0,
+          "recall": 0.0,
+          "specificity": 0.9047619047619048,
+          "mcc": -0.1749635530559413
+        },
+        "silver_geometry_macro_MCC": 0.058807323984308914,
+        "expert_geometry_macro_MCC": 0.0746207718762158
+      }
+    },
+    "expert_missing_parts_prompt_group_bootstrap_intervals": {
+      "claude-sonnet-4": {
+        "all_3d_expert": {
+          "recall_95pct_group_bootstrap": [
+            0.0769,
+            0.4054
+          ],
+          "precision_95pct_group_bootstrap": [
+            0.1667,
+            0.625
+          ],
+          "false_positive_rate_95pct_group_bootstrap": [
+            0.0694,
+            0.2687
+          ],
+          "prompt_groups": 50,
+          "bootstrap_replicates": 1000,
+          "seed": 20261024
+        },
+        "mechanical_expert": {
+          "recall_95pct_group_bootstrap": [
+            0.0,
+            0.5556
+          ],
+          "precision_95pct_group_bootstrap": [
+            0.0,
+            1.0
+          ],
+          "false_positive_rate_95pct_group_bootstrap": [
+            0.0,
+            0.35
+          ],
+          "prompt_groups": 15,
+          "bootstrap_replicates": 1000,
+          "seed": 20261024
+        }
+      },
+      "gemini-2.5-pro": {
+        "all_3d_expert": {
+          "recall_95pct_group_bootstrap": [
+            0.3846,
+            0.7715
+          ],
+          "precision_95pct_group_bootstrap": [
+            0.317,
+            0.6411
+          ],
+          "false_positive_rate_95pct_group_bootstrap": [
+            0.169,
+            0.4063
+          ],
+          "prompt_groups": 50,
+          "bootstrap_replicates": 1000,
+          "seed": 20261025
+        },
+        "mechanical_expert": {
+          "recall_95pct_group_bootstrap": [
+            0.1247,
+            0.8571
+          ],
+          "precision_95pct_group_bootstrap": [
+            0.125,
+            0.6
+          ],
+          "false_positive_rate_95pct_group_bootstrap": [
+            0.1249,
+            0.5652
+          ],
+          "prompt_groups": 15,
+          "bootstrap_replicates": 1000,
+          "seed": 20261025
+        }
+      },
+      "gpt-4.1": {
+        "all_3d_expert": {
+          "recall_95pct_group_bootstrap": [
+            0.2727,
+            0.6411
+          ],
+          "precision_95pct_group_bootstrap": [
+            0.2631,
+            0.6176
+          ],
+          "false_positive_rate_95pct_group_bootstrap": [
+            0.1525,
+            0.4118
+          ],
+          "prompt_groups": 50,
+          "bootstrap_replicates": 1000,
+          "seed": 20261026
+        },
+        "mechanical_expert": {
+          "recall_95pct_group_bootstrap": [
+            0.0,
+            0.7143
+          ],
+          "precision_95pct_group_bootstrap": [
+            0.0,
+            0.75
+          ],
+          "false_positive_rate_95pct_group_bootstrap": [
+            0.05,
+            0.45
+          ],
+          "prompt_groups": 15,
+          "bootstrap_replicates": 1000,
+          "seed": 20261026
+        }
+      },
+      "gpt-5": {
+        "all_3d_expert": {
+          "recall_95pct_group_bootstrap": [
+            0.0689,
+            0.3214
+          ],
+          "precision_95pct_group_bootstrap": [
+            0.2727,
+            0.8
+          ],
+          "false_positive_rate_95pct_group_bootstrap": [
+            0.0154,
+            0.1429
+          ],
+          "prompt_groups": 50,
+          "bootstrap_replicates": 1000,
+          "seed": 20261027
+        },
+        "mechanical_expert": {
+          "recall_95pct_group_bootstrap": [
+            0.0,
+            0.375
+          ],
+          "precision_95pct_group_bootstrap": [
+            0.0,
+            1.0
+          ],
+          "false_positive_rate_95pct_group_bootstrap": [
+            0.0,
+            0.1579
+          ],
+          "prompt_groups": 15,
+          "bootstrap_replicates": 1000,
+          "seed": 20261027
+        }
+      },
+      "qwen3-vl-235b": {
+        "all_3d_expert": {
+          "recall_95pct_group_bootstrap": [
+            0.0303,
+            0.2502
+          ],
+          "precision_95pct_group_bootstrap": [
+            0.0769,
+            0.5333
+          ],
+          "false_positive_rate_95pct_group_bootstrap": [
+            0.0448,
+            0.2344
+          ],
+          "prompt_groups": 50,
+          "bootstrap_replicates": 1000,
+          "seed": 20261028
+        },
+        "mechanical_expert": {
+          "recall_95pct_group_bootstrap": [
+            0.0,
+            0.0
+          ],
+          "precision_95pct_group_bootstrap": [
+            0.0,
+            0.0
+          ],
+          "false_positive_rate_95pct_group_bootstrap": [
+            0.0,
+            0.2964
+          ],
+          "prompt_groups": 15,
+          "bootstrap_replicates": 1000,
+          "seed": 20261028
+        }
+      }
+    }
+  },
+  "original_external_data_remains_in_var": true,
+  "caveats": [
+    "The released 3D prediction data are generated by authors, not inference performed on Nitro; historical model versions and public training contamination unknown.",
+    "Mechanical category selection exploratory and may combine vehicles, robotics, tools and electronics; geometry defects are human labels, not numerical engineering physics.",
+    "Only 99 golden assets common to all five baseline models, human labels are adjudicated but nonzero human disagreement and rare categories.",
+    "W3C ACT contains author-scripted and image-background cases; scripts excluded and proxy blocks network to protect system.",
+    "Small cropped target screenshots may remove important context for ScreenVLM; no extrapolation to normal full-page parsing.",
+    "NVIDIA physical plausibility video head reports approximately 80.52% bad recall and 31.33% good rejection on its heldout same-generator set, H100, not validated locally on machinery videos."
+  ],
+  "next_required": [
+    "Independent clean and physically impossible REAL mechanical CAD and render examples beyond generative text-to-3D source labels, with source geometry and multiview captures",
+    "Video model comparison on human temporal-discontinuity/real stutter annotations and approved timelines",
+    "ScreenVLM full-page and screenshot-only defect detector comparison with same developer-separate real-site holdout; parser output alone not acceptance",
+    "Official PatchCore/EfficientAD domain-trained industrial anomaly comparison on independent actual generated 3D textures",
+    "Cross-browser axe rule coverage, known intention for ellipsis and valid overlap exceptions"
+  ]
+}
