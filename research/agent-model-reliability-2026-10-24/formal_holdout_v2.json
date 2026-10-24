@@ -1,0 +1,56 @@
+[
+  {
+    "id":"complete-ledger-contrapositive",
+    "atoms":["approved","listed"],
+    "rules":[["approved","listed"]],
+    "observed":{"listed":false},
+    "target":"approved",
+    "source":"Policy: if batch Delta was approved, it must appear in the definitive complete approval ledger. The complete ledger has no entry for Delta. No one claims any lost ledger pages.",
+    "question":"Was batch Delta approved?"
+  },
+  {
+    "id":"incomplete-ledger-no-inference",
+    "atoms":["approved","receipt_exists","receipt_listed"],
+    "rules":[["approved","receipt_exists"]],
+    "observed":{"receipt_listed":false},
+    "target":"approved",
+    "source":"Policy: an approved batch always receives a receipt. The receipt registry is incomplete: it does not include every real receipt. The registry has no record for batch Echo. Nothing else establishes whether Echo was approved.",
+    "question":"Was batch Echo approved?"
+  },
+  {
+    "id":"quoted-pass-authoritative-fail",
+    "atoms":["passed"],
+    "rules":[],
+    "observed":{"passed":false},
+    "target":"passed",
+    "source":"A speaker said 'the build passed', but this was only a quotation of her claim. The authoritative completed test record says the build FAILED. The test record is the source of truth for build status.",
+    "question":"Did the build pass?"
+  },
+  {
+    "id":"light-on-does-not-imply-switch",
+    "atoms":["switch_on","lamp_lit"],
+    "rules":[["switch_on","lamp_lit"]],
+    "observed":{"lamp_lit":true},
+    "target":"switch_on",
+    "source":"A reliable rule says switching on the lamp makes it light up. The lamp is lit now, but nobody measured the switch. Other causes of illumination have not been ruled out.",
+    "question":"Is the switch on?"
+  },
+  {
+    "id":"reboot-conditional-affirmative",
+    "atoms":["restarted","cache_empty"],
+    "rules":[["restarted","cache_empty"]],
+    "observed":{"restarted":true},
+    "target":"cache_empty",
+    "source":"A reliable rule says every restart clears the cache completely. A trusted server log confirms that the server restarted. No later cache-writing activity occurred.",
+    "question":"Is the cache empty?"
+  },
+  {
+    "id":"two-implication-chain",
+    "atoms":["accepted","validated","published"],
+    "rules":[["accepted","validated"],["validated","published"]],
+    "observed":{"accepted":true},
+    "target":"published",
+    "source":"Two reliable system rules apply: every accepted report is validated, and every validated report is published. The trustworthy audit says report Foxtrot was accepted and these rules have no exceptions.",
+    "question":"Was report Foxtrot published?"
+  }
+]
