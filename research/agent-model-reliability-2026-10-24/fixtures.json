@@ -1,0 +1,10 @@
+[
+  {"id":"relevance-user-explicit-status","kind":"relevance","dimension":"user_answer","user_request":"Tell me the exact pending worker status, not a summary.","candidate":"Worker is blocked waiting on a missing database file.","gold":8,"tolerance":0,"judgments":[]},
+  {"id":"relevance-irrelevant-changelog","kind":"relevance","dimension":"user_answer","user_request":"Is the download finished?","candidate":"Last year's theme stylesheet was reformatted.","gold":0,"judgments":[]},
+  {"id":"relevance-worker-critical","kind":"relevance","dimension":"worker_quality","user_request":"Repair the downloader without data loss.","candidate":"A failed write can leave truncated media unless committed atomically.","gold":8,"judgments":[]},
+  {"id":"relevance-orchestration","kind":"relevance","dimension":"orchestration","user_request":"Run the parser and then publish validated output.","candidate":"Publishing depends on a successful parser validation.","gold":8,"judgments":[]},
+  {"id":"extract-conditional","kind":"extraction","source":"If the server was restarted, the cache may be empty. No restart is confirmed.","question":"Has the server restarted?","gold":"unknown","judgments":[]},
+  {"id":"extract-quotation","kind":"extraction","source":"Alice said 'the build passed', but the test runner logged failure.","question":"Did the build pass?","gold":"no","judgments":[]},
+  {"id":"reason-entailment","kind":"reasoning","source":"Every approved batch has a receipt. Batch X has no receipt; completeness of the receipt ledger is unknown.","question":"Was X approved?","gold":"unknown","judgments":[]},
+  {"id":"reason-arithmetic","kind":"reasoning","source":"Seven tests passed, three failed, and none were skipped.","question":"How many tests ran?","gold":"10","judgments":[]}
+]

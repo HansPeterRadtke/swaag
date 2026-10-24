@@ -1,0 +1,4982 @@
+{
+  "source": "/data/infra tracked files at local checkout; includes original recordings",
+  "files": [
+    {
+      "file": "AGENTS.md",
+      "bytes": 4286,
+      "sha256": "0832872f3de94abbd8eee19faeb9ad552d63bcadd63832ba00b73e00e296c789",
+      "chunks": [
+        {
+          "start": 0,
+          "end": 4286,
+          "sha256": "0832872f3de94abbd8eee19faeb9ad552d63bcadd63832ba00b73e00e296c789"
+        }
+      ],
+      "read_mode": "mechanical byte inventory only; semantic review not claimed"
+    },
+    {
+      "file": "README.md",
+      "bytes": 6763,
+      "sha256": "e95c0f3f3a724380cdeb8f71bb3fd00a27fd685a6b807975ef978a1d0499f0bb",
+      "chunks": [
+        {
+          "start": 0,
+          "end": 6763,
+          "sha256": "e95c0f3f3a724380cdeb8f71bb3fd00a27fd685a6b807975ef978a1d0499f0bb"
+        }
+      ],
+      "read_mode": "mechanical byte inventory only; semantic review not claimed"
+    },
+    {
+      "file": "docs/README.md",
+      "bytes": 6022,
+      "sha256": "7c112173b3c53569b754ca52cbc85d48b16a7df715086bde4293bfa651bb4cea",
+      "chunks": [
+        {
+          "start": 0,
+          "end": 6022,
+          "sha256": "7c112173b3c53569b754ca52cbc85d48b16a7df715086bde4293bfa651bb4cea"
+        }
+      ],
+      "read_mode": "mechanical byte inventory only; semantic review not claimed"
+    },
+    {
+      "file": "docs/aubro.md",
+      "bytes": 21654,
+      "sha256": "fac24bcde16ab72805574dedcd5b54539ba7d092f9ee5774e89cdd42d8077a62",
+      "chunks": [
+        {
+          "start": 0,
+          "end": 21654,
+          "sha256": "fac24bcde16ab72805574dedcd5b54539ba7d092f9ee5774e89cdd42d8077a62"
+        }
+      ],
+      "read_mode": "mechanical byte inventory only; semantic review not claimed"
+    },
+    {
+      "file": "docs/calendar-automation.md",
+      "bytes": 43454,
+      "sha256": "292ef88cc63543e4754442e8a17880c49145d93ca4e252992a525b417fc21a5e",
+      "chunks": [
+        {
+          "start": 0,
+          "end": 32768,
+          "sha256": "37fb6a394b8478a00832c4c9473bec24787a95c0868807b04a7ef477d03969cd"
+        },
+        {
+          "start": 32768,
+          "end": 43454,
+          "sha256": "d008d9e46c3119403efcdb9e66cfa3888ebe22fd9d68c791d9235921687aa627"
+        }
+      ],
+      "read_mode": "mechanical byte inventory only; semantic review not claimed"
+    },
+    {
+      "file": "docs/calendar-mobile.md",
+      "bytes": 12172,
+      "sha256": "432cadfe578d404fa917238db6379461df16d5bb546e1bca4c5683b5b6fa2cb2",
+      "chunks": [
+        {
+          "start": 0,
+          "end": 12172,
+          "sha256": "432cadfe578d404fa917238db6379461df16d5bb546e1bca4c5683b5b6fa2cb2"
+        }
+      ],
+      "read_mode": "mechanical byte inventory only; semantic review not claimed"
+    },
+    {
+      "file": "docs/gallery-viewport-contract.md",
+      "bytes": 8802,
+      "sha256": "b30fefe6ed796ee63e48251e61f0a46dc29023db85ef339c3728371d4a7cbe31",
+      "chunks": [
+        {
+          "start": 0,
+          "end": 8802,
+          "sha256": "b30fefe6ed796ee63e48251e61f0a46dc29023db85ef339c3728371d4a7cbe31"
+        }
+      ],
+      "read_mode": "mechanical byte inventory only; semantic review not claimed"
+    },
+    {
+      "file": "docs/google-mail-calendar-chatgpt-handover.md",
+      "bytes": 52051,
+      "sha256": "b5af47a40673624e4d19fe1373a199bb27a652adbaa9f171ef48a1253ed7a2b5",
+      "chunks": [
+        {
+          "start": 0,
+          "end": 32768,
+          "sha256": "7406b56196600727ab3c320ea98c8c240d89e1abe4777cdad1b1cff85c8e57fa"
+        },
+        {
+          "start": 32768,
+          "end": 52051,
+          "sha256": "73879359e031648dbb26fb695f48e6cf7e14b53a03a6d9e572030189d3daac95"
+        }
+      ],
+      "read_mode": "mechanical byte inventory only; semantic review not claimed"
+    },
+    {
+      "file": "docs/google-operations.md",
+      "bytes": 35147,
+      "sha256": "44d32d63ccfa7d412cdb7464e9a7a21427e8cb6ade1d1f128c9e6395900be643",
+      "chunks": [
+        {
+          "start": 0,
+          "end": 32768,
+          "sha256": "c592a3a5c2116f58199f2cf9a8628ed0b93733766de3780a65f573d77b1a682e"
+        },
+        {
+          "start": 32768,
+          "end": 35147,
+          "sha256": "624aaa7ef74a3ce3d0dc1246b0cfe1c9649f289197997b29d6be96a3c829e075"
+        }
+      ],
+      "read_mode": "mechanical byte inventory only; semantic review not claimed"
+    },
+    {
+      "file": "docs/guidlines/OPEN_QUESTIONS_AUDIT_2026-10-09.md",
+      "bytes": 9446,
+      "sha256": "ba0a28f1ae162f10a2b319a23ea5ddf0a7ef9cad4bedaa4cd24391c8037ad867",
+      "chunks": [
+        {
+          "start": 0,
+          "end": 9446,
+          "sha256": "ba0a28f1ae162f10a2b319a23ea5ddf0a7ef9cad4bedaa4cd24391c8037ad867"
+        }
+      ],
+      "read_mode": "mechanical byte inventory only; semantic review not claimed"
+    },
+    {
+      "file": "docs/guidlines/README.md",
+      "bytes": 13582,
+      "sha256": "0601a9591faaa0d6819d69ff5e8df9e5a5632ef1e73d683b515284b2b7225239",
+      "chunks": [
+        {
+          "start": 0,
+          "end": 13582,
+          "sha256": "0601a9591faaa0d6819d69ff5e8df9e5a5632ef1e73d683b515284b2b7225239"
+        }
+      ],
+      "read_mode": "mechanical byte inventory only; semantic review not claimed"
+    },
+    {
+      "file": "docs/guidlines/RESEARCH_2026-08-30.md",
+      "bytes": 264,
+      "sha256": "79993deec5151c4c9c9dbdced3c816aac889255eaa9b8689c4e257b9d5d64fd0",
+      "chunks": [
+        {
+          "start": 0,
+          "end": 264,
+          "sha256": "79993deec5151c4c9c9dbdced3c816aac889255eaa9b8689c4e257b9d5d64fd0"
+        }
+      ],
+      "read_mode": "mechanical byte inventory only; semantic review not claimed"
+    },
+    {
+      "file": "docs/guidlines/RESEARCH_AUDIT.md",
+      "bytes": 49836,
+      "sha256": "cd98f641f46f0c0c6fe7d335b9a472156fa0dc195c9b75c014fa370ed2235b4f",
+      "chunks": [
+        {
+          "start": 0,
+          "end": 32768,
+          "sha256": "5cc215a582411837c9e1b9fe0c96258784c2814c1f22c26ee0d7ee40245ff2a3"
+        },
+        {
+          "start": 32768,
+          "end": 49836,
+          "sha256": "c12fd82d8b6ac83baeb14526cc67b260b83b7ad12442ca1c2c666a8e5698f04e"
+        }
+      ],
+      "read_mode": "mechanical byte inventory only; semantic review not claimed"
+    },
+    {
+      "file": "docs/guidlines/agents.md",
+      "bytes": 40928,
+      "sha256": "94401fb6f4db320f98cd8af84b23153565735349a796cec13adf91c9f1beaf74",
+      "chunks": [
+        {
+          "start": 0,
+          "end": 32768,
+          "sha256": "12829f181aa3783fb83af54ae891a36757037b8bc63af1e3705124ea0e4256fd"
+        },
+        {
+          "start": 32768,
+          "end": 40928,
+          "sha256": "b99e69720d47371dd59d450b66c7e4f66fcd03f7d6c66125b678cbb5e914477a"
+        }
+      ],
+      "read_mode": "mechanical byte inventory only; semantic review not claimed"
+    },
+    {
+      "file": "docs/guidlines/agents/architecture.md",
+      "bytes": 19845,
+      "sha256": "f9f6fa62f240dd32d7bdeac317e61e785b44585b7233b53ae06b19f1cd1fcb7c",
+      "chunks": [
+        {
+          "start": 0,
+          "end": 19845,
+          "sha256": "f9f6fa62f240dd32d7bdeac317e61e785b44585b7233b53ae06b19f1cd1fcb7c"
+        }
+      ],
+      "read_mode": "mechanical byte inventory only; semantic review not claimed"
+    },
+    {
+      "file": "docs/guidlines/agents/context_quality_and_relevance.md",
+      "bytes": 7967,
+      "sha256": "05656cfcc9239c23a0ef7e1cc9c929a7d213a52e3b20168f4df26fe7f2555a1d",
+      "chunks": [
+        {
+          "start": 0,
+          "end": 7967,
+          "sha256": "05656cfcc9239c23a0ef7e1cc9c929a7d213a52e3b20168f4df26fe7f2555a1d"
+        }
+      ],
+      "read_mode": "mechanical byte inventory only; semantic review not claimed"
+    },
+    {
+      "file": "docs/guidlines/agents/fast_user_facing_dispatch_and_preemption.md",
+      "bytes": 22177,
+      "sha256": "799e7b4633107e6b22dde77b6e2f562a40d0effa659663566004ad7731a2f8bd",
+      "chunks": [
+        {
+          "start": 0,
+          "end": 22177,
+          "sha256": "799e7b4633107e6b22dde77b6e2f562a40d0effa659663566004ad7731a2f8bd"
+        }
+      ],
+      "read_mode": "mechanical byte inventory only; semantic review not claimed"
+    },
+    {
+      "file": "docs/guidlines/agents/history_storage_and_deletion.md",
+      "bytes": 5972,
+      "sha256": "2dd523aba6bcc2ec00da1413a2e7a400784f07ced85853e7cb800270b1fefe19",
+      "chunks": [
+        {
+          "start": 0,
+          "end": 5972,
+          "sha256": "2dd523aba6bcc2ec00da1413a2e7a400784f07ced85853e7cb800270b1fefe19"
+        }
+      ],
+      "read_mode": "mechanical byte inventory only; semantic review not claimed"
+    },
+    {
+      "file": "docs/guidlines/agents/large_sources.md",
+      "bytes": 3216,
+      "sha256": "a40536c8db64c81311d202609601042785d7f5295855890cbfbef5fd261218f4",
+      "chunks": [
+        {
+          "start": 0,
+          "end": 3216,
+          "sha256": "a40536c8db64c81311d202609601042785d7f5295855890cbfbef5fd261218f4"
+        }
+      ],
+      "read_mode": "mechanical byte inventory only; semantic review not claimed"
+    },
+    {
+      "file": "docs/guidlines/agents/research_and_evidence.md",
+      "bytes": 7536,
+      "sha256": "21fa109c534a38e7d8a38640688007dd26458b6824dac9d299b5526288e6a0fa",
+      "chunks": [
+        {
+          "start": 0,
+          "end": 7536,
+          "sha256": "21fa109c534a38e7d8a38640688007dd26458b6824dac9d299b5526288e6a0fa"
+        }
+      ],
+      "read_mode": "mechanical byte inventory only; semantic review not claimed"
+    },
+    {
+      "file": "docs/guidlines/agents/reusable_workspace_and_tool_forge.md",
+      "bytes": 21654,
+      "sha256": "18072a8c0f1a8322800bc2a3a87b059deeab24baf16731dd06137bb7292efb3e",
+      "chunks": [
+        {
+          "start": 0,
+          "end": 21654,
+          "sha256": "18072a8c0f1a8322800bc2a3a87b059deeab24baf16731dd06137bb7292efb3e"
+        }
+      ],
+      "read_mode": "mechanical byte inventory only; semantic review not claimed"
+    },
+    {
+      "file": "docs/guidlines/agents/user_goals_and_answer_first_communication.md",
+      "bytes": 17148,
+      "sha256": "8b1a2e2302c45da0e1b46a72bed582275245ef34e8f2fa821283dc8649290cc7",
+      "chunks": [
+        {
+          "start": 0,
+          "end": 17148,
+          "sha256": "8b1a2e2302c45da0e1b46a72bed582275245ef34e8f2fa821283dc8649290cc7"
+        }
+      ],
+      "read_mode": "mechanical byte inventory only; semantic review not claimed"
+    },
+    {
+      "file": "docs/guidlines/agents/voice_turn_taking_and_priority.md",
+      "bytes": 5063,
+      "sha256": "fd975c154703dbb64aa758711194946ef38859416d8b53ac0ec8014d9a32c2ab",
+      "chunks": [
+        {
+          "start": 0,
+          "end": 5063,
+          "sha256": "fd975c154703dbb64aa758711194946ef38859416d8b53ac0ec8014d9a32c2ab"
+        }
+      ],
+      "read_mode": "mechanical byte inventory only; semantic review not claimed"
+    },
+    {
+      "file": "docs/guidlines/appendix/recording-coverage.md",
+      "bytes": 24081,
+      "sha256": "8e430eb3d0525cfbe33aa6e69c5b5ca027aaf6c122e1b2910ef6df25c19747f0",
+      "chunks": [
+        {
+          "start": 0,
+          "end": 24081,
+          "sha256": "8e430eb3d0525cfbe33aa6e69c5b5ca027aaf6c122e1b2910ef6df25c19747f0"
+        }
+      ],
+      "read_mode": "mechanical byte inventory only; semantic review not claimed"
+    },
+    {
+      "file": "docs/guidlines/appendix/recording-integration-2026-10-24.md",
+      "bytes": 9329,
+      "sha256": "168482d40a7f902d38d426aabeb350ef886c7f1751f3a664c61cc93320de9749",
+      "chunks": [
+        {
+          "start": 0,
+          "end": 9329,
+          "sha256": "168482d40a7f902d38d426aabeb350ef886c7f1751f3a664c61cc93320de9749"
+        }
+      ],
+      "read_mode": "mechanical byte inventory only; semantic review not claimed"
+    },
+    {
+      "file": "docs/guidlines/appendix/recording-research-2026-10-24.md",
+      "bytes": 13653,
+      "sha256": "e8815f0230499bb628f6a9769aaab39d0b657678d43584f7cced122013ca5622",
+      "chunks": [
+        {
+          "start": 0,
+          "end": 13653,
+          "sha256": "e8815f0230499bb628f6a9769aaab39d0b657678d43584f7cced122013ca5622"
+        }
+      ],
+      "read_mode": "mechanical byte inventory only; semantic review not claimed"
+    },
+    {
+      "file": "docs/guidlines/appendix/research-and-alternatives.md",
+      "bytes": 53523,
+      "sha256": "af44f1a7c35333e9342a5eae54a8c025a5f772ac31c4b2dc69ec923d9e042eee",
+      "chunks": [
+        {
+          "start": 0,
+          "end": 32768,
+          "sha256": "f1d38aeb1293f8f4a25090a51ea3f77cabcd91fe8fb3044b04ae2cc27a7c1d71"
+        },
+        {
+          "start": 32768,
+          "end": 53523,
+          "sha256": "d90353ebc202470f3efc07a5fec8185ef6682a6ad0fa63a10a92abc372f69241"
+        }
+      ],
+      "read_mode": "mechanical byte inventory only; semantic review not claimed"
+    },
+    {
+      "file": "docs/guidlines/appendix/source-preservation.md",
+      "bytes": 2409904,
+      "sha256": "3179aa3b5d689a88ed08fef0691b40ae7c569de43e0af5883518e0a0622c9926",
+      "chunks": [
+        {
+          "start": 0,
+          "end": 32768,
+          "sha256": "7c56fd8a585896b525064c4c9a56240a6fa5afda74e6baa514bde96923a3d2e2"
+        },
+        {
+          "start": 32768,
+          "end": 65536,
+          "sha256": "e1e4a829c2035b8fe58210ad2dd1278396ce47bb661cf0509617a0afd79a8371"
+        },
+        {
+          "start": 65536,
+          "end": 98304,
+          "sha256": "eefd093aa68f56eee0f51c26d3bf8297d1df2f5d69b93f84b5767a01b86ba209"
+        },
+        {
+          "start": 98304,
+          "end": 131072,
+          "sha256": "4b7b5ef0f1fbc01e0a67728a10f720a96bc4dcf6bcdbe85222ca7dff1081baba"
+        },
+        {
+          "start": 131072,
+          "end": 163840,
+          "sha256": "7af811874ced0156466318ed63d303915ccca3dfb6d3a993b0474db45c6f1b80"
+        },
+        {
+          "start": 163840,
+          "end": 196608,
+          "sha256": "e153932b3de38ace53b74b733ac927503a06b58d32c4ef314d280b073207f2e9"
+        },
+        {
+          "start": 196608,
+          "end": 229376,
+          "sha256": "38970c31ce385244bdf2f92da1fba998d6af953e8f979b642305aeffc56f1904"
+        },
+        {
+          "start": 229376,
+          "end": 262144,
+          "sha256": "0878ebfd227be28ff964d0ff62cc94c56753c09e6c110530c2167fd9b7627ec4"
+        },
+        {
+          "start": 262144,
+          "end": 294912,
+          "sha256": "1c54acc121d1c57cae175cb9415b4ac35ab4a605b5f29ecf72b76beb253ccc44"
+        },
+        {
+          "start": 294912,
+          "end": 327680,
+          "sha256": "13a2000b0cd8fe8f8ba782f7e56d20b6ead78258b4354156abfaed89de2fea83"
+        },
+        {
+          "start": 327680,
+          "end": 360448,
+          "sha256": "a4134512b77f0f77a9a39b5b6356efdbb2267fbd033ac045506019db8d3cabf7"
+        },
+        {
+          "start": 360448,
+          "end": 393216,
+          "sha256": "048583e6754fe07cc8ce0ae01f4aee13667f6f7a758fe0417b7bc17d57b8095c"
+        },
+        {
+          "start": 393216,
+          "end": 425984,
+          "sha256": "71c136646dc5f5d571aaacca3fd56c1633a6fcd1f6e0b53291afbe3c32ba0c4e"
+        },
+        {
+          "start": 425984,
+          "end": 458752,
+          "sha256": "8b8358acfd64a813f74103b13884e2a9b3520720aba5411b4cf301f3ea1ecc52"
+        },
+        {
+          "start": 458752,
+          "end": 491520,
+          "sha256": "40832ae7c55a3ce7ce81a2ce0533e3ef53ea28d8f45a207d1349205f575c55c8"
+        },
+        {
+          "start": 491520,
+          "end": 524288,
+          "sha256": "ea175c747100be880fa2657e3d21096466fa8bafb870c72a75b73e44e38a0e60"
+        },
+        {
+          "start": 524288,
+          "end": 557056,
+          "sha256": "3d14a038a61abc752205774d43da717b606c3491eb247c8597069057dd85b81d"
+        },
+        {
+          "start": 557056,
+          "end": 589824,
+          "sha256": "52695c36901f8fefb60f23e8fea27af225bd5f967164f5572df0639379feefa9"
+        },
+        {
+          "start": 589824,
+          "end": 622592,
+          "sha256": "1eaaf0bd5e2bc9f73b5e4648a259c8e6d97b07b21794b67de28df9bd36385725"
+        },
+        {
+          "start": 622592,
+          "end": 655360,
+          "sha256": "5587a8f8fa41e52d5f75f9fec6f6d4a07274cc9aca2234776b15fee6821a87a9"
+        },
+        {
+          "start": 655360,
+          "end": 688128,
+          "sha256": "3e8a6fa554de8f89efec9f90afd748ef955262e95f72cc4357efeb57321868a6"
+        },
+        {
+          "start": 688128,
+          "end": 720896,
+          "sha256": "e84bbaea5e0434575265415a35f008146e304fd0424d52a9b14e7d8ab3c8925a"
+        },
+        {
+          "start": 720896,
+          "end": 753664,
+          "sha256": "f55f620fe4d5ef9adb526ee323ea2f3e4c9ab9d89212d3cbcb09ecc9d3ea300f"
+        },
+        {
+          "start": 753664,
+          "end": 786432,
+          "sha256": "7b407847fdb74ed4e31f70c875a110d63785cae7c97ada34c4bf86e13e2a220a"
+        },
+        {
+          "start": 786432,
+          "end": 819200,
+          "sha256": "3f6515a80fee3148166de8a930e4497d721d05c8fb9c7e79fe5c8c94b9abee93"
+        },
+        {
+          "start": 819200,
+          "end": 851968,
+          "sha256": "318184213e62c1c7dae60915e6c7115bf4fb4dae1271026357648168b102ec65"
+        },
+        {
+          "start": 851968,
+          "end": 884736,
+          "sha256": "0f99022cc1a98753d815a6823368b3a690d8723c6dfff3fb76aed2e02f2db182"
+        },
+        {
+          "start": 884736,
+          "end": 917504,
+          "sha256": "bb8bb49185af29c6e92e9452075e5df45c287e1f5b395ce7d11468702dbc583f"
+        },
+        {
+          "start": 917504,
+          "end": 950272,
+          "sha256": "0d95ee5b7eaa431cbb3015008091fe910c623137cfbe5592a3b6bef105a87c9e"
+        },
+        {
+          "start": 950272,
+          "end": 983040,
+          "sha256": "5b2de8048445ae8cc7abb70963fea090e667d4dfe9adb442af33a5064f170e6d"
+        },
+        {
+          "start": 983040,
+          "end": 1015808,
+          "sha256": "e70cc19eddb33d8ad0344d71c663ca8d0f44517b341e1131f67ca33514630f6b"
+        },
+        {
+          "start": 1015808,
+          "end": 1048576,
+          "sha256": "1b93194f0b83ff5e88d56c599fd1bb3b4847b64eb71f081bc299007f993c17f8"
+        },
+        {
+          "start": 1048576,
+          "end": 1081344,
+          "sha256": "a30e029664f366a7c0c7270c1a872d9d8a17e2ba4fd5d3b90c34e780b3d813eb"
+        },
+        {
+          "start": 1081344,
+          "end": 1114112,
+          "sha256": "ef666df4aeacecf1b243e0eb90b5756246d91a3f094deeb8c553ea8f86bfa9e4"
+        },
+        {
+          "start": 1114112,
+          "end": 1146880,
+          "sha256": "a5ccb48b0baed91c1652b5c7c695dcb38328510ebd512a96332b7f7d75388c1e"
+        },
+        {
+          "start": 1146880,
+          "end": 1179648,
+          "sha256": "7a6f8d435d28c00ac9004685c264ca27b212249d0b8d3b560b25a5ff962cce61"
+        },
+        {
+          "start": 1179648,
+          "end": 1212416,
+          "sha256": "b233fe399a40fd48efcff798618c8b4a3a3ca75419df375c5ddf3068f119e050"
+        },
+        {
+          "start": 1212416,
+          "end": 1245184,
+          "sha256": "8b1ae4215fbe16dae10f22a9a1c18e428cac9a4594f6165ad96c925f9889e8c0"
+        },
+        {
+          "start": 1245184,
+          "end": 1277952,
+          "sha256": "821f922a7a2267141b656a0de74cebea52b21a7d0ca8204cc8d9c08237d75762"
+        },
+        {
+          "start": 1277952,
+          "end": 1310720,
+          "sha256": "f887c82b980f92fc9953c2c24eb78661856bd9d03220359175165c737e7dfeee"
+        },
+        {
+          "start": 1310720,
+          "end": 1343488,
+          "sha256": "2443d38f9f66c2b223025778d37456c863a2effc45585cb0634d2524161af932"
+        },
+        {
+          "start": 1343488,
+          "end": 1376256,
+          "sha256": "78fb437f7960df7db1987bbfa78614f5d7206949a53408296f0aa4996fbcaa15"
+        },
+        {
+          "start": 1376256,
+          "end": 1409024,
+          "sha256": "02db2e4e225c72aa2af8731e53da13827fa13b1121d7258ccda74ad567686919"
+        },
+        {
+          "start": 1409024,
+          "end": 1441792,
+          "sha256": "f687be6fa4dc72333991db8a78b032292f29a238862c49fd31e200c7e0f1ea4d"
+        },
+        {
+          "start": 1441792,
+          "end": 1474560,
+          "sha256": "c10f05ed13576ff61e92cf4cec13714f3746c2e4e8f053a64c65880030a46648"
+        },
+        {
+          "start": 1474560,
+          "end": 1507328,
+          "sha256": "0acbd2a2c136594f2e1ba6563055a61c3719976bb48949d9c0a524ab1641164e"
+        },
+        {
+          "start": 1507328,
+          "end": 1540096,
+          "sha256": "d9f171cd86e588b4b6b1b2cf1dcd40b2a6640cab9f5d05975551aecbd8409fd0"
+        },
+        {
+          "start": 1540096,
+          "end": 1572864,
+          "sha256": "7f1b4de4346195fb2194eb846e08ee5ffe0ddd76f280dc7b5d167e70c7dc786a"
+        },
+        {
+          "start": 1572864,
+          "end": 1605632,
+          "sha256": "e60aef9bc86cbc26cc7bf42b8b596b0f10fab3644d594aa0456b18946b3e6b12"
+        },
+        {
+          "start": 1605632,
+          "end": 1638400,
+          "sha256": "d92e14f41456e1d0a4bd8433b773369d09a11b9aec3a17d99a3b49137014a155"
+        },
+        {
+          "start": 1638400,
+          "end": 1671168,
+          "sha256": "dd7978a0949ada6d8996e34401f142774112007d54fe556543806ed3a72a052e"
+        },
+        {
+          "start": 1671168,
+          "end": 1703936,
+          "sha256": "c54642be7e47f1d4aec5ee7032a6c8def9d8c9bfc737b11608a59d21a9883442"
+        },
+        {
+          "start": 1703936,
+          "end": 1736704,
+          "sha256": "579ca56c9278bf315edac03b3b19cd5ee22035d324ec4eeb71e6c936b4355487"
+        },
+        {
+          "start": 1736704,
+          "end": 1769472,
+          "sha256": "a05bf32a5189781ca37b70e0c063b98622188c3ca4b690eec8e1d7ac4206d6ed"
+        },
+        {
+          "start": 1769472,
+          "end": 1802240,
+          "sha256": "90858ea856463f9e77f26a7d1c0ac5854b91bda3496b3a50379d0910c7fa335c"
+        },
+        {
+          "start": 1802240,
+          "end": 1835008,
+          "sha256": "63d5df4a52074c5c96e3de7bb29749094ef3e06ca2136dc9d5f62775901f9cad"
+        },
+        {
+          "start": 1835008,
+          "end": 1867776,
+          "sha256": "f863fd44a764fc2b1b3e28f3f0860e30b78f364c1f2ded34af69f25fe9cd405f"
+        },
+        {
+          "start": 1867776,
+          "end": 1900544,
+          "sha256": "25fca49206f85d44e742e0a0227fcaf82915bd82196f82575a4376865eb86241"
+        },
+        {
+          "start": 1900544,
+          "end": 1933312,
+          "sha256": "af378640412ae54ed59fdcd4700ff0488cc32fa8cab55c0cc555a05dd9ff036b"
+        },
+        {
+          "start": 1933312,
+          "end": 1966080,
+          "sha256": "e16620712e6839f331b4783cbdb80a75af09afcb50df63cf5b475f63aa525ed1"
+        },
+        {
+          "start": 1966080,
+          "end": 1998848,
+          "sha256": "5363cd97415163f14056e9630c29d3ac43a82d46656b5d64296e033d2ffc5653"
+        },
+        {
+          "start": 1998848,
+          "end": 2031616,
+          "sha256": "b14ced670fe491bafd0f2222e2b368d15313c0da562f8d698401cd2456a96955"
+        },
+        {
+          "start": 2031616,
+          "end": 2064384,
+          "sha256": "0ea2e31003b7a43066eb3029d59de52a8b7dff203fde20a894dd058a0a3f55e6"
+        },
+        {
+          "start": 2064384,
+          "end": 2097152,
+          "sha256": "5e1b704dfd4b687fe895a8ea11325157a12ec7d626d87733a07036cc4ddbd536"
+        },
+        {
+          "start": 2097152,
+          "end": 2129920,
+          "sha256": "dbd6751f395ad2fc79ba345c47010f971f9d392941bb9ba30f3a182ece66ec53"
+        },
+        {
+          "start": 2129920,
+          "end": 2162688,
+          "sha256": "dd97a0ee304e059e3fc9ff285febde3e0ba70eabce4097cc46232c3e0441169c"
+        },
+        {
+          "start": 2162688,
+          "end": 2195456,
+          "sha256": "d12e2345605ef6a735f572e6892c9c86140c9e4c1c0868c91c94fc0c3332735c"
+        },
+        {
+          "start": 2195456,
+          "end": 2228224,
+          "sha256": "19107411732f088d1ec3e56075d47352ea719e73cc1b8f5b9210249b83ccff1d"
+        },
+        {
+          "start": 2228224,
+          "end": 2260992,
+          "sha256": "6174467ea6a22b855a9923ece0a7e76cae472c46d7774328f2c8a8694196ed60"
+        },
+        {
+          "start": 2260992,
+          "end": 2293760,
+          "sha256": "6c58e32eaee9004c48811595324ba09e8d8abf627c5051cd1c204e4ac40ea3b5"
+        },
+        {
+          "start": 2293760,
+          "end": 2326528,
+          "sha256": "5f6169beefc3055b2c3445d6319de5d17cf6ae370b3b44c225bd1c7110e5dc5f"
+        },
+        {
+          "start": 2326528,
+          "end": 2359296,
+          "sha256": "4af847e28ae15c9ff86c553700ac301a82f65d5e86263132070b6914b40b01a5"
+        },
+        {
+          "start": 2359296,
+          "end": 2392064,
+          "sha256": "06a7405c5323e25216bd74b1ffe2698158e86c84907b185e94d1008ad3a22046"
+        },
+        {
+          "start": 2392064,
+          "end": 2409904,
+          "sha256": "32ee68169af0c0ec3809e0b592288f19f2f2873b720473f5a913bd484face902"
+        }
+      ],
+      "read_mode": "mechanical byte inventory only; semantic review not claimed"
+    },
+    {
+      "file": "docs/guidlines/configuration.md",
+      "bytes": 8164,
+      "sha256": "4a36d97919e49d65b6c641b9f0d9a4b4f3cb1f8abcbc425aa01a1a965e0fd014",
+      "chunks": [
+        {
+          "start": 0,
+          "end": 8164,
+          "sha256": "4a36d97919e49d65b6c641b9f0d9a4b4f3cb1f8abcbc425aa01a1a965e0fd014"
+        }
+      ],
+      "read_mode": "mechanical byte inventory only; semantic review not claimed"
+    },
+    {
+      "file": "docs/guidlines/constraint_decoding.txt",
+      "bytes": 1782,
+      "sha256": "b9960cbdd86b51fe14a0d44e30847fac0de9b5ab7e2da3185f0f2f96bb36fbfa",
+      "chunks": [
+        {
+          "start": 0,
+          "end": 1782,
+          "sha256": "b9960cbdd86b51fe14a0d44e30847fac0de9b5ab7e2da3185f0f2f96bb36fbfa"
+        }
+      ],
+      "read_mode": "mechanical byte inventory only; semantic review not claimed"
+    },
+    {
+      "file": "docs/guidlines/doc/audio_style.md",
+      "bytes": 5312,
+      "sha256": "f4bab777990d08dbf2f8ca5c63dfcc25f6ea5b25822db8363f6c9816a03a252a",
+      "chunks": [
+        {
+          "start": 0,
+          "end": 5312,
+          "sha256": "f4bab777990d08dbf2f8ca5c63dfcc25f6ea5b25822db8363f6c9816a03a252a"
+        }
+      ],
+      "read_mode": "mechanical byte inventory only; semantic review not claimed"
+    },
+    {
+      "file": "docs/guidlines/games/core_and_modalities.md",
+      "bytes": 7128,
+      "sha256": "a2b1bdb1d1e633bc0eb20aba6613b4da1238ac0493ca8d5038b45e41d6d37755",
+      "chunks": [
+        {
+          "start": 0,
+          "end": 7128,
+          "sha256": "a2b1bdb1d1e633bc0eb20aba6613b4da1238ac0493ca8d5038b45e41d6d37755"
+        }
+      ],
+      "read_mode": "mechanical byte inventory only; semantic review not claimed"
+    },
+    {
+      "file": "docs/guidlines/games/early_game_engagement_and_onboarding.md",
+      "bytes": 6759,
+      "sha256": "01b260494ae0b9911fdbf4f2b7de6804b5ca6e47fb05887985e00ed6109b334f",
+      "chunks": [
+        {
+          "start": 0,
+          "end": 6759,
+          "sha256": "01b260494ae0b9911fdbf4f2b7de6804b5ca6e47fb05887985e00ed6109b334f"
+        }
+      ],
+      "read_mode": "mechanical byte inventory only; semantic review not claimed"
+    },
+    {
+      "file": "docs/guidlines/games/hidden_systems_and_player_research.md",
+      "bytes": 5211,
+      "sha256": "53bc90372e83f9fd358f106a5286b006250a096fb5cfe9fe8eac73fb2fa5146d",
+      "chunks": [
+        {
+          "start": 0,
+          "end": 5211,
+          "sha256": "53bc90372e83f9fd358f106a5286b006250a096fb5cfe9fe8eac73fb2fa5146d"
+        }
+      ],
+      "read_mode": "mechanical byte inventory only; semantic review not claimed"
+    },
+    {
+      "file": "docs/guidlines/games/learned_habits_and_automation.md",
+      "bytes": 10093,
+      "sha256": "e7c5e2cd6b42d566e2e00b32c30353f057239b36e7a0ec8098bc6481caa0c549",
+      "chunks": [
+        {
+          "start": 0,
+          "end": 10093,
+          "sha256": "e7c5e2cd6b42d566e2e00b32c30353f057239b36e7a0ec8098bc6481caa0c549"
+        }
+      ],
+      "read_mode": "mechanical byte inventory only; semantic review not claimed"
+    },
+    {
+      "file": "docs/guidlines/games/physical_character_model.md",
+      "bytes": 10105,
+      "sha256": "764fa9d8c7a49ac3857bf99eaf6ffb3299c0f17f2b00a96dfdc2481d1dc65b94",
+      "chunks": [
+        {
+          "start": 0,
+          "end": 10105,
+          "sha256": "764fa9d8c7a49ac3857bf99eaf6ffb3299c0f17f2b00a96dfdc2481d1dc65b94"
+        }
+      ],
+      "read_mode": "mechanical byte inventory only; semantic review not claimed"
+    },
+    {
+      "file": "docs/guidlines/games/playability_realism_and_saving.md",
+      "bytes": 5978,
+      "sha256": "aa4971fb095968cebb6beb52f91bf04f5749e77f5d0abaf740cb46dfeacc944a",
+      "chunks": [
+        {
+          "start": 0,
+          "end": 5978,
+          "sha256": "aa4971fb095968cebb6beb52f91bf04f5749e77f5d0abaf740cb46dfeacc944a"
+        }
+      ],
+      "read_mode": "mechanical byte inventory only; semantic review not claimed"
+    },
+    {
+      "file": "docs/guidlines/games/semantic_physics_text_loop.md",
+      "bytes": 9088,
+      "sha256": "5872841698b0d1a0fc8a8604f74f2cb5fc0a306e0fd21fd83edc9ddd5ce4062d",
+      "chunks": [
+        {
+          "start": 0,
+          "end": 9088,
+          "sha256": "5872841698b0d1a0fc8a8604f74f2cb5fc0a306e0fd21fd83edc9ddd5ce4062d"
+        }
+      ],
+      "read_mode": "mechanical byte inventory only; semantic review not claimed"
+    },
+    {
+      "file": "docs/guidlines/games/standard_game_foundation.md",
+      "bytes": 8486,
+      "sha256": "020b8472fad0f75219e6970bc694622a1109118ea583e0e1640d4a54a761d66d",
+      "chunks": [
+        {
+          "start": 0,
+          "end": 8486,
+          "sha256": "020b8472fad0f75219e6970bc694622a1109118ea583e0e1640d4a54a761d66d"
+        }
+      ],
+      "read_mode": "mechanical byte inventory only; semantic review not claimed"
+    },
+    {
+      "file": "docs/guidlines/games/world_and_generation.md",
+      "bytes": 12614,
+      "sha256": "22440062f4f9f1c9eaf63b6ae974c0f163a8388d4e3c2533d5e35970115dd922",
+      "chunks": [
+        {
+          "start": 0,
+          "end": 12614,
+          "sha256": "22440062f4f9f1c9eaf63b6ae974c0f163a8388d4e3c2533d5e35970115dd922"
+        }
+      ],
+      "read_mode": "mechanical byte inventory only; semantic review not claimed"
+    },
+    {
+      "file": "docs/guidlines/gui/INDEX_FOR_BOTS.md",
+      "bytes": 1402,
+      "sha256": "54aef1a9e67959d9b985c3baa5ee48690ed7406c5f18230883f2fde76acb1ad9",
+      "chunks": [
+        {
+          "start": 0,
+          "end": 1402,
+          "sha256": "54aef1a9e67959d9b985c3baa5ee48690ed7406c5f18230883f2fde76acb1ad9"
+        }
+      ],
+      "read_mode": "mechanical byte inventory only; semantic review not claimed"
+    },
+    {
+      "file": "docs/guidlines/gui/README.md",
+      "bytes": 9294,
+      "sha256": "c39f77532650c6845dd203c9a46acae659c5908e9eaa6121364e6f2bf115a9e0",
+      "chunks": [
+        {
+          "start": 0,
+          "end": 9294,
+          "sha256": "c39f77532650c6845dd203c9a46acae659c5908e9eaa6121364e6f2bf115a9e0"
+        }
+      ],
+      "read_mode": "mechanical byte inventory only; semantic review not claimed"
+    },
+    {
+      "file": "docs/guidlines/gui/REFERENCES.md",
+      "bytes": 5155,
+      "sha256": "f763a8430296d9ea1f8719e9a2abee828b423992cc9bdfb7729379d65ea02bae",
+      "chunks": [
+        {
+          "start": 0,
+          "end": 5155,
+          "sha256": "f763a8430296d9ea1f8719e9a2abee828b423992cc9bdfb7729379d65ea02bae"
+        }
+      ],
+      "read_mode": "mechanical byte inventory only; semantic review not claimed"
+    },
+    {
+      "file": "docs/guidlines/gui/bidirectional_ai_ui_and_live_design.md",
+      "bytes": 20825,
+      "sha256": "2eab6954b2fca1b9caa3b9423d316985b268429aca22b95daf25a5a9f5600d8e",
+      "chunks": [
+        {
+          "start": 0,
+          "end": 20825,
+          "sha256": "2eab6954b2fca1b9caa3b9423d316985b268429aca22b95daf25a5a9f5600d8e"
+        }
+      ],
+      "read_mode": "mechanical byte inventory only; semantic review not claimed"
+    },
+    {
+      "file": "docs/guidlines/gui/core/01_question_first_design.md",
+      "bytes": 871,
+      "sha256": "8967bdd3af2d6db413c7d6dbbff7018a39a44687bcfafe50cf05dce393c38862",
+      "chunks": [
+        {
+          "start": 0,
+          "end": 871,
+          "sha256": "8967bdd3af2d6db413c7d6dbbff7018a39a44687bcfafe50cf05dce393c38862"
+        }
+      ],
+      "read_mode": "mechanical byte inventory only; semantic review not claimed"
+    },
+    {
+      "file": "docs/guidlines/gui/core/02_screen_question_contract.md",
+      "bytes": 3649,
+      "sha256": "bb93aca7f565f44816137eb605f19b8ea84b476643538ae0d3417ff60ab09db8",
+      "chunks": [
+        {
+          "start": 0,
+          "end": 3649,
+          "sha256": "bb93aca7f565f44816137eb605f19b8ea84b476643538ae0d3417ff60ab09db8"
+        }
+      ],
+      "read_mode": "mechanical byte inventory only; semantic review not claimed"
+    },
+    {
+      "file": "docs/guidlines/gui/core/03_module_purpose_contract.md",
+      "bytes": 2408,
+      "sha256": "fcc8e24897af546df5bca83ff33852169ae6635388455d42b2bf21f41aef750e",
+      "chunks": [
+        {
+          "start": 0,
+          "end": 2408,
+          "sha256": "fcc8e24897af546df5bca83ff33852169ae6635388455d42b2bf21f41aef750e"
+        }
+      ],
+      "read_mode": "mechanical byte inventory only; semantic review not claimed"
+    },
+    {
+      "file": "docs/guidlines/gui/core/04_visibility_priority_model.md",
+      "bytes": 3670,
+      "sha256": "001d3e6a8622a8a410eb7f7d004f123b4dabfcf04638aa5be855ddf8002e4121",
+      "chunks": [
+        {
+          "start": 0,
+          "end": 3670,
+          "sha256": "001d3e6a8622a8a410eb7f7d004f123b4dabfcf04638aa5be855ddf8002e4121"
+        }
+      ],
+      "read_mode": "mechanical byte inventory only; semantic review not claimed"
+    },
+    {
+      "file": "docs/guidlines/gui/core/05_rejection_gates.md",
+      "bytes": 1963,
+      "sha256": "fcb84567b766749831fa623c8da7596b985e40e81c0ae28ba3fed7bd8c59ccd9",
+      "chunks": [
+        {
+          "start": 0,
+          "end": 1963,
+          "sha256": "fcb84567b766749831fa623c8da7596b985e40e81c0ae28ba3fed7bd8c59ccd9"
+        }
+      ],
+      "read_mode": "mechanical byte inventory only; semantic review not claimed"
+    },
+    {
+      "file": "docs/guidlines/gui/core/06_action_acknowledgement_and_progress.md",
+      "bytes": 8948,
+      "sha256": "4f2f67f6b3386400a7bd4e54dfa93a6e83880551a135cda30d13b6033a4c2ced",
+      "chunks": [
+        {
+          "start": 0,
+          "end": 8948,
+          "sha256": "4f2f67f6b3386400a7bd4e54dfa93a6e83880551a135cda30d13b6033a4c2ced"
+        }
+      ],
+      "read_mode": "mechanical byte inventory only; semantic review not claimed"
+    },
+    {
+      "file": "docs/guidlines/gui/core/color.md",
+      "bytes": 2074,
+      "sha256": "0db6cc3c637b9a730faf1750e7f7571988fd4f78b8d671a56c205c732b973985",
+      "chunks": [
+        {
+          "start": 0,
+          "end": 2074,
+          "sha256": "0db6cc3c637b9a730faf1750e7f7571988fd4f78b8d671a56c205c732b973985"
+        }
+      ],
+      "read_mode": "mechanical byte inventory only; semantic review not claimed"
+    },
+    {
+      "file": "docs/guidlines/gui/core/status_visibility.md",
+      "bytes": 1089,
+      "sha256": "8ef28fa0a50ba95bcb8622f253032835247344455d337fde8bd23ab2196bebb2",
+      "chunks": [
+        {
+          "start": 0,
+          "end": 1089,
+          "sha256": "8ef28fa0a50ba95bcb8622f253032835247344455d337fde8bd23ab2196bebb2"
+        }
+      ],
+      "read_mode": "mechanical byte inventory only; semantic review not claimed"
+    },
+    {
+      "file": "docs/guidlines/gui/domains/backtest_results.md",
+      "bytes": 2934,
+      "sha256": "fb1269330dc8232f11e8d036a90d5b7655c874728ee31a9c9178164f81ad3579",
+      "chunks": [
+        {
+          "start": 0,
+          "end": 2934,
+          "sha256": "fb1269330dc8232f11e8d036a90d5b7655c874728ee31a9c9178164f81ad3579"
+        }
+      ],
+      "read_mode": "mechanical byte inventory only; semantic review not claimed"
+    },
+    {
+      "file": "docs/guidlines/gui/domains/backtest_running.md",
+      "bytes": 2765,
+      "sha256": "88b803d99732e0d3c2067f02514aef915f3a8733f4aca293359522564a3d34e3",
+      "chunks": [
+        {
+          "start": 0,
+          "end": 2765,
+          "sha256": "88b803d99732e0d3c2067f02514aef915f3a8733f4aca293359522564a3d34e3"
+        }
+      ],
+      "read_mode": "mechanical byte inventory only; semantic review not claimed"
+    },
+    {
+      "file": "docs/guidlines/gui/domains/etf_combo_search.md",
+      "bytes": 1992,
+      "sha256": "e749aabdbf505ddd40d9ea0c9665d6670eefcd932f2a39f08e35a60bb60eb002",
+      "chunks": [
+        {
+          "start": 0,
+          "end": 1992,
+          "sha256": "e749aabdbf505ddd40d9ea0c9665d6670eefcd932f2a39f08e35a60bb60eb002"
+        }
+      ],
+      "read_mode": "mechanical byte inventory only; semantic review not claimed"
+    },
+    {
+      "file": "docs/guidlines/gui/domains/live_trading.md",
+      "bytes": 3873,
+      "sha256": "9f6a3a23dfd60ea19e994d585607d989f7755bc06a7b0d826cab77489a141aae",
+      "chunks": [
+        {
+          "start": 0,
+          "end": 3873,
+          "sha256": "9f6a3a23dfd60ea19e994d585607d989f7755bc06a7b0d826cab77489a141aae"
+        }
+      ],
+      "read_mode": "mechanical byte inventory only; semantic review not claimed"
+    },
+    {
+      "file": "docs/guidlines/gui/domains/optimization.md",
+      "bytes": 1759,
+      "sha256": "de2ad739d993fe8ee57c41b7d916106f85958218099d6acc047a452e6c44b3eb",
+      "chunks": [
+        {
+          "start": 0,
+          "end": 1759,
+          "sha256": "de2ad739d993fe8ee57c41b7d916106f85958218099d6acc047a452e6c44b3eb"
+        }
+      ],
+      "read_mode": "mechanical byte inventory only; semantic review not claimed"
+    },
+    {
+      "file": "docs/guidlines/gui/domains/options_search.md",
+      "bytes": 2257,
+      "sha256": "d6e1d44a53c4342014c080d9008f34d649e212f18cd3489908aee4d378fbec8e",
+      "chunks": [
+        {
+          "start": 0,
+          "end": 2257,
+          "sha256": "d6e1d44a53c4342014c080d9008f34d649e212f18cd3489908aee4d378fbec8e"
+        }
+      ],
+      "read_mode": "mechanical byte inventory only; semantic review not claimed"
+    },
+    {
+      "file": "docs/guidlines/gui/domains/portfolio_overview.md",
+      "bytes": 1816,
+      "sha256": "335b53bb1d8a8f58e1932d65f915659d04ff19eb61c10d583597c9b62c74755c",
+      "chunks": [
+        {
+          "start": 0,
+          "end": 1816,
+          "sha256": "335b53bb1d8a8f58e1932d65f915659d04ff19eb61c10d583597c9b62c74755c"
+        }
+      ],
+      "read_mode": "mechanical byte inventory only; semantic review not claimed"
+    },
+    {
+      "file": "docs/guidlines/gui/platforms/android.md",
+      "bytes": 8830,
+      "sha256": "655cef309fbff30deb781190eb70c655e20eb4d1407569df273bfd29361d9150",
+      "chunks": [
+        {
+          "start": 0,
+          "end": 8830,
+          "sha256": "655cef309fbff30deb781190eb70c655e20eb4d1407569df273bfd29361d9150"
+        }
+      ],
+      "read_mode": "mechanical byte inventory only; semantic review not claimed"
+    },
+    {
+      "file": "docs/guidlines/gui/platforms/desktop_general.md",
+      "bytes": 1629,
+      "sha256": "58baef8657db41b629b086832d9ae81b2239cb66316f9fc5f3477286cca6ec84",
+      "chunks": [
+        {
+          "start": 0,
+          "end": 1629,
+          "sha256": "58baef8657db41b629b086832d9ae81b2239cb66316f9fc5f3477286cca6ec84"
+        }
+      ],
+      "read_mode": "mechanical byte inventory only; semantic review not claimed"
+    },
+    {
+      "file": "docs/guidlines/gui/platforms/qt_desktop.md",
+      "bytes": 2425,
+      "sha256": "787fd2d59c483d1c56ed799306bf61b2c954eac6fc2462ca446d93f1a2ee9a89",
+      "chunks": [
+        {
+          "start": 0,
+          "end": 2425,
+          "sha256": "787fd2d59c483d1c56ed799306bf61b2c954eac6fc2462ca446d93f1a2ee9a89"
+        }
+      ],
+      "read_mode": "mechanical byte inventory only; semantic review not claimed"
+    },
+    {
+      "file": "docs/guidlines/gui/platforms/tablet_large_screen.md",
+      "bytes": 1052,
+      "sha256": "d47a0b02882b76bc9a08e33934929887bb3e83c952e3630956b4f4e04478ef49",
+      "chunks": [
+        {
+          "start": 0,
+          "end": 1052,
+          "sha256": "d47a0b02882b76bc9a08e33934929887bb3e83c952e3630956b4f4e04478ef49"
+        }
+      ],
+      "read_mode": "mechanical byte inventory only; semantic review not claimed"
+    },
+    {
+      "file": "docs/guidlines/gui/platforms/web.md",
+      "bytes": 1417,
+      "sha256": "f6a386dd32b494cb3be8e7156e65e4c1e7506361a824923a243602e3e6481574",
+      "chunks": [
+        {
+          "start": 0,
+          "end": 1417,
+          "sha256": "f6a386dd32b494cb3be8e7156e65e4c1e7506361a824923a243602e3e6481574"
+        }
+      ],
+      "read_mode": "mechanical byte inventory only; semantic review not claimed"
+    },
+    {
+      "file": "docs/guidlines/gui/recipes/bad_good_examples.md",
+      "bytes": 2125,
+      "sha256": "ac72b3a2d0a0a45ab13880dcdf665ebd9194badd3c3f678d001780ed153dec41",
+      "chunks": [
+        {
+          "start": 0,
+          "end": 2125,
+          "sha256": "ac72b3a2d0a0a45ab13880dcdf665ebd9194badd3c3f678d001780ed153dec41"
+        }
+      ],
+      "read_mode": "mechanical byte inventory only; semantic review not claimed"
+    },
+    {
+      "file": "docs/guidlines/gui/recipes/charts.md",
+      "bytes": 3545,
+      "sha256": "7e42f212b28452eab0aa6df76208a518df1d452f0673d1c9dfd6a3545c85b696",
+      "chunks": [
+        {
+          "start": 0,
+          "end": 3545,
+          "sha256": "7e42f212b28452eab0aa6df76208a518df1d452f0673d1c9dfd6a3545c85b696"
+        }
+      ],
+      "read_mode": "mechanical byte inventory only; semantic review not claimed"
+    },
+    {
+      "file": "docs/guidlines/gui/recipes/loading_and_health.md",
+      "bytes": 2409,
+      "sha256": "4dbe03cf4a40b85f5c77f1584b4faa0ada187a8317991d56f6155b7187939a6f",
+      "chunks": [
+        {
+          "start": 0,
+          "end": 2409,
+          "sha256": "4dbe03cf4a40b85f5c77f1584b4faa0ada187a8317991d56f6155b7187939a6f"
+        }
+      ],
+      "read_mode": "mechanical byte inventory only; semantic review not claimed"
+    },
+    {
+      "file": "docs/guidlines/gui/recipes/metric_dictionary.md",
+      "bytes": 1941,
+      "sha256": "36b1711c3ade657ce9594a5ac21a4563c318dcdec95bbb4d07cbe9aedd1b3820",
+      "chunks": [
+        {
+          "start": 0,
+          "end": 1941,
+          "sha256": "36b1711c3ade657ce9594a5ac21a4563c318dcdec95bbb4d07cbe9aedd1b3820"
+        }
+      ],
+      "read_mode": "mechanical byte inventory only; semantic review not claimed"
+    },
+    {
+      "file": "docs/guidlines/gui/recipes/tables_text_numbers.md",
+      "bytes": 2879,
+      "sha256": "04442a461be8f2f95cff3cd72b94e8b6062aabed54eecf460e29ea46c9ae8b4f",
+      "chunks": [
+        {
+          "start": 0,
+          "end": 2879,
+          "sha256": "04442a461be8f2f95cff3cd72b94e8b6062aabed54eecf460e29ea46c9ae8b4f"
+        }
+      ],
+      "read_mode": "mechanical byte inventory only; semantic review not claimed"
+    },
+    {
+      "file": "docs/guidlines/gui/recipes/tests_and_verification.md",
+      "bytes": 4693,
+      "sha256": "80d13bb3dfd312918e01d10b34e6283cda850e13ed1efb07a311b76b93747deb",
+      "chunks": [
+        {
+          "start": 0,
+          "end": 4693,
+          "sha256": "80d13bb3dfd312918e01d10b34e6283cda850e13ed1efb07a311b76b93747deb"
+        }
+      ],
+      "read_mode": "mechanical byte inventory only; semantic review not claimed"
+    },
+    {
+      "file": "docs/guidlines/gui/templates/module_purpose_contract_template.md",
+      "bytes": 716,
+      "sha256": "e0fcabda9c48164187b298a4c9a3310c864ae6953da64d210a2ea7c5d339053f",
+      "chunks": [
+        {
+          "start": 0,
+          "end": 716,
+          "sha256": "e0fcabda9c48164187b298a4c9a3310c864ae6953da64d210a2ea7c5d339053f"
+        }
+      ],
+      "read_mode": "mechanical byte inventory only; semantic review not claimed"
+    },
+    {
+      "file": "docs/guidlines/gui/templates/screen_contract_template.md",
+      "bytes": 1031,
+      "sha256": "d391c385ea724d8754c0e0226d7201f864bc119e6f19c49cec59d9e11d58d47e",
+      "chunks": [
+        {
+          "start": 0,
+          "end": 1031,
+          "sha256": "d391c385ea724d8754c0e0226d7201f864bc119e6f19c49cec59d9e11d58d47e"
+        }
+      ],
+      "read_mode": "mechanical byte inventory only; semantic review not claimed"
+    },
+    {
+      "file": "docs/guidlines/gui/templates/task_prompt_template.md",
+      "bytes": 1360,
+      "sha256": "201abeaf909b473abcd25965e190b114f15a835f7ff103280e31ce9d62e14101",
+      "chunks": [
+        {
+          "start": 0,
+          "end": 1360,
+          "sha256": "201abeaf909b473abcd25965e190b114f15a835f7ff103280e31ce9d62e14101"
+        }
+      ],
+      "read_mode": "mechanical byte inventory only; semantic review not claimed"
+    },
+    {
+      "file": "docs/guidlines/gui/voice_interfaces.md",
+      "bytes": 13323,
+      "sha256": "5a0bd1206e5d3ac8535da4187a8674f94b784a0301d2d7ff7a4c113430ba4bf7",
+      "chunks": [
+        {
+          "start": 0,
+          "end": 13323,
+          "sha256": "5a0bd1206e5d3ac8535da4187a8674f94b784a0301d2d7ff7a4c113430ba4bf7"
+        }
+      ],
+      "read_mode": "mechanical byte inventory only; semantic review not claimed"
+    },
+    {
+      "file": "docs/guidlines/kmd/knowledge_and_memory_design.md",
+      "bytes": 6108,
+      "sha256": "727a6df88defe4f0ca32f96c1e0571aa02faaed8345142aa2460cad0470ceba1",
+      "chunks": [
+        {
+          "start": 0,
+          "end": 6108,
+          "sha256": "727a6df88defe4f0ca32f96c1e0571aa02faaed8345142aa2460cad0470ceba1"
+        }
+      ],
+      "read_mode": "mechanical byte inventory only; semantic review not claimed"
+    },
+    {
+      "file": "docs/guidlines/knowledge_retrieval.md",
+      "bytes": 4917,
+      "sha256": "bca42dd6e62b7149fceffc2d3cece53f4520e026e9f709757b423f31b5205745",
+      "chunks": [
+        {
+          "start": 0,
+          "end": 4917,
+          "sha256": "bca42dd6e62b7149fceffc2d3cece53f4520e026e9f709757b423f31b5205745"
+        }
+      ],
+      "read_mode": "mechanical byte inventory only; semantic review not claimed"
+    },
+    {
+      "file": "docs/guidlines/logging.md",
+      "bytes": 6289,
+      "sha256": "449ee6232b8326033d221781fdd8c5f20e5cc894e4e3bc7d44dc7f0b8c1eaa01",
+      "chunks": [
+        {
+          "start": 0,
+          "end": 6289,
+          "sha256": "449ee6232b8326033d221781fdd8c5f20e5cc894e4e3bc7d44dc7f0b8c1eaa01"
+        }
+      ],
+      "read_mode": "mechanical byte inventory only; semantic review not claimed"
+    },
+    {
+      "file": "docs/guidlines/mediaediting/README.md",
+      "bytes": 11835,
+      "sha256": "9c0d8965a2d17c1bae3ac2a513cc37b5d3b4b1d2d95ea447f3666cbcab26451e",
+      "chunks": [
+        {
+          "start": 0,
+          "end": 11835,
+          "sha256": "9c0d8965a2d17c1bae3ac2a513cc37b5d3b4b1d2d95ea447f3666cbcab26451e"
+        }
+      ],
+      "read_mode": "mechanical byte inventory only; semantic review not claimed"
+    },
+    {
+      "file": "docs/guidlines/network_transport_and_testing.md",
+      "bytes": 3302,
+      "sha256": "9a330ace1bb8b88764e581a6c3770e061d5a4f8602a1ed41fa421108f4596d85",
+      "chunks": [
+        {
+          "start": 0,
+          "end": 3302,
+          "sha256": "9a330ace1bb8b88764e581a6c3770e061d5a4f8602a1ed41fa421108f4596d85"
+        }
+      ],
+      "read_mode": "mechanical byte inventory only; semantic review not claimed"
+    },
+    {
+      "file": "docs/guidlines/networking.md",
+      "bytes": 5352,
+      "sha256": "b12546efed9839711605d69b436177ca3ac9963a1a7218b0de0514150d5cfd9e",
+      "chunks": [
+        {
+          "start": 0,
+          "end": 5352,
+          "sha256": "b12546efed9839711605d69b436177ca3ac9963a1a7218b0de0514150d5cfd9e"
+        }
+      ],
+      "read_mode": "mechanical byte inventory only; semantic review not claimed"
+    },
+    {
+      "file": "docs/guidlines/original-recordings/Default/Recording 2026-08-04 09-50-01.txt",
+      "bytes": 311,
+      "sha256": "e2d2eb8c1a271b7456731f42e4ce2ab6e5fdb224c341b11a652768f2dead6fb0",
+      "chunks": [
+        {
+          "start": 0,
+          "end": 311,
+          "sha256": "e2d2eb8c1a271b7456731f42e4ce2ab6e5fdb224c341b11a652768f2dead6fb0"
+        }
+      ],
+      "read_mode": "mechanical byte inventory only; semantic review not claimed"
+    },
+    {
+      "file": "docs/guidlines/original-recordings/Default/Recording 2026-08-04 09-52-49.txt",
+      "bytes": 250,
+      "sha256": "73e739b089beab52fb9fcd0bb83f1274aebd0a6226cb6e5a2f905f5bee6efc61",
+      "chunks": [
+        {
+          "start": 0,
+          "end": 250,
+          "sha256": "73e739b089beab52fb9fcd0bb83f1274aebd0a6226cb6e5a2f905f5bee6efc61"
+        }
+      ],
+      "read_mode": "mechanical byte inventory only; semantic review not claimed"
+    },
+    {
+      "file": "docs/guidlines/original-recordings/Default/Recording 2026-08-04 13-51-42.txt",
+      "bytes": 86,
+      "sha256": "79f6d21ba9920e2b48c3b7c9f4f1b4537394c1f70e47fcee11c6038f0f8d0679",
+      "chunks": [
+        {
+          "start": 0,
+          "end": 86,
+          "sha256": "79f6d21ba9920e2b48c3b7c9f4f1b4537394c1f70e47fcee11c6038f0f8d0679"
+        }
+      ],
+      "read_mode": "mechanical byte inventory only; semantic review not claimed"
+    },
+    {
+      "file": "docs/guidlines/original-recordings/Default/Voicebutton E2E smoke test (10).txt",
+      "bytes": 76,
+      "sha256": "e3750e5b30150ffe2638a9d1d27bd704b7b015a86cd92b66dac55f15fa17e87e",
+      "chunks": [
+        {
+          "start": 0,
+          "end": 76,
+          "sha256": "e3750e5b30150ffe2638a9d1d27bd704b7b015a86cd92b66dac55f15fa17e87e"
+        }
+      ],
+      "read_mode": "mechanical byte inventory only; semantic review not claimed"
+    },
+    {
+      "file": "docs/guidlines/original-recordings/Default/Voicebutton E2E smoke test (11).txt",
+      "bytes": 76,
+      "sha256": "e3750e5b30150ffe2638a9d1d27bd704b7b015a86cd92b66dac55f15fa17e87e",
+      "chunks": [
+        {
+          "start": 0,
+          "end": 76,
+          "sha256": "e3750e5b30150ffe2638a9d1d27bd704b7b015a86cd92b66dac55f15fa17e87e"
+        }
+      ],
+      "read_mode": "mechanical byte inventory only; semantic review not claimed"
+    },
+    {
+      "file": "docs/guidlines/original-recordings/Default/Voicebutton E2E smoke test (12).txt",
+      "bytes": 76,
+      "sha256": "e3750e5b30150ffe2638a9d1d27bd704b7b015a86cd92b66dac55f15fa17e87e",
+      "chunks": [
+        {
+          "start": 0,
+          "end": 76,
+          "sha256": "e3750e5b30150ffe2638a9d1d27bd704b7b015a86cd92b66dac55f15fa17e87e"
+        }
+      ],
+      "read_mode": "mechanical byte inventory only; semantic review not claimed"
+    },
+    {
+      "file": "docs/guidlines/original-recordings/Default/Voicebutton E2E smoke test (13).txt",
+      "bytes": 76,
+      "sha256": "e3750e5b30150ffe2638a9d1d27bd704b7b015a86cd92b66dac55f15fa17e87e",
+      "chunks": [
+        {
+          "start": 0,
+          "end": 76,
+          "sha256": "e3750e5b30150ffe2638a9d1d27bd704b7b015a86cd92b66dac55f15fa17e87e"
+        }
+      ],
+      "read_mode": "mechanical byte inventory only; semantic review not claimed"
+    },
+    {
+      "file": "docs/guidlines/original-recordings/Default/Voicebutton E2E smoke test (2).txt",
+      "bytes": 76,
+      "sha256": "e3750e5b30150ffe2638a9d1d27bd704b7b015a86cd92b66dac55f15fa17e87e",
+      "chunks": [
+        {
+          "start": 0,
+          "end": 76,
+          "sha256": "e3750e5b30150ffe2638a9d1d27bd704b7b015a86cd92b66dac55f15fa17e87e"
+        }
+      ],
+      "read_mode": "mechanical byte inventory only; semantic review not claimed"
+    },
+    {
+      "file": "docs/guidlines/original-recordings/Default/Voicebutton E2E smoke test (3).txt",
+      "bytes": 76,
+      "sha256": "e3750e5b30150ffe2638a9d1d27bd704b7b015a86cd92b66dac55f15fa17e87e",
+      "chunks": [
+        {
+          "start": 0,
+          "end": 76,
+          "sha256": "e3750e5b30150ffe2638a9d1d27bd704b7b015a86cd92b66dac55f15fa17e87e"
+        }
+      ],
+      "read_mode": "mechanical byte inventory only; semantic review not claimed"
+    },
+    {
+      "file": "docs/guidlines/original-recordings/Default/Voicebutton E2E smoke test (5).txt",
+      "bytes": 76,
+      "sha256": "e3750e5b30150ffe2638a9d1d27bd704b7b015a86cd92b66dac55f15fa17e87e",
+      "chunks": [
+        {
+          "start": 0,
+          "end": 76,
+          "sha256": "e3750e5b30150ffe2638a9d1d27bd704b7b015a86cd92b66dac55f15fa17e87e"
+        }
+      ],
+      "read_mode": "mechanical byte inventory only; semantic review not claimed"
+    },
+    {
+      "file": "docs/guidlines/original-recordings/Default/Voicebutton E2E smoke test (6).txt",
+      "bytes": 76,
+      "sha256": "e3750e5b30150ffe2638a9d1d27bd704b7b015a86cd92b66dac55f15fa17e87e",
+      "chunks": [
+        {
+          "start": 0,
+          "end": 76,
+          "sha256": "e3750e5b30150ffe2638a9d1d27bd704b7b015a86cd92b66dac55f15fa17e87e"
+        }
+      ],
+      "read_mode": "mechanical byte inventory only; semantic review not claimed"
+    },
+    {
+      "file": "docs/guidlines/original-recordings/Default/Voicebutton E2E smoke test (7).txt",
+      "bytes": 76,
+      "sha256": "e3750e5b30150ffe2638a9d1d27bd704b7b015a86cd92b66dac55f15fa17e87e",
+      "chunks": [
+        {
+          "start": 0,
+          "end": 76,
+          "sha256": "e3750e5b30150ffe2638a9d1d27bd704b7b015a86cd92b66dac55f15fa17e87e"
+        }
+      ],
+      "read_mode": "mechanical byte inventory only; semantic review not claimed"
+    },
+    {
+      "file": "docs/guidlines/original-recordings/Default/Voicebutton E2E smoke test (8).txt",
+      "bytes": 76,
+      "sha256": "e3750e5b30150ffe2638a9d1d27bd704b7b015a86cd92b66dac55f15fa17e87e",
+      "chunks": [
+        {
+          "start": 0,
+          "end": 76,
+          "sha256": "e3750e5b30150ffe2638a9d1d27bd704b7b015a86cd92b66dac55f15fa17e87e"
+        }
+      ],
+      "read_mode": "mechanical byte inventory only; semantic review not claimed"
+    },
+    {
+      "file": "docs/guidlines/original-recordings/Default/Voicebutton E2E smoke test (9).txt",
+      "bytes": 76,
+      "sha256": "e3750e5b30150ffe2638a9d1d27bd704b7b015a86cd92b66dac55f15fa17e87e",
+      "chunks": [
+        {
+          "start": 0,
+          "end": 76,
+          "sha256": "e3750e5b30150ffe2638a9d1d27bd704b7b015a86cd92b66dac55f15fa17e87e"
+        }
+      ],
+      "read_mode": "mechanical byte inventory only; semantic review not claimed"
+    },
+    {
+      "file": "docs/guidlines/original-recordings/Default/Voicebutton E2E smoke test.txt",
+      "bytes": 76,
+      "sha256": "e3750e5b30150ffe2638a9d1d27bd704b7b015a86cd92b66dac55f15fa17e87e",
+      "chunks": [
+        {
+          "start": 0,
+          "end": 76,
+          "sha256": "e3750e5b30150ffe2638a9d1d27bd704b7b015a86cd92b66dac55f15fa17e87e"
+        }
+      ],
+      "read_mode": "mechanical byte inventory only; semantic review not claimed"
+    },
+    {
+      "file": "docs/guidlines/original-recordings/agents/Recording 2026-08-04 10-27-01.txt",
+      "bytes": 4,
+      "sha256": "9742d6d72566f8a6af9bb7122da4f11e0615c19ffdd68445505a405bbe96b6dc",
+      "chunks": [
+        {
+          "start": 0,
+          "end": 4,
+          "sha256": "9742d6d72566f8a6af9bb7122da4f11e0615c19ffdd68445505a405bbe96b6dc"
+        }
+      ],
+      "read_mode": "mechanical byte inventory only; semantic review not claimed"
+    },
+    {
+      "file": "docs/guidlines/original-recordings/agents/Recording 2026-08-04 10-27-24.txt",
+      "bytes": 3037,
+      "sha256": "041ea2a39fcec416c3f3d3085ab14b43ac6ea200022ba503296864f1f2ef8ba8",
+      "chunks": [
+        {
+          "start": 0,
+          "end": 3037,
+          "sha256": "041ea2a39fcec416c3f3d3085ab14b43ac6ea200022ba503296864f1f2ef8ba8"
+        }
+      ],
+      "read_mode": "mechanical byte inventory only; semantic review not claimed"
+    },
+    {
+      "file": "docs/guidlines/original-recordings/agents/Recording 2026-08-04 10-36-47.txt",
+      "bytes": 4375,
+      "sha256": "7039ffd3bd8bdb18e051252c4ca113de0c7bac3270b71020cead0275a85aa3e8",
+      "chunks": [
+        {
+          "start": 0,
+          "end": 4375,
+          "sha256": "7039ffd3bd8bdb18e051252c4ca113de0c7bac3270b71020cead0275a85aa3e8"
+        }
+      ],
+      "read_mode": "mechanical byte inventory only; semantic review not claimed"
+    },
+    {
+      "file": "docs/guidlines/original-recordings/agents/Recording 2026-08-04 19-21-08.txt",
+      "bytes": 10704,
+      "sha256": "9eb8e70d4c898f5395c796cde6dbc4e91f6aeaaa8f322d8e888ae8fc0ccaaa52",
+      "chunks": [
+        {
+          "start": 0,
+          "end": 10704,
+          "sha256": "9eb8e70d4c898f5395c796cde6dbc4e91f6aeaaa8f322d8e888ae8fc0ccaaa52"
+        }
+      ],
+      "read_mode": "mechanical byte inventory only; semantic review not claimed"
+    },
+    {
+      "file": "docs/guidlines/original-recordings/agents/Recording 2026-08-05 11-39-16.txt",
+      "bytes": 4738,
+      "sha256": "737876148e0836ab1bc3e7a8a139654e6437ef2279b843a77011a17f73bb50b6",
+      "chunks": [
+        {
+          "start": 0,
+          "end": 4738,
+          "sha256": "737876148e0836ab1bc3e7a8a139654e6437ef2279b843a77011a17f73bb50b6"
+        }
+      ],
+      "read_mode": "mechanical byte inventory only; semantic review not claimed"
+    },
+    {
+      "file": "docs/guidlines/original-recordings/agents/Recording 2026-08-05 12-00-31.txt",
+      "bytes": 2801,
+      "sha256": "2eeb67569a639d59f756b672dff361a089ff2238f8526702caa912d1a00c805a",
+      "chunks": [
+        {
+          "start": 0,
+          "end": 2801,
+          "sha256": "2eeb67569a639d59f756b672dff361a089ff2238f8526702caa912d1a00c805a"
+        }
+      ],
+      "read_mode": "mechanical byte inventory only; semantic review not claimed"
+    },
+    {
+      "file": "docs/guidlines/original-recordings/agents/Recording 2026-08-06 17-47-36-666.txt",
+      "bytes": 5847,
+      "sha256": "0ce2061b52f3480626bc735dfc5a565222071f33a7bc6279831a32cd861ddce0",
+      "chunks": [
+        {
+          "start": 0,
+          "end": 5847,
+          "sha256": "0ce2061b52f3480626bc735dfc5a565222071f33a7bc6279831a32cd861ddce0"
+        }
+      ],
+      "read_mode": "mechanical byte inventory only; semantic review not claimed"
+    },
+    {
+      "file": "docs/guidlines/original-recordings/agents/Recording 2026-08-07 12-43-50-515.txt",
+      "bytes": 3158,
+      "sha256": "9ce2c474de14d7c78af12d1c8a7de97614e60d73a8c2a053828974a28c69b599",
+      "chunks": [
+        {
+          "start": 0,
+          "end": 3158,
+          "sha256": "9ce2c474de14d7c78af12d1c8a7de97614e60d73a8c2a053828974a28c69b599"
+        }
+      ],
+      "read_mode": "mechanical byte inventory only; semantic review not claimed"
+    },
+    {
+      "file": "docs/guidlines/original-recordings/agents/Recording 2026-08-09 13-35-10-245.txt",
+      "bytes": 7355,
+      "sha256": "f516fc2ab79c4f06ed38deb2611e96a1eebef43d0afcd32978c5078007a5ed54",
+      "chunks": [
+        {
+          "start": 0,
+          "end": 7355,
+          "sha256": "f516fc2ab79c4f06ed38deb2611e96a1eebef43d0afcd32978c5078007a5ed54"
+        }
+      ],
+      "read_mode": "mechanical byte inventory only; semantic review not claimed"
+    },
+    {
+      "file": "docs/guidlines/original-recordings/agents/Recording 2026-08-10 12-20-47-854.txt",
+      "bytes": 10369,
+      "sha256": "613a590ae97589005f3c5cf66857efb8091cc473bcabaf36591c5beed22a1904",
+      "chunks": [
+        {
+          "start": 0,
+          "end": 10369,
+          "sha256": "613a590ae97589005f3c5cf66857efb8091cc473bcabaf36591c5beed22a1904"
+        }
+      ],
+      "read_mode": "mechanical byte inventory only; semantic review not claimed"
+    },
+    {
+      "file": "docs/guidlines/original-recordings/agents/Recording 2026-08-11 11-49-55-272.txt",
+      "bytes": 4864,
+      "sha256": "221185fa471c2c618c3d599c01879a2cd37e20a6093852442454349ece28d8da",
+      "chunks": [
+        {
+          "start": 0,
+          "end": 4864,
+          "sha256": "221185fa471c2c618c3d599c01879a2cd37e20a6093852442454349ece28d8da"
+        }
+      ],
+      "read_mode": "mechanical byte inventory only; semantic review not claimed"
+    },
+    {
+      "file": "docs/guidlines/original-recordings/agents/Recording 2026-08-11 12-06-27-811.txt",
+      "bytes": 34400,
+      "sha256": "16e37710ca95d1e49e8f4d13b4e2821e55ee4ebfac603cf7ef124e959f25570a",
+      "chunks": [
+        {
+          "start": 0,
+          "end": 32768,
+          "sha256": "f04ee2b43ff20388263ff7d1c536fe3dc161340b591677f27487e5fee0d2548d"
+        },
+        {
+          "start": 32768,
+          "end": 34400,
+          "sha256": "6ee43db0682681b3eb568a0df8e9f65d2463735f83745b5a85fadc03f438a70f"
+        }
+      ],
+      "read_mode": "mechanical byte inventory only; semantic review not claimed"
+    },
+    {
+      "file": "docs/guidlines/original-recordings/agents/Recording 2026-08-18 18-49-23-836.txt",
+      "bytes": 8091,
+      "sha256": "ff81929393bc96eb23b31d89ab4d6f86f75baa12460e267f3df220d147eb1093",
+      "chunks": [
+        {
+          "start": 0,
+          "end": 8091,
+          "sha256": "ff81929393bc96eb23b31d89ab4d6f86f75baa12460e267f3df220d147eb1093"
+        }
+      ],
+      "read_mode": "mechanical byte inventory only; semantic review not claimed"
+    },
+    {
+      "file": "docs/guidlines/original-recordings/agents/Recording 2026-08-19 18-37-20-756.txt",
+      "bytes": 10431,
+      "sha256": "750947604ced6a5d82614b82fd803bb9050478c488a731444f433dcdd21ffdd0",
+      "chunks": [
+        {
+          "start": 0,
+          "end": 10431,
+          "sha256": "750947604ced6a5d82614b82fd803bb9050478c488a731444f433dcdd21ffdd0"
+        }
+      ],
+      "read_mode": "mechanical byte inventory only; semantic review not claimed"
+    },
+    {
+      "file": "docs/guidlines/original-recordings/agents/Recording 2026-08-20 18-28-49-000.txt",
+      "bytes": 10236,
+      "sha256": "f1202c38d7867092a02899371c7d69f58a5cb8d78c722fddf103909207cafc3a",
+      "chunks": [
+        {
+          "start": 0,
+          "end": 10236,
+          "sha256": "f1202c38d7867092a02899371c7d69f58a5cb8d78c722fddf103909207cafc3a"
+        }
+      ],
+      "read_mode": "mechanical byte inventory only; semantic review not claimed"
+    },
+    {
+      "file": "docs/guidlines/original-recordings/agents/Recording 2026-08-21 20-48-36-202.txt",
+      "bytes": 13102,
+      "sha256": "758aa997690df6251fb0ab5febce8e355cf7391ec8deebfcef52b843c3840e9f",
+      "chunks": [
+        {
+          "start": 0,
+          "end": 13102,
+          "sha256": "758aa997690df6251fb0ab5febce8e355cf7391ec8deebfcef52b843c3840e9f"
+        }
+      ],
+      "read_mode": "mechanical byte inventory only; semantic review not claimed"
+    },
+    {
+      "file": "docs/guidlines/original-recordings/agents/Recording 2026-08-24 12-54-18-186.txt",
+      "bytes": 12538,
+      "sha256": "3538e106c320cc73ccf0861b70f723eb7f9a8419617c631bf5b7888694ef036a",
+      "chunks": [
+        {
+          "start": 0,
+          "end": 12538,
+          "sha256": "3538e106c320cc73ccf0861b70f723eb7f9a8419617c631bf5b7888694ef036a"
+        }
+      ],
+      "read_mode": "mechanical byte inventory only; semantic review not claimed"
+    },
+    {
+      "file": "docs/guidlines/original-recordings/agents/Recording 2026-08-24 17-37-48-367.txt",
+      "bytes": 23712,
+      "sha256": "66911c6e8480339f2ae63f60d6d09b46b6d8f0d7739f27140e479fbddb1daac2",
+      "chunks": [
+        {
+          "start": 0,
+          "end": 23712,
+          "sha256": "66911c6e8480339f2ae63f60d6d09b46b6d8f0d7739f27140e479fbddb1daac2"
+        }
+      ],
+      "read_mode": "mechanical byte inventory only; semantic review not claimed"
+    },
+    {
+      "file": "docs/guidlines/original-recordings/agents/Recording 2026-08-24 19-26-50-252.txt",
+      "bytes": 16176,
+      "sha256": "ec658b13bb791bf9a066670111060fe43b1ec403d6fb9ccad7cadc2310f14afd",
+      "chunks": [
+        {
+          "start": 0,
+          "end": 16176,
+          "sha256": "ec658b13bb791bf9a066670111060fe43b1ec403d6fb9ccad7cadc2310f14afd"
+        }
+      ],
+      "read_mode": "mechanical byte inventory only; semantic review not claimed"
+    },
+    {
+      "file": "docs/guidlines/original-recordings/agents/Recording 2026-08-25 11-38-51-829.txt",
+      "bytes": 11585,
+      "sha256": "be64e2b5a2ef65a3b75385272f6cc45016076e41a610d71c83e6990197e9c882",
+      "chunks": [
+        {
+          "start": 0,
+          "end": 11585,
+          "sha256": "be64e2b5a2ef65a3b75385272f6cc45016076e41a610d71c83e6990197e9c882"
+        }
+      ],
+      "read_mode": "mechanical byte inventory only; semantic review not claimed"
+    },
+    {
+      "file": "docs/guidlines/original-recordings/agents/Recording 2026-08-26 06-30-01-466.txt",
+      "bytes": 12952,
+      "sha256": "72fd91a4728e16a4b193998e777ca399da7338bd8090eac39c9a737774da8e3f",
+      "chunks": [
+        {
+          "start": 0,
+          "end": 12952,
+          "sha256": "72fd91a4728e16a4b193998e777ca399da7338bd8090eac39c9a737774da8e3f"
+        }
+      ],
+      "read_mode": "mechanical byte inventory only; semantic review not claimed"
+    },
+    {
+      "file": "docs/guidlines/original-recordings/agents/Recording 2026-08-27 07-44-58-232.txt",
+      "bytes": 111755,
+      "sha256": "d2cdc0348ff8d7f513f8d4cf5d5458f6817106d8c8943f1ccd4ef5426af9108a",
+      "chunks": [
+        {
+          "start": 0,
+          "end": 32768,
+          "sha256": "d9f96c0e627406554d89db4ce085988ca578e402730e7405bfcc1dcecadadafc"
+        },
+        {
+          "start": 32768,
+          "end": 65536,
+          "sha256": "bac12d72f59ce4fe2fd006384a275dd08699e093f0adc396f6e5bab75f45d5e1"
+        },
+        {
+          "start": 65536,
+          "end": 98304,
+          "sha256": "9a73d4a9a4fc9061c242184f912959547c7b5e2cd1fb17f5afc181a89e275269"
+        },
+        {
+          "start": 98304,
+          "end": 111755,
+          "sha256": "5710ba6b2e16aa869e51e81e0d5f0fdfef582a910b8486e8e60ffbd2ce54e419"
+        }
+      ],
+      "read_mode": "mechanical byte inventory only; semantic review not claimed"
+    },
+    {
+      "file": "docs/guidlines/original-recordings/agents/Recording 2026-08-29 16-51-40-798.txt",
+      "bytes": 122466,
+      "sha256": "27f0ca5476e2a9aaf6c8329c119a56233de358b738219e8847e202a359a186b2",
+      "chunks": [
+        {
+          "start": 0,
+          "end": 32768,
+          "sha256": "52e8b8e9eec2f2dd748f81d89eccc95dfcb70b1d6b1a999485faf09139eb6635"
+        },
+        {
+          "start": 32768,
+          "end": 65536,
+          "sha256": "10dbe49d959c892f49c9cf3c6cfabe4ddd76ffa913a2c4ff4a48914cf8c42b31"
+        },
+        {
+          "start": 65536,
+          "end": 98304,
+          "sha256": "63884c1919d4249be39fbefd4636280890ae456de4a16b2184e1ba08318442e9"
+        },
+        {
+          "start": 98304,
+          "end": 122466,
+          "sha256": "66425e2949105a95514a36eed0a0f380a7e61063e2068abd971d2330b23758dc"
+        }
+      ],
+      "read_mode": "mechanical byte inventory only; semantic review not claimed"
+    },
+    {
+      "file": "docs/guidlines/original-recordings/agents/Recording 2026-08-30 16-37-33-908.txt",
+      "bytes": 7719,
+      "sha256": "95b16f649484ab6687ac5c49d61ec27df2e6b4b6c05cf37368b8d9c2a91966c7",
+      "chunks": [
+        {
+          "start": 0,
+          "end": 7719,
+          "sha256": "95b16f649484ab6687ac5c49d61ec27df2e6b4b6c05cf37368b8d9c2a91966c7"
+        }
+      ],
+      "read_mode": "mechanical byte inventory only; semantic review not claimed"
+    },
+    {
+      "file": "docs/guidlines/original-recordings/agents/Recording 2026-08-30 20-48-42-423.txt",
+      "bytes": 26167,
+      "sha256": "31085734f775cee5c815ee1b252620966400e3f7a442224c8122534fef099f7b",
+      "chunks": [
+        {
+          "start": 0,
+          "end": 26167,
+          "sha256": "31085734f775cee5c815ee1b252620966400e3f7a442224c8122534fef099f7b"
+        }
+      ],
+      "read_mode": "mechanical byte inventory only; semantic review not claimed"
+    },
+    {
+      "file": "docs/guidlines/original-recordings/agents/Recording 2026-09-02 06-20-58-642.txt",
+      "bytes": 19917,
+      "sha256": "8ea2f7134f8556fafa5a7ddab6fe4834cbd6b9fc96023eb9289835c08cad040d",
+      "chunks": [
+        {
+          "start": 0,
+          "end": 19917,
+          "sha256": "8ea2f7134f8556fafa5a7ddab6fe4834cbd6b9fc96023eb9289835c08cad040d"
+        }
+      ],
+      "read_mode": "mechanical byte inventory only; semantic review not claimed"
+    },
+    {
+      "file": "docs/guidlines/original-recordings/agents/Recording 2026-09-02 12-25-33-881.txt",
+      "bytes": 179581,
+      "sha256": "c4a64a8875910ae3a77cb8223dd8229e181ea1234eee90a66b04bb50e37ff230",
+      "chunks": [
+        {
+          "start": 0,
+          "end": 32768,
+          "sha256": "1b443ba4d5cbc8966ec20cc8e603854f4d45112e2fa26963d4bca29a4dadd9ee"
+        },
+        {
+          "start": 32768,
+          "end": 65536,
+          "sha256": "99103c2536bf379194ba539be3b2ffd13f9a80d33a188073dad4894cb9a4b4c3"
+        },
+        {
+          "start": 65536,
+          "end": 98304,
+          "sha256": "b81a441186016773fa40fb922c5986e4ac230667422d9b1c89a1f2e23e7329b2"
+        },
+        {
+          "start": 98304,
+          "end": 131072,
+          "sha256": "ef8a7f3473df0485a29cb07c6c8a35a72b5a9b060cec0a9d9d6d03f9e9ba8189"
+        },
+        {
+          "start": 131072,
+          "end": 163840,
+          "sha256": "e03d57633e81e4b2a8dca935d12ecc6bf31cc14e662776e3991c4a8ba6ae2a14"
+        },
+        {
+          "start": 163840,
+          "end": 179581,
+          "sha256": "eb17695a2f636096578d897e857664090b59b47afbfc9fc6db2940c932941cf9"
+        }
+      ],
+      "read_mode": "mechanical byte inventory only; semantic review not claimed"
+    },
+    {
+      "file": "docs/guidlines/original-recordings/agents/Recording 2026-09-03 19-37-36-767.txt",
+      "bytes": 19394,
+      "sha256": "3c0d7b4ad62ef07e5211ff20f0262ea35049439699493b780d67a424aaba7370",
+      "chunks": [
+        {
+          "start": 0,
+          "end": 19394,
+          "sha256": "3c0d7b4ad62ef07e5211ff20f0262ea35049439699493b780d67a424aaba7370"
+        }
+      ],
+      "read_mode": "mechanical byte inventory only; semantic review not claimed"
+    },
+    {
+      "file": "docs/guidlines/original-recordings/agents/Recording 2026-09-06 10-59-50-580.txt",
+      "bytes": 13331,
+      "sha256": "9f29e54b4c784319608f6b388101a668bd4f0a479268a24dd2cb69032ff45bad",
+      "chunks": [
+        {
+          "start": 0,
+          "end": 13331,
+          "sha256": "9f29e54b4c784319608f6b388101a668bd4f0a479268a24dd2cb69032ff45bad"
+        }
+      ],
+      "read_mode": "mechanical byte inventory only; semantic review not claimed"
+    },
+    {
+      "file": "docs/guidlines/original-recordings/agents/Recording 2026-09-10 12-42-34-972.txt",
+      "bytes": 6725,
+      "sha256": "4d918ba87001349f6187d0f3dccf797a6396b41f334c0b1cdbc918fc93600ea1",
+      "chunks": [
+        {
+          "start": 0,
+          "end": 6725,
+          "sha256": "4d918ba87001349f6187d0f3dccf797a6396b41f334c0b1cdbc918fc93600ea1"
+        }
+      ],
+      "read_mode": "mechanical byte inventory only; semantic review not claimed"
+    },
+    {
+      "file": "docs/guidlines/original-recordings/agents/Recording 2026-09-14 12-13-21-828.txt",
+      "bytes": 23249,
+      "sha256": "15b87c97995d21c48d8c85edba55561b81935fc035f55913ef37ff6460eebb5a",
+      "chunks": [
+        {
+          "start": 0,
+          "end": 23249,
+          "sha256": "15b87c97995d21c48d8c85edba55561b81935fc035f55913ef37ff6460eebb5a"
+        }
+      ],
+      "read_mode": "mechanical byte inventory only; semantic review not claimed"
+    },
+    {
+      "file": "docs/guidlines/original-recordings/agents/Recording 2026-09-16 22-57-59-230.txt",
+      "bytes": 29474,
+      "sha256": "4c36fca7103e054029d0915f11145fa6cf246a43c8e9f26a2b68f61861c0e2a8",
+      "chunks": [
+        {
+          "start": 0,
+          "end": 29474,
+          "sha256": "4c36fca7103e054029d0915f11145fa6cf246a43c8e9f26a2b68f61861c0e2a8"
+        }
+      ],
+      "read_mode": "mechanical byte inventory only; semantic review not claimed"
+    },
+    {
+      "file": "docs/guidlines/original-recordings/agents/Recording 2026-09-17 11-49-21-406.txt",
+      "bytes": 19980,
+      "sha256": "55258e6dc2c152bf6c59e895f21f6ca5feda1b5b8370967f6d2fb52f2011dd0b",
+      "chunks": [
+        {
+          "start": 0,
+          "end": 19980,
+          "sha256": "55258e6dc2c152bf6c59e895f21f6ca5feda1b5b8370967f6d2fb52f2011dd0b"
+        }
+      ],
+      "read_mode": "mechanical byte inventory only; semantic review not claimed"
+    },
+    {
+      "file": "docs/guidlines/original-recordings/agents/Recording 2026-10-03 15-13-24-878.txt",
+      "bytes": 14867,
+      "sha256": "da00cf277198c9f3edf159c54eca9f9d214bec2c199d16a74426bfdd4319ec5e",
+      "chunks": [
+        {
+          "start": 0,
+          "end": 14867,
+          "sha256": "da00cf277198c9f3edf159c54eca9f9d214bec2c199d16a74426bfdd4319ec5e"
+        }
+      ],
+      "read_mode": "mechanical byte inventory only; semantic review not claimed"
+    },
+    {
+      "file": "docs/guidlines/original-recordings/agents/Recording 2026-10-04 10-18-01-427.txt",
+      "bytes": 18038,
+      "sha256": "37611b73a424d0c67a18b1fa613d81065d240c0c6d46477a6bc633963632c741",
+      "chunks": [
+        {
+          "start": 0,
+          "end": 18038,
+          "sha256": "37611b73a424d0c67a18b1fa613d81065d240c0c6d46477a6bc633963632c741"
+        }
+      ],
+      "read_mode": "mechanical byte inventory only; semantic review not claimed"
+    },
+    {
+      "file": "docs/guidlines/original-recordings/agents/Recording 2026-10-12 17-15-15-205.txt",
+      "bytes": 28821,
+      "sha256": "ab81f3cb53dae9515c8222f6b34375c77301cbeefb845683b57da1fdaaad234f",
+      "chunks": [
+        {
+          "start": 0,
+          "end": 28821,
+          "sha256": "ab81f3cb53dae9515c8222f6b34375c77301cbeefb845683b57da1fdaaad234f"
+        }
+      ],
+      "read_mode": "mechanical byte inventory only; semantic review not claimed"
+    },
+    {
+      "file": "docs/guidlines/original-recordings/agents/Recording 2026-10-14 12-41-21-326.txt",
+      "bytes": 10931,
+      "sha256": "0c2338bba4e7c951557e2f23d20a7bba21f81d6bb8d0eb83f056a3ef24d72186",
+      "chunks": [
+        {
+          "start": 0,
+          "end": 10931,
+          "sha256": "0c2338bba4e7c951557e2f23d20a7bba21f81d6bb8d0eb83f056a3ef24d72186"
+        }
+      ],
+      "read_mode": "mechanical byte inventory only; semantic review not claimed"
+    },
+    {
+      "file": "docs/guidlines/original-recordings/agents/Recording 2026-10-15 17-41-19-190.txt",
+      "bytes": 24403,
+      "sha256": "8b1669420769d25e70d009be93d9adbfdb76b94aa64c8f63693de803842344e7",
+      "chunks": [
+        {
+          "start": 0,
+          "end": 24403,
+          "sha256": "8b1669420769d25e70d009be93d9adbfdb76b94aa64c8f63693de803842344e7"
+        }
+      ],
+      "read_mode": "mechanical byte inventory only; semantic review not claimed"
+    },
+    {
+      "file": "docs/guidlines/original-recordings/agents/Recording 2026-10-17 13-00-28-020.txt",
+      "bytes": 25937,
+      "sha256": "a872dcd3df12f8dc36792cee5560eefc6a23c84c0c79d226cfea561faa1a25b6",
+      "chunks": [
+        {
+          "start": 0,
+          "end": 25937,
+          "sha256": "a872dcd3df12f8dc36792cee5560eefc6a23c84c0c79d226cfea561faa1a25b6"
+        }
+      ],
+      "read_mode": "mechanical byte inventory only; semantic review not claimed"
+    },
+    {
+      "file": "docs/guidlines/original-recordings/agents/Recording 2026-10-17 23-00-29-387.txt",
+      "bytes": 13505,
+      "sha256": "8f11584b194ec6fe5cad93c1b9093324824656be08f4642f6e9c305ffc2bc28d",
+      "chunks": [
+        {
+          "start": 0,
+          "end": 13505,
+          "sha256": "8f11584b194ec6fe5cad93c1b9093324824656be08f4642f6e9c305ffc2bc28d"
+        }
+      ],
+      "read_mode": "mechanical byte inventory only; semantic review not claimed"
+    },
+    {
+      "file": "docs/guidlines/original-recordings/agents/Recording 2026-10-18 18-38-21-960.txt",
+      "bytes": 17620,
+      "sha256": "107223d43cf20d14673b98bd7242e1723cd89a4e6028180a6b2d1a125db20eb5",
+      "chunks": [
+        {
+          "start": 0,
+          "end": 17620,
+          "sha256": "107223d43cf20d14673b98bd7242e1723cd89a4e6028180a6b2d1a125db20eb5"
+        }
+      ],
+      "read_mode": "mechanical byte inventory only; semantic review not claimed"
+    },
+    {
+      "file": "docs/guidlines/original-recordings/agents/Recording 2026-10-19 17-53-10-580.txt",
+      "bytes": 3931,
+      "sha256": "5a437eeb64116a652e8b6ebf2afc31e8b2e63a33351c43a3408edbb28238ddb4",
+      "chunks": [
+        {
+          "start": 0,
+          "end": 3931,
+          "sha256": "5a437eeb64116a652e8b6ebf2afc31e8b2e63a33351c43a3408edbb28238ddb4"
+        }
+      ],
+      "read_mode": "mechanical byte inventory only; semantic review not claimed"
+    },
+    {
+      "file": "docs/guidlines/original-recordings/agents/Recording 2026-10-20 11-48-38-894.txt",
+      "bytes": 13179,
+      "sha256": "0ac96a1c8f1ac34a044519ed96798dd01a81b6a353309e658f3d6f4a0f5ccd17",
+      "chunks": [
+        {
+          "start": 0,
+          "end": 13179,
+          "sha256": "0ac96a1c8f1ac34a044519ed96798dd01a81b6a353309e658f3d6f4a0f5ccd17"
+        }
+      ],
+      "read_mode": "mechanical byte inventory only; semantic review not claimed"
+    },
+    {
+      "file": "docs/guidlines/original-recordings/games/Recording 2026-08-13 17-37-45-601.txt",
+      "bytes": 28644,
+      "sha256": "371af8a051aa51d6688cc33d5f40a2180be2311545866d39bad7b7b673c0aa44",
+      "chunks": [
+        {
+          "start": 0,
+          "end": 28644,
+          "sha256": "371af8a051aa51d6688cc33d5f40a2180be2311545866d39bad7b7b673c0aa44"
+        }
+      ],
+      "read_mode": "mechanical byte inventory only; semantic review not claimed"
+    },
+    {
+      "file": "docs/guidlines/original-recordings/games/Recording 2026-08-13 18-11-36-235.txt",
+      "bytes": 13034,
+      "sha256": "c60b999c6f31dd9721b09dd08eaae9ac73d9500240eacde4b090c32161842a77",
+      "chunks": [
+        {
+          "start": 0,
+          "end": 13034,
+          "sha256": "c60b999c6f31dd9721b09dd08eaae9ac73d9500240eacde4b090c32161842a77"
+        }
+      ],
+      "read_mode": "mechanical byte inventory only; semantic review not claimed"
+    },
+    {
+      "file": "docs/guidlines/original-recordings/games/Recording 2026-08-14 13-01-57-849.txt",
+      "bytes": 10442,
+      "sha256": "d602098ca19c0f1e8bb2453a85090d4d0682253939c985458f3fc9c6cd03da17",
+      "chunks": [
+        {
+          "start": 0,
+          "end": 10442,
+          "sha256": "d602098ca19c0f1e8bb2453a85090d4d0682253939c985458f3fc9c6cd03da17"
+        }
+      ],
+      "read_mode": "mechanical byte inventory only; semantic review not claimed"
+    },
+    {
+      "file": "docs/guidlines/original-recordings/games/Recording 2026-08-14 16-27-52-325.txt",
+      "bytes": 2976,
+      "sha256": "7ce23bc83ac7fdd5c85fa8b456aed2e5f9387a9546b7a9016aff0880b9837665",
+      "chunks": [
+        {
+          "start": 0,
+          "end": 2976,
+          "sha256": "7ce23bc83ac7fdd5c85fa8b456aed2e5f9387a9546b7a9016aff0880b9837665"
+        }
+      ],
+      "read_mode": "mechanical byte inventory only; semantic review not claimed"
+    },
+    {
+      "file": "docs/guidlines/original-recordings/games/Recording 2026-08-14 17-01-32-916.txt",
+      "bytes": 4192,
+      "sha256": "9cd207a20a887f28effc8c8b9023796c0b910f3e6dbe2bc566e7d5411ab93e0b",
+      "chunks": [
+        {
+          "start": 0,
+          "end": 4192,
+          "sha256": "9cd207a20a887f28effc8c8b9023796c0b910f3e6dbe2bc566e7d5411ab93e0b"
+        }
+      ],
+      "read_mode": "mechanical byte inventory only; semantic review not claimed"
+    },
+    {
+      "file": "docs/guidlines/original-recordings/games/Recording 2026-08-14 17-49-02-029.txt",
+      "bytes": 17610,
+      "sha256": "81d7ac73d31229f022fcf8a51bad781c4da0572cb582edd40ac8b1403c9da323",
+      "chunks": [
+        {
+          "start": 0,
+          "end": 17610,
+          "sha256": "81d7ac73d31229f022fcf8a51bad781c4da0572cb582edd40ac8b1403c9da323"
+        }
+      ],
+      "read_mode": "mechanical byte inventory only; semantic review not claimed"
+    },
+    {
+      "file": "docs/guidlines/original-recordings/games/Recording 2026-09-22 16-21-16-561.txt",
+      "bytes": 3193,
+      "sha256": "ec9f9ac6c375841d2eee76552768a30369ebac3eacd1e055f96dd04e4f248d4f",
+      "chunks": [
+        {
+          "start": 0,
+          "end": 3193,
+          "sha256": "ec9f9ac6c375841d2eee76552768a30369ebac3eacd1e055f96dd04e4f248d4f"
+        }
+      ],
+      "read_mode": "mechanical byte inventory only; semantic review not claimed"
+    },
+    {
+      "file": "docs/guidlines/original-recordings/games/Recording 2026-09-22 19-29-45-708.txt",
+      "bytes": 17035,
+      "sha256": "3caddbd244f4718cee9620ecbe854b85fe312d80dc3e0e58a1aba9c520002e06",
+      "chunks": [
+        {
+          "start": 0,
+          "end": 17035,
+          "sha256": "3caddbd244f4718cee9620ecbe854b85fe312d80dc3e0e58a1aba9c520002e06"
+        }
+      ],
+      "read_mode": "mechanical byte inventory only; semantic review not claimed"
+    },
+    {
+      "file": "docs/guidlines/original-recordings/games/Recording 2026-09-23 07-45-59-368.txt",
+      "bytes": 16241,
+      "sha256": "e29aa5fcaa0bcf78c287f51964c45b0f5d6db4b8c7dc3b59ecba91d8347e57ab",
+      "chunks": [
+        {
+          "start": 0,
+          "end": 16241,
+          "sha256": "e29aa5fcaa0bcf78c287f51964c45b0f5d6db4b8c7dc3b59ecba91d8347e57ab"
+        }
+      ],
+      "read_mode": "mechanical byte inventory only; semantic review not claimed"
+    },
+    {
+      "file": "docs/guidlines/original-recordings/games/Recording 2026-09-23 12-43-37-539.txt",
+      "bytes": 11989,
+      "sha256": "d91626236ecc48415fec87879af7e7dc7df4e61ffc77ee4bfb0ddeadf5b734bd",
+      "chunks": [
+        {
+          "start": 0,
+          "end": 11989,
+          "sha256": "d91626236ecc48415fec87879af7e7dc7df4e61ffc77ee4bfb0ddeadf5b734bd"
+        }
+      ],
+      "read_mode": "mechanical byte inventory only; semantic review not claimed"
+    },
+    {
+      "file": "docs/guidlines/original-recordings/games/Recording 2026-09-23 18-07-16-763.txt",
+      "bytes": 20271,
+      "sha256": "7a6e34efe08afb378e1436c2e51b9bc0312e188110267ab1790266ce80df687b",
+      "chunks": [
+        {
+          "start": 0,
+          "end": 20271,
+          "sha256": "7a6e34efe08afb378e1436c2e51b9bc0312e188110267ab1790266ce80df687b"
+        }
+      ],
+      "read_mode": "mechanical byte inventory only; semantic review not claimed"
+    },
+    {
+      "file": "docs/guidlines/original-recordings/games/Recording 2026-09-24 11-11-22-318.txt",
+      "bytes": 6804,
+      "sha256": "b7506f7b65e0666d827739093087cba1d76af66d4d5290173a8c585520893798",
+      "chunks": [
+        {
+          "start": 0,
+          "end": 6804,
+          "sha256": "b7506f7b65e0666d827739093087cba1d76af66d4d5290173a8c585520893798"
+        }
+      ],
+      "read_mode": "mechanical byte inventory only; semantic review not claimed"
+    },
+    {
+      "file": "docs/guidlines/original-recordings/games/Recording 2026-09-24 14-06-13-020.txt",
+      "bytes": 24310,
+      "sha256": "07c826d47d0a137c7b522f205d6ba6cbb9226bd7898b9dcc4c1f16cff9813c35",
+      "chunks": [
+        {
+          "start": 0,
+          "end": 24310,
+          "sha256": "07c826d47d0a137c7b522f205d6ba6cbb9226bd7898b9dcc4c1f16cff9813c35"
+        }
+      ],
+      "read_mode": "mechanical byte inventory only; semantic review not claimed"
+    },
+    {
+      "file": "docs/guidlines/original-recordings/games/Recording 2026-09-24 19-08-31-060.txt",
+      "bytes": 14196,
+      "sha256": "61908746caac02f4cce87ffb8cdbd0ec38d590f47d614533438b842dec367d6f",
+      "chunks": [
+        {
+          "start": 0,
+          "end": 14196,
+          "sha256": "61908746caac02f4cce87ffb8cdbd0ec38d590f47d614533438b842dec367d6f"
+        }
+      ],
+      "read_mode": "mechanical byte inventory only; semantic review not claimed"
+    },
+    {
+      "file": "docs/guidlines/original-recordings/games/Recording 2026-09-24 20-20-06-214.txt",
+      "bytes": 25959,
+      "sha256": "1e9b4314614d1b1ac9e8396cdc5811cd24e6612bb18ae179610c679c4c1ac969",
+      "chunks": [
+        {
+          "start": 0,
+          "end": 25959,
+          "sha256": "1e9b4314614d1b1ac9e8396cdc5811cd24e6612bb18ae179610c679c4c1ac969"
+        }
+      ],
+      "read_mode": "mechanical byte inventory only; semantic review not claimed"
+    },
+    {
+      "file": "docs/guidlines/original-recordings/games/Recording 2026-09-25 18-40-43-161.txt",
+      "bytes": 23517,
+      "sha256": "131abd68f988d114c068ac940a7393926084b3aeb24c4ec4c587055c30aa3a95",
+      "chunks": [
+        {
+          "start": 0,
+          "end": 23517,
+          "sha256": "131abd68f988d114c068ac940a7393926084b3aeb24c4ec4c587055c30aa3a95"
+        }
+      ],
+      "read_mode": "mechanical byte inventory only; semantic review not claimed"
+    },
+    {
+      "file": "docs/guidlines/original-recordings/games/Recording 2026-09-25 21-49-14-988.txt",
+      "bytes": 124,
+      "sha256": "38671b9aa30d4fb20e50a4e75334a3a3aceafe6d9417c8e8cf20e3b401e74670",
+      "chunks": [
+        {
+          "start": 0,
+          "end": 124,
+          "sha256": "38671b9aa30d4fb20e50a4e75334a3a3aceafe6d9417c8e8cf20e3b401e74670"
+        }
+      ],
+      "read_mode": "mechanical byte inventory only; semantic review not claimed"
+    },
+    {
+      "file": "docs/guidlines/original-recordings/games/Recording 2026-09-25 21-49-53-432.txt",
+      "bytes": 10284,
+      "sha256": "15f087efafc7e24d5a5fa83bddaff99ff27b930c7c14a24f312c07721ecb17c2",
+      "chunks": [
+        {
+          "start": 0,
+          "end": 10284,
+          "sha256": "15f087efafc7e24d5a5fa83bddaff99ff27b930c7c14a24f312c07721ecb17c2"
+        }
+      ],
+      "read_mode": "mechanical byte inventory only; semantic review not claimed"
+    },
+    {
+      "file": "docs/guidlines/original-recordings/games/Recording 2026-10-09 12-16-12-908.txt",
+      "bytes": 11247,
+      "sha256": "425cfc8b8587d7b44c5112d94cac5f8348c6eb0294eb19ace5a635565e80aee6",
+      "chunks": [
+        {
+          "start": 0,
+          "end": 11247,
+          "sha256": "425cfc8b8587d7b44c5112d94cac5f8348c6eb0294eb19ace5a635565e80aee6"
+        }
+      ],
+      "read_mode": "mechanical byte inventory only; semantic review not claimed"
+    },
+    {
+      "file": "docs/guidlines/original-recordings/games/Recording 2026-10-09 18-04-17-301.txt",
+      "bytes": 20640,
+      "sha256": "2d762aaf65d1dda21943a0d8c1612cc424f8df9c2b679f0e2e2409f958238cf0",
+      "chunks": [
+        {
+          "start": 0,
+          "end": 20640,
+          "sha256": "2d762aaf65d1dda21943a0d8c1612cc424f8df9c2b679f0e2e2409f958238cf0"
+        }
+      ],
+      "read_mode": "mechanical byte inventory only; semantic review not claimed"
+    },
+    {
+      "file": "docs/guidlines/original-recordings/games/Recording 2026-10-10 18-14-53-924.txt",
+      "bytes": 10065,
+      "sha256": "eec72cfb205a06533b1ed4ee38443fe4ba61d2aaf1eb40a2a336e1e50c32ed50",
+      "chunks": [
+        {
+          "start": 0,
+          "end": 10065,
+          "sha256": "eec72cfb205a06533b1ed4ee38443fe4ba61d2aaf1eb40a2a336e1e50c32ed50"
+        }
+      ],
+      "read_mode": "mechanical byte inventory only; semantic review not claimed"
+    },
+    {
+      "file": "docs/guidlines/original-recordings/games/Recording 2026-10-10 18-42-09-059.txt",
+      "bytes": 4715,
+      "sha256": "186296281d738b065509c4a4362ef7506a82306ddfe30900193e10090eea46ac",
+      "chunks": [
+        {
+          "start": 0,
+          "end": 4715,
+          "sha256": "186296281d738b065509c4a4362ef7506a82306ddfe30900193e10090eea46ac"
+        }
+      ],
+      "read_mode": "mechanical byte inventory only; semantic review not claimed"
+    },
+    {
+      "file": "docs/guidlines/original-recordings/games/Recording 2026-10-14 18-33-46-960.txt",
+      "bytes": 16882,
+      "sha256": "319d21791b2e271bcb1b92f2c8ac297e8b5056a162e11100f69df614f9f68428",
+      "chunks": [
+        {
+          "start": 0,
+          "end": 16882,
+          "sha256": "319d21791b2e271bcb1b92f2c8ac297e8b5056a162e11100f69df614f9f68428"
+        }
+      ],
+      "read_mode": "mechanical byte inventory only; semantic review not claimed"
+    },
+    {
+      "file": "docs/guidlines/original-recordings/general/config/Recording 2026-08-10 17-25-49-264.txt",
+      "bytes": 8785,
+      "sha256": "cb2f78284b9faff7e532525a7c56992969ef81f95db04806a5d930a3352bc796",
+      "chunks": [
+        {
+          "start": 0,
+          "end": 8785,
+          "sha256": "cb2f78284b9faff7e532525a7c56992969ef81f95db04806a5d930a3352bc796"
+        }
+      ],
+      "read_mode": "mechanical byte inventory only; semantic review not claimed"
+    },
+    {
+      "file": "docs/guidlines/original-recordings/general/config/Recording 2026-08-21 06-46-58-804.txt",
+      "bytes": 8713,
+      "sha256": "2f70e879ccd61d2b761c8943a6aae2b72a23d2d73483da24e711dbcef315e622",
+      "chunks": [
+        {
+          "start": 0,
+          "end": 8713,
+          "sha256": "2f70e879ccd61d2b761c8943a6aae2b72a23d2d73483da24e711dbcef315e622"
+        }
+      ],
+      "read_mode": "mechanical byte inventory only; semantic review not claimed"
+    },
+    {
+      "file": "docs/guidlines/original-recordings/general/config/Recording 2026-08-31 12-31-37-822.txt",
+      "bytes": 10169,
+      "sha256": "39df00c07a54f513b4f9391641204890c97736f7f9c1bc09256fea962bfd8f03",
+      "chunks": [
+        {
+          "start": 0,
+          "end": 10169,
+          "sha256": "39df00c07a54f513b4f9391641204890c97736f7f9c1bc09256fea962bfd8f03"
+        }
+      ],
+      "read_mode": "mechanical byte inventory only; semantic review not claimed"
+    },
+    {
+      "file": "docs/guidlines/original-recordings/general/logging/Recording 2026-08-09 18-44-42-295.txt",
+      "bytes": 1,
+      "sha256": "01ba4719c80b6fe911b091a7c05124b64eeece964e09c058ef8f9805daca546b",
+      "chunks": [
+        {
+          "start": 0,
+          "end": 1,
+          "sha256": "01ba4719c80b6fe911b091a7c05124b64eeece964e09c058ef8f9805daca546b"
+        }
+      ],
+      "read_mode": "mechanical byte inventory only; semantic review not claimed"
+    },
+    {
+      "file": "docs/guidlines/original-recordings/general/logging/Recording 2026-08-09 18-45-04-576.txt",
+      "bytes": 11933,
+      "sha256": "95d4f99b864ca634df8c78bbcc843e0c5fadf180e3916483ae53c7f5cda68f79",
+      "chunks": [
+        {
+          "start": 0,
+          "end": 11933,
+          "sha256": "95d4f99b864ca634df8c78bbcc843e0c5fadf180e3916483ae53c7f5cda68f79"
+        }
+      ],
+      "read_mode": "mechanical byte inventory only; semantic review not claimed"
+    },
+    {
+      "file": "docs/guidlines/original-recordings/general/network/Recording 2026-08-07 12-59-34-262.txt",
+      "bytes": 8716,
+      "sha256": "15eb8f01ac62edc64b46f9205c75e7c91689cab94445121cd4b35fc5e6ee4bf6",
+      "chunks": [
+        {
+          "start": 0,
+          "end": 8716,
+          "sha256": "15eb8f01ac62edc64b46f9205c75e7c91689cab94445121cd4b35fc5e6ee4bf6"
+        }
+      ],
+      "read_mode": "mechanical byte inventory only; semantic review not claimed"
+    },
+    {
+      "file": "docs/guidlines/original-recordings/general/network/Recording 2026-08-07 17-53-06-299.txt",
+      "bytes": 6906,
+      "sha256": "c379adef5ebe33ae5ac5b4adc008fb03a713db241c4d1a6c909e89b3afaf43d9",
+      "chunks": [
+        {
+          "start": 0,
+          "end": 6906,
+          "sha256": "c379adef5ebe33ae5ac5b4adc008fb03a713db241c4d1a6c909e89b3afaf43d9"
+        }
+      ],
+      "read_mode": "mechanical byte inventory only; semantic review not claimed"
+    },
+    {
+      "file": "docs/guidlines/original-recordings/general/network/Recording 2026-08-20 13-05-36-584.txt",
+      "bytes": 6337,
+      "sha256": "d5a4840a5b9779f8a0b4f2d8a5864cbe7239181d6619407f25dac263961f777e",
+      "chunks": [
+        {
+          "start": 0,
+          "end": 6337,
+          "sha256": "d5a4840a5b9779f8a0b4f2d8a5864cbe7239181d6619407f25dac263961f777e"
+        }
+      ],
+      "read_mode": "mechanical byte inventory only; semantic review not claimed"
+    },
+    {
+      "file": "docs/guidlines/original-recordings/general/network/Recording 2026-10-06 11-24-06-508.txt",
+      "bytes": 13408,
+      "sha256": "c1398fb77fc9c7235e35b8279f91ff9b027e9e58fc000e93892537d96d6b21f6",
+      "chunks": [
+        {
+          "start": 0,
+          "end": 13408,
+          "sha256": "c1398fb77fc9c7235e35b8279f91ff9b027e9e58fc000e93892537d96d6b21f6"
+        }
+      ],
+      "read_mode": "mechanical byte inventory only; semantic review not claimed"
+    },
+    {
+      "file": "docs/guidlines/original-recordings/general/programming/Recording 2026-08-26 21-01-35-467.txt",
+      "bytes": 11111,
+      "sha256": "e0bafa8230aa541678cc5c2f30f506d00f670ffcf4d6fd1e2286940c08f59581",
+      "chunks": [
+        {
+          "start": 0,
+          "end": 11111,
+          "sha256": "e0bafa8230aa541678cc5c2f30f506d00f670ffcf4d6fd1e2286940c08f59581"
+        }
+      ],
+      "read_mode": "mechanical byte inventory only; semantic review not claimed"
+    },
+    {
+      "file": "docs/guidlines/original-recordings/general/programming/Recording 2026-08-27 13-07-44-756.txt",
+      "bytes": 52186,
+      "sha256": "2ce568625fe4d95b1790f2cf271b6b73ddf34ed912ba8cfbab432bf4b6e4e0ef",
+      "chunks": [
+        {
+          "start": 0,
+          "end": 32768,
+          "sha256": "eec3faf358f482534c74dcdb0e7d3c748bf507e46c8151724efb1e20d5d485ea"
+        },
+        {
+          "start": 32768,
+          "end": 52186,
+          "sha256": "537cbd688f1356e65059195e94fb4c1acccef50fbfbab00ae50c1baa766e9a2a"
+        }
+      ],
+      "read_mode": "mechanical byte inventory only; semantic review not claimed"
+    },
+    {
+      "file": "docs/guidlines/original-recordings/general/programming/Recording 2026-08-27 19-35-37-192.txt",
+      "bytes": 16226,
+      "sha256": "d08f83a168cc5db8d20b13c90db37ad8e770c2b48aaa1060b4342d941352998b",
+      "chunks": [
+        {
+          "start": 0,
+          "end": 16226,
+          "sha256": "d08f83a168cc5db8d20b13c90db37ad8e770c2b48aaa1060b4342d941352998b"
+        }
+      ],
+      "read_mode": "mechanical byte inventory only; semantic review not claimed"
+    },
+    {
+      "file": "docs/guidlines/original-recordings/general/programming/Recording 2026-08-28 07-36-32-915.txt",
+      "bytes": 19856,
+      "sha256": "b80519e26fdf42cbade139de080340b609adc9ab3fb8cd3f0ab97056e938ce14",
+      "chunks": [
+        {
+          "start": 0,
+          "end": 19856,
+          "sha256": "b80519e26fdf42cbade139de080340b609adc9ab3fb8cd3f0ab97056e938ce14"
+        }
+      ],
+      "read_mode": "mechanical byte inventory only; semantic review not claimed"
+    },
+    {
+      "file": "docs/guidlines/original-recordings/general/programming/Recording 2026-08-28 18-41-20-415.txt",
+      "bytes": 28,
+      "sha256": "0c5c284822799894518ebcb5ca5e1d2b01ed6e9e95b0f8f377d14aae8d67e347",
+      "chunks": [
+        {
+          "start": 0,
+          "end": 28,
+          "sha256": "0c5c284822799894518ebcb5ca5e1d2b01ed6e9e95b0f8f377d14aae8d67e347"
+        }
+      ],
+      "read_mode": "mechanical byte inventory only; semantic review not claimed"
+    },
+    {
+      "file": "docs/guidlines/original-recordings/general/programming/Recording 2026-08-28 18-41-45-580.txt",
+      "bytes": 10167,
+      "sha256": "b0020f83cf59b3fd9575c8bc8faa1e358f94bdf41906696a50ecd98bab996cec",
+      "chunks": [
+        {
+          "start": 0,
+          "end": 10167,
+          "sha256": "b0020f83cf59b3fd9575c8bc8faa1e358f94bdf41906696a50ecd98bab996cec"
+        }
+      ],
+      "read_mode": "mechanical byte inventory only; semantic review not claimed"
+    },
+    {
+      "file": "docs/guidlines/original-recordings/general/programming/Recording 2026-09-01 18-26-08-628.txt",
+      "bytes": 71718,
+      "sha256": "67f2489efb3cd7a714e805777bedbbc4b2917cd86ec52ec584d37cc604097d71",
+      "chunks": [
+        {
+          "start": 0,
+          "end": 32768,
+          "sha256": "0e242f088156c3c7158e96ebaea9373e015d59fd6738388080318b45294b6273"
+        },
+        {
+          "start": 32768,
+          "end": 65536,
+          "sha256": "debcec95ff9d90d391e961b9de6a7f7ffda6685da252aa22b087f8fa8c7918ff"
+        },
+        {
+          "start": 65536,
+          "end": 71718,
+          "sha256": "4e49f0a370180f4de5dbbf28e6043be9dbebee4ca6a447890c8464874ef72807"
+        }
+      ],
+      "read_mode": "mechanical byte inventory only; semantic review not claimed"
+    },
+    {
+      "file": "docs/guidlines/original-recordings/general/programming/Recording 2026-09-07 12-13-37-378.txt",
+      "bytes": 10087,
+      "sha256": "322efdf964e3e3c5bee1a63e925813895ae3ab030d11937f5a62bc41d3c768fa",
+      "chunks": [
+        {
+          "start": 0,
+          "end": 10087,
+          "sha256": "322efdf964e3e3c5bee1a63e925813895ae3ab030d11937f5a62bc41d3c768fa"
+        }
+      ],
+      "read_mode": "mechanical byte inventory only; semantic review not claimed"
+    },
+    {
+      "file": "docs/guidlines/original-recordings/general/programming/Recording 2026-09-07 16-57-57-943.txt",
+      "bytes": 14140,
+      "sha256": "d8f7e85feeb21901cc1562351daecb15290e7d0d5c855d833931d267e1fdb67d",
+      "chunks": [
+        {
+          "start": 0,
+          "end": 14140,
+          "sha256": "d8f7e85feeb21901cc1562351daecb15290e7d0d5c855d833931d267e1fdb67d"
+        }
+      ],
+      "read_mode": "mechanical byte inventory only; semantic review not claimed"
+    },
+    {
+      "file": "docs/guidlines/original-recordings/general/programming/Recording 2026-09-09 17-53-23-726.txt",
+      "bytes": 6541,
+      "sha256": "4cf4d4bfce902f6cd0ad74ce4d85f2ab5b837789c9a6e0d2d56111bbfc036bb9",
+      "chunks": [
+        {
+          "start": 0,
+          "end": 6541,
+          "sha256": "4cf4d4bfce902f6cd0ad74ce4d85f2ab5b837789c9a6e0d2d56111bbfc036bb9"
+        }
+      ],
+      "read_mode": "mechanical byte inventory only; semantic review not claimed"
+    },
+    {
+      "file": "docs/guidlines/original-recordings/general/programming/Recording 2026-09-10 17-57-18-069.txt",
+      "bytes": 9594,
+      "sha256": "d2b7b1017e172f68fa95a06103907ad61b4b730b4cd31bb93516956f5a5204d5",
+      "chunks": [
+        {
+          "start": 0,
+          "end": 9594,
+          "sha256": "d2b7b1017e172f68fa95a06103907ad61b4b730b4cd31bb93516956f5a5204d5"
+        }
+      ],
+      "read_mode": "mechanical byte inventory only; semantic review not claimed"
+    },
+    {
+      "file": "docs/guidlines/original-recordings/general/programming/Recording 2026-09-17 07-42-28-553.txt",
+      "bytes": 18241,
+      "sha256": "38130cbfdcea8dd43be5f4edc68ebd783e22c98150bbf51bccb390e66c0632ef",
+      "chunks": [
+        {
+          "start": 0,
+          "end": 18241,
+          "sha256": "38130cbfdcea8dd43be5f4edc68ebd783e22c98150bbf51bccb390e66c0632ef"
+        }
+      ],
+      "read_mode": "mechanical byte inventory only; semantic review not claimed"
+    },
+    {
+      "file": "docs/guidlines/original-recordings/general/programming/Recording 2026-09-18 18-22-26-547.txt",
+      "bytes": 44599,
+      "sha256": "ed7a4ae70d045548ec66fe7ca8d20c055f32c96111230f110776064eb685f6ab",
+      "chunks": [
+        {
+          "start": 0,
+          "end": 32768,
+          "sha256": "3d1e482ce1b2692180b3e41b8e1837acf997cb6f0ce30b3fc835ff273fe3b0ea"
+        },
+        {
+          "start": 32768,
+          "end": 44599,
+          "sha256": "338863083bb381484c5b1d46e233d0b42ef1c141369644ab768a901627c3f78a"
+        }
+      ],
+      "read_mode": "mechanical byte inventory only; semantic review not claimed"
+    },
+    {
+      "file": "docs/guidlines/original-recordings/general/programming/Recording 2026-09-19 09-03-14-084.txt",
+      "bytes": 32255,
+      "sha256": "f66bed6343592cae1a2d03e09943793ae73380d602421740176f2ca195995ef4",
+      "chunks": [
+        {
+          "start": 0,
+          "end": 32255,
+          "sha256": "f66bed6343592cae1a2d03e09943793ae73380d602421740176f2ca195995ef4"
+        }
+      ],
+      "read_mode": "mechanical byte inventory only; semantic review not claimed"
+    },
+    {
+      "file": "docs/guidlines/original-recordings/general/programming/Recording 2026-09-20 10-00-31-110.txt",
+      "bytes": 26689,
+      "sha256": "aea5e2741c308bf45594f581786b8ec44be48d4ebf6839c07c075f335a5a2630",
+      "chunks": [
+        {
+          "start": 0,
+          "end": 26689,
+          "sha256": "aea5e2741c308bf45594f581786b8ec44be48d4ebf6839c07c075f335a5a2630"
+        }
+      ],
+      "read_mode": "mechanical byte inventory only; semantic review not claimed"
+    },
+    {
+      "file": "docs/guidlines/original-recordings/general/programming/Recording 2026-09-26 09-29-14-271.txt",
+      "bytes": 45326,
+      "sha256": "7fab4fde783f287c51f7c68b4e1453b58c76d0e86c5672747d23603e58758bb9",
+      "chunks": [
+        {
+          "start": 0,
+          "end": 32768,
+          "sha256": "89ffd32df24ba5159c992fae5158c3ade48f1dbff8c639c23cfd18f780d5a987"
+        },
+        {
+          "start": 32768,
+          "end": 45326,
+          "sha256": "0c9e1e6b24f7e4dcb7d1f18121e764a181945bd8885b7dde8cc66f7a6e362441"
+        }
+      ],
+      "read_mode": "mechanical byte inventory only; semantic review not claimed"
+    },
+    {
+      "file": "docs/guidlines/original-recordings/general/programming/Recording 2026-09-27 12-45-39-038.txt",
+      "bytes": 11671,
+      "sha256": "83898544f9b2062829981c42bf4170e9c1d8c229761151edc31bba8c212c708f",
+      "chunks": [
+        {
+          "start": 0,
+          "end": 11671,
+          "sha256": "83898544f9b2062829981c42bf4170e9c1d8c229761151edc31bba8c212c708f"
+        }
+      ],
+      "read_mode": "mechanical byte inventory only; semantic review not claimed"
+    },
+    {
+      "file": "docs/guidlines/original-recordings/general/programming/Recording 2026-09-27 19-44-45-736.txt",
+      "bytes": 17665,
+      "sha256": "42cf7156137d97528037432d9a529413d7a5f7fbc3ba3db05451c3fe1c94781c",
+      "chunks": [
+        {
+          "start": 0,
+          "end": 17665,
+          "sha256": "42cf7156137d97528037432d9a529413d7a5f7fbc3ba3db05451c3fe1c94781c"
+        }
+      ],
+      "read_mode": "mechanical byte inventory only; semantic review not claimed"
+    },
+    {
+      "file": "docs/guidlines/original-recordings/general/programming/Recording 2026-09-27 20-56-31-463.txt",
+      "bytes": 13158,
+      "sha256": "6fb4c3b01f1e853bb85cc418aadd5e52910393bf7b6c899516e957159f121f00",
+      "chunks": [
+        {
+          "start": 0,
+          "end": 13158,
+          "sha256": "6fb4c3b01f1e853bb85cc418aadd5e52910393bf7b6c899516e957159f121f00"
+        }
+      ],
+      "read_mode": "mechanical byte inventory only; semantic review not claimed"
+    },
+    {
+      "file": "docs/guidlines/original-recordings/general/programming/Recording 2026-10-07 18-02-02-878.txt",
+      "bytes": 12197,
+      "sha256": "57f5d2fde33f3ca5f644a3df1af40eb9c07bb65e59a5ed6c97d5d3d86d7f395f",
+      "chunks": [
+        {
+          "start": 0,
+          "end": 12197,
+          "sha256": "57f5d2fde33f3ca5f644a3df1af40eb9c07bb65e59a5ed6c97d5d3d86d7f395f"
+        }
+      ],
+      "read_mode": "mechanical byte inventory only; semantic review not claimed"
+    },
+    {
+      "file": "docs/guidlines/original-recordings/general/testing/Recording 2026-08-15 20-49-36-478.txt",
+      "bytes": 15441,
+      "sha256": "5e0509ca1caae5b4094bc3a7ccd629cf86db2df0a447aab1e1aff3e3fd862fb4",
+      "chunks": [
+        {
+          "start": 0,
+          "end": 15441,
+          "sha256": "5e0509ca1caae5b4094bc3a7ccd629cf86db2df0a447aab1e1aff3e3fd862fb4"
+        }
+      ],
+      "read_mode": "mechanical byte inventory only; semantic review not claimed"
+    },
+    {
+      "file": "docs/guidlines/original-recordings/general/testing/Recording 2026-08-16 15-18-25-301.txt",
+      "bytes": 310,
+      "sha256": "0bcc190063e4638e33df4db1b7b654ffa734d464559ee9571a002026f8999feb",
+      "chunks": [
+        {
+          "start": 0,
+          "end": 310,
+          "sha256": "0bcc190063e4638e33df4db1b7b654ffa734d464559ee9571a002026f8999feb"
+        }
+      ],
+      "read_mode": "mechanical byte inventory only; semantic review not claimed"
+    },
+    {
+      "file": "docs/guidlines/original-recordings/general/testing/Recording 2026-08-16 15-21-52-298.txt",
+      "bytes": 27064,
+      "sha256": "42900dd1abd42a5ae65b8deac371706aaa7a44ff1164ba1edc73369a7ef443b4",
+      "chunks": [
+        {
+          "start": 0,
+          "end": 27064,
+          "sha256": "42900dd1abd42a5ae65b8deac371706aaa7a44ff1164ba1edc73369a7ef443b4"
+        }
+      ],
+      "read_mode": "mechanical byte inventory only; semantic review not claimed"
+    },
+    {
+      "file": "docs/guidlines/original-recordings/general/testing/Recording 2026-08-20 17-24-02-965.txt",
+      "bytes": 27824,
+      "sha256": "39f0dc00fda769ee9a55b323e10f474dd341300767da26fcd87c84b963280c58",
+      "chunks": [
+        {
+          "start": 0,
+          "end": 27824,
+          "sha256": "39f0dc00fda769ee9a55b323e10f474dd341300767da26fcd87c84b963280c58"
+        }
+      ],
+      "read_mode": "mechanical byte inventory only; semantic review not claimed"
+    },
+    {
+      "file": "docs/guidlines/original-recordings/general/testing/Recording 2026-09-23 08-47-18-577.txt",
+      "bytes": 18762,
+      "sha256": "f0ad2b233c74d6f4d9d2f0994962ef892bda770d2b6066b8da5ae3a4e81f882c",
+      "chunks": [
+        {
+          "start": 0,
+          "end": 18762,
+          "sha256": "f0ad2b233c74d6f4d9d2f0994962ef892bda770d2b6066b8da5ae3a4e81f882c"
+        }
+      ],
+      "read_mode": "mechanical byte inventory only; semantic review not claimed"
+    },
+    {
+      "file": "docs/guidlines/original-recordings/gui/Recording 2026-08-02 09-05-03-221.txt",
+      "bytes": 6702,
+      "sha256": "7d8887c65d4c56bca0f147c570974b845a2464ddbbbed632a8d2836ca1e85ab2",
+      "chunks": [
+        {
+          "start": 0,
+          "end": 6702,
+          "sha256": "7d8887c65d4c56bca0f147c570974b845a2464ddbbbed632a8d2836ca1e85ab2"
+        }
+      ],
+      "read_mode": "mechanical byte inventory only; semantic review not claimed"
+    },
+    {
+      "file": "docs/guidlines/original-recordings/gui/Recording 2026-08-06 05-59-55-646.txt",
+      "bytes": 1,
+      "sha256": "01ba4719c80b6fe911b091a7c05124b64eeece964e09c058ef8f9805daca546b",
+      "chunks": [
+        {
+          "start": 0,
+          "end": 1,
+          "sha256": "01ba4719c80b6fe911b091a7c05124b64eeece964e09c058ef8f9805daca546b"
+        }
+      ],
+      "read_mode": "mechanical byte inventory only; semantic review not claimed"
+    },
+    {
+      "file": "docs/guidlines/original-recordings/gui/Recording 2026-08-11 16-21-19-567.txt",
+      "bytes": 1793,
+      "sha256": "b5b7814e2fd1ea5e6e9239f9a18b643f25dca033426b96675c0c708a07220be3",
+      "chunks": [
+        {
+          "start": 0,
+          "end": 1793,
+          "sha256": "b5b7814e2fd1ea5e6e9239f9a18b643f25dca033426b96675c0c708a07220be3"
+        }
+      ],
+      "read_mode": "mechanical byte inventory only; semantic review not claimed"
+    },
+    {
+      "file": "docs/guidlines/original-recordings/gui/Recording 2026-08-17 17-41-05-624.txt",
+      "bytes": 8780,
+      "sha256": "0647fa2663e85fda6bf625e8aa765b5220ee0b2786a0b629b0535ffed55b6365",
+      "chunks": [
+        {
+          "start": 0,
+          "end": 8780,
+          "sha256": "0647fa2663e85fda6bf625e8aa765b5220ee0b2786a0b629b0535ffed55b6365"
+        }
+      ],
+      "read_mode": "mechanical byte inventory only; semantic review not claimed"
+    },
+    {
+      "file": "docs/guidlines/original-recordings/gui/Recording 2026-08-20 06-28-29-010.txt",
+      "bytes": 14846,
+      "sha256": "74d6dea2ed87828129a6e4050ca6c5e70bc37fda03db5aade3166e66267228e8",
+      "chunks": [
+        {
+          "start": 0,
+          "end": 14846,
+          "sha256": "74d6dea2ed87828129a6e4050ca6c5e70bc37fda03db5aade3166e66267228e8"
+        }
+      ],
+      "read_mode": "mechanical byte inventory only; semantic review not claimed"
+    },
+    {
+      "file": "docs/guidlines/original-recordings/gui/Recording 2026-08-20 12-40-27-187.txt",
+      "bytes": 6277,
+      "sha256": "ad442ac0c87c5ace9f8d56d50871fc4cafada38678f91b6fdec9e6203d42428c",
+      "chunks": [
+        {
+          "start": 0,
+          "end": 6277,
+          "sha256": "ad442ac0c87c5ace9f8d56d50871fc4cafada38678f91b6fdec9e6203d42428c"
+        }
+      ],
+      "read_mode": "mechanical byte inventory only; semantic review not claimed"
+    },
+    {
+      "file": "docs/guidlines/original-recordings/gui/Recording 2026-08-21 13-20-26-329.txt",
+      "bytes": 21916,
+      "sha256": "8130a49806b47969d0203da7ba8dc11cddf9ff196c3078bc758e6719f8450629",
+      "chunks": [
+        {
+          "start": 0,
+          "end": 21916,
+          "sha256": "8130a49806b47969d0203da7ba8dc11cddf9ff196c3078bc758e6719f8450629"
+        }
+      ],
+      "read_mode": "mechanical byte inventory only; semantic review not claimed"
+    },
+    {
+      "file": "docs/guidlines/original-recordings/gui/Recording 2026-08-27 18-49-13-262.txt",
+      "bytes": 11761,
+      "sha256": "dfbfba637c87e040ca64d931681702dddfc26e4c7f4da35db39973b598d4e527",
+      "chunks": [
+        {
+          "start": 0,
+          "end": 11761,
+          "sha256": "dfbfba637c87e040ca64d931681702dddfc26e4c7f4da35db39973b598d4e527"
+        }
+      ],
+      "read_mode": "mechanical byte inventory only; semantic review not claimed"
+    },
+    {
+      "file": "docs/guidlines/original-recordings/gui/Recording 2026-09-03 18-57-52-081.txt",
+      "bytes": 9150,
+      "sha256": "7a0d757a99f48ec76ff1b72814f0e9c926357e81828a75d5bb560d750d66b5f8",
+      "chunks": [
+        {
+          "start": 0,
+          "end": 9150,
+          "sha256": "7a0d757a99f48ec76ff1b72814f0e9c926357e81828a75d5bb560d750d66b5f8"
+        }
+      ],
+      "read_mode": "mechanical byte inventory only; semantic review not claimed"
+    },
+    {
+      "file": "docs/guidlines/original-recordings/gui/Recording 2026-09-05 10-49-12-342.txt",
+      "bytes": 23934,
+      "sha256": "19e13a46695c0dc941ab97bc7adad6ca918921a707a71880cc6d4fce859d8af7",
+      "chunks": [
+        {
+          "start": 0,
+          "end": 23934,
+          "sha256": "19e13a46695c0dc941ab97bc7adad6ca918921a707a71880cc6d4fce859d8af7"
+        }
+      ],
+      "read_mode": "mechanical byte inventory only; semantic review not claimed"
+    },
+    {
+      "file": "docs/guidlines/original-recordings/gui/Recording 2026-09-16 11-18-49-098.txt",
+      "bytes": 31026,
+      "sha256": "caec1ed0a834195a938aa39e2b74e4773589b6713fadf99b8ebfe2bdaddae0d8",
+      "chunks": [
+        {
+          "start": 0,
+          "end": 31026,
+          "sha256": "caec1ed0a834195a938aa39e2b74e4773589b6713fadf99b8ebfe2bdaddae0d8"
+        }
+      ],
+      "read_mode": "mechanical byte inventory only; semantic review not claimed"
+    },
+    {
+      "file": "docs/guidlines/original-recordings/gui/Recording 2026-10-10 17-44-18-524.txt",
+      "bytes": 11034,
+      "sha256": "4cfce4f5474c6024d020060c213c4e90e246b282b35c7a892650c2183587065e",
+      "chunks": [
+        {
+          "start": 0,
+          "end": 11034,
+          "sha256": "4cfce4f5474c6024d020060c213c4e90e246b282b35c7a892650c2183587065e"
+        }
+      ],
+      "read_mode": "mechanical byte inventory only; semantic review not claimed"
+    },
+    {
+      "file": "docs/guidlines/original-recordings/gui/Recording 2026-10-16 12-21-39-986.txt",
+      "bytes": 12954,
+      "sha256": "811ec75c7d55282fef04ed376090e4b2e0cf1983419d669dc2c9e71ffe6aa970",
+      "chunks": [
+        {
+          "start": 0,
+          "end": 12954,
+          "sha256": "811ec75c7d55282fef04ed376090e4b2e0cf1983419d669dc2c9e71ffe6aa970"
+        }
+      ],
+      "read_mode": "mechanical byte inventory only; semantic review not claimed"
+    },
+    {
+      "file": "docs/guidlines/original-recordings/gui/Recovered recording e621bbf3.txt",
+      "bytes": 15850,
+      "sha256": "3603a8847d51a36f4662b1bef957949675ed96b75beb43ba176b904b07814758",
+      "chunks": [
+        {
+          "start": 0,
+          "end": 15850,
+          "sha256": "3603a8847d51a36f4662b1bef957949675ed96b75beb43ba176b904b07814758"
+        }
+      ],
+      "read_mode": "mechanical byte inventory only; semantic review not claimed"
+    },
+    {
+      "file": "docs/guidlines/original-recordings/kmd/Recording 2026-08-05 17-22-26-192.txt",
+      "bytes": 12364,
+      "sha256": "3e4f732fb9b6cfbe27ef3c4ce2ea5b1be70ccaf9a1647f0a0116865359b3a58a",
+      "chunks": [
+        {
+          "start": 0,
+          "end": 12364,
+          "sha256": "3e4f732fb9b6cfbe27ef3c4ce2ea5b1be70ccaf9a1647f0a0116865359b3a58a"
+        }
+      ],
+      "read_mode": "mechanical byte inventory only; semantic review not claimed"
+    },
+    {
+      "file": "docs/guidlines/original-recordings/kmd/Recording 2026-08-06 12-09-51-499.txt",
+      "bytes": 5331,
+      "sha256": "a366bf89c5caa2748a8a8562fd42a175b1f1cb43f21bb272ba11e5f444ea7f72",
+      "chunks": [
+        {
+          "start": 0,
+          "end": 5331,
+          "sha256": "a366bf89c5caa2748a8a8562fd42a175b1f1cb43f21bb272ba11e5f444ea7f72"
+        }
+      ],
+      "read_mode": "mechanical byte inventory only; semantic review not claimed"
+    },
+    {
+      "file": "docs/guidlines/original-recordings/kmd/Recording 2026-08-06 17-30-53-705.txt",
+      "bytes": 4573,
+      "sha256": "6ca1dc9acd31a77fd0cfcd6db9cbcd8cb3255866375bb9f2ab9be8d4c5792752",
+      "chunks": [
+        {
+          "start": 0,
+          "end": 4573,
+          "sha256": "6ca1dc9acd31a77fd0cfcd6db9cbcd8cb3255866375bb9f2ab9be8d4c5792752"
+        }
+      ],
+      "read_mode": "mechanical byte inventory only; semantic review not claimed"
+    },
+    {
+      "file": "docs/guidlines/original-recordings/mediaediting/Recording 2026-10-23 11-36-58-668.txt",
+      "bytes": 16648,
+      "sha256": "a025de6597e5d9eeacd59ff72afdcb740e1c60699aba26ebb5a70d586a233782",
+      "chunks": [
+        {
+          "start": 0,
+          "end": 16648,
+          "sha256": "a025de6597e5d9eeacd59ff72afdcb740e1c60699aba26ebb5a70d586a233782"
+        }
+      ],
+      "read_mode": "mechanical byte inventory only; semantic review not claimed"
+    },
+    {
+      "file": "docs/guidlines/original-recordings/mediaediting/Recording 2026-10-23 17-14-05-661.txt",
+      "bytes": 25962,
+      "sha256": "2fb9e885c223f8ce66ad7304b4a8ce0128f442cbbe2c40f037f602c7cff51225",
+      "chunks": [
+        {
+          "start": 0,
+          "end": 25962,
+          "sha256": "2fb9e885c223f8ce66ad7304b4a8ce0128f442cbbe2c40f037f602c7cff51225"
+        }
+      ],
+      "read_mode": "mechanical byte inventory only; semantic review not claimed"
+    },
+    {
+      "file": "docs/guidlines/original-recordings/projects/Recording 2026-08-21 19-27-04-642.txt",
+      "bytes": 82,
+      "sha256": "77d14bad889a7b993eabf39da133d0e700c0b0160a2e47a304ae23a10171f03e",
+      "chunks": [
+        {
+          "start": 0,
+          "end": 82,
+          "sha256": "77d14bad889a7b993eabf39da133d0e700c0b0160a2e47a304ae23a10171f03e"
+        }
+      ],
+      "read_mode": "mechanical byte inventory only; semantic review not claimed"
+    },
+    {
+      "file": "docs/guidlines/original-recordings/projects/Recording 2026-08-21 19-31-23-759.txt",
+      "bytes": 11827,
+      "sha256": "90cb12975120d67b038351f381ca6014de5aadbc62ecfc16b5931f1a4488f8f2",
+      "chunks": [
+        {
+          "start": 0,
+          "end": 11827,
+          "sha256": "90cb12975120d67b038351f381ca6014de5aadbc62ecfc16b5931f1a4488f8f2"
+        }
+      ],
+      "read_mode": "mechanical byte inventory only; semantic review not claimed"
+    },
+    {
+      "file": "docs/guidlines/original-recordings/test1/Recording 2026-07-28 18-04-27-909.txt",
+      "bytes": 209,
+      "sha256": "c8f7fa7892a6ae58b38e15efe5ce85a47da73182a3a6e8c9647003a07b7cd3b5",
+      "chunks": [
+        {
+          "start": 0,
+          "end": 209,
+          "sha256": "c8f7fa7892a6ae58b38e15efe5ce85a47da73182a3a6e8c9647003a07b7cd3b5"
+        }
+      ],
+      "read_mode": "mechanical byte inventory only; semantic review not claimed"
+    },
+    {
+      "file": "docs/guidlines/original-recordings/test1/Recording 2026-08-02 08-18-36-831.txt",
+      "bytes": 348,
+      "sha256": "c0b1941938c7254c545477d8e26e64d66e3b70ac719d9297741166e5407a035f",
+      "chunks": [
+        {
+          "start": 0,
+          "end": 348,
+          "sha256": "c0b1941938c7254c545477d8e26e64d66e3b70ac719d9297741166e5407a035f"
+        }
+      ],
+      "read_mode": "mechanical byte inventory only; semantic review not claimed"
+    },
+    {
+      "file": "docs/guidlines/original-recordings/test1/Recording 2026-08-06 20-13-41-794.txt",
+      "bytes": 51,
+      "sha256": "12221ec685c4ace9bc63d78c09f7a88c9a19f53be04a3242c7c5115d74da85e3",
+      "chunks": [
+        {
+          "start": 0,
+          "end": 51,
+          "sha256": "12221ec685c4ace9bc63d78c09f7a88c9a19f53be04a3242c7c5115d74da85e3"
+        }
+      ],
+      "read_mode": "mechanical byte inventory only; semantic review not claimed"
+    },
+    {
+      "file": "docs/guidlines/original-recordings/test1/Recording 2026-08-06 20-55-54-374.txt",
+      "bytes": 96,
+      "sha256": "70e03c2f7d7242798dac72e558dcc49052a62b7780318ec61195f25e13dbaf7e",
+      "chunks": [
+        {
+          "start": 0,
+          "end": 96,
+          "sha256": "70e03c2f7d7242798dac72e558dcc49052a62b7780318ec61195f25e13dbaf7e"
+        }
+      ],
+      "read_mode": "mechanical byte inventory only; semantic review not claimed"
+    },
+    {
+      "file": "docs/guidlines/original-recordings/test1/Recording 2026-08-06 20-57-12-902.txt",
+      "bytes": 121,
+      "sha256": "e9067f1ef592a51f15eecb95850a9d0c9223ac610c462e9bb86e3163a847276d",
+      "chunks": [
+        {
+          "start": 0,
+          "end": 121,
+          "sha256": "e9067f1ef592a51f15eecb95850a9d0c9223ac610c462e9bb86e3163a847276d"
+        }
+      ],
+      "read_mode": "mechanical byte inventory only; semantic review not claimed"
+    },
+    {
+      "file": "docs/guidlines/original-recordings/test1/Recording 2026-08-06 22-17-25-669.txt",
+      "bytes": 20,
+      "sha256": "adda644a693e978d7c00358f1ff8bc55aa23059c8533f01bad2b469eaf41d975",
+      "chunks": [
+        {
+          "start": 0,
+          "end": 20,
+          "sha256": "adda644a693e978d7c00358f1ff8bc55aa23059c8533f01bad2b469eaf41d975"
+        }
+      ],
+      "read_mode": "mechanical byte inventory only; semantic review not claimed"
+    },
+    {
+      "file": "docs/guidlines/original-recordings/test1/Recording 2026-08-07 17-46-51-452.txt",
+      "bytes": 96,
+      "sha256": "3fce93ad98af39bd885befa357644add5e4b6c83621db3a098dba2e17bdf8eb1",
+      "chunks": [
+        {
+          "start": 0,
+          "end": 96,
+          "sha256": "3fce93ad98af39bd885befa357644add5e4b6c83621db3a098dba2e17bdf8eb1"
+        }
+      ],
+      "read_mode": "mechanical byte inventory only; semantic review not claimed"
+    },
+    {
+      "file": "docs/guidlines/original-recordings/test1/Recording 2026-08-07 17-48-23-700.txt",
+      "bytes": 75,
+      "sha256": "2440298bb4f5ec0872b020f85085c9e2a72b735bf356713fbb27721e0f8f85df",
+      "chunks": [
+        {
+          "start": 0,
+          "end": 75,
+          "sha256": "2440298bb4f5ec0872b020f85085c9e2a72b735bf356713fbb27721e0f8f85df"
+        }
+      ],
+      "read_mode": "mechanical byte inventory only; semantic review not claimed"
+    },
+    {
+      "file": "docs/guidlines/original-recordings/test1/Recording 2026-08-07 17-49-13-419.txt",
+      "bytes": 64,
+      "sha256": "4585acebd0e137e334bd631d9b1da45627e550df3f140a59c61ffdfc8f199f62",
+      "chunks": [
+        {
+          "start": 0,
+          "end": 64,
+          "sha256": "4585acebd0e137e334bd631d9b1da45627e550df3f140a59c61ffdfc8f199f62"
+        }
+      ],
+      "read_mode": "mechanical byte inventory only; semantic review not claimed"
+    },
+    {
+      "file": "docs/guidlines/original-recordings/test1/Recording 2026-08-07 17-50-05-286.txt",
+      "bytes": 39,
+      "sha256": "d04eac987da1718f1c7f0f2e29c8e79765dadbb8f7d05f4f0d77f1faf45f64ec",
+      "chunks": [
+        {
+          "start": 0,
+          "end": 39,
+          "sha256": "d04eac987da1718f1c7f0f2e29c8e79765dadbb8f7d05f4f0d77f1faf45f64ec"
+        }
+      ],
+      "read_mode": "mechanical byte inventory only; semantic review not claimed"
+    },
+    {
+      "file": "docs/guidlines/original-recordings/test1/Recording 2026-08-07 18-57-18-421.txt",
+      "bytes": 92,
+      "sha256": "bc9fb41907cf46b498c562e68641930ce64addfabc3b6945bbc61f027f8ecd80",
+      "chunks": [
+        {
+          "start": 0,
+          "end": 92,
+          "sha256": "bc9fb41907cf46b498c562e68641930ce64addfabc3b6945bbc61f027f8ecd80"
+        }
+      ],
+      "read_mode": "mechanical byte inventory only; semantic review not claimed"
+    },
+    {
+      "file": "docs/guidlines/original-recordings/test1/Recording 2026-08-07 20-22-53-272.txt",
+      "bytes": 58,
+      "sha256": "6f4aeb797eed4efbe6bf3575061bcbe9eb4c70209a15c0bb222ce37bd83185bd",
+      "chunks": [
+        {
+          "start": 0,
+          "end": 58,
+          "sha256": "6f4aeb797eed4efbe6bf3575061bcbe9eb4c70209a15c0bb222ce37bd83185bd"
+        }
+      ],
+      "read_mode": "mechanical byte inventory only; semantic review not claimed"
+    },
+    {
+      "file": "docs/guidlines/original-recordings/test1/Recording 2026-08-07 20-24-09-601.txt",
+      "bytes": 78,
+      "sha256": "f7f827a6413984e2deb51391b8f30219e401af657559d17857b4b57d8b42d4cb",
+      "chunks": [
+        {
+          "start": 0,
+          "end": 78,
+          "sha256": "f7f827a6413984e2deb51391b8f30219e401af657559d17857b4b57d8b42d4cb"
+        }
+      ],
+      "read_mode": "mechanical byte inventory only; semantic review not claimed"
+    },
+    {
+      "file": "docs/guidlines/original-recordings/test1/Recording 2026-08-07 22-08-48-917.txt",
+      "bytes": 51,
+      "sha256": "37ee33d8a92f19ebb9d467c616a68de7d7006cf8d7cd8b10fffcf57ff503a2e9",
+      "chunks": [
+        {
+          "start": 0,
+          "end": 51,
+          "sha256": "37ee33d8a92f19ebb9d467c616a68de7d7006cf8d7cd8b10fffcf57ff503a2e9"
+        }
+      ],
+      "read_mode": "mechanical byte inventory only; semantic review not claimed"
+    },
+    {
+      "file": "docs/guidlines/original-recordings/test1/Recording 2026-08-07 22-10-44-304.txt",
+      "bytes": 62,
+      "sha256": "7853a4e8abc29e3786909059c9f8c39afdd0f2a7de89a2abf73153c7c3163af9",
+      "chunks": [
+        {
+          "start": 0,
+          "end": 62,
+          "sha256": "7853a4e8abc29e3786909059c9f8c39afdd0f2a7de89a2abf73153c7c3163af9"
+        }
+      ],
+      "read_mode": "mechanical byte inventory only; semantic review not claimed"
+    },
+    {
+      "file": "docs/guidlines/original-recordings/test1/Recording 2026-08-07 22-13-49-080.txt",
+      "bytes": 200,
+      "sha256": "0ea614a19c9fe001aca76dd1dbe81c915aa48e13e360feff10aea38b01899e69",
+      "chunks": [
+        {
+          "start": 0,
+          "end": 200,
+          "sha256": "0ea614a19c9fe001aca76dd1dbe81c915aa48e13e360feff10aea38b01899e69"
+        }
+      ],
+      "read_mode": "mechanical byte inventory only; semantic review not claimed"
+    },
+    {
+      "file": "docs/guidlines/original-recordings/test1/Recording 2026-08-08 13-03-03-852.txt",
+      "bytes": 487,
+      "sha256": "1ee770a8d44f7fbe9425df1fc4ba7a4448a52667bb51c4e27d6a32f2c2d6c9ea",
+      "chunks": [
+        {
+          "start": 0,
+          "end": 487,
+          "sha256": "1ee770a8d44f7fbe9425df1fc4ba7a4448a52667bb51c4e27d6a32f2c2d6c9ea"
+        }
+      ],
+      "read_mode": "mechanical byte inventory only; semantic review not claimed"
+    },
+    {
+      "file": "docs/guidlines/original-recordings/test1/Recording 2026-08-09 13-32-17-557.txt",
+      "bytes": 390,
+      "sha256": "b9e6296b135d40e53b3f38ce2d8efc5a74f25e27bdeae17af36023069c8cedac",
+      "chunks": [
+        {
+          "start": 0,
+          "end": 390,
+          "sha256": "b9e6296b135d40e53b3f38ce2d8efc5a74f25e27bdeae17af36023069c8cedac"
+        }
+      ],
+      "read_mode": "mechanical byte inventory only; semantic review not claimed"
+    },
+    {
+      "file": "docs/guidlines/original-recordings/test1/Recording 2026-09-04 19-33-50-992.txt",
+      "bytes": 51,
+      "sha256": "101263751e2ad2a3c650647eedef65bb9eac67131ae0d8f66ec51dab73971ae4",
+      "chunks": [
+        {
+          "start": 0,
+          "end": 51,
+          "sha256": "101263751e2ad2a3c650647eedef65bb9eac67131ae0d8f66ec51dab73971ae4"
+        }
+      ],
+      "read_mode": "mechanical byte inventory only; semantic review not claimed"
+    },
+    {
+      "file": "docs/guidlines/original-recordings/test1/Recording 2026-09-04 19-36-39-273.txt",
+      "bytes": 29,
+      "sha256": "b0b5ed43d4921cc3690fc1b750cb66680e7c4ed5d7c6f68bfbbfad2317cece1a",
+      "chunks": [
+        {
+          "start": 0,
+          "end": 29,
+          "sha256": "b0b5ed43d4921cc3690fc1b750cb66680e7c4ed5d7c6f68bfbbfad2317cece1a"
+        }
+      ],
+      "read_mode": "mechanical byte inventory only; semantic review not claimed"
+    },
+    {
+      "file": "docs/guidlines/original-recordings/test1/Recording 2026-09-25 16-19-46-804.txt",
+      "bytes": 202,
+      "sha256": "ddfef96a57c8b89bac145d79bc855a034b328c371cf3a7d884644ebfe8af281b",
+      "chunks": [
+        {
+          "start": 0,
+          "end": 202,
+          "sha256": "ddfef96a57c8b89bac145d79bc855a034b328c371cf3a7d884644ebfe8af281b"
+        }
+      ],
+      "read_mode": "mechanical byte inventory only; semantic review not claimed"
+    },
+    {
+      "file": "docs/guidlines/original-recordings/test1/Recording 2026-09-26 15-06-39-010.txt",
+      "bytes": 242,
+      "sha256": "08b289beb494e8814a5f56c1c8ad7236419daeb5157a80b4be9eb4a34f5d2ad9",
+      "chunks": [
+        {
+          "start": 0,
+          "end": 242,
+          "sha256": "08b289beb494e8814a5f56c1c8ad7236419daeb5157a80b4be9eb4a34f5d2ad9"
+        }
+      ],
+      "read_mode": "mechanical byte inventory only; semantic review not claimed"
+    },
+    {
+      "file": "docs/guidlines/original-recordings/test1/Recording 2026-09-26 15-09-03-437.txt",
+      "bytes": 328,
+      "sha256": "88d8d65d1ad78f3b3a680990ddd18cde5bea170693d8b9cbd38bae5ee84e50b6",
+      "chunks": [
+        {
+          "start": 0,
+          "end": 328,
+          "sha256": "88d8d65d1ad78f3b3a680990ddd18cde5bea170693d8b9cbd38bae5ee84e50b6"
+        }
+      ],
+      "read_mode": "mechanical byte inventory only; semantic review not claimed"
+    },
+    {
+      "file": "docs/guidlines/original-recordings/test1/Recording 2026-09-27 10-46-02-973.txt",
+      "bytes": 177,
+      "sha256": "a3ce6672f13e91ec41fc06ac5f5ffd22654447e32f3a2b29dcd32a1c45b64bb9",
+      "chunks": [
+        {
+          "start": 0,
+          "end": 177,
+          "sha256": "a3ce6672f13e91ec41fc06ac5f5ffd22654447e32f3a2b29dcd32a1c45b64bb9"
+        }
+      ],
+      "read_mode": "mechanical byte inventory only; semantic review not claimed"
+    },
+    {
+      "file": "docs/guidlines/original-recordings/test1/Recording 2026-09-27 11-54-32-235.txt",
+      "bytes": 88,
+      "sha256": "0791eb0d0b972eecd2ad7c703ecaa00916ddc19080cf23ab4255cf8c5ffb4a65",
+      "chunks": [
+        {
+          "start": 0,
+          "end": 88,
+          "sha256": "0791eb0d0b972eecd2ad7c703ecaa00916ddc19080cf23ab4255cf8c5ffb4a65"
+        }
+      ],
+      "read_mode": "mechanical byte inventory only; semantic review not claimed"
+    },
+    {
+      "file": "docs/guidlines/original-recordings/test1/Recording 2026-09-27 18-18-28-087.txt",
+      "bytes": 72,
+      "sha256": "dc6680c1d75e8b748cdf58eb818412ba0e892d6c0e8c42441481be00c10f7a1d",
+      "chunks": [
+        {
+          "start": 0,
+          "end": 72,
+          "sha256": "dc6680c1d75e8b748cdf58eb818412ba0e892d6c0e8c42441481be00c10f7a1d"
+        }
+      ],
+      "read_mode": "mechanical byte inventory only; semantic review not claimed"
+    },
+    {
+      "file": "docs/guidlines/original-recordings/test1/Recording 2026-10-19 19-50-54-862.txt",
+      "bytes": 129,
+      "sha256": "dfd9405d688598945cbc7411c91a763568024d334fde16798569d054f70482bb",
+      "chunks": [
+        {
+          "start": 0,
+          "end": 129,
+          "sha256": "dfd9405d688598945cbc7411c91a763568024d334fde16798569d054f70482bb"
+        }
+      ],
+      "read_mode": "mechanical byte inventory only; semantic review not claimed"
+    },
+    {
+      "file": "docs/guidlines/original-recordings/test1/Recording 2026-10-19 19-51-15-837.txt",
+      "bytes": 408,
+      "sha256": "34dfe82ffcbca61cd4fc0a3c9c50817afa8a6a377c1aa719c319624623e0cc60",
+      "chunks": [
+        {
+          "start": 0,
+          "end": 408,
+          "sha256": "34dfe82ffcbca61cd4fc0a3c9c50817afa8a6a377c1aa719c319624623e0cc60"
+        }
+      ],
+      "read_mode": "mechanical byte inventory only; semantic review not claimed"
+    },
+    {
+      "file": "docs/guidlines/original-recordings/trading/Recording 2026-08-22 09-34-44-829.txt",
+      "bytes": 22948,
+      "sha256": "09bbcde2b552630ea7a9145ff1d56ea1dc769b5d7a7d76acecda120b55a91ca1",
+      "chunks": [
+        {
+          "start": 0,
+          "end": 22948,
+          "sha256": "09bbcde2b552630ea7a9145ff1d56ea1dc769b5d7a7d76acecda120b55a91ca1"
+        }
+      ],
+      "read_mode": "mechanical byte inventory only; semantic review not claimed"
+    },
+    {
+      "file": "docs/guidlines/original-recordings/trading/Recording 2026-08-22 10-17-28-752.txt",
+      "bytes": 10558,
+      "sha256": "84b8087333d327772f71cc4a2bc40c749a8b09eb1f60865ca8e4966f3dc71ed0",
+      "chunks": [
+        {
+          "start": 0,
+          "end": 10558,
+          "sha256": "84b8087333d327772f71cc4a2bc40c749a8b09eb1f60865ca8e4966f3dc71ed0"
+        }
+      ],
+      "read_mode": "mechanical byte inventory only; semantic review not claimed"
+    },
+    {
+      "file": "docs/guidlines/original-recordings/trading/Recording 2026-08-22 12-08-24-115.txt",
+      "bytes": 15,
+      "sha256": "366f318c3601752c2d23407c21e9aa9c0ce1e1a55f7bfa53903b4d37461a0100",
+      "chunks": [
+        {
+          "start": 0,
+          "end": 15,
+          "sha256": "366f318c3601752c2d23407c21e9aa9c0ce1e1a55f7bfa53903b4d37461a0100"
+        }
+      ],
+      "read_mode": "mechanical byte inventory only; semantic review not claimed"
+    },
+    {
+      "file": "docs/guidlines/original-recordings/trading/Recording 2026-08-22 12-08-48-969.txt",
+      "bytes": 5258,
+      "sha256": "00051719730a409233602a449ecb582c906c9c0e78fe32abbd13757ed0b00df9",
+      "chunks": [
+        {
+          "start": 0,
+          "end": 5258,
+          "sha256": "00051719730a409233602a449ecb582c906c9c0e78fe32abbd13757ed0b00df9"
+        }
+      ],
+      "read_mode": "mechanical byte inventory only; semantic review not claimed"
+    },
+    {
+      "file": "docs/guidlines/original-recordings/trading/Recording 2026-08-22 15-47-18-326.txt",
+      "bytes": 21709,
+      "sha256": "4c9fd61faa342ff0494bca5ab1f496a3acc35ca34c918d4d4af4b08b3aec01b4",
+      "chunks": [
+        {
+          "start": 0,
+          "end": 21709,
+          "sha256": "4c9fd61faa342ff0494bca5ab1f496a3acc35ca34c918d4d4af4b08b3aec01b4"
+        }
+      ],
+      "read_mode": "mechanical byte inventory only; semantic review not claimed"
+    },
+    {
+      "file": "docs/guidlines/original-recordings/trading/Recording 2026-08-26 18-23-52-726.txt",
+      "bytes": 35761,
+      "sha256": "1b376d444f293996c28c8b55996b8043f960857f01705b346c435cd522288978",
+      "chunks": [
+        {
+          "start": 0,
+          "end": 32768,
+          "sha256": "0271da1b22a214188bcc38c9c16e5c4df8990638ad976e5234390cb6f8bd5088"
+        },
+        {
+          "start": 32768,
+          "end": 35761,
+          "sha256": "d25b3f15d450e295c5f1fdeb81ec3bb5cbe9ad7f2f83dc7cc83b903dc01b2bea"
+        }
+      ],
+      "read_mode": "mechanical byte inventory only; semantic review not claimed"
+    },
+    {
+      "file": "docs/guidlines/original-recordings/trading/Recording 2026-09-05 17-48-55-452.txt",
+      "bytes": 14881,
+      "sha256": "bc2d1563fc638a77a240fae69a6aceaad728ea6563d13314e12280a7b1feb179",
+      "chunks": [
+        {
+          "start": 0,
+          "end": 14881,
+          "sha256": "bc2d1563fc638a77a240fae69a6aceaad728ea6563d13314e12280a7b1feb179"
+        }
+      ],
+      "read_mode": "mechanical byte inventory only; semantic review not claimed"
+    },
+    {
+      "file": "docs/guidlines/original-recordings/trading/Recording 2026-09-16 07-25-43-993.txt",
+      "bytes": 6187,
+      "sha256": "6bccb621d0c2cd6349acb8b6504dad2c705b2c43a73de9727681fdaf3c394973",
+      "chunks": [
+        {
+          "start": 0,
+          "end": 6187,
+          "sha256": "6bccb621d0c2cd6349acb8b6504dad2c705b2c43a73de9727681fdaf3c394973"
+        }
+      ],
+      "read_mode": "mechanical byte inventory only; semantic review not claimed"
+    },
+    {
+      "file": "docs/guidlines/original-recordings/trading/Recording 2026-09-16 16-14-29-036.txt",
+      "bytes": 11697,
+      "sha256": "fbed20cf2ed7628f08afd0c331a4c7a6a7e651204ec3ae7a785db0648f084eda",
+      "chunks": [
+        {
+          "start": 0,
+          "end": 11697,
+          "sha256": "fbed20cf2ed7628f08afd0c331a4c7a6a7e651204ec3ae7a785db0648f084eda"
+        }
+      ],
+      "read_mode": "mechanical byte inventory only; semantic review not claimed"
+    },
+    {
+      "file": "docs/guidlines/original-recordings/trading/Recording 2026-09-16 19-24-32-674.txt",
+      "bytes": 23106,
+      "sha256": "b4240f286e7415fb8f46798daef5d70231a85e7e3ce0af8a43601d2c6f8b6abc",
+      "chunks": [
+        {
+          "start": 0,
+          "end": 23106,
+          "sha256": "b4240f286e7415fb8f46798daef5d70231a85e7e3ce0af8a43601d2c6f8b6abc"
+        }
+      ],
+      "read_mode": "mechanical byte inventory only; semantic review not claimed"
+    },
+    {
+      "file": "docs/guidlines/original-recordings/trading/Recording 2026-09-22 11-25-58-600.txt",
+      "bytes": 52962,
+      "sha256": "c91deb611a86530f1abb27ca573a43aa68f3191f00e4e2ab30e26d237cdeba8e",
+      "chunks": [
+        {
+          "start": 0,
+          "end": 32768,
+          "sha256": "bfb1bcf2b07c2048a57ef3988c40c850a77739aafccebf2e9bb5137850c75c57"
+        },
+        {
+          "start": 32768,
+          "end": 52962,
+          "sha256": "6c2f23ef746ceda3f28dfab95e65bf2713efd47b2fb8876de6688fbfb20695b3"
+        }
+      ],
+      "read_mode": "mechanical byte inventory only; semantic review not claimed"
+    },
+    {
+      "file": "docs/guidlines/original-recordings/trading/Recording 2026-09-25 11-48-16-135.txt",
+      "bytes": 12802,
+      "sha256": "1d9bf8944fbea5eda264a15cde9fc27e10d758546eacd90fcd01ea78b3dde68e",
+      "chunks": [
+        {
+          "start": 0,
+          "end": 12802,
+          "sha256": "1d9bf8944fbea5eda264a15cde9fc27e10d758546eacd90fcd01ea78b3dde68e"
+        }
+      ],
+      "read_mode": "mechanical byte inventory only; semantic review not claimed"
+    },
+    {
+      "file": "docs/guidlines/original-recordings/trading/Recording 2026-10-08 12-28-50-396.txt",
+      "bytes": 17694,
+      "sha256": "6fa8068e8c7d8e14fcd49e16175e2afd65a880399f9a5a32cc18a68cd07d04af",
+      "chunks": [
+        {
+          "start": 0,
+          "end": 17694,
+          "sha256": "6fa8068e8c7d8e14fcd49e16175e2afd65a880399f9a5a32cc18a68cd07d04af"
+        }
+      ],
+      "read_mode": "mechanical byte inventory only; semantic review not claimed"
+    },
+    {
+      "file": "docs/guidlines/original-recordings/trading/Recording 2026-10-23 18-56-44-662.txt",
+      "bytes": 5445,
+      "sha256": "cb428ccb0b2177484dfa135c9d430748bee81acb6143342e1ac23edb60b4ddff",
+      "chunks": [
+        {
+          "start": 0,
+          "end": 5445,
+          "sha256": "cb428ccb0b2177484dfa135c9d430748bee81acb6143342e1ac23edb60b4ddff"
+        }
+      ],
+      "read_mode": "mechanical byte inventory only; semantic review not claimed"
+    },
+    {
+      "file": "docs/guidlines/performance_reliability.md",
+      "bytes": 5146,
+      "sha256": "ba7b596571f75755be4b9344e1c4e89e07827947c4366839a79d7a753a5f5267",
+      "chunks": [
+        {
+          "start": 0,
+          "end": 5146,
+          "sha256": "ba7b596571f75755be4b9344e1c4e89e07827947c4366839a79d7a753a5f5267"
+        }
+      ],
+      "read_mode": "mechanical byte inventory only; semantic review not claimed"
+    },
+    {
+      "file": "docs/guidlines/programming/README.md",
+      "bytes": 24960,
+      "sha256": "48b0173163d91ec1bf139949ceb73f3f963000f7dcc77d81f123adcc4a75db64",
+      "chunks": [
+        {
+          "start": 0,
+          "end": 24960,
+          "sha256": "48b0173163d91ec1bf139949ceb73f3f963000f7dcc77d81f123adcc4a75db64"
+        }
+      ],
+      "read_mode": "mechanical byte inventory only; semantic review not claimed"
+    },
+    {
+      "file": "docs/guidlines/projects/recording_to_guideline_conversion.md",
+      "bytes": 4615,
+      "sha256": "2eb8d6b54c3c481a35dbe40f04f69ffa57592af9c10b25f67f7df95149fda074",
+      "chunks": [
+        {
+          "start": 0,
+          "end": 4615,
+          "sha256": "2eb8d6b54c3c481a35dbe40f04f69ffa57592af9c10b25f67f7df95149fda074"
+        }
+      ],
+      "read_mode": "mechanical byte inventory only; semantic review not claimed"
+    },
+    {
+      "file": "docs/guidlines/robotics/algorithm_selection_and_learning.md",
+      "bytes": 8643,
+      "sha256": "2f5487151c19a4251b6aa29e1b0916b319da1a9251a89d6ab42811acc23cef56",
+      "chunks": [
+        {
+          "start": 0,
+          "end": 8643,
+          "sha256": "2f5487151c19a4251b6aa29e1b0916b319da1a9251a89d6ab42811acc23cef56"
+        }
+      ],
+      "read_mode": "mechanical byte inventory only; semantic review not claimed"
+    },
+    {
+      "file": "docs/guidlines/security_privacy.md",
+      "bytes": 4544,
+      "sha256": "168c9f7cefbbe5429914866eff25b6d52150706e80754e2fbefa44f66cfcbd7c",
+      "chunks": [
+        {
+          "start": 0,
+          "end": 4544,
+          "sha256": "168c9f7cefbbe5429914866eff25b6d52150706e80754e2fbefa44f66cfcbd7c"
+        }
+      ],
+      "read_mode": "mechanical byte inventory only; semantic review not claimed"
+    },
+    {
+      "file": "docs/guidlines/source_traceability.md",
+      "bytes": 3163,
+      "sha256": "8ced5659c817ac963f15381636e37b14ad5e069e0980b8524e036be2278dfec7",
+      "chunks": [
+        {
+          "start": 0,
+          "end": 3163,
+          "sha256": "8ced5659c817ac963f15381636e37b14ad5e069e0980b8524e036be2278dfec7"
+        }
+      ],
+      "read_mode": "mechanical byte inventory only; semantic review not claimed"
+    },
+    {
+      "file": "docs/guidlines/testing.md",
+      "bytes": 20320,
+      "sha256": "3fe6c3f86c138adf9ec073fd9d63a1b1f98f5f9aa7b87a2f9f255f15880d0d16",
+      "chunks": [
+        {
+          "start": 0,
+          "end": 20320,
+          "sha256": "3fe6c3f86c138adf9ec073fd9d63a1b1f98f5f9aa7b87a2f9f255f15880d0d16"
+        }
+      ],
+      "read_mode": "mechanical byte inventory only; semantic review not claimed"
+    },
+    {
+      "file": "docs/guidlines/tests.txt",
+      "bytes": 9013,
+      "sha256": "40bc540b0e7ef3c7b44da87d95d83db2b5d6f7511ded9ad59b0926bac2a72d4f",
+      "chunks": [
+        {
+          "start": 0,
+          "end": 9013,
+          "sha256": "40bc540b0e7ef3c7b44da87d95d83db2b5d6f7511ded9ad59b0926bac2a72d4f"
+        }
+      ],
+      "read_mode": "mechanical byte inventory only; semantic review not claimed"
+    },
+    {
+      "file": "docs/guidlines/trading/data_and_backtesting.md",
+      "bytes": 12518,
+      "sha256": "9e4d8aea243dba92e2e73ad029ac1722d1dc2f0b255b58501e9ba508db1ceea3",
+      "chunks": [
+        {
+          "start": 0,
+          "end": 12518,
+          "sha256": "9e4d8aea243dba92e2e73ad029ac1722d1dc2f0b255b58501e9ba508db1ceea3"
+        }
+      ],
+      "read_mode": "mechanical byte inventory only; semantic review not claimed"
+    },
+    {
+      "file": "docs/guidlines/trading/data_provenance_database.md",
+      "bytes": 10481,
+      "sha256": "dd22bf1f6a71bd1f0708a3783ce9bf2af92175eea29e4ccc3250e284c01e8eb7",
+      "chunks": [
+        {
+          "start": 0,
+          "end": 10481,
+          "sha256": "dd22bf1f6a71bd1f0708a3783ce9bf2af92175eea29e4ccc3250e284c01e8eb7"
+        }
+      ],
+      "read_mode": "mechanical byte inventory only; semantic review not claimed"
+    },
+    {
+      "file": "docs/guidlines/trading/dcf_market_efficiency_research.md",
+      "bytes": 8472,
+      "sha256": "0d138569ddabc904263d463cbbe736effc680f6372fb62e66397e02053bfc6b2",
+      "chunks": [
+        {
+          "start": 0,
+          "end": 8472,
+          "sha256": "0d138569ddabc904263d463cbbe736effc680f6372fb62e66397e02053bfc6b2"
+        }
+      ],
+      "read_mode": "mechanical byte inventory only; semantic review not claimed"
+    },
+    {
+      "file": "docs/guidlines/trading/options.md",
+      "bytes": 7363,
+      "sha256": "3b645a5298ebd3d0843e8694210b6648b75a9e25e1f128dadd2c8fbb908a7f70",
+      "chunks": [
+        {
+          "start": 0,
+          "end": 7363,
+          "sha256": "3b645a5298ebd3d0843e8694210b6648b75a9e25e1f128dadd2c8fbb908a7f70"
+        }
+      ],
+      "read_mode": "mechanical byte inventory only; semantic review not claimed"
+    },
+    {
+      "file": "docs/guidlines/trading/public_network_hypotheses.md",
+      "bytes": 5823,
+      "sha256": "a894b5a30cd32cb34e4ae55f46df50a98cd69f9fb1ad0381b9e4b17fbfb58915",
+      "chunks": [
+        {
+          "start": 0,
+          "end": 5823,
+          "sha256": "a894b5a30cd32cb34e4ae55f46df50a98cd69f9fb1ad0381b9e4b17fbfb58915"
+        }
+      ],
+      "read_mode": "mechanical byte inventory only; semantic review not claimed"
+    },
+    {
+      "file": "docs/guidlines/trading/reporting_and_gui.md",
+      "bytes": 5854,
+      "sha256": "2310c6cc9514fddb66a38e3b244aaea634eb21caff646c32ac180a42a9bb1185",
+      "chunks": [
+        {
+          "start": 0,
+          "end": 5854,
+          "sha256": "2310c6cc9514fddb66a38e3b244aaea634eb21caff646c32ac180a42a9bb1185"
+        }
+      ],
+      "read_mode": "mechanical byte inventory only; semantic review not claimed"
+    },
+    {
+      "file": "docs/guidlines/trading/strategy_research.md",
+      "bytes": 12687,
+      "sha256": "d5266ef5fa39cb692df3d466cb8ca547668671f3bb5aea5c1f7374d20d6141d5",
+      "chunks": [
+        {
+          "start": 0,
+          "end": 12687,
+          "sha256": "d5266ef5fa39cb692df3d466cb8ca547668671f3bb5aea5c1f7374d20d6141d5"
+        }
+      ],
+      "read_mode": "mechanical byte inventory only; semantic review not claimed"
+    },
+    {
+      "file": "docs/infra-guideline-cross-project-status-2026-10-21.md",
+      "bytes": 39073,
+      "sha256": "b2352eec5d995dbaf21e0fe28b50d16b023ca54cc4b637e833d04cd0b191cdb3",
+      "chunks": [
+        {
+          "start": 0,
+          "end": 32768,
+          "sha256": "9a7e8afbd8bca7c74036253d9b0f5e856b974af201649d109554a892a3d7b128"
+        },
+        {
+          "start": 32768,
+          "end": 39073,
+          "sha256": "490c834bcd1024f2ad4fe008d3c25e3ed4f894705ae47dd2759d0f30b0b12ba4"
+        }
+      ],
+      "read_mode": "mechanical byte inventory only; semantic review not claimed"
+    },
+    {
+      "file": "docs/knowmorenewsclips.md",
+      "bytes": 5237,
+      "sha256": "c387f89d40f12871b2d0effe2d12065a66d4aebfe74ac0ef156618f8edb8183b",
+      "chunks": [
+        {
+          "start": 0,
+          "end": 5237,
+          "sha256": "c387f89d40f12871b2d0effe2d12065a66d4aebfe74ac0ef156618f8edb8183b"
+        }
+      ],
+      "read_mode": "mechanical byte inventory only; semantic review not claimed"
+    },
+    {
+      "file": "docs/llms/README.md",
+      "bytes": 5903,
+      "sha256": "d15bba45dcaa533f9089dc513a6488ba1835ee8f1f085cdbdcadb479de47eb8b",
+      "chunks": [
+        {
+          "start": 0,
+          "end": 5903,
+          "sha256": "d15bba45dcaa533f9089dc513a6488ba1835ee8f1f085cdbdcadb479de47eb8b"
+        }
+      ],
+      "read_mode": "mechanical byte inventory only; semantic review not claimed"
+    },
+    {
+      "file": "docs/llms/benchmark-results.md",
+      "bytes": 13350,
+      "sha256": "9636549a40e3fedef130ea48f560b674b5a01e0c9a7c9d9550c0cd5af8614a8c",
+      "chunks": [
+        {
+          "start": 0,
+          "end": 13350,
+          "sha256": "9636549a40e3fedef130ea48f560b674b5a01e0c9a7c9d9550c0cd5af8614a8c"
+        }
+      ],
+      "read_mode": "mechanical byte inventory only; semantic review not claimed"
+    },
+    {
+      "file": "docs/llms/candidate-ram-ledger.md",
+      "bytes": 5301,
+      "sha256": "eef3512bef367647e1b3fc0ef5cebcd6725ed966845271d661d56f6506dd91d4",
+      "chunks": [
+        {
+          "start": 0,
+          "end": 5301,
+          "sha256": "eef3512bef367647e1b3fc0ef5cebcd6725ed966845271d661d56f6506dd91d4"
+        }
+      ],
+      "read_mode": "mechanical byte inventory only; semantic review not claimed"
+    },
+    {
+      "file": "docs/llms/final-quality-results.md",
+      "bytes": 4593,
+      "sha256": "654f85eece60406fdf532fc0cbe339ebbcd42a652e23f3f0eff16c3189f3dbb8",
+      "chunks": [
+        {
+          "start": 0,
+          "end": 4593,
+          "sha256": "654f85eece60406fdf532fc0cbe339ebbcd42a652e23f3f0eff16c3189f3dbb8"
+        }
+      ],
+      "read_mode": "mechanical byte inventory only; semantic review not claimed"
+    },
+    {
+      "file": "docs/llms/jetson-thor-operations.md",
+      "bytes": 19255,
+      "sha256": "871b960b3bdba9eb9cdff20752dca736eb7c27b229f514b371e0f3706d51768b",
+      "chunks": [
+        {
+          "start": 0,
+          "end": 19255,
+          "sha256": "871b960b3bdba9eb9cdff20752dca736eb7c27b229f514b371e0f3706d51768b"
+        }
+      ],
+      "read_mode": "mechanical byte inventory only; semantic review not claimed"
+    },
+    {
+      "file": "docs/llms/measurements-by-phase.md",
+      "bytes": 1348,
+      "sha256": "c8e10ee0b49960fdba1342d5c11c0fba696ae64099e4b7078e29a075b7903551",
+      "chunks": [
+        {
+          "start": 0,
+          "end": 1348,
+          "sha256": "c8e10ee0b49960fdba1342d5c11c0fba696ae64099e4b7078e29a075b7903551"
+        }
+      ],
+      "read_mode": "mechanical byte inventory only; semantic review not claimed"
+    },
+    {
+      "file": "docs/llms/measurements.md",
+      "bytes": 18733,
+      "sha256": "389101896e962d43d1557919289548e1d913e6fe501ee63a71a3fbd9f398d673",
+      "chunks": [
+        {
+          "start": 0,
+          "end": 18733,
+          "sha256": "389101896e962d43d1557919289548e1d913e6fe501ee63a71a3fbd9f398d673"
+        }
+      ],
+      "read_mode": "mechanical byte inventory only; semantic review not claimed"
+    },
+    {
+      "file": "docs/llms/methodology.md",
+      "bytes": 5790,
+      "sha256": "5535a17f1ef6b75d93a129e3c1c05da1a4bebb1b01c2647dc9405ecb2ae1c0ce",
+      "chunks": [
+        {
+          "start": 0,
+          "end": 5790,
+          "sha256": "5535a17f1ef6b75d93a129e3c1c05da1a4bebb1b01c2647dc9405ecb2ae1c0ce"
+        }
+      ],
+      "read_mode": "mechanical byte inventory only; semantic review not claimed"
+    },
+    {
+      "file": "docs/llms/model-matrix.md",
+      "bytes": 17766,
+      "sha256": "113380eee080a85a1c408592b5e11ddfadf522c565a5cc80c3f7d2cc32566a2c",
+      "chunks": [
+        {
+          "start": 0,
+          "end": 17766,
+          "sha256": "113380eee080a85a1c408592b5e11ddfadf522c565a5cc80c3f7d2cc32566a2c"
+        }
+      ],
+      "read_mode": "mechanical byte inventory only; semantic review not claimed"
+    },
+    {
+      "file": "docs/llms/qwen3-coder-30b-full-context-2026-10-18.md",
+      "bytes": 14720,
+      "sha256": "f82c7cc0e7f3db8ec6947a0000471d9412472bdeee4eb9e7eb520a66abd19577",
+      "chunks": [
+        {
+          "start": 0,
+          "end": 14720,
+          "sha256": "f82c7cc0e7f3db8ec6947a0000471d9412472bdeee4eb9e7eb520a66abd19577"
+        }
+      ],
+      "read_mode": "mechanical byte inventory only; semantic review not claimed"
+    },
+    {
+      "file": "docs/llms/raw-data.md",
+      "bytes": 1056,
+      "sha256": "a2874458732bf15d646f2a5e0c50e6f64fce779f285e9f0caa28b0c4d4dd765d",
+      "chunks": [
+        {
+          "start": 0,
+          "end": 1056,
+          "sha256": "a2874458732bf15d646f2a5e0c50e6f64fce779f285e9f0caa28b0c4d4dd765d"
+        }
+      ],
+      "read_mode": "mechanical byte inventory only; semantic review not claimed"
+    },
+    {
+      "file": "docs/llms/swaag-memory-admission-2026-10-14.md",
+      "bytes": 3760,
+      "sha256": "291c36fbfa1e797f897ff043d9561b45440349a919e4cd2598d46477c03ebd90",
+      "chunks": [
+        {
+          "start": 0,
+          "end": 3760,
+          "sha256": "291c36fbfa1e797f897ff043d9561b45440349a919e4cd2598d46477c03ebd90"
+        }
+      ],
+      "read_mode": "mechanical byte inventory only; semantic review not claimed"
+    },
+    {
+      "file": "docs/llms/ternary-bonsai2-27b-results.md",
+      "bytes": 4976,
+      "sha256": "0ea16416ca4d7bef55f4ce68dd24e724e5b16f187cffaf944b69be74edc63fd0",
+      "chunks": [
+        {
+          "start": 0,
+          "end": 4976,
+          "sha256": "0ea16416ca4d7bef55f4ce68dd24e724e5b16f187cffaf944b69be74edc63fd0"
+        }
+      ],
+      "read_mode": "mechanical byte inventory only; semantic review not claimed"
+    },
+    {
+      "file": "docs/llms/test-ledger.md",
+      "bytes": 22632,
+      "sha256": "120d6c9fa79afcb5e10fb60f0a5d8725f86efe8a71f8e7a2515c7e377f542cf0",
+      "chunks": [
+        {
+          "start": 0,
+          "end": 22632,
+          "sha256": "120d6c9fa79afcb5e10fb60f0a5d8725f86efe8a71f8e7a2515c7e377f542cf0"
+        }
+      ],
+      "read_mode": "mechanical byte inventory only; semantic review not claimed"
+    },
+    {
+      "file": "docs/llms/thor-dual-full-context-coder-qwen38-q8-2026-10-18.md",
+      "bytes": 9649,
+      "sha256": "0f719234313a5dac880243d24618d92f6d4d97307c7a68c93627a9919e48cba7",
+      "chunks": [
+        {
+          "start": 0,
+          "end": 9649,
+          "sha256": "0f719234313a5dac880243d24618d92f6d4d97307c7a68c93627a9919e48cba7"
+        }
+      ],
+      "read_mode": "mechanical byte inventory only; semantic review not claimed"
+    },
+    {
+      "file": "docs/llms/thor-swaag-coder-foreground-qwen38-q8-workers-2026-10-18.md",
+      "bytes": 35121,
+      "sha256": "884fe0586f5df16a612225a8f8e1b7ae974392a0405babe509e0d17fa4112266",
+      "chunks": [
+        {
+          "start": 0,
+          "end": 32768,
+          "sha256": "2b6caed28ec6de05051fce4cd8ffc65a66c86c93ddc4d9118daaf11ae90eca4c"
+        },
+        {
+          "start": 32768,
+          "end": 35121,
+          "sha256": "d44129f5749bad6ec2c578f1100aeb05e5e63b032f78795e21d7aab587b05df8"
+        }
+      ],
+      "read_mode": "mechanical byte inventory only; semantic review not claimed"
+    },
+    {
+      "file": "docs/local-mail.md",
+      "bytes": 15070,
+      "sha256": "2c4324d600db938a3bfc9a469e984f5ec4e776b6819ea78527fd7a9def3a2404",
+      "chunks": [
+        {
+          "start": 0,
+          "end": 15070,
+          "sha256": "2c4324d600db938a3bfc9a469e984f5ec4e776b6819ea78527fd7a9def3a2404"
+        }
+      ],
+      "read_mode": "mechanical byte inventory only; semantic review not claimed"
+    },
+    {
+      "file": "docs/media-library.md",
+      "bytes": 24341,
+      "sha256": "3ed2db8adc9726ff4a52572a6918e974c838165c6dfd3453594895d1e2f71681",
+      "chunks": [
+        {
+          "start": 0,
+          "end": 24341,
+          "sha256": "3ed2db8adc9726ff4a52572a6918e974c838165c6dfd3453594895d1e2f71681"
+        }
+      ],
+      "read_mode": "mechanical byte inventory only; semantic review not claimed"
+    },
+    {
+      "file": "docs/model-start-admission.md",
+      "bytes": 4315,
+      "sha256": "7f0bb41f203452a2b20f7ea37870f6758111040c11f2d9145c4a522f66f11562",
+      "chunks": [
+        {
+          "start": 0,
+          "end": 4315,
+          "sha256": "7f0bb41f203452a2b20f7ea37870f6758111040c11f2d9145c4a522f66f11562"
+        }
+      ],
+      "read_mode": "mechanical byte inventory only; semantic review not claimed"
+    },
+    {
+      "file": "docs/password-generator.md",
+      "bytes": 3328,
+      "sha256": "ba72417cf5d3eb608e9c9a5f99deb574990c8b4fd720b70b2fac86401dc7bebe",
+      "chunks": [
+        {
+          "start": 0,
+          "end": 3328,
+          "sha256": "ba72417cf5d3eb608e9c9a5f99deb574990c8b4fd720b70b2fac86401dc7bebe"
+        }
+      ],
+      "read_mode": "mechanical byte inventory only; semantic review not claimed"
+    },
+    {
+      "file": "docs/presentations.md",
+      "bytes": 9357,
+      "sha256": "63697e009ca0655f5f95f1b617bba69e7232a08caecdae9fd725d71e1e649d18",
+      "chunks": [
+        {
+          "start": 0,
+          "end": 9357,
+          "sha256": "63697e009ca0655f5f95f1b617bba69e7232a08caecdae9fd725d71e1e649d18"
+        }
+      ],
+      "read_mode": "mechanical byte inventory only; semantic review not claimed"
+    },
+    {
+      "file": "docs/reports/3d-game-asset-generation-pipeline-report-2026-08.md",
+      "bytes": 36253,
+      "sha256": "23acc6b8fe1382fccfd744096743583917948df5b19b832b33ab4b2fd36579a1",
+      "chunks": [
+        {
+          "start": 0,
+          "end": 32768,
+          "sha256": "01a249dc5673916e24d149c57b3d0bca5b14b0ed3e1519b0bc4b89d0547ed79f"
+        },
+        {
+          "start": 32768,
+          "end": 36253,
+          "sha256": "ce6f2dbe1cfb19f2fbb98b30e62e46dd4557f249e0ac36ae05ad96e10e321c51"
+        }
+      ],
+      "read_mode": "mechanical byte inventory only; semantic review not claimed"
+    },
+    {
+      "file": "docs/reports/README.md",
+      "bytes": 971,
+      "sha256": "9fee3e693dad46a5090394bf75545a8b7cbd8b16a3a3c6e19d15ba0a66ad49f7",
+      "chunks": [
+        {
+          "start": 0,
+          "end": 971,
+          "sha256": "9fee3e693dad46a5090394bf75545a8b7cbd8b16a3a3c6e19d15ba0a66ad49f7"
+        }
+      ],
+      "read_mode": "mechanical byte inventory only; semantic review not claimed"
+    },
+    {
+      "file": "docs/speech-player.md",
+      "bytes": 7872,
+      "sha256": "f2376cbf6c85835aee12ada773e240b2926e60a3a71ebd947f030c66661669e0",
+      "chunks": [
+        {
+          "start": 0,
+          "end": 7872,
+          "sha256": "f2376cbf6c85835aee12ada773e240b2926e60a3a71ebd947f030c66661669e0"
+        }
+      ],
+      "read_mode": "mechanical byte inventory only; semantic review not claimed"
+    },
+    {
+      "file": "docs/speech.md",
+      "bytes": 7119,
+      "sha256": "414cfb12aeb77f0b33c7cd4525fc2fc657b0256ed18e5bb14e8c13cdcf2694a1",
+      "chunks": [
+        {
+          "start": 0,
+          "end": 7119,
+          "sha256": "414cfb12aeb77f0b33c7cd4525fc2fc657b0256ed18e5bb14e8c13cdcf2694a1"
+        }
+      ],
+      "read_mode": "mechanical byte inventory only; semantic review not claimed"
+    },
+    {
+      "file": "docs/swaag-launch.md",
+      "bytes": 8304,
+      "sha256": "3b50fc5e4996dbf218247b1afbdc3235ad321b542332e6d3b181948c5fd6ab91",
+      "chunks": [
+        {
+          "start": 0,
+          "end": 8304,
+          "sha256": "3b50fc5e4996dbf218247b1afbdc3235ad321b542332e6d3b181948c5fd6ab91"
+        }
+      ],
+      "read_mode": "mechanical byte inventory only; semantic review not claimed"
+    },
+    {
+      "file": "docs/swaag-workspace-tools-20261021.md",
+      "bytes": 1381,
+      "sha256": "8178c5a0a4aa314963ed3df7a883f283b4721c58717dbf8cd3e44464a39790d3",
+      "chunks": [
+        {
+          "start": 0,
+          "end": 1381,
+          "sha256": "8178c5a0a4aa314963ed3df7a883f283b4721c58717dbf8cd3e44464a39790d3"
+        }
+      ],
+      "read_mode": "mechanical byte inventory only; semantic review not claimed"
+    },
+    {
+      "file": "docs/system-description.md",
+      "bytes": 31319,
+      "sha256": "4f801baf06fdf93907c3e2d7b479df2b46db882d595df47089653db9e59d354b",
+      "chunks": [
+        {
+          "start": 0,
+          "end": 31319,
+          "sha256": "4f801baf06fdf93907c3e2d7b479df2b46db882d595df47089653db9e59d354b"
+        }
+      ],
+      "read_mode": "mechanical byte inventory only; semantic review not claimed"
+    },
+    {
+      "file": "docs/system-server-mcp.md",
+      "bytes": 6918,
+      "sha256": "eee4ad9f3321aa4eaac5860a793b711a296a144433aea0275828c43415e5389b",
+      "chunks": [
+        {
+          "start": 0,
+          "end": 6918,
+          "sha256": "eee4ad9f3321aa4eaac5860a793b711a296a144433aea0275828c43415e5389b"
+        }
+      ],
+      "read_mode": "mechanical byte inventory only; semantic review not claimed"
+    },
+    {
+      "file": "docs/takeovers/google-mail-calendar-chatgpt-2026-10-23.md",
+      "bytes": 32767,
+      "sha256": "ceecdb7d94883fea2492046bbbe5f85ba72e62b6282d326a66009a5f6fca890a",
+      "chunks": [
+        {
+          "start": 0,
+          "end": 32767,
+          "sha256": "ceecdb7d94883fea2492046bbbe5f85ba72e62b6282d326a66009a5f6fca890a"
+        }
+      ],
+      "read_mode": "mechanical byte inventory only; semantic review not claimed"
+    },
+    {
+      "file": "docs/takeovers/google-mail-calendar-chatgpt.md",
+      "bytes": 7555,
+      "sha256": "04e4debcb01b1b237fe2083d48f3d803e8cbdc72213039e6ecbe1626e8073c9a",
+      "chunks": [
+        {
+          "start": 0,
+          "end": 7555,
+          "sha256": "04e4debcb01b1b237fe2083d48f3d803e8cbdc72213039e6ecbe1626e8073c9a"
+        }
+      ],
+      "read_mode": "mechanical byte inventory only; semantic review not claimed"
+    },
+    {
+      "file": "docs/thor-agent-space-reserve-2026-10-21.md",
+      "bytes": 1497,
+      "sha256": "a7ab90597cd3fee5fb01d0fcfe2acfc8ba3256cff699c9c369c3f173f04d8036",
+      "chunks": [
+        {
+          "start": 0,
+          "end": 1497,
+          "sha256": "a7ab90597cd3fee5fb01d0fcfe2acfc8ba3256cff699c9c369c3f173f04d8036"
+        }
+      ],
+      "read_mode": "mechanical byte inventory only; semantic review not claimed"
+    },
+    {
+      "file": "docs/video-library.md",
+      "bytes": 24775,
+      "sha256": "8dd7152c16a8c9a1eb2007c2a978a3d817704c766a3bb3a6a2596bed68364d8b",
+      "chunks": [
+        {
+          "start": 0,
+          "end": 24775,
+          "sha256": "8dd7152c16a8c9a1eb2007c2a978a3d817704c766a3bb3a6a2596bed68364d8b"
+        }
+      ],
+      "read_mode": "mechanical byte inventory only; semantic review not claimed"
+    },
+    {
+      "file": "docs/voice-agent-audio.md",
+      "bytes": 6385,
+      "sha256": "075fb8acc40530fb79fa805b4ec130c9b3d1dceabe68e1ea8a98498a7a5b444d",
+      "chunks": [
+        {
+          "start": 0,
+          "end": 6385,
+          "sha256": "075fb8acc40530fb79fa805b4ec130c9b3d1dceabe68e1ea8a98498a7a5b444d"
+        }
+      ],
+      "read_mode": "mechanical byte inventory only; semantic review not claimed"
+    },
+    {
+      "file": "docs/voice-agent-live.md",
+      "bytes": 15567,
+      "sha256": "62fdfd0edde0fcd01810f894357755a897f06c750caf540cf86cd385bd9827c6",
+      "chunks": [
+        {
+          "start": 0,
+          "end": 15567,
+          "sha256": "62fdfd0edde0fcd01810f894357755a897f06c750caf540cf86cd385bd9827c6"
+        }
+      ],
+      "read_mode": "mechanical byte inventory only; semantic review not claimed"
+    },
+    {
+      "file": "docs/vps-openvpn-auth-recovery-2026-10-24.md",
+      "bytes": 5457,
+      "sha256": "5e87eeefec6277ae89327e6e9bdd8789d05177d192a25dfb7d57ba10682832ed",
+      "chunks": [
+        {
+          "start": 0,
+          "end": 5457,
+          "sha256": "5e87eeefec6277ae89327e6e9bdd8789d05177d192a25dfb7d57ba10682832ed"
+        }
+      ],
+      "read_mode": "mechanical byte inventory only; semantic review not claimed"
+    },
+    {
+      "file": "docs/weather-observations.md",
+      "bytes": 10785,
+      "sha256": "2bc06b2bcb79f411ea3bb1c30ae27281aa4f0093553372020f10f3cbf0f78def",
+      "chunks": [
+        {
+          "start": 0,
+          "end": 10785,
+          "sha256": "2bc06b2bcb79f411ea3bb1c30ae27281aa4f0093553372020f10f3cbf0f78def"
+        }
+      ],
+      "read_mode": "mechanical byte inventory only; semantic review not claimed"
+    },
+    {
+      "file": "docs/web-interfaces.md",
+      "bytes": 4187,
+      "sha256": "3f91f9dd374db45ccd4c044df470c01031db53a4b350088eab368ac2cf98626a",
+      "chunks": [
+        {
+          "start": 0,
+          "end": 4187,
+          "sha256": "3f91f9dd374db45ccd4c044df470c01031db53a4b350088eab368ac2cf98626a"
+        }
+      ],
+      "read_mode": "mechanical byte inventory only; semantic review not claimed"
+    },
+    {
+      "file": "docs/web-portal-screen-contract.md",
+      "bytes": 8547,
+      "sha256": "bf2ccca51be50aef41f979fab43a99e24184b2a344260118425dc394f34fe898",
+      "chunks": [
+        {
+          "start": 0,
+          "end": 8547,
+          "sha256": "bf2ccca51be50aef41f979fab43a99e24184b2a344260118425dc394f34fe898"
+        }
+      ],
+      "read_mode": "mechanical byte inventory only; semantic review not claimed"
+    },
+    {
+      "file": "docs/web-portal.md",
+      "bytes": 16574,
+      "sha256": "c8ce69218a9f501fcdd4fae0af8ccf1e7661f5c8cb0b88f7087582d7c6a51e61",
+      "chunks": [
+        {
+          "start": 0,
+          "end": 16574,
+          "sha256": "c8ce69218a9f501fcdd4fae0af8ccf1e7661f5c8cb0b88f7087582d7c6a51e61"
+        }
+      ],
+      "read_mode": "mechanical byte inventory only; semantic review not claimed"
+    },
+    {
+      "file": "etc/calendar-chatgpt-prompt.txt",
+      "bytes": 483,
+      "sha256": "54c2152e29fabc45b96656e7f8a57035329ddd69c43db9b65222d137cb7f54d9",
+      "chunks": [
+        {
+          "start": 0,
+          "end": 483,
+          "sha256": "54c2152e29fabc45b96656e7f8a57035329ddd69c43db9b65222d137cb7f54d9"
+        }
+      ],
+      "read_mode": "mechanical byte inventory only; semantic review not claimed"
+    },
+    {
+      "file": "etc/calendar-swaag-prompt.txt",
+      "bytes": 1146,
+      "sha256": "465f7c7cac92f97ad94b8ffd80dc3921d457131e3ea105c0ef86fe36e3c67ce7",
+      "chunks": [
+        {
+          "start": 0,
+          "end": 1146,
+          "sha256": "465f7c7cac92f97ad94b8ffd80dc3921d457131e3ea105c0ef86fe36e3c67ce7"
+        }
+      ],
+      "read_mode": "mechanical byte inventory only; semantic review not claimed"
+    },
+    {
+      "file": "hosts/nitro/etc/NETPLAN_GENERATOR_MASK.md",
+      "bytes": 701,
+      "sha256": "694e0eed21458e1e8d1df97ad22d5c7c96f12f2700898cce8ebaf87e2c2c4116",
+      "chunks": [
+        {
+          "start": 0,
+          "end": 701,
+          "sha256": "694e0eed21458e1e8d1df97ad22d5c7c96f12f2700898cce8ebaf87e2c2c4116"
+        }
+      ],
+      "read_mode": "mechanical byte inventory only; semantic review not claimed"
+    },
+    {
+      "file": "secrets/cgtrader.txt",
+      "bytes": 376,
+      "sha256": "a5dcf6922a3ff11dc01468fb6a432de5a71c496f876392ab410e5be90ecbc18a",
+      "chunks": [
+        {
+          "start": 0,
+          "end": 376,
+          "sha256": "a5dcf6922a3ff11dc01468fb6a432de5a71c496f876392ab410e5be90ecbc18a"
+        }
+      ],
+      "read_mode": "mechanical byte inventory only; semantic review not claimed"
+    },
+    {
+      "file": "secrets/google.txt",
+      "bytes": 223,
+      "sha256": "adf456db06fa7f399cf1cac25c3faa5a1f958f129c68a7ee5ea3f4c6df9303bc",
+      "chunks": [
+        {
+          "start": 0,
+          "end": 223,
+          "sha256": "adf456db06fa7f399cf1cac25c3faa5a1f958f129c68a7ee5ea3f4c6df9303bc"
+        }
+      ],
+      "read_mode": "mechanical byte inventory only; semantic review not claimed"
+    },
+    {
+      "file": "secrets/open_router_models_free.txt",
+      "bytes": 6589,
+      "sha256": "8f87d922dc3518445d7ca7cbaf64ca587d231cc7a600b23b7a847d871a424525",
+      "chunks": [
+        {
+          "start": 0,
+          "end": 6589,
+          "sha256": "8f87d922dc3518445d7ca7cbaf64ca587d231cc7a600b23b7a847d871a424525"
+        }
+      ],
+      "read_mode": "mechanical byte inventory only; semantic review not claimed"
+    },
+    {
+      "file": "secrets/personal.txt",
+      "bytes": 172,
+      "sha256": "de3400c74d110b451a3b9fca540221e420ffd8547d61e2cd34353125646520d0",
+      "chunks": [
+        {
+          "start": 0,
+          "end": 172,
+          "sha256": "de3400c74d110b451a3b9fca540221e420ffd8547d61e2cd34353125646520d0"
+        }
+      ],
+      "read_mode": "mechanical byte inventory only; semantic review not claimed"
+    },
+    {
+      "file": "secrets/token_fmp.txt",
+      "bytes": 33,
+      "sha256": "a07f9a21396fbd976017b96eaf06f46cd8b438d3fa64fc0b96e5bfb0c649ab10",
+      "chunks": [
+        {
+          "start": 0,
+          "end": 33,
+          "sha256": "a07f9a21396fbd976017b96eaf06f46cd8b438d3fa64fc0b96e5bfb0c649ab10"
+        }
+      ],
+      "read_mode": "mechanical byte inventory only; semantic review not claimed"
+    },
+    {
+      "file": "secrets/token_github.txt",
+      "bytes": 42,
+      "sha256": "3002d7060c700b6f75f6ca6b1680383ab21369cab9b83bbbe573980599f738f4",
+      "chunks": [
+        {
+          "start": 0,
+          "end": 42,
+          "sha256": "3002d7060c700b6f75f6ca6b1680383ab21369cab9b83bbbe573980599f738f4"
+        }
+      ],
+      "read_mode": "mechanical byte inventory only; semantic review not claimed"
+    },
+    {
+      "file": "secrets/token_github_admin.txt",
+      "bytes": 94,
+      "sha256": "df46621da6371b83401ea9ff340592e228bb128d640a23d5db5cd25c6d14082e",
+      "chunks": [
+        {
+          "start": 0,
+          "end": 94,
+          "sha256": "df46621da6371b83401ea9ff340592e228bb128d640a23d5db5cd25c6d14082e"
+        }
+      ],
+      "read_mode": "mechanical byte inventory only; semantic review not claimed"
+    },
+    {
+      "file": "secrets/token_n8n.txt",
+      "bytes": 208,
+      "sha256": "406f493eebc6f907710914fc5f0c5c2f1fd88c05b53c4a4f9d745dadb72090b0",
+      "chunks": [
+        {
+          "start": 0,
+          "end": 208,
+          "sha256": "406f493eebc6f907710914fc5f0c5c2f1fd88c05b53c4a4f9d745dadb72090b0"
+        }
+      ],
+      "read_mode": "mechanical byte inventory only; semantic review not claimed"
+    },
+    {
+      "file": "secrets/token_open_router.txt",
+      "bytes": 79,
+      "sha256": "c898c969341a6f48d61e4883a39a21d4c729124b65f14a94acdb4121a148c238",
+      "chunks": [
+        {
+          "start": 0,
+          "end": 79,
+          "sha256": "c898c969341a6f48d61e4883a39a21d4c729124b65f14a94acdb4121a148c238"
+        }
+      ],
+      "read_mode": "mechanical byte inventory only; semantic review not claimed"
+    },
+    {
+      "file": "secrets/token_pip.txt",
+      "bytes": 180,
+      "sha256": "53d739a22432a71a98c2d7669da2bd272dc1794a59f46105ea91af6756480199",
+      "chunks": [
+        {
+          "start": 0,
+          "end": 180,
+          "sha256": "53d739a22432a71a98c2d7669da2bd272dc1794a59f46105ea91af6756480199"
+        }
+      ],
+      "read_mode": "mechanical byte inventory only; semantic review not claimed"
+    },
+    {
+      "file": "secrets/token_playcanva.txt",
+      "bytes": 32,
+      "sha256": "22391b1c7496fbf76926da1d14bea08f0537d2f74e8523038a48958d1c1462e7",
+      "chunks": [
+        {
+          "start": 0,
+          "end": 32,
+          "sha256": "22391b1c7496fbf76926da1d14bea08f0537d2f74e8523038a48958d1c1462e7"
+        }
+      ],
+      "read_mode": "mechanical byte inventory only; semantic review not claimed"
+    },
+    {
+      "file": "secrets/token_trading212.txt",
+      "bytes": 83,
+      "sha256": "84621ced71e92786920c6b57a741587f0f080fb4301baf84d42b62b5ca0d7336",
+      "chunks": [
+        {
+          "start": 0,
+          "end": 83,
+          "sha256": "84621ced71e92786920c6b57a741587f0f080fb4301baf84d42b62b5ca0d7336"
+        }
+      ],
+      "read_mode": "mechanical byte inventory only; semantic review not claimed"
+    },
+    {
+      "file": "secrets/token_wix.txt",
+      "bytes": 771,
+      "sha256": "3bcb97a03e7c2d12ce9be73ec360e1c4d3b473a0ca6029c99b1d61325562fc6d",
+      "chunks": [
+        {
+          "start": 0,
+          "end": 771,
+          "sha256": "3bcb97a03e7c2d12ce9be73ec360e1c4d3b473a0ca6029c99b1d61325562fc6d"
+        }
+      ],
+      "read_mode": "mechanical byte inventory only; semantic review not claimed"
+    },
+    {
+      "file": "secrets/unity3d.txt",
+      "bytes": 67,
+      "sha256": "484e11927093fc66fced00e56a8189b468a5a81bbe4eac67efa9af07985f1fd2",
+      "chunks": [
+        {
+          "start": 0,
+          "end": 67,
+          "sha256": "484e11927093fc66fced00e56a8189b468a5a81bbe4eac67efa9af07985f1fd2"
+        }
+      ],
+      "read_mode": "mechanical byte inventory only; semantic review not claimed"
+    },
+    {
+      "file": "secrets/wix.txt",
+      "bytes": 67,
+      "sha256": "edb2794df13128ab8582af078fdd3d63dcb94df9e18df03fb40b35835c2e67b8",
+      "chunks": [
+        {
+          "start": 0,
+          "end": 67,
+          "sha256": "edb2794df13128ab8582af078fdd3d63dcb94df9e18df03fb40b35835c2e67b8"
+        }
+      ],
+      "read_mode": "mechanical byte inventory only; semantic review not claimed"
+    },
+    {
+      "file": "services/README.md",
+      "bytes": 632,
+      "sha256": "bab004cd35584e5b7403c4c711e52cd256fb373e9de79118eb1177adcd29cd1c",
+      "chunks": [
+        {
+          "start": 0,
+          "end": 632,
+          "sha256": "bab004cd35584e5b7403c4c711e52cd256fb373e9de79118eb1177adcd29cd1c"
+        }
+      ],
+      "read_mode": "mechanical byte inventory only; semantic review not claimed"
+    },
+    {
+      "file": "services/THIRD_PARTY.md",
+      "bytes": 594,
+      "sha256": "20aee5268f93c74e56a1efe18ce09964b622f36bbe68f8dda16177df5df2c82b",
+      "chunks": [
+        {
+          "start": 0,
+          "end": 594,
+          "sha256": "20aee5268f93c74e56a1efe18ce09964b622f36bbe68f8dda16177df5df2c82b"
+        }
+      ],
+      "read_mode": "mechanical byte inventory only; semantic review not claimed"
+    },
+    {
+      "file": "services/remote_desktop/README.md",
+      "bytes": 2396,
+      "sha256": "43ef94043d89ab828c7eb6825f8536bd00f3ddba1450acdf747059da19b1bacb",
+      "chunks": [
+        {
+          "start": 0,
+          "end": 2396,
+          "sha256": "43ef94043d89ab828c7eb6825f8536bd00f3ddba1450acdf747059da19b1bacb"
+        }
+      ],
+      "read_mode": "mechanical byte inventory only; semantic review not claimed"
+    },
+    {
+      "file": "services/remote_desktop/backends/jetson/README.md",
+      "bytes": 661,
+      "sha256": "c54f3744b220a71f938fdb078575b3c17c13e22eb7d0b954b6ba674ceada6356",
+      "chunks": [
+        {
+          "start": 0,
+          "end": 661,
+          "sha256": "c54f3744b220a71f938fdb078575b3c17c13e22eb7d0b954b6ba674ceada6356"
+        }
+      ],
+      "read_mode": "mechanical byte inventory only; semantic review not claimed"
+    },
+    {
+      "file": "services/remote_desktop/backends/jetson/requirements.txt",
+      "bytes": 43,
+      "sha256": "e9580b7bcb8f88c5e137b73fc801e0b07ed763840f5d365361eda1f9586aa6f3",
+      "chunks": [
+        {
+          "start": 0,
+          "end": 43,
+          "sha256": "e9580b7bcb8f88c5e137b73fc801e0b07ed763840f5d365361eda1f9586aa6f3"
+        }
+      ],
+      "read_mode": "mechanical byte inventory only; semantic review not claimed"
+    },
+    {
+      "file": "services/video_library/README.md",
+      "bytes": 455,
+      "sha256": "f1363d403a75bd35259352a16c7c50284d7aea2611dd3a6b9cb9ab1999d75c1f",
+      "chunks": [
+        {
+          "start": 0,
+          "end": 455,
+          "sha256": "f1363d403a75bd35259352a16c7c50284d7aea2611dd3a6b9cb9ab1999d75c1f"
+        }
+      ],
+      "read_mode": "mechanical byte inventory only; semantic review not claimed"
+    },
+    {
+      "file": "services/video_library/SCREEN_CONTRACT.md",
+      "bytes": 1968,
+      "sha256": "0d2db59010fd58e89a021deea44648d2dad5e06517c013221b4b0b6ef07b4733",
+      "chunks": [
+        {
+          "start": 0,
+          "end": 1968,
+          "sha256": "0d2db59010fd58e89a021deea44648d2dad5e06517c013221b4b0b6ef07b4733"
+        }
+      ],
+      "read_mode": "mechanical byte inventory only; semantic review not claimed"
+    },
+    {
+      "file": "services/video_library/static/vendor/README.md",
+      "bytes": 512,
+      "sha256": "595a5312b5fdcb946da645f61cd4e54b937c5fd820fa76183eee70df13fcd1ea",
+      "chunks": [
+        {
+          "start": 0,
+          "end": 512,
+          "sha256": "595a5312b5fdcb946da645f61cd4e54b937c5fd820fa76183eee70df13fcd1ea"
+        }
+      ],
+      "read_mode": "mechanical byte inventory only; semantic review not claimed"
+    },
+    {
+      "file": "src/google_service/QUICKSTART.md",
+      "bytes": 4123,
+      "sha256": "41533365807e7daf2ffc7352a50606d83e67ad13855a3326240cb25f94f3910d",
+      "chunks": [
+        {
+          "start": 0,
+          "end": 4123,
+          "sha256": "41533365807e7daf2ffc7352a50606d83e67ad13855a3326240cb25f94f3910d"
+        }
+      ],
+      "read_mode": "mechanical byte inventory only; semantic review not claimed"
+    },
+    {
+      "file": "src/google_service/README.md",
+      "bytes": 18587,
+      "sha256": "c8aa8e4f97452240c7475ce5870cefa8c11f4f52cafcf2db56c8e43e32e6ea2e",
+      "chunks": [
+        {
+          "start": 0,
+          "end": 18587,
+          "sha256": "c8aa8e4f97452240c7475ce5870cefa8c11f4f52cafcf2db56c8e43e32e6ea2e"
+        }
+      ],
+      "read_mode": "mechanical byte inventory only; semantic review not claimed"
+    },
+    {
+      "file": "src/mail_service/README.md",
+      "bytes": 7468,
+      "sha256": "fe0f4983cccee31b7eaab6a92a6d3967f07eb9b35f1ce27b0685b19c24f19c3f",
+      "chunks": [
+        {
+          "start": 0,
+          "end": 7468,
+          "sha256": "fe0f4983cccee31b7eaab6a92a6d3967f07eb9b35f1ce27b0685b19c24f19c3f"
+        }
+      ],
+      "read_mode": "mechanical byte inventory only; semantic review not claimed"
+    }
+  ]
+}
