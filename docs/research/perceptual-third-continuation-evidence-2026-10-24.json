@@ -1,0 +1,243 @@
+{
+  "date": "2026-10-24",
+  "research_ownership": "SWAAG visual perception, original owner testing/GUI/media-editing recordings",
+  "overall_status": "PARTIAL \u2014 no tested general vision/video judge qualified for autonomous acceptance",
+  "all_raw_source_and_prediction_SHA256": {
+    "rapidata_human_choices": "6c69fc142f36f103b5ef77296231f4f608e37533746f6322fe1e0790325e40e9",
+    "rapidata_fps_confound": "fabfd260f994bcfc34a3ec400d6ebbe747d448aca0ea11cad8c39d3ead461ac5",
+    "rapidata_generated_pair": "e58b6b0483cde5fbf087d38cdda9b0d0e67f607d61b3b6c2ab8786c283728c00",
+    "rapidata_temporal_pixel_scores": "ea1707a8369bbc4ff39115adc43c221a7f08ba60b547d81d65ecf6a1ed9453a0",
+    "rapidata_human_vote_scoring": "ff61a73be23001208b5ab0d794dfe06fabc4642d63bf7ce21820df10d0ef1885",
+    "expert_vlm_votes": "3019fa8d2347eed71feca57d6754c99c52717ef52d0713409c9b93fda804d41c",
+    "human_glb_mesh_structure": "0ad3815852510f19f3d027b7ba2ed040d83c2d5e4e95bda7a74b5677419928c1",
+    "spotlight_original_manifest": "5ce793af4f6c3aae9711572cc50ae76289b12b6f981cc0496dc2b57843799a87",
+    "spotlight_frozen_pixel_only_predictions": "6cc2b947d67a4293133b206dde9f41bc9ebf5f0b9799ffb0758dbd0363e371f0",
+    "spotlight_human_motion_labels_scored": "a887b211ee774a6f8fff928c18886bd3d2097472af57559906a0f49ada0de16f",
+    "spotlight_random_peak_chance": "e64c9f740a97d28f12771edc47703a4631edfad54f53b42567525f090f5968ff",
+    "prior_3d_gui_report": "4aa04b474770d98385ee52fc297b57739e67a1e36445588a30612afe4c31e557"
+  },
+  "real_physics_human_pair_confounded": {
+    "pair_count_real_vs_Cosmos": 12,
+    "pair_count_Cosmos_vs_MiniMax": 6,
+    "native_fps_alone_agreed_with_human_preferences": 18,
+    "total_video_pair_evaluations": 18,
+    "test_method": "human aggregate source vote after frozen 12fps optical flow; FPS-only metadata diagnostic post-hoc",
+    "main_result": "Apparent 10/12 and 6/6 optical-flow/human preference agreement cannot imply physical reasoning; metadata native FPS alone gives 12/12 and 6/6, separate model pipelines and encodings confounded",
+    "independent_gold": "Rapidata physics human PREFERENCE, not true physical law or exact stutter time labels",
+    "relevance": "no-model physics judgement qualification"
+  },
+  "five_released_3d_human_VLM_votes": {
+    "source": "3D-DefectBench expert-adjudicated 99 GLB/generative mesh assets, historical author VLM inference (not new local model calls)",
+    "five_models": [
+      "claude-sonnet-4",
+      "gemini-2.5-pro",
+      "gpt-4.1",
+      "gpt-5",
+      "qwen3-vl-235b"
+    ],
+    "expert_missing_parts_majority_3_of_5": {
+      "n": 99,
+      "positive": 31,
+      "negative": 68,
+      "TP": 8,
+      "FP": 8,
+      "FN": 23,
+      "TN": 60,
+      "precision": 0.5,
+      "recall": 0.25806451612903225,
+      "specificity": 0.8823529411764706,
+      "fpr": 0.11764705882352941
+    },
+    "expert_missing_parts_any_1_of_5": {
+      "n": 99,
+      "positive": 31,
+      "negative": 68,
+      "TP": 20,
+      "FP": 29,
+      "FN": 11,
+      "TN": 39,
+      "precision": 0.40816326530612246,
+      "recall": 0.6451612903225806,
+      "specificity": 0.5735294117647058,
+      "fpr": 0.4264705882352941
+    },
+    "expert_mechanical_missing_parts_majority_3_of_5": {
+      "n": 30,
+      "positive": 9,
+      "negative": 21,
+      "TP": 1,
+      "FP": 2,
+      "FN": 8,
+      "TN": 19,
+      "precision": 0.3333333333333333,
+      "recall": 0.1111111111111111,
+      "specificity": 0.9047619047619048,
+      "fpr": 0.09523809523809523
+    },
+    "expert_mechanical_missing_parts_any_1_of_5": {
+      "n": 30,
+      "positive": 9,
+      "negative": 21,
+      "TP": 5,
+      "FP": 9,
+      "FN": 4,
+      "TN": 12,
+      "precision": 0.35714285714285715,
+      "recall": 0.5555555555555556,
+      "specificity": 0.5714285714285714,
+      "fpr": 0.42857142857142855
+    },
+    "policy": "unweighted fixed votes any/3of5/4of5/5of5, all four scored; no threshold tuning or heldout statistical fit",
+    "finding": "ensemble consensus may reduce false alarms by missing most defects; not trustworthy physical-engineering QA"
+  },
+  "real_glb_deterministic_structure": {
+    "source": "10 human-labelled actual 3D-DefectBench golden GLBs, four human majority missing-parts, six not",
+    "checked_meshes": 10,
+    "submeshes_all_open": 10,
+    "missingparts_as_nonfinite_coordinates": {
+      "n": 10,
+      "TP": 0,
+      "FP": 0,
+      "TN": 6,
+      "FN": 4,
+      "precision": null,
+      "recall": 0.0
+    },
+    "missingparts_as_open_submeshes": {
+      "n": 10,
+      "TP": 4,
+      "FP": 6,
+      "TN": 0,
+      "FN": 0,
+      "precision": 0.4,
+      "recall": 1.0
+    },
+    "missingparts_as_coarse_AABB_overlap": {
+      "n": 10,
+      "TP": 4,
+      "FP": 3,
+      "TN": 3,
+      "FN": 0,
+      "precision": 0.5714285714285714,
+      "recall": 1.0
+    },
+    "physical_meaning": "GLB watertight is not necessary for every render asset, AABB overlap not narrowphase collision or penetration, mesh validity cannot detect absent semantic part"
+  },
+  "spotlight_human_temporal_errors": {
+    "original_source": "Spotlight ECCV 2026 external human annotations, 600 original videos, 1604 localizable errors across motion, physics, semantics and anatomy; v1 revision pinned",
+    "selected_videos": 24,
+    "source_prompt_families": 8,
+    "source_generators": [
+      "ltx2",
+      "seedance",
+      "veo3"
+    ],
+    "videos_with_human_motion_label": 9,
+    "videos_without_motion_label_NOT_GOLD_CLEAN": 15,
+    "separately_human_localized_motion_intervals": 11,
+    "low_level_optical_flow_raw_cpu_seconds": 104.27,
+    "low_level_analyzer_results": {
+      "flow_magnitude_jerk": {
+        "TP_on_labeled_motion": 4,
+        "FP_proxy_on_no_motion_labels": 4,
+        "FN_on_labeled_motion": 5,
+        "TN_proxy_on_no_motion_labels": 11,
+        "labeled_motion_videos": 9,
+        "not_motion_labeled_videos": 15,
+        "positive_recall": 0.4444444444444444,
+        "proxy_precision": 0.5,
+        "events_localized_by_top3": 9,
+        "total_human_motion_events": 11,
+        "event_recall_top3": 0.8181818181818182
+      },
+      "warp_residual": {
+        "TP_on_labeled_motion": 5,
+        "FP_proxy_on_no_motion_labels": 0,
+        "FN_on_labeled_motion": 4,
+        "TN_proxy_on_no_motion_labels": 15,
+        "labeled_motion_videos": 9,
+        "not_motion_labeled_videos": 15,
+        "positive_recall": 0.5555555555555556,
+        "proxy_precision": 1.0,
+        "events_localized_by_top3": 9,
+        "total_human_motion_events": 11,
+        "event_recall_top3": 0.8181818181818182
+      },
+      "frame_difference_mae": {
+        "TP_on_labeled_motion": 1,
+        "FP_proxy_on_no_motion_labels": 0,
+        "FN_on_labeled_motion": 8,
+        "TN_proxy_on_no_motion_labels": 15,
+        "labeled_motion_videos": 9,
+        "not_motion_labeled_videos": 15,
+        "positive_recall": 0.1111111111111111,
+        "proxy_precision": 1.0,
+        "events_localized_by_top3": 8,
+        "total_human_motion_events": 11,
+        "event_recall_top3": 0.7272727272727273
+      }
+    },
+    "chance_audit": {
+      "random_expected_events_out_of_11": 6.6951,
+      "random_std": 1.4384,
+      "random_95pct_interval_counts": [
+        4,
+        9
+      ],
+      "random_max": 11,
+      "seed": 20261024,
+      "draws": 10000,
+      "topK": 3,
+      "separation_frames_min": 3,
+      "total_motion_events": 11,
+      "full_clip_motion_annotation_count": 1
+    },
+    "chance_comparison": {
+      "flow_magnitude_jerk": {
+        "events_localized_by_top3": 9,
+        "random_peak_ge_observed_pvalue": 0.1028,
+        "TP_labeled": 4,
+        "FN_labeled": 5,
+        "FP_proxy_unlabeled": 4
+      },
+      "warp_residual": {
+        "events_localized_by_top3": 9,
+        "random_peak_ge_observed_pvalue": 0.1028,
+        "TP_labeled": 5,
+        "FN_labeled": 4,
+        "FP_proxy_unlabeled": 0
+      },
+      "frame_difference_mae": {
+        "events_localized_by_top3": 8,
+        "random_peak_ge_observed_pvalue": 0.2913,
+        "TP_labeled": 1,
+        "FN_labeled": 8,
+        "FP_proxy_unlabeled": 0
+      }
+    },
+    "caveat": "Human motion annotations may be broad, one covers full clip. Out-of-labeled moments and videos not necessarily clean. Random-time baseline for same 3 peak slots detects average 6.70/11 and >=9/11 in about 10.3% cases, so 9/11 localizations not convincing. No video language model was locally tested on this sample; paper author results separate."
+  },
+  "previous_local_specialized_model": {
+    "ScreenVLM": "316M model, 4 real target crops, 0 full expected labels, ~273 CPU seconds per image, not a clipping classifier; full pages unmeasured",
+    "axe_core": "real axe-core 4.14.0 32 of 34 official W3C ACT text-contrast source cases executed, 7 confirmed failed, 7 passed, 9 N/A correctly, 8 inconclusive and 1 applicability mistake; 2 scripted cases not executed; component only",
+    "Thor_Qwen3VL": "original 3/4, clipped text wrongly accepted, acceptance gate FAILED"
+  },
+  "recommended_narrow_tools": {
+    "instrumented_DOM_web": "tested axe-core WCAG contrast rules and DOM scroll/client/ancestor bounds with actual screenshot; must abstain unsupported cases",
+    "screenshot_UI": "expected-text OCR + independently rated visual evidence, screenshot-only CLIP/ScreenVLM not qualified; SSIM difference only change triage",
+    "diagrams": "authoritative graph topology/chart data/label manifest plus OCR and geometry; 42/134 source labels recovered by Tesseract PSM6 on source-backed diagrams, not semantic reasoning accuracy",
+    "industrial_3D": "actual source CAD world transforms, contacts/constraints/normals and multiview targeted verification, with human/independent good/bad mechanical reference; generic CLIP and released VLMs unqualified",
+    "video": "frame PTS/hash/source timelines plus semantic intentional cut/hold contract, optional flow visualization; no freeze detector or learned physics judge yet validated on user product"
+  },
+  "next_open": [
+    "externally grounded true clean and defective industrial 3D renders (correct linkage/contact, authentic source dimensions) rather than only generated geometry defects",
+    "human-verified naturally occurring video frame-drop/judder/artifact dataset with truly clean same codec/fps controls and frame timestamps; test modern video VLM and deterministic candidates",
+    "full-page specialized ScreenVLM/OmniParser & UI-UX on diverse real GUI clipping/overlap/contrast independently seen by humans",
+    "independently calibrated error rates and selection thresholds outside publicly consumed development datasets, broad host/resource/latency tests"
+  ],
+  "evaluation_integrity": [
+    "Source videos and mechanical source assets are noncommercial licensed and remain exclusively in /data/var, no model weights or original private recordings in Git",
+    "All algorithms fixed before scoring but same public sample used for diagnostic discussion; not an unseen deployment holdout",
+    "No actual live trading/3D render/model GPU servers interrupted, no new Calendar events created; no denied tool action retried"
+  ]
+}

@@ -302,5 +302,49 @@
       "CGVQM+D with approved reference and human-rated defects"
     ],
     "physically_plausible_3d_render_and_natural_video_motion_claims": "unverified, models are not accepted as standalone gates"
+  },
+  "third_hourly_continuation_2026_10_24": {
+    "objective": "test available visual and video judges against independently resolved actual rendered defect/clean examples, keep negative evidence",
+    "decision": "PARTIAL: no qualified general GUI/diagram/industrial 3D/temporal video model acceptance gate",
+    "report": "perceptual-analyzers-third-hourly-continuation-2026-10-24.md",
+    "aggregate_evidence": "perceptual-third-continuation-evidence-2026-10-24.json",
+    "source_results": {
+      "Spotlight_ECCV2026_real_human_motion": [
+        "24 actual original T2V videos, 8 independent prompts, 3 generators, 9 motion-labelled, 11 human intervals",
+        "8fps 160x90 flow-warp residual flags 5/9 motion-labelled, 0/15 no-motion-label proxies",
+        "3 peaks overlap 9/11 human events but expected 6.695 under random 3 separated peaks, p~0.103; cannot accept"
+      ],
+      "Rapidata_physics_human_preferences": [
+        "12 real vs Cosmos and 6 Cosmos vs MiniMax original video pairs",
+        "flow motion acceleration appeared to agree with humans 10/12 and 6/6, but original frame rate ALONE matched all 18/18 preferences; strong confound, not physical detection"
+      ],
+      "3D_expert_five_VLM_vote": [
+        "99 expert GLB labelled assets, 31 missing parts, five published VLM predictions",
+        "majority of 5 catches 8/31, 8 false positives /68; any one detects 20/31 but 29 false positives; no reliable ensemble"
+      ],
+      "Real_GLB_structure": [
+        "10 actual 3D human-labelled machine-like GLBs, 4 missing-parts yes, 6 no",
+        "non-watertight for all 10, invalid as missing-part acceptance gate; AABB overlap flags 4 positives and 3/6 no-missing false alarms; not proof of collision or physical correctness"
+      ]
+    },
+    "validated_previous_narrow_properties": [
+      "axe-core 4.14.0 WCAG contrast on author W3C ACT cases with explicit unknown outcomes",
+      "browser exact-target DOM scroll/client text clipping measured 9/9 positives and 0/9 false alarms on limited real-site controls",
+      "exact matched output timeline identifies unauthorized frame edits only when approved final source/hold/cut contract known"
+    ],
+    "still_unverified": [
+      "specialized UI full-page parser and screenshot-only true defects on unseen diverse websites",
+      "source/CAD-physically correct/incorrect actual industrial renders",
+      "human-confirmed naturally occurring frame-level stutter with verified same-codec genuinely clean controls",
+      "video VLM physics/error model inference on Nitro/Thor uncontented production hardware",
+      "independent untouched final acceptance data after research-driven selection"
+    ],
+    "source_output_links": [
+      "https://huggingface.co/datasets/UBC-ViL/Spotlight-VideoGen-Errors",
+      "https://spotlight-video.github.io/",
+      "https://huggingface.co/datasets/Rapidata/image-to-video-physics-human-feedback-benchmark",
+      "https://huggingface.co/datasets/aieval2026/3d-defectbench"
+    ],
+    "caveats": "Motion-unlabeled is NOT verified clean; video preference FPS/codec confounding invalidates apparent physics success; 3D expert missing-parts votes and mesh invariants answer fundamentally different properties, both narrow."
   }
 }
