@@ -1,0 +1,501 @@
+{
+  "source_url": "https://raw.githubusercontent.com/stanford-futuredata/ARES/main/datasets/example_files/nq_labeled_output.tsv",
+  "source_sha256": "649321a57e4dfe404d43c9ecb2443889b89cdff12e5ec62cca04cc42602bf236",
+  "original_rows": 6189,
+  "source_label_counts": {
+    "1.0": 2653,
+    "0.0": 1768,
+    "": 1768
+  },
+  "label_provenance_caution": "ARES example output appears constructed/mixed; do not claim the full corpus has independent blinded human relevance ratings; this external set is supplemental and not SWAAG-context representative",
+  "sampling": {
+    "version": "sample-ares-nq-v1",
+    "seed": 20261025,
+    "queries": 24,
+    "pairs": 48,
+    "per_overlap_tercile": 8,
+    "filters": "query 12..175 chars, >=3 words; full document 120..1350 chars; only source 0.0 and 1.0 labels; choose maximum-overlap negative per query then stratify query overlap thirds"
+  },
+  "items": [
+    {
+      "item_id": "nq-00-1",
+      "query": "who are the characters in yo gabba gabba",
+      "document": "Yo Gabba Gabba! is an American live action/puppet educational, musical children's television show starring five costumed toys coming to life and their friend DJ Lance Rock. The series premiered on Nick Jr. August 20, 2007 and ended on November 12, 2015. There is a single topic in each episode, e.g. \"Adventure\", \"Friends\", and \"Dance\", through songs and short storylines in the half-hour program. Additionally, the show teaches children life and social skills, such as sharing and trying new foods. It also encourages viewers to move along with and dance with the characters in the program. The show is noted for its indie-culture guest stars and bands, and for drawing visual inspiration from 8-bit video games and \"H.R. Pufnstuf\", among other television shows. Created by Christian Jacobs (lead singer of the Aquabats) and Scott Schultz, the show's learning process has parents, older siblings, and younger kids watch the show together rather than letting it act as a babysitter. The television program has spawned a touring live stage show, various toys and branded clothing. Trademarks relating to \"Yo Gabba Gabba!\" and its characters are held by GabbaCaDabra, LLC in partnership with The Magic Store and WildBrain.",
+      "label": 1,
+      "source_row_index": 2673,
+      "passage_sha256": "0aac6e22ff1601aa8e286dfe990e418e9ad94ce8cb152ad4ddef82217fd0eb06",
+      "question_token_overlap_with_negative": 0.2,
+      "source_label_type": "unverified source-provided example dataset label; NOT independently established as human-rater ground truth"
+    },
+    {
+      "item_id": "nq-00-0",
+      "query": "who are the characters in yo gabba gabba",
+      "document": "Rhyner and several Special Forces members were wounded throughout the course of the battle. Rhyner was shot twice in the chest and once in the leg, although his protective vest stopped the two bullets to his chest from causing a mortal injury. Despite being wounded within the first fifteen minutes of the battle, Rhyner continued to direct close air support and airstrikes until the assault force was evacuated seven hours later. 50 of the airstrikes he called in were within 200m of friendly positions; the term \"danger close\" is applied when referring to airstrikes within 600m. He was credited with saving the entire 100-man team from being overrun twice. According to the Air Force Cross citation, during the battle Rhyner directed close air support and airstrikes totalling 4,570 cannon rounds, nine Hellfire missiles, 162 rockets, a dozen 500-pound bombs, and one 2,000-pound bomb. As a result of the same battle, ten U.S. Army soldiers, nine Special Forces and one Combat Cameraman received the Silver Star, the greatest number of Silver Stars awarded for a single battle since the Vietnam War.",
+      "label": 0,
+      "source_row_index": 5635,
+      "passage_sha256": "d2678df02db74569d56fcf2a303bf4ed4b8b964a2389d34f4b0d332b081edc2a",
+      "question_token_overlap_with_negative": 0.2,
+      "source_label_type": "unverified source-provided example dataset label; NOT independently established as human-rater ground truth"
+    },
+    {
+      "item_id": "nq-01-1",
+      "query": "who was the killer in the movie i know what you did last summer",
+      "document": "Julie finds an article mentioning Susie's father, Ben Willis, and realizes that Ben was the man they ran over, moments after he had killed David to avenge his daughter. She then goes to the docks to tell Ray, but he refuses to believe her. Julie notices Ray's boat is called \"Billy Blue\" and runs away. Ben appears, knocking Ray unconscious, and invites Julie to hide on his boat. On the boat, she finds photos and articles about her friends and her, and pictures of Susie. Ben's boat leaves the docks, and he begins tormenting Julie, chasing her below deck; there, she uncovers the bodies of Helen and Barry in the boat's ice box. Ray regains consciousness and steals a motorboat to rescue Julie. He ultimately uses the rigging to sever Ben's hand and send him overboard. When Julie and Ray are questioned by the police, they deny knowing why Ben attempted to kill them, but they are relieved not to have actually killed anyone the previous summer, and reconcile.",
+      "label": 1,
+      "source_row_index": 5420,
+      "passage_sha256": "22bdeec61d5752e7d6403536ae0f41d865e817b812d9620c3651597113bdb7dc",
+      "question_token_overlap_with_negative": 0.181818,
+      "source_label_type": "unverified source-provided example dataset label; NOT independently established as human-rater ground truth"
+    },
+    {
+      "item_id": "nq-01-0",
+      "query": "who was the killer in the movie i know what you did last summer",
+      "document": "The final sequence on the boat was shot on an actual water-bound vessel on the Cape Fear River, which proved difficult for the actors and crew. According to Gillespie, the filmmakers nearly lost the boat while attempting to dock it due to the volatile waters, after which they were forced to leave and shoot other footage until the following day.",
+      "label": 0,
+      "source_row_index": 5923,
+      "passage_sha256": "d3d8185e3d93e1249827ef2da6bebb6ba5a43ff5ae07f28059ccca63b000256d",
+      "question_token_overlap_with_negative": 0.181818,
+      "source_label_type": "unverified source-provided example dataset label; NOT independently established as human-rater ground truth"
+    },
+    {
+      "item_id": "nq-02-1",
+      "query": "what is the snow on mars made of",
+      "document": "The caps at both poles consist primarily of water ice. Frozen carbon dioxide accumulates as a comparatively thin layer about one metre thick on the north cap in the northern winter, while the south cap has a permanent dry ice cover about 8 m thick. The northern polar cap has a diameter of about 1000 km during the northern Mars summer, and contains about 1.6 million cubic km of ice, which if spread evenly on the cap would be 2 km thick. (This compares to a volume of 2.85 million cubic km (km) for the Greenland ice sheet.) The southern polar cap has a diameter of 350 km and a thickness of 3 km. The total volume of ice in the south polar cap plus the adjacent layered deposits has also been estimated at 1.6 million cubic km. Both polar caps show spiral troughs, which recent analysis of SHARAD ice penetrating radar has shown are a result of roughly perpendicular katabatic winds that spiral due to the Coriolis Effect.",
+      "label": 1,
+      "source_row_index": 2280,
+      "passage_sha256": "a8fb4ed691f1537c5eb9563be52505ecdee231542eddaad835dadf7e53136614",
+      "question_token_overlap_with_negative": 0.2,
+      "source_label_type": "unverified source-provided example dataset label; NOT independently established as human-rater ground truth"
+    },
+    {
+      "item_id": "nq-02-0",
+      "query": "what is the snow on mars made of",
+      "document": "Morfeo subsequently began his professional career when he was promoted to the Atalanta B.C. senior side, making his Serie A debut with the club later that year, at the age of 17, on 19 December, in a 2–1 home win over Genoa. he scored his first two goals for the club after coming on as a substitute against Lecce, helping Atalanta to come back from behind to earn a 3–3 draw; he finished the 1993–94 season with 9 appearances and 3 goals.",
+      "label": 0,
+      "source_row_index": 2098,
+      "passage_sha256": "faec048b5dabd51dc7c81712ea5f8c4052d98254bf5d796fe58842e201a10ec9",
+      "question_token_overlap_with_negative": 0.2,
+      "source_label_type": "unverified source-provided example dataset label; NOT independently established as human-rater ground truth"
+    },
+    {
+      "item_id": "nq-03-1",
+      "query": "who signed the declaration of independence for maryland",
+      "document": "Some delegates were away on business when the Declaration was debated, including William Hooper and Samuel Chase, but they were back in Congress to sign on August 2. Other delegates were present when the Declaration was debated but added their names after August 2, including Lewis Morris, Oliver Wolcott, Thomas McKean, and possibly Elbridge Gerry. Richard Henry Lee and George Wythe were in Virginia during July and August, but returned to Congress and signed the Declaration probably in September and October, respectively.",
+      "label": 1,
+      "source_row_index": 273,
+      "passage_sha256": "9e940bbce24349820f33381b04181c053ed4058f8e96780381ac96e9fd95aab7",
+      "question_token_overlap_with_negative": 0.142857,
+      "source_label_type": "unverified source-provided example dataset label; NOT independently established as human-rater ground truth"
+    },
+    {
+      "item_id": "nq-03-0",
+      "query": "who signed the declaration of independence for maryland",
+      "document": "Shackleford is trained by Dale Romans. The colt's first race was on October 16, 2010, where he finished ninth in a $44,000 maiden special weight race at Keeneland Race Course on a synthetic surface. That race was won by eventual Blue Grass Stakes runner-up and Kentucky Derby starter Twinspired. In November 2010, his second start, Shackleford won a $59,000 maiden special weight race at Churchill Downs on dirt at , taking the rail down the stretch and prevailing over a field of 11.",
+      "label": 0,
+      "source_row_index": 4452,
+      "passage_sha256": "e988fb3ab8d1e5045309fd2f0b4553b097a477b1325cea4e49410445550063b3",
+      "question_token_overlap_with_negative": 0.142857,
+      "source_label_type": "unverified source-provided example dataset label; NOT independently established as human-rater ground truth"
+    },
+    {
+      "item_id": "nq-04-1",
+      "query": "where are unipolar neurons found in spinal cord",
+      "document": "The soma (cell body) of each pseudounipolar neuron is located within a dorsal root ganglion. The axon leaves the cell body (and out of the dorsal root ganglion) into the dorsal root, where it splits into two branches. The central branch goes to the dorsal columns of the spinal cord, where it forms synapses with other neurons. The peripheral branch travels through the distal dorsal root into the spinal nerve all the way until skin, joint, and muscle.",
+      "label": 1,
+      "source_row_index": 3483,
+      "passage_sha256": "4b396c6a97a3fe94654f4be643c6549b171e71dde3b11f9415219532de8ae6fa",
+      "question_token_overlap_with_negative": 0.571429,
+      "source_label_type": "unverified source-provided example dataset label; NOT independently established as human-rater ground truth"
+    },
+    {
+      "item_id": "nq-04-0",
+      "query": "where are unipolar neurons found in spinal cord",
+      "document": "By definition, a pseudounipolar neuron has one axon with two branches: central and peripheral. These axonal branches should not be confused with dendrites. These sensory neurons are an exception to the typical neuron, in that they do not have separate dendrites and an axonal process, but rather one branched process that serves both functions. The axon has a peripheral branch (from the cell body to the periphery: skin, joint and muscle) and a central branch (from the cell body to spinal cord).",
+      "label": 0,
+      "source_row_index": 5002,
+      "passage_sha256": "3610572792da48c5fa4c697411eee81a0cf583077732c9162f863e0327e7dc1f",
+      "question_token_overlap_with_negative": 0.571429,
+      "source_label_type": "unverified source-provided example dataset label; NOT independently established as human-rater ground truth"
+    },
+    {
+      "item_id": "nq-05-1",
+      "query": "when was the reaper invented by cyrus mccormick",
+      "document": "The \"McCormick Reaper\" was designed by Robert McCormick in Walnut Grove, Virginia. However, Robert became frustrated when he was unable to perfect his new device. His son Cyrus asked for permission to try to complete his father's project. With permission granted, the McCormick Reaper was patented by his son Cyrus McCormick in 1834 as a horse-drawn farm implement to cut small grain crops. This McCormick reaper machine had several special elements:",
+      "label": 1,
+      "source_row_index": 5033,
+      "passage_sha256": "4ecd41d81dc812a44d1f5fb5a048826efbbc7cda8aca8e20c3d8a5515440636d",
+      "question_token_overlap_with_negative": 0.428571,
+      "source_label_type": "unverified source-provided example dataset label; NOT independently established as human-rater ground truth"
+    },
+    {
+      "item_id": "nq-05-0",
+      "query": "when was the reaper invented by cyrus mccormick",
+      "document": "Mechanical reapers substantially changed agriculture from their appearance in the 1830s until the 1860s through 1880s, when they evolved into related machines, often called by different names (self-raking reaper, harvester, reaper-binder, grain binder, binder), that collected and bound the sheaves of grain with wire or twine. Today reapers and grain binders have been largely replaced by combines in commercial farming, but some smaller farms still use them.",
+      "label": 0,
+      "source_row_index": 4133,
+      "passage_sha256": "adf5bc2fcf6586a8ca81e58eb1191bc67a49eb4a06538639f13d4dca89d43b53",
+      "question_token_overlap_with_negative": 0.428571,
+      "source_label_type": "unverified source-provided example dataset label; NOT independently established as human-rater ground truth"
+    },
+    {
+      "item_id": "nq-06-1",
+      "query": "chris cornell she's going to change the world",
+      "document": "Greg Tate of Rolling Stone said this about the song \"Can't Change Me,\" is as rhapsodically gorgeous as pop gets, putting a spin on true love that any reprobate slacker can relate to: \"She's going to change the world/But she can't change me/Suddenly I can see everything that's wrong with me/But what can I do?/I'm the only thing I really have at all.\" Cornell unveils a desire to be reckoned with as an openly wounded and unabashedly portentous rock balladeer.\"",
+      "label": 1,
+      "source_row_index": 614,
+      "passage_sha256": "766c23cf66f5df0862d14e29abfa7748064f75691a43964bc4fe2c66c5ceda76",
+      "question_token_overlap_with_negative": 0.142857,
+      "source_label_type": "unverified source-provided example dataset label; NOT independently established as human-rater ground truth"
+    },
+    {
+      "item_id": "nq-06-0",
+      "query": "chris cornell she's going to change the world",
+      "document": "To manage the land, the state had created a Forest Commission, making New York second only to California in having a state-level forestry agency. Most of its members were either openly or covertly connected to timber interests, however, and routinely approved dodges around the legislation to make sure logging would continue. In 1893 the legislature retroactively approved many of these practices by giving the commission the right to sell timber from the lands and trade them as it saw fit.",
+      "label": 0,
+      "source_row_index": 2573,
+      "passage_sha256": "7a88a3a5d604caf84d8532fb78e6acf72e346a613b39c668e2e89a84900191b0",
+      "question_token_overlap_with_negative": 0.142857,
+      "source_label_type": "unverified source-provided example dataset label; NOT independently established as human-rater ground truth"
+    },
+    {
+      "item_id": "nq-07-1",
+      "query": "where would the group bacteroids likely be found",
+      "document": "Bacteroides fragilis is an obligately anaerobic, Gram-negative, rod-shaped bacterium. It is part of the normal microbiota of the human colon and is generally commensal, but can cause infection if displaced into the bloodstream or surrounding tissue following surgery, disease, or trauma.",
+      "label": 1,
+      "source_row_index": 4139,
+      "passage_sha256": "e80879520d9e80079a65b5f4f983262bd1807aea5d3dc01690d33af5c7429783",
+      "question_token_overlap_with_negative": 0.285714,
+      "source_label_type": "unverified source-provided example dataset label; NOT independently established as human-rater ground truth"
+    },
+    {
+      "item_id": "nq-07-0",
+      "query": "where would the group bacteroids likely be found",
+      "document": "The \"B. fragilis\" group is the most commonly isolated Bacteroidaceae in anaerobic infections, especially those that originate from the gastrointestinal microbiota. \"B. fragilis\" is the most prevalent organism in the \"B. fragilis\" group, accounting for 41% to 78% of the isolates of the group. These organisms are resistant to penicillin by virtue of production of beta-lactamase, and by other unknown factors.",
+      "label": 0,
+      "source_row_index": 2604,
+      "passage_sha256": "4912d5c3a4f5015f250e6d979ec39ca726b708c4a71edc0a8bef50faaae5a15f",
+      "question_token_overlap_with_negative": 0.285714,
+      "source_label_type": "unverified source-provided example dataset label; NOT independently established as human-rater ground truth"
+    },
+    {
+      "item_id": "nq-08-1",
+      "query": "what is the breakdown product formed when one phosphate group is removed from atp",
+      "document": "ATP hydrolysis is the catabolic reaction process by which chemical energy that has been stored in the high-energy phosphoanhydride bonds in adenosine triphosphate (ATP) is released by splitting these bonds, for example in muscles, by producing work in the form of mechanical energy. The product is adenosine diphosphate (ADP) and an inorganic phosphate, orthophosphate (P). ADP can be further hydrolyzed to give energy, adenosine monophosphate (AMP), and another orthophosphate (P). ATP hydrolysis is the final link between the energy derived from food or sunlight and useful work such as muscle contraction, the establishment of electrochemical gradients across membranes, and biosynthetic processes necessary to maintain life.",
+      "label": 1,
+      "source_row_index": 1530,
+      "passage_sha256": "188dc447b675dcffe1e2b3bfc382506b962daab65d1a7f9117c6e5b5f8b53ae5",
+      "question_token_overlap_with_negative": 0.166667,
+      "source_label_type": "unverified source-provided example dataset label; NOT independently established as human-rater ground truth"
+    },
+    {
+      "item_id": "nq-08-0",
+      "query": "what is the breakdown product formed when one phosphate group is removed from atp",
+      "document": "The 1927 Vanderbilt Commodores football team represented Vanderbilt University in the 1927 Southern Conference football season. The 1927 season was Dan McGugin's 23rd year as head coach. Running back Jimmy Armistead led the nation in scoring in 1927 with 138 points. The team's quarterback was Bill Spears. One fellow wrote Vanderbilt produced \"almost certainly the legit top Heisman candidate in Spears, if there had been a Heisman Trophy to award in 1927.\"",
+      "label": 0,
+      "source_row_index": 2763,
+      "passage_sha256": "c3fe82f2b331f210daa3c4039a58565880b88eaccb0287772bc4557f58cc352c",
+      "question_token_overlap_with_negative": 0.166667,
+      "source_label_type": "unverified source-provided example dataset label; NOT independently established as human-rater ground truth"
+    },
+    {
+      "item_id": "nq-09-1",
+      "query": "who plays the lion in the movie zookeeper",
+      "document": "Zookeeper is a 2011 American comedy film directed by Frank Coraci, starring Kevin James, Rosario Dawson, Leslie Bibb, Joe Rogan and featuring the voices of Nick Nolte, Sylvester Stallone, Adam Sandler, Don Rickles, Judd Apatow, Cher, Jon Favreau, and Faizon Love. It is about an unlucky zookeeper who turns to the animals at his zoo to help him find love. It was the first MGM film to be co-produced with Happy Madison, yet distributed by Columbia Pictures. The film was released on July 8, 2011.",
+      "label": 1,
+      "source_row_index": 3979,
+      "passage_sha256": "1630d20be661e104fe0eab1901d37f2f988b28faeab577d6782f2ddc9ba2659e",
+      "question_token_overlap_with_negative": 0.5,
+      "source_label_type": "unverified source-provided example dataset label; NOT independently established as human-rater ground truth"
+    },
+    {
+      "item_id": "nq-09-0",
+      "query": "who plays the lion in the movie zookeeper",
+      "document": "Ignatiy Vishnevetsky, who co-hosts the film review series \"\", said that \"even though the movie looks hilarious from the trailer, it is only hilarious if you enjoy seeing Kevin James fall down a lot\". He gave the film a \"thumbs down,\" as did Christy Lemire, the other co-host of the series.",
+      "label": 0,
+      "source_row_index": 1201,
+      "passage_sha256": "10484b9feaa6adc8a71a12c162f89254d9f115eeba684fb6ea25bbac95c681ba",
+      "question_token_overlap_with_negative": 0.5,
+      "source_label_type": "unverified source-provided example dataset label; NOT independently established as human-rater ground truth"
+    },
+    {
+      "item_id": "nq-10-1",
+      "query": "who is the book of acts written to",
+      "document": "Luke–Acts is an attempt to answer a theological problem, namely how the Messiah of the Jews came to have an overwhelmingly non-Jewish church; the answer it provides, and its central theme, is that the message of Christ was sent to the Gentiles because the Jews rejected it. Luke–Acts can be also seen as a defense of (or \"apology\" for) the Jesus movement addressed to the Jews: the bulk of the speeches and sermons in Acts are addressed to Jewish audiences, with the Romans serving as external arbiters on disputes concerning Jewish customs and law. On the one hand, Luke portrays the Christians as a sect of the Jews, and therefore entitled to legal protection as a recognised religion; on the other, Luke seems unclear as to the future God intends for Jews and Christians, celebrating the Jewishness of Jesus and his immediate followers while also stressing how the Jews had rejected God's promised Messiah.",
+      "label": 1,
+      "source_row_index": 722,
+      "passage_sha256": "780c15183e5cde888ba3ea07cf61b73e5cc1275da780739d9139791ff957b19a",
+      "question_token_overlap_with_negative": 0.4,
+      "source_label_type": "unverified source-provided example dataset label; NOT independently established as human-rater ground truth"
+    },
+    {
+      "item_id": "nq-10-0",
+      "query": "who is the book of acts written to",
+      "document": "While no proposed date for the composition of Acts is universally accepted, the most common scholarly position is to date Luke–Acts to 80–90 AD, on the grounds that it uses Mark as a source, looks back on the destruction of Jerusalem, and does not show any awareness of the letters of Paul (which began circulating late in the first century). The earliest possible date for the composition of Acts is set by the events with which it ends, Paul's imprisonment in Rome c. 63 AD, but such an early dating is a minority position. The last possible date would be set by its first definite citation by another author, but there is no unanimity on this; some scholars find echoes of Acts in a work from c. 95 AD called 1 Clement, while others see no indisputable citation until the middle of the 2nd century. A minority of scholars, necessarily in the latter camp, conclude that Acts dates to the 2nd century, believing that it shows awareness of the letters of Paul, the works of Josephus, or the writings of Marcion.",
+      "label": 0,
+      "source_row_index": 2289,
+      "passage_sha256": "1cdc4eb53661128549e27d37f9a46358d9ecf773cbfb15cff8811934f9da44c9",
+      "question_token_overlap_with_negative": 0.4,
+      "source_label_type": "unverified source-provided example dataset label; NOT independently established as human-rater ground truth"
+    },
+    {
+      "item_id": "nq-11-1",
+      "query": "which type of hematoma is a result of torn bridging meningeal veins",
+      "document": "A subdural hematoma (SDH) is a type of hematoma—usually associated with traumatic brain injury—in which blood gathers between the inner layer of the dura mater and the arachnoid mater. It usually results from tears in bridging veins that cross the subdural space.",
+      "label": 1,
+      "source_row_index": 2229,
+      "passage_sha256": "b4602da93e3dd834d3289e7754300ed1a1e7cf693814ce2eedef8b200bc9d668",
+      "question_token_overlap_with_negative": 0.125,
+      "source_label_type": "unverified source-provided example dataset label; NOT independently established as human-rater ground truth"
+    },
+    {
+      "item_id": "nq-11-0",
+      "query": "which type of hematoma is a result of torn bridging meningeal veins",
+      "document": "The centrepiece of the Centre Hall is a concert pipe organ constructed and installed by Lewis & Co. The organ was originally commissioned as part of the Glasgow International Exhibition, held in Kelvingrove Park in 1901. The organ was installed in the concert hall of the exhibition, which was capable of seating 3,000 people. The Centre Hall of the then newly completed Art Gallery and Museum was intended from the beginning to be a space in which to hold concerts. When the 1901 exhibition ended, a Councillor urged the Glasgow Corporation (now Glasgow Council) to purchase the organ, stating that without it, \"the art gallery would be a body without a soul\". Purchase price and installation costs were met from the surplus exhibition proceeds, and the organ was installed in the Centre Hall by Lewis and Co. The present case front in walnut with non-functional display pipes was commissioned at this time from John W. Simpson. Simpson was the senior partner of Simpson & Milner Allen, architects of the gallery building.",
+      "label": 0,
+      "source_row_index": 2191,
+      "passage_sha256": "4a8cd1f667aad57542f8aae8d07cf06bc1229ac593dcf5f89719e4b33ebd7b05",
+      "question_token_overlap_with_negative": 0.125,
+      "source_label_type": "unverified source-provided example dataset label; NOT independently established as human-rater ground truth"
+    },
+    {
+      "item_id": "nq-12-1",
+      "query": "what does the c stand for chrysler 300c",
+      "document": "BULLET::::- The 1957 Chrysler 300C is that year's version of the Chrysler 300 \"letter series\"; a large, high-performance luxury coupe sold in very limited numbers.",
+      "label": 1,
+      "source_row_index": 4243,
+      "passage_sha256": "e145f9d97e868a9c2c8e50267014a6a312abda81280c3333e456d6f8a1c24e9f",
+      "question_token_overlap_with_negative": 0.142857,
+      "source_label_type": "unverified source-provided example dataset label; NOT independently established as human-rater ground truth"
+    },
+    {
+      "item_id": "nq-12-0",
+      "query": "what does the c stand for chrysler 300c",
+      "document": "A street-legal sedan with all factory options and upgrades such as a full roll cage, complete NHRA safety package, and a 2.8 Liter liquid-cooled twin-screw Supercharger, Methanol, and Nitrous burning 7.0 liter engine. The Punisher is expected to make a world record speed run in 2019. With the boasted speed times of 0–60 in 2.0 seconds, 1/4 mile 8.56 @ 161 mph, and top speed of 265 mph with its 3.06 gear ratio, The Punisher is the fastest street-legal sedan in the world to date.",
+      "label": 0,
+      "source_row_index": 1486,
+      "passage_sha256": "b1655b635e1d4fabcf0b05c642abfec31e1b09ec5d1003046d0c2bca6ad7f0de",
+      "question_token_overlap_with_negative": 0.142857,
+      "source_label_type": "unverified source-provided example dataset label; NOT independently established as human-rater ground truth"
+    },
+    {
+      "item_id": "nq-13-1",
+      "query": "who built pedestrian bridge at florida international university",
+      "document": "The main companies behind the construction project are Munilla Construction Management (MCM), a Miami-based construction management firm, and FIGG Bridge Engineers, a Tallahassee-based firm. Unlike most bridges in Florida, the design for this project was overseen by the university itself, not the Florida Department of Transportation.",
+      "label": 1,
+      "source_row_index": 4088,
+      "passage_sha256": "17718e157247894e2256f19947e0816331c88437e6babee3617a6853da49c43c",
+      "question_token_overlap_with_negative": 0.0,
+      "source_label_type": "unverified source-provided example dataset label; NOT independently established as human-rater ground truth"
+    },
+    {
+      "item_id": "nq-13-0",
+      "query": "who built pedestrian bridge at florida international university",
+      "document": "Two years after his last UFC appearance, Menne picked up a win before being signed by Bellator Fighting Championships. He made his debut for the organization at against Norman Paraisy in the quarterfinals of the on April 17, 2009. Though the underdog coming into the fight, Menne won via third round submission. Less than a month later, Menne faced Omar de la Cruz at on May 15, 2009. Menne lost via TKO. He left the organization in late 2009.",
+      "label": 0,
+      "source_row_index": 3992,
+      "passage_sha256": "d7163d796635bca46b3de4ca3b6d248c0bb3b8aaffd24619a3d8691b2930d975",
+      "question_token_overlap_with_negative": 0.0,
+      "source_label_type": "unverified source-provided example dataset label; NOT independently established as human-rater ground truth"
+    },
+    {
+      "item_id": "nq-14-1",
+      "query": "how many players on the line of scrimmage in american football",
+      "document": "In both American and Canadian professional football, every player on the defensive team is considered eligible. The offensive team must have at least seven players lined up on the line of scrimmage. Of the players on the line of scrimmage, only the two players on the ends of the line of scrimmage are eligible receivers. The remaining players are in the backfield (four in American football, five in Canadian football), including the quarterback. These backfield players are also eligible receivers. In the National Football League, a quarterback who takes his stance behind center as a T-formation quarterback is not eligible unless, before the ball is snapped, he legally moves to a position at least one yard behind the line of scrimmage or on the end of the line, and is stationary in that position for at least one second before the snap, but is nonetheless not counted toward the seven men required on the line of scrimmage.",
+      "label": 1,
+      "source_row_index": 1339,
+      "passage_sha256": "e365b8e4fe3cb8dbba2a27b998beb8285ef3212028cf1e8923d88c1ac772c16f",
+      "question_token_overlap_with_negative": 0.125,
+      "source_label_type": "unverified source-provided example dataset label; NOT independently established as human-rater ground truth"
+    },
+    {
+      "item_id": "nq-14-0",
+      "query": "how many players on the line of scrimmage in american football",
+      "document": "During much of the interwar period, Italians held most of the technical jobs in the Albanian economy. Albania had four ports: Durrës, Shëngjin, Vlorë, and Sarandë. Albania's main exports were petroleum, animal skins, cheese, livestock, and eggs. Primary imports were grain and other foodstuffs, metal products, and machinery. In 1939, the value of Albania's imports was four times that of its exports. About seventy percent of Albania's exports went to Italy. Italian factories furnished about forty percent of Albania's imports, and the Italian government paid for the rest.",
+      "label": 0,
+      "source_row_index": 27,
+      "passage_sha256": "91767724cdd228cf83ec40608acd1855f3d62d5e803de2d7546d470258363dc6",
+      "question_token_overlap_with_negative": 0.125,
+      "source_label_type": "unverified source-provided example dataset label; NOT independently established as human-rater ground truth"
+    },
+    {
+      "item_id": "nq-15-1",
+      "query": "who played alex cross in along came a spider",
+      "document": "Along Came a Spider is a 2001 American neo noir psychological thriller film directed by Lee Tamahori. It is the second installment of the \"Alex Cross\" film series and a sequel to the 1997 film \"Kiss the Girls\", with Morgan Freeman reprising his role as detective Alex Cross. The screenplay by Marc Moss was adapted from the 1993 novel of the same title by James Patterson, but many of the key plot elements of the book were controversially eliminated. The movie received negative to mixed critical reviews, although it became a box office success.",
+      "label": 1,
+      "source_row_index": 4866,
+      "passage_sha256": "91c64687f30f4283547433f5fb7b34726d6a5da88dab03fbc867fb630e453c73",
+      "question_token_overlap_with_negative": 0.0,
+      "source_label_type": "unverified source-provided example dataset label; NOT independently established as human-rater ground truth"
+    },
+    {
+      "item_id": "nq-15-0",
+      "query": "who played alex cross in along came a spider",
+      "document": "In March 2013, Williams signed an ordinance passed by the Huntington City Council which rescinded a 1% occupation tax which had been the subject of a lawsuit filed in 2011 against the city. The tax had been imposed under a West Virginia initiative which granted several cities, including Huntington, increased home rule, including increased powers to change their tax structures.",
+      "label": 0,
+      "source_row_index": 5796,
+      "passage_sha256": "b878f826a2600255bd954efc77ddfa02c3c8cd4e423e86c8d94872a72509bbad",
+      "question_token_overlap_with_negative": 0.0,
+      "source_label_type": "unverified source-provided example dataset label; NOT independently established as human-rater ground truth"
+    },
+    {
+      "item_id": "nq-16-1",
+      "query": "when does body temperature tend to be lowest",
+      "document": "In humans, a diurnal variation has been observed dependent on the periods of rest and activity, lowest at 11 p.m. to 3 a.m. and peaking at 10 a.m. to 6 p.m. Monkeys also have a well-marked and regular diurnal variation of body temperature that follows periods of rest and activity, and is not dependent on the incidence of day and night; nocturnal monkeys reach their highest body temperature at night and lowest during the day. Sutherland Simpson and J.J. Galbraith observed that all nocturnal animals and birds – whose periods of rest and activity are naturally reversed through habit and not from outside interference – experience their highest temperature during the natural period of activity (night) and lowest during the period of rest (day). Those diurnal temperatures can be reversed by reversing their daily routine.",
+      "label": 1,
+      "source_row_index": 3565,
+      "passage_sha256": "605cc2f98dda3918076906f2ee5dd6420940d0946c8a5e1e385460b14a44564e",
+      "question_token_overlap_with_negative": 0.333333,
+      "source_label_type": "unverified source-provided example dataset label; NOT independently established as human-rater ground truth"
+    },
+    {
+      "item_id": "nq-16-0",
+      "query": "when does body temperature tend to be lowest",
+      "document": "By numerous observations upon humans and other animals, John Hunter showed that the essential difference between the so-called warm-blooded and cold-blooded animals lies in observed constancy of the temperature of the former, and the observed variability of the temperature of the latter. Almost all birds and mammals have a high temperature almost constant and independent of that of the surrounding air (homeothermy). Almost all other animals display a variation of body temperature, dependent on their surroundings (poikilothermy).",
+      "label": 0,
+      "source_row_index": 1460,
+      "passage_sha256": "670b7998262fb5db98a83d9bddc84ec3d07812d44361bb851a11769df545b583",
+      "question_token_overlap_with_negative": 0.333333,
+      "source_label_type": "unverified source-provided example dataset label; NOT independently established as human-rater ground truth"
+    },
+    {
+      "item_id": "nq-17-1",
+      "query": "when did david akers kick the 63 yard field goal",
+      "document": "On September 9, 2012, Akers tied the NFL record for the longest field goal by kicking a 63-yard field goal off the crossbar against the Green Bay Packers at Lambeau Field. The record was originally set by Tom Dempsey and was shared with Jason Elam and Sebastian Janikowski until Broncos kicker Matt Prater broke the record with a 64-yard field goal on December 8, 2013.",
+      "label": 1,
+      "source_row_index": 3215,
+      "passage_sha256": "d0d4439ca586ca4ecfed193cce3b399ad9af038ce5643a36261caa069d1bc21a",
+      "question_token_overlap_with_negative": 0.111111,
+      "source_label_type": "unverified source-provided example dataset label; NOT independently established as human-rater ground truth"
+    },
+    {
+      "item_id": "nq-17-0",
+      "query": "when did david akers kick the 63 yard field goal",
+      "document": "Germany was concerned that France might attempt a \"coup de main\", and make a sudden invasion of south-west Germany through Alsace, with the use of rail transport to suddenly concentrate a large army in Strasbourg. It countered this possibility with the fortresses of Rastatt, Ulm, and Ingolstadt, that were built upon the German system of fortification, and were some of the strongest fortresses of Europe. Germany expected that a French army that attacked by this route would have to halt before Ulm and Rastatt. Bavaria, Württemberg, Baden, and the neighbouring States of the Confederation would then, under cover of those fortresses, keep the enemy in check for a time, until further German reinforcements could be summoned.",
+      "label": 0,
+      "source_row_index": 4457,
+      "passage_sha256": "a90a4737da10f581a082ff345744d5e1106245152c52c16a967e20e5c0db3d3b",
+      "question_token_overlap_with_negative": 0.111111,
+      "source_label_type": "unverified source-provided example dataset label; NOT independently established as human-rater ground truth"
+    },
+    {
+      "item_id": "nq-18-1",
+      "query": "the elements in each period have the same number of",
+      "document": "A period in the periodic table is a row of chemical elements. All elements in a row have the same number of electron shells. Each next element in a period has one more proton and is less metallic than its predecessor. Arranged this way, groups of elements in the same column have similar chemical and physical properties, reflecting the periodic law. For example, the alkali metals lie in the first column (group 1) and share similar properties, such as high reactivity and the tendency to lose one electron to arrive at a noble-gas electronic configuration. As of 2016, a total of 118 elements have been discovered and confirmed.",
+      "label": 1,
+      "source_row_index": 35,
+      "passage_sha256": "3f27e6b5171c351b012f7c5ba1ec9422781202ed342702c0448883629e60761d",
+      "question_token_overlap_with_negative": 0.285714,
+      "source_label_type": "unverified source-provided example dataset label; NOT independently established as human-rater ground truth"
+    },
+    {
+      "item_id": "nq-18-0",
+      "query": "the elements in each period have the same number of",
+      "document": "In late 1973 the SAR banned the use of E type carriages on regular services, and when they were running they were restricted to 80 km/h (50 mph), and the VR matched this with a similar ban on Joint Stock through the VR system. This reduced the usefulness of the afflicted carriages, so in 1974, 6AE, 9AE, 10AE, 39AE, 40AE, 41AE, 42AE, 6BE, 7BE, 10BE and 42BE were condemned. 10AE, 6BE, 7BE and 10BE were scrapped at Newport Workshops in 1976, around the same time as 40AE and 42AE; the others at undetermined times and locations. 40AE had been sold in 1975, so its scrapping in 1976 is unusual. The frame and bogies from 39AE were eventually sold to West Coast Railway, then when that company folded in 2004 they were onsold. 42BE was held until 1975, then placed in the Mile End Rail Museum in South Australia. In 1988 it was moved with the rest of the rollingstock to the Port Dock Station Museum, now known as the National Railway Museum.",
+      "label": 0,
+      "source_row_index": 2250,
+      "passage_sha256": "730eb9aa28b159f87616d86592a93550754c24cb78453ddb653448bb426a5a4a",
+      "question_token_overlap_with_negative": 0.285714,
+      "source_label_type": "unverified source-provided example dataset label; NOT independently established as human-rater ground truth"
+    },
+    {
+      "item_id": "nq-19-1",
+      "query": "how old was sasuke when his clan died",
+      "document": "Sasuke is introduced in the third chapter of \"Naruto\"s manga as a young ninja assigned to become a member of Team 7 alongside his rival Naruto Uzumaki and Sakura Haruno, the latter of whom is infatuated with him. The trio are trained under the guidance of Kakashi Hatake. Although Sasuke is antisocial, cold and distant, he starts caring about Naruto and Sakura. During a mission, Sasuke awakens his Sharingan — his clan's inherited ability to see through illusions — which allows him to learn imperceptible movements at a superhuman rate. It is revealed later that Sasuke is the sole survivor of the once-powerful Uchiha clan of Konohagakure. He, at the age of seven, survived the massacre of his clan perpetrated by his brother, Itachi, who spared Sasuke's life because he did not consider him worth killing. Sasuke seeks strong fighting opponents to reassure himself his power is growing.",
+      "label": 1,
+      "source_row_index": 2950,
+      "passage_sha256": "a207d3f6a2033a163b3a752dc1e41e6dbedfc1ba42c1c83bd6150f223bf595e2",
+      "question_token_overlap_with_negative": 0.625,
+      "source_label_type": "unverified source-provided example dataset label; NOT independently established as human-rater ground truth"
+    },
+    {
+      "item_id": "nq-19-0",
+      "query": "how old was sasuke when his clan died",
+      "document": "Sugiyama thought Sasuke's line, \"you are annoying\", summed up the character's feelings toward Sakura and indicated a change in their relationship each time it was said; although she initially annoys him, he smiles when he repeats it before leaving Konohagakure. Naruto's Japanese voice actress, Junko Takeuchi, said Sasuke's line addressed to Sakura, \"see you next time... thank you\", revealed his feelings for her. Sugiyama stated that by the end of the series, Sasuke realized how much he had hurt Sakura's feelings and apologized to her after his final fight against Naruto because of this. While recording for \"Boruto: Naruto the Movie\", Sugiyama expected to see a bond between Sasuke and his apprentice, Boruto Uzumaki. According to Sugiyama, Sasuke's personality had changed for the and the actor wanted fans to see the character's interaction with his family.",
+      "label": 0,
+      "source_row_index": 1706,
+      "passage_sha256": "b7dcc085bf0da7e5ad913a44698b1f04e411c6dba1d2ae86a54fc82b258dce04",
+      "question_token_overlap_with_negative": 0.625,
+      "source_label_type": "unverified source-provided example dataset label; NOT independently established as human-rater ground truth"
+    },
+    {
+      "item_id": "nq-20-1",
+      "query": "who made the first to record with the electric guitar",
+      "document": "George Warren Barnes (July 17, 1921 – September 5, 1977) was an American swing jazz guitarist who played the first electric guitar in 1931. He made the first commercial recording of an electric guitar on March 1, 1938, in sessions with Big Bill Broonzy.",
+      "label": 1,
+      "source_row_index": 4109,
+      "passage_sha256": "91a33f1dd912cb777110fb6608e82f394ae60537aab92a94071d77ac7b586647",
+      "question_token_overlap_with_negative": 0.375,
+      "source_label_type": "unverified source-provided example dataset label; NOT independently established as human-rater ground truth"
+    },
+    {
+      "item_id": "nq-20-0",
+      "query": "who made the first to record with the electric guitar",
+      "document": "In a review of the album \"Don't Get Around Much Anymore\" (material from a 1977 concert in Concord, California, recorded a little more than a month before Barnes's death at the age of 56), Jim Ferguson wrote, \"Often overlooked in a sea of more modern-sounding, bebop-oriented guitarists, George Barnes could swing like mad and spin out intricate, frequently bluesy phrases with awesome precision and musicality...From start to finish, this well-recorded performance demonstrates the qualities that qualify Barnes for a position among the most elite players in the annals of jazz guitar.\"",
+      "label": 0,
+      "source_row_index": 4207,
+      "passage_sha256": "2210614e837b68ac3b02133e3ff265552a87b3b0af41eb0a68e90cce7a2e1394",
+      "question_token_overlap_with_negative": 0.375,
+      "source_label_type": "unverified source-provided example dataset label; NOT independently established as human-rater ground truth"
+    },
+    {
+      "item_id": "nq-21-1",
+      "query": "who plays dusty in the movie pure country",
+      "document": "Pure Country is a 1992 American dramatic musical western film directed by Christopher Cain and starring George Strait in his acting debut, with Lesley Ann Warren, Isabel Glasser and Kyle Chandler. The film was considered a box office bomb, but it grossed over $15 million against a $10 million budget, and the soundtrack was a critical success and, to date, is Strait's best selling album. It was followed by two direct-to-video sequels, \"\" (2010) and \"\" (2017).",
+      "label": 1,
+      "source_row_index": 2445,
+      "passage_sha256": "655e0eaf6e755cbafb65ab00e07895ad5edd0224cdb70ac43b66e5d51b9777b4",
+      "question_token_overlap_with_negative": 0.285714,
+      "source_label_type": "unverified source-provided example dataset label; NOT independently established as human-rater ground truth"
+    },
+    {
+      "item_id": "nq-21-0",
+      "query": "who plays dusty in the movie pure country",
+      "document": "Buddy confronts Lula after his \"performance\" and demands $100,000 and a recording contract or he will tell the media about Dusty's no-show. Buddy, is not granted his wishes, so he tells all the media outlets that Lula \"offered\" him the money and contract to keep imitating Dusty, which clearly is a lie. Lula, realizing she's in trouble, reaches out to Earl to find Dusty. She then follows him to Dusty's location. Realizing he has feelings for Harley and will not leave, she tells her he's married to her. Harley dumps Dusty and Lula is waiting to scoop Dusty up to return to his band and career. Now back with his band, he demands that his stage shows be toned down, without all the smoke and elaborate lighting of which he had grown weary. Dusty wants Buddy Jackson found so he can confront him about what he told the media.",
+      "label": 0,
+      "source_row_index": 4798,
+      "passage_sha256": "dd1fbed13413d21cdebf10d8a09be177b7abf814b6ffa8eb5ce21400471730a6",
+      "question_token_overlap_with_negative": 0.285714,
+      "source_label_type": "unverified source-provided example dataset label; NOT independently established as human-rater ground truth"
+    },
+    {
+      "item_id": "nq-22-1",
+      "query": "when did the song the joker come out",
+      "document": "\"The Joker\" is a song by the Steve Miller Band from their 1973 album \"The Joker\". It is one of two Steve Miller Band songs that feature the nonce word \"pompatus\". The song topped the US \"Billboard\" Hot 100 in early 1974.",
+      "label": 1,
+      "source_row_index": 3708,
+      "passage_sha256": "a4425117723b295b978b49806e65e76adfca40665b9acf0e1d4b7ab1c21fda23",
+      "question_token_overlap_with_negative": 0.285714,
+      "source_label_type": "unverified source-provided example dataset label; NOT independently established as human-rater ground truth"
+    },
+    {
+      "item_id": "nq-22-0",
+      "query": "when did the song the joker come out",
+      "document": "More than 16 years later, in September 1990, it reached number one in the UK Singles Chart for two weeks after being used in \"Great Deal\", a Hugh Johnson-directed television advertisement for Levi's, thus holding the record for the longest gap between transatlantic chart-toppers. This reissue of \"The Joker\" also topped the Irish Singles Chart, the New Zealand RIANZ Singles Chart, the Dutch Nationale Top 100 and the Dutch Top 40.",
+      "label": 0,
+      "source_row_index": 1589,
+      "passage_sha256": "a6894692dc8dafaf79c808d40f78fc453cfe5e979d9f33f48264610ffc6a6a7d",
+      "question_token_overlap_with_negative": 0.285714,
+      "source_label_type": "unverified source-provided example dataset label; NOT independently established as human-rater ground truth"
+    },
+    {
+      "item_id": "nq-23-1",
+      "query": "when did the right to buy scheme start",
+      "document": "The Right to Buy scheme is a policy in the United Kingdom (with the exception of Scotland since 1 August 2016 and Wales from 26 Jan 2019) which gives secure tenants of councils and some housing associations the legal right to buy, at a large discount, the council house they are living in. There is also a Right to Acquire for assured tenants of housing association homes built with public subsidy after 1997, at a smaller discount. About 1,500,000 homes in the UK have been sold in this manner since the introduction of the scheme in 1980, with the scheme being cited as one of the major factors in the drastic reduction in the amount of social housing in the UK, falling from nearly 6.5 million units in 1979 to roughly 2 million units in 2017, while also being credited as the main driver of the 15% rise in home ownership, which rose from 55% of householders in 1979 to a peak of 71% in 2003 (though this figure has declined since the late 2000s to 63% in England specifically in 2017).",
+      "label": 1,
+      "source_row_index": 139,
+      "passage_sha256": "eaacfd568f744d7f6871db464bb1c68d9a1aa887eb3bf4811f4025790c2f0d0f",
+      "question_token_overlap_with_negative": 0.142857,
+      "source_label_type": "unverified source-provided example dataset label; NOT independently established as human-rater ground truth"
+    },
+    {
+      "item_id": "nq-23-0",
+      "query": "when did the right to buy scheme start",
+      "document": "Jeffrey Alan Kahane (born September 12, 1956, in Los Angeles, California) is an American classical concert pianist and conductor. He was music director of the Los Angeles Chamber Orchestra following a 20-year run, the longest of any music director in the orchestra's history. He is currently the Music Director of the Sarasota Music Festival, a program of Sarasota Orchestra and is Professor of Keyboard Studies (Piano) at the University of Southern California Thornton School of Music in Los Angeles, California",
+      "label": 0,
+      "source_row_index": 1771,
+      "passage_sha256": "f29dc30bf164dff18af303c2f0f0df55b44469e1cbeb3f87181ff6e4f9cb3c09",
+      "question_token_overlap_with_negative": 0.142857,
+      "source_label_type": "unverified source-provided example dataset label; NOT independently established as human-rater ground truth"
+    }
+  ]
+}
