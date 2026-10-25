@@ -1,0 +1,326 @@
+{
+  "date": "2026-10-25",
+  "status": "PARTIAL \u2014 new externally source-labelled industrial defect evidence, normal-only calibrated models evaluated, but no industrial automatic-release reliability established for unrelated machinery",
+  "source": "MVTec LOCO AD original industrial splicing connectors, HF public pinned Rafa612/mvtec_loco replica, original lab photography and author source ground-truth category labels",
+  "source_repo": "Rafa612/mvtec_loco",
+  "official_HF_revision": "839fee8178c10d2e50afddc671238ba85d9975d9",
+  "dataset_official_citation": "Bergmann et al Beyond Dents and Scratches: Logical Constraints in Unsupervised Anomaly Detection and Localization, IJCV 2022",
+  "license": "MVTec CC BY-NC-SA 4.0 noncommercial research, no original model image data or redistributed photos in SWAAG Git",
+  "owner_general_relevance": "External real component-assembly logical and structural defects visible in camera photos, closer to machinery missing/incorrect parts than source-graph toy fixtures, not proof of CAD contact, photorealistic 3D or physical load capacity.",
+  "source_only_private_SHA256": {
+    "precommitted_image_selection_and_orig_split": "98c4548ac791ac142adc2df615fd0dcc06ff880af129223a3e320bb46caf82e0",
+    "original134_image_source_hash_receipt": "e8cb04243bd54ab8a0812ea24cadc1c24a263b74b6a83588b984bdebf42f8ea7",
+    "pixel_only_134_image_CLIP_ViT32_and_HSV_features": "ccbc4f5d772588a456a263891a40d4443953d5abb26498e53d267ec995bd01ea",
+    "normal_only_calibrated_134_continuous_scores_before_test_gold": "54abd89292d40def6262a5c7d4f139ca0f686bc03b39bb25f26672a8b73fe0fa",
+    "frozen_threshold_original_ground_truth_90_eval": "7a1bee329ca90bed5f2cfc772c3f0b58efd2c5c0c410aed20ddf30aaeb256c8f"
+  },
+  "sample": {
+    "train_source_good_original_images": 24,
+    "normal_source_validation_images_used_for_95pct_score_cutoff": 20,
+    "source_original_test_good": 30,
+    "source_original_test_logical_anomalies": 30,
+    "source_original_test_structural_anomalies": 30,
+    "total_raw_original_source_images": 134,
+    "source_image_bytes_MB": 277.39,
+    "source_train_validation_test_disjoint": true,
+    "selection_hash_frozen_before_model_inference": true
+  },
+  "methods": {
+    "CLIP_global_nearest_normal": "Existing pretrained frozen OpenAI CLIP ViT-B/32 image embedding to nearest of 24 original train good embeddings; 95th percentile of 20 original normal validation score",
+    "HSV_spatial_hist_nearest_normal": "Original 2x4 tile HSV 8x4x4 1024D spatial histogram, nearest of same 24 train-good; 95th percentile of same 20 validation normal scores",
+    "CLIP_p95_patch_memory": "Existing pretrained CLIP ViT32 last-hidden 49 visual patches, 768D per patch compared to 1176 normal patch tokens, 95th nearest-neighbor patch anomaly percentile; NOT official PatchCore/EfficientAD; normal-only calibration on same20"
+  },
+  "original_heldout_score_and_errors": {
+    "CLIP_global_nearest_normal": {
+      "logical_vs_real_clean": {
+        "n": 60,
+        "TP": 6,
+        "FP": 9,
+        "FN": 24,
+        "TN": 21,
+        "recall": 0.2,
+        "specificity": 0.7,
+        "precision_in_enriched_test_sample": 0.4,
+        "balanced_accuracy": 0.44999999999999996,
+        "source_original_test_ROC_AUC": 0.4644444444444444,
+        "source_positive_recall_exact_binomial95_CI": [
+          0.0771,
+          0.3857
+        ],
+        "source_control_specificity_exact_binomial95_CI": [
+          0.506,
+          0.8527
+        ],
+        "frozen_normal_only_threshold": 0.030646312150000004,
+        "image_stratified_bootstrap_95pct_ROC_AUC": [
+          0.3133,
+          0.6106
+        ],
+        "image_stratified_bootstrap_95pct_balanced_accuracy": [
+          0.3333,
+          0.5667
+        ]
+      },
+      "structural_vs_real_clean": {
+        "n": 60,
+        "TP": 9,
+        "FP": 9,
+        "FN": 21,
+        "TN": 21,
+        "recall": 0.3,
+        "specificity": 0.7,
+        "precision_in_enriched_test_sample": 0.5,
+        "balanced_accuracy": 0.5,
+        "source_original_test_ROC_AUC": 0.5466666666666666,
+        "source_positive_recall_exact_binomial95_CI": [
+          0.1473,
+          0.494
+        ],
+        "source_control_specificity_exact_binomial95_CI": [
+          0.506,
+          0.8527
+        ],
+        "frozen_normal_only_threshold": 0.030646312150000004,
+        "image_stratified_bootstrap_95pct_ROC_AUC": [
+          0.3989,
+          0.6978
+        ],
+        "image_stratified_bootstrap_95pct_balanced_accuracy": [
+          0.3833,
+          0.6167
+        ]
+      },
+      "all_source_anomalies_vs_original_clean": {
+        "n": 90,
+        "TP": 15,
+        "FP": 9,
+        "FN": 45,
+        "TN": 21,
+        "recall": 0.25,
+        "specificity": 0.7,
+        "precision_in_enriched_test_sample": 0.625,
+        "balanced_accuracy": 0.475,
+        "source_original_test_ROC_AUC": 0.5055555555555555,
+        "source_positive_recall_exact_binomial95_CI": [
+          0.1472,
+          0.3786
+        ],
+        "source_control_specificity_exact_binomial95_CI": [
+          0.506,
+          0.8527
+        ],
+        "frozen_normal_only_threshold": 0.030646312150000004,
+        "image_stratified_bootstrap_95pct_ROC_AUC": [
+          0.38,
+          0.6294
+        ],
+        "image_stratified_bootstrap_95pct_balanced_accuracy": [
+          0.3667,
+          0.575
+        ]
+      }
+    },
+    "HSV_spatial_hist_nearest_normal": {
+      "logical_vs_real_clean": {
+        "n": 60,
+        "TP": 3,
+        "FP": 1,
+        "FN": 27,
+        "TN": 29,
+        "recall": 0.1,
+        "specificity": 0.9666666666666667,
+        "precision_in_enriched_test_sample": 0.75,
+        "balanced_accuracy": 0.5333333333333333,
+        "source_original_test_ROC_AUC": 0.6044444444444446,
+        "source_positive_recall_exact_binomial95_CI": [
+          0.0211,
+          0.2653
+        ],
+        "source_control_specificity_exact_binomial95_CI": [
+          0.8278,
+          0.9992
+        ],
+        "frozen_normal_only_threshold": 0.018761166500000002,
+        "image_stratified_bootstrap_95pct_ROC_AUC": [
+          0.4533,
+          0.7533
+        ],
+        "image_stratified_bootstrap_95pct_balanced_accuracy": [
+          0.4667,
+          0.6
+        ]
+      },
+      "structural_vs_real_clean": {
+        "n": 60,
+        "TP": 0,
+        "FP": 1,
+        "FN": 30,
+        "TN": 29,
+        "recall": 0.0,
+        "specificity": 0.9666666666666667,
+        "precision_in_enriched_test_sample": 0.0,
+        "balanced_accuracy": 0.48333333333333334,
+        "source_original_test_ROC_AUC": 0.5133333333333334,
+        "source_positive_recall_exact_binomial95_CI": [
+          0,
+          0.1157
+        ],
+        "source_control_specificity_exact_binomial95_CI": [
+          0.8278,
+          0.9992
+        ],
+        "frozen_normal_only_threshold": 0.018761166500000002,
+        "image_stratified_bootstrap_95pct_ROC_AUC": [
+          0.3556,
+          0.6622
+        ],
+        "image_stratified_bootstrap_95pct_balanced_accuracy": [
+          0.45,
+          0.5
+        ]
+      },
+      "all_source_anomalies_vs_original_clean": {
+        "n": 90,
+        "TP": 3,
+        "FP": 1,
+        "FN": 57,
+        "TN": 29,
+        "recall": 0.05,
+        "specificity": 0.9666666666666667,
+        "precision_in_enriched_test_sample": 0.75,
+        "balanced_accuracy": 0.5083333333333333,
+        "source_original_test_ROC_AUC": 0.5588888888888889,
+        "source_positive_recall_exact_binomial95_CI": [
+          0.0104,
+          0.1392
+        ],
+        "source_control_specificity_exact_binomial95_CI": [
+          0.8278,
+          0.9992
+        ],
+        "frozen_normal_only_threshold": 0.018761166500000002,
+        "image_stratified_bootstrap_95pct_ROC_AUC": [
+          0.435,
+          0.6792
+        ],
+        "image_stratified_bootstrap_95pct_balanced_accuracy": [
+          0.4583,
+          0.55
+        ]
+      }
+    },
+    "CLIP_p95_patch_memory": {
+      "logical_vs_real_clean": {
+        "n": 60,
+        "TP": 6,
+        "FP": 5,
+        "FN": 24,
+        "TN": 25,
+        "recall": 0.2,
+        "specificity": 0.8333333333333334,
+        "precision_in_enriched_test_sample": 0.5454545454545454,
+        "balanced_accuracy": 0.5166666666666667,
+        "source_original_test_ROC_AUC": 0.5722222222222222,
+        "source_positive_recall_exact_binomial95_CI": [
+          0.0771,
+          0.3857
+        ],
+        "source_control_specificity_exact_binomial95_CI": [
+          0.6528,
+          0.9436
+        ],
+        "frozen_normal_only_threshold": 0.14505780345000002,
+        "image_stratified_bootstrap_95pct_ROC_AUC": [
+          0.4222,
+          0.7139
+        ],
+        "image_stratified_bootstrap_95pct_balanced_accuracy": [
+          0.4167,
+          0.6167
+        ]
+      },
+      "structural_vs_real_clean": {
+        "n": 60,
+        "TP": 8,
+        "FP": 5,
+        "FN": 22,
+        "TN": 25,
+        "recall": 0.26666666666666666,
+        "specificity": 0.8333333333333334,
+        "precision_in_enriched_test_sample": 0.6153846153846154,
+        "balanced_accuracy": 0.55,
+        "source_original_test_ROC_AUC": 0.6077777777777779,
+        "source_positive_recall_exact_binomial95_CI": [
+          0.1228,
+          0.4589
+        ],
+        "source_control_specificity_exact_binomial95_CI": [
+          0.6528,
+          0.9436
+        ],
+        "frozen_normal_only_threshold": 0.14505780345000002,
+        "image_stratified_bootstrap_95pct_ROC_AUC": [
+          0.4689,
+          0.7533
+        ],
+        "image_stratified_bootstrap_95pct_balanced_accuracy": [
+          0.45,
+          0.65
+        ]
+      },
+      "all_source_anomalies_vs_original_clean": {
+        "n": 90,
+        "TP": 14,
+        "FP": 5,
+        "FN": 46,
+        "TN": 25,
+        "recall": 0.23333333333333334,
+        "specificity": 0.8333333333333334,
+        "precision_in_enriched_test_sample": 0.7368421052631579,
+        "balanced_accuracy": 0.5333333333333333,
+        "source_original_test_ROC_AUC": 0.5900000000000001,
+        "source_positive_recall_exact_binomial95_CI": [
+          0.1338,
+          0.3604
+        ],
+        "source_control_specificity_exact_binomial95_CI": [
+          0.6528,
+          0.9436
+        ],
+        "frozen_normal_only_threshold": 0.14505780345000002,
+        "image_stratified_bootstrap_95pct_ROC_AUC": [
+          0.4666,
+          0.7197
+        ],
+        "image_stratified_bootstrap_95pct_balanced_accuracy": [
+          0.45,
+          0.6167
+        ]
+      }
+    }
+  },
+  "frozen_normal_only_thresholds": {
+    "CLIP_global_nearest_normal": 0.030646312150000004,
+    "HSV_spatial_hist_nearest_normal": 0.018761166500000002,
+    "CLIP_p95_patch_memory": 0.14505780345000002
+  },
+  "local_resource": {
+    "GPU_used": false,
+    "pixel_feature_CPU_wall_s": 213.62,
+    "pixel_feature_peak_RSS_KB": 1189124,
+    "frozen_transformers_checkpoint_sha256": "a63082132ba4f97a80bea76823f544493bffa8082296d62d71581a4feff1576f",
+    "cpu_threads": 1,
+    "source_bytes_and_images_outside_Git": true
+  },
+  "limits": [
+    "The 134 original source photos are copyrighted CC BY-NC-SA, academic noncommercial research only; nothing published as production model training assets.",
+    "Only one actual industrial product family, not unrelated forklift and rack photography; no load/mesh support or design intent measured.",
+    "Source image labels created by MVTec researchers, not independently re-annotated by this agent, and some original masks could be incomplete.",
+    "CLIP pretrained general visual embeddings may have been exposed to MVTec images during original pretraining; historical checkpoint data exposure is not established.",
+    "HSV raw pixel baseline has no external pretraining, CLIP has broad image pretraining; equivalent local training/calibration numbers do NOT mean equal cumulative pretraining budget.",
+    "Only 20 normal validation images determine threshold, 30 clean test images remain, so false positive rate has broad confidence; no test threshold optimization allowed.",
+    "No local generative VLM or specialized EffcientAD model tested for this category; old 18 MVTec Pushpins results not reused or falsely counted as new data.",
+    "Declaring individual normal-only test failure does not prove semantic absence/placement correctness or photorealistic generated 3D.",
+    "Any alternative method selected after viewing this dataset would require a completely untouched second source-category benchmark and engineering owner task labels."
+  ]
+}

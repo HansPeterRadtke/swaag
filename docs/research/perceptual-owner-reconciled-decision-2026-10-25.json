@@ -159,5 +159,44 @@
     "arrow_direction": "80/147 reading-order guess among Hough-found unique directed links, p=0.322 chance comparison; not pixel arrowheads",
     "decision": "Only source-assisted undirected connector proposal and triage; do not auto approve a complete directed diagram. No production GPU, Calendar effects or denied prior source retrievals.",
     "stronger_posthoc_distance_result": "Same external 669 scorable source pairs: continuous OCR label-distance-only AUC0.726 vs actual line Hough AUC0.783, paired source-diagram CI of difference [+0.002,+0.116], second OCR mode interval crosses zero. Posthoc development control, not independent final model selection. Explicit arrow direction remains unsolved."
+  },
+  "later_original_industrial_splicing_camera_visual_evidence": {
+    "source_report": "perceptual-mvtec-splicing-industrial-visual-review-2026-10-25.md",
+    "source_compact_report_sha256": "e6f57267523b1e340d0bb169ce15364331cfe3ad124d6c94c72be8dfdfbe2662",
+    "source_class_counts": "24 normal train;20 normal validation;test90 with normal30 logical30 structural30",
+    "screening_model_results": {
+      "CLIP_global_nearest_normal": {
+        "TP": 15,
+        "FP": 9,
+        "FN": 45,
+        "TN": 21,
+        "AUC": 0.5055555555555555,
+        "logical_correct": 6,
+        "structural_correct": 9,
+        "source_anomaly_threshold_fixed_before_test_labels": true
+      },
+      "HSV_spatial_hist_nearest_normal": {
+        "TP": 3,
+        "FP": 1,
+        "FN": 57,
+        "TN": 29,
+        "AUC": 0.5588888888888889,
+        "logical_correct": 3,
+        "structural_correct": 0,
+        "source_anomaly_threshold_fixed_before_test_labels": true
+      },
+      "CLIP_p95_patch_memory": {
+        "TP": 14,
+        "FP": 5,
+        "FN": 46,
+        "TN": 25,
+        "AUC": 0.5900000000000001,
+        "logical_correct": 6,
+        "structural_correct": 8,
+        "source_anomaly_threshold_fixed_before_test_labels": true
+      }
+    },
+    "owner_decision": "Use independently verified CAD/physical contact for physical soundness. CLIP or HSV camera-image anomaly scores can only nominate review where false negatives/alarms permit; cannot approve machine CAD or final photorealism automatically.",
+    "scope": "External original real industrial source photos under restrictive noncommercial license, not owner CGTrader renders."
   }
 }

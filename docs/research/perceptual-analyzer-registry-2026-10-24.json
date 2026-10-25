@@ -444,6 +444,36 @@
       "source_report": "perceptual-topobench-real-directed-connector-research-2026-10-25.md",
       "limitations": "Hough line strokes and OCR source-name grounding locate undirected candidate connectors but cannot infer arrowheads or source intended relation direction. 768/966 original source edges unscorable due OCR, and many source-negative edges flagged; source curated graph may omit visible edges, class imbalance and line crossings; only 69 license-cleared images, not 93 link-only. No GPU/model inference; no automatic pass.",
       "stronger_same_budget_baseline": "posthoc continuous distance-only AUROC0.726 vs Hough0.783, image-cluster delta95% [0.002,0.116] for OCR11; alternate OCR6 includes 0. This is exploratory diagnostic, no genuine untouched holdout."
+    },
+    {
+      "task": "Industrial camera visual screening of source label normal versus logical and structural connector assembly anomalies",
+      "method": "CLIP_global_nearest_normal source normal 24 images + validation-normal-only calibrated 20 images, then heldout 30 correct,30 logical defects,30 structural defects; source images externally curated",
+      "model_version": "Original MVTec LOCO AD splicing connectors, pinned HF replica 839fee8178c10d2e50afddc671238ba85d9975d9; frozen OpenAI CLIP ViT-B32 CPU only or no pretrained HSV baseline",
+      "status": "RESEARCH_ONLY_UNQUALIFIED_TO_AUTOMATICALLY_CERTIFY_3D_MACHINERY_PHOTOREALISM_OR_INDUSTRIAL_ASSEMBLY",
+      "scope": "Real MVTec LOCO original industrial photographs distinct from earlier 18 pushpin sample. CC BY-NC-SA noncommercial. 90 heldout original test with source normal versus logical/structural author labels, no test parameter tuning.",
+      "result": "Pooled industrial defects TP=15 FP=9 FN=45 TN=21 ROC_AUC=0.506; logical TP=6/30, structural TP=9/30, false good flags=9/30; threshold 95th pct 20 heldout source-validation good photos; AUC95CI=[0.38, 0.6294]",
+      "source_report": "perceptual-mvtec-splicing-industrial-visual-review-2026-10-25.md",
+      "limitations": "Pretrained full-image CLIP or CLIP patch proxy is not a certified industrial anomaly detector (not PatchCore/EfficientAD); in-domain 24 source normal references and 20 normal validation samples, just 30 test true good controls. Original category assigned by MVTec authors, no blind owner assessor. Source licensing restricts commercial use. Industrial photos not correct physical CAD support or warehouse photorealistic render."
+    },
+    {
+      "task": "Industrial camera visual screening of source label normal versus logical and structural connector assembly anomalies",
+      "method": "HSV_spatial_hist_nearest_normal source normal 24 images + validation-normal-only calibrated 20 images, then heldout 30 correct,30 logical defects,30 structural defects; source images externally curated",
+      "model_version": "Original MVTec LOCO AD splicing connectors, pinned HF replica 839fee8178c10d2e50afddc671238ba85d9975d9; frozen OpenAI CLIP ViT-B32 CPU only or no pretrained HSV baseline",
+      "status": "RESEARCH_ONLY_UNQUALIFIED_TO_AUTOMATICALLY_CERTIFY_3D_MACHINERY_PHOTOREALISM_OR_INDUSTRIAL_ASSEMBLY",
+      "scope": "Real MVTec LOCO original industrial photographs distinct from earlier 18 pushpin sample. CC BY-NC-SA noncommercial. 90 heldout original test with source normal versus logical/structural author labels, no test parameter tuning.",
+      "result": "Pooled industrial defects TP=3 FP=1 FN=57 TN=29 ROC_AUC=0.559; logical TP=3/30, structural TP=0/30, false good flags=1/30; threshold 95th pct 20 heldout source-validation good photos; AUC95CI=[0.435, 0.6792]",
+      "source_report": "perceptual-mvtec-splicing-industrial-visual-review-2026-10-25.md",
+      "limitations": "Pretrained full-image CLIP or CLIP patch proxy is not a certified industrial anomaly detector (not PatchCore/EfficientAD); in-domain 24 source normal references and 20 normal validation samples, just 30 test true good controls. Original category assigned by MVTec authors, no blind owner assessor. Source licensing restricts commercial use. Industrial photos not correct physical CAD support or warehouse photorealistic render."
+    },
+    {
+      "task": "Industrial camera visual screening of source label normal versus logical and structural connector assembly anomalies",
+      "method": "CLIP_p95_patch_memory source normal 24 images + validation-normal-only calibrated 20 images, then heldout 30 correct,30 logical defects,30 structural defects; source images externally curated",
+      "model_version": "Original MVTec LOCO AD splicing connectors, pinned HF replica 839fee8178c10d2e50afddc671238ba85d9975d9; frozen OpenAI CLIP ViT-B32 CPU only or no pretrained HSV baseline",
+      "status": "RESEARCH_ONLY_UNQUALIFIED_TO_AUTOMATICALLY_CERTIFY_3D_MACHINERY_PHOTOREALISM_OR_INDUSTRIAL_ASSEMBLY",
+      "scope": "Real MVTec LOCO original industrial photographs distinct from earlier 18 pushpin sample. CC BY-NC-SA noncommercial. 90 heldout original test with source normal versus logical/structural author labels, no test parameter tuning.",
+      "result": "Pooled industrial defects TP=14 FP=5 FN=46 TN=25 ROC_AUC=0.590; logical TP=6/30, structural TP=8/30, false good flags=5/30; threshold 95th pct 20 heldout source-validation good photos; AUC95CI=[0.4666, 0.7197]",
+      "source_report": "perceptual-mvtec-splicing-industrial-visual-review-2026-10-25.md",
+      "limitations": "Pretrained full-image CLIP or CLIP patch proxy is not a certified industrial anomaly detector (not PatchCore/EfficientAD); in-domain 24 source normal references and 20 normal validation samples, just 30 test true good controls. Original category assigned by MVTec authors, no blind owner assessor. Source licensing restricts commercial use. Industrial photos not correct physical CAD support or warehouse photorealistic render."
     }
   ],
   "second_continuation_2026_10_24": {
@@ -759,5 +789,46 @@
     "resource": "CPU low priority about209sec, peak RSS about272MiB, no GPU or production renderer interrupted, original copyrighted images/raw OCR outside project Git.",
     "stronger_distance_control": "POSTHOC same 669 OCR-grounded source pairs: continuous image-normalized source-label center-distance AUROC0.726 versus Hough0.783; difference+0.057 source-image CI+0.002..+0.116; PSM6 distance0.701 Hough0.760 paired CI-0.028..+0.150 includes0. Hough marginal advantage and not an arrow direction or source-complete acceptance gate.",
     "stronger_distance_control_evidence_SHA256": "323c6c76d67773afa50f3f186c3c3b6536a917f423c55b229997ba739d4ec372"
+  },
+  "original_industrial_MVTec_LOCO_splicing_visual_2026_10_25": {
+    "status": "PARTIAL: 134 actual MVTec industrial source photographs, 3 predeclared CPU visual detectors compared against original external clean/logical/structural labels; no full physical/photorealism acceptance model qualified",
+    "report": "perceptual-mvtec-splicing-industrial-visual-review-2026-10-25.md",
+    "evidence": "perceptual-mvtec-splicing-new-industrial-anomaly-evidence-2026-10-25.json",
+    "original_pinned_source": "MVTec LOCO AD splicing connectors public HF 839fee8178c10d2e50afddc671238ba85d9975d9, CC BY-NC-SA research only, new independent source product vs older pushpins",
+    "source_counts": "24 train good, 20 validation good, 30 test true good, 30 test logical anomalies, 30 test structural anomalies",
+    "method_concise_original_TP_FP_FN_TN": {
+      "CLIP_global_nearest_normal": {
+        "TP": 15,
+        "FP": 9,
+        "FN": 45,
+        "TN": 21,
+        "AUC": 0.5055555555555555,
+        "logical_correct": 6,
+        "structural_correct": 9,
+        "source_anomaly_threshold_fixed_before_test_labels": true
+      },
+      "HSV_spatial_hist_nearest_normal": {
+        "TP": 3,
+        "FP": 1,
+        "FN": 57,
+        "TN": 29,
+        "AUC": 0.5588888888888889,
+        "logical_correct": 3,
+        "structural_correct": 0,
+        "source_anomaly_threshold_fixed_before_test_labels": true
+      },
+      "CLIP_p95_patch_memory": {
+        "TP": 14,
+        "FP": 5,
+        "FN": 46,
+        "TN": 25,
+        "AUC": 0.5900000000000001,
+        "logical_correct": 6,
+        "structural_correct": 8,
+        "source_anomaly_threshold_fixed_before_test_labels": true
+      }
+    },
+    "cannot_prove": "Visual camera defects in one assembly photo family DO NOT establish CAD load/geometry, correct 3D scene materials/shaders, physics, general human-perceived photorealism, or general low false alarms on unseen manufacturers. No commercial MVTec photo usage implied.",
+    "no_effects": "No GPU, model services, 3D renders, uncertain Calendar submissions, denied video retrieval or third-party media in Git."
   }
 }
