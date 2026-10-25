@@ -1,0 +1,247 @@
+{
+  "date": "2026-10-25",
+  "status": "PARTIAL \u2014 source original moving gameplay frozen-character bug visual detector experiment measured, no independently human-blind objectionability or temporal event intervals, no general automatic QA model qualified",
+  "source": "TempGlitch original 2026 in-engine authored frozen character pose vs original normal Godot Platformer footage, asgaardlab/TempGlitch MIT dataset source; original scene ID matched by full filename family, not merely suffix",
+  "source_provenance_sha256": {
+    "source_frozen_12_original_scenes_before_pixels": "4f5df294b187e0c42a006cc2c6bb88a931bbec7673eb4f98e7db068ac0f35775",
+    "exact_original_24_MP4_LFS_SHA_verified_file_receipts": "b26967771f7b174624129966658f32276a4339f5c2a80c95be4886b3f7a69603",
+    "source_blind_native_FFmpeg+5fps_region_Farneback_metrics": "70c219a40fb85e4a08deb0b9fb04778d480c7a4efda1b537a26dec0f11968b4a",
+    "external_authored_glitch_vs_normal_error_counts": "bc01853694402fd1236c7186f867909250fb1bcec1d135fde4a8c393949117e9"
+  },
+  "original_independent_scene_pairs": 12,
+  "original_video_files_CPU_decoded": 24,
+  "source_media_megabytes": 716.73,
+  "independent_source_truth_scope": "Author intentionally injected character animation pose remains stationary while rest game may animate. Source original normal same numeric game scene family; labels engineered by authors, no human blind subjectively objectionable ratings, no source frame-accurate onset/end labels.",
+  "method_frozen_conditions": {
+    "date": "2026-10-25",
+    "input": "original external Godot author-injected FROZEN CHARACTER ANIMATION versus normal original rendered Platformer clips, same source family/index, exact source SHA verified; not natural frozen encoded frames",
+    "video_frames_per_second_analysis": 5,
+    "scaled_pixel_resolution": [
+      192,
+      108
+    ],
+    "image_sampling": "FFmpeg fps5 scale192:108:flags=area grayscale, -threads1 -filter_threads1, decoder returns all sampled frames max600",
+    "ffmpeg_full_frame_freezedetect": "freezedetect=n=-50dB:d=0.6",
+    "source_blind_character_region": "x fractions 0.35..0.65, y fractions 0.25..0.85, no learned segmentation; may not contain avatar, no source bounding boxes",
+    "local_raw_still_when_background_moves": "ROI MAE<=2.0 AND outside MAE>=4.0, at least3 adjacent samples at5fps",
+    "local_phase_aligned_still_when_background_moves": "cv2.phaseCorrelate ROI registered +/-16px full plane, grayscale aligned residual MAE<=3.0 AND outside raw MAE>=4.0, at least3 samples",
+    "local_opticalflow_still_when_outer_moves": "OpenCV Farneback defaults pyrScale0.5 levels3 winsize15 iterations3 poly_n5 poly_sigma1.2 flags0, median magnitude ROI<=0.75 and outer>=2.0 on adjacent sampled frames, at least3",
+    "whole_frame_MAE_stall": "entire picture MAE<=1.0 for at least3 transitions",
+    "local_robustness": "freeze anomaly requires 3 consecutive transitions while backdrop moving to avoid certifying intentional whole-scene hold",
+    "no_gold_label_or_selected_source_family_used_inside_feature_logic": true,
+    "invalid_previously_attempted_instrumentation_run_preserved_outside_Git": "INVALID_FILTER_STRING_partial_source_analysis_preserved_20261025.json, partial six cases not evaluated",
+    "no_gpu_use": true,
+    "time_limit_per_original_video_s": 45,
+    "input_source_rights": "TempGlitch original dataset MIT research release, underlying game content may have separate rights; original MP4 files stay /data/var, not Git"
+  },
+  "observed_original_source_binary_and_rank_performance": {
+    "official_FFmpeg_full_frame_freezedetect": {
+      "scorable_n": 24,
+      "expected_original_label_positive_n": 12,
+      "expected_original_label_negative_n": 12,
+      "abstained_original_positive_n": 0,
+      "abstained_original_normal_control_n": 0,
+      "TP": 0,
+      "FP": 0,
+      "FN": 12,
+      "TN": 12,
+      "conditional_recall": 0.0,
+      "conditional_specificity": 1.0,
+      "conditional_precision_on_balanced_sample": null,
+      "conditional_balanced_accuracy": 0.5,
+      "continuous_run_score_AUROC": 0.5,
+      "source_original_exact_recall95_CI": [
+        0,
+        0.2646
+      ],
+      "source_original_exact_false_alarm95_CI": [
+        0,
+        0.2646
+      ],
+      "same_original_scene_bug_score_exceeds_normal": 0,
+      "same_original_scene_bug_score_below_normal": 0,
+      "same_original_scene_equal_score": 12,
+      "source_match_same_scene_exact_sign_p_if_nontied": null,
+      "source_scene_matched_bootstrap_95pct_CI": {
+        "AUROC": [
+          0.5,
+          0.5
+        ],
+        "balanced_accuracy": [
+          0.5,
+          0.5
+        ]
+      }
+    },
+    "whole_frame_pixel_MAE_stall": {
+      "scorable_n": 24,
+      "expected_original_label_positive_n": 12,
+      "expected_original_label_negative_n": 12,
+      "abstained_original_positive_n": 0,
+      "abstained_original_normal_control_n": 0,
+      "TP": 0,
+      "FP": 0,
+      "FN": 12,
+      "TN": 12,
+      "conditional_recall": 0.0,
+      "conditional_specificity": 1.0,
+      "conditional_precision_on_balanced_sample": null,
+      "conditional_balanced_accuracy": 0.5,
+      "continuous_run_score_AUROC": 0.45486111111111116,
+      "source_original_exact_recall95_CI": [
+        0,
+        0.2646
+      ],
+      "source_original_exact_false_alarm95_CI": [
+        0,
+        0.2646
+      ],
+      "same_original_scene_bug_score_exceeds_normal": 1,
+      "same_original_scene_bug_score_below_normal": 2,
+      "same_original_scene_equal_score": 9,
+      "source_match_same_scene_exact_sign_p_if_nontied": 1.0,
+      "source_scene_matched_bootstrap_95pct_CI": {
+        "AUROC": [
+          0.3299,
+          0.5833
+        ],
+        "balanced_accuracy": [
+          0.5,
+          0.5
+        ]
+      }
+    },
+    "center_raw_still_while_outer_motion": {
+      "scorable_n": 24,
+      "expected_original_label_positive_n": 12,
+      "expected_original_label_negative_n": 12,
+      "abstained_original_positive_n": 0,
+      "abstained_original_normal_control_n": 0,
+      "TP": 0,
+      "FP": 0,
+      "FN": 12,
+      "TN": 12,
+      "conditional_recall": 0.0,
+      "conditional_specificity": 1.0,
+      "conditional_precision_on_balanced_sample": null,
+      "conditional_balanced_accuracy": 0.5,
+      "continuous_run_score_AUROC": 0.5416666666666666,
+      "source_original_exact_recall95_CI": [
+        0,
+        0.2646
+      ],
+      "source_original_exact_false_alarm95_CI": [
+        0,
+        0.2646
+      ],
+      "same_original_scene_bug_score_exceeds_normal": 1,
+      "same_original_scene_bug_score_below_normal": 0,
+      "same_original_scene_equal_score": 11,
+      "source_match_same_scene_exact_sign_p_if_nontied": 1.0,
+      "source_scene_matched_bootstrap_95pct_CI": {
+        "AUROC": [
+          0.5,
+          0.625
+        ],
+        "balanced_accuracy": [
+          0.5,
+          0.5
+        ]
+      }
+    },
+    "phase_aligned_center_still_while_outer_motion": {
+      "scorable_n": 24,
+      "expected_original_label_positive_n": 12,
+      "expected_original_label_negative_n": 12,
+      "abstained_original_positive_n": 0,
+      "abstained_original_normal_control_n": 0,
+      "TP": 1,
+      "FP": 0,
+      "FN": 11,
+      "TN": 12,
+      "conditional_recall": 0.08333333333333333,
+      "conditional_specificity": 1.0,
+      "conditional_precision_on_balanced_sample": 1.0,
+      "conditional_balanced_accuracy": 0.5416666666666666,
+      "continuous_run_score_AUROC": 0.5034722222222222,
+      "source_original_exact_recall95_CI": [
+        0.0021,
+        0.3848
+      ],
+      "source_original_exact_false_alarm95_CI": [
+        0,
+        0.2646
+      ],
+      "same_original_scene_bug_score_exceeds_normal": 1,
+      "same_original_scene_bug_score_below_normal": 2,
+      "same_original_scene_equal_score": 9,
+      "source_match_same_scene_exact_sign_p_if_nontied": 1.0,
+      "source_scene_matched_bootstrap_95pct_CI": {
+        "AUROC": [
+          0.375,
+          0.6354
+        ],
+        "balanced_accuracy": [
+          0.5,
+          0.625
+        ]
+      }
+    },
+    "Farneback_center_still_while_background_moves": {
+      "scorable_n": 24,
+      "expected_original_label_positive_n": 12,
+      "expected_original_label_negative_n": 12,
+      "abstained_original_positive_n": 0,
+      "abstained_original_normal_control_n": 0,
+      "TP": 0,
+      "FP": 0,
+      "FN": 12,
+      "TN": 12,
+      "conditional_recall": 0.0,
+      "conditional_specificity": 1.0,
+      "conditional_precision_on_balanced_sample": null,
+      "conditional_balanced_accuracy": 0.5,
+      "continuous_run_score_AUROC": 0.5972222222222223,
+      "source_original_exact_recall95_CI": [
+        0,
+        0.2646
+      ],
+      "source_original_exact_false_alarm95_CI": [
+        0,
+        0.2646
+      ],
+      "same_original_scene_bug_score_exceeds_normal": 4,
+      "same_original_scene_bug_score_below_normal": 1,
+      "same_original_scene_equal_score": 7,
+      "source_match_same_scene_exact_sign_p_if_nontied": 0.375,
+      "source_scene_matched_bootstrap_95pct_CI": {
+        "AUROC": [
+          0.4583,
+          0.7569
+        ],
+        "balanced_accuracy": [
+          0.5,
+          0.5
+        ]
+      }
+    }
+  },
+  "run_resource": {
+    "GPU_used": false,
+    "FFmpeg_native_source_and_5fps_image_CPU_seconds": 1075.6,
+    "peak_video_pixel_CPU_RSS_KB": 275444,
+    "original_source_files_in_project_git": false,
+    "original_video_model_inference_queried": false
+  },
+  "scientific_limits": [
+    "Source video-size capped 70MB per original matched pair and 12 selected via fixed SHA sort from 27 eligible original Platformer scenes; no whole 1500 set or independent engine domain.",
+    "Godot author injected character pose bugs are not genuine unplanned camera video playback frozen frames. No ground truth human time-coded fault masks means only video-level bug class detection.",
+    "No player/rig bounding boxes or latent engine pose logs available to video pixel detector; center ROI is a guess, not a certified character area.",
+    "Normal source clips may show pauses, stationary characters, camera cuts and intentional non-motion; no independent new human rating of false positive phenomena.",
+    "Frame-only low-level CV detects image stasis or relative motion, not whether an action, mechanical assembly, joint or player intent is correct.",
+    "Any method appearing strong on 12 source scene pairs has wide exact confidence and must be externally verified on previously unexamined engine, user production source and human clear event labels before approval.",
+    "Results are not direct model-inference on Thor, and none qualifies complete multimodal video/audible synchronization.",
+    "Original third-party game media and per-case source identifiers retained in /data/var, not distributed in Git.",
+    "Previously denied high-resolution owner video tail-frame retrieval and other Spotlight video analysis were not reattempted, and no uncertain Calendar send was repeated."
+  ]
+}

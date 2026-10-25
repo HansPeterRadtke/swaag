@@ -271,5 +271,79 @@
       ],
       "meaning": "PaDiM-inspired ranker has no robust demonstrated superiority over global ResNet18 under source uncertainty; both fail most actual external industrial defects and cannot qualify automatic release."
     }
+  },
+  "later_external_actual_gameplay_frozen_character_video": {
+    "new_source_report": "perceptual-tempglitch-frozen-pose-source-video-2026-10-25.md",
+    "source_compact_SHA256": "669b2412532983c4b25dcc5403c2777c80c961bdc485c5d157d953e477d867ff",
+    "original_clean_and_buggy_scene_pairs": 12,
+    "source_author_truth_not_human_MOS": "author-coded character frozen vs normal, no event-time masks, not genuine unplanned playback defect",
+    "source_measured_method_TP_FP_FN_TN": {
+      "official_FFmpeg_full_frame_freezedetect": {
+        "TP": 0,
+        "FP": 0,
+        "FN": 12,
+        "TN": 12,
+        "abstained_author_bug": 0,
+        "abstained_author_normal": 0,
+        "AUROC_author_label": 0.5,
+        "source_pair_auc95_CI": [
+          0.5,
+          0.5
+        ]
+      },
+      "whole_frame_pixel_MAE_stall": {
+        "TP": 0,
+        "FP": 0,
+        "FN": 12,
+        "TN": 12,
+        "abstained_author_bug": 0,
+        "abstained_author_normal": 0,
+        "AUROC_author_label": 0.45486111111111116,
+        "source_pair_auc95_CI": [
+          0.3299,
+          0.5833
+        ]
+      },
+      "center_raw_still_while_outer_motion": {
+        "TP": 0,
+        "FP": 0,
+        "FN": 12,
+        "TN": 12,
+        "abstained_author_bug": 0,
+        "abstained_author_normal": 0,
+        "AUROC_author_label": 0.5416666666666666,
+        "source_pair_auc95_CI": [
+          0.5,
+          0.625
+        ]
+      },
+      "phase_aligned_center_still_while_outer_motion": {
+        "TP": 1,
+        "FP": 0,
+        "FN": 11,
+        "TN": 12,
+        "abstained_author_bug": 0,
+        "abstained_author_normal": 0,
+        "AUROC_author_label": 0.5034722222222222,
+        "source_pair_auc95_CI": [
+          0.375,
+          0.6354
+        ]
+      },
+      "Farneback_center_still_while_background_moves": {
+        "TP": 0,
+        "FP": 0,
+        "FN": 12,
+        "TN": 12,
+        "abstained_author_bug": 0,
+        "abstained_author_normal": 0,
+        "AUROC_author_label": 0.5972222222222223,
+        "source_pair_auc95_CI": [
+          0.4583,
+          0.7569
+        ]
+      }
+    },
+    "deployment_decision": "A frozen character pose can leave each video frame moving. FFmpeg whole frame is a narrow frame-stall check, not character animation quality. Need engine animation state plus actual seen motion and independent human event labels for release."
   }
 }

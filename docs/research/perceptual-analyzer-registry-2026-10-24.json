@@ -514,6 +514,56 @@
       "result": "Original heldout images TP 11, FP 2, FN 49, TN 28, ROC AUC 0.640, 95 CI [0.5144, 0.7658], logical TP 2/30 and structural TP 9/30 at a 20-normal-only validation 95p fixed threshold",
       "source_report": "perceptual-mvtec-screwbag-padim-spatial-original-photos-2026-10-25.md",
       "limitations": "One different original object/source product family, author external labels not new blind human reannotation; no proof of mechanical CAD contacts/photorealistic source render; far too many missed logical parts, and 30 correct test samples too few to bound production false alarm. Research PaDiM-inspired proxy not official PaDiM."
+    },
+    {
+      "task": "Video character animation pose frozen vs full-screen video freeze, real original Godot source footage",
+      "method": "official_FFmpeg_full_frame_freezedetect",
+      "model_version": "FFmpeg native 6.1.1 frozen video filter or original OpenCV grayscale region/phase/Farneback analysis at 5 FPS on Nitro CPU nice19, no trained VLM/character pose model",
+      "status": "SOURCE_ENGINE_CREATOR_LABELS_TESTED_ONLY_NOT_APPROVED_FOR_GENERAL_VIDEO_SEMANTIC_TEMPORAL_RELEASE_GATE",
+      "scope": "24 actual original Platformer source MP4s,12 creator-injected character frozen-animation fault clips +12 same scene/index author-normal clips, exact original source LFS SHA/byte verified. Creator injected labels not independent human subjective faults or time-coded event truth.",
+      "result": "Original source author type TP0, FP0, FN12, TN12, abstain 0 bug/0 normal, AUROC 0.5, source-scene bootstrap95 [0.5, 0.5]",
+      "source_report": "perceptual-tempglitch-frozen-pose-source-video-2026-10-25.md",
+      "limitations": "Character animation freezing is not full framebuffer stall: world camera may move while actor pose frozen. No actor pixel bbox or 3D rig/pose ground truth, only guessed ROI; one small size-biased original game family. No human timestamped fault labels. Do not infer physical animation correctness or audiovisual sync. Source video outside Git."
+    },
+    {
+      "task": "Video character animation pose frozen vs full-screen video freeze, real original Godot source footage",
+      "method": "whole_frame_pixel_MAE_stall",
+      "model_version": "FFmpeg native 6.1.1 frozen video filter or original OpenCV grayscale region/phase/Farneback analysis at 5 FPS on Nitro CPU nice19, no trained VLM/character pose model",
+      "status": "SOURCE_ENGINE_CREATOR_LABELS_TESTED_ONLY_NOT_APPROVED_FOR_GENERAL_VIDEO_SEMANTIC_TEMPORAL_RELEASE_GATE",
+      "scope": "24 actual original Platformer source MP4s,12 creator-injected character frozen-animation fault clips +12 same scene/index author-normal clips, exact original source LFS SHA/byte verified. Creator injected labels not independent human subjective faults or time-coded event truth.",
+      "result": "Original source author type TP0, FP0, FN12, TN12, abstain 0 bug/0 normal, AUROC 0.45486111111111116, source-scene bootstrap95 [0.3299, 0.5833]",
+      "source_report": "perceptual-tempglitch-frozen-pose-source-video-2026-10-25.md",
+      "limitations": "Character animation freezing is not full framebuffer stall: world camera may move while actor pose frozen. No actor pixel bbox or 3D rig/pose ground truth, only guessed ROI; one small size-biased original game family. No human timestamped fault labels. Do not infer physical animation correctness or audiovisual sync. Source video outside Git."
+    },
+    {
+      "task": "Video character animation pose frozen vs full-screen video freeze, real original Godot source footage",
+      "method": "center_raw_still_while_outer_motion",
+      "model_version": "FFmpeg native 6.1.1 frozen video filter or original OpenCV grayscale region/phase/Farneback analysis at 5 FPS on Nitro CPU nice19, no trained VLM/character pose model",
+      "status": "SOURCE_ENGINE_CREATOR_LABELS_TESTED_ONLY_NOT_APPROVED_FOR_GENERAL_VIDEO_SEMANTIC_TEMPORAL_RELEASE_GATE",
+      "scope": "24 actual original Platformer source MP4s,12 creator-injected character frozen-animation fault clips +12 same scene/index author-normal clips, exact original source LFS SHA/byte verified. Creator injected labels not independent human subjective faults or time-coded event truth.",
+      "result": "Original source author type TP0, FP0, FN12, TN12, abstain 0 bug/0 normal, AUROC 0.5416666666666666, source-scene bootstrap95 [0.5, 0.625]",
+      "source_report": "perceptual-tempglitch-frozen-pose-source-video-2026-10-25.md",
+      "limitations": "Character animation freezing is not full framebuffer stall: world camera may move while actor pose frozen. No actor pixel bbox or 3D rig/pose ground truth, only guessed ROI; one small size-biased original game family. No human timestamped fault labels. Do not infer physical animation correctness or audiovisual sync. Source video outside Git."
+    },
+    {
+      "task": "Video character animation pose frozen vs full-screen video freeze, real original Godot source footage",
+      "method": "phase_aligned_center_still_while_outer_motion",
+      "model_version": "FFmpeg native 6.1.1 frozen video filter or original OpenCV grayscale region/phase/Farneback analysis at 5 FPS on Nitro CPU nice19, no trained VLM/character pose model",
+      "status": "SOURCE_ENGINE_CREATOR_LABELS_TESTED_ONLY_NOT_APPROVED_FOR_GENERAL_VIDEO_SEMANTIC_TEMPORAL_RELEASE_GATE",
+      "scope": "24 actual original Platformer source MP4s,12 creator-injected character frozen-animation fault clips +12 same scene/index author-normal clips, exact original source LFS SHA/byte verified. Creator injected labels not independent human subjective faults or time-coded event truth.",
+      "result": "Original source author type TP1, FP0, FN11, TN12, abstain 0 bug/0 normal, AUROC 0.5034722222222222, source-scene bootstrap95 [0.375, 0.6354]",
+      "source_report": "perceptual-tempglitch-frozen-pose-source-video-2026-10-25.md",
+      "limitations": "Character animation freezing is not full framebuffer stall: world camera may move while actor pose frozen. No actor pixel bbox or 3D rig/pose ground truth, only guessed ROI; one small size-biased original game family. No human timestamped fault labels. Do not infer physical animation correctness or audiovisual sync. Source video outside Git."
+    },
+    {
+      "task": "Video character animation pose frozen vs full-screen video freeze, real original Godot source footage",
+      "method": "Farneback_center_still_while_background_moves",
+      "model_version": "FFmpeg native 6.1.1 frozen video filter or original OpenCV grayscale region/phase/Farneback analysis at 5 FPS on Nitro CPU nice19, no trained VLM/character pose model",
+      "status": "SOURCE_ENGINE_CREATOR_LABELS_TESTED_ONLY_NOT_APPROVED_FOR_GENERAL_VIDEO_SEMANTIC_TEMPORAL_RELEASE_GATE",
+      "scope": "24 actual original Platformer source MP4s,12 creator-injected character frozen-animation fault clips +12 same scene/index author-normal clips, exact original source LFS SHA/byte verified. Creator injected labels not independent human subjective faults or time-coded event truth.",
+      "result": "Original source author type TP0, FP0, FN12, TN12, abstain 0 bug/0 normal, AUROC 0.5972222222222223, source-scene bootstrap95 [0.4583, 0.7569]",
+      "source_report": "perceptual-tempglitch-frozen-pose-source-video-2026-10-25.md",
+      "limitations": "Character animation freezing is not full framebuffer stall: world camera may move while actor pose frozen. No actor pixel bbox or 3D rig/pose ground truth, only guessed ROI; one small size-biased original game family. No human timestamped fault labels. Do not infer physical animation correctness or audiovisual sync. Source video outside Git."
     }
   ],
   "second_continuation_2026_10_24": {
@@ -953,5 +1003,83 @@
       ],
       "interpretation": "Better raw AUC over global ResNet18/HSV is not statistically established; high miss rate at fixed normal-only threshold persists. Global and spatial p95 false-positive correct controls were disjoint. Do not auto-approve/reject or build posthoc OR ensemble from this benchmark."
     }
+  },
+  "external_real_Godot_Frozen_Character_Animation_vs_Normal_2026_10_25": {
+    "status": "PARTIAL: genuinely new 24 ORIGINAL third-party gameplay video CPU visual fault measurement, but no qualified character pose, motion physics or natural audiovisual perceptual release gate",
+    "report": "perceptual-tempglitch-frozen-pose-source-video-2026-10-25.md",
+    "compact_source_hash_evidence": "perceptual-tempglitch-real-character-pose-video-control-2026-10-25.json",
+    "new_original_public_source": "TempGlitch original 2026 author engineered frozen CHARACTER animation vs normal matched Platformer scene, source selection hash before pixels, video license MIT dataset with third-party game imagery rights checked separately",
+    "source_original_n": "12 matched scene pairs, 24 distinct original videos, about717MB exact original SHA verified, no source result from owner video retrieved",
+    "method_error_counts_and_false_alarms": {
+      "official_FFmpeg_full_frame_freezedetect": {
+        "TP": 0,
+        "FP": 0,
+        "FN": 12,
+        "TN": 12,
+        "abstained_author_bug": 0,
+        "abstained_author_normal": 0,
+        "AUROC_author_label": 0.5,
+        "source_pair_auc95_CI": [
+          0.5,
+          0.5
+        ]
+      },
+      "whole_frame_pixel_MAE_stall": {
+        "TP": 0,
+        "FP": 0,
+        "FN": 12,
+        "TN": 12,
+        "abstained_author_bug": 0,
+        "abstained_author_normal": 0,
+        "AUROC_author_label": 0.45486111111111116,
+        "source_pair_auc95_CI": [
+          0.3299,
+          0.5833
+        ]
+      },
+      "center_raw_still_while_outer_motion": {
+        "TP": 0,
+        "FP": 0,
+        "FN": 12,
+        "TN": 12,
+        "abstained_author_bug": 0,
+        "abstained_author_normal": 0,
+        "AUROC_author_label": 0.5416666666666666,
+        "source_pair_auc95_CI": [
+          0.5,
+          0.625
+        ]
+      },
+      "phase_aligned_center_still_while_outer_motion": {
+        "TP": 1,
+        "FP": 0,
+        "FN": 11,
+        "TN": 12,
+        "abstained_author_bug": 0,
+        "abstained_author_normal": 0,
+        "AUROC_author_label": 0.5034722222222222,
+        "source_pair_auc95_CI": [
+          0.375,
+          0.6354
+        ]
+      },
+      "Farneback_center_still_while_background_moves": {
+        "TP": 0,
+        "FP": 0,
+        "FN": 12,
+        "TN": 12,
+        "abstained_author_bug": 0,
+        "abstained_author_normal": 0,
+        "AUROC_author_label": 0.5972222222222223,
+        "source_pair_auc95_CI": [
+          0.4583,
+          0.7569
+        ]
+      }
+    },
+    "full_frame_vs_subject_differentiation": "Full-frame FFmpeg or frame-MAE can never prove absence of a character pose frozen while the rest of scene changes. Fixed ROIs/flow are imperfect, not semantic rig-motion analysis.",
+    "automated_video_default": "Verify approved frame/PTS/audio timeline and in-engine body pose/velocity constraints first when source available, and direct original video human/qualified ROI inspection for semantics. Never greenlight based on global freeze detector or VLM confidence.",
+    "invalid_preceding_read_only_test": "Initial ffmpeg filter string contained explanatory prose; six partial attempts stopped and invalid state preserved outside Git, no score. Correct new output path and filter verified; no production or other agent service affected.",
+    "no_effects": "No GPU, no source owner render, no Calendar replay/earlier denied 72-video or source-resolution retrieval, no license-restricted video in Git."
   }
 }
