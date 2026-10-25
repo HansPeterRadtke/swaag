@@ -1,0 +1,74 @@
+{
+  "date": "2026-10-25",
+  "scientific_status": "POSTHOC paired comparison on already consumed 90 real original MVTec screw_bag source test images, do NOT call an independent new model holdout",
+  "original_private_source_sha256": "f8332fb1a85e50f770e4e9272f7b27ebae21af2b0b3089603adf139fc001d2a5",
+  "methods_four_predeclared_before_image_scores": true,
+  "source_gold_test_labels_used_only_after_134_image_scores_frozen": true,
+  "source_photo_n": {
+    "test_normal": 30,
+    "test_logical": 30,
+    "test_structural": 30
+  },
+  "same_90_original_image_AUC": {
+    "ResNet18_global_cosine_nearest_normal": 0.6272222222222222,
+    "ResNet18_spatial_gaussian_mahalanobis_max": 0.5138888888888888,
+    "ResNet18_spatial_gaussian_mahalanobis_p95": 0.7061111111111111,
+    "HSV_spatial_color_nearest_normal": 0.64
+  },
+  "posthoc_paired_by_source_image_AUC_deltas": {
+    "ResNet18_global_cosine_nearest_normal": {
+      "ROC_AUC_spatial_p95_minus_other": 0.0788888888888889,
+      "same_original_source_image_pair_bootstrap_95pct": [
+        -0.08668055555555555,
+        0.23222222222222222
+      ]
+    },
+    "ResNet18_spatial_gaussian_mahalanobis_max": {
+      "ROC_AUC_spatial_p95_minus_other": 0.1922222222222223,
+      "same_original_source_image_pair_bootstrap_95pct": [
+        0.031111111111111197,
+        0.3422222222222222
+      ]
+    },
+    "HSV_spatial_color_nearest_normal": {
+      "ROC_AUC_spatial_p95_minus_other": 0.06611111111111112,
+      "same_original_source_image_pair_bootstrap_95pct": [
+        -0.0878055555555555,
+        0.2177916666666668
+      ]
+    }
+  },
+  "source_anomaly_positive_and_good_control_detection_discordances": {
+    "ResNet18_global_cosine_nearest_normal": {
+      "positive_images_flagged_only_by_spatial_p95": 11,
+      "positive_images_flagged_only_by_comparator": 7,
+      "positive_images_flagged_by_both": 5,
+      "good_images_false_flagged_only_by_spatial_p95": 3,
+      "good_images_false_flagged_only_by_comparator": 3,
+      "good_images_false_flagged_by_both": 0
+    },
+    "ResNet18_spatial_gaussian_mahalanobis_max": {
+      "positive_images_flagged_only_by_spatial_p95": 11,
+      "positive_images_flagged_only_by_comparator": 11,
+      "positive_images_flagged_by_both": 5,
+      "good_images_false_flagged_only_by_spatial_p95": 2,
+      "good_images_false_flagged_only_by_comparator": 9,
+      "good_images_false_flagged_by_both": 1
+    },
+    "HSV_spatial_color_nearest_normal": {
+      "positive_images_flagged_only_by_spatial_p95": 9,
+      "positive_images_flagged_only_by_comparator": 4,
+      "positive_images_flagged_by_both": 7,
+      "good_images_false_flagged_only_by_spatial_p95": 3,
+      "good_images_false_flagged_only_by_comparator": 2,
+      "good_images_false_flagged_by_both": 0
+    }
+  },
+  "limits": [
+    "The comparison was performed after reading each method accuracy, so it is a diagnostic on consumed data, not preregistered superiority.",
+    "Intervals over resampled original photos remain from a single source MVTec category and not independent manufacturer or camera/domain holdout.",
+    "AUC difference alone does not measure false alarms/misses at the predeclared normal-calibrated threshold.",
+    "The two methods can flag DIFFERENT correct controls and defects despite similar aggregate error counts; OR-ing detections can increase false alarms.",
+    "No licensed images, embeddings or model weights exported to project Git."
+  ]
+}

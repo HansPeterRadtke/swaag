@@ -474,6 +474,46 @@
       "result": "Pooled industrial defects TP=14 FP=5 FN=46 TN=25 ROC_AUC=0.590; logical TP=6/30, structural TP=8/30, false good flags=5/30; threshold 95th pct 20 heldout source-validation good photos; AUC95CI=[0.4666, 0.7197]",
       "source_report": "perceptual-mvtec-splicing-industrial-visual-review-2026-10-25.md",
       "limitations": "Pretrained full-image CLIP or CLIP patch proxy is not a certified industrial anomaly detector (not PatchCore/EfficientAD); in-domain 24 source normal references and 20 normal validation samples, just 30 test true good controls. Original category assigned by MVTec authors, no blind owner assessor. Source licensing restricts commercial use. Industrial photos not correct physical CAD support or warehouse photorealistic render."
+    },
+    {
+      "task": "Original real industrial screw-bag logical/component-completeness and structural abnormality screening",
+      "method": "ResNet18_global_cosine_nearest_normal",
+      "model_version": "Official pretrained Torchvision ResNet18 ImageNet1K V1 verified f37072fd SHA or no-pretraining HSV, 32 fixed per-pixel channels and normal-only Gaussian shrinkage for spatial probes; NOT official PaDiM/PatchCore",
+      "status": "TRIAGE_ONLY_NOT_ACCURATE_ENOUGH_FOR_AUTOMATIC_INDUSTRIAL_OR_3D_CAD_ACCEPTANCE",
+      "scope": "New MVTec LOCO AD screw_bag source category, externally labelled original real photos 24 normal train20 normal validation30 clean test30 logical30 structural; CC BY-NC-SA noncommercial and original source outside Git",
+      "result": "Original heldout images TP 12, FP 3, FN 48, TN 27, ROC AUC 0.627, 95 CI [0.5033, 0.7456], logical TP 6/30 and structural TP 6/30 at a 20-normal-only validation 95p fixed threshold",
+      "source_report": "perceptual-mvtec-screwbag-padim-spatial-original-photos-2026-10-25.md",
+      "limitations": "One different original object/source product family, author external labels not new blind human reannotation; no proof of mechanical CAD contacts/photorealistic source render; far too many missed logical parts, and 30 correct test samples too few to bound production false alarm. Research PaDiM-inspired proxy not official PaDiM."
+    },
+    {
+      "task": "Original real industrial screw-bag logical/component-completeness and structural abnormality screening",
+      "method": "ResNet18_spatial_gaussian_mahalanobis_max",
+      "model_version": "Official pretrained Torchvision ResNet18 ImageNet1K V1 verified f37072fd SHA or no-pretraining HSV, 32 fixed per-pixel channels and normal-only Gaussian shrinkage for spatial probes; NOT official PaDiM/PatchCore",
+      "status": "TRIAGE_ONLY_NOT_ACCURATE_ENOUGH_FOR_AUTOMATIC_INDUSTRIAL_OR_3D_CAD_ACCEPTANCE",
+      "scope": "New MVTec LOCO AD screw_bag source category, externally labelled original real photos 24 normal train20 normal validation30 clean test30 logical30 structural; CC BY-NC-SA noncommercial and original source outside Git",
+      "result": "Original heldout images TP 16, FP 10, FN 44, TN 20, ROC AUC 0.514, 95 CI [0.3875, 0.6462], logical TP 6/30 and structural TP 10/30 at a 20-normal-only validation 95p fixed threshold",
+      "source_report": "perceptual-mvtec-screwbag-padim-spatial-original-photos-2026-10-25.md",
+      "limitations": "One different original object/source product family, author external labels not new blind human reannotation; no proof of mechanical CAD contacts/photorealistic source render; far too many missed logical parts, and 30 correct test samples too few to bound production false alarm. Research PaDiM-inspired proxy not official PaDiM."
+    },
+    {
+      "task": "Original real industrial screw-bag logical/component-completeness and structural abnormality screening",
+      "method": "ResNet18_spatial_gaussian_mahalanobis_p95",
+      "model_version": "Official pretrained Torchvision ResNet18 ImageNet1K V1 verified f37072fd SHA or no-pretraining HSV, 32 fixed per-pixel channels and normal-only Gaussian shrinkage for spatial probes; NOT official PaDiM/PatchCore",
+      "status": "TRIAGE_ONLY_NOT_ACCURATE_ENOUGH_FOR_AUTOMATIC_INDUSTRIAL_OR_3D_CAD_ACCEPTANCE",
+      "scope": "New MVTec LOCO AD screw_bag source category, externally labelled original real photos 24 normal train20 normal validation30 clean test30 logical30 structural; CC BY-NC-SA noncommercial and original source outside Git",
+      "result": "Original heldout images TP 16, FP 3, FN 44, TN 27, ROC AUC 0.706, 95 CI [0.5947, 0.8061], logical TP 6/30 and structural TP 10/30 at a 20-normal-only validation 95p fixed threshold",
+      "source_report": "perceptual-mvtec-screwbag-padim-spatial-original-photos-2026-10-25.md",
+      "limitations": "One different original object/source product family, author external labels not new blind human reannotation; no proof of mechanical CAD contacts/photorealistic source render; far too many missed logical parts, and 30 correct test samples too few to bound production false alarm. Research PaDiM-inspired proxy not official PaDiM."
+    },
+    {
+      "task": "Original real industrial screw-bag logical/component-completeness and structural abnormality screening",
+      "method": "HSV_spatial_color_nearest_normal",
+      "model_version": "Official pretrained Torchvision ResNet18 ImageNet1K V1 verified f37072fd SHA or no-pretraining HSV, 32 fixed per-pixel channels and normal-only Gaussian shrinkage for spatial probes; NOT official PaDiM/PatchCore",
+      "status": "TRIAGE_ONLY_NOT_ACCURATE_ENOUGH_FOR_AUTOMATIC_INDUSTRIAL_OR_3D_CAD_ACCEPTANCE",
+      "scope": "New MVTec LOCO AD screw_bag source category, externally labelled original real photos 24 normal train20 normal validation30 clean test30 logical30 structural; CC BY-NC-SA noncommercial and original source outside Git",
+      "result": "Original heldout images TP 11, FP 2, FN 49, TN 28, ROC AUC 0.640, 95 CI [0.5144, 0.7658], logical TP 2/30 and structural TP 9/30 at a 20-normal-only validation 95p fixed threshold",
+      "source_report": "perceptual-mvtec-screwbag-padim-spatial-original-photos-2026-10-25.md",
+      "limitations": "One different original object/source product family, author external labels not new blind human reannotation; no proof of mechanical CAD contacts/photorealistic source render; far too many missed logical parts, and 30 correct test samples too few to bound production false alarm. Research PaDiM-inspired proxy not official PaDiM."
     }
   ],
   "second_continuation_2026_10_24": {
@@ -830,5 +870,88 @@
     },
     "cannot_prove": "Visual camera defects in one assembly photo family DO NOT establish CAD load/geometry, correct 3D scene materials/shaders, physics, general human-perceived photorealism, or general low false alarms on unseen manufacturers. No commercial MVTec photo usage implied.",
     "no_effects": "No GPU, model services, 3D renders, uncertain Calendar submissions, denied video retrieval or third-party media in Git."
+  },
+  "new_independent_MVTec_screwbag_PaDiM_spatial_2026_10_25": {
+    "status": "PARTIAL: genuine NEW industrial product category, official ImageNet pretrained ResNet18 spatial Gaussian and same normal-only budget global ResNet/HSV alternatives tested; all miss many actual source logical and structural faults and not approved automatic inspection",
+    "dated_report": "perceptual-mvtec-screwbag-padim-spatial-original-photos-2026-10-25.md",
+    "new_source_pinned_evidence": "perceptual-mvtec-screwbag-new-spatial-anomaly-evidence-2026-10-25.json",
+    "original_source_sha256": "98aaba9418391165d9f5e1a91bf5466e514a9e707d2919851129c5a4eb031c80",
+    "physical_source_rights": "Original MVTec 134 photographs CC BY-NC-SA and all ResNet ImageNet weights/patch embeddings retained /data/var; not permitted commercial product training from those pixels.",
+    "independent_sample": "New screw_bag 24 normal-train+20 normal-calibration+30 normal controls+30 logical+30 structural, no source test labels used in feature scoring/thresholding. Distinct from earlier splicing connectors and pushpins.",
+    "all_predeclared_method_outcomes": {
+      "ResNet18_global_cosine_nearest_normal": {
+        "source_original_true_logical": 6,
+        "source_original_true_structural": 6,
+        "FP_on_30_good": 3,
+        "TP_of_60_positives": 12,
+        "FN_of_60_positives": 48,
+        "TN_of_30_controls": 27,
+        "AUROC": 0.6272222222222222,
+        "AUROC95_bootstrap": [
+          0.5033,
+          0.7456
+        ],
+        "normal_only_95percent_threshold": 0.12252682460000001
+      },
+      "ResNet18_spatial_gaussian_mahalanobis_max": {
+        "source_original_true_logical": 6,
+        "source_original_true_structural": 10,
+        "FP_on_30_good": 10,
+        "TP_of_60_positives": 16,
+        "FN_of_60_positives": 44,
+        "TN_of_30_controls": 20,
+        "AUROC": 0.5138888888888888,
+        "AUROC95_bootstrap": [
+          0.3875,
+          0.6462
+        ],
+        "normal_only_95percent_threshold": 28.3248071669
+      },
+      "ResNet18_spatial_gaussian_mahalanobis_p95": {
+        "source_original_true_logical": 6,
+        "source_original_true_structural": 10,
+        "FP_on_30_good": 3,
+        "TP_of_60_positives": 16,
+        "FN_of_60_positives": 44,
+        "TN_of_30_controls": 27,
+        "AUROC": 0.7061111111111111,
+        "AUROC95_bootstrap": [
+          0.5947,
+          0.8061
+        ],
+        "normal_only_95percent_threshold": 11.437708377900002
+      },
+      "HSV_spatial_color_nearest_normal": {
+        "source_original_true_logical": 2,
+        "source_original_true_structural": 9,
+        "FP_on_30_good": 2,
+        "TP_of_60_positives": 11,
+        "FN_of_60_positives": 49,
+        "TN_of_30_controls": 28,
+        "AUROC": 0.64,
+        "AUROC95_bootstrap": [
+          0.5144,
+          0.7658
+        ],
+        "normal_only_95percent_threshold": 0.059138491450000004
+      }
+    },
+    "operational_result": "PaDiM-inspired spatial p95 detects a few more structural errors than global pretrained embedding on this new product class, but recall low, source test insufficient for acceptance of whole industrial assemblies/3D graphics. Need source CAD/physical rules and separate visual review.",
+    "no_production_effects": "No GPU or owner render load, no Calendar or earlier uncertain delivery replay, licensed source images and 134 embeddings outside Git.",
+    "after_the_fact_paired_method_comparison": {
+      "status": "POSTHOC diagnostic on same90 consumed original source cases, not independent supertest",
+      "compact_report": "perceptual-mvtec-screwbag-posthoc-paired-uncertainty-2026-10-25.json",
+      "source_input_hash": "f8332fb1a85e50f770e4e9272f7b27ebae21af2b0b3089603adf139fc001d2a5",
+      "ROC_AUC_spatial_p95_minus_global": 0.0788888888888889,
+      "95pct_pair_bootstrap_delta_spatial_minus_global": [
+        -0.08668055555555555,
+        0.23222222222222222
+      ],
+      "95pct_pair_bootstrap_delta_spatial_minus_HSV": [
+        -0.0878055555555555,
+        0.2177916666666668
+      ],
+      "interpretation": "Better raw AUC over global ResNet18/HSV is not statistically established; high miss rate at fixed normal-only threshold persists. Global and spatial p95 false-positive correct controls were disjoint. Do not auto-approve/reject or build posthoc OR ensemble from this benchmark."
+    }
   }
 }

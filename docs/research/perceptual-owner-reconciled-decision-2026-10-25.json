@@ -198,5 +198,78 @@
     },
     "owner_decision": "Use independently verified CAD/physical contact for physical soundness. CLIP or HSV camera-image anomaly scores can only nominate review where false negatives/alarms permit; cannot approve machine CAD or final photorealism automatically.",
     "scope": "External original real industrial source photos under restrictive noncommercial license, not owner CGTrader renders."
+  },
+  "later_MVTec_screwbag_spatial_source_results": {
+    "source_new_original_industrial_product": "MVTec LOCO screw_bag external author labels, 134 real original photos including 90 clean/defective test, distinct from earlier splicing/pushpins",
+    "source_report": "perceptual-mvtec-screwbag-padim-spatial-original-photos-2026-10-25.md",
+    "source_compact_report_SHA256": "98aaba9418391165d9f5e1a91bf5466e514a9e707d2919851129c5a4eb031c80",
+    "methods_with_independent_clean_negative_counts": {
+      "ResNet18_global_cosine_nearest_normal": {
+        "source_original_true_logical": 6,
+        "source_original_true_structural": 6,
+        "FP_on_30_good": 3,
+        "TP_of_60_positives": 12,
+        "FN_of_60_positives": 48,
+        "TN_of_30_controls": 27,
+        "AUROC": 0.6272222222222222,
+        "AUROC95_bootstrap": [
+          0.5033,
+          0.7456
+        ],
+        "normal_only_95percent_threshold": 0.12252682460000001
+      },
+      "ResNet18_spatial_gaussian_mahalanobis_max": {
+        "source_original_true_logical": 6,
+        "source_original_true_structural": 10,
+        "FP_on_30_good": 10,
+        "TP_of_60_positives": 16,
+        "FN_of_60_positives": 44,
+        "TN_of_30_controls": 20,
+        "AUROC": 0.5138888888888888,
+        "AUROC95_bootstrap": [
+          0.3875,
+          0.6462
+        ],
+        "normal_only_95percent_threshold": 28.3248071669
+      },
+      "ResNet18_spatial_gaussian_mahalanobis_p95": {
+        "source_original_true_logical": 6,
+        "source_original_true_structural": 10,
+        "FP_on_30_good": 3,
+        "TP_of_60_positives": 16,
+        "FN_of_60_positives": 44,
+        "TN_of_30_controls": 27,
+        "AUROC": 0.7061111111111111,
+        "AUROC95_bootstrap": [
+          0.5947,
+          0.8061
+        ],
+        "normal_only_95percent_threshold": 11.437708377900002
+      },
+      "HSV_spatial_color_nearest_normal": {
+        "source_original_true_logical": 2,
+        "source_original_true_structural": 9,
+        "FP_on_30_good": 2,
+        "TP_of_60_positives": 11,
+        "FN_of_60_positives": 49,
+        "TN_of_30_controls": 28,
+        "AUROC": 0.64,
+        "AUROC95_bootstrap": [
+          0.5144,
+          0.7658
+        ],
+        "normal_only_95percent_threshold": 0.059138491450000004
+      }
+    },
+    "owner_recommendation": "The spatial ResNet anomaly detector was a modest ranker improvement but at frozen source-normal threshold misses many logical and structural defects. Use only for visual triage; physical load/contact assembly integrity remains source-CAD invariant plus qualified inspection. No universal quality gate.",
+    "posthoc_uncertainty": {
+      "new_report": "perceptual-mvtec-screwbag-posthoc-paired-uncertainty-2026-10-25.json",
+      "spatial_p95_minus_global_ROC_AUC": 0.0788888888888889,
+      "paired_CI_crosses_zero": [
+        -0.08668055555555555,
+        0.23222222222222222
+      ],
+      "meaning": "PaDiM-inspired ranker has no robust demonstrated superiority over global ResNet18 under source uncertainty; both fail most actual external industrial defects and cannot qualify automatic release."
+    }
   }
 }
