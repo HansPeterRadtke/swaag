@@ -302,6 +302,36 @@
       "result": "924/924 deterministic graph-count answers internally consistent with original source; image PNG correctness not established",
       "source_report": "perceptual-real-diagram-benchmark-2026-10-25.md",
       "caveats": "Author annotations may not match pixels/design intent; validating source-derived QA is not sufficient rendered/real-world diagram acceptance"
+    },
+    {
+      "task": "Image-only human reviewed slide Content Overflow/Cut-off defect detection (NOT app UI)",
+      "method": "Fixed Tesseract5.3.4+OpenCV4.x source image-only heuristic, zero-shot CLIP ViT-B/32 and leave-one-source-family-out frozen OCR/CV 16-feature logistic",
+      "model_version": "Tesseract 5.3.4 PSM11, OpenAI CLIP ViT-B/32 local 578MB PyTorch, sklearn class-weighted logistic, CPU-only one torch thread",
+      "status": "research_triage_only_not_accepted_for_autonomous_GUI_or_slide_rejection",
+      "scope": "82 human strong-agreement positive original/synthetically altered presentation slides and 82 source-type/alteration-matched category strong negatives; original full 2400, 343 unique images across categories",
+      "result": "fixed CV TP=58,FP=26,FN=24,TN=56,AUROC=0.72286; CLIP TP=52,FP=62,FN=30,TN=20,AUROC=0.4382807852468768; source-heldout fitted-model TP=48,FP=26,FN=34,TN=56,AUROC=0.6643367043426531",
+      "source_report": "perceptual-independent-real-human-layout-2026-10-25.md",
+      "limitations": "Slide not actual GUI; human target-negative does not certify other errors absent; matched sample purposely balanced, category class and source alteration confounds; lowcontrast 20 positives only and FPR0/20 is not proof of zero deployment false alarms; no custom model qualified; pixel-grayscale quantile is NOT proper WCAG contrast."
+    },
+    {
+      "task": "Image-only human reviewed slide Occluded Content defect detection (NOT app UI)",
+      "method": "Fixed Tesseract5.3.4+OpenCV4.x source image-only heuristic, zero-shot CLIP ViT-B/32 and leave-one-source-family-out frozen OCR/CV 16-feature logistic",
+      "model_version": "Tesseract 5.3.4 PSM11, OpenAI CLIP ViT-B/32 local 578MB PyTorch, sklearn class-weighted logistic, CPU-only one torch thread",
+      "status": "research_triage_only_not_accepted_for_autonomous_GUI_or_slide_rejection",
+      "scope": "105 human strong-agreement positive original/synthetically altered presentation slides and 105 source-type/alteration-matched category strong negatives; original full 2400, 343 unique images across categories",
+      "result": "fixed CV TP=24,FP=12,FN=81,TN=93,AUROC=0.55782; CLIP TP=74,FP=78,FN=31,TN=27,AUROC=0.48036281179138324; source-heldout fitted-model TP=52,FP=36,FN=53,TN=69,AUROC=0.6360090702947846",
+      "source_report": "perceptual-independent-real-human-layout-2026-10-25.md",
+      "limitations": "Slide not actual GUI; human target-negative does not certify other errors absent; matched sample purposely balanced, category class and source alteration confounds; lowcontrast 20 positives only and FPR0/20 is not proof of zero deployment false alarms; no custom model qualified; pixel-grayscale quantile is NOT proper WCAG contrast."
+    },
+    {
+      "task": "Image-only human reviewed slide Insufficient Color Contrast for Readability defect detection (NOT app UI)",
+      "method": "Fixed Tesseract5.3.4+OpenCV4.x source image-only heuristic, zero-shot CLIP ViT-B/32 and leave-one-source-family-out frozen OCR/CV 16-feature logistic",
+      "model_version": "Tesseract 5.3.4 PSM11, OpenAI CLIP ViT-B/32 local 578MB PyTorch, sklearn class-weighted logistic, CPU-only one torch thread",
+      "status": "research_triage_only_not_accepted_for_autonomous_GUI_or_slide_rejection",
+      "scope": "20 human strong-agreement positive original/synthetically altered presentation slides and 20 source-type/alteration-matched category strong negatives; original full 2400, 343 unique images across categories",
+      "result": "fixed CV TP=8,FP=0,FN=12,TN=20,AUROC=0.71125; CLIP TP=12,FP=16,FN=8,TN=4,AUROC=0.4325; source-heldout fitted-model TP=13,FP=3,FN=7,TN=17,AUROC=0.7999999999999999",
+      "source_report": "perceptual-independent-real-human-layout-2026-10-25.md",
+      "limitations": "Slide not actual GUI; human target-negative does not certify other errors absent; matched sample purposely balanced, category class and source alteration confounds; lowcontrast 20 positives only and FPR0/20 is not proof of zero deployment false alarms; no custom model qualified; pixel-grayscale quantile is NOT proper WCAG contrast."
     }
   ],
   "second_continuation_2026_10_24": {
@@ -481,5 +511,36 @@
     "integrity_warning": "All 2431 question indices reordered in 3 archived Qwen logs; aligned by exact source diagram+question+reference, never index. Some Gemini3 answers truncated at source output-token cap 512. Source question-only variants free prose, therefore strict JSON score zero means contract mismatch, NOT comprehension zero.",
     "remaining": "human-verified rendered diagram defects/overlap and correct graph evidence vs pixel; mechanical CAD/photorealism and natural video glitches still not qualified",
     "source_archive_owned_media": "stored unmodified in /data/var; bundled personal_token folder never accessed or extracted"
+  },
+  "SlideAudit_human_343_visible_defect_2026_10_25": {
+    "status": "PARTIAL: 343 real/synthetically altered original slide raster images benchmarked with real human strong-positive/category-negative labels, no accepted generic GUI/3D/video judge",
+    "report": "perceptual-independent-real-human-layout-2026-10-25.md",
+    "compact_source_human_labels_and_confusions": "perceptual-slideaudit-human-visual-evidence-2026-10-25.json",
+    "source_license": "SlideAudit UIST 2025 CC BY4, GitHub original 642d490b7c1d2e78a50a631bfd359433397f3ecf",
+    "n_original_human_reviewed_slides": 2400,
+    "unique_original_rasters_tested": 343,
+    "human_positive_target_counts": {
+      "Content Overflow/Cut-off": 82,
+      "Occluded Content": 105,
+      "Insufficient Color Contrast for Readability": 20
+    },
+    "measured_CPU_seconds": {
+      "Tesseract_OpenCV": 1035.77,
+      "actual_CLIP_model": 381.61
+    },
+    "literal_source_input_binaries_not_committed": true,
+    "no_GPU_contention": true,
+    "observations": [
+      "Overflow/cutoff single-image OCR border detection 58/82 true and 26/82 false with AUROC 0.723, better than zero-shot CLIP AUC0.438",
+      "Occlusion overlapping OCR boxes only 24/105 true and 12/105 false, continuous AUC0.558; CLIP AUC0.480, neither suitable",
+      "Low contrast fixed image-glyph proxy 8/20 positive found 0/20 false, exact binomial 95% FPR upper 16.8% small sample; source-trained logistic model 13/20 and 3/20 false but not pretrained vision detector",
+      "Human bbox localization not far beyond random center because boxes can cover large slide region; no model is authorized for automatic rejection",
+      "Source-calibrated feature models can overfit source alteration and task definitions; no untouched GUI deployment holdout"
+    ],
+    "candidate_followups": [
+      "Official UI-Lens CVPR 2026 human UI overflow/overlap dataset gated, not silently accessed",
+      "OwlEye published 85/84% detection but original GitHub repository missing complete test image/model artifacts, not locally reproducible",
+      "Human annotated real mobile screenshots and web DOM remain more directly relevant than presentation slides, zero autonomous qualification"
+    ]
   }
 }

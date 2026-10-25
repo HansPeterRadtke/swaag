@@ -1,0 +1,511 @@
+{
+  "date": "2026-10-25",
+  "objective": "independently validate screenshot-only UI-ish visual defect detectors vs real human labels, rather than metadata-only fixtures",
+  "overall_status": "PARTIAL \u2014 no generic or source-transfer tested visual model qualifies for autonomous GUI cut-off/overlap/contrast acceptance",
+  "source": "SlideAudit UIST 2025 real/synthetically altered human-rated presentation slides, CC BY4, 2400 source annotations; 343 source-type/alteration-matched unique original images evaluated",
+  "dataset_github_revision": "642d490b7c1d2e78a50a631bfd359433397f3ecf",
+  "source_data_all_outside_project_git": true,
+  "source_sha256": {
+    "selection_2400_human_reviewed": "ba9b55128ce40c68e4e13a122fe9d09075e83f9e4615b23c63312015da626828",
+    "image_only_cv_ocr_343": "13010ad89e5b549b7a2c2de6379bb51d9cd1bc3e82f0a8ff65f56249375cc87c",
+    "cv_human_score": "4da104db6296462ea865a2d4c97759ded7dc9fe0a7e0a600a339711ceb96efcc",
+    "CLIP_real_image_model_predictions": "164259c1263b83316f95c32b1ccae825efbd7e05d0a0e13d48e5884a25d93cc4",
+    "CLIP_human_score": "ba439a1e42d9e8acc144aff06222e801e9cba1edf200522b0eea182771e777a6",
+    "source_disjoint_learned_cv_human_scores": "dce1d2cd281c0508586c98e1155a032873bed101ff7ade9b3f75f0f8aa40d2b9"
+  },
+  "dataset": {
+    "all_labelled_slide_images": 2400,
+    "source_original_unique_image_cases_tested": 343,
+    "human_reviewers_per_image": 3,
+    "matched_human_positive_to_category_specific_negative_controls": true,
+    "origin_types": [
+      "Gemini",
+      "gdcdataset",
+      "Google"
+    ],
+    "alteration_types": [
+      "nojitter",
+      "texture",
+      "layout",
+      "alignment"
+    ],
+    "human_has_strong_agreement_required": true,
+    "no_original_slide_scripts_executed": true,
+    "unverified_or_disagreed_annotations_excluded_per_category": true,
+    "original_GUI_not_proven": "These are authored slide designs, some intentionally modified, NOT actual desktop/web/mobile GUI screenshots."
+  },
+  "image_models": {
+    "OpenAI_CLIP": "ViT-B32 578MB local pretrained frozen checkpoint, 224x224 input, six fixed zero-shot prompts, no trained threshold; CPU one thread",
+    "deterministic": "Tesseract 5.3.4 PSM11 + OpenCV 4.x image features, fixed border 2%, text word IoU 0.15 and pixel-contrast proxy <4.5 in >=35% boxes, NOT WCAG contrast",
+    "transfer_learned": "SimpleImputer,StandardScaler,class-weighted logistic regression on fixed 16 image-derived features, trained on two original slide source families, evaluated on completely different source family, no hyperparameter tuning"
+  },
+  "resource": {
+    "OCR_OpenCV_pixel_only_wall_s": 1035.77,
+    "OCR_OpenCV_peak_RSS_KB": 255316,
+    "OCR_OpenCV_statuses": {
+      "complete": 341,
+      "ocr_timeout_no_retry": 2
+    },
+    "CLIP_local_CPU_wall_s": 381.61,
+    "CLIP_max_RSS_KB": 1202272,
+    "GPU_inference_used": false
+  },
+  "tasks": {
+    "Content Overflow/Cut-off": {
+      "human_strong_positive_count": 82,
+      "matched_strong_negative_count": 82,
+      "source_weak_positive_excluded": 191,
+      "source_strata_matched_without_fallback": 82,
+      "fixed_OCR_OpenCV": {
+        "n": 164,
+        "TP": 58,
+        "FP": 26,
+        "FN": 24,
+        "TN": 56,
+        "sensitivity": 0.7073170731707317,
+        "specificity_vs_human_strong_negative": 0.6829268292682927,
+        "precision_in_enriched_balanced_source": 0.6904761904761905,
+        "balanced_accuracy": 0.6951219512195121,
+        "positive_count": 82,
+        "control_count": 82
+      },
+      "image_only_continuous_indicator_AUROC": 0.72286,
+      "CV_ocr_operational_coverage": {
+        "matched_pairs_total": 82,
+        "matched_pairs_with_both_OCR_complete": 82,
+        "matched_pairs_with_OCR_abstention": 0,
+        "individual_positive_OCR_abstentions": 0,
+        "individual_control_OCR_abstentions": 0
+      },
+      "CV_complete_case_confusion": {
+        "n": 164,
+        "TP": 58,
+        "FP": 26,
+        "FN": 24,
+        "TN": 56,
+        "sensitivity": 0.7073170731707317,
+        "specificity_vs_human_strong_negative": 0.6829268292682927,
+        "precision_in_enriched_balanced_source": 0.6904761904761905,
+        "balanced_accuracy": 0.6951219512195121,
+        "positive_count": 82,
+        "control_count": 82
+      },
+      "CV_marginal_95pct_exact_binomial_recall_CI": [
+        0.5965,
+        0.8026
+      ],
+      "CV_marginal_95pct_exact_binomial_false_alarm_rate_CI": [
+        0.2187,
+        0.4292
+      ],
+      "image_only_vision_CLIP_ViTB32": {
+        "n": 164,
+        "TP": 52,
+        "FP": 62,
+        "FN": 30,
+        "TN": 20,
+        "recall": 0.6341463414634146,
+        "specificity_on_strong_negatives": 0.24390243902439024,
+        "precision_on_balanced_source_sample": 0.45614035087719296,
+        "balanced_accuracy": 0.43902439024390244
+      },
+      "CLIP_vision_ranking_AUROC": 0.4382807852468768,
+      "leave_one_slide_source_out_trained_logistic_pixel_features": {
+        "n": 164,
+        "TP": 48,
+        "FP": 26,
+        "FN": 34,
+        "TN": 56,
+        "recall": 0.5853658536585366,
+        "specificity": 0.6829268292682927,
+        "precision": 0.6486486486486487,
+        "balanced_accuracy": 0.6341463414634146,
+        "roc_auc": 0.6643367043426531
+      },
+      "source_disjoint_fold_details": {
+        "Gemini": {
+          "n": 20,
+          "positives": 10,
+          "negatives": 10,
+          "model_roc_auc": 0.5,
+          "model_TP": 3,
+          "model_FP": 4,
+          "model_FN": 7,
+          "model_TN": 6
+        },
+        "gdcdataset": {
+          "n": 38,
+          "positives": 19,
+          "negatives": 19,
+          "model_roc_auc": 0.7894736842105263,
+          "model_TP": 13,
+          "model_FP": 5,
+          "model_FN": 6,
+          "model_TN": 14
+        },
+        "Google": {
+          "n": 106,
+          "positives": 53,
+          "negatives": 53,
+          "model_roc_auc": 0.63937344250623,
+          "model_TP": 32,
+          "model_FP": 17,
+          "model_FN": 21,
+          "model_TN": 36
+        }
+      },
+      "bootstrapped95_fixed_OCR_proxy": {
+        "sensitivity": [
+          0.6098,
+          0.8049
+        ],
+        "specificity_vs_human_strong_negative": [
+          0.5732,
+          0.7805
+        ],
+        "balanced_accuracy": [
+          0.6159,
+          0.7744
+        ],
+        "auroc": [
+          0.6404,
+          0.8019
+        ]
+      },
+      "bootstrapped95_CLIP": {
+        "recall": [
+          0.5244,
+          0.7439
+        ],
+        "specificity_on_strong_negatives": [
+          0.1585,
+          0.3415
+        ],
+        "roc_auc": [
+          0.3548,
+          0.5265
+        ],
+        "balanced_accuracy": [
+          0.3659,
+          0.5122
+        ]
+      },
+      "source_human_bbox_localization": {
+        "source_positive_cases_with_bbox": 74,
+        "source_positive_cases_no_bbox": 8,
+        "positive_bbox_proposals_with_any_hit": 38,
+        "source_positive_cases_with_no_proposals": 23,
+        "mean_random_center_hit_fraction": 0.2712162162162162,
+        "mean_random_any_candidate_hit_prob_proxy": 0.34513377371466164
+      }
+    },
+    "Occluded Content": {
+      "human_strong_positive_count": 105,
+      "matched_strong_negative_count": 105,
+      "source_weak_positive_excluded": 267,
+      "source_strata_matched_without_fallback": 105,
+      "fixed_OCR_OpenCV": {
+        "n": 210,
+        "TP": 24,
+        "FP": 12,
+        "FN": 81,
+        "TN": 93,
+        "sensitivity": 0.22857142857142856,
+        "specificity_vs_human_strong_negative": 0.8857142857142857,
+        "precision_in_enriched_balanced_source": 0.6666666666666666,
+        "balanced_accuracy": 0.5571428571428572,
+        "positive_count": 105,
+        "control_count": 105
+      },
+      "image_only_continuous_indicator_AUROC": 0.55782,
+      "CV_ocr_operational_coverage": {
+        "matched_pairs_total": 105,
+        "matched_pairs_with_both_OCR_complete": 103,
+        "matched_pairs_with_OCR_abstention": 2,
+        "individual_positive_OCR_abstentions": 1,
+        "individual_control_OCR_abstentions": 1
+      },
+      "CV_complete_case_confusion": {
+        "n": 206,
+        "TP": 24,
+        "FP": 12,
+        "FN": 79,
+        "TN": 91,
+        "sensitivity": 0.23300970873786409,
+        "specificity_vs_human_strong_negative": 0.883495145631068,
+        "precision_in_enriched_balanced_source": 0.6666666666666666,
+        "balanced_accuracy": 0.558252427184466,
+        "positive_count": 103,
+        "control_count": 103
+      },
+      "CV_marginal_95pct_exact_binomial_recall_CI": [
+        0.1523,
+        0.3207
+      ],
+      "CV_marginal_95pct_exact_binomial_false_alarm_rate_CI": [
+        0.0605,
+        0.1911
+      ],
+      "image_only_vision_CLIP_ViTB32": {
+        "n": 210,
+        "TP": 74,
+        "FP": 78,
+        "FN": 31,
+        "TN": 27,
+        "recall": 0.7047619047619048,
+        "specificity_on_strong_negatives": 0.2571428571428571,
+        "precision_on_balanced_source_sample": 0.4868421052631579,
+        "balanced_accuracy": 0.48095238095238096
+      },
+      "CLIP_vision_ranking_AUROC": 0.48036281179138324,
+      "leave_one_slide_source_out_trained_logistic_pixel_features": {
+        "n": 210,
+        "TP": 52,
+        "FP": 36,
+        "FN": 53,
+        "TN": 69,
+        "recall": 0.49523809523809526,
+        "specificity": 0.6571428571428571,
+        "precision": 0.5909090909090909,
+        "balanced_accuracy": 0.5761904761904761,
+        "roc_auc": 0.6360090702947846
+      },
+      "source_disjoint_fold_details": {
+        "Gemini": {
+          "n": 80,
+          "positives": 40,
+          "negatives": 40,
+          "model_roc_auc": 0.586875,
+          "model_TP": 21,
+          "model_FP": 17,
+          "model_FN": 19,
+          "model_TN": 23
+        },
+        "gdcdataset": {
+          "n": 48,
+          "positives": 24,
+          "negatives": 24,
+          "model_roc_auc": 0.7413194444444444,
+          "model_TP": 15,
+          "model_FP": 11,
+          "model_FN": 9,
+          "model_TN": 13
+        },
+        "Google": {
+          "n": 82,
+          "positives": 41,
+          "negatives": 41,
+          "model_roc_auc": 0.6400951814396193,
+          "model_TP": 16,
+          "model_FP": 8,
+          "model_FN": 25,
+          "model_TN": 33
+        }
+      },
+      "bootstrapped95_fixed_OCR_proxy": {
+        "sensitivity": [
+          0.1524,
+          0.3143
+        ],
+        "specificity_vs_human_strong_negative": [
+          0.819,
+          0.9429
+        ],
+        "balanced_accuracy": [
+          0.5048,
+          0.6048
+        ],
+        "auroc": [
+          0.5052,
+          0.6088
+        ]
+      },
+      "bootstrapped95_CLIP": {
+        "recall": [
+          0.619,
+          0.7905
+        ],
+        "specificity_on_strong_negatives": [
+          0.1714,
+          0.3431
+        ],
+        "roc_auc": [
+          0.4145,
+          0.5442
+        ],
+        "balanced_accuracy": [
+          0.4286,
+          0.5333
+        ]
+      },
+      "source_human_bbox_localization": {
+        "source_positive_cases_with_bbox": 104,
+        "source_positive_cases_no_bbox": 1,
+        "positive_bbox_proposals_with_any_hit": 16,
+        "source_positive_cases_with_no_proposals": 81,
+        "mean_random_center_hit_fraction": 0.34555288461538464,
+        "mean_random_any_candidate_hit_prob_proxy": 0.11847015940872897
+      }
+    },
+    "Insufficient Color Contrast for Readability": {
+      "human_strong_positive_count": 20,
+      "matched_strong_negative_count": 20,
+      "source_weak_positive_excluded": 93,
+      "source_strata_matched_without_fallback": 20,
+      "fixed_OCR_OpenCV": {
+        "n": 40,
+        "TP": 8,
+        "FP": 0,
+        "FN": 12,
+        "TN": 20,
+        "sensitivity": 0.4,
+        "specificity_vs_human_strong_negative": 1.0,
+        "precision_in_enriched_balanced_source": 1.0,
+        "balanced_accuracy": 0.7,
+        "positive_count": 20,
+        "control_count": 20
+      },
+      "image_only_continuous_indicator_AUROC": 0.71125,
+      "CV_ocr_operational_coverage": {
+        "matched_pairs_total": 20,
+        "matched_pairs_with_both_OCR_complete": 20,
+        "matched_pairs_with_OCR_abstention": 0,
+        "individual_positive_OCR_abstentions": 0,
+        "individual_control_OCR_abstentions": 0
+      },
+      "CV_complete_case_confusion": {
+        "n": 40,
+        "TP": 8,
+        "FP": 0,
+        "FN": 12,
+        "TN": 20,
+        "sensitivity": 0.4,
+        "specificity_vs_human_strong_negative": 1.0,
+        "precision_in_enriched_balanced_source": 1.0,
+        "balanced_accuracy": 0.7,
+        "positive_count": 20,
+        "control_count": 20
+      },
+      "CV_marginal_95pct_exact_binomial_recall_CI": [
+        0.1912,
+        0.6395
+      ],
+      "CV_marginal_95pct_exact_binomial_false_alarm_rate_CI": [
+        0.0,
+        0.1684
+      ],
+      "image_only_vision_CLIP_ViTB32": {
+        "n": 40,
+        "TP": 12,
+        "FP": 16,
+        "FN": 8,
+        "TN": 4,
+        "recall": 0.6,
+        "specificity_on_strong_negatives": 0.2,
+        "precision_on_balanced_source_sample": 0.42857142857142855,
+        "balanced_accuracy": 0.4
+      },
+      "CLIP_vision_ranking_AUROC": 0.4325,
+      "leave_one_slide_source_out_trained_logistic_pixel_features": {
+        "n": 40,
+        "TP": 13,
+        "FP": 3,
+        "FN": 7,
+        "TN": 17,
+        "recall": 0.65,
+        "specificity": 0.85,
+        "precision": 0.8125,
+        "balanced_accuracy": 0.75,
+        "roc_auc": 0.7999999999999999
+      },
+      "source_disjoint_fold_details": {
+        "Gemini": {
+          "n": 4,
+          "positives": 2,
+          "negatives": 2,
+          "model_roc_auc": 0.5,
+          "model_TP": 1,
+          "model_FP": 0,
+          "model_FN": 1,
+          "model_TN": 2
+        },
+        "gdcdataset": {
+          "n": 10,
+          "positives": 5,
+          "negatives": 5,
+          "model_roc_auc": 1.0,
+          "model_TP": 5,
+          "model_FP": 0,
+          "model_FN": 0,
+          "model_TN": 5
+        },
+        "Google": {
+          "n": 26,
+          "positives": 13,
+          "negatives": 13,
+          "model_roc_auc": 0.7514792899408285,
+          "model_TP": 7,
+          "model_FP": 3,
+          "model_FN": 6,
+          "model_TN": 10
+        }
+      },
+      "bootstrapped95_fixed_OCR_proxy": {
+        "sensitivity": [
+          0.2,
+          0.6
+        ],
+        "specificity_vs_human_strong_negative": [
+          1.0,
+          1.0
+        ],
+        "balanced_accuracy": [
+          0.6,
+          0.8
+        ],
+        "auroc": [
+          0.5,
+          0.895
+        ]
+      },
+      "bootstrapped95_CLIP": {
+        "recall": [
+          0.4,
+          0.8
+        ],
+        "specificity_on_strong_negatives": [
+          0.05,
+          0.4
+        ],
+        "roc_auc": [
+          0.2749,
+          0.6025
+        ],
+        "balanced_accuracy": [
+          0.275,
+          0.5
+        ]
+      },
+      "source_human_bbox_localization": {
+        "source_positive_cases_with_bbox": 20,
+        "source_positive_cases_no_bbox": 0,
+        "positive_bbox_proposals_with_any_hit": 16,
+        "source_positive_cases_with_no_proposals": 0,
+        "mean_random_center_hit_fraction": 0.398625,
+        "mean_random_any_candidate_hit_prob_proxy": 0.7593965501764599
+      }
+    }
+  },
+  "limitations": [
+    "Balanced target-category positives/negative controls selected by author human labels, therefore a per-study enriched test and no deployment prevalence; reported precision does not transfer to real GUIs",
+    "Human source has_strong_agreement is the released dataset flag, not a guaranteed unanimous three-annotator adjudication; only 20 strong low-contrast positives",
+    "Some source images are deliberately altered slide images, real authored origins mixed; category-negative slides may exhibit other mistakes",
+    "Low color-contrast inferred by grayscale pixel quantiles inside OCR word boxes is NOT proper foreground/background WCAG computed contrast and can mislabel photos/gradients",
+    "Clipping inside widget containers is not equivalent to text touching physical slide boundary; occluded shapes may not appear as two OCR word boxes",
+    "Generic CLIP prompt softmax is uncalibrated; no semantic visual judgment, cannot locate faults or certify layout",
+    "Source-trained 16-feature classifier used category human labels for fitting and tested leave-one-slide-source-type-out; not a pretrained image model or independent untouched deployment set",
+    "Operational OCR timeouts are ABSTAINS, not genuine negative judgments. Report complete paired coverage alongside conservative default-negative counts",
+    "Bounding box localization against human broad regions requires random chance-area comparison; high center hit can be trivial if gold region covers much of slide",
+    "No guarantee of actual application GUI performance; narrow companion to real Firefox ScreenParser and W3C axe-core benchmarks already committed"
+  ]
+}
