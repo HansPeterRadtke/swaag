@@ -1,0 +1,376 @@
+{
+  "date": "2026-10-25",
+  "status": "PARTIAL: line-based source-assisted connection retrieval shows bounded positive conditional signal, far too many false positive source non-edges, low OCR source grounding and no reliable arrow direction",
+  "source": "TopoBench-180 external curated original test-only source graphs and sixty-nine legally redistributed real diagram images (fifty-four AI2D and fifteen natural network diagrams), 93 link-only original sources omitted for licensing",
+  "upstream": "https://huggingface.co/datasets/WayneGuo0011/TopoBench-180",
+  "source_revision": "df366de6a2c8aaf83c0a95ba8bfb1a28e231cb14",
+  "source_license_attribution": "AI2D Creative Commons BY-SA plus original individual per-image network licenses; no original pixels, raw OCR or source images added to project Git",
+  "original_copyright_redistribution_risk_93_images_not_requested": true,
+  "source_SHA256": {
+    "original_162_test_parquet_including_69_original_images": "0531ad874c16f78c9dc4f2a5502c4b844c9e33729b6e032fb15cb20c05e07fb7",
+    "original_all69_OCR_plus_Canny_Hough_pixel_predictions": "845018cd03d86b661a310ca925e98eadea35b92977d1eb53828aa2624db005d8",
+    "original_external_graph_truth_join_score": "081a4874aa926b255a6348381b28a629b07d36ae53963c6b4d116da42b9da4f9"
+  },
+  "source_image_only_feature_config": {
+    "source": "WayneGuo0011/TopoBench-180 actual 69 redistributed test images in 162 test-only source rows; 54 original AI2D, 15 source-licensed public network diagrams",
+    "dataset_revision": "df366de6a2c8aaf83c0a95ba8bfb1a28e231cb14",
+    "image_only_features_before_gold": true,
+    "source_image_count": 69,
+    "preprocessed_max_longside_px": 1400,
+    "ocr": "Tesseract 5.3.4 native default English, TSV, two separately frozen sparse PSM11 and single-block PSM6, conf>=30 for later mapping; no exact source node labels given to OCR",
+    "psm_modes": [
+      11,
+      6
+    ],
+    "tesseract_per_image_timeout_seconds": 13,
+    "opencv": "Canny(gray,80,180); HoughLinesP rho1 theta1deg threshold=max(12,0.015*diagonal), minLineLength=max(12,.024diag), maxLineGap=max(4,.013diag)",
+    "max_hough_segments_to_store": 2000,
+    "source_image_license": "AI2D CC BY-SA 4.0, 15 network images have individual evidenced redistribution license; original media not published to project Git",
+    "CPU_threads": 1,
+    "anticipated_timeout_handling": "pending_or_uncertain never retried; fail/timeout not considered clean",
+    "no_model_inference_or_gold_labels": true
+  },
+  "predeclared_frozen_source_annotated_scoring_config": {
+    "source": "TopoBench 69 legally redistributed original real diagram test images with source node and directed relation annotations, no other 93 link-only images fetched",
+    "author_pinned_revision": "df366de6a2c8aaf83c0a95ba8bfb1a28e231cb14",
+    "ocr_psm_predeclared": [
+      11,
+      6
+    ],
+    "OCR_unique_anchors": "exact normalized full source node name token sequence in one Tesseract block/paragraph/line, conf >=30, deduplicate matching text locations and ABSTAIN if multiple/no matches",
+    "OCR_source_normalization": "NFKC casefold and non-letter-digit -> spaces, exact consecutive normalized tokens, no fuzzy Levenshtein tuning",
+    "line_rule": "Hough segments length >=2.4pct diagonal from original pixels, maximum cosine>0.82, max of cosine * segment-projection-overlap-fraction * exp(-mean_endpoint_perp_distance/(.06*diag)), threshold >0.32",
+    "nearest_neighbor_baseline": "If either source node is the nearest text-anchor neighbor of the other in actual OCR box-center pixel coordinates, mark undirected connection regardless of line pixels",
+    "no_link_baseline": "Always classify no source edge, valid for measuring false-positive class imbalance, not real detection",
+    "directed_null": "Only after predicted undirected link, assume arrow direction left-to-right when horizontal dominance or top-to-bottom otherwise. This is a layout shortcut, not arrowhead vision. Exact directed edge scoring reported separately, not conflated with undirected edge recognition.",
+    "source_negative_controls": "Every unique unordered pair of uniquely OCR-grounded source node names with NO annotated relationship in either direction",
+    "independent_source_labels": "Curated third-party graph labels; human reliability/exhaustiveness not independently certified, ensure this caveat",
+    "threshold_fit_to_labels": false,
+    "unit_of_grouped_bootstrap": "original distinct diagram ID, 1500 replicates seed 20261025"
+  },
+  "original_pixel_ocr_elapsed_seconds": 208.53,
+  "original_pixel_ocr_peak_RSS_kibibytes": 271748,
+  "original_GPU_used": false,
+  "source_graph_ground_truth_caveat": "External curated node-centric graph annotations are assumed complete for scoring annotated edge/nonedge relations but do not constitute independently blinded human proof of every pixel or arrow. The OCR image-only extractor did NOT receive these source labels; node grounding after OCR uses expected name references.",
+  "PSM_both_predeclared_settings": {
+    "11": {
+      "original_diagrams_with_redistributable_pixels": 69,
+      "total_original_annotated_source_nodes": 740,
+      "unique_ocr_grounded_source_nodes": 229,
+      "source_annotated_undirected_connections_all_diagrams": 966,
+      "scorable_annotated_connections_both_node_labels_found": 198,
+      "unscorable_source_connections_due_ambiguous_or_missing_OCR_anchor": 768,
+      "actual_annotated_negative_nonconnection_controls_scored": 471,
+      "source_diagrams_with_at_least_one_grounded_pair": 38,
+      "source_diagram_bootstrap95": {
+        "resampling": "source diagrams, 1500 samples, seed20261025",
+        "source_diagrams": 38,
+        "CI95": {
+          "Hough_balanced_accuracy": [
+            0.6651,
+            0.7611
+          ],
+          "nearest_balanced_accuracy": [
+            0.6417,
+            0.7256
+          ],
+          "Hough_AUROC": [
+            0.7423,
+            0.8249
+          ],
+          "Hough_AUROC_minus_layout_nearest_AUROC": [
+            0.0492,
+            0.1558
+          ]
+        }
+      },
+      "source_conditional_hough_binary": {
+        "scored_pairs": 669,
+        "TP": 151,
+        "FP": 158,
+        "FN": 47,
+        "TN": 313,
+        "recall": 0.7626262626262627,
+        "specificity": 0.6645435244161358,
+        "precision": 0.4886731391585761,
+        "balanced_accuracy": 0.7135848935211992
+      },
+      "source_conditional_layout_nearest_neighbor_null": {
+        "scored_pairs": 669,
+        "TP": 93,
+        "FP": 55,
+        "FN": 105,
+        "TN": 416,
+        "recall": 0.4696969696969697,
+        "specificity": 0.8832271762208068,
+        "precision": 0.6283783783783784,
+        "balanced_accuracy": 0.6764620729588883
+      },
+      "source_conditional_always_no_connection_null": {
+        "scored_pairs": 669,
+        "TP": 0,
+        "FP": 0,
+        "FN": 198,
+        "TN": 471,
+        "recall": 0.0,
+        "specificity": 1.0,
+        "precision": null,
+        "balanced_accuracy": 0.5
+      },
+      "source_line_score_ROC_AUC": 0.7832732848656415,
+      "source_domains": {
+        "ai2d_web": {
+          "n_diagrams": 54,
+          "Hough": {
+            "scored_pairs": 619,
+            "TP": 146,
+            "FP": 155,
+            "FN": 39,
+            "TN": 279,
+            "recall": 0.7891891891891892,
+            "specificity": 0.6428571428571429,
+            "precision": 0.4850498338870432,
+            "balanced_accuracy": 0.7160231660231661
+          },
+          "nearest_baseline": {
+            "scored_pairs": 619,
+            "TP": 86,
+            "FP": 50,
+            "FN": 99,
+            "TN": 384,
+            "recall": 0.4648648648648649,
+            "specificity": 0.8847926267281107,
+            "precision": 0.6323529411764706,
+            "balanced_accuracy": 0.6748287457964878
+          }
+        },
+        "network": {
+          "n_diagrams": 15,
+          "Hough": {
+            "scored_pairs": 50,
+            "TP": 5,
+            "FP": 3,
+            "FN": 8,
+            "TN": 34,
+            "recall": 0.38461538461538464,
+            "specificity": 0.918918918918919,
+            "precision": 0.625,
+            "balanced_accuracy": 0.6517671517671518
+          },
+          "nearest_baseline": {
+            "scored_pairs": 50,
+            "TP": 7,
+            "FP": 5,
+            "FN": 6,
+            "TN": 32,
+            "recall": 0.5384615384615384,
+            "specificity": 0.8648648648648649,
+            "precision": 0.5833333333333334,
+            "balanced_accuracy": 0.7016632016632016
+          }
+        }
+      },
+      "layout_reading_order_guessed_arrow_orientation_NOT_measured_vision": {
+        "source_unambiguous_directed_node_pairs": 188,
+        "hough_detected_unambiguous_directed_connections": 147,
+        "direction_right_under_layout_bias": 80,
+        "direction_wrong_under_layout_bias": 67,
+        "direction_accuracy_given_detected_directed_edge": 0.54421768707483,
+        "two_sided_binomial_p_vs_half": 0.3223076486087749,
+        "exact_binomial_95pct_accuracy_CI": [
+          0.4601,
+          0.6265
+        ],
+        "this_is_NOT_arrowhead_analysis": true
+      },
+      "diagram_ocr_grounding_abstentions": {
+        "diagram_OCR_anchors_incomplete_or_ambiguous_count": 0
+      }
+    },
+    "6": {
+      "original_diagrams_with_redistributable_pixels": 69,
+      "total_original_annotated_source_nodes": 740,
+      "unique_ocr_grounded_source_nodes": 173,
+      "source_annotated_undirected_connections_all_diagrams": 966,
+      "scorable_annotated_connections_both_node_labels_found": 140,
+      "unscorable_source_connections_due_ambiguous_or_missing_OCR_anchor": 826,
+      "actual_annotated_negative_nonconnection_controls_scored": 334,
+      "source_diagrams_with_at_least_one_grounded_pair": 31,
+      "source_diagram_bootstrap95": {
+        "resampling": "source diagrams, 1500 samples, seed20261025",
+        "source_diagrams": 31,
+        "CI95": {
+          "Hough_balanced_accuracy": [
+            0.6276,
+            0.734
+          ],
+          "nearest_balanced_accuracy": [
+            0.582,
+            0.679
+          ],
+          "Hough_AUROC": [
+            0.7052,
+            0.8155
+          ],
+          "Hough_AUROC_minus_layout_nearest_AUROC": [
+            0.0577,
+            0.2167
+          ]
+        }
+      },
+      "source_conditional_hough_binary": {
+        "scored_pairs": 474,
+        "TP": 102,
+        "FP": 124,
+        "FN": 38,
+        "TN": 210,
+        "recall": 0.7285714285714285,
+        "specificity": 0.6287425149700598,
+        "precision": 0.45132743362831856,
+        "balanced_accuracy": 0.6786569717707442
+      },
+      "source_conditional_layout_nearest_neighbor_null": {
+        "scored_pairs": 474,
+        "TP": 58,
+        "FP": 53,
+        "FN": 82,
+        "TN": 281,
+        "recall": 0.4142857142857143,
+        "specificity": 0.8413173652694611,
+        "precision": 0.5225225225225225,
+        "balanced_accuracy": 0.6278015397775877
+      },
+      "source_conditional_always_no_connection_null": {
+        "scored_pairs": 474,
+        "TP": 0,
+        "FP": 0,
+        "FN": 140,
+        "TN": 334,
+        "recall": 0.0,
+        "specificity": 1.0,
+        "precision": null,
+        "balanced_accuracy": 0.5
+      },
+      "source_line_score_ROC_AUC": 0.7595166809238665,
+      "source_domains": {
+        "ai2d_web": {
+          "n_diagrams": 54,
+          "Hough": {
+            "scored_pairs": 456,
+            "TP": 100,
+            "FP": 123,
+            "FN": 36,
+            "TN": 197,
+            "recall": 0.7352941176470589,
+            "specificity": 0.615625,
+            "precision": 0.4484304932735426,
+            "balanced_accuracy": 0.6754595588235295
+          },
+          "nearest_baseline": {
+            "scored_pairs": 456,
+            "TP": 54,
+            "FP": 50,
+            "FN": 82,
+            "TN": 270,
+            "recall": 0.39705882352941174,
+            "specificity": 0.84375,
+            "precision": 0.5192307692307693,
+            "balanced_accuracy": 0.6204044117647058
+          }
+        },
+        "network": {
+          "n_diagrams": 15,
+          "Hough": {
+            "scored_pairs": 18,
+            "TP": 2,
+            "FP": 1,
+            "FN": 2,
+            "TN": 13,
+            "recall": 0.5,
+            "specificity": 0.9285714285714286,
+            "precision": 0.6666666666666666,
+            "balanced_accuracy": 0.7142857142857143
+          },
+          "nearest_baseline": {
+            "scored_pairs": 18,
+            "TP": 4,
+            "FP": 3,
+            "FN": 0,
+            "TN": 11,
+            "recall": 1.0,
+            "specificity": 0.7857142857142857,
+            "precision": 0.5714285714285714,
+            "balanced_accuracy": 0.8928571428571428
+          }
+        }
+      },
+      "layout_reading_order_guessed_arrow_orientation_NOT_measured_vision": {
+        "source_unambiguous_directed_node_pairs": 135,
+        "hough_detected_unambiguous_directed_connections": 100,
+        "direction_right_under_layout_bias": 44,
+        "direction_wrong_under_layout_bias": 56,
+        "direction_accuracy_given_detected_directed_edge": 0.44,
+        "two_sided_binomial_p_vs_half": 0.2712530240738354,
+        "exact_binomial_95pct_accuracy_CI": [
+          0.3408,
+          0.5428
+        ],
+        "this_is_NOT_arrowhead_analysis": true
+      },
+      "diagram_ocr_grounding_abstentions": {
+        "diagram_OCR_anchors_incomplete_or_ambiguous_count": 0
+      }
+    }
+  },
+  "immediately_usable_recommendation": "If diagram has trusted source graph names, use source graph to validate required nodes and arrow direction logically. Use OCR/Hough line geometry only to suggest image link locations, recording ungrounded nodes/links as unknown, and never auto approve arrow direction or a complete diagram from these methods. For actual final render require explicit visual arrowhead evidence or independent human/specialist review.",
+  "limitations": [
+    "Source denominator: 69 original diagrams, 740 annotated nodes, 966 source unordered links, BUT only 38 diagrams with grounded endpoint pairs and 198 source links scorable with OCR PSM11; estimates conditioned on successful OCR cannot be treated as full dataset recall.",
+    "Hough line alignment is not an arrowhead detector and cannot infer edge direction. A simple reading-order shortcut guessing arrow direction attained only about half accuracy on grounded directed edges.",
+    "Source curated topology annotations can omit or contain mistakes in final diagram pixels; apparent false positives may include visually drawn edges not covered by source ground graph.",
+    "Original 15 network diagrams differed strongly from 54 AI2D diagrams in OCR grounding; benchmark mixed styles and human annotator source validity needs caution.",
+    "Nested diagram annotations and source names are used to match already frozen OCR text bounding boxes, not supplied to image model directly; results are source-assisted, not end-to-end visual parser.",
+    "The AUC +0.05 to +0.16 over a nearest-neighbor binary-layout baseline is a source-diagram cluster descriptive interval on an externally curated TEST-only dataset, not post-selection final super-holdout performance.",
+    "Some subject/relationship edge direction source truth may be semantically reciprocal and not visually annotated with standalone arrowheads; a line segment can show a connection without a unique direction.",
+    "No extra model inference needed; current Nitro RTX3060 production and CPU load protected."
+  ],
+  "later_posthoc_continuous_distance_control": {
+    "status": "Exploratory POSTHOC diagnostic chosen after predeclared Hough and binary nearest-neighbor results, consumes same sample and is not untouched holdout",
+    "source_saved_raw_sha256": "323c6c76d67773afa50f3f186c3c3b6536a917f423c55b229997ba739d4ec372",
+    "source_output_local_only": "/data/var/perceptual-independent-20261024/topobench-independent-20261025/69_real_original_diagram_continuous_distance_null_POSTHOC_20261025.json",
+    "PSM11": {
+      "original_diagrams_with_pair_sources": 38,
+      "original_node_pairs_both_anchors": 669,
+      "actual_annotated_source_positive_undirected_edges": 198,
+      "source_negative_non_edges": 471,
+      "AUROC": {
+        "score_hough": 0.7832732848656415,
+        "score_nearest_binary": 0.6764620729588883,
+        "score_geometry_distance": 0.7260074202749363
+      },
+      "Hough_AUROC_minus_CONTINUOUS_distance_AUROC": 0.05726586459070526,
+      "source_diagram_bootstrap_95pct_delta": [
+        0.002311774767061509,
+        0.1157548985836965
+      ],
+      "no_model_training_or_threshold_selection": true
+    },
+    "PSM6": {
+      "original_diagrams_with_pair_sources": 31,
+      "original_node_pairs_both_anchors": 474,
+      "actual_annotated_source_positive_undirected_edges": 140,
+      "source_negative_non_edges": 334,
+      "AUROC": {
+        "score_hough": 0.7595166809238665,
+        "score_nearest_binary": 0.6278015397775877,
+        "score_geometry_distance": 0.7007485029940119
+      },
+      "Hough_AUROC_minus_CONTINUOUS_distance_AUROC": 0.05876817792985456,
+      "source_diagram_bootstrap_95pct_delta": [
+        -0.028421983547346836,
+        0.1500789729250834
+      ],
+      "no_model_training_or_threshold_selection": true
+    },
+    "interpretation": "Hough AUC0.783 versus continuous OCR-label spatial-distance-only AUC0.726 on same source pairs; paired by source diagram ROC delta +0.057 CI[+0.002,+0.116], narrow and posthoc. PSM6 0.760 vs0.701 delta+0.059 CI[-0.028,+0.150], includes no improvement. Source-pixel Hough adds modest evidence, not an autonomous graph parser, and no arrowhead direction evidence."
+  }
+}

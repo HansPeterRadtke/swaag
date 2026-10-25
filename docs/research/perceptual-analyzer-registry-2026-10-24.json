@@ -433,6 +433,17 @@
       "result": "TP87 FN73 FP66 TN94, balanced accuracy56.6%, AUROC0.599, pair-cluster bootstrap95% AUC0.547-0.653. Frozen Animation source file sizes distinctly different; this may encode original video duration/bitrate/scene, not actual glitch perception.",
       "source_report": "perceptual-tempglitch-primary-video-evidence-2026-10-25.md",
       "limitations": "Videos never downloaded/decoded in metadata experiment; frame-only VLM inputs do not literally receive file bytes; cannot directly compare 320 metadata holdout to author 1500 VLM table as a paired model challenge; no unseen game engine or human subjective error labels."
+    },
+    {
+      "task": "Recognize actual visible node-to-node connections and arrow direction in real source-annotated diagram screenshots",
+      "method": "Tesseract 5.3.4 image-only OCR PSM11 and PSM6, grayscale Canny and OpenCV HoughLinesP segment alignment; source names used ONLY to ground already frozen OCR, never graph truth to compute image features; predeclared nearest-neighbor and no-edge controls",
+      "model_version": "Tesseract 5.3.4, OpenCV and NumPy on Nitro CPU nice19, original TopoBench-180 public pinned HF revision df366de6a2c8aaf83c0a95ba8bfb1a28e231cb14",
+      "status": "SOURCE_ASSISTED_UNDIRECTED_CONNECTION_PROPOSALS_ONLY_NO_DIRECTED_ARROW_OR_DIAGRAM_AUTOMATIC_ACCEPTANCE",
+      "scope": "69 real redistributed external images, 54 AI2D and15 network, 740 source annotated nodes,966 annotated unordered edges; OCR11 uniquely grounded229 nodes, only38 diagrams and198 source edges both endpoints scorable. Curated annotations not fully independently human-verified pixel truth.",
+      "result": "Conditional on669 source-grounded OCR11 node pairs, Hough TP151 FP158 FN47 TN313, AUROC0.783 source-diagram CI0.742-0.825, balanced accuracy0.714. Layout nearest neighbor baseline TP93 FP55 FN105 TN416, paired image-cluster AUC improvement CI0.049-0.156. End-to-end node grounding low and layout-direction shortcut correct80/147, chance-consistent. PSM6 poorer but retained.",
+      "source_report": "perceptual-topobench-real-directed-connector-research-2026-10-25.md",
+      "limitations": "Hough line strokes and OCR source-name grounding locate undirected candidate connectors but cannot infer arrowheads or source intended relation direction. 768/966 original source edges unscorable due OCR, and many source-negative edges flagged; source curated graph may omit visible edges, class imbalance and line crossings; only 69 license-cleared images, not 93 link-only. No GPU/model inference; no automatic pass.",
+      "stronger_same_budget_baseline": "posthoc continuous distance-only AUROC0.726 vs Hough0.783, image-cluster delta95% [0.002,0.116] for OCR11; alternate OCR6 includes 0. This is exploratory diagnostic, no genuine untouched holdout."
     }
   ],
   "second_continuation_2026_10_24": {
@@ -734,5 +745,19 @@
     "calendar_submission_uncertainty": "Prior two owner-reported ChatGPT Calendar submission attempts remained SUBMISSION_UNCERTAIN. No send repeated, no delivery success/failure inferred; verified source commits are separate.",
     "untouched_media_and_originals": true,
     "missing_next_decisive_evidence": "Untouched human original application GUI defect+true clean controls, engineering-certified multi-machine CAD+render source and subjective perceptual quality, independent natural time-coded video/audio faults with equivalent encoded clean controls; no qualifying full system yet."
+  },
+  "TopoBench_69_original_diagram_undirected_connector_pixel_2026_10_25": {
+    "state": "PARTIAL: tested real original image connector existence on external curated graph source; no correct directional arrow perception model proven",
+    "source_report": "perceptual-topobench-real-directed-connector-research-2026-10-25.md",
+    "source_evidence": "perceptual-topobench-69-original-diagram-connector-evidence-2026-10-25.json",
+    "source_original_selection": "69/162 images redistributed with original per-image rights; 93 link-only excluded; full test annotations 740 nodes and 966 unique source undirected links",
+    "ocr_grounding": "229/740 nodes, only198/966 source links scorable,38/69 diagrams support at least one grounded pair",
+    "binary_hough_conditional": "TP151 FP158 FN47 TN313 of669 known endpoint pairs; source-diagram clustered balanced accuracy CI0.665-0.761, AUC0.783 CI0.742-0.825",
+    "nearest_neighbor_baseline": "TP93 FP55 FN105 TN416 on same pairs; source-diagram paired ROC improvement about0.05-0.16",
+    "direction_error": "Reading order guess80/147 correct on detected and unambiguously directed source edges, exact binomial p0.322 vs chance, no arrowhead detector validated",
+    "no_credible_global_pass": "Source graph proves some expected relationships but must inspect actual drawn arrows and labels; Hough can flag proposals, not declare visually correct topology.",
+    "resource": "CPU low priority about209sec, peak RSS about272MiB, no GPU or production renderer interrupted, original copyrighted images/raw OCR outside project Git.",
+    "stronger_distance_control": "POSTHOC same 669 OCR-grounded source pairs: continuous image-normalized source-label center-distance AUROC0.726 versus Hough0.783; difference+0.057 source-image CI+0.002..+0.116; PSM6 distance0.701 Hough0.760 paired CI-0.028..+0.150 includes0. Hough marginal advantage and not an arrow direction or source-complete acceptance gate.",
+    "stronger_distance_control_evidence_SHA256": "323c6c76d67773afa50f3f186c3c3b6536a917f423c55b229997ba739d4ec372"
   }
 }

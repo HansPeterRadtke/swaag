@@ -143,5 +143,21 @@
     "General engineering-certified 3D source/render benchmark with measured visual FN/FP",
     "Frame-accurate independently human-reviewed natural playback glitches and AV sync evaluation",
     "Earlier denied Spotlight 72-video result and full-res owner video source-framehash result, not retried"
-  ]
+  ],
+  "later_independent_real_diagram_connector_evidence": {
+    "dated": "2026-10-25",
+    "report": "perceptual-topobench-real-directed-connector-research-2026-10-25.md",
+    "compact_evidence_sha256": "e4c8151f344bda720c9dcc8b8c49c91211b9f8dad428d5029bdcf9f385b6e29e",
+    "original_new_source": "TopoBench-180 original 69 license-redistributed diagrams,69 images,/162 original test items,93 link-only excluded; separate from previously SADU154",
+    "observed_undirected_connector_conditional": {
+      "TP": 151,
+      "FP": 158,
+      "FN": 47,
+      "TN": 313
+    },
+    "OCR_coverage": "229/740 source nodes and198/966 source links grounded, only38/69 diagrams scorable",
+    "arrow_direction": "80/147 reading-order guess among Hough-found unique directed links, p=0.322 chance comparison; not pixel arrowheads",
+    "decision": "Only source-assisted undirected connector proposal and triage; do not auto approve a complete directed diagram. No production GPU, Calendar effects or denied prior source retrievals.",
+    "stronger_posthoc_distance_result": "Same external 669 scorable source pairs: continuous OCR label-distance-only AUC0.726 vs actual line Hough AUC0.783, paired source-diagram CI of difference [+0.002,+0.116], second OCR mode interval crosses zero. Posthoc development control, not independent final model selection. Explicit arrow direction remains unsolved."
+  }
 }
