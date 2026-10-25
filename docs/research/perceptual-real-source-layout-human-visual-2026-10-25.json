@@ -1,0 +1,296 @@
+{
+  "date": "2026-10-25",
+  "overall_status": "PARTIAL \u2014 source object rectangles can help identify visually annotated occlusion but none tested reliably certifies actual GUI clipping, occlusion or contrast",
+  "human_original_media": "SlideAudit UIST 2025 original/altered presentation slides, 2,400 human reviewed designs, 3 human annotators, CC BY 4.0 GitHub original pinned 642d490b7c1d2e78a50a631bfd359433397f3ecf",
+  "source_description_elements": "All 343 previously frozen human-reviewed source slide descriptions, mostly TEXT_BOX and IMAGE, original authored normalized rectangles; source content text never available to human comparison code except geometry extraction.",
+  "source_sha256": {
+    "independent_human_selection": "ba9b55128ce40c68e4e13a122fe9d09075e83f9e4615b23c63312015da626828",
+    "all343_source_layout_frozen_before_human_labels": "c5d6258799fe9d9d455ca5395807e5ea8d862f5ef207b1eec1b9196136f897fb",
+    "source_layout_labels_scoring": "814deba8d98f09de5b6567f4f63269c1302bd6066935e0d6fcd12fd4fc72c4fc",
+    "independent_frozen_source_intersection_proposals": "deac47274e876f1177cca2d9ac587d878272edc2514aa58d48ae33b16b836ee3",
+    "same_slide_binary_OR_AND_comparison": "6ff6bf7fff35892eaa06aff2f6ded21cd5bca70a3fa295ba93225eb7f6aae27b",
+    "human_occlusion_region_uniform_spatial_null": "b012c8b06a47bc487df915566ca47f21ba3c208d5d5dbcbfd52f46185933f93d",
+    "previous_pixels_only_Tesseract_OpenCV_scores": "4da104db6296462ea865a2d4c97759ded7dc9fe0a7e0a600a339711ceb96efcc",
+    "previous_actual_CLIP_model_scores": "ba439a1e42d9e8acc144aff06222e801e9cba1edf200522b0eea182771e777a6",
+    "GeneVA_video_frame_artifact_source_taxonomy_only": "e665adcdbabb74da246bf8173a524845a1545f16c6879c14b97eee2ea1415a0a"
+  },
+  "n_distinct_original_slide_rasters": 343,
+  "n_original_source_layout_descriptions": 343,
+  "n_valid_source_rectangles": 1684,
+  "n_desc_with_source_text_outside_by_2pct": 30,
+  "n_desc_with_any_source_pair_overlap_above_10pct": 185,
+  "target_human_category_results": {
+    "Content Overflow/Cut-off": {
+      "n_positive_human_strong_agreement": 82,
+      "n_matched_human_negative_target_category": 82,
+      "source_metadata_guide": "Original authored slide element geometry, not pixel perception or reliable modern DOM",
+      "source_rectangle_fixed_rule": {
+        "n": 164,
+        "TP": 9,
+        "FP": 7,
+        "FN": 73,
+        "TN": 75,
+        "recall": 0.10975609756097561,
+        "specificity": 0.9146341463414634,
+        "precision_on_balanced_sample": 0.5625,
+        "balanced_accuracy": 0.5121951219512195
+      },
+      "source_primary_continuous_AUROC": 0.5611986912552053,
+      "source_primary_continuous_AUROC_matched_pair_bootstrap95": [
+        0.4765,
+        0.6394
+      ],
+      "source_rectangle_binary_balanced_accuracy_bootstrap95": [
+        0.4695,
+        0.5549
+      ],
+      "old_image_only_OCR_baseline": {
+        "n": 164,
+        "TP": 58,
+        "FP": 26,
+        "FN": 24,
+        "TN": 56,
+        "sensitivity": 0.7073170731707317,
+        "specificity_vs_human_strong_negative": 0.6829268292682927,
+        "precision_in_enriched_balanced_source": 0.6904761904761905,
+        "balanced_accuracy": 0.6951219512195121,
+        "positive_count": 82,
+        "control_count": 82
+      },
+      "old_real_zero_shot_CLIP": {
+        "n": 164,
+        "TP": 52,
+        "FP": 62,
+        "FN": 30,
+        "TN": 20,
+        "recall": 0.6341463414634146,
+        "specificity_on_strong_negatives": 0.24390243902439024,
+        "precision_on_balanced_source_sample": 0.45614035087719296,
+        "balanced_accuracy": 0.43902439024390244
+      },
+      "geometry_OR_image_heuristic": {
+        "TP": 62,
+        "FP": 32,
+        "FN": 20,
+        "TN": 50,
+        "recall": 0.7560975609756098,
+        "specificity": 0.6097560975609756,
+        "precision_balanced_sample": 0.6595744680851063,
+        "balanced_accuracy": 0.6829268292682926
+      },
+      "geometry_AND_image_heuristic": {
+        "TP": 5,
+        "FP": 1,
+        "FN": 77,
+        "TN": 81,
+        "recall": 0.06097560975609756,
+        "specificity": 0.9878048780487805,
+        "precision_balanced_sample": 0.8333333333333334,
+        "balanced_accuracy": 0.524390243902439
+      },
+      "source_image_primary_AUROC_delta_matched95": [
+        -0.277,
+        -0.0502
+      ]
+    },
+    "Occluded Content": {
+      "n_positive_human_strong_agreement": 105,
+      "n_matched_human_negative_target_category": 105,
+      "source_metadata_guide": "Original authored slide element geometry, not pixel perception or reliable modern DOM",
+      "source_rectangle_fixed_rule": {
+        "n": 210,
+        "TP": 93,
+        "FP": 33,
+        "FN": 12,
+        "TN": 72,
+        "recall": 0.8857142857142857,
+        "specificity": 0.6857142857142857,
+        "precision_on_balanced_sample": 0.7380952380952381,
+        "balanced_accuracy": 0.7857142857142857
+      },
+      "source_primary_continuous_AUROC": 0.7705215419501132,
+      "source_primary_continuous_AUROC_matched_pair_bootstrap95": [
+        0.7027,
+        0.8349
+      ],
+      "source_rectangle_binary_balanced_accuracy_bootstrap95": [
+        0.7286,
+        0.8381
+      ],
+      "old_image_only_OCR_baseline": {
+        "n": 210,
+        "TP": 24,
+        "FP": 12,
+        "FN": 81,
+        "TN": 93,
+        "sensitivity": 0.22857142857142856,
+        "specificity_vs_human_strong_negative": 0.8857142857142857,
+        "precision_in_enriched_balanced_source": 0.6666666666666666,
+        "balanced_accuracy": 0.5571428571428572,
+        "positive_count": 105,
+        "control_count": 105
+      },
+      "old_real_zero_shot_CLIP": {
+        "n": 210,
+        "TP": 74,
+        "FP": 78,
+        "FN": 31,
+        "TN": 27,
+        "recall": 0.7047619047619048,
+        "specificity_on_strong_negatives": 0.2571428571428571,
+        "precision_on_balanced_source_sample": 0.4868421052631579,
+        "balanced_accuracy": 0.48095238095238096
+      },
+      "geometry_OR_image_heuristic": {
+        "TP": 96,
+        "FP": 40,
+        "FN": 9,
+        "TN": 65,
+        "recall": 0.9142857142857143,
+        "specificity": 0.6190476190476191,
+        "precision_balanced_sample": 0.7058823529411765,
+        "balanced_accuracy": 0.7666666666666666
+      },
+      "geometry_AND_image_heuristic": {
+        "TP": 21,
+        "FP": 5,
+        "FN": 84,
+        "TN": 100,
+        "recall": 0.2,
+        "specificity": 0.9523809523809523,
+        "precision_balanced_sample": 0.8076923076923077,
+        "balanced_accuracy": 0.5761904761904761
+      },
+      "source_image_primary_AUROC_delta_matched95": [
+        0.1313,
+        0.2966
+      ],
+      "source_occlusion_localization_and_chance": {
+        "n_occlusion_human_positive_slides_with_bbox": 104,
+        "source_localization_hits": 85,
+        "source_proposal_empty": 12,
+        "hit_fraction": 0.8173076923076923,
+        "expected_random_location_hits": 44.0458,
+        "random_simulation_95pct_hit_count_interval": [
+          36,
+          52
+        ],
+        "num_random_trials": 10000,
+        "seed": 20261025,
+        "number_random_trials_ge_observed": 0,
+        "empirical_one_sided_probability_with_plus_one_correction": 9.999000099990002e-05,
+        "observed_minus_random_expected_hit_fraction": 0.3937903846153846,
+        "per_slide_bootstrap_95pct_delta_hit_fraction": [
+          0.32478975961538464,
+          0.46110050480769216
+        ],
+        "human_categories_by_original_slide_source": {
+          "Gemini": {
+            "n": 40,
+            "hits": 35,
+            "random_expected_hits": 19.315
+          },
+          "gdcdataset": {
+            "n": 24,
+            "hits": 18,
+            "random_expected_hits": 8.1408
+          },
+          "Google": {
+            "n": 40,
+            "hits": 32,
+            "random_expected_hits": 16.59
+          }
+        }
+      },
+      "source_total_overlap_area_AUROC_exploratory_secondary": 0.8107482993197278
+    },
+    "Insufficient Color Contrast for Readability": {
+      "n_positive_human_strong_agreement": 20,
+      "n_matched_human_negative_target_category": 20,
+      "source_metadata_guide": "Original authored slide element geometry, not pixel perception or reliable modern DOM",
+      "source_rectangle_fixed_rule": {
+        "n": 40,
+        "TP": 10,
+        "FP": 5,
+        "FN": 10,
+        "TN": 15,
+        "recall": 0.5,
+        "specificity": 0.75,
+        "precision_on_balanced_sample": 0.6666666666666666,
+        "balanced_accuracy": 0.625
+      },
+      "source_primary_continuous_AUROC": 0.63625,
+      "source_primary_continuous_AUROC_matched_pair_bootstrap95": [
+        0.4475,
+        0.8225
+      ],
+      "source_rectangle_binary_balanced_accuracy_bootstrap95": [
+        0.5,
+        0.775
+      ],
+      "old_image_only_OCR_baseline": {
+        "n": 40,
+        "TP": 8,
+        "FP": 0,
+        "FN": 12,
+        "TN": 20,
+        "sensitivity": 0.4,
+        "specificity_vs_human_strong_negative": 1.0,
+        "precision_in_enriched_balanced_source": 1.0,
+        "balanced_accuracy": 0.7,
+        "positive_count": 20,
+        "control_count": 20
+      },
+      "old_real_zero_shot_CLIP": {
+        "n": 40,
+        "TP": 12,
+        "FP": 16,
+        "FN": 8,
+        "TN": 4,
+        "recall": 0.6,
+        "specificity_on_strong_negatives": 0.2,
+        "precision_on_balanced_source_sample": 0.42857142857142855,
+        "balanced_accuracy": 0.4
+      }
+    }
+  },
+  "separate_candidate_video_annotation_source": {
+    "source": "GeneVA WACV 2026 University/Immersive Computing Lab, S3 public frames metadata",
+    "source_link": "https://www.immersivecomputinglab.org/publication/geneva/",
+    "published_dataset_video_count": 16356,
+    "actually_completed_annotation_row_count": 16361,
+    "distinct_source_videoIDs_seen": 16351,
+    "annotated_events_per_frame_record": 487179,
+    "generators_source_counts": {
+      "vc2": 5453,
+      "sora": 5452,
+      "pika1": 5447
+    },
+    "broad_original_frame_record_category_counts_overlapping": {
+      "shape, form, geometry": 228991,
+      "motion": 181049,
+      "physics": 142160,
+      "visual artifacts": 210425,
+      "semantic mismatch with text": 61880,
+      "other": 28617
+    },
+    "number_of_ratings_per_video_source": {
+      "1": 16350,
+      "2": 1
+    },
+    "new_local_video_judge_accuracy": "NOT TESTED",
+    "data_access_observation": "112.7 MB original JSON S3 annotation stream read and summarized in-memory, no raw annotator IDs/free-text descriptions stored. A sample VC/Sora video object HEAD was accessible. No new video clips obtained/scored.",
+    "critical_limitation": "Broad motion/physics/artifact per-frame region labels and sometimes interpolated tracks, generally one annotator per video; not a certified natural playback stutter/freeze versus truly clean matched-FPS control benchmark. Approx event/track counts are NOT independent human confirmations."
+  },
+  "scientific_cautions": [
+    "This is not a clean web/android GUI human screenshot dataset; source is slides, some deliberately modified, and author-provided layout rectangles may precede final pixel alterations.",
+    "The 343 human-reviewed source images were already used by prior CLIP/OCR comparison and selection; source-geometry tests are exploratory on consumed development benchmark, not pristine super-test.",
+    "All label no-category slides have strong agreement on THAT category only and may contain other design defects.",
+    "Intentional stacking of source shapes and background text boxes produces false occlusion alerts, and text can be clipped within entirely onscreen containers.",
+    "The spatial localization null is random uniform independent locations with each case original number proposals; a low null probability demonstrates geometric alignment beyond chance under that null but not that overlap is unwanted, visually obscuring or correct in real app.",
+    "The category low contrast is unmeasurable from object rectangles alone; observed correlation with text-box overlap is not proof of color readability.",
+    "Simple OR improves occlusion sensitivity at an increased false-positive rate and slightly lower balanced accuracy; more detectors do not automatically yield a better judge.",
+    "GeneVA single-rater spatiotemporal generated-video artifacts are not clean natural-frame discontinuity truth. Current production models not qualified."
+  ],
+  "original_licensed_or_private_media_in_git": false
+}

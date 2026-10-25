@@ -332,6 +332,26 @@
       "result": "fixed CV TP=8,FP=0,FN=12,TN=20,AUROC=0.71125; CLIP TP=12,FP=16,FN=8,TN=4,AUROC=0.4325; source-heldout fitted-model TP=13,FP=3,FN=7,TN=17,AUROC=0.7999999999999999",
       "source_report": "perceptual-independent-real-human-layout-2026-10-25.md",
       "limitations": "Slide not actual GUI; human target-negative does not certify other errors absent; matched sample purposely balanced, category class and source alteration confounds; lowcontrast 20 positives only and FPR0/20 is not proof of zero deployment false alarms; no custom model qualified; pixel-grayscale quantile is NOT proper WCAG contrast."
+    },
+    {
+      "task": "Human-visible occlusion/overlap on actual rendered source-backed designs",
+      "method": "Original author-authored normalized object geometry pairwise rectangle intersection >=10pct smaller box; no screenshot model, no semantic overlay intent",
+      "model_version": "SlideAudit UIST 2025 original object descriptions pinned 642d490b7c1d2e78a50a631bfd359433397f3ecf / Python stdlib",
+      "status": "evidence_based_occlusion_region_triage_only_NOT_autonomous_quality_gate",
+      "scope": "343 original source-layout descriptions plus 105 human strong occlusion positives + 105 same-origin/alteration negative controls, 104 positive human region boxes, some slides intentionally altered",
+      "result": "93/105 TP 33/105 FP, recall88.6% specificity68.6%, source max overlap AUC0.771 vs pixel OCR word overlap0.558; source intersection centers localized 85/104 human regions vs random 44/104 under same proposal counts (empirical p<1e-4), does not prove unintended occlusion",
+      "source_report": "perceptual-source-layout-vs-actual-visual-2026-10-25.md",
+      "limitations": "Object rectangles can intentionally overlap or be pre-augmentation source geometry; human broad-box source overlap is not a verified visible pixel collision. Source vs pixel combined OR finds 96/105 but increases false control alerts to40/105. Transferring to actual GUI apps requires independent original GUI benchmarks, not slides."
+    },
+    {
+      "task": "Human-visible text cut-off vs original source object boundaries",
+      "method": "Original source TEXT_BOX rectangle outside slide by more than2pct of its own area, compared to previous actual pixel OCR border/canvas rule on same real slides",
+      "model_version": "SlideAudit source original geometry, 343 real/synthetic slides, Python stdlib numeric checks",
+      "status": "rejected_as_source_only_general_clipped_text_gate",
+      "scope": "82 strong human overflow/cutoff positives and 82 matched strong negatives across original slides",
+      "result": "9/82 TP 7/82 FP source only, recall11%; max text offcanvas AUC0.561 vs pixel OCR text-border AUC0.723, matched-pair AUC source minus pixel CI -0.277 to -0.050",
+      "source_report": "perceptual-source-layout-vs-actual-visual-2026-10-25.md",
+      "limitations": "Text can crop INSIDE fully onslide container, source layout may not match final altered pixels; do not substitute structural bounding rectangles for actual rendering analysis."
     }
   ],
   "second_continuation_2026_10_24": {
@@ -541,6 +561,26 @@
       "Official UI-Lens CVPR 2026 human UI overflow/overlap dataset gated, not silently accessed",
       "OwlEye published 85/84% detection but original GitHub repository missing complete test image/model artifacts, not locally reproducible",
       "Human annotated real mobile screenshots and web DOM remain more directly relevant than presentation slides, zero autonomous qualification"
+    ]
+  },
+  "real_slide_source_geometry_rendered_visual_2026_10_25": {
+    "state": "PARTIAL, task-specific source-assisted occlusion localization strongly above spatial null on human-reviewed rendered slides but no reliable full GUI/video/3D approval stack",
+    "report": "perceptual-source-layout-vs-actual-visual-2026-10-25.md",
+    "source_linked_compact_result": "perceptual-real-source-layout-human-visual-2026-10-25.json",
+    "actual_original_source_slides": 343,
+    "author_object_rectangles_valid": 1684,
+    "source_text_offcanvas_2pct_flagged_slides": 30,
+    "source_any_overlap_10pct_flagged_slides": 185,
+    "source_clipped_text_confusion": "TP9 FP7 FN73 TN75 on 82/82 human cut-off vs controls; pixel OCR source-independent TP58 FP26, CLIP TP52 FP62",
+    "source_occlusion_confusion": "TP93 FP33 FN12 TN72 on 105/105 human visually occluded vs controls; pixel OCR TP24 FP12, CLIP TP74 FP78",
+    "source_overlap_region_localization": "top3 source-geometry intersection centers in human box 85/104; 10k uniform location control expected44.05 hits 95% range36\u201352, empirical p<0.0001 conditional uniform spatial null. Does NOT establish intended vs unwanted coverage.",
+    "OR_AND_combinations": "OR for occlusion 96 TP 40 FP, balanced accuracy 76.7% vs source-only 78.6%; OR overflow62TP32FP balanced accuracy68.3% vs pixel-only69.5%; simple combination not automatically beneficial.",
+    "video_candidate_GeneVA": "WACV26 original per-frame artifact regions, 16,351 completed distinct video records in public S3 annotation JSON; about487k frame box entries (correlated, often interpolated), broadly motion/physics/geometry/artifact, generally one annotator per video; no model tested, not genuine clean vs time-coded natural playback stutter controls. Original annotator IDs were never stored/committed.",
+    "kept_prior_negative_effects": [
+      "Source overlap 33/105 false alarms is not qualified app GUI detection",
+      "Earlier denied Spotlight 72-video result and full resolution tail framehash requests not retried",
+      "First erroneous source proposal loop saved 27 records, preserved in var as invalid and excluded; corrected version covers all343 IDs",
+      "No other agents or shared GPU production interrupted, no original media in source repo"
     ]
   }
 }
