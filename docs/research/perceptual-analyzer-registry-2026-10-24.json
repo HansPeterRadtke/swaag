@@ -716,5 +716,23 @@
     "full_source_release_metadata_independent": "All 1500 file size entries audited, source paired clean/bug verified by category+engine+ID; Stuck in Place duplicates numeric1\u201375 across TWO game environments; fixed train/test metadata-only heldout 320 TP87 FN73 FP66 TN94 AUROC0.599 CI [0.547,0.653], not visual or direct paired author VLM comparison.",
     "hardware": "No source videos or large weights downloaded in this source metadata audit, no Nitro/Thor GPU inference, other agents spared.",
     "what_is_unanswered": "Independent visually adjudicated natural nonintended video freeze/jerk/physics events with source-matched clean controls and ground truth intervals across new engines and buyer media; calibrated specialized object tracking/physics checks and actual per-device latency/false alarm."
+  },
+  "owner_current_use_provenance_reconciled_2026_10_25": {
+    "status": "PARTIAL research outcome, USE narrow verified deterministic properties, DO NOT claim global visual release pass",
+    "direct_owner_spoken_verdict": "perceptual-owner-reconciled-decision-2026-10-25.md",
+    "evidence_fingerprint_ledger": "perceptual-owner-reconciled-decision-2026-10-25.json",
+    "preserve_prior_failing_gates": [
+      "Thor four-image Qwen3-VL 8B missed text clipping; source runtime absent, recorded 3/4, no retest",
+      "six synthetic metadata fixtures are NOT screenshot-only accuracy",
+      "ScreenParser YOLO target-box alignment 11/32 is NOT general UI perception accuracy",
+      "FFmpeg freeze and VideoSham per-source models fail manual editor category reliability",
+      "TempGlitch authors VLM confusion demonstrates near-chance full benchmark"
+    ],
+    "deployment_tier_A": "Use known DOM clipping, axe-core CSS WCAG determinate outcome, source graph, physical triangle contact/support path, or known source/video timestamp and exact approved editing contract. Only property-specific PASS/FAIL, unknown abstains.",
+    "deployment_tier_B": "Use pixel OCR, ScreenParser, edge/line/geometry boxes, image segmentation, source optical flow/video frozen-frame detectors as triage with region/time and explicit uncertainty; no universal accept/reject.",
+    "deployment_tier_C": "For real perceptual photorealism, ambiguous UI hierarchy/intent, 3D physically sound machinery, diagram arrow semantics, natural video playback and audio alignment require independent visual+source reference or appropriately qualified human review.",
+    "calendar_submission_uncertainty": "Prior two owner-reported ChatGPT Calendar submission attempts remained SUBMISSION_UNCERTAIN. No send repeated, no delivery success/failure inferred; verified source commits are separate.",
+    "untouched_media_and_originals": true,
+    "missing_next_decisive_evidence": "Untouched human original application GUI defect+true clean controls, engineering-certified multi-machine CAD+render source and subjective perceptual quality, independent natural time-coded video/audio faults with equivalent encoded clean controls; no qualifying full system yet."
   }
 }

@@ -1,0 +1,147 @@
+{
+  "dated": "2026-10-25",
+  "research_project": "SWAAG visual perception, existing research branch",
+  "status": "PARTIAL — direct original questions now answered with an immediately usable narrow task-specific default, but a general reliability-qualified universal visual QA judge is NOT established",
+  "source_report_receipts": {
+    "GUI_W3C_axe_and_ScreenVLM": {
+      "project_relative_path": "docs/research/perceptual-source-calibrated-evidence-2026-10-24.json",
+      "source_sha256": "4aa04b474770d98385ee52fc297b57739e67a1e36445588a30612afe4c31e557",
+      "bytes": 17810,
+      "evidence_origin": "existing project-owned report, not new model inference"
+    },
+    "real_Firefox_32_and_Scry311": {
+      "project_relative_path": "docs/research/perceptual-visible-human-reviewed-evidence-2026-10-24.json",
+      "source_sha256": "d20b109e41e433a9b7245347bb1014cf4265a4acd443231bcbcb15135f3a08d8",
+      "bytes": 9057,
+      "evidence_origin": "existing project-owned report, not new model inference"
+    },
+    "ScreenParser_real_websites": {
+      "project_relative_path": "docs/research/perceptual-screenparser-verified-evidence-2026-10-25.json",
+      "source_sha256": "279d27efae0705278278765892a3853c001ab47a53a562ba3e7e0d793d505d36",
+      "bytes": 7158,
+      "evidence_origin": "existing project-owned report, not new model inference"
+    },
+    "human_slides_OCR_CLIP": {
+      "project_relative_path": "docs/research/perceptual-slideaudit-human-visual-evidence-2026-10-25.json",
+      "source_sha256": "bf749f3fb2e671b1f8b0989c54f3b645926593a3875491dce3f94fc2dbfb00c6",
+      "bytes": 17062,
+      "evidence_origin": "existing project-owned report, not new model inference"
+    },
+    "human_slides_source_geometry": {
+      "project_relative_path": "docs/research/perceptual-real-source-layout-human-visual-2026-10-25.json",
+      "source_sha256": "46fecb5f153be02b6ae9ed2d66a750723dbcb16fc295d8f04fbaa18b3be22577",
+      "bytes": 12503,
+      "evidence_origin": "existing project-owned report, not new model inference"
+    },
+    "actual_mobile_UI_OCR_and_3D_holdout": {
+      "project_relative_path": "docs/research/perceptual-asset-and-text-holdout-uncertainty-2026-10-25.json",
+      "source_sha256": "1e0777cdab57dc3cb9a49874ffee5f06e458ea5c9aeadb054ef079d2ac4f008c",
+      "bytes": 7320,
+      "evidence_origin": "existing project-owned report, not new model inference"
+    },
+    "real_diagrams_source_graph_VLM_OCR": {
+      "project_relative_path": "docs/research/perceptual-sadu-154-real-diagrams-evidence-2026-10-25.json",
+      "source_sha256": "c97ce84025dbe4603453f94eec3ae17ff561614bd8055d40d5b2cc67746e79f7",
+      "bytes": 22690,
+      "evidence_origin": "existing project-owned report, not new model inference"
+    },
+    "owner_actual_3D_contact_chain": {
+      "project_relative_path": "docs/research/perceptual-owner-warehouse-physical-contact-chain-2026-10-25.json",
+      "source_sha256": "542b06a95bbfef743d3b3e964a6e9119e2ab9b341161e514d5faf7c3e3316009",
+      "bytes": 5981,
+      "evidence_origin": "existing project-owned report, not new model inference"
+    },
+    "actual_owner_30fps_video_timing": {
+      "project_relative_path": "docs/research/perceptual-owner-video-verified-signal-2026-10-25.json",
+      "source_sha256": "95ca25d7e93c2193fefb1486e52ab6358f096407328a0829619656bedfddcfe5",
+      "bytes": 3015,
+      "evidence_origin": "existing project-owned report, not new model inference"
+    },
+    "VideoSham_edited_original_controls": {
+      "project_relative_path": "docs/research/perceptual-videosham-real-temporal-editor-control-2026-10-25.json",
+      "source_sha256": "9cb12b38b96a070325b902f15eeb387249e85d31031814b9e2647a595b7cc21e",
+      "bytes": 13846,
+      "evidence_origin": "existing project-owned report, not new model inference"
+    },
+    "TempGlitch_published_models_and_source_metadata": {
+      "project_relative_path": "docs/research/perceptual-tempglitch-1500-source-evidence-2026-10-25.json",
+      "source_sha256": "63f45f879725d9545624766b7de1e180df97e13269bc92894e6b28d09644fd9a",
+      "bytes": 19362,
+      "evidence_origin": "existing project-owned report, not new model inference"
+    }
+  },
+  "original_recording": "Infra original-recordings/general/testing/Recording 2026-09-23 08-47-18-577.txt, read completely in the current task; original GUI and media instructions consulted through live normalized guidelines and original-source path checks",
+  "GUI": {
+    "automatically_verifiable": "Known browser DOM client/scroll/ancestor clipping constraints, specified required text and CSS/axe-core determinate WCAG findings; pass ONLY narrow specified checks, not whole screen",
+    "applicable_standards": "axe-core 4.14, source executed 32 of34 official W3C ACT cases, 23 correct determinate, 1 wrong applicability, 8 executed inconclusive, 2 intentionally excluded",
+    "screen_only_human_reviewed_source_slides": {
+      "source_category": "SlideAudit 3-rater strong agreement, not actual application GUI",
+      "clipped_text_OCR": {
+        "TP": 58,
+        "FP": 26,
+        "FN": 24,
+        "TN": 56
+      },
+      "occluded_source_rectangles": {
+        "TP": 93,
+        "FP": 33,
+        "FN": 12,
+        "TN": 72
+      },
+      "low_contrast_pixel_proxy": {
+        "TP": 8,
+        "FP": 0,
+        "FN": 12,
+        "TN": 20
+      }
+    },
+    "genuine_app_pairs_heldout": {
+      "source": "Scry Design Diff, 132 paired sampled reference/implementation screenshots, 97 evaluation from other app groups, label typography OR missing content, negatives not guaranteed defect-free",
+      "paired_OCR": {
+        "TP": 21,
+        "FP": 34,
+        "FN": 7,
+        "TN": 35
+      }
+    },
+    "models": {
+      "ScreenParser_YOLO_source_target_IoU_at_least_point5": "11/32 one-target natural Firefox full-page, ~63s CPU per image, NOT defect classification or general mAP",
+      "ScreenVLM_source_four_crops": "0 of 4 full expected labels recovered at ~273 seconds each CPU under too-short 384-token cap, NOT full-page benchmark",
+      "CLIP_zero_shot": "Fails against human-reviewed SlideAudit screenshot target labels; high false alarms",
+      "Thor_Qwen3VL_initial": "3 of 4 GUI cases in preserved 2026-10-24 project reports with one missed clipped-text defect. Original raw runtime JSON at old location no longer present, so not newly reverified; six metadata-aware synthetic passes are not a visual gate"
+    },
+    "unresolved": "Strong and low-false-alarm detection of natural unclipped/cropped/overlapping/low-contrast content on entirely unseen actual applications with independent human visual oracles."
+  },
+  "diagram": {
+    "hard_source": "924 of 924 original graph-derived numeric references consistent on 154 independently sourced real software diagrams; source oracle self-consistency NOT pixel correctness",
+    "model": "best 1743/2431 = 71.7 pct exact QA, source author predictions re-scored independently; 114 spurious and 1133 missed retrieved relation/name elements for selected top model",
+    "OCR": "820/1733 =47.3pct distinct source names, only label recall; not connector direction or visual quality",
+    "unresolved": "Human-certified rendered graph arrows/occlusions and data-to-pixel correspondence, false alarms on independently annotated good/bad final diagrams."
+  },
+  "3D": {
+    "source_truth": "Real actual saved Blender warehouse v44 and corrected v47, 24 pallets/72 supports/12 racks; intermediate pallet-to-bearing 72/72 but bearing-to-rack 0/72; corrected complete support contact 72/72; same pallet world meshes and 72 bar bounds, corrected rack rotation. One correlated source, no statistical generalization.",
+    "external_generated_3D_human": "119 heldout source generated GLBs, two-annotator majority missing-parts labels; AABB source geometry TP9 FP20 FN24 TN66, close to chance.",
+    "unresolved": "Independent engineered CAD physical load/weld/joint constraint truth and actual rendered photorealism/occlusion approval from blinded experts and unrelated machinery."
+  },
+  "video": {
+    "owner_actual_v52": "two actual videos each 420 frames with no PTS gaps, 30FPS; warehouse 20 adjacent coarse-scale near-identical pairs near ending vs dock zero, source-resolution repetition and stutter NOT verified, prior denied retrieval remains denied",
+    "real_original_Adobe_author_edit_labels": "19 intentional temporal vs19 other edits; official FFmpeg freezedetect TP7 FP12 FN12 TN7, source-reference matcher 17TP 9FP with several abstentions, author edit categories not subjective defects",
+    "TempGlitch_literature_source": "12 published source VLMs on 750 author-injected in-engine glitch and 750 normal Godot clips, best accuracy54.1pct, raw Gemini3 Flash TP654 FP650; Qwen3-VL8B 5fps TP2 FP0 FN748; not local VLM inference or independent human MOS",
+    "nonvisual_shortcut_control": "encoded filesize/category on source dataset heldout 320 achieved AUROC0.599, not video perception",
+    "unresolved": "Natural unwanted video stalls/judder with source-matched clean FPS/codec, independent human frame event truth, approval contract and audio/video synchronization validated separately"
+  },
+  "operational_tiers": {
+    "A_source_contract": "Automatic per-property fail or pass only for known DOM/CSS, source graph, exact mesh contact constraints, exact approved edit/timestamp/audio stream conditions; source validation is NOT rendered perceptual quality.",
+    "B_independent_pixel_signal": "Tesseract/OCR and ScreenParser proposals, source rectangle/raster comparison, segmentation, flow/freezedetect/reference pHash annotate suspected region/time plus disagreement and abstain; never silently promote to global PASS/FAIL based on score or model prose.",
+    "C_visual_semantic_review": "For design intent, uninstrumented rendered GUI, diagram arrow semantics, industrial physical plausibility/photorealism and unplanned temporal/AV defects require independent source geometry/physical and actual pixels and human/qualified domain checker. Unknown remains unknown."
+  },
+  "resource_protection": "Nitro RTX3060 six GB occupied by other agents, CPU/GPU production busy. No local VLM runs in this checkpoint; source-only verification and writing. Thor model services untouched.",
+  "calendar_delivery_status": "Two earlier platform submissions at 10:54 and 11:54 Germany were reported SUBMISSION_UNCERTAIN; no assertion that provider accepted or rejected them. Never retried, recreated, or rerouted. Verified repo commits/results are distinct from ChatGPT UI delivery proof.",
+  "explicitly_not_completed": [
+    "One universal model accepted for all graphical modalities",
+    "Untouched benchmark of full deployed GUI defects with independently certified clean negatives",
+    "General engineering-certified 3D source/render benchmark with measured visual FN/FP",
+    "Frame-accurate independently human-reviewed natural playback glitches and AV sync evaluation",
+    "Earlier denied Spotlight 72-video result and full-res owner video source-framehash result, not retried"
+  ]
+}
