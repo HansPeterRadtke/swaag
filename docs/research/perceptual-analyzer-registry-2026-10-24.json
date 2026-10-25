@@ -362,6 +362,57 @@
       "result": "Intermediate 72 of 72 wood-steel within2mm but 0 of72 bearing racks both ends, corrected 72 of72 wood-steel and 72 of72 steel racks both ends. Wood meshes24/24 and support bounds72/72 identical between partial and corrected;12 racks rotated ninety degrees. 108 geometry instances stable 5 frames. Earlier one-dimensional stage gate was unsafe.",
       "source_report": "perceptual-direct-verdict-and-real-warehouse-contact-2026-10-25.md",
       "limitations": "One correlated product history not statistical IID cases; geometric triangle hits are neither proof of mechanical stress/load rating nor photographically plausible renders; erroneous/sparse probe negatives are not universal noncontact; known object roles and intended support path are required."
+    },
+    {
+      "task": "Real video temporal edits vs other author video edits \u2014 FFmpeg native freezedetect, real human-authored edited video control",
+      "method": "untrained native pixel freeze detection on real Adobe VideoSham edited footage",
+      "model_version": "FFmpeg6.1.1 and OpenCV4.12/Numpy2.2 CPU-only frozen settings; no learned video VLM",
+      "status": "FAILED_standalone_temporal_author_edit_classifier",
+      "source_scope": "Adobe VideoSham public original real Vimeo authored videos: 19 intentionally temporal edits + 19 other deliberately edited controls, author labels not subjective defect acceptability, source release Part1",
+      "sample_n": 38,
+      "TP": 7,
+      "FP": 12,
+      "FN": 12,
+      "TN": 7,
+      "abstained_temporal_source_positive": 0,
+      "abstained_other_source_edit_controls": 0,
+      "continuous_AUROC_for_author_edit_type": 0.45429362880886426,
+      "source_report": "perceptual-videosham-real-temporal-evidence-2026-10-25.md",
+      "limitations": "Only author intended edit types; edited controls may be different codec, frame rate, color or duration; no human-rated natural unintended freeze truth or event-level localization; weak small sample, source-related clips and copyright license noncommercial; broad model acceptance not supported."
+    },
+    {
+      "task": "Real video temporal edits vs other author video edits \u2014 Tiny grayscale no-reference frame hold and change spikes",
+      "method": "source image sequence pixel difference, no original reference",
+      "model_version": "FFmpeg6.1.1 and OpenCV4.12/Numpy2.2 CPU-only frozen settings; no learned video VLM",
+      "status": "FAILED_universal_video_stutter_gate",
+      "source_scope": "Adobe VideoSham public original real Vimeo authored videos: 19 intentionally temporal edits + 19 other deliberately edited controls, author labels not subjective defect acceptability, source release Part1",
+      "sample_n": 38,
+      "TP": 2,
+      "FP": 2,
+      "FN": 16,
+      "TN": 17,
+      "abstained_temporal_source_positive": 1,
+      "abstained_other_source_edit_controls": 0,
+      "continuous_AUROC_for_author_edit_type": 0.6169590643274854,
+      "source_report": "perceptual-videosham-real-temporal-evidence-2026-10-25.md",
+      "limitations": "Only author intended edit types; edited controls may be different codec, frame rate, color or duration; no human-rated natural unintended freeze truth or event-level localization; weak small sample, source-related clips and copyright license noncommercial; broad model acceptance not supported."
+    },
+    {
+      "task": "Real video temporal edits vs other author video edits \u2014 Known-source original-to-edited perceptual frame fingerprint timeline",
+      "method": "source matched original Vimeo frame pHash64 against edited MP4",
+      "model_version": "FFmpeg6.1.1 and OpenCV4.12/Numpy2.2 CPU-only frozen settings; no learned video VLM",
+      "status": "SENSITIVE_TO_ANY_EDIT_USE_ONLY_FOR_APPROVED_SOURCE_PROVENANCE_WITH_ABSTAIN",
+      "source_scope": "Adobe VideoSham public original real Vimeo authored videos: 19 intentionally temporal edits + 19 other deliberately edited controls, author labels not subjective defect acceptability, source release Part1",
+      "sample_n": 38,
+      "TP": 17,
+      "FP": 9,
+      "FN": 1,
+      "TN": 4,
+      "abstained_temporal_source_positive": 1,
+      "abstained_other_source_edit_controls": 6,
+      "continuous_AUROC_for_author_edit_type": 0.9145299145299145,
+      "source_report": "perceptual-videosham-real-temporal-evidence-2026-10-25.md",
+      "limitations": "Only author intended edit types; edited controls may be different codec, frame rate, color or duration; no human-rated natural unintended freeze truth or event-level localization; weak small sample, source-related clips and copyright license noncommercial; broad model acceptance not supported."
     }
   ],
   "second_continuation_2026_10_24": {
@@ -610,6 +661,28 @@
     "video_stall_sources_not_downloaded": [
       "First-party LIVE Mobile 200 distorted/reference clips including freeze, requires access form",
       "LIVE Mobile Stall Database-II 174 altered videos,24 source videos,54 human subjective raters, access request required; FFmpeg freezedetect cannot infer editor intent."
+    ]
+  },
+  "author_video_edit_temporal_external_controls_2026_10_25": {
+    "status": "PARTIAL \u2014 measured real third-party video edit categories with strong negative results, no autonomous video freeze/judder/physics model qualified",
+    "report": "perceptual-videosham-real-temporal-evidence-2026-10-25.md",
+    "compact_source": "perceptual-videosham-real-temporal-editor-control-2026-10-25.json",
+    "source_published": "Adobe VideoSham dataset real author-edited Vimeo clips, academic Adobe Research License1.1a, public GitHub original v1.0",
+    "source_independent_original_clip_IDs": 38,
+    "author_temporal_positives": 19,
+    "other_processed_edit_controls": 19,
+    "actual_source_and_edited_MP4_archived_files_verified": 76,
+    "actually_decoded_source_plus_edited_frame_count": 16577,
+    "no_reference_findings": "Official FFmpeg freezedetect TP7 FP12 FN12 TN7, AUC0.454; custom fixed no-ref OR TP2 FP2 FN16 TN17 with one positive resource cap abstain. NOT a general video defect gate.",
+    "known_original_reference_findings": "Perceptual frame source matching TP17 FN1 in18 scorable temporal positive, FP9 TN4 in13 scorable other edits, abstain positive1 and control6, AUC0.915 conditional. Detects content departures, not specifically unwanted temporal changes.",
+    "duration_metadata_confound": "Duration ratio > 1.3x alone TP15 FN3 FP0 TN19, source-edit-type AUROC0.956; proves data-construction bias dominates measured edit-type detection; NOT video visual perception.",
+    "scientific_restrictions": [
+      "One positive source clip crossed previously declared 2100-frame per-clip limit and is marked undecidable, not failed model interpretation.",
+      "Reference-aware image matching must abstain on poor source content match and can false reject visual/spatial edits.",
+      "No human-blind subjective temporal fault ratings or event interval annotations; the author edits include intentional artistic speed changes.",
+      "Source 38 independent clip IDs may not represent independent generators/Vimeo contributors.",
+      "Research source media noncommercial and never enters Git, no active production render/GPU.",
+      "Previously denied unrelated video result retrievals not retried."
     ]
   }
 }

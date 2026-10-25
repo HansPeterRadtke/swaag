@@ -1,0 +1,354 @@
+{
+  "date": "2026-10-25",
+  "status": "PARTIAL: tested author intentional temporal edit categories on authentic real-video sources; no qualified universal natural video stutter/judder or subjective physics quality judge",
+  "dataset": "Adobe VideoSham 2022 author-edited Vimeo original media; publicly published research sample of 352 edits, scoped to release Part1 19 temporal and 19 other edits",
+  "license": "Adobe Research License 1.1a noncommercial academic research; never redistribute third-party source video through public project Git",
+  "upstream": "https://github.com/adobe-research/VideoSham-dataset",
+  "source_hashes": {
+    "immutable_author_labels_and_selection": "a5a83436355087e3428e54765f8c02228cba398668f954eefb6fb564a9d2c7a7",
+    "76_video_extract_source_size_crc_and_sha": "1e701c77bcff3fb4ae90cb1d8e0cdd3f8d1c9af288129eab95fccc7e9f0efd23",
+    "38_complete_pair_pixel_features_frozen_before_labels": "194adab8346f5000310d6a395b4509e0e561580466a796de106bb73b2e8f1bb1",
+    "edited_vs_other_author_category_labels_score": "a491c5ae7a6114b8d1a7fc59a5605c276e3324fdc5e6dee84aa346106f949a2b",
+    "official_ffmpeg_frozen_author_label_comparison": "d489781697ce76a614bddcb8beada9af3b0d5413f7ad0ec604de9521d4b14c50"
+  },
+  "selection": {
+    "source_release": "GitHub original v1.0 first public original/processed archive pair",
+    "independent_original_source_clip_families": 38,
+    "author_temporal_intent_positive_pairs": 19,
+    "author_other_edit_controls_pairs": 19,
+    "original_and_edited_video_files_total": 76,
+    "total_expected_download_mb": 684.89,
+    "source_category_distribution": {
+      "Frame duplication/Reversed Frames/Frame dropping/Speeding up/Slowing down": 19,
+      "Audio replaced/Audio added": 4,
+      "Removing an entity/Removing a subject": 4,
+      "Background/Color Change": 4,
+      "Adding an entity/ Adding a subject": 4,
+      "Text Replaced/Text Added": 3
+    },
+    "no_source_visual_features_used_for_label_selection": true
+  },
+  "resource": {
+    "ffmpeg_original_and_edited_native_fps_gray_128x72_frames_fully_decoded": 16577,
+    "GPU_used": false,
+    "actual_video_model_inference_used": false,
+    "ffmpeg_one_thread_nice": true,
+    "raw_restricted_video_media_in_Git": false,
+    "cpu_feature_seconds_this_last_continuation": 169.87,
+    "peak_runtime_RSS_KB": 262976
+  },
+  "predeclared_detectors": {
+    "source": "Adobe VideoSham release v1.0 38 source-independent original/edited Vimeo pairs",
+    "license": "Adobe Research License v1.1a noncommercial",
+    "source_original_and_altered_human_temporal_labels_NOT_read_by_inference": true,
+    "video_frames": "Decode each native FPS original and processed sequence, grayscale 128x72 with ffmpeg6 scale area, no rate conversion, max 2100 original frames/clip, ffmpeg -vsync 0",
+    "phash": "64-bit 32x32 DCT pHash 8x8 threshold of AC coefficients, no fit; Hamming distance to every original source-frame",
+    "no_ref_freeze": "at least 3 consecutive adjacent scaled grayscale frame MAE<0.8, with preceding and following five frame context moving >3.0 grayscale units (median); read max across intervals",
+    "no_ref_cut_jerk": "frame difference outlier > max(8, median(diff)+6*1.4826*MAD), fraction of all valid transitions",
+    "ref_match_distance_threshold_bits": 12,
+    "ref_min_valid_frame_fraction": 0.25,
+    "ref_expected_timing_source_fps_divided_by_processed_fps": "unit real physical clock progression plus arbitrary source segment start offset",
+    "ref_bad_frame_alignment_threshold_original_frames": 4.0,
+    "ref_min_abnormal_fraction_for_flag": 0.2,
+    "ref_source_motion_quality_requirement": "at least 0.15 fraction of source pHash adjacent frames differ by two or more bits",
+    "reference_selection": "known exact associated original source ID, no author task labels used",
+    "duration_ratio_baseline": "absolute log edit/original duration > log(1.3) flagged; separate confound not accepted video perception",
+    "cv2_version": "4.12.0",
+    "numpy": "2.2.6"
+  },
+  "comparisons": {
+    "no_ref_hold": {
+      "tested": 37,
+      "total_available": 38,
+      "abstained_positive": 1,
+      "abstained_other_edit_controls": 0,
+      "TP": 0,
+      "FP": 1,
+      "FN": 18,
+      "TN": 18,
+      "source_author_temporal_recall_when_scored": 0.0,
+      "source_other_edit_specificity_when_scored": 0.9473684210526315,
+      "precision_on_balanced_author_edit_type": 0.0,
+      "balanced_accuracy_on_scorable": 0.47368421052631576,
+      "continuous_feature": "image_low_frame_change_rate",
+      "continuous_roc_auc": 0.3742690058479532,
+      "available_continuous_scores": 37,
+      "source_clip_bootstrap95": {
+        "balanced_accuracy": [
+          0.4118,
+          0.5
+        ],
+        "AUROC": [
+          0.205,
+          0.5651
+        ]
+      },
+      "exact_binomial95_on_conditional_recall": [
+        0,
+        0.1853
+      ],
+      "exact_binomial95_on_conditional_false_alarm_rate": [
+        0.0013,
+        0.2603
+      ],
+      "not_an_independent_camera_family_human_rating": true
+    },
+    "no_ref_jerk": {
+      "tested": 37,
+      "total_available": 38,
+      "abstained_positive": 1,
+      "abstained_other_edit_controls": 0,
+      "TP": 2,
+      "FP": 1,
+      "FN": 16,
+      "TN": 18,
+      "source_author_temporal_recall_when_scored": 0.1111111111111111,
+      "source_other_edit_specificity_when_scored": 0.9473684210526315,
+      "precision_on_balanced_author_edit_type": 0.6666666666666666,
+      "balanced_accuracy_on_scorable": 0.5292397660818713,
+      "continuous_feature": "image_motion_jerk_score",
+      "continuous_roc_auc": 0.6169590643274854,
+      "available_continuous_scores": 37,
+      "source_clip_bootstrap95": {
+        "balanced_accuracy": [
+          0.4444,
+          0.625
+        ],
+        "AUROC": [
+          0.4626,
+          0.7642
+        ]
+      },
+      "exact_binomial95_on_conditional_recall": [
+        0.0138,
+        0.3471
+      ],
+      "exact_binomial95_on_conditional_false_alarm_rate": [
+        0.0013,
+        0.2603
+      ],
+      "not_an_independent_camera_family_human_rating": true
+    },
+    "no_ref_combined": {
+      "tested": 37,
+      "total_available": 38,
+      "abstained_positive": 1,
+      "abstained_other_edit_controls": 0,
+      "TP": 2,
+      "FP": 2,
+      "FN": 16,
+      "TN": 17,
+      "source_author_temporal_recall_when_scored": 0.1111111111111111,
+      "source_other_edit_specificity_when_scored": 0.8947368421052632,
+      "precision_on_balanced_author_edit_type": 0.5,
+      "balanced_accuracy_on_scorable": 0.5029239766081871,
+      "continuous_feature": "image_motion_jerk_score",
+      "continuous_roc_auc": 0.6169590643274854,
+      "available_continuous_scores": 37,
+      "source_clip_bootstrap95": {
+        "balanced_accuracy": [
+          0.4015,
+          0.6053
+        ],
+        "AUROC": [
+          0.4626,
+          0.7642
+        ]
+      },
+      "exact_binomial95_on_conditional_recall": [
+        0.0138,
+        0.3471
+      ],
+      "exact_binomial95_on_conditional_false_alarm_rate": [
+        0.013,
+        0.3314
+      ],
+      "not_an_independent_camera_family_human_rating": true
+    },
+    "reference_aware": {
+      "tested": 31,
+      "total_available": 38,
+      "abstained_positive": 1,
+      "abstained_other_edit_controls": 6,
+      "TP": 17,
+      "FP": 9,
+      "FN": 1,
+      "TN": 4,
+      "source_author_temporal_recall_when_scored": 0.9444444444444444,
+      "source_other_edit_specificity_when_scored": 0.3076923076923077,
+      "precision_on_balanced_author_edit_type": 0.6538461538461539,
+      "balanced_accuracy_on_scorable": 0.6260683760683761,
+      "continuous_feature": "image_ref_abnormal_score",
+      "continuous_roc_auc": 0.9145299145299145,
+      "available_continuous_scores": 31,
+      "source_clip_bootstrap95": {
+        "balanced_accuracy": [
+          0.4937,
+          0.7667
+        ],
+        "AUROC": [
+          0.7917,
+          1.0
+        ]
+      },
+      "exact_binomial95_on_conditional_recall": [
+        0.7271,
+        0.9986
+      ],
+      "exact_binomial95_on_conditional_false_alarm_rate": [
+        0.3857,
+        0.9091
+      ],
+      "not_an_independent_camera_family_human_rating": true
+    },
+    "duration_only_CONFOUNDED_NOT_VISUAL": {
+      "tested": 37,
+      "total_available": 38,
+      "abstained_positive": 1,
+      "abstained_other_edit_controls": 0,
+      "TP": 15,
+      "FP": 0,
+      "FN": 3,
+      "TN": 19,
+      "source_author_temporal_recall_when_scored": 0.8333333333333334,
+      "source_other_edit_specificity_when_scored": 1.0,
+      "precision_on_balanced_author_edit_type": 1.0,
+      "balanced_accuracy_on_scorable": 0.9166666666666667,
+      "continuous_feature": "duration_ratio_score",
+      "continuous_roc_auc": 0.956140350877193,
+      "available_continuous_scores": 37,
+      "source_clip_bootstrap95": {
+        "balanced_accuracy": [
+          0.8214,
+          1.0
+        ],
+        "AUROC": [
+          0.873,
+          1.0
+        ]
+      },
+      "exact_binomial95_on_conditional_recall": [
+        0.5858,
+        0.9642
+      ],
+      "exact_binomial95_on_conditional_false_alarm_rate": [
+        0,
+        0.1765
+      ],
+      "not_an_independent_camera_family_human_rating": true
+    },
+    "official_ffmpeg_freezedetect": {
+      "tested": 38,
+      "TP": 7,
+      "FP": 12,
+      "FN": 12,
+      "TN": 7,
+      "abstained_positive": 0,
+      "abstained_other_edit_controls": 0,
+      "continuous_roc_auc": 0.45429362880886426,
+      "source_clip_bootstrap95": {
+        "balanced_accuracy": [
+          0.2159090909090909,
+          0.5297817460317459
+        ],
+        "AUROC": [
+          0.27450301450219977,
+          0.6426992403609642
+        ]
+      },
+      "exact_binomial95_on_conditional_recall": [
+        0.1629,
+        0.6164
+      ],
+      "exact_binomial95_on_conditional_false_alarm_rate": [
+        0.3836,
+        0.8371
+      ],
+      "not_an_independent_camera_family_human_rating": true
+    }
+  },
+  "official_ffmpeg_source_detector_frozen_parameters": "freezedetect=n=-50dB:d=0.12",
+  "original_source_intention_breakdown": {
+    "adding an entity/ adding a subject": {
+      "n": 4,
+      "no_ref_detected": 0,
+      "reference_scored": 3,
+      "reference_detected": 3,
+      "median_edited_to_source_duration_ratio": 1.0
+    },
+    "audio replaced/audio added": {
+      "n": 4,
+      "no_ref_detected": 1,
+      "reference_scored": 4,
+      "reference_detected": 2,
+      "median_edited_to_source_duration_ratio": 1.0
+    },
+    "background/color change": {
+      "n": 4,
+      "no_ref_detected": 0,
+      "reference_scored": 2,
+      "reference_detected": 1,
+      "median_edited_to_source_duration_ratio": 1.0
+    },
+    "frame_dropping": {
+      "n": 3,
+      "no_ref_detected": 1,
+      "reference_scored": 3,
+      "reference_detected": 2,
+      "median_edited_to_source_duration_ratio": 0.6816958563601485
+    },
+    "frame_repetition": {
+      "n": 8,
+      "no_ref_detected": 1,
+      "reference_scored": 8,
+      "reference_detected": 8,
+      "median_edited_to_source_duration_ratio": 2.7094918092747626
+    },
+    "frame_reversal": {
+      "n": 2,
+      "no_ref_detected": 0,
+      "reference_scored": 2,
+      "reference_detected": 2,
+      "median_edited_to_source_duration_ratio": 1.4983142897270623
+    },
+    "removing an entity/removing a subject": {
+      "n": 4,
+      "no_ref_detected": 0,
+      "reference_scored": 3,
+      "reference_detected": 2,
+      "median_edited_to_source_duration_ratio": 0.9947917082917084
+    },
+    "speed_or_timeline_change": {
+      "n": 4,
+      "no_ref_detected": 0,
+      "reference_scored": 3,
+      "reference_detected": 3,
+      "median_edited_to_source_duration_ratio": 0.33701653795671477
+    },
+    "speedup": {
+      "n": 2,
+      "no_ref_detected": 0,
+      "reference_scored": 2,
+      "reference_detected": 2,
+      "median_edited_to_source_duration_ratio": 0.4504288394990647
+    },
+    "text replaced/text added": {
+      "n": 3,
+      "no_ref_detected": 1,
+      "reference_scored": 1,
+      "reference_detected": 1,
+      "median_edited_to_source_duration_ratio": 1.0
+    }
+  },
+  "why_this_does_not_prove_objectionable_video_quality": [
+    "Author categories label intentional frame manipulation, which may be aesthetically appropriate and not a human visual defect, unlike production stutter.",
+    "No precise human-confirmed altered frame interval references, so temporal localization precision/F1 cannot be computed.",
+    "Temporal positives and non-temporal edited controls are editorial categories; other edits and reencodings can cause motion/appearance changes and temporal control false alarms.",
+    "All selected clips came from first release half and possibly correlated original Vimeo content; 38 source clips not 38 independent camera families.",
+    "Reference-aware frame matching requires access to actual associated original source; where perceptual hashes disagree it must abstain instead of marking good.",
+    "A simple duration ratio baseline may perform well for author speed changes without seeing pixels, and should be reported as a confound, not a quality analyzer.",
+    "Benchmark size nineteen per class means even no observed false positives is too weak for near-perfect high-stakes specificity.",
+    "A method comparison on this dataset is model selection; another untouched video source group is needed for unbiased deployment acceptance."
+  ],
+  "role_for_actual_production": "Use original source/video hashes, exact approved edit/hold timeline and native PTS first, then frame content comparison when exact final approved reference is available, use no-reference freeze/flow as candidate trigger only; ordinary optical flow and visual LLM confidence cannot certify physical plausibility, object realism or stutter intent."
+}
