@@ -1,0 +1,200 @@
+{
+  "date": "2026-10-25",
+  "status": "COMPLETE narrow test: real site UI ELEMENT PARSING only; NOT a qualified clipping/overlap/contrast DEFECT classifier",
+  "model": "docling-project/ScreenParser YOLO11-L, ScreenParse-v2 55 classes, source pinned f029e565f1206577402e43206454522075be3f72",
+  "model_weight_license": "Apache-2.0 source card, 153.26MB; Ultralytics 8.3.221 runtime AGPL-3.0/enterprise is a separate commercial-license issue",
+  "runtime": "Nitro RTX 3060 not used; loaded production-host CPU one torch thread, 1280-pixel input, raw source native 1920x994 Firefox raster, device=cpu",
+  "source_sha256": {
+    "model_manifest": "49f3d5618d3c5118814ccabe6c8c88a7dc4b9bb22d6b00878be85dcedef225a0",
+    "captured_Firefox_32": "b9e17c9d81b125ddb0f8138bb82f591689579e340f1366b14a429eeca2ec0408",
+    "frozen_YOLO_predictions": "7b88cbd2dadcfe8645ed1e839209f738c220788534019c9c923cde3ef5757e47",
+    "direct_target_localization_scores": "fffe51f0f080b9bcd711cc63ff84307d623b0e5981080dda18fef02ef35765f7",
+    "source_paired_analysis": "2cbd92a9241fa22c2c1829597644049347243a8a00fe147f07ce6b67b7e8e593"
+  },
+  "case_scope": {
+    "actual_websites_or_site_families": 15,
+    "paired_clean_defective_comparisons": 16,
+    "frozen_real_Firefox_screenshots": 32,
+    "known_browser_defective_targets": 16,
+    "paired_clean_controls": 16,
+    "criterion_types": [
+      "redecheck:element-protrusion",
+      "redecheck:viewport-protrusion"
+    ],
+    "screenshot_dimensions_px": [
+      1920,
+      994
+    ],
+    "note": "Not exhaustively annotated all UI boxes. Source target DOM bounding box may include clipped invisible CSS extent, so IoU is only a narrow target localization metric, not parser average precision."
+  },
+  "model_inference": {
+    "config": {
+      "checkpoint": "docling-project/ScreenParser best.pt pinned f029e565f1206577402e43206454522075be3f72",
+      "runtime": "Ultralytics 8.3.221 YOLO11-L, PyTorch 2.5.1 CPU FP32",
+      "imgsz": 1280,
+      "confidence_min": 0.1,
+      "iou_nonmax_suppression": 0.1,
+      "max_det": 1000,
+      "device": "cpu",
+      "torch_threads": 1,
+      "evaluation_iou_thresholds": [
+        0.1,
+        0.3,
+        0.5
+      ],
+      "exclusion_generic_classes": [
+        "Screen",
+        "Window",
+        "Column/Browser",
+        "Navigation Bar"
+      ],
+      "scope": "class-agnostic target IoU and center coverage; not classification of visual defect"
+    },
+    "source_results_finished": 32,
+    "actual_mean_seconds_per_image": 63.41834375,
+    "total_cpu_seconds": 2039.73,
+    "peak_RSS_KB": 1032608,
+    "runtime_distribution": {
+      "total_cpu_seconds": 2029.387,
+      "mean_seconds_per_screenshot": 63.41834375,
+      "median_seconds_per_screenshot": 57.183499999999995,
+      "p10_seconds": 49.973800000000004,
+      "p90_seconds": 82.6839,
+      "min_seconds": 45.814,
+      "max_seconds": 138.856
+    },
+    "observed_nonexhaustive_element_class_counts": {
+      "Link": 893,
+      "Button": 60,
+      "Text": 409,
+      "Heading": 122,
+      "File Icon": 1,
+      "List Item": 66,
+      "Utility Button": 7,
+      "Image": 39,
+      "App Icon": 2,
+      "Alert": 1,
+      "Search Field": 4,
+      "Logo": 13,
+      "Avatar": 2,
+      "Badge": 5,
+      "Video": 2,
+      "Menu": 2,
+      "Code snippet": 4,
+      "Side Bar": 2,
+      "List": 1,
+      "Checkbox": 12
+    }
+  },
+  "target_box_result": {
+    "all": {
+      "n": 32,
+      "iou_hits": {
+        "0.1": 22,
+        "0.3": 14,
+        "0.5": 11
+      },
+      "center_covered": 19,
+      "mean_best_iou": 0.34458937500000003,
+      "median_boxes": 45.5
+    },
+    "clipped": {
+      "n": 18,
+      "iou_hits": {
+        "0.1": 14,
+        "0.3": 12,
+        "0.5": 9
+      },
+      "center_covered": 14,
+      "mean_best_iou": 0.4485922222222222,
+      "median_boxes": 49.0
+    },
+    "viewport_protrusion": {
+      "n": 14,
+      "iou_hits": {
+        "0.1": 8,
+        "0.3": 2,
+        "0.5": 2
+      },
+      "center_covered": 5,
+      "mean_best_iou": 0.21087142857142857,
+      "median_boxes": 40.5
+    },
+    "defective": {
+      "n": 16,
+      "iou_hits": {
+        "0.1": 7,
+        "0.3": 5,
+        "0.5": 3
+      },
+      "center_covered": 7,
+      "mean_best_iou": 0.19923125,
+      "median_boxes": 44.0
+    },
+    "clean_control": {
+      "n": 16,
+      "iou_hits": {
+        "0.1": 15,
+        "0.3": 9,
+        "0.5": 8
+      },
+      "center_covered": 12,
+      "mean_best_iou": 0.4899475,
+      "median_boxes": 45.5
+    }
+  },
+  "paired_readonly_analysis": {
+    "n_pairs": 16,
+    "independent_website_families": 15,
+    "same_pixel_pair_count": 1,
+    "mean_clean_IoU": 0.4899475,
+    "mean_defect_IoU": 0.19923125,
+    "mean_paired_IoU_delta": 0.29071625,
+    "median_paired_IoU_delta": 0.25373,
+    "paired_source_cluster_bootstrap_95pct_mean_delta": [
+      0.1650526176470588,
+      0.4240799999999999
+    ],
+    "clean_higher_IoU_than_bad_count": 15,
+    "bad_higher_IoU_than_clean_count": 1,
+    "tie_count": 0,
+    "sign_test_two_sided_p": 0.000518798828125,
+    "paired_threshold_comparison": {
+      "0.1": {
+        "clean_visible_element_located": 15,
+        "defect_visible_element_located": 7
+      },
+      "0.3": {
+        "clean_visible_element_located": 9,
+        "defect_visible_element_located": 5
+      },
+      "0.5": {
+        "clean_visible_element_located": 8,
+        "defect_visible_element_located": 3
+      }
+    },
+    "by_defect_type": {
+      "redecheck:element-protrusion": {
+        "n_pairs": 9,
+        "mean_iou_delta": 0.3270266666666667,
+        "clean_iou_at_least_point5": 6,
+        "defect_iou_at_least_point5": 3
+      },
+      "redecheck:viewport-protrusion": {
+        "n_pairs": 7,
+        "mean_iou_delta": 0.24403142857142857,
+        "clean_iou_at_least_point5": 2,
+        "defect_iou_at_least_point5": 0
+      }
+    }
+  },
+  "conclusion": "The checkpoint demonstrably outputs many plausible UI-element boxes from real Firefox whole-viewport screens. Yet independent source target IoU >=0.5 in only 11/32 cases (3/16 defect target vs 8/16 controls); paired IoU lower for 15/16 defective source boxes. This is not evidence of valid standalone defect inspection, and visual clipping changes source CSS target vs visible parsed UI geometry. CPU latency is too high for live quality gating on busy Nitro. Precise DOM client-scroll bounds + standard accessibility checks remain preferable for narrow measurable properties; YOLO could help find element candidates in screenshot-only cases only after separate full element precision/recall and text validation.",
+  "remaining_qualification": [
+    "Exhaustive human-labelled UI box/text class ground truth, not one source selected target",
+    "True visible defects and non-defects matched for scale and rendering/intent, not only source CSS-bbox mutations",
+    "ScreenParser alternate runtime/license, speed and model size on genuinely idle hardware",
+    "Complete production GUI clip/overlap/contrast decision accuracy, false alarms, abstain policy",
+    "Physical 3D and temporal video quality are separate tasks not addressed by this model"
+  ],
+  "licensed_source_media_in_git": false
+}

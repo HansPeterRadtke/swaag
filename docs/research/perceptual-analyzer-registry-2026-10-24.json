@@ -346,5 +346,42 @@
       "https://huggingface.co/datasets/aieval2026/3d-defectbench"
     ],
     "caveats": "Motion-unlabeled is NOT verified clean; video preference FPS/codec confounding invalidates apparent physics success; 3D expert missing-parts votes and mesh invariants answer fundamentally different properties, both narrow."
+  },
+  "overnight_first_2026_10_25": {
+    "status": "PARTIAL \u2014 no universal or standalone qualified visual, mechanical or temporal video judge",
+    "source_report": "perceptual-analyzers-overnight-2026-10-25.md",
+    "source_candidate_metadata": "perceptual-candidate-availability-2026-10-25.json",
+    "verified_latest_model_downloads": {
+      "ScreenParser-YOLO11-L": "153259543-byte pinned f029e56 UI detector model under isolated var; 55 classes; CPU Ultralytics; bbox/class only, not defect diagnosis",
+      "ScreenVLM-v2": "previous checkpoint and CPU outputs unchanged, official 6192 output-token limit rather than previous 384; 0/4 constrained crop result cannot rank full-page capability"
+    },
+    "actual_source_corpora": {
+      "full_page_32_UIJudgeBench": "32 archived real website target-centered whole viewport screenshots with 16 externally verified CSS defects and 16 controls; image-only YOLO confidence, boxes and IoU scored separately after raw outputs; metrics pending/partial at reporting checkpoint",
+      "Spotlight_72_prompt_disjoint": "72 original videos from 24 previously unseen prompt groups, 26 independently motion-labelled and 46 unlabeled; 356230976 source bytes, fixed 8FPS Farneback thresholds from earlier pilot; final score unverified after denied run-output retrieval"
+    },
+    "important_model_candidates_and_blockers": {
+      "ScreenParser": "Source checkpoint Apache-2.0, Ultralytics 8.3.221 runtime AGPL3/Enterprise, commercial deployment needs license review; CPU inference in shared workstation slow; image-only element localization must be calibrated; no OCR/quality verdict",
+      "PhyProbe": "Open-source 2026 physical-violation scoring 2B PE-Core backbone about 9GB, too large for busy Nitro 6GB GPU; author pairwise scores only, not tested here",
+      "nvidia_physical_plausibility": "Reported same-generator human-bad recall 80.52% but rejects 31.33% human-good, unavailable as qualified general Blender video gate",
+      "Principia": "Calibration-independent paired-object physics rules with independently annotated real scenes; requires gated SAM3 CUDA; not installed or locally scored",
+      "Figma_Defect_3_5K": "Repository only 100 annotation-preview records and one rendered PNG; full claimed 3,500-image and 12.7GB DOM dataset unavailable, not independent image benchmark"
+    },
+    "preserved_prior_rejections": "Thor Qwen3VL 3/4 clipped false negative, metadata-only fixture successes not perception, Scry SSIM false flag high, CLIP images poor, five-VLM 3D majority misses, low-level motion signals FPS confounded and near random peaks",
+    "unanswered": "real GUI clipping/overlap/contrast screenshot-only and full GUI parser on independent holdout; 3D actual industrial physics/photorealism with objective CAD; video natural judder/error with frame-accurate truly clean controls and video-language model; untouched selection-aware final data",
+    "actual_owner_completed_v52_media": {
+      "verified_aggregate": "perceptual-owner-video-verified-signal-2026-10-25.json",
+      "both_mp4s": "420 frames 30fps regular source PTS, zero PTS gaps or duplicated presentation timestamps",
+      "warehouse": "20 at 256x144 grayscale near-identical adjacent matches among final frames 396..419, not verified original full-res exact duplicates; no definitive stutter diagnosis",
+      "dock": "0 exact adjacent matches at 256x144 grayscale, no robust local spikes; still no subjective quality certification",
+      "denied_source_resolution_tail_run": "unverified after direct retrieval was blocked; no repeat, work-around or source truth claim"
+    },
+    "ScreenParser_verified_postcheckpoint": {
+      "data": "perceptual-screenparser-verified-evidence-2026-10-25.json",
+      "status": "narrow real-site whole-page element localization experiment complete, NOT GUI defect acceptance",
+      "sources": "32 real Firefox whole-viewport screens, 16 separately DOM-labelled clip/overflow and 16 controls, 15 site families",
+      "result": "11 of 32 selected target element boxes IoU>=0.5; 3/16 defective, 8/16 clean; 15/16 source-paired clean IoU greater than defect; 1 pixel-identical clean/defect source pair makes image-only DOM-label decision impossible",
+      "hardware": "CPU-only one torch thread, 2039.73 s total, mean 63.418 s/image, peak 1.03GB RAM; no GPU use",
+      "caveat": "one target DOM rectangle per page, not exhaustive element annotations; model not a defect classifier, overflowing/hidden CSS extent mismatched with visible boxes"
+    }
   }
 }

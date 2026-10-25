@@ -1,0 +1,55 @@
+{
+  "date": "2026-10-25",
+  "scope": "actual completed warehouse and dock Cycles motion-blur 1080p 30fps v52; source files left untouched",
+  "source_report_sha256": {
+    "video_pts": "e40df041e747ed742a02dc021d4f66f7cfdb6a63521416ca53bcdf618019b10c",
+    "low_resolution_pixel_flow": "3e15cdfafb8c9b7cde05e4063db183daff7214206f9758d750693f8a440072f4"
+  },
+  "results": {
+    "warehouse_v52": {
+      "source_mp4_sha256": "4122379c57e569ff29f39c4eff58ffb4c470e9673bc742006fe6ed27a75b1043",
+      "source_mp4_bytes": 24868578,
+      "nominal_fps": 30,
+      "encoded_video_frames": 420,
+      "encoded_pts_min_delta_s": 0.033333,
+      "encoded_pts_max_delta_s": 0.033334,
+      "encoded_missing_pts_gaps": 0,
+      "encoded_duplicate_pts": 0,
+      "coarse_gray_resolution_wh": [
+        256,
+        144
+      ],
+      "coarse_near_identical_adjacent_pairs": 20,
+      "coarse_gray_repeat_first_to_last_frame_indexes": [
+        396,
+        419
+      ],
+      "flow_computable_pairs": 399,
+      "flow_median_px_at_coarse_scale": 1.31136,
+      "large_local_motion_outlier_candidates": 0,
+      "source_resolution_exact_frame_repeat_count": "NOT_VERIFIED; a separate requested tail-framehash run result retrieval was explicitly denied, not bypassed; do not interpret grayscale matches as original 1080p duplicates."
+    },
+    "dock_v52": {
+      "source_mp4_sha256": "a14aa04e88c835f5cad1cbc536eeeb7574aad669324baff0309741b0a88c9d46",
+      "source_mp4_bytes": 18451442,
+      "nominal_fps": 30,
+      "encoded_video_frames": 420,
+      "encoded_pts_min_delta_s": 0.033333,
+      "encoded_pts_max_delta_s": 0.033334,
+      "encoded_missing_pts_gaps": 0,
+      "encoded_duplicate_pts": 0,
+      "coarse_gray_resolution_wh": [
+        256,
+        144
+      ],
+      "coarse_near_identical_adjacent_pairs": 0,
+      "coarse_gray_repeat_first_to_last_frame_indexes": [],
+      "flow_computable_pairs": 419,
+      "flow_median_px_at_coarse_scale": 0.57927,
+      "large_local_motion_outlier_candidates": 0,
+      "source_resolution_exact_frame_repeat_count": "NOT_VERIFIED; a separate requested tail-framehash run result retrieval was explicitly denied, not bypassed; do not interpret grayscale matches as original 1080p duplicates."
+    }
+  },
+  "interpretation": "Both actual encoded outputs have regular 30 fps presentation timing and zero PTS gaps, ruling out irregular PTS as immediate cause of visible stuttering in these two files. Warehouse closing frames are nearly static only AFTER downscale to grayscale, with 20 near-identical frame pairs close to the end; dock has zero such coarse matches. This might be an intentional outro, static camera/object, tiny original image variations or render cadence; source-resolution exact duplication and subjective perceptual smoothness were NOT verified. No author-rated good/bad reference for these two clips. A separate tail-source-resolution run output was denied; no retry or workaround was attempted.",
+  "production_write_effects": "none, read-only videos"
+}

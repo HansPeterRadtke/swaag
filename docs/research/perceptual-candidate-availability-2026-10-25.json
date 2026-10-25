@@ -1,0 +1,73 @@
+{
+  "research_date": "2026-10-25",
+  "objective": "which judge models/benchmarks are materially installed, available, and licensable; DOES NOT imply tested model accuracy",
+  "ScreenParser": {
+    "checkpoint_model": "docling-project/ScreenParser",
+    "pinned_revision": "f029e565f1206577402e43206454522075be3f72",
+    "weight_bytes": 153259543,
+    "weights_sha256": "dbcb4f583ccfdb8100a68e606525c247890a2de4c1a54b14741e0ee29ce0ab88",
+    "model_card_weight_license": "Apache-2.0 (weights from model card); isolated Ultralytics runtime license separately reviewed",
+    "ultralytics_8_3_221_runtime": "AGPL-3.0 / separately available Enterprise commercial license according to ultralytics.com/license; legal review needed for proprietary deployment, model card weight Apache 2.0 does not alone license inference runtime",
+    "official_source": "https://huggingface.co/docling-project/ScreenParser",
+    "local_cpu_accuracy_status": "32 real full-page screenshots model evaluation pending or available separately; do not infer from installation"
+  },
+  "ScreenVLM": {
+    "checkpoint_model": "docling-project/ScreenVLM",
+    "pinned_revision": "78df0cc8498bbea1a03eb2816056fc0a76d2f63d",
+    "weight_bytes": 756008824,
+    "official_max_new_tokens_example": 6192,
+    "prior_test_local_max_new_tokens": 384,
+    "prior_local_2_of_4_screen_tags_truncated": true,
+    "note": "prior 0 of 4 expected labels at 384 tokens on small crops is NOT a fair official full-page parsing score",
+    "official_source": "https://huggingface.co/docling-project/ScreenVLM"
+  },
+  "PhyProbe": {
+    "pip_current_version": "0.1.0",
+    "release_available": true,
+    "package": "phyprobe",
+    "model_head_weights_size_approx_MB": 4,
+    "backbone_size_approx_GB": 9,
+    "hardware": "2B parameter PE-Core-G14-448 backbone; high GPU memory, incompatible with spare shared Nitro RTX3060 6 GB; NOT executed",
+    "source": "https://pypi.org/project/phyprobe/",
+    "scientific_results_external_only": "https://research.nvidia.com/labs/cosmos-lab/phyprobe/"
+  },
+  "nvidia_physical_plausibility_evaluator": {
+    "hf_revision": "4712d5ba3167bbd744bf5b1a427b5c7b7b18d627",
+    "license": "openmdw-1.1",
+    "source": "https://huggingface.co/nvidia/physical-plausibility-evaluator",
+    "reported_same_generator_bad_recall": 0.8052,
+    "reported_same_generator_good_video_false_rejection": 0.3133,
+    "hardware": "trained head + frozen V-JEPA2.1 ViT-L, published H100 evaluation; no Nitro execution, not tested on Blender machinery"
+  },
+  "Principia": {
+    "owner_repo": "PrincipiaBench/Principia",
+    "source": "https://github.com/PrincipiaBench/Principia",
+    "tracking_requirement": "SAM3 gated HF access plus CUDA GPU for object tracking; not runnable as documented without grant/idle GPU",
+    "value": "paired-object gravity, restitution, momentum, friction invariants independent of camera calibration; not a universal subjective video judge",
+    "default_branch": "main"
+  },
+  "Figma_Defect_3_5K_claimed": {
+    "repo": "https://github.com/gzmelon/UI-Defect-Benchmark",
+    "tree_revision": "b1e6a2fe8809f23fcd43d43ba1812a2e8493f71f",
+    "source_tree_files": 53,
+    "public_preview_annotation_records": 100,
+    "public_image_files": 1,
+    "full_3500_claimed_release": "README itself says full ~12.7GB image+DOM+style archive to be hosted after journal acceptance, absent from pinned repository at evaluation",
+    "validation_use": "NOT suitable for independent image-based Figma-Defect-3.5K model scoring; no 3.5K original screenshots/DOM available; do not repeat author performance claim as locally confirmed"
+  },
+  "ScreenParse_parser_alternative": {
+    "RT_DETRv2": "Authors report object-detector 43M element model on ScreenParse dataset, but no independently verified RT-DETRv2 checkpoint installed locally",
+    "OmniParser": "Microsoft v2 icon_detect_v3 MIT + MIT Florence icon_caption option, different license from YOLOv8 AGPL icon_detect; no local inference score yet",
+    "source": [
+      "https://saidgurbuz.github.io/screenparse/",
+      "https://huggingface.co/microsoft/OmniParser-v2.0"
+    ]
+  },
+  "known_unanswered": [
+    "ScreenParser real-target bbox localization result and reliability on actual defects",
+    "complete ScreenVLM on full screenshots with enough output tokens under production-safe compute",
+    "installed, domain-calibrated physical plausibility video scorer on independent human labels, without encoding/generator confounds",
+    "industrial 3D mechanically verified physical assembly faults and natural real-video stutter time truth"
+  ],
+  "data_source_status": "All source evidence from official upstream model/research/dataset APIs and pinned local source hashes. Availability and software licenses distinct from accuracy. Actual model outputs in dated project reports."
+}
