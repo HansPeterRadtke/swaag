@@ -1,5 +1,8 @@
 # Direct answers to the original agent-model recording questions — October 25, 2026
 
+**Latest independently controlled architecture evidence, 25 October 2026:** `DECISIVE_MATCHED_COMPUTE_FINDINGS_2026-10-25.md` recomputes 208 matched SAS-versus-MAS contrasts from the original Nature Machine Intelligence 2026 source CSV under the same model/benchmark/compute control; it distinguishes multiple independent-job batches from decomposing one serial answer. The earlier narrow Qwen and scientific summaries below remain intact.
+
+
 **Status PARTIAL overall; five conditional questions answered directly.** Research owner: SWAAG. This is an evidence-based analysis of **already completed** experiments and independently published primary studies, not a new production change or a declaration that unperformed experiments have succeeded. The original owner's relevant recordings are Infra `original-recordings/agents/Recording 2026-10-17 13-00-28-020.txt`, `Recording 2026-10-17 23-00-29-387.txt`, `Recording 2026-10-18 18-38-21-960.txt`, and the grammar-auxiliary passage in `original-recordings/general/programming/Recording 2026-09-27 20-56-31-463.txt`. The project already has comprehensive dated background reports and preserved raw experiment artifacts under this research directory. The output-format and Qwen-context observations below were compared only where input source/task/model/seed/condition were genuinely matched.
 
 ## Answer 1: context required for user-facing answers versus agent work

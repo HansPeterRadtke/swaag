@@ -1,0 +1,2362 @@
+{
+  "all_original_matched_cells": [
+    {
+      "above_paper_capability_threshold_45pct": false,
+      "best_mas": "multi-agent-centralized",
+      "best_mas_delta_pp": 8.080808,
+      "best_mas_performance": 0.3434343434343434,
+      "best_mas_status": "gain",
+      "dataset": "browsecomp_plus_sampled_100",
+      "family": "anthropic",
+      "model": "claude-3-7-sonnet-20250219",
+      "other_architectures": {
+        "multi-agent-centralized": {
+          "delta_pp": 8.080808,
+          "delta_relative_percent": 30.769231,
+          "direction": "gain",
+          "performance": 0.3434343434343434
+        },
+        "multi-agent-decentralized": {
+          "delta_pp": 3.030303,
+          "delta_relative_percent": 11.538462,
+          "direction": "gain",
+          "performance": 0.29292929292929293
+        },
+        "multi-agent-hybrid": {
+          "delta_pp": 7.070707,
+          "delta_relative_percent": 26.923077,
+          "direction": "gain",
+          "performance": 0.3333333333333333
+        },
+        "multi-agent-independent": {
+          "delta_pp": -8.080808,
+          "delta_relative_percent": -30.769231,
+          "direction": "loss",
+          "performance": 0.18181818181818182
+        }
+      },
+      "single_agent": 0.26262626262626265
+    },
+    {
+      "above_paper_capability_threshold_45pct": false,
+      "best_mas": "multi-agent-hybrid",
+      "best_mas_delta_pp": 12.121212,
+      "best_mas_performance": 0.41414141414141414,
+      "best_mas_status": "gain",
+      "dataset": "browsecomp_plus_sampled_100",
+      "family": "anthropic",
+      "model": "claude-sonnet-4-20250514",
+      "other_architectures": {
+        "multi-agent-centralized": {
+          "delta_pp": 3.030303,
+          "delta_relative_percent": 10.344828,
+          "direction": "gain",
+          "performance": 0.32323232323232326
+        },
+        "multi-agent-decentralized": {
+          "delta_pp": 8.080808,
+          "delta_relative_percent": 27.586207,
+          "direction": "gain",
+          "performance": 0.37373737373737376
+        },
+        "multi-agent-hybrid": {
+          "delta_pp": 12.121212,
+          "delta_relative_percent": 41.37931,
+          "direction": "gain",
+          "performance": 0.41414141414141414
+        },
+        "multi-agent-independent": {
+          "delta_pp": -18.181818,
+          "delta_relative_percent": -62.068966,
+          "direction": "loss",
+          "performance": 0.1111111111111111
+        }
+      },
+      "single_agent": 0.29292929292929293
+    },
+    {
+      "above_paper_capability_threshold_45pct": false,
+      "best_mas": "multi-agent-decentralized",
+      "best_mas_delta_pp": 9.090909,
+      "best_mas_performance": 0.43434343434343436,
+      "best_mas_status": "gain",
+      "dataset": "browsecomp_plus_sampled_100",
+      "family": "anthropic",
+      "model": "claude-sonnet-4-5",
+      "other_architectures": {
+        "multi-agent-centralized": {
+          "delta_pp": 8.513709,
+          "delta_relative_percent": 24.789916,
+          "direction": "gain",
+          "performance": 0.42857142857142855
+        },
+        "multi-agent-decentralized": {
+          "delta_pp": 9.090909,
+          "delta_relative_percent": 26.470588,
+          "direction": "gain",
+          "performance": 0.43434343434343436
+        },
+        "multi-agent-hybrid": {
+          "delta_pp": 6.060606,
+          "delta_relative_percent": 17.647059,
+          "direction": "gain",
+          "performance": 0.40404040404040403
+        },
+        "multi-agent-independent": {
+          "delta_pp": -20.20202,
+          "delta_relative_percent": -58.823529,
+          "direction": "loss",
+          "performance": 0.1414141414141414
+        }
+      },
+      "single_agent": 0.3434343434343434
+    },
+    {
+      "above_paper_capability_threshold_45pct": false,
+      "best_mas": "multi-agent-centralized",
+      "best_mas_delta_pp": 5.0,
+      "best_mas_performance": 0.22,
+      "best_mas_status": "gain",
+      "dataset": "browsecomp_plus_sampled_100",
+      "family": "gemini",
+      "model": "gemini-2.0-flash",
+      "other_architectures": {
+        "multi-agent-centralized": {
+          "delta_pp": 5.0,
+          "delta_relative_percent": 29.411765,
+          "direction": "gain",
+          "performance": 0.22
+        },
+        "multi-agent-decentralized": {
+          "delta_pp": 1.0,
+          "delta_relative_percent": 5.882353,
+          "direction": "gain",
+          "performance": 0.18
+        },
+        "multi-agent-hybrid": {
+          "delta_pp": 3.0,
+          "delta_relative_percent": 17.647059,
+          "direction": "gain",
+          "performance": 0.2
+        },
+        "multi-agent-independent": {
+          "delta_pp": -7.0,
+          "delta_relative_percent": -41.176471,
+          "direction": "loss",
+          "performance": 0.1
+        }
+      },
+      "single_agent": 0.17
+    },
+    {
+      "above_paper_capability_threshold_45pct": false,
+      "best_mas": "multi-agent-hybrid",
+      "best_mas_delta_pp": 4.0,
+      "best_mas_performance": 0.32,
+      "best_mas_status": "gain",
+      "dataset": "browsecomp_plus_sampled_100",
+      "family": "gemini",
+      "model": "gemini-2.5-flash",
+      "other_architectures": {
+        "multi-agent-centralized": {
+          "delta_pp": 3.0,
+          "delta_relative_percent": 10.714286,
+          "direction": "gain",
+          "performance": 0.31
+        },
+        "multi-agent-decentralized": {
+          "delta_pp": -2.0,
+          "delta_relative_percent": -7.142857,
+          "direction": "loss",
+          "performance": 0.26
+        },
+        "multi-agent-hybrid": {
+          "delta_pp": 4.0,
+          "delta_relative_percent": 14.285714,
+          "direction": "gain",
+          "performance": 0.32
+        },
+        "multi-agent-independent": {
+          "delta_pp": -7.0,
+          "delta_relative_percent": -25.0,
+          "direction": "loss",
+          "performance": 0.21
+        }
+      },
+      "single_agent": 0.28
+    },
+    {
+      "above_paper_capability_threshold_45pct": false,
+      "best_mas": "multi-agent-decentralized",
+      "best_mas_delta_pp": 7.0,
+      "best_mas_performance": 0.43,
+      "best_mas_status": "gain",
+      "dataset": "browsecomp_plus_sampled_100",
+      "family": "gemini",
+      "model": "gemini-2.5-pro",
+      "other_architectures": {
+        "multi-agent-centralized": {
+          "delta_pp": 1.0,
+          "delta_relative_percent": 2.777778,
+          "direction": "gain",
+          "performance": 0.37
+        },
+        "multi-agent-decentralized": {
+          "delta_pp": 7.0,
+          "delta_relative_percent": 19.444444,
+          "direction": "gain",
+          "performance": 0.43
+        },
+        "multi-agent-hybrid": {
+          "delta_pp": 4.0,
+          "delta_relative_percent": 11.111111,
+          "direction": "gain",
+          "performance": 0.4
+        },
+        "multi-agent-independent": {
+          "delta_pp": -12.0,
+          "delta_relative_percent": -33.333333,
+          "direction": "loss",
+          "performance": 0.24
+        }
+      },
+      "single_agent": 0.36
+    },
+    {
+      "above_paper_capability_threshold_45pct": false,
+      "best_mas": "multi-agent-decentralized",
+      "best_mas_delta_pp": 13.0,
+      "best_mas_performance": 0.5,
+      "best_mas_status": "gain",
+      "dataset": "browsecomp_plus_sampled_100",
+      "family": "openai",
+      "model": "gpt-5",
+      "other_architectures": {
+        "multi-agent-centralized": {
+          "delta_pp": -3.0,
+          "delta_relative_percent": -8.108108,
+          "direction": "loss",
+          "performance": 0.34
+        },
+        "multi-agent-decentralized": {
+          "delta_pp": 13.0,
+          "delta_relative_percent": 35.135135,
+          "direction": "gain",
+          "performance": 0.5
+        },
+        "multi-agent-hybrid": {
+          "delta_pp": 1.0,
+          "delta_relative_percent": 2.702703,
+          "direction": "gain",
+          "performance": 0.38
+        },
+        "multi-agent-independent": {
+          "delta_pp": 7.0,
+          "delta_relative_percent": 18.918919,
+          "direction": "gain",
+          "performance": 0.44
+        }
+      },
+      "single_agent": 0.37
+    },
+    {
+      "above_paper_capability_threshold_45pct": false,
+      "best_mas": "multi-agent-decentralized",
+      "best_mas_delta_pp": -8.0,
+      "best_mas_performance": 0.33,
+      "best_mas_status": "loss",
+      "dataset": "browsecomp_plus_sampled_100",
+      "family": "openai",
+      "model": "gpt-5-mini",
+      "other_architectures": {
+        "multi-agent-centralized": {
+          "delta_pp": -15.0,
+          "delta_relative_percent": -36.585366,
+          "direction": "loss",
+          "performance": 0.26
+        },
+        "multi-agent-decentralized": {
+          "delta_pp": -8.0,
+          "delta_relative_percent": -19.512195,
+          "direction": "loss",
+          "performance": 0.33
+        },
+        "multi-agent-hybrid": {
+          "delta_pp": -17.0,
+          "delta_relative_percent": -41.463415,
+          "direction": "loss",
+          "performance": 0.24
+        },
+        "multi-agent-independent": {
+          "delta_pp": -16.0,
+          "delta_relative_percent": -39.02439,
+          "direction": "loss",
+          "performance": 0.25
+        }
+      },
+      "single_agent": 0.41
+    },
+    {
+      "above_paper_capability_threshold_45pct": false,
+      "best_mas": "multi-agent-hybrid",
+      "best_mas_delta_pp": -4.0,
+      "best_mas_performance": 0.33,
+      "best_mas_status": "loss",
+      "dataset": "browsecomp_plus_sampled_100",
+      "family": "openai",
+      "model": "gpt-5-nano",
+      "other_architectures": {
+        "multi-agent-centralized": {
+          "delta_pp": -10.0,
+          "delta_relative_percent": -27.027027,
+          "direction": "loss",
+          "performance": 0.27
+        },
+        "multi-agent-decentralized": {
+          "delta_pp": -5.0,
+          "delta_relative_percent": -13.513514,
+          "direction": "loss",
+          "performance": 0.32
+        },
+        "multi-agent-hybrid": {
+          "delta_pp": -4.0,
+          "delta_relative_percent": -10.810811,
+          "direction": "loss",
+          "performance": 0.33
+        },
+        "multi-agent-independent": {
+          "delta_pp": -19.0,
+          "delta_relative_percent": -51.351351,
+          "direction": "loss",
+          "performance": 0.18
+        }
+      },
+      "single_agent": 0.37
+    },
+    {
+      "above_paper_capability_threshold_45pct": false,
+      "best_mas": "multi-agent-centralized",
+      "best_mas_delta_pp": 0.0,
+      "best_mas_performance": 0.3,
+      "best_mas_status": "tie",
+      "dataset": "finance-agent",
+      "family": "anthropic",
+      "model": "claude-3-7-sonnet-20250219",
+      "other_architectures": {
+        "multi-agent-centralized": {
+          "delta_pp": 0.0,
+          "delta_relative_percent": 0.0,
+          "direction": "tie",
+          "performance": 0.3
+        },
+        "multi-agent-decentralized": {
+          "delta_pp": -10.0,
+          "delta_relative_percent": -33.333333,
+          "direction": "loss",
+          "performance": 0.2
+        },
+        "multi-agent-hybrid": {
+          "delta_pp": -6.0,
+          "delta_relative_percent": -20.0,
+          "direction": "loss",
+          "performance": 0.24
+        },
+        "multi-agent-independent": {
+          "delta_pp": -18.0,
+          "delta_relative_percent": -60.0,
+          "direction": "loss",
+          "performance": 0.12
+        }
+      },
+      "single_agent": 0.3
+    },
+    {
+      "above_paper_capability_threshold_45pct": false,
+      "best_mas": "multi-agent-centralized",
+      "best_mas_delta_pp": 10.0,
+      "best_mas_performance": 0.42,
+      "best_mas_status": "gain",
+      "dataset": "finance-agent",
+      "family": "anthropic",
+      "model": "claude-sonnet-4-20250514",
+      "other_architectures": {
+        "multi-agent-centralized": {
+          "delta_pp": 10.0,
+          "delta_relative_percent": 31.25,
+          "direction": "gain",
+          "performance": 0.42
+        },
+        "multi-agent-decentralized": {
+          "delta_pp": 0.0,
+          "delta_relative_percent": 0.0,
+          "direction": "tie",
+          "performance": 0.32
+        },
+        "multi-agent-hybrid": {
+          "delta_pp": 6.0,
+          "delta_relative_percent": 18.75,
+          "direction": "gain",
+          "performance": 0.38
+        },
+        "multi-agent-independent": {
+          "delta_pp": -16.0,
+          "delta_relative_percent": -50.0,
+          "direction": "loss",
+          "performance": 0.16
+        }
+      },
+      "single_agent": 0.32
+    },
+    {
+      "above_paper_capability_threshold_45pct": false,
+      "best_mas": "multi-agent-centralized",
+      "best_mas_delta_pp": 18.0,
+      "best_mas_performance": 0.46,
+      "best_mas_status": "gain",
+      "dataset": "finance-agent",
+      "family": "anthropic",
+      "model": "claude-sonnet-4-5",
+      "other_architectures": {
+        "multi-agent-centralized": {
+          "delta_pp": 18.0,
+          "delta_relative_percent": 64.285714,
+          "direction": "gain",
+          "performance": 0.46
+        },
+        "multi-agent-decentralized": {
+          "delta_pp": 16.0,
+          "delta_relative_percent": 57.142857,
+          "direction": "gain",
+          "performance": 0.44
+        },
+        "multi-agent-hybrid": {
+          "delta_pp": 18.0,
+          "delta_relative_percent": 64.285714,
+          "direction": "gain",
+          "performance": 0.46
+        },
+        "multi-agent-independent": {
+          "delta_pp": 0.0,
+          "delta_relative_percent": 0.0,
+          "direction": "tie",
+          "performance": 0.28
+        }
+      },
+      "single_agent": 0.28
+    },
+    {
+      "above_paper_capability_threshold_45pct": false,
+      "best_mas": "multi-agent-decentralized",
+      "best_mas_delta_pp": 62.0,
+      "best_mas_performance": 0.72,
+      "best_mas_status": "gain",
+      "dataset": "finance-agent",
+      "family": "gemini",
+      "model": "gemini-2.0-flash",
+      "other_architectures": {
+        "multi-agent-centralized": {
+          "delta_pp": 60.0,
+          "delta_relative_percent": 600.0,
+          "direction": "gain",
+          "performance": 0.7
+        },
+        "multi-agent-decentralized": {
+          "delta_pp": 62.0,
+          "delta_relative_percent": 620.0,
+          "direction": "gain",
+          "performance": 0.72
+        },
+        "multi-agent-hybrid": {
+          "delta_pp": 58.0,
+          "delta_relative_percent": 580.0,
+          "direction": "gain",
+          "performance": 0.68
+        },
+        "multi-agent-independent": {
+          "delta_pp": 52.0,
+          "delta_relative_percent": 520.0,
+          "direction": "gain",
+          "performance": 0.62
+        }
+      },
+      "single_agent": 0.1
+    },
+    {
+      "above_paper_capability_threshold_45pct": false,
+      "best_mas": "multi-agent-centralized",
+      "best_mas_delta_pp": 58.0,
+      "best_mas_performance": 0.74,
+      "best_mas_status": "gain",
+      "dataset": "finance-agent",
+      "family": "gemini",
+      "model": "gemini-2.5-flash",
+      "other_architectures": {
+        "multi-agent-centralized": {
+          "delta_pp": 58.0,
+          "delta_relative_percent": 362.5,
+          "direction": "gain",
+          "performance": 0.74
+        },
+        "multi-agent-decentralized": {
+          "delta_pp": 58.0,
+          "delta_relative_percent": 362.5,
+          "direction": "gain",
+          "performance": 0.74
+        },
+        "multi-agent-hybrid": {
+          "delta_pp": 58.0,
+          "delta_relative_percent": 362.5,
+          "direction": "gain",
+          "performance": 0.74
+        },
+        "multi-agent-independent": {
+          "delta_pp": 52.0,
+          "delta_relative_percent": 325.0,
+          "direction": "gain",
+          "performance": 0.68
+        }
+      },
+      "single_agent": 0.16
+    },
+    {
+      "above_paper_capability_threshold_45pct": true,
+      "best_mas": "multi-agent-centralized",
+      "best_mas_delta_pp": 20.0,
+      "best_mas_performance": 0.78,
+      "best_mas_status": "gain",
+      "dataset": "finance-agent",
+      "family": "gemini",
+      "model": "gemini-2.5-pro",
+      "other_architectures": {
+        "multi-agent-centralized": {
+          "delta_pp": 20.0,
+          "delta_relative_percent": 34.482759,
+          "direction": "gain",
+          "performance": 0.78
+        },
+        "multi-agent-decentralized": {
+          "delta_pp": 18.0,
+          "delta_relative_percent": 31.034483,
+          "direction": "gain",
+          "performance": 0.76
+        },
+        "multi-agent-hybrid": {
+          "delta_pp": 18.0,
+          "delta_relative_percent": 31.034483,
+          "direction": "gain",
+          "performance": 0.76
+        },
+        "multi-agent-independent": {
+          "delta_pp": 18.0,
+          "delta_relative_percent": 31.034483,
+          "direction": "gain",
+          "performance": 0.76
+        }
+      },
+      "single_agent": 0.58
+    },
+    {
+      "above_paper_capability_threshold_45pct": true,
+      "best_mas": "multi-agent-centralized",
+      "best_mas_delta_pp": 18.0,
+      "best_mas_performance": 0.8,
+      "best_mas_status": "gain",
+      "dataset": "finance-agent",
+      "family": "openai",
+      "model": "gpt-5",
+      "other_architectures": {
+        "multi-agent-centralized": {
+          "delta_pp": 18.0,
+          "delta_relative_percent": 29.032258,
+          "direction": "gain",
+          "performance": 0.8
+        },
+        "multi-agent-decentralized": {
+          "delta_pp": 16.0,
+          "delta_relative_percent": 25.806452,
+          "direction": "gain",
+          "performance": 0.78
+        },
+        "multi-agent-hybrid": {
+          "delta_pp": 16.0,
+          "delta_relative_percent": 25.806452,
+          "direction": "gain",
+          "performance": 0.78
+        },
+        "multi-agent-independent": {
+          "delta_pp": 14.0,
+          "delta_relative_percent": 22.580645,
+          "direction": "gain",
+          "performance": 0.76
+        }
+      },
+      "single_agent": 0.62
+    },
+    {
+      "above_paper_capability_threshold_45pct": true,
+      "best_mas": "multi-agent-independent",
+      "best_mas_delta_pp": 24.0,
+      "best_mas_performance": 0.78,
+      "best_mas_status": "gain",
+      "dataset": "finance-agent",
+      "family": "openai",
+      "model": "gpt-5-mini",
+      "other_architectures": {
+        "multi-agent-centralized": {
+          "delta_pp": 18.0,
+          "delta_relative_percent": 33.333333,
+          "direction": "gain",
+          "performance": 0.72
+        },
+        "multi-agent-decentralized": {
+          "delta_pp": 22.0,
+          "delta_relative_percent": 40.740741,
+          "direction": "gain",
+          "performance": 0.76
+        },
+        "multi-agent-hybrid": {
+          "delta_pp": 12.0,
+          "delta_relative_percent": 22.222222,
+          "direction": "gain",
+          "performance": 0.66
+        },
+        "multi-agent-independent": {
+          "delta_pp": 24.0,
+          "delta_relative_percent": 44.444444,
+          "direction": "gain",
+          "performance": 0.78
+        }
+      },
+      "single_agent": 0.54
+    },
+    {
+      "above_paper_capability_threshold_45pct": false,
+      "best_mas": "multi-agent-independent",
+      "best_mas_delta_pp": 52.0,
+      "best_mas_performance": 0.76,
+      "best_mas_status": "gain",
+      "dataset": "finance-agent",
+      "family": "openai",
+      "model": "gpt-5-nano",
+      "other_architectures": {
+        "multi-agent-centralized": {
+          "delta_pp": 52.0,
+          "delta_relative_percent": 216.666667,
+          "direction": "gain",
+          "performance": 0.76
+        },
+        "multi-agent-decentralized": {
+          "delta_pp": 52.0,
+          "delta_relative_percent": 216.666667,
+          "direction": "gain",
+          "performance": 0.76
+        },
+        "multi-agent-hybrid": {
+          "delta_pp": 50.0,
+          "delta_relative_percent": 208.333333,
+          "direction": "gain",
+          "performance": 0.74
+        },
+        "multi-agent-independent": {
+          "delta_pp": 52.0,
+          "delta_relative_percent": 216.666667,
+          "direction": "gain",
+          "performance": 0.76
+        }
+      },
+      "single_agent": 0.24
+    },
+    {
+      "above_paper_capability_threshold_45pct": true,
+      "best_mas": "multi-agent-hybrid",
+      "best_mas_delta_pp": -29.292929,
+      "best_mas_performance": 0.30303030303030304,
+      "best_mas_status": "loss",
+      "dataset": "plancraft-test",
+      "family": "anthropic",
+      "model": "claude-3-7-sonnet-20250219",
+      "other_architectures": {
+        "multi-agent-centralized": {
+          "delta_pp": -40.40404,
+          "delta_relative_percent": -67.79661,
+          "direction": "loss",
+          "performance": 0.1919191919191919
+        },
+        "multi-agent-decentralized": {
+          "delta_pp": -48.484848,
+          "delta_relative_percent": -81.355932,
+          "direction": "loss",
+          "performance": 0.1111111111111111
+        },
+        "multi-agent-hybrid": {
+          "delta_pp": -29.292929,
+          "delta_relative_percent": -49.152542,
+          "direction": "loss",
+          "performance": 0.30303030303030304
+        },
+        "multi-agent-independent": {
+          "delta_pp": -50.505051,
+          "delta_relative_percent": -84.745763,
+          "direction": "loss",
+          "performance": 0.09090909090909091
+        }
+      },
+      "single_agent": 0.5959595959595959
+    },
+    {
+      "above_paper_capability_threshold_45pct": true,
+      "best_mas": "multi-agent-hybrid",
+      "best_mas_delta_pp": -39.393939,
+      "best_mas_performance": 0.2828282828282828,
+      "best_mas_status": "loss",
+      "dataset": "plancraft-test",
+      "family": "anthropic",
+      "model": "claude-sonnet-4-20250514",
+      "other_architectures": {
+        "multi-agent-centralized": {
+          "delta_pp": -50.505051,
+          "delta_relative_percent": -74.626866,
+          "direction": "loss",
+          "performance": 0.1717171717171717
+        },
+        "multi-agent-decentralized": {
+          "delta_pp": -47.474747,
+          "delta_relative_percent": -70.149254,
+          "direction": "loss",
+          "performance": 0.20202020202020202
+        },
+        "multi-agent-hybrid": {
+          "delta_pp": -39.393939,
+          "delta_relative_percent": -58.208955,
+          "direction": "loss",
+          "performance": 0.2828282828282828
+        },
+        "multi-agent-independent": {
+          "delta_pp": -58.585859,
+          "delta_relative_percent": -86.567164,
+          "direction": "loss",
+          "performance": 0.09090909090909091
+        }
+      },
+      "single_agent": 0.6767676767676768
+    },
+    {
+      "above_paper_capability_threshold_45pct": true,
+      "best_mas": "multi-agent-hybrid",
+      "best_mas_delta_pp": -42.424242,
+      "best_mas_performance": 0.3434343434343434,
+      "best_mas_status": "loss",
+      "dataset": "plancraft-test",
+      "family": "anthropic",
+      "model": "claude-sonnet-4-5",
+      "other_architectures": {
+        "multi-agent-centralized": {
+          "delta_pp": -57.575758,
+          "delta_relative_percent": -75.0,
+          "direction": "loss",
+          "performance": 0.1919191919191919
+        },
+        "multi-agent-decentralized": {
+          "delta_pp": -60.606061,
+          "delta_relative_percent": -78.947368,
+          "direction": "loss",
+          "performance": 0.16161616161616163
+        },
+        "multi-agent-hybrid": {
+          "delta_pp": -42.424242,
+          "delta_relative_percent": -55.263158,
+          "direction": "loss",
+          "performance": 0.3434343434343434
+        },
+        "multi-agent-independent": {
+          "delta_pp": -69.69697,
+          "delta_relative_percent": -90.789474,
+          "direction": "loss",
+          "performance": 0.0707070707070707
+        }
+      },
+      "single_agent": 0.7676767676767676
+    },
+    {
+      "above_paper_capability_threshold_45pct": true,
+      "best_mas": "multi-agent-decentralized",
+      "best_mas_delta_pp": -8.0,
+      "best_mas_performance": 0.44,
+      "best_mas_status": "loss",
+      "dataset": "plancraft-test",
+      "family": "gemini",
+      "model": "gemini-2.0-flash",
+      "other_architectures": {
+        "multi-agent-centralized": {
+          "delta_pp": -22.0,
+          "delta_relative_percent": -42.307692,
+          "direction": "loss",
+          "performance": 0.3
+        },
+        "multi-agent-decentralized": {
+          "delta_pp": -8.0,
+          "delta_relative_percent": -15.384615,
+          "direction": "loss",
+          "performance": 0.44
+        },
+        "multi-agent-hybrid": {
+          "delta_pp": -20.0,
+          "delta_relative_percent": -38.461538,
+          "direction": "loss",
+          "performance": 0.32
+        },
+        "multi-agent-independent": {
+          "delta_pp": -37.0,
+          "delta_relative_percent": -71.153846,
+          "direction": "loss",
+          "performance": 0.15
+        }
+      },
+      "single_agent": 0.52
+    },
+    {
+      "above_paper_capability_threshold_45pct": true,
+      "best_mas": "multi-agent-decentralized",
+      "best_mas_delta_pp": -10.0,
+      "best_mas_performance": 0.41,
+      "best_mas_status": "loss",
+      "dataset": "plancraft-test",
+      "family": "gemini",
+      "model": "gemini-2.5-flash",
+      "other_architectures": {
+        "multi-agent-centralized": {
+          "delta_pp": -13.0,
+          "delta_relative_percent": -25.490196,
+          "direction": "loss",
+          "performance": 0.38
+        },
+        "multi-agent-decentralized": {
+          "delta_pp": -10.0,
+          "delta_relative_percent": -19.607843,
+          "direction": "loss",
+          "performance": 0.41
+        },
+        "multi-agent-hybrid": {
+          "delta_pp": -10.0,
+          "delta_relative_percent": -19.607843,
+          "direction": "loss",
+          "performance": 0.41
+        },
+        "multi-agent-independent": {
+          "delta_pp": -32.0,
+          "delta_relative_percent": -62.745098,
+          "direction": "loss",
+          "performance": 0.19
+        }
+      },
+      "single_agent": 0.51
+    },
+    {
+      "above_paper_capability_threshold_45pct": true,
+      "best_mas": "multi-agent-hybrid",
+      "best_mas_delta_pp": -9.0,
+      "best_mas_performance": 0.42,
+      "best_mas_status": "loss",
+      "dataset": "plancraft-test",
+      "family": "gemini",
+      "model": "gemini-2.5-pro",
+      "other_architectures": {
+        "multi-agent-centralized": {
+          "delta_pp": -17.0,
+          "delta_relative_percent": -33.333333,
+          "direction": "loss",
+          "performance": 0.34
+        },
+        "multi-agent-decentralized": {
+          "delta_pp": -13.0,
+          "delta_relative_percent": -25.490196,
+          "direction": "loss",
+          "performance": 0.38
+        },
+        "multi-agent-hybrid": {
+          "delta_pp": -9.0,
+          "delta_relative_percent": -17.647059,
+          "direction": "loss",
+          "performance": 0.42
+        },
+        "multi-agent-independent": {
+          "delta_pp": -37.0,
+          "delta_relative_percent": -72.54902,
+          "direction": "loss",
+          "performance": 0.14
+        }
+      },
+      "single_agent": 0.51
+    },
+    {
+      "above_paper_capability_threshold_45pct": true,
+      "best_mas": "multi-agent-decentralized",
+      "best_mas_delta_pp": -15.0,
+      "best_mas_performance": 0.46,
+      "best_mas_status": "loss",
+      "dataset": "plancraft-test",
+      "family": "openai",
+      "model": "gpt-5",
+      "other_architectures": {
+        "multi-agent-centralized": {
+          "delta_pp": -29.0,
+          "delta_relative_percent": -47.540984,
+          "direction": "loss",
+          "performance": 0.32
+        },
+        "multi-agent-decentralized": {
+          "delta_pp": -15.0,
+          "delta_relative_percent": -24.590164,
+          "direction": "loss",
+          "performance": 0.46
+        },
+        "multi-agent-hybrid": {
+          "delta_pp": -27.4,
+          "delta_relative_percent": -44.918033,
+          "direction": "loss",
+          "performance": 0.336
+        },
+        "multi-agent-independent": {
+          "delta_pp": -33.0,
+          "delta_relative_percent": -54.098361,
+          "direction": "loss",
+          "performance": 0.28
+        }
+      },
+      "single_agent": 0.61
+    },
+    {
+      "above_paper_capability_threshold_45pct": true,
+      "best_mas": "multi-agent-decentralized",
+      "best_mas_delta_pp": -9.0,
+      "best_mas_performance": 0.45,
+      "best_mas_status": "loss",
+      "dataset": "plancraft-test",
+      "family": "openai",
+      "model": "gpt-5-mini",
+      "other_architectures": {
+        "multi-agent-centralized": {
+          "delta_pp": -19.0,
+          "delta_relative_percent": -35.185185,
+          "direction": "loss",
+          "performance": 0.35
+        },
+        "multi-agent-decentralized": {
+          "delta_pp": -9.0,
+          "delta_relative_percent": -16.666667,
+          "direction": "loss",
+          "performance": 0.45
+        },
+        "multi-agent-hybrid": {
+          "delta_pp": -19.0,
+          "delta_relative_percent": -35.185185,
+          "direction": "loss",
+          "performance": 0.35
+        },
+        "multi-agent-independent": {
+          "delta_pp": -26.0,
+          "delta_relative_percent": -48.148148,
+          "direction": "loss",
+          "performance": 0.28
+        }
+      },
+      "single_agent": 0.54
+    },
+    {
+      "above_paper_capability_threshold_45pct": false,
+      "best_mas": "multi-agent-decentralized",
+      "best_mas_delta_pp": 0.0,
+      "best_mas_performance": 0.38,
+      "best_mas_status": "tie",
+      "dataset": "plancraft-test",
+      "family": "openai",
+      "model": "gpt-5-nano",
+      "other_architectures": {
+        "multi-agent-centralized": {
+          "delta_pp": -9.0,
+          "delta_relative_percent": -23.684211,
+          "direction": "loss",
+          "performance": 0.29
+        },
+        "multi-agent-decentralized": {
+          "delta_pp": 0.0,
+          "delta_relative_percent": 0.0,
+          "direction": "tie",
+          "performance": 0.38
+        },
+        "multi-agent-hybrid": {
+          "delta_pp": -3.0,
+          "delta_relative_percent": -7.894737,
+          "direction": "loss",
+          "performance": 0.35
+        },
+        "multi-agent-independent": {
+          "delta_pp": -14.0,
+          "delta_relative_percent": -36.842105,
+          "direction": "loss",
+          "performance": 0.24
+        }
+      },
+      "single_agent": 0.38
+    },
+    {
+      "above_paper_capability_threshold_45pct": true,
+      "best_mas": "multi-agent-decentralized",
+      "best_mas_delta_pp": -15.0,
+      "best_mas_performance": 0.55,
+      "best_mas_status": "loss",
+      "dataset": "swe-bench-verified",
+      "family": "anthropic",
+      "model": "claude-sonnet-4-20250514",
+      "other_architectures": {
+        "multi-agent-centralized": {
+          "delta_pp": -20.0,
+          "delta_relative_percent": -28.571429,
+          "direction": "loss",
+          "performance": 0.5
+        },
+        "multi-agent-decentralized": {
+          "delta_pp": -15.0,
+          "delta_relative_percent": -21.428571,
+          "direction": "loss",
+          "performance": 0.55
+        },
+        "multi-agent-hybrid": {
+          "delta_pp": -25.0,
+          "delta_relative_percent": -35.714286,
+          "direction": "loss",
+          "performance": 0.45
+        },
+        "multi-agent-independent": {
+          "delta_pp": -40.0,
+          "delta_relative_percent": -57.142857,
+          "direction": "loss",
+          "performance": 0.3
+        }
+      },
+      "single_agent": 0.7
+    },
+    {
+      "above_paper_capability_threshold_45pct": true,
+      "best_mas": "multi-agent-centralized",
+      "best_mas_delta_pp": -5.0,
+      "best_mas_performance": 0.7,
+      "best_mas_status": "loss",
+      "dataset": "swe-bench-verified",
+      "family": "anthropic",
+      "model": "claude-sonnet-4-5",
+      "other_architectures": {
+        "multi-agent-centralized": {
+          "delta_pp": -5.0,
+          "delta_relative_percent": -6.666667,
+          "direction": "loss",
+          "performance": 0.7
+        },
+        "multi-agent-decentralized": {
+          "delta_pp": -5.0,
+          "delta_relative_percent": -6.666667,
+          "direction": "loss",
+          "performance": 0.7
+        },
+        "multi-agent-hybrid": {
+          "delta_pp": -5.0,
+          "delta_relative_percent": -6.666667,
+          "direction": "loss",
+          "performance": 0.7
+        },
+        "multi-agent-independent": {
+          "delta_pp": -20.0,
+          "delta_relative_percent": -26.666667,
+          "direction": "loss",
+          "performance": 0.55
+        }
+      },
+      "single_agent": 0.75
+    },
+    {
+      "above_paper_capability_threshold_45pct": false,
+      "best_mas": "multi-agent-independent",
+      "best_mas_delta_pp": 25.0,
+      "best_mas_performance": 0.4,
+      "best_mas_status": "gain",
+      "dataset": "swe-bench-verified",
+      "family": "gemini",
+      "model": "gemini-2.0-flash",
+      "other_architectures": {
+        "multi-agent-centralized": {
+          "delta_pp": 10.0,
+          "delta_relative_percent": 66.666667,
+          "direction": "gain",
+          "performance": 0.25
+        },
+        "multi-agent-decentralized": {
+          "delta_pp": 10.0,
+          "delta_relative_percent": 66.666667,
+          "direction": "gain",
+          "performance": 0.25
+        },
+        "multi-agent-hybrid": {
+          "delta_pp": 15.0,
+          "delta_relative_percent": 100.0,
+          "direction": "gain",
+          "performance": 0.3
+        },
+        "multi-agent-independent": {
+          "delta_pp": 25.0,
+          "delta_relative_percent": 166.666667,
+          "direction": "gain",
+          "performance": 0.4
+        }
+      },
+      "single_agent": 0.15
+    },
+    {
+      "above_paper_capability_threshold_45pct": true,
+      "best_mas": "multi-agent-hybrid",
+      "best_mas_delta_pp": -5.0,
+      "best_mas_performance": 0.45,
+      "best_mas_status": "loss",
+      "dataset": "swe-bench-verified",
+      "family": "gemini",
+      "model": "gemini-2.5-flash",
+      "other_architectures": {
+        "multi-agent-centralized": {
+          "delta_pp": -15.0,
+          "delta_relative_percent": -30.0,
+          "direction": "loss",
+          "performance": 0.35
+        },
+        "multi-agent-decentralized": {
+          "delta_pp": -15.0,
+          "delta_relative_percent": -30.0,
+          "direction": "loss",
+          "performance": 0.35
+        },
+        "multi-agent-hybrid": {
+          "delta_pp": -5.0,
+          "delta_relative_percent": -10.0,
+          "direction": "loss",
+          "performance": 0.45
+        },
+        "multi-agent-independent": {
+          "delta_pp": -10.0,
+          "delta_relative_percent": -20.0,
+          "direction": "loss",
+          "performance": 0.4
+        }
+      },
+      "single_agent": 0.5
+    },
+    {
+      "above_paper_capability_threshold_45pct": true,
+      "best_mas": "multi-agent-hybrid",
+      "best_mas_delta_pp": -10.0,
+      "best_mas_performance": 0.6,
+      "best_mas_status": "loss",
+      "dataset": "swe-bench-verified",
+      "family": "gemini",
+      "model": "gemini-2.5-pro",
+      "other_architectures": {
+        "multi-agent-centralized": {
+          "delta_pp": -15.0,
+          "delta_relative_percent": -21.428571,
+          "direction": "loss",
+          "performance": 0.55
+        },
+        "multi-agent-decentralized": {
+          "delta_pp": -25.0,
+          "delta_relative_percent": -35.714286,
+          "direction": "loss",
+          "performance": 0.45
+        },
+        "multi-agent-hybrid": {
+          "delta_pp": -10.0,
+          "delta_relative_percent": -14.285714,
+          "direction": "loss",
+          "performance": 0.6
+        },
+        "multi-agent-independent": {
+          "delta_pp": -20.0,
+          "delta_relative_percent": -28.571429,
+          "direction": "loss",
+          "performance": 0.5
+        }
+      },
+      "single_agent": 0.7
+    },
+    {
+      "above_paper_capability_threshold_45pct": true,
+      "best_mas": "multi-agent-decentralized",
+      "best_mas_delta_pp": 5.0,
+      "best_mas_performance": 0.7,
+      "best_mas_status": "gain",
+      "dataset": "swe-bench-verified",
+      "family": "openai",
+      "model": "gpt-5",
+      "other_architectures": {
+        "multi-agent-centralized": {
+          "delta_pp": -5.0,
+          "delta_relative_percent": -7.692308,
+          "direction": "loss",
+          "performance": 0.6
+        },
+        "multi-agent-decentralized": {
+          "delta_pp": 5.0,
+          "delta_relative_percent": 7.692308,
+          "direction": "gain",
+          "performance": 0.7
+        },
+        "multi-agent-hybrid": {
+          "delta_pp": -10.0,
+          "delta_relative_percent": -15.384615,
+          "direction": "loss",
+          "performance": 0.55
+        },
+        "multi-agent-independent": {
+          "delta_pp": -10.0,
+          "delta_relative_percent": -15.384615,
+          "direction": "loss",
+          "performance": 0.55
+        }
+      },
+      "single_agent": 0.65
+    },
+    {
+      "above_paper_capability_threshold_45pct": false,
+      "best_mas": "multi-agent-centralized",
+      "best_mas_delta_pp": 10.0,
+      "best_mas_performance": 0.5,
+      "best_mas_status": "gain",
+      "dataset": "swe-bench-verified",
+      "family": "openai",
+      "model": "gpt-5-mini",
+      "other_architectures": {
+        "multi-agent-centralized": {
+          "delta_pp": 10.0,
+          "delta_relative_percent": 25.0,
+          "direction": "gain",
+          "performance": 0.5
+        },
+        "multi-agent-decentralized": {
+          "delta_pp": -10.0,
+          "delta_relative_percent": -25.0,
+          "direction": "loss",
+          "performance": 0.3
+        },
+        "multi-agent-hybrid": {
+          "delta_pp": 10.0,
+          "delta_relative_percent": 25.0,
+          "direction": "gain",
+          "performance": 0.5
+        },
+        "multi-agent-independent": {
+          "delta_pp": 5.0,
+          "delta_relative_percent": 12.5,
+          "direction": "gain",
+          "performance": 0.45
+        }
+      },
+      "single_agent": 0.4
+    },
+    {
+      "above_paper_capability_threshold_45pct": false,
+      "best_mas": "multi-agent-centralized",
+      "best_mas_delta_pp": 30.0,
+      "best_mas_performance": 0.35,
+      "best_mas_status": "gain",
+      "dataset": "swe-bench-verified",
+      "family": "openai",
+      "model": "gpt-5-nano",
+      "other_architectures": {
+        "multi-agent-centralized": {
+          "delta_pp": 30.0,
+          "delta_relative_percent": 600.0,
+          "direction": "gain",
+          "performance": 0.35
+        },
+        "multi-agent-decentralized": {
+          "delta_pp": 30.0,
+          "delta_relative_percent": 600.0,
+          "direction": "gain",
+          "performance": 0.35
+        },
+        "multi-agent-hybrid": {
+          "delta_pp": 25.0,
+          "delta_relative_percent": 500.0,
+          "direction": "gain",
+          "performance": 0.3
+        },
+        "multi-agent-independent": {
+          "delta_pp": 20.0,
+          "delta_relative_percent": 400.0,
+          "direction": "gain",
+          "performance": 0.25
+        }
+      },
+      "single_agent": 0.05
+    },
+    {
+      "above_paper_capability_threshold_45pct": false,
+      "best_mas": "multi-agent-independent",
+      "best_mas_delta_pp": 10.0,
+      "best_mas_performance": 0.35,
+      "best_mas_status": "gain",
+      "dataset": "terminal-bench",
+      "family": "anthropic",
+      "model": "claude-sonnet-4-20250514",
+      "other_architectures": {
+        "multi-agent-centralized": {
+          "delta_pp": 0.0,
+          "delta_relative_percent": 0.0,
+          "direction": "tie",
+          "performance": 0.25
+        },
+        "multi-agent-decentralized": {
+          "delta_pp": 10.0,
+          "delta_relative_percent": 40.0,
+          "direction": "gain",
+          "performance": 0.35
+        },
+        "multi-agent-hybrid": {
+          "delta_pp": 0.0,
+          "delta_relative_percent": 0.0,
+          "direction": "tie",
+          "performance": 0.25
+        },
+        "multi-agent-independent": {
+          "delta_pp": 10.0,
+          "delta_relative_percent": 40.0,
+          "direction": "gain",
+          "performance": 0.35
+        }
+      },
+      "single_agent": 0.25
+    },
+    {
+      "above_paper_capability_threshold_45pct": true,
+      "best_mas": "multi-agent-hybrid",
+      "best_mas_delta_pp": -10.0,
+      "best_mas_performance": 0.5,
+      "best_mas_status": "loss",
+      "dataset": "terminal-bench",
+      "family": "anthropic",
+      "model": "claude-sonnet-4-5",
+      "other_architectures": {
+        "multi-agent-centralized": {
+          "delta_pp": -15.0,
+          "delta_relative_percent": -25.0,
+          "direction": "loss",
+          "performance": 0.45
+        },
+        "multi-agent-decentralized": {
+          "delta_pp": -20.0,
+          "delta_relative_percent": -33.333333,
+          "direction": "loss",
+          "performance": 0.4
+        },
+        "multi-agent-hybrid": {
+          "delta_pp": -10.0,
+          "delta_relative_percent": -16.666667,
+          "direction": "loss",
+          "performance": 0.5
+        },
+        "multi-agent-independent": {
+          "delta_pp": -20.0,
+          "delta_relative_percent": -33.333333,
+          "direction": "loss",
+          "performance": 0.4
+        }
+      },
+      "single_agent": 0.6
+    },
+    {
+      "above_paper_capability_threshold_45pct": false,
+      "best_mas": "multi-agent-independent",
+      "best_mas_delta_pp": 5.0,
+      "best_mas_performance": 0.2,
+      "best_mas_status": "gain",
+      "dataset": "terminal-bench",
+      "family": "gemini",
+      "model": "gemini-2.0-flash",
+      "other_architectures": {
+        "multi-agent-centralized": {
+          "delta_pp": 0.0,
+          "delta_relative_percent": 0.0,
+          "direction": "tie",
+          "performance": 0.15
+        },
+        "multi-agent-decentralized": {
+          "delta_pp": -10.0,
+          "delta_relative_percent": -66.666667,
+          "direction": "loss",
+          "performance": 0.05
+        },
+        "multi-agent-hybrid": {
+          "delta_pp": -10.0,
+          "delta_relative_percent": -66.666667,
+          "direction": "loss",
+          "performance": 0.05
+        },
+        "multi-agent-independent": {
+          "delta_pp": 5.0,
+          "delta_relative_percent": 33.333333,
+          "direction": "gain",
+          "performance": 0.2
+        }
+      },
+      "single_agent": 0.15
+    },
+    {
+      "above_paper_capability_threshold_45pct": false,
+      "best_mas": "multi-agent-centralized",
+      "best_mas_delta_pp": 5.0,
+      "best_mas_performance": 0.25,
+      "best_mas_status": "gain",
+      "dataset": "terminal-bench",
+      "family": "gemini",
+      "model": "gemini-2.5-flash",
+      "other_architectures": {
+        "multi-agent-centralized": {
+          "delta_pp": 5.0,
+          "delta_relative_percent": 25.0,
+          "direction": "gain",
+          "performance": 0.25
+        },
+        "multi-agent-decentralized": {
+          "delta_pp": 5.0,
+          "delta_relative_percent": 25.0,
+          "direction": "gain",
+          "performance": 0.25
+        },
+        "multi-agent-hybrid": {
+          "delta_pp": 5.0,
+          "delta_relative_percent": 25.0,
+          "direction": "gain",
+          "performance": 0.25
+        },
+        "multi-agent-independent": {
+          "delta_pp": 0.0,
+          "delta_relative_percent": 0.0,
+          "direction": "tie",
+          "performance": 0.2
+        }
+      },
+      "single_agent": 0.2
+    },
+    {
+      "above_paper_capability_threshold_45pct": false,
+      "best_mas": "multi-agent-independent",
+      "best_mas_delta_pp": -15.0,
+      "best_mas_performance": 0.3,
+      "best_mas_status": "loss",
+      "dataset": "terminal-bench",
+      "family": "gemini",
+      "model": "gemini-2.5-pro",
+      "other_architectures": {
+        "multi-agent-centralized": {
+          "delta_pp": -35.0,
+          "delta_relative_percent": -77.777778,
+          "direction": "loss",
+          "performance": 0.1
+        },
+        "multi-agent-decentralized": {
+          "delta_pp": -15.0,
+          "delta_relative_percent": -33.333333,
+          "direction": "loss",
+          "performance": 0.3
+        },
+        "multi-agent-hybrid": {
+          "delta_pp": -20.0,
+          "delta_relative_percent": -44.444444,
+          "direction": "loss",
+          "performance": 0.25
+        },
+        "multi-agent-independent": {
+          "delta_pp": -15.0,
+          "delta_relative_percent": -33.333333,
+          "direction": "loss",
+          "performance": 0.3
+        }
+      },
+      "single_agent": 0.45
+    },
+    {
+      "above_paper_capability_threshold_45pct": false,
+      "best_mas": "multi-agent-hybrid",
+      "best_mas_delta_pp": 20.0,
+      "best_mas_performance": 0.5,
+      "best_mas_status": "gain",
+      "dataset": "terminal-bench",
+      "family": "openai",
+      "model": "gpt-5",
+      "other_architectures": {
+        "multi-agent-centralized": {
+          "delta_pp": 15.0,
+          "delta_relative_percent": 50.0,
+          "direction": "gain",
+          "performance": 0.45
+        },
+        "multi-agent-decentralized": {
+          "delta_pp": 15.0,
+          "delta_relative_percent": 50.0,
+          "direction": "gain",
+          "performance": 0.45
+        },
+        "multi-agent-hybrid": {
+          "delta_pp": 20.0,
+          "delta_relative_percent": 66.666667,
+          "direction": "gain",
+          "performance": 0.5
+        },
+        "multi-agent-independent": {
+          "delta_pp": 15.0,
+          "delta_relative_percent": 50.0,
+          "direction": "gain",
+          "performance": 0.45
+        }
+      },
+      "single_agent": 0.3
+    },
+    {
+      "above_paper_capability_threshold_45pct": false,
+      "best_mas": "multi-agent-independent",
+      "best_mas_delta_pp": 15.0,
+      "best_mas_performance": 0.45,
+      "best_mas_status": "gain",
+      "dataset": "terminal-bench",
+      "family": "openai",
+      "model": "gpt-5-mini",
+      "other_architectures": {
+        "multi-agent-centralized": {
+          "delta_pp": -15.0,
+          "delta_relative_percent": -50.0,
+          "direction": "loss",
+          "performance": 0.15
+        },
+        "multi-agent-decentralized": {
+          "delta_pp": 0.0,
+          "delta_relative_percent": 0.0,
+          "direction": "tie",
+          "performance": 0.3
+        },
+        "multi-agent-hybrid": {
+          "delta_pp": -10.0,
+          "delta_relative_percent": -33.333333,
+          "direction": "loss",
+          "performance": 0.2
+        },
+        "multi-agent-independent": {
+          "delta_pp": 15.0,
+          "delta_relative_percent": 50.0,
+          "direction": "gain",
+          "performance": 0.45
+        }
+      },
+      "single_agent": 0.3
+    },
+    {
+      "above_paper_capability_threshold_45pct": false,
+      "best_mas": "multi-agent-independent",
+      "best_mas_delta_pp": 5.0,
+      "best_mas_performance": 0.3,
+      "best_mas_status": "gain",
+      "dataset": "terminal-bench",
+      "family": "openai",
+      "model": "gpt-5-nano",
+      "other_architectures": {
+        "multi-agent-centralized": {
+          "delta_pp": -5.0,
+          "delta_relative_percent": -20.0,
+          "direction": "loss",
+          "performance": 0.2
+        },
+        "multi-agent-decentralized": {
+          "delta_pp": 0.0,
+          "delta_relative_percent": 0.0,
+          "direction": "tie",
+          "performance": 0.25
+        },
+        "multi-agent-hybrid": {
+          "delta_pp": -5.0,
+          "delta_relative_percent": -20.0,
+          "direction": "loss",
+          "performance": 0.2
+        },
+        "multi-agent-independent": {
+          "delta_pp": 5.0,
+          "delta_relative_percent": 20.0,
+          "direction": "gain",
+          "performance": 0.3
+        }
+      },
+      "single_agent": 0.25
+    },
+    {
+      "above_paper_capability_threshold_45pct": true,
+      "best_mas": "multi-agent-decentralized",
+      "best_mas_delta_pp": 14.0,
+      "best_mas_performance": 0.67,
+      "best_mas_status": "gain",
+      "dataset": "workbench",
+      "family": "anthropic",
+      "model": "claude-3-7-sonnet-20250219",
+      "other_architectures": {
+        "multi-agent-centralized": {
+          "delta_pp": 10.0,
+          "delta_relative_percent": 18.867925,
+          "direction": "gain",
+          "performance": 0.63
+        },
+        "multi-agent-decentralized": {
+          "delta_pp": 14.0,
+          "delta_relative_percent": 26.415094,
+          "direction": "gain",
+          "performance": 0.67
+        },
+        "multi-agent-hybrid": {
+          "delta_pp": 13.0,
+          "delta_relative_percent": 24.528302,
+          "direction": "gain",
+          "performance": 0.66
+        },
+        "multi-agent-independent": {
+          "delta_pp": 2.0,
+          "delta_relative_percent": 3.773585,
+          "direction": "gain",
+          "performance": 0.55
+        }
+      },
+      "single_agent": 0.53
+    },
+    {
+      "above_paper_capability_threshold_45pct": true,
+      "best_mas": "multi-agent-decentralized",
+      "best_mas_delta_pp": 8.0,
+      "best_mas_performance": 0.72,
+      "best_mas_status": "gain",
+      "dataset": "workbench",
+      "family": "anthropic",
+      "model": "claude-sonnet-4-20250514",
+      "other_architectures": {
+        "multi-agent-centralized": {
+          "delta_pp": 4.0,
+          "delta_relative_percent": 6.25,
+          "direction": "gain",
+          "performance": 0.68
+        },
+        "multi-agent-decentralized": {
+          "delta_pp": 8.0,
+          "delta_relative_percent": 12.5,
+          "direction": "gain",
+          "performance": 0.72
+        },
+        "multi-agent-hybrid": {
+          "delta_pp": 7.0,
+          "delta_relative_percent": 10.9375,
+          "direction": "gain",
+          "performance": 0.71
+        },
+        "multi-agent-independent": {
+          "delta_pp": 1.0,
+          "delta_relative_percent": 1.5625,
+          "direction": "gain",
+          "performance": 0.65
+        }
+      },
+      "single_agent": 0.64
+    },
+    {
+      "above_paper_capability_threshold_45pct": true,
+      "best_mas": "multi-agent-decentralized",
+      "best_mas_delta_pp": 16.0,
+      "best_mas_performance": 0.81,
+      "best_mas_status": "gain",
+      "dataset": "workbench",
+      "family": "anthropic",
+      "model": "claude-sonnet-4-5",
+      "other_architectures": {
+        "multi-agent-centralized": {
+          "delta_pp": 7.0,
+          "delta_relative_percent": 10.769231,
+          "direction": "gain",
+          "performance": 0.72
+        },
+        "multi-agent-decentralized": {
+          "delta_pp": 16.0,
+          "delta_relative_percent": 24.615385,
+          "direction": "gain",
+          "performance": 0.81
+        },
+        "multi-agent-hybrid": {
+          "delta_pp": 9.0,
+          "delta_relative_percent": 13.846154,
+          "direction": "gain",
+          "performance": 0.74
+        },
+        "multi-agent-independent": {
+          "delta_pp": 5.0,
+          "delta_relative_percent": 7.692308,
+          "direction": "gain",
+          "performance": 0.7
+        }
+      },
+      "single_agent": 0.65
+    },
+    {
+      "above_paper_capability_threshold_45pct": true,
+      "best_mas": "multi-agent-hybrid",
+      "best_mas_delta_pp": 0.0,
+      "best_mas_performance": 0.55,
+      "best_mas_status": "tie",
+      "dataset": "workbench",
+      "family": "gemini",
+      "model": "gemini-2.0-flash",
+      "other_architectures": {
+        "multi-agent-centralized": {
+          "delta_pp": -3.0,
+          "delta_relative_percent": -5.454545,
+          "direction": "loss",
+          "performance": 0.52
+        },
+        "multi-agent-decentralized": {
+          "delta_pp": -3.0,
+          "delta_relative_percent": -5.454545,
+          "direction": "loss",
+          "performance": 0.52
+        },
+        "multi-agent-hybrid": {
+          "delta_pp": 0.0,
+          "delta_relative_percent": 0.0,
+          "direction": "tie",
+          "performance": 0.55
+        },
+        "multi-agent-independent": {
+          "delta_pp": -2.0,
+          "delta_relative_percent": -3.636364,
+          "direction": "loss",
+          "performance": 0.53
+        }
+      },
+      "single_agent": 0.55
+    },
+    {
+      "above_paper_capability_threshold_45pct": true,
+      "best_mas": "multi-agent-hybrid",
+      "best_mas_delta_pp": 0.0,
+      "best_mas_performance": 0.63,
+      "best_mas_status": "tie",
+      "dataset": "workbench",
+      "family": "gemini",
+      "model": "gemini-2.5-flash",
+      "other_architectures": {
+        "multi-agent-centralized": {
+          "delta_pp": -5.0,
+          "delta_relative_percent": -7.936508,
+          "direction": "loss",
+          "performance": 0.58
+        },
+        "multi-agent-decentralized": {
+          "delta_pp": -5.0,
+          "delta_relative_percent": -7.936508,
+          "direction": "loss",
+          "performance": 0.58
+        },
+        "multi-agent-hybrid": {
+          "delta_pp": 0.0,
+          "delta_relative_percent": 0.0,
+          "direction": "tie",
+          "performance": 0.63
+        },
+        "multi-agent-independent": {
+          "delta_pp": -9.0,
+          "delta_relative_percent": -14.285714,
+          "direction": "loss",
+          "performance": 0.54
+        }
+      },
+      "single_agent": 0.63
+    },
+    {
+      "above_paper_capability_threshold_45pct": true,
+      "best_mas": "multi-agent-decentralized",
+      "best_mas_delta_pp": 5.0,
+      "best_mas_performance": 0.69,
+      "best_mas_status": "gain",
+      "dataset": "workbench",
+      "family": "gemini",
+      "model": "gemini-2.5-pro",
+      "other_architectures": {
+        "multi-agent-centralized": {
+          "delta_pp": 2.0,
+          "delta_relative_percent": 3.125,
+          "direction": "gain",
+          "performance": 0.66
+        },
+        "multi-agent-decentralized": {
+          "delta_pp": 5.0,
+          "delta_relative_percent": 7.8125,
+          "direction": "gain",
+          "performance": 0.69
+        },
+        "multi-agent-hybrid": {
+          "delta_pp": 2.0,
+          "delta_relative_percent": 3.125,
+          "direction": "gain",
+          "performance": 0.66
+        },
+        "multi-agent-independent": {
+          "delta_pp": -8.0,
+          "delta_relative_percent": -12.5,
+          "direction": "loss",
+          "performance": 0.56
+        }
+      },
+      "single_agent": 0.64
+    },
+    {
+      "above_paper_capability_threshold_45pct": true,
+      "best_mas": "multi-agent-decentralized",
+      "best_mas_delta_pp": 6.0,
+      "best_mas_performance": 0.76,
+      "best_mas_status": "gain",
+      "dataset": "workbench",
+      "family": "openai",
+      "model": "gpt-5",
+      "other_architectures": {
+        "multi-agent-centralized": {
+          "delta_pp": -6.0,
+          "delta_relative_percent": -8.571429,
+          "direction": "loss",
+          "performance": 0.64
+        },
+        "multi-agent-decentralized": {
+          "delta_pp": 6.0,
+          "delta_relative_percent": 8.571429,
+          "direction": "gain",
+          "performance": 0.76
+        },
+        "multi-agent-hybrid": {
+          "delta_pp": -10.0,
+          "delta_relative_percent": -14.285714,
+          "direction": "loss",
+          "performance": 0.6
+        },
+        "multi-agent-independent": {
+          "delta_pp": -11.0,
+          "delta_relative_percent": -15.714286,
+          "direction": "loss",
+          "performance": 0.59
+        }
+      },
+      "single_agent": 0.7
+    },
+    {
+      "above_paper_capability_threshold_45pct": true,
+      "best_mas": "multi-agent-decentralized",
+      "best_mas_delta_pp": -8.0,
+      "best_mas_performance": 0.62,
+      "best_mas_status": "loss",
+      "dataset": "workbench",
+      "family": "openai",
+      "model": "gpt-5-mini",
+      "other_architectures": {
+        "multi-agent-centralized": {
+          "delta_pp": -10.0,
+          "delta_relative_percent": -14.285714,
+          "direction": "loss",
+          "performance": 0.6
+        },
+        "multi-agent-decentralized": {
+          "delta_pp": -8.0,
+          "delta_relative_percent": -11.428571,
+          "direction": "loss",
+          "performance": 0.62
+        },
+        "multi-agent-hybrid": {
+          "delta_pp": -14.0,
+          "delta_relative_percent": -20.0,
+          "direction": "loss",
+          "performance": 0.56
+        },
+        "multi-agent-independent": {
+          "delta_pp": -25.0,
+          "delta_relative_percent": -35.714286,
+          "direction": "loss",
+          "performance": 0.45
+        }
+      },
+      "single_agent": 0.7
+    },
+    {
+      "above_paper_capability_threshold_45pct": true,
+      "best_mas": "multi-agent-decentralized",
+      "best_mas_delta_pp": -1.0,
+      "best_mas_performance": 0.61,
+      "best_mas_status": "loss",
+      "dataset": "workbench",
+      "family": "openai",
+      "model": "gpt-5-nano",
+      "other_architectures": {
+        "multi-agent-centralized": {
+          "delta_pp": -6.0,
+          "delta_relative_percent": -9.677419,
+          "direction": "loss",
+          "performance": 0.56
+        },
+        "multi-agent-decentralized": {
+          "delta_pp": -1.0,
+          "delta_relative_percent": -1.612903,
+          "direction": "loss",
+          "performance": 0.61
+        },
+        "multi-agent-hybrid": {
+          "delta_pp": -14.0,
+          "delta_relative_percent": -22.580645,
+          "direction": "loss",
+          "performance": 0.48
+        },
+        "multi-agent-independent": {
+          "delta_pp": -18.0,
+          "delta_relative_percent": -29.032258,
+          "direction": "loss",
+          "performance": 0.44
+        }
+      },
+      "single_agent": 0.62
+    }
+  ],
+  "baseline_45pct_exploratory_groups": [
+    {
+      "best_mas_gain_count": 21,
+      "best_mas_loss_count": 3,
+      "best_mas_tie_count": 2,
+      "fraction_some_mas_better": 0.8077,
+      "group": "baseline_at_most_45pct",
+      "n_matched_model_datasets": 26
+    },
+    {
+      "best_mas_gain_count": 9,
+      "best_mas_loss_count": 15,
+      "best_mas_tie_count": 2,
+      "fraction_some_mas_better": 0.3462,
+      "group": "baseline_over_45pct",
+      "n_matched_model_datasets": 26
+    }
+  ],
+  "best_mas_oracle_average_delta_pp": 4.9266,
+  "best_mas_oracle_overall_direction": {
+    "gain": 30,
+    "loss": 18,
+    "tie": 4
+  },
+  "macro_source_sampling": "all 52 model-dataset cells equally weighted; no task-level confidence intervals",
+  "n_original_configurations": 260,
+  "n_paired_mas_vs_sas_comparisons": 208,
+  "num_matched_model_dataset_cells": 52,
+  "overall_architecture_contrasts": [
+    {
+      "architecture": "multi-agent-independent",
+      "direction_counts": {
+        "gain": 18,
+        "loss": 32,
+        "tie": 2
+      },
+      "macro_mean_matched_delta_pp": -7.3125,
+      "pair_count": 52
+    },
+    {
+      "architecture": "multi-agent-centralized",
+      "direction_counts": {
+        "gain": 23,
+        "loss": 26,
+        "tie": 3
+      },
+      "macro_mean_matched_delta_pp": -1.3435,
+      "pair_count": 52
+    },
+    {
+      "architecture": "multi-agent-decentralized",
+      "direction_counts": {
+        "gain": 24,
+        "loss": 24,
+        "tie": 4
+      },
+      "macro_mean_matched_delta_pp": 0.7815,
+      "pair_count": 52
+    },
+    {
+      "architecture": "multi-agent-hybrid",
+      "direction_counts": {
+        "gain": 24,
+        "loss": 25,
+        "tie": 3
+      },
+      "macro_mean_matched_delta_pp": 0.0912,
+      "pair_count": 52
+    }
+  ],
+  "per_dataset_contrasts": [
+    {
+      "best_mas_oracle_directions": {
+        "gain": 7,
+        "loss": 2
+      },
+      "best_mas_oracle_mean_delta_pp": 5.1437,
+      "by_architecture": [
+        {
+          "architecture": "multi-agent-independent",
+          "directions": {
+            "gain": 1,
+            "loss": 8
+          },
+          "max_matched_delta_pp": 7.0,
+          "mean_matched_delta_pp": -11.1627,
+          "mean_source_performance": 0.206038,
+          "min_matched_delta_pp": -20.202
+        },
+        {
+          "architecture": "multi-agent-centralized",
+          "directions": {
+            "gain": 6,
+            "loss": 3
+          },
+          "max_matched_delta_pp": 8.5137,
+          "mean_matched_delta_pp": 0.0694,
+          "mean_source_performance": 0.31836,
+          "min_matched_delta_pp": -15.0
+        },
+        {
+          "architecture": "multi-agent-decentralized",
+          "directions": {
+            "gain": 6,
+            "loss": 3
+          },
+          "max_matched_delta_pp": 13.0,
+          "mean_matched_delta_pp": 2.9113,
+          "mean_source_performance": 0.346779,
+          "min_matched_delta_pp": -8.0
+        },
+        {
+          "architecture": "multi-agent-hybrid",
+          "directions": {
+            "gain": 7,
+            "loss": 2
+          },
+          "max_matched_delta_pp": 12.1212,
+          "mean_matched_delta_pp": 1.8058,
+          "mean_source_performance": 0.335724,
+          "min_matched_delta_pp": -17.0
+        }
+      ],
+      "dataset": "browsecomp_plus_sampled_100",
+      "models": 9,
+      "name": "BrowseComp-Plus",
+      "single_agent_mean": 0.317666
+    },
+    {
+      "best_mas_oracle_directions": {
+        "gain": 8,
+        "tie": 1
+      },
+      "best_mas_oracle_mean_delta_pp": 29.1111,
+      "by_architecture": [
+        {
+          "architecture": "multi-agent-independent",
+          "directions": {
+            "gain": 6,
+            "loss": 2,
+            "tie": 1
+          },
+          "max_matched_delta_pp": 52.0,
+          "mean_matched_delta_pp": 19.7778,
+          "mean_source_performance": 0.546667,
+          "min_matched_delta_pp": -18.0
+        },
+        {
+          "architecture": "multi-agent-centralized",
+          "directions": {
+            "gain": 8,
+            "tie": 1
+          },
+          "max_matched_delta_pp": 60.0,
+          "mean_matched_delta_pp": 28.2222,
+          "mean_source_performance": 0.631111,
+          "min_matched_delta_pp": 0.0
+        },
+        {
+          "architecture": "multi-agent-decentralized",
+          "directions": {
+            "gain": 7,
+            "loss": 1,
+            "tie": 1
+          },
+          "max_matched_delta_pp": 62.0,
+          "mean_matched_delta_pp": 26.0,
+          "mean_source_performance": 0.608889,
+          "min_matched_delta_pp": -10.0
+        },
+        {
+          "architecture": "multi-agent-hybrid",
+          "directions": {
+            "gain": 8,
+            "loss": 1
+          },
+          "max_matched_delta_pp": 58.0,
+          "mean_matched_delta_pp": 25.5556,
+          "mean_source_performance": 0.604444,
+          "min_matched_delta_pp": -6.0
+        }
+      ],
+      "dataset": "finance-agent",
+      "models": 9,
+      "name": "Finance Agent",
+      "single_agent_mean": 0.348889
+    },
+    {
+      "best_mas_oracle_directions": {
+        "loss": 8,
+        "tie": 1
+      },
+      "best_mas_oracle_mean_delta_pp": -18.0123,
+      "by_architecture": [
+        {
+          "architecture": "multi-agent-independent",
+          "directions": {
+            "loss": 9
+          },
+          "max_matched_delta_pp": -14.0,
+          "mean_matched_delta_pp": -39.7542,
+          "mean_source_performance": 0.170281,
+          "min_matched_delta_pp": -69.697
+        },
+        {
+          "architecture": "multi-agent-centralized",
+          "directions": {
+            "loss": 9
+          },
+          "max_matched_delta_pp": -9.0,
+          "mean_matched_delta_pp": -28.6094,
+          "mean_source_performance": 0.281728,
+          "min_matched_delta_pp": -57.5758
+        },
+        {
+          "architecture": "multi-agent-decentralized",
+          "directions": {
+            "loss": 8,
+            "tie": 1
+          },
+          "max_matched_delta_pp": 0.0,
+          "mean_matched_delta_pp": -23.5073,
+          "mean_source_performance": 0.33275,
+          "min_matched_delta_pp": -60.6061
+        },
+        {
+          "architecture": "multi-agent-hybrid",
+          "directions": {
+            "loss": 9
+          },
+          "max_matched_delta_pp": -3.0,
+          "mean_matched_delta_pp": -22.1679,
+          "mean_source_performance": 0.346144,
+          "min_matched_delta_pp": -42.4242
+        }
+      ],
+      "dataset": "plancraft-test",
+      "models": 9,
+      "name": "PlanCraft",
+      "single_agent_mean": 0.567823
+    },
+    {
+      "best_mas_oracle_directions": {
+        "gain": 5,
+        "loss": 2,
+        "tie": 2
+      },
+      "best_mas_oracle_mean_delta_pp": 4.4444,
+      "by_architecture": [
+        {
+          "architecture": "multi-agent-independent",
+          "directions": {
+            "gain": 3,
+            "loss": 6
+          },
+          "max_matched_delta_pp": 5.0,
+          "mean_matched_delta_pp": -7.2222,
+          "mean_source_performance": 0.556667,
+          "min_matched_delta_pp": -25.0
+        },
+        {
+          "architecture": "multi-agent-centralized",
+          "directions": {
+            "gain": 4,
+            "loss": 5
+          },
+          "max_matched_delta_pp": 10.0,
+          "mean_matched_delta_pp": -0.7778,
+          "mean_source_performance": 0.621111,
+          "min_matched_delta_pp": -10.0
+        },
+        {
+          "architecture": "multi-agent-decentralized",
+          "directions": {
+            "gain": 5,
+            "loss": 4
+          },
+          "max_matched_delta_pp": 16.0,
+          "mean_matched_delta_pp": 3.5556,
+          "mean_source_performance": 0.664444,
+          "min_matched_delta_pp": -8.0
+        },
+        {
+          "architecture": "multi-agent-hybrid",
+          "directions": {
+            "gain": 4,
+            "loss": 3,
+            "tie": 2
+          },
+          "max_matched_delta_pp": 13.0,
+          "mean_matched_delta_pp": -0.7778,
+          "mean_source_performance": 0.621111,
+          "min_matched_delta_pp": -14.0
+        }
+      ],
+      "dataset": "workbench",
+      "models": 9,
+      "name": "WorkBench",
+      "single_agent_mean": 0.628889
+    },
+    {
+      "best_mas_oracle_directions": {
+        "gain": 4,
+        "loss": 4
+      },
+      "best_mas_oracle_mean_delta_pp": 4.375,
+      "by_architecture": [
+        {
+          "architecture": "multi-agent-independent",
+          "directions": {
+            "gain": 3,
+            "loss": 5
+          },
+          "max_matched_delta_pp": 25.0,
+          "mean_matched_delta_pp": -6.25,
+          "mean_source_performance": 0.425,
+          "min_matched_delta_pp": -40.0
+        },
+        {
+          "architecture": "multi-agent-centralized",
+          "directions": {
+            "gain": 3,
+            "loss": 5
+          },
+          "max_matched_delta_pp": 30.0,
+          "mean_matched_delta_pp": -1.25,
+          "mean_source_performance": 0.475,
+          "min_matched_delta_pp": -20.0
+        },
+        {
+          "architecture": "multi-agent-decentralized",
+          "directions": {
+            "gain": 3,
+            "loss": 5
+          },
+          "max_matched_delta_pp": 30.0,
+          "mean_matched_delta_pp": -3.125,
+          "mean_source_performance": 0.45625,
+          "min_matched_delta_pp": -25.0
+        },
+        {
+          "architecture": "multi-agent-hybrid",
+          "directions": {
+            "gain": 3,
+            "loss": 5
+          },
+          "max_matched_delta_pp": 25.0,
+          "mean_matched_delta_pp": -0.625,
+          "mean_source_performance": 0.48125,
+          "min_matched_delta_pp": -25.0
+        }
+      ],
+      "dataset": "swe-bench-verified",
+      "models": 8,
+      "name": "SWE-bench Verified",
+      "single_agent_mean": 0.4875
+    },
+    {
+      "best_mas_oracle_directions": {
+        "gain": 6,
+        "loss": 2
+      },
+      "best_mas_oracle_mean_delta_pp": 4.375,
+      "by_architecture": [
+        {
+          "architecture": "multi-agent-independent",
+          "directions": {
+            "gain": 5,
+            "loss": 2,
+            "tie": 1
+          },
+          "max_matched_delta_pp": 15.0,
+          "mean_matched_delta_pp": 1.875,
+          "mean_source_performance": 0.33125,
+          "min_matched_delta_pp": -20.0
+        },
+        {
+          "architecture": "multi-agent-centralized",
+          "directions": {
+            "gain": 2,
+            "loss": 4,
+            "tie": 2
+          },
+          "max_matched_delta_pp": 15.0,
+          "mean_matched_delta_pp": -6.25,
+          "mean_source_performance": 0.25,
+          "min_matched_delta_pp": -35.0
+        },
+        {
+          "architecture": "multi-agent-decentralized",
+          "directions": {
+            "gain": 3,
+            "loss": 3,
+            "tie": 2
+          },
+          "max_matched_delta_pp": 15.0,
+          "mean_matched_delta_pp": -1.875,
+          "mean_source_performance": 0.29375,
+          "min_matched_delta_pp": -20.0
+        },
+        {
+          "architecture": "multi-agent-hybrid",
+          "directions": {
+            "gain": 2,
+            "loss": 5,
+            "tie": 1
+          },
+          "max_matched_delta_pp": 20.0,
+          "mean_matched_delta_pp": -3.75,
+          "mean_source_performance": 0.275,
+          "min_matched_delta_pp": -20.0
+        }
+      ],
+      "dataset": "terminal-bench",
+      "models": 8,
+      "name": "Terminal-Bench",
+      "single_agent_mean": 0.3125
+    }
+  ],
+  "scientific_limitations": [
+    "Publisher CSV contains means per configuration, no case-level trials or paired raw correctness.",
+    "Architecture policy effect cannot be separated from implementation choices and realized coordination-turn costs by this CSV alone.",
+    "The best-MAS aggregate is post-hoc oracle selection across variants and not deployable without validation.",
+    "Model / task cells reuse original datasets; 260 configurations are not 260 independent tasks.",
+    "Separate clinical batch paper compared whole-batch single model with isolated workers, not isolated single-model task calls under equal effective context."
+  ],
+  "source_description": "publisher released Fig 1 and 2 configuration means, Nature Machine Intelligence 2026",
+  "source_sha256": "402a9fea7430bf4dbf1645c8bafd7850811ffb5bb331568e8088d85c4dc9ffd9",
+  "swe_terminal_45pct_descriptive_sign_match": {
+    "fraction": 0.875,
+    "matches": 14,
+    "n": 16,
+    "warning": "already derived from same published paper, not new independent prospective validation"
+  }
+}
