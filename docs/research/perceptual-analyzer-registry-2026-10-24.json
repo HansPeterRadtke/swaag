@@ -272,6 +272,36 @@
       },
       "source_report": "perceptual-analyzers-independent-heldouts-2026-10-25.md",
       "limitations": "Missing Content includes nontext objects, Typography often preserves words. The other-tagged screen negatives are not proof of absence of errors. Calibration/test source dataset already previously used, not untouched super-test."
+    },
+    {
+      "task": "Real human-source architectural diagram entity/relation/arrow QA over rendered PNGs",
+      "method": "Source-published vision-language model QA, 11 historical checkpoints; independent normalized exact JSON answer and relation set scoring",
+      "model_version": "SADU 2026 author-run 11 Gemini/Claude/GPT/Qwen configurations, 2431 distinct questions per model; model versions archived Feb-Mar 2026",
+      "status": "rejected_as_standalone_diagram_correctness_judge",
+      "scope": "154 genuine source diagrams (51 behavior,53 structure,50 ER), manual entity/relation graphs, 2431 questions/model, original source QA verified; no live inference",
+      "result": "Gemini3 Flash Preview 1743/2431 strict exact 71.7% (source-diagram cluster CI 69.0-74.3), Gemini2.5 Flash 1692/2431 69.6%, Qwen2.5-VL32B 1078/2431 44.3%; many missing/spurious connection labels; 3 Qwen model logs had all 2431 index positions reordered, remapped by original source QA identity",
+      "source_report": "perceptual-real-diagram-benchmark-2026-10-25.md",
+      "caveats": "Author-released historic VLM output, source QA-derived ground truth rather than exhaustive visible defect labels; strict JSON and source max 512 tokens cause parse/truncation effects, not pure visual reasoning; no deployment model/accuracy claim"
+    },
+    {
+      "task": "Original real architecture diagram raster label readability",
+      "method": "Tesseract OCR v5.3.4 PSM11 whole-diagram image, CPU nice, long edge max4096, exact human source entity name recognition",
+      "model_version": "Tesseract 5.3.4 English; 154 full original diagrams; no GPU; 515.49 seconds cumulative wall",
+      "status": "useful_only_for_simple_real_ER_diagram_labels_not_general_diagram_judge",
+      "scope": "154 real rendered diagrams with 1733 distinct per-diagram source entity labels (1842 original instances); no model gold passed to OCR",
+      "result": "820/1733 =47.3% overall exact entity label recall; ER 348/379=91.8%, behavioral 209/515=40.6%, structural 263/839=31.3%; no valid OCR false positive rate because true unannotated connectors/legends exist",
+      "source_report": "perceptual-real-diagram-benchmark-2026-10-25.md",
+      "caveats": "Label recall is not arc/arrow correctness; source labels may not perfectly reflect raster/legibility; no broad language OCR guarantee or acceptance"
+    },
+    {
+      "task": "Source-specified diagram graph structural numerical consistency",
+      "method": "Independent Python parse of original manually structured graph entity,relation,cluster attributes vs author derived QA (6 counts per drawing)",
+      "model_version": "Python 3.12 stdlib JSON; 154 real original graph-source JSON and matching QA files",
+      "status": "validated_only_for_original_source_graph_numeric_consistency_not_rendered_visual",
+      "scope": "924 graph source numeric QA properties compared (154x6), not pixel perception",
+      "result": "924/924 deterministic graph-count answers internally consistent with original source; image PNG correctness not established",
+      "source_report": "perceptual-real-diagram-benchmark-2026-10-25.md",
+      "caveats": "Author annotations may not match pixels/design intent; validating source-derived QA is not sufficient rendered/real-world diagram acceptance"
     }
   ],
   "second_continuation_2026_10_24": {
@@ -439,5 +469,17 @@
     "3D_semantic_result": "AABB source overlap on 119 heldout real GLB assets: missing parts 9/33 recall, 20/86 flag negative, AUC 0.523 CI 0.435\u20130.624; no valid source geometry semantic completeness gate.",
     "GUI_text_result": "Tesseract paired OCR 132 real screenshots across 52 apps, app-disjoint evaluation 97: 21/28 tagged text issues found, 34/69 other cases flagged; ROC 0.621 vs SSIM 0.472 on same examples, app-cluster delta CI 0.027\u20130.282; no qualified standalone text/layout gate.",
     "source_scope": "Original licensed dataset assets only in /data/var; signed negative results and previous stored source remained untouched; CPU nice scheduling, no shared model GPU use."
+  },
+  "SADU_real_154_human_source_diagrams_2026_10_25": {
+    "status": "PARTIAL, no qualified generic visual/mechanical/video acceptance judge",
+    "report": "perceptual-real-diagram-benchmark-2026-10-25.md",
+    "aggregate": "perceptual-sadu-154-real-diagrams-evidence-2026-10-25.json",
+    "source": "SADU Zenodo 19339991, 154 real architecture diagrams, 2431 ground QA, 11 published historical VLM responses, 26741 source QA comparisons",
+    "ground_oracle": "6 source graph properties for each of 154 diagrams, 924/924 internally consistent, does not certify pixels",
+    "model_relations": "best strict overall 71.7%, Gemini3 source-group CI about 69.0\u201374.3; Gemini2.5 Flash 69.6%; best entity retrieval has 89.3% precision but only 45.7% recall",
+    "screenshot_OCR": "820/1733=47.3% exact entity names; 91.8% ER, 40.6% behavioral, 31.3% structural; cannot count false positives against incomplete label gold",
+    "integrity_warning": "All 2431 question indices reordered in 3 archived Qwen logs; aligned by exact source diagram+question+reference, never index. Some Gemini3 answers truncated at source output-token cap 512. Source question-only variants free prose, therefore strict JSON score zero means contract mismatch, NOT comprehension zero.",
+    "remaining": "human-verified rendered diagram defects/overlap and correct graph evidence vs pixel; mechanical CAD/photorealism and natural video glitches still not qualified",
+    "source_archive_owned_media": "stored unmodified in /data/var; bundled personal_token folder never accessed or extracted"
   }
 }

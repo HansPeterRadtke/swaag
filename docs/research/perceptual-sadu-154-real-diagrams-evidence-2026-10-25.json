@@ -1,0 +1,552 @@
+{
+  "date": "2026-10-25",
+  "goal": "Reliably judge real GUI/scientific/architecture diagram correctness from available deterministic checks and vision models",
+  "overall_status": "PARTIAL \u2014 no single vision-language or OCR diagram judgment model qualifies for automatic structural/visual defect acceptance",
+  "primary_source": "SADU, Shuyin Ouyang et al. arXiv:2604.04009, CC BY4 original Zenodo DOI 10.5281/zenodo.19339991",
+  "source_zip_sha256": "73b8c04cffc0411fbaeca8ed6f67f005df5a9568d46017fe2244ae5c85c3a717",
+  "source_original_structure": {
+    "real_diagrams": 154,
+    "behavior": 51,
+    "structural": 53,
+    "ER": 50,
+    "author_manual_graph_and_QA": true,
+    "model_response_logs": 11,
+    "model_QAs_each": 2431,
+    "total_archived_QA_predictions_scored": 26741,
+    "independent_numeric_source_graph_assertions": 924,
+    "independent_numeric_assertion_mismatches": 0,
+    "author_original_graph_entities": 1842,
+    "author_original_graph_relations": 1887
+  },
+  "raw_source_reproducibility_sha256": {
+    "original_source_QA_model_decisions": "9500e4ca6e5d65178bd647cec0fef208be974ab98a085be5c607524984438a06",
+    "independent_model_aggregate": "7d8cc4e4b76b62ab75db20fd5ff5476d9c9069d5333a65fcaf8a7f40543b5e1f",
+    "quality_count_baselines_and_discrepancy_audit": "d3c69270dc28448540182c4cafa9935abcea6d0800ad76fc27ba6e0735a2a12d",
+    "original_graph_oracle_consistency": "f9c91d21dad542e7c792e238716a2ba027f3e4840b0bbfce82a298fa28d7f69d",
+    "image_only_OCR_labels": "f867a545bc902dc629bb7776a32e84957cd81fc421d2360956e153e1f3ed5216",
+    "pixel_only_OCR_raw": "c72bc8effba41cf3368860bc9a780b03d92e7c057675c26dbfeb429e4ce7a4e6",
+    "author_prompt_thinking_output_ablation": "8ff876f03754d6e0aa24374afe84c05d6981eca89eafce37c69a2b0d00831ef3"
+  },
+  "scoring_protocol": "Deterministic source QA exact count or case/space/underscore normalized set comparison (not trained judge)",
+  "model_archived_output_not_live_inference": true,
+  "primary_metrics": {
+    "claude-haiku-4-5": {
+      "strict_source_QA_accuracy": 0.46688605512134923,
+      "strict_correct_QA_n": 1135,
+      "numeric_QA_accuracy": 0.4358600583090379,
+      "relation_QA_accuracy": 0.5325581395348837,
+      "relation_text_retrieval_precision": 0.6313993174061433,
+      "relation_text_retrieval_recall": 0.6208053691275168,
+      "retrieval_false_positive_source_entities": 756,
+      "retrieval_false_negative_source_entities": 791,
+      "format_or_answer_type_invalid": 66,
+      "source_model_judge_disagreement": 48,
+      "cluster_95pct_strict_accuracy": [
+        0.4386,
+        0.4953
+      ],
+      "task_macro_average_accuracy": 0.49068618643394823,
+      "conditional_accuracy_on_valid_JSON": 0.4799154334038055
+    },
+    "claude-sonnet-4-5": {
+      "strict_source_QA_accuracy": 0.544220485396956,
+      "strict_correct_QA_n": 1323,
+      "numeric_QA_accuracy": 0.5145772594752187,
+      "relation_QA_accuracy": 0.6302325581395349,
+      "relation_text_retrieval_precision": 0.6642616642616642,
+      "relation_text_retrieval_recall": 0.662032598274209,
+      "retrieval_false_positive_source_entities": 698,
+      "retrieval_false_negative_source_entities": 705,
+      "format_or_answer_type_invalid": 55,
+      "source_model_judge_disagreement": 63,
+      "cluster_95pct_strict_accuracy": [
+        0.5171,
+        0.5716
+      ],
+      "task_macro_average_accuracy": 0.5453187101066705,
+      "conditional_accuracy_on_valid_JSON": 0.5568181818181818
+    },
+    "gemini-2.5-flash-lite": {
+      "strict_source_QA_accuracy": 0.40847387906211435,
+      "strict_correct_QA_n": 993,
+      "numeric_QA_accuracy": 0.31997084548104954,
+      "relation_QA_accuracy": 0.5348837209302325,
+      "relation_text_retrieval_precision": 0.6493702770780856,
+      "relation_text_retrieval_recall": 0.6179290508149569,
+      "retrieval_false_positive_source_entities": 696,
+      "retrieval_false_negative_source_entities": 797,
+      "format_or_answer_type_invalid": 51,
+      "source_model_judge_disagreement": 65,
+      "cluster_95pct_strict_accuracy": [
+        0.3839,
+        0.4329
+      ],
+      "task_macro_average_accuracy": 0.4519974379826584,
+      "conditional_accuracy_on_valid_JSON": 0.41722689075630254
+    },
+    "gemini-2.5-flash": {
+      "strict_source_QA_accuracy": 0.6960098724804608,
+      "strict_correct_QA_n": 1692,
+      "numeric_QA_accuracy": 0.7186588921282799,
+      "relation_QA_accuracy": 0.6802325581395349,
+      "relation_text_retrieval_precision": 0.7885010266940452,
+      "relation_text_retrieval_recall": 0.7363374880153404,
+      "retrieval_false_positive_source_entities": 412,
+      "retrieval_false_negative_source_entities": 550,
+      "format_or_answer_type_invalid": 59,
+      "source_model_judge_disagreement": 54,
+      "cluster_95pct_strict_accuracy": [
+        0.6673,
+        0.7252
+      ],
+      "task_macro_average_accuracy": 0.7088664445369879,
+      "conditional_accuracy_on_valid_JSON": 0.7133220910623946
+    },
+    "gemini-3-flash-preview": {
+      "strict_source_QA_accuracy": 0.7169888934594817,
+      "strict_correct_QA_n": 1743,
+      "numeric_QA_accuracy": 0.7587463556851312,
+      "relation_QA_accuracy": 0.7406976744186047,
+      "relation_text_retrieval_precision": 0.8931583880037488,
+      "relation_text_retrieval_recall": 0.45685522531160117,
+      "retrieval_false_positive_source_entities": 114,
+      "retrieval_false_negative_source_entities": 1133,
+      "format_or_answer_type_invalid": 265,
+      "source_model_judge_disagreement": 95,
+      "cluster_95pct_strict_accuracy": [
+        0.6904,
+        0.7431
+      ],
+      "task_macro_average_accuracy": 0.6901897499082228,
+      "conditional_accuracy_on_valid_JSON": 0.8047091412742382
+    },
+    "gemini-3.1-flash-lite-preview": {
+      "strict_source_QA_accuracy": 0.6384204031262855,
+      "strict_correct_QA_n": 1552,
+      "numeric_QA_accuracy": 0.60932944606414,
+      "relation_QA_accuracy": 0.7209302325581395,
+      "relation_text_retrieval_precision": 0.7529901196047842,
+      "relation_text_retrieval_recall": 0.6941514860977949,
+      "retrieval_false_positive_source_entities": 475,
+      "retrieval_false_negative_source_entities": 638,
+      "format_or_answer_type_invalid": 55,
+      "source_model_judge_disagreement": 70,
+      "cluster_95pct_strict_accuracy": [
+        0.6112,
+        0.6658
+      ],
+      "task_macro_average_accuracy": 0.6279725127166244,
+      "conditional_accuracy_on_valid_JSON": 0.6531986531986532
+    },
+    "gpt-4o-mini": {
+      "strict_source_QA_accuracy": 0.17359111476758535,
+      "strict_correct_QA_n": 422,
+      "numeric_QA_accuracy": 0.1618075801749271,
+      "relation_QA_accuracy": 0.20930232558139536,
+      "relation_text_retrieval_precision": 0.2919971160778659,
+      "relation_text_retrieval_recall": 0.3883029721955896,
+      "retrieval_false_positive_source_entities": 1964,
+      "retrieval_false_negative_source_entities": 1276,
+      "format_or_answer_type_invalid": 24,
+      "source_model_judge_disagreement": 14,
+      "cluster_95pct_strict_accuracy": [
+        0.1525,
+        0.1962
+      ],
+      "task_macro_average_accuracy": 0.1815619571700703,
+      "conditional_accuracy_on_valid_JSON": 0.17532197756543416
+    },
+    "gpt-5-nano": {
+      "strict_source_QA_accuracy": 0.5364047716988893,
+      "strict_correct_QA_n": 1304,
+      "numeric_QA_accuracy": 0.49854227405247814,
+      "relation_QA_accuracy": 0.608139534883721,
+      "relation_text_retrieval_precision": 0.7396739130434783,
+      "relation_text_retrieval_recall": 0.6524448705656759,
+      "retrieval_false_positive_source_entities": 479,
+      "retrieval_false_negative_source_entities": 725,
+      "format_or_answer_type_invalid": 16,
+      "source_model_judge_disagreement": 68,
+      "cluster_95pct_strict_accuracy": [
+        0.5093,
+        0.5641
+      ],
+      "task_macro_average_accuracy": 0.5626668200628464,
+      "conditional_accuracy_on_valid_JSON": 0.5399585921325052
+    },
+    "qwen_2.5-VL-32B": {
+      "strict_source_QA_accuracy": 0.4434389140271493,
+      "strict_correct_QA_n": 1078,
+      "numeric_QA_accuracy": 0.3819241982507289,
+      "relation_QA_accuracy": 0.5511627906976744,
+      "relation_text_retrieval_precision": 0.6266816143497758,
+      "relation_text_retrieval_recall": 0.535953978906999,
+      "retrieval_false_positive_source_entities": 666,
+      "retrieval_false_negative_source_entities": 968,
+      "format_or_answer_type_invalid": 1,
+      "source_model_judge_disagreement": 34,
+      "cluster_95pct_strict_accuracy": [
+        0.4163,
+        0.4706
+      ],
+      "task_macro_average_accuracy": 0.46015900838641166,
+      "conditional_accuracy_on_valid_JSON": 0.44362139917695476
+    },
+    "qwen_2.5-VL-3B": {
+      "strict_source_QA_accuracy": 0.30645824763471824,
+      "strict_correct_QA_n": 745,
+      "numeric_QA_accuracy": 0.23542274052478135,
+      "relation_QA_accuracy": 0.4,
+      "relation_text_retrieval_precision": 0.573968253968254,
+      "relation_text_retrieval_recall": 0.4333652924256951,
+      "retrieval_false_positive_source_entities": 671,
+      "retrieval_false_negative_source_entities": 1182,
+      "format_or_answer_type_invalid": 51,
+      "source_model_judge_disagreement": 30,
+      "cluster_95pct_strict_accuracy": [
+        0.2803,
+        0.3325
+      ],
+      "task_macro_average_accuracy": 0.341016171854512,
+      "conditional_accuracy_on_valid_JSON": 0.3130252100840336
+    },
+    "qwen_2.5-VL-7B": {
+      "strict_source_QA_accuracy": 0.3858494446729741,
+      "strict_correct_QA_n": 938,
+      "numeric_QA_accuracy": 0.3075801749271137,
+      "relation_QA_accuracy": 0.48604651162790696,
+      "relation_text_retrieval_precision": 0.6394335511982571,
+      "relation_text_retrieval_recall": 0.5627996164908916,
+      "retrieval_false_positive_source_entities": 662,
+      "retrieval_false_negative_source_entities": 912,
+      "format_or_answer_type_invalid": 9,
+      "source_model_judge_disagreement": 24,
+      "cluster_95pct_strict_accuracy": [
+        0.3576,
+        0.4162
+      ],
+      "task_macro_average_accuracy": 0.42125723243694746,
+      "conditional_accuracy_on_valid_JSON": 0.3872832369942196
+    }
+  },
+  "zero_count_baseline": {
+    "always_zero_correct": 345,
+    "total_numeric_qa": 1372,
+    "exact_accuracy": 0.25145772594752186,
+    "by_subtype": [
+      {
+        "task": "entities_have_more_than_one_relations",
+        "questions": 154,
+        "author_true_zero_fraction": 0.012987012987012988,
+        "mean_gold_answer": 6.298701298701299
+      },
+      {
+        "task": "how_many_attributes_certain_entity_has",
+        "questions": 79,
+        "author_true_zero_fraction": 0.05063291139240506,
+        "mean_gold_answer": 3.911392405063291
+      },
+      {
+        "task": "how_many_clusters_have_clusters_within",
+        "questions": 154,
+        "author_true_zero_fraction": 0.8181818181818182,
+        "mean_gold_answer": 0.37012987012987014
+      },
+      {
+        "task": "how_many_entities_does_certain_cluster_have",
+        "questions": 32,
+        "author_true_zero_fraction": 0.0,
+        "mean_gold_answer": 2.875
+      },
+      {
+        "task": "how_many_entities_not_in_clusters",
+        "questions": 154,
+        "author_true_zero_fraction": 0.01948051948051948,
+        "mean_gold_answer": 9.915584415584416
+      },
+      {
+        "task": "how_many_methods_certain_entity_has",
+        "questions": 29,
+        "author_true_zero_fraction": 0.10344827586206896,
+        "mean_gold_answer": 5.344827586206897
+      },
+      {
+        "task": "how_many_relation_types",
+        "questions": 154,
+        "author_true_zero_fraction": 0.0,
+        "mean_gold_answer": 1.7077922077922079
+      },
+      {
+        "task": "how_many_relations_have_label",
+        "questions": 154,
+        "author_true_zero_fraction": 0.5909090909090909,
+        "mean_gold_answer": 4.123376623376624
+      },
+      {
+        "task": "total_cluster_number",
+        "questions": 154,
+        "author_true_zero_fraction": 0.7532467532467533,
+        "mean_gold_answer": 1.1493506493506493
+      },
+      {
+        "task": "total_entity_number",
+        "questions": 154,
+        "author_true_zero_fraction": 0.0,
+        "mean_gold_answer": 11.96103896103896
+      },
+      {
+        "task": "total_relation_number",
+        "questions": 154,
+        "author_true_zero_fraction": 0.0,
+        "mean_gold_answer": 12.253246753246753
+      }
+    ]
+  },
+  "model_comparison": {
+    "gemini3_vs_gemini2p5_flash_exact_accuracy_difference": 0.02097902097902098,
+    "numeric_accuracy_difference": 0.04008746355685131,
+    "diagram_cluster_bootstrap_95pct_diff": [
+      0.0016642254113051758,
+      0.04116616820985952
+    ],
+    "diagram_cluster_bootstrap_95pct_numeric_diff": [
+      0.018221242560076782,
+      0.06273285103194348
+    ],
+    "paired_question_outcomes": {
+      "both_correct": 1456,
+      "gemini3_only": 287,
+      "gemini2p5_only": 236,
+      "both_wrong": 452
+    },
+    "resample_unit": "source diagram, 154 independent-ish diagrams, 4000 repeated draws",
+    "seed": 20261025
+  },
+  "authored_index_alignment": {
+    "claude-haiku-4-5": 0,
+    "claude-sonnet-4-5": 0,
+    "gemini-2.5-flash-lite": 0,
+    "gemini-2.5-flash": 0,
+    "gemini-3-flash-preview": 0,
+    "gemini-3.1-flash-lite-preview": 0,
+    "gpt-4o-mini": 0,
+    "gpt-5-nano": 0,
+    "qwen_2.5-VL-32B": 2431,
+    "qwen_2.5-VL-3B": 2431,
+    "qwen_2.5-VL-7B": 2431
+  },
+  "source_graph_QA_internal_consistency": {
+    "total_entity_number": {
+      "n": 154,
+      "matches": 154,
+      "disagreements": 0
+    },
+    "total_relation_number": {
+      "n": 154,
+      "matches": 154,
+      "disagreements": 0
+    },
+    "total_cluster_number": {
+      "n": 154,
+      "matches": 154,
+      "disagreements": 0
+    },
+    "how_many_entities_not_in_clusters": {
+      "n": 154,
+      "matches": 154,
+      "disagreements": 0
+    },
+    "how_many_relations_have_label": {
+      "n": 154,
+      "matches": 154,
+      "disagreements": 0
+    },
+    "how_many_clusters_have_clusters_within": {
+      "n": 154,
+      "matches": 154,
+      "disagreements": 0
+    }
+  },
+  "pixel_only_Tesseract_vs_entity_names": {
+    "ocr_config": {
+      "source": "Zenodo SADU 19339991 154 REAL architecture diagrams, source graph labels independently annotated by authors",
+      "ocr_engine": "Tesseract 5.3.4 PSM11, standard installed English language",
+      "max_image_long_side": 4096,
+      "min_token_length": 1,
+      "ocr_seconds_max_per_diagram": 16,
+      "local_cpu_threads": 1,
+      "clip_image": "no crop, whole original chart, scaling down only when longer than 4096 pixels",
+      "text_normalization": "Unicode NFKC, casefold, underscores -> spaces, strip other punctuation, collapse spaces",
+      "ground_truth_nothing_seen_by_ocr": true,
+      "file_selection": "every one of 154 source Diagram images in ZIP, no model output-driven filtering",
+      "limitation": "Cannot score OCR false positives against entity-only labels: many legitimate relation labels and axis/legend text excluded from entity list. Native diagrams include font/compression unreadability. Not a graph topology understanding test."
+    },
+    "whole_original_real_diagrams": 154,
+    "all": {
+      "total_diagrams": 154,
+      "scored_diagrams": 154,
+      "ocr_abstain_or_timeout": 0,
+      "author_annotated_unique_entity_labels": 1733,
+      "exact_labels_recognized": 820,
+      "exact_entity_name_recall": 0.47316791690709753,
+      "reference_unique_words": 2388,
+      "individual_reference_word_coverage_upper_bound": 0.6486599664991625,
+      "entire_diagrams_with_all_entity_names": 59,
+      "total_cpu_ocr_s": 515.49
+    },
+    "per_domain": {
+      "behavior": {
+        "total_diagrams": 51,
+        "scored_diagrams": 51,
+        "ocr_abstain_or_timeout": 0,
+        "author_annotated_unique_entity_labels": 515,
+        "exact_labels_recognized": 209,
+        "exact_entity_name_recall": 0.4058252427184466,
+        "reference_unique_words": 974,
+        "individual_reference_word_coverage_upper_bound": 0.8901437371663244,
+        "entire_diagrams_with_all_entity_names": 1,
+        "total_cpu_ocr_s": 139.17
+      },
+      "structural": {
+        "total_diagrams": 53,
+        "scored_diagrams": 53,
+        "ocr_abstain_or_timeout": 0,
+        "author_annotated_unique_entity_labels": 839,
+        "exact_labels_recognized": 263,
+        "exact_entity_name_recall": 0.3134684147794994,
+        "reference_unique_words": 1014,
+        "individual_reference_word_coverage_upper_bound": 0.3057199211045365,
+        "entire_diagrams_with_all_entity_names": 21,
+        "total_cpu_ocr_s": 204.31
+      },
+      "ER": {
+        "total_diagrams": 50,
+        "scored_diagrams": 50,
+        "ocr_abstain_or_timeout": 0,
+        "author_annotated_unique_entity_labels": 379,
+        "exact_labels_recognized": 348,
+        "exact_entity_name_recall": 0.9182058047493403,
+        "reference_unique_words": 400,
+        "individual_reference_word_coverage_upper_bound": 0.93,
+        "entire_diagrams_with_all_entity_names": 37,
+        "total_cpu_ocr_s": 172.02
+      }
+    },
+    "note": "Expected entity-name recall only. No false positive precision because unannotated legitimate relation names and legends appear in rendered diagram. Pixel-only OCR not semantic graph/edge understanding."
+  },
+  "prompt_and_reasoning_ablation": {
+    "source_metadata": "Same source 154 diagrams, 2431 QA per variant; authors already ran all inference, max_completion_tokens 512",
+    "valid_JSON_comparable": {
+      "gemini3_full_default": {
+        "overall": 0.7169888934594817,
+        "numeric": 0.7587463556851312,
+        "relation": 0.7406976744186047,
+        "format_invalid": 265,
+        "source_mean_tokens": 1918.1493212669684
+      },
+      "gemini3_full_low_thinking": {
+        "overall": 0.7194570135746606,
+        "numeric": 0.6924198250728864,
+        "relation": 0.8151162790697675,
+        "format_invalid": 46,
+        "source_mean_tokens": 1666.9489921842862
+      },
+      "gemini3_full_high_thinking": {
+        "overall": 0.7104072398190046,
+        "numeric": 0.750728862973761,
+        "relation": 0.736046511627907,
+        "format_invalid": 270,
+        "source_mean_tokens": 1918.6647470176881
+      },
+      "gemini2p5_full_default": {
+        "overall": 0.6960098724804608,
+        "numeric": 0.7186588921282799,
+        "relation": 0.6802325581395349,
+        "format_invalid": 59,
+        "source_mean_tokens": 960.5779514603043
+      },
+      "gemini2p5_without_definition": {
+        "overall": 0.6182640888523242,
+        "numeric": 0.6122448979591837,
+        "relation": 0.6302325581395349,
+        "format_invalid": 87,
+        "source_mean_tokens": 788.1538461538462
+      },
+      "gemini2p5_without_rules": {
+        "overall": 0.690662278897573,
+        "numeric": 0.7237609329446064,
+        "relation": 0.6488372093023256,
+        "format_invalid": 95,
+        "source_mean_tokens": 854.1908679555738
+      }
+    },
+    "source_question_only_not_strictly_scored": [
+      "gemini3_question_only_default",
+      "gemini3_question_only_low_thinking",
+      "gemini3_question_only_high_thinking",
+      "gemini2p5_question_only"
+    ],
+    "strict_only_question_zero_is_prompt_contract_mismatch_NOT_model_comprehension": true,
+    "compatible_paired_QA_differences": {
+      "gemini3_full_low_thinking": {
+        "baseline": "gemini3_full_default",
+        "delta_accuracy": 0.0024681201151789387,
+        "improved_QAs": 198,
+        "regressed_QAs": 192,
+        "unchanged_QAs": 2041,
+        "source_diagram_clustered_95pct_delta": [
+          -0.014386272870761788,
+          0.018496445792948853
+        ],
+        "cannot_establish_current_model_causal_effects": true
+      },
+      "gemini3_full_high_thinking": {
+        "baseline": "gemini3_full_default",
+        "delta_accuracy": -0.00658165364047717,
+        "improved_QAs": 14,
+        "regressed_QAs": 30,
+        "unchanged_QAs": 2387,
+        "source_diagram_clustered_95pct_delta": [
+          -0.013383801646294996,
+          -0.0008354044543746678
+        ],
+        "cannot_establish_current_model_causal_effects": true
+      },
+      "gemini2p5_without_definition": {
+        "baseline": "gemini2p5_full_default",
+        "delta_accuracy": -0.07774578362813657,
+        "improved_QAs": 128,
+        "regressed_QAs": 317,
+        "unchanged_QAs": 1986,
+        "source_diagram_clustered_95pct_delta": [
+          -0.09416200641200291,
+          -0.0617871123155676
+        ],
+        "cannot_establish_current_model_causal_effects": true
+      },
+      "gemini2p5_without_rules": {
+        "baseline": "gemini2p5_full_default",
+        "delta_accuracy": -0.0053475935828877,
+        "improved_QAs": 131,
+        "regressed_QAs": 144,
+        "unchanged_QAs": 2156,
+        "source_diagram_clustered_95pct_delta": [
+          -0.01821899257869146,
+          0.007743412450013921
+        ],
+        "cannot_establish_current_model_causal_effects": true
+      }
+    }
+  },
+  "limitations": [
+    "This source original archive includes a personal_token directory never opened and never committed. Original benchmark model outputs and source images kept outside Git.",
+    "QA model predictions are historical author inference, not live 2026-current model checks on owners own diagrams.",
+    "Original QA derived from human annotated source graph; 924/924 graph numeric consistency does not certify each PNG depicts the source graph perfectly.",
+    "Strict deterministic normalized set-match rejects some semantically equivalent text and counts source prompt formatting truncations as end-to-end failure.",
+    "Generic VLM task QA does not directly measure false alarms on generated defective vs true clean diagram variants, because SADU original rendered diagrams are reference inputs.",
+    "Tesseract entity name recall is not edge direction or graph semantic accuracy; OCR extra tokens cannot be called false-positive entities without comprehensive text annotation.",
+    "Question-only model outputs are natural-language responses rather than required JSON; cannot be ranked as 0% diagram understanding under the JSON exact format.",
+    "Bootstrap confidence intervals resample original diagrams, not independent downstream user design projects; public source possible benchmark exposure."
+  ],
+  "recommended_use": "Treat source-coded diagram graph topology/direction/count/labels as the contract; compare actual image label/connector visibility with deterministic OCR/geometry and independently reviewed discrepancies. Use VLMs only as evidence/proposal with verified false-alarm/negative rates, not unconditional acceptance."
+}
