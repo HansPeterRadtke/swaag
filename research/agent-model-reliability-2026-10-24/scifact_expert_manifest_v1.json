@@ -1,0 +1,627 @@
+{
+  "study": "scifact-expert-claims-v1",
+  "upstream_url": "https://scifact.s3-us-west-2.amazonaws.com/release/latest/data.tar.gz",
+  "upstream_sha256": "11c621288d41ac144d29b13b0f8503b3820b7d6e8b1f6ff24dff335c196d76be",
+  "split": "dev",
+  "seed": 20261025,
+  "selection": "24 SUPPORT +24 CONTRADICT expert-labelled claim/abstract pairs; stratify within each label by original abstract character-length thirds; 8 samples per third; length filter 500..3600, claim <=260; evidence rationale indices union",
+  "provenance": "expert-written scientific claims with annotated support/refute evidence and rationale sentences; SciFact Wadden et al. EMNLP 2020; not general task-relevance ground truth; original source may occur in model pretraining",
+  "license_note": "original SciFact distribution may have noncommercial license; full scientific abstracts and claims are held only in private scratch, not included in public Git",
+  "cases": [
+    {
+      "case_id": "scifact-dev-v1-00",
+      "source_claim_id": 597,
+      "source_doc_id": "36355784",
+      "gold": "SUPPORT",
+      "claim_sha256": "a36bfcf73eaad604f6af903095cab6b8ff101f97ebcd90ca1211790203edabb2",
+      "abstract_sha256": "4f8a4a949c1afccb0ebfbe6af6cc56ff263790c52a83d5ec122147780cd97147",
+      "rationale_indices": [
+        6,
+        7
+      ],
+      "abstract_chars": 1493
+    },
+    {
+      "case_id": "scifact-dev-v1-01",
+      "source_claim_id": 743,
+      "source_doc_id": "32159283",
+      "gold": "CONTRADICT",
+      "claim_sha256": "d3f06967755e3dac374b0d34c5aa87b217104286b83f9bfe545af1ab552ad590",
+      "abstract_sha256": "fceb05c08b079fc95ae6e10c8b7a46ff26b4ebbba87b74724d4d42a1a8140a05",
+      "rationale_indices": [
+        8
+      ],
+      "abstract_chars": 1910
+    },
+    {
+      "case_id": "scifact-dev-v1-02",
+      "source_claim_id": 1232,
+      "source_doc_id": "13905670",
+      "gold": "CONTRADICT",
+      "claim_sha256": "1a0f37f74dc9c5cae79e230ccf5baf4fbcd7a7a7317cd91f529141f925806626",
+      "abstract_sha256": "9b2942c5df124fd75222ed40b42016659e197a98ec6d43cd1b5d3976ca84c242",
+      "rationale_indices": [
+        3
+      ],
+      "abstract_chars": 1159
+    },
+    {
+      "case_id": "scifact-dev-v1-03",
+      "source_claim_id": 692,
+      "source_doc_id": "24088502",
+      "gold": "CONTRADICT",
+      "claim_sha256": "1539fd936eeff6a45ae3b434eb949e6dd7fe8cffd5edeb7cffd026202c1b24be",
+      "abstract_sha256": "fce6d3aed1dbd9fcb8a19d155a98b5f9d49ef9a691e7b1e1871f4995d5618092",
+      "rationale_indices": [
+        8,
+        9,
+        10
+      ],
+      "abstract_chars": 2310
+    },
+    {
+      "case_id": "scifact-dev-v1-04",
+      "source_claim_id": 532,
+      "source_doc_id": "12991445",
+      "gold": "CONTRADICT",
+      "claim_sha256": "546e1ce34db0952945877eef45018fbdff9e2a85352409ea28655c04f6099b9b",
+      "abstract_sha256": "403d6bca367378ce12a6939198dc53aba92a32c1d81e5d14054b48b2d9adfd2a",
+      "rationale_indices": [
+        5,
+        9,
+        11,
+        12
+      ],
+      "abstract_chars": 2331
+    },
+    {
+      "case_id": "scifact-dev-v1-05",
+      "source_claim_id": 217,
+      "source_doc_id": "21366394",
+      "gold": "SUPPORT",
+      "claim_sha256": "3ec1289c1a15b149cfb6fdd8d6b1b6630f08f191577b5f157c885c96c6f1a3da",
+      "abstract_sha256": "7cccc402824f0121b0694240d28d3cb1a8d196b718363e740235f4860677239f",
+      "rationale_indices": [
+        4
+      ],
+      "abstract_chars": 1253
+    },
+    {
+      "case_id": "scifact-dev-v1-06",
+      "source_claim_id": 212,
+      "source_doc_id": "22038539",
+      "gold": "CONTRADICT",
+      "claim_sha256": "ffdef727ad758265da468fc599538f562c53c807f6af7f165a15406260e52775",
+      "abstract_sha256": "f2961675733ee59ad8aa911a96a0c32bfb12d6ec0ba42e4d19bbca5a6b803913",
+      "rationale_indices": [
+        1,
+        3,
+        4,
+        7,
+        8
+      ],
+      "abstract_chars": 1375
+    },
+    {
+      "case_id": "scifact-dev-v1-07",
+      "source_claim_id": 521,
+      "source_doc_id": "34873974",
+      "gold": "SUPPORT",
+      "claim_sha256": "df0786000fb9a183b4599f9ba481ff71fd103fdac20929bb7c07887d54b4a0b1",
+      "abstract_sha256": "9441b23324170d809e984c42d97c561f1a1d2b90a061c7d736b9e862e2eedcb4",
+      "rationale_indices": [
+        14
+      ],
+      "abstract_chars": 3169
+    },
+    {
+      "case_id": "scifact-dev-v1-08",
+      "source_claim_id": 1389,
+      "source_doc_id": "23895668",
+      "gold": "SUPPORT",
+      "claim_sha256": "ba472dbf3c478dcead941fa2a4678ac9674ba2b0789af2bba9809a1b4b0288fe",
+      "abstract_sha256": "06e39a81201c40cbde9b5662f210709c4d8188d439dc2d13c27300fc7bbf590e",
+      "rationale_indices": [
+        2,
+        3
+      ],
+      "abstract_chars": 942
+    },
+    {
+      "case_id": "scifact-dev-v1-09",
+      "source_claim_id": 249,
+      "source_doc_id": "1568684",
+      "gold": "CONTRADICT",
+      "claim_sha256": "c27e99d504bfe060fea34d6f8a67136eeb2fed4e8f7843502061bbd2af2423d9",
+      "abstract_sha256": "e81984e106bc443c7a693c83f6d495db3565efd8e65f2dd55d5a0b99d527f842",
+      "rationale_indices": [
+        1,
+        3,
+        4
+      ],
+      "abstract_chars": 1028
+    },
+    {
+      "case_id": "scifact-dev-v1-10",
+      "source_claim_id": 171,
+      "source_doc_id": "12670680",
+      "gold": "CONTRADICT",
+      "claim_sha256": "0d66257d03c48da709c1640f4556858325e7e8f0d0edc42baf607043f6fdadf5",
+      "abstract_sha256": "e63c3602894b17da3f0dee12bce14afed1217f49c817c9a75b9a5acf91913eee",
+      "rationale_indices": [
+        1,
+        2,
+        4
+      ],
+      "abstract_chars": 1212
+    },
+    {
+      "case_id": "scifact-dev-v1-11",
+      "source_claim_id": 1352,
+      "source_doc_id": "12885341",
+      "gold": "SUPPORT",
+      "claim_sha256": "364f086cf42ec71f978781a883f58a818178bddd736cb6fbaaa5b8c06b9a8c0c",
+      "abstract_sha256": "889cf49d7b9e379c82d163aa8ee86351f5a39d431e5277727a1ef3ebce19a442",
+      "rationale_indices": [
+        3,
+        5
+      ],
+      "abstract_chars": 1140
+    },
+    {
+      "case_id": "scifact-dev-v1-12",
+      "source_claim_id": 1049,
+      "source_doc_id": "12486491",
+      "gold": "CONTRADICT",
+      "claim_sha256": "0a9422defcde1603f93caad6513d9f3804a6b6e0ab1492630bdaa9b98a52ef69",
+      "abstract_sha256": "4c481f478804f49909565a29999c3ac1f665fb73ea07e56efff77cab9046acf6",
+      "rationale_indices": [
+        5,
+        6
+      ],
+      "abstract_chars": 1169
+    },
+    {
+      "case_id": "scifact-dev-v1-13",
+      "source_claim_id": 1088,
+      "source_doc_id": "37549932",
+      "gold": "CONTRADICT",
+      "claim_sha256": "3fe686fe7956a53d3ddb2effb35141851fa65f5d17ed344d46e5caff346e8f14",
+      "abstract_sha256": "d0803c5c8383c0324ec0e0a2774041399c56d9af741aec7639f8d482ae5f8077",
+      "rationale_indices": [
+        3
+      ],
+      "abstract_chars": 914
+    },
+    {
+      "case_id": "scifact-dev-v1-14",
+      "source_claim_id": 1140,
+      "source_doc_id": "12009265",
+      "gold": "CONTRADICT",
+      "claim_sha256": "b406c7672755f714524b0b3b86651e809ebed4a9300c5252de995698a457ff8a",
+      "abstract_sha256": "6398f3114eb7db174039a456141840ba90682bd48a06a3ba82fe0b4bf7f561f6",
+      "rationale_indices": [
+        9,
+        14
+      ],
+      "abstract_chars": 2835
+    },
+    {
+      "case_id": "scifact-dev-v1-15",
+      "source_claim_id": 598,
+      "source_doc_id": "25742130",
+      "gold": "CONTRADICT",
+      "claim_sha256": "dc417054d77fe758b7a23b4274322d6774557cd9902370dc730f13aa40f86e2d",
+      "abstract_sha256": "aa6befec6f22e1776ef372ec6df2bd54ef67999fbdbc61dac5c085e115f7cec4",
+      "rationale_indices": [
+        6,
+        9
+      ],
+      "abstract_chars": 1702
+    },
+    {
+      "case_id": "scifact-dev-v1-16",
+      "source_claim_id": 536,
+      "source_doc_id": "16056514",
+      "gold": "SUPPORT",
+      "claim_sha256": "1ddb669d87023943600005d115085fbe2545674c7eee7f2ba46a9bcab3bbffd4",
+      "abstract_sha256": "e473f0f87a5e181d4b8536a53e29bc5ee25ea11c5908e81b05f444a8e285efae",
+      "rationale_indices": [
+        4
+      ],
+      "abstract_chars": 1473
+    },
+    {
+      "case_id": "scifact-dev-v1-17",
+      "source_claim_id": 1024,
+      "source_doc_id": "5373138",
+      "gold": "SUPPORT",
+      "claim_sha256": "132009378ca61e6b8f57892b3e76da4880f0ce0170be7e4f687da29cc42856bf",
+      "abstract_sha256": "184e6febacce54cef2c590dc5e13ae0e022f0e5137d385de3ceb2db81eac0a2c",
+      "rationale_indices": [
+        4
+      ],
+      "abstract_chars": 1142
+    },
+    {
+      "case_id": "scifact-dev-v1-18",
+      "source_claim_id": 513,
+      "source_doc_id": "13230773",
+      "gold": "CONTRADICT",
+      "claim_sha256": "b604e38c3ec70b96620437f4c9ee54317d7acd96da9da09d5f1e9959cdfdb23d",
+      "abstract_sha256": "d434f2266b30a557b2381b39f538eca37498efac3aa0e0de93d182f751891e05",
+      "rationale_indices": [
+        11
+      ],
+      "abstract_chars": 2470
+    },
+    {
+      "case_id": "scifact-dev-v1-19",
+      "source_claim_id": 1029,
+      "source_doc_id": "13940200",
+      "gold": "CONTRADICT",
+      "claim_sha256": "93ae53e6501bc2e921e55df8213f0e1f65209176410cab6b4bc9283c01958db4",
+      "abstract_sha256": "88b3f041e26d1ab27fa15ff68e0001ae03cdb84d7cc85db15023a12ce3bc18ab",
+      "rationale_indices": [
+        3
+      ],
+      "abstract_chars": 1046
+    },
+    {
+      "case_id": "scifact-dev-v1-20",
+      "source_claim_id": 613,
+      "source_doc_id": "9638032",
+      "gold": "SUPPORT",
+      "claim_sha256": "9a6e217fb32c2b7cdcfb63a2d32650078a3214bc901921692bf88e6886a42c20",
+      "abstract_sha256": "8d99d178c6ce6c65966f592cbdfe9d1e2852ee5f9e47ba1820980eda5076a79a",
+      "rationale_indices": [
+        4
+      ],
+      "abstract_chars": 1252
+    },
+    {
+      "case_id": "scifact-dev-v1-21",
+      "source_claim_id": 1221,
+      "source_doc_id": "19736671",
+      "gold": "CONTRADICT",
+      "claim_sha256": "c31c43ce66d96f7ea5aee254d4d4ef06299beeddf633bcf4ddadbcd0c50ec494",
+      "abstract_sha256": "60d1941844e89aceedf9c12c57ceb0213af14624d26ed2d195942ca4a1168765",
+      "rationale_indices": [
+        2
+      ],
+      "abstract_chars": 1434
+    },
+    {
+      "case_id": "scifact-dev-v1-22",
+      "source_claim_id": 540,
+      "source_doc_id": "11886686",
+      "gold": "SUPPORT",
+      "claim_sha256": "3863f355898194ce4eee76e2e02ac463cd3cc61dc8404b440df6f3cd521f7bfe",
+      "abstract_sha256": "c203601a77f2bd63652338b34e3ff46bce6ec933b7b47ca4040461ae592430d2",
+      "rationale_indices": [
+        5
+      ],
+      "abstract_chars": 1276
+    },
+    {
+      "case_id": "scifact-dev-v1-23",
+      "source_claim_id": 533,
+      "source_doc_id": "12991445",
+      "gold": "SUPPORT",
+      "claim_sha256": "40ee59d129190707c39bbdf5c26d1eb122c3e82f07d5c8dac32d06616f05506a",
+      "abstract_sha256": "403d6bca367378ce12a6939198dc53aba92a32c1d81e5d14054b48b2d9adfd2a",
+      "rationale_indices": [
+        5,
+        9,
+        11,
+        12
+      ],
+      "abstract_chars": 2331
+    },
+    {
+      "case_id": "scifact-dev-v1-24",
+      "source_claim_id": 53,
+      "source_doc_id": "45638119",
+      "gold": "SUPPORT",
+      "claim_sha256": "9b2dfe5b6a8eaf271a580900057e8f0f92d2f6320b510426bd9cff0a36cf000f",
+      "abstract_sha256": "45b13536bc22cd6ed97cb68d9baedd04f2071bc60ccc6dc0f6e392ca83e01b7a",
+      "rationale_indices": [
+        4
+      ],
+      "abstract_chars": 1129
+    },
+    {
+      "case_id": "scifact-dev-v1-25",
+      "source_claim_id": 847,
+      "source_doc_id": "16787954",
+      "gold": "CONTRADICT",
+      "claim_sha256": "bb672a4f554f0245d17da2538ab2fcd2e42351db01489d56a63654df3fac4990",
+      "abstract_sha256": "a4f62fe2fd1dbad1ba5db76d80d2a26264c23b851de9b8bd20cd462507eca2be",
+      "rationale_indices": [
+        2
+      ],
+      "abstract_chars": 1476
+    },
+    {
+      "case_id": "scifact-dev-v1-26",
+      "source_claim_id": 837,
+      "source_doc_id": "15928989",
+      "gold": "SUPPORT",
+      "claim_sha256": "4808bb53aefbfe7669477e2611f0853880fd0f330a493af75c1497c77f021e74",
+      "abstract_sha256": "1fe1b6da5b149d9b3babe4c9a999d34d294de82c1ee052ea9d045764ccba3203",
+      "rationale_indices": [
+        7,
+        8
+      ],
+      "abstract_chars": 1446
+    },
+    {
+      "case_id": "scifact-dev-v1-27",
+      "source_claim_id": 904,
+      "source_doc_id": "7370282",
+      "gold": "SUPPORT",
+      "claim_sha256": "b4946c564b4cec12e4d9c4aae22c974de433b241a30758b27a38d99d942d60d5",
+      "abstract_sha256": "a9d491abfa189467ae5a2af4bc0e87de97bb287610c23dc57bb59e1b8404619d",
+      "rationale_indices": [
+        6
+      ],
+      "abstract_chars": 1189
+    },
+    {
+      "case_id": "scifact-dev-v1-28",
+      "source_claim_id": 216,
+      "source_doc_id": "21366394",
+      "gold": "CONTRADICT",
+      "claim_sha256": "88797b39027c04b9bdd690082f5df1016c20697f45c70ee968e9df12d7b6c511",
+      "abstract_sha256": "7cccc402824f0121b0694240d28d3cb1a8d196b718363e740235f4860677239f",
+      "rationale_indices": [
+        4
+      ],
+      "abstract_chars": 1253
+    },
+    {
+      "case_id": "scifact-dev-v1-29",
+      "source_claim_id": 516,
+      "source_doc_id": "29564505",
+      "gold": "CONTRADICT",
+      "claim_sha256": "390fdb4964a2555235270cb733df8b728dadf94607035079e0ebb81cf536fab8",
+      "abstract_sha256": "469a5fae47e6fe110ef550ed7ded2f6c9f4f1644ca1004e31a7022c0b156c08e",
+      "rationale_indices": [
+        8,
+        13
+      ],
+      "abstract_chars": 3273
+    },
+    {
+      "case_id": "scifact-dev-v1-30",
+      "source_claim_id": 275,
+      "source_doc_id": "14241418",
+      "gold": "SUPPORT",
+      "claim_sha256": "56cd6d3ced44fad701c1e5dd298eddc3c9378fa4bccbad1f942d545bc34dfa79",
+      "abstract_sha256": "d3d267e8d53ce20371fc195210199d13f674655f78b1a7da16f81114d999c2da",
+      "rationale_indices": [
+        10
+      ],
+      "abstract_chars": 1907
+    },
+    {
+      "case_id": "scifact-dev-v1-31",
+      "source_claim_id": 431,
+      "source_doc_id": "28937856",
+      "gold": "SUPPORT",
+      "claim_sha256": "2e42cb2dfac47a8d50891164d81142d5aa584845fd551207b5dfd38a03dde43b",
+      "abstract_sha256": "cb4526b47cff0049fd71a7df84357adb1b3b60dc8cde1fe6be64055679ccb474",
+      "rationale_indices": [
+        5
+      ],
+      "abstract_chars": 1074
+    },
+    {
+      "case_id": "scifact-dev-v1-32",
+      "source_claim_id": 49,
+      "source_doc_id": "5953485",
+      "gold": "SUPPORT",
+      "claim_sha256": "e7a7fd0383b268309fcab86c367b88971381ddc54579f3ae4cb7452d1d979d59",
+      "abstract_sha256": "2fe9012b1817942aad6c4cd81e025cc2f563366c3a3f7792ccc9ba4abdcc3b6e",
+      "rationale_indices": [
+        1,
+        2
+      ],
+      "abstract_chars": 1069
+    },
+    {
+      "case_id": "scifact-dev-v1-33",
+      "source_claim_id": 882,
+      "source_doc_id": "14803797",
+      "gold": "CONTRADICT",
+      "claim_sha256": "621181ac70182efee9180f93bd0f5d66cdeae4201928843ce43b98f15f31b8c8",
+      "abstract_sha256": "482b91126c6a22a9e02cf717c44a02aad5a3c68facedbb58761a8e6d45bf32bf",
+      "rationale_indices": [
+        2
+      ],
+      "abstract_chars": 1575
+    },
+    {
+      "case_id": "scifact-dev-v1-34",
+      "source_claim_id": 539,
+      "source_doc_id": "13282296",
+      "gold": "SUPPORT",
+      "claim_sha256": "5941bc4a97b557c02a9f0ceeef1ed12d16de46655d6e7c6ee95a877ef317bae1",
+      "abstract_sha256": "dd0ad13e36a03c5c2a21140f066ec2df608f15cc1f0084e7d81f9cd9c839575e",
+      "rationale_indices": [
+        7,
+        11
+      ],
+      "abstract_chars": 2877
+    },
+    {
+      "case_id": "scifact-dev-v1-35",
+      "source_claim_id": 781,
+      "source_doc_id": "24338780",
+      "gold": "CONTRADICT",
+      "claim_sha256": "2e7a0a4dacda017e74dfd205e3bd3e1ef2800e8cff0a37626e897d491f99df16",
+      "abstract_sha256": "0e43205867fb8a1c0b1774c57d17eb72c592567f7c9061869b671cfd8f5e9b9a",
+      "rationale_indices": [
+        2,
+        3,
+        6
+      ],
+      "abstract_chars": 1328
+    },
+    {
+      "case_id": "scifact-dev-v1-36",
+      "source_claim_id": 742,
+      "source_doc_id": "32159283",
+      "gold": "SUPPORT",
+      "claim_sha256": "501aa61b6c89d79f9289a62a84e32b1a3c086ce65531de69c112366b580431ce",
+      "abstract_sha256": "fceb05c08b079fc95ae6e10c8b7a46ff26b4ebbba87b74724d4d42a1a8140a05",
+      "rationale_indices": [
+        8
+      ],
+      "abstract_chars": 1910
+    },
+    {
+      "case_id": "scifact-dev-v1-37",
+      "source_claim_id": 793,
+      "source_doc_id": "8551160",
+      "gold": "CONTRADICT",
+      "claim_sha256": "7e0b51e0b1775e2b69053acece16ff094b207ed894ecd6ab108935e7d50e5d90",
+      "abstract_sha256": "da96436346d0f1e13c26627e7d008b86111a1d273c1eb8c6c7fb9176916eb281",
+      "rationale_indices": [
+        1
+      ],
+      "abstract_chars": 716
+    },
+    {
+      "case_id": "scifact-dev-v1-38",
+      "source_claim_id": 1368,
+      "source_doc_id": "2425364",
+      "gold": "SUPPORT",
+      "claim_sha256": "e70fc6250dcfe787e5b4dd6100dd43ef49d1da61c20a293d0a14c3553daeee34",
+      "abstract_sha256": "838a17b5fb80d485c7361306b764ebdda28960acd225b499d84a5e1af32718d8",
+      "rationale_indices": [
+        9,
+        10,
+        11,
+        12
+      ],
+      "abstract_chars": 1999
+    },
+    {
+      "case_id": "scifact-dev-v1-39",
+      "source_claim_id": 993,
+      "source_doc_id": "16472469",
+      "gold": "CONTRADICT",
+      "claim_sha256": "5984e064eaaef159ffa6a1a5c22b9480f6f705429ce681179494bbe991098e79",
+      "abstract_sha256": "9708de9a9b5f35caf0f5308594184141b51106e517744b545a8c3de277dcef4b",
+      "rationale_indices": [
+        4
+      ],
+      "abstract_chars": 1263
+    },
+    {
+      "case_id": "scifact-dev-v1-40",
+      "source_claim_id": 48,
+      "source_doc_id": "13734012",
+      "gold": "CONTRADICT",
+      "claim_sha256": "99c3b3dfeccabdab91500141e3658e74ffa77be97689135c44eb87877eb2e197",
+      "abstract_sha256": "aa5ad1280fbafa82d833888d478561b802d0a53dd5265db1cb5004f6d56d314c",
+      "rationale_indices": [
+        4
+      ],
+      "abstract_chars": 2131
+    },
+    {
+      "case_id": "scifact-dev-v1-41",
+      "source_claim_id": 1273,
+      "source_doc_id": "11041152",
+      "gold": "SUPPORT",
+      "claim_sha256": "cb0c4abb5f201437e9cedc531ef0d78d50752054d2b7bd98c897ad20d7be62de",
+      "abstract_sha256": "2e29358cdf6ebe02401c0dcc7a1bf875ca4c58f58221dcf828a894355e90eaa0",
+      "rationale_indices": [
+        5
+      ],
+      "abstract_chars": 1274
+    },
+    {
+      "case_id": "scifact-dev-v1-42",
+      "source_claim_id": 1266,
+      "source_doc_id": "37480103",
+      "gold": "SUPPORT",
+      "claim_sha256": "72e2980487eb747fab328084f5eed4bb619dcdc8a4a980fcc882518eff4ad3a4",
+      "abstract_sha256": "f335068c2b1ac4dc5134ee196c327de7c5fae033d251854605ff1f50e36c17a9",
+      "rationale_indices": [
+        10,
+        12
+      ],
+      "abstract_chars": 2517
+    },
+    {
+      "case_id": "scifact-dev-v1-43",
+      "source_claim_id": 756,
+      "source_doc_id": "2831620",
+      "gold": "SUPPORT",
+      "claim_sha256": "7541482281368eb5372e015385051c865ec50f9919811102e866e6301f3d7347",
+      "abstract_sha256": "ceb67874148ea3d527f3471eca9cbe92ceff3893b4ddabf460bc248f84c884d2",
+      "rationale_indices": [
+        0
+      ],
+      "abstract_chars": 1132
+    },
+    {
+      "case_id": "scifact-dev-v1-44",
+      "source_claim_id": 1339,
+      "source_doc_id": "15482274",
+      "gold": "CONTRADICT",
+      "claim_sha256": "f9774ff5c58058ec6128daf014dc8d4ebcb6d0f1f0f594a2678333619bbdf9e6",
+      "abstract_sha256": "cff6da9f4a0df3837e845a7b42d6dbbaba8b2c67ae1a779c8998acba5076cc90",
+      "rationale_indices": [
+        7,
+        8,
+        9,
+        10
+      ],
+      "abstract_chars": 2013
+    },
+    {
+      "case_id": "scifact-dev-v1-45",
+      "source_claim_id": 54,
+      "source_doc_id": "49556906",
+      "gold": "CONTRADICT",
+      "claim_sha256": "3302315065db282a5a26c69859b6e9b5549da1b69ff085989ce142f55a0241f1",
+      "abstract_sha256": "2c166cb0f853b1406c68c0aaa78a68361536d8f223addb284d0eddd429d062e0",
+      "rationale_indices": [
+        5,
+        6,
+        7
+      ],
+      "abstract_chars": 1338
+    },
+    {
+      "case_id": "scifact-dev-v1-46",
+      "source_claim_id": 960,
+      "source_doc_id": "8780599",
+      "gold": "SUPPORT",
+      "claim_sha256": "2c2b8cf8f84f725a1b7486b7418ca106574173e41ba1563fe63cf2e00910c101",
+      "abstract_sha256": "da8cdef468dbffd07b1a356bf46fb98e448f397dd80c4cca4b4112443c215d5f",
+      "rationale_indices": [
+        6,
+        8
+      ],
+      "abstract_chars": 1473
+    },
+    {
+      "case_id": "scifact-dev-v1-47",
+      "source_claim_id": 146,
+      "source_doc_id": "10582939",
+      "gold": "SUPPORT",
+      "claim_sha256": "6a876ac3a53a11dc60e297c7484cb36d3172761e5f5b3cc21b836e9a05f95cbf",
+      "abstract_sha256": "2b3ce23e2ba1d6a6c8b884fc486fb43dff89b69d9437ddc85d79a54873d92bc0",
+      "rationale_indices": [
+        8,
+        12
+      ],
+      "abstract_chars": 2882
+    }
+  ]
+}
