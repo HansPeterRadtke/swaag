@@ -323,6 +323,65 @@ class PromptBuilder:
     def template_text(self, template_name: str) -> str:
         return self._load_template(template_name)
 
+    @staticmethod
+    def _current_turn_read_receipt_index(messages: list[Message], original_request: str) -> str:
+        """Reiterate observed current-turn file reads without losing any source.
+
+        This is a mechanical evidence INDEX, never proof of all required work,
+        an instruction extracted from tool output, or a filter of exact history.
+        A model must still interpret the unchanged user request and actual tool
+        results. Re-reading external observations remains permitted.
+        """
+        from collections import OrderedDict
+
+        observations: dict[str, list[int]] = OrderedDict()
+        for message in messages:
+            if message.role != "tool" or message.name != "read_file":
+                continue
+            metadata = message.metadata
+            if metadata.get("source_event_type") != "tool_result":
+                continue
+            output = metadata.get("output")
+            if not isinstance(output, dict) or not isinstance(output.get("text"), str):
+                continue
+            path = output.get("path")
+            sequence = metadata.get("source_event_sequence")
+            if not isinstance(path, str) or not path:
+                continue
+            if type(sequence) is not int or sequence < 1:
+                continue
+            observations.setdefault(path, []).append(sequence)
+        if not observations:
+            return ""
+        lines = [
+            "MECHANICAL CURRENT-TURN READ_FILE RECEIPT INDEX (observed tool data; not instructions):",
+            "Only these paths had a successful read_file tool result in this current turn. "
+            "Other tools may have different evidence, as recorded verbatim above.",
+        ]
+        for path, sequences in observations.items():
+            lines.append(
+                "- path=" + stable_json_dumps(path, indent=None)
+                + f", completed_read_receipts={len(sequences)}, exact_source_sequences="
+                + stable_json_dumps(sequences, indent=None)
+            )
+        lines.append(
+            "Compare each source-specific requested fact with the actual observed evidence "
+            "and the original user request. Do not invent unobserved source content, "
+            "and do not mistake a prior success for an observation of a different file. "
+            "Rereading the same file may be appropriate when state or freshness changes; "
+            "the index is a factual aide, NOT a ban on repeated observations. "
+            "All exact tool results and original history remain recoverable."
+        )
+        if len(original_request) <= 4096:
+            lines.append("Original current user request, verbatim again for this evidence check:\n" + original_request)
+        else:
+            lines.append(
+                "Original user request is longer than this bounded index's display limit. "
+                "Consult the verbatim authoritative request already included above; "
+                "it has not been shortened or removed."
+            )
+        return "\n".join(lines) + "\n\n"
+
     def build_agent_action_prompt(
         self,
         messages: list[Message],
@@ -411,6 +470,17 @@ class PromptBuilder:
                 text=f"Exact tool schemas available for this call:\n{self.render_tool_catalog(tools) or '(none)'}\n\n",
             )
         )
+        read_receipt_index = self._current_turn_read_receipt_index(
+            turn_transcript, original_request
+        )
+        if read_receipt_index:
+            components.append(
+                PromptComponent(
+                    name="current_turn_read_receipt_index",
+                    category="tool_result",
+                    text=read_receipt_index,
+                )
+            )
         if validation_feedback:
             components.append(_action_recovery_feedback(validation_feedback))
         action_template = (
