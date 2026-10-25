@@ -352,6 +352,16 @@
       "result": "9/82 TP 7/82 FP source only, recall11%; max text offcanvas AUC0.561 vs pixel OCR text-border AUC0.723, matched-pair AUC source minus pixel CI -0.277 to -0.050",
       "source_report": "perceptual-source-layout-vs-actual-visual-2026-10-25.md",
       "limitations": "Text can crop INSIDE fully onslide container, source layout may not match final altered pixels; do not substitute structural bounding rectangles for actual rendering analysis."
+    },
+    {
+      "task": "True source-mesh contact-chain analysis in original owner warehouse pallet/rack mechanical assembly",
+      "method": "Blender 4.0.2 CPU-only world-triangle vertical ray casts for named wood-steel contact and steel-to-original-rack at both endpoints, plus exact saved scene component identity and world geometry fingerprints",
+      "model_version": "Blender 4.0.2; three original saved stages v30 pre, v44 partial, v47 corrected, no learned inference",
+      "status": "narrow_source_geometry_contact_invariant_VERIFIED_in_one_original_real_asset_ONLY",
+      "scope": "24 real pallet meshes,72 steel supports,12 racks, two correlated repair stages with original source unchanged wood+supports, 5 movie frame checkpoints",
+      "result": "Intermediate 72 of 72 wood-steel within2mm but 0 of72 bearing racks both ends, corrected 72 of72 wood-steel and 72 of72 steel racks both ends. Wood meshes24/24 and support bounds72/72 identical between partial and corrected;12 racks rotated ninety degrees. 108 geometry instances stable 5 frames. Earlier one-dimensional stage gate was unsafe.",
+      "source_report": "perceptual-direct-verdict-and-real-warehouse-contact-2026-10-25.md",
+      "limitations": "One correlated product history not statistical IID cases; geometric triangle hits are neither proof of mechanical stress/load rating nor photographically plausible renders; erroneous/sparse probe negatives are not universal noncontact; known object roles and intended support path are required."
     }
   ],
   "second_continuation_2026_10_24": {
@@ -581,6 +591,25 @@
       "Earlier denied Spotlight 72-video result and full resolution tail framehash requests not retried",
       "First erroneous source proposal loop saved 27 records, preserved in var as invalid and excluded; corrected version covers all343 IDs",
       "No other agents or shared GPU production interrupted, no original media in source repo"
+    ]
+  },
+  "actual_warehouse_3d_support_chain_2026_10_25": {
+    "status": "NARROW TRUE SOURCE GEOMETRY VERIFIED; universal visual QA original goal PARTIAL",
+    "dated_report": "perceptual-direct-verdict-and-real-warehouse-contact-2026-10-25.md",
+    "compact_SHA_receipts": "perceptual-owner-warehouse-physical-contact-chain-2026-10-25.json",
+    "real_pallet_meshes": 24,
+    "real_racks": 12,
+    "real_steel_bars": 72,
+    "intermediate_wood_support_near_contacts": 72,
+    "intermediate_complete_wood_bar_rack_both_ends": 0,
+    "corrected_wood_support_near_contacts": 72,
+    "corrected_complete_wood_bar_rack_both_ends": 72,
+    "critical_source_lineage": "Wood meshes and steel bar world position unchanged v44 to v47, all12 rack world meshes reoriented ninety degrees; intentional original bad state not falsely portrayed as representative independent benchmark.",
+    "animation_sampling": "5 real scene frames 1,91,210,330,420 have 108 unchanged geometry meshes, none animate; not all perceptual film frames approved.",
+    "next_gap": "Independent expert-certified industrial equipment geometry and photorealistic rendered good/bad samples on untouched manufacturer families, and controlled natural playback video temporal faults.",
+    "video_stall_sources_not_downloaded": [
+      "First-party LIVE Mobile 200 distorted/reference clips including freeze, requires access form",
+      "LIVE Mobile Stall Database-II 174 altered videos,24 source videos,54 human subjective raters, access request required; FFmpeg freezedetect cannot infer editor intent."
     ]
   }
 }

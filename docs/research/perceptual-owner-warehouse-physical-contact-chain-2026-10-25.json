@@ -1,0 +1,89 @@
+{
+  "date": "2026-10-25",
+  "status": "VERIFIED narrow source-engineering contact chain, NOT physical load capacity or vision photorealism nor industrial benchmark accuracy",
+  "project": "SWAAG perceptual analyzer research, owner warehouse production scene v30 (pre), v44 (intermediate), v47 (corrected)",
+  "source_assets_STAY_OUTSIDE_GIT": true,
+  "source_blender_version": "4.0.2",
+  "unchanged_production_scene_SHA256": "6609f09ac0637dd232539f7d5de49ce3e59dc477a5bf25beb125ddcbf73849b6",
+  "source_provenance": {
+    "v47_matches_preexisting_independent_camera_source_receipt": true,
+    "source_pre_repair_wood_and_rack_identity": "91f0bf4187be18b353ca4f3f899130449bdc44721dedab73d6854260b78b96a5",
+    "source_intermediate_wood_and_rack_identity": "b091c5b33c4dd770b81e90a80922d92dc58778b208fecc22849f2cf2421c671e",
+    "source_corrected_wood_and_rack_identity": "9c8359252ebadacc4d3c3cd087a67786e86d395f00f4843608ef832564aa4b2b",
+    "physical_rack_reorientation_source_script_sha256": "865385f6b7bf6c8bd1e9342274820942e2263e0abdbf2d9c1925ac3a4ad69e9c",
+    "rack_repair_confirmed_from_source": "90 degree rotation about local center in existing real v45 build script, not inferred from model prose"
+  },
+  "raw_unmodified_results_SHA256": {
+    "original_before_repair_rack_local_probe": "9fa6f89e97a85bc5f95ace5d0340ff696295547f6ce4c4768a80322aa7379e9f",
+    "intermediate_v44_both_contact_stages": "0dbc1053e6c1aa61030d572f95589ce98f3011a063c1d679429cee3e205777af",
+    "corrected_v47_wood_to_bearing": "39f4d87a1a9f9facc1d6abaadb110953a7a52d1bfbbbc852ea2260516bc7c49d",
+    "corrected_v47_bearing_to_rack_both_ends": "274b0b25a94b6f5c2229c90a0637419400e54b2aae52d5493aa0cf998eebda6f",
+    "corrected_v47_five_frame_mesh_stability": "78861f2cb478c329d13ef3c2ca8ab450d04ff593718ef2f470e01219f78f19ef"
+  },
+  "actual_source_scene_counts": {
+    "pallets": 24,
+    "steel_bearing_bars": 72,
+    "rack_bays": 12
+  },
+  "individual_frame_sample_indices": [
+    1,
+    91,
+    210,
+    330,
+    420
+  ],
+  "original_v30_pre_repair": {
+    "real_steel_bearing_bars": 0,
+    "rack_end_location_wood_to_rack_ray_hits": 0,
+    "predefined_endpoint_source_rack_rays": 144,
+    "limitation": "No hit at selected endpoint ray XY positions does not establish missing every possible rack contact; source racks misoriented and this before/after is not a single-variable pair."
+  },
+  "real_intermediate_v44": {
+    "wood_to_steel_contact_bars_within_2mm": 72,
+    "source_steel_bars_with_rack_contact_at_LEFT_end": 0,
+    "source_steel_bars_with_rack_contact_at_RIGHT_end": 0,
+    "source_steel_bars_with_full_wood_bearing_rack_contact_chain": 0,
+    "failed_component": "Horizontal original rack axes misoriented. A simple wood/support vertical gap check falsely implies the steel bars are themselves supported."
+  },
+  "real_corrected_v47": {
+    "wood_to_steel_contact_bars_within_2mm": 72,
+    "wood_to_steel_sampled_min_vertical_gap_m": -0.0003,
+    "wood_to_steel_sampled_max_vertical_gap_m": -0.0003,
+    "original_rack_triangle_geometric_hits_at_both_ends": 72,
+    "original_rack_left_end_hits": 72,
+    "original_rack_right_end_hits": 72,
+    "sampled_rack_endpoint_rays": 432,
+    "dynamic_sampled_source_meshes_unchanged_per_frame": 108,
+    "sampled_scene_frame_count": 5,
+    "no_animation_data_on_these_108_mesh_objects": true
+  },
+  "version_controlled_geometric_identity": {
+    "pallet_world_triangle_meshes_identical_pre_v30_through_v47": 24,
+    "original_racks_same_v30_v44": 12,
+    "original_racks_CHANGED_world_geometry_v44_to_v47": 12,
+    "steel_bearing_bars_same_v44_v47_world_AABB": 72,
+    "matches": {
+      "pallet": {
+        "count": 24,
+        "pre_equals_intermediate": 24,
+        "intermediate_equals_corrected": 24
+      },
+      "rack": {
+        "count": 12,
+        "pre_equals_intermediate": 12,
+        "intermediate_equals_corrected": 0
+      }
+    },
+    "causal_limit": "The intermediate-to-corrected comparison holds all pallet world-space triangle meshes and steel bar world-space bounding geometry fixed, while racks are explicitly reoriented. Therefore this specific spatial rack orientation repair explains why the tested full bearing contact chain changes. It does not prove real engineered load strength."
+  },
+  "what_this_proves": "Source-aware geometry ray casting along the full declared load path can detect a real incomplete manufactured assembly-like visual product state, while earlier vertical-only measurement returned a misleading apparent pass; original author contact labels were not used to calculate raw geometry.",
+  "what_is_NOT_proved": [
+    "It is one internally correlated warehouse with one before/after correction, not 72 independent industrial defect+clean experiments. No independent TP/FP estimate for other machinery.",
+    "Ray hits on selected contact points prove triangle geometry proximity/intersection, not steel weld integrity, friction, allowable load, true structural simulation, mechanical engineering certification or intended whole-scene appearance.",
+    "No actual rendered image/video frame was judged for plausibility or photographic realism.",
+    "Five sample animation frames with no object animation show stable observed contact geometry, but not an independent test of every aspect of all 420 rendered frames.",
+    "CAD/load-bearing design oracle could itself be wrong; stage source-level assumptions and scope must be recorded."
+  ],
+  "narrow_tool_recommendation": "For source-available industrial 3D work: source-identity checksum and object role tags \u2192 actual world triangle contact between required components \u2192 vertical AND horizontal support path with intended endpoints and no unsupported components \u2192 joints/collision/animation static-or-dynamic checks \u2192 separate actual rendered image human/visual-model review and independent mechanical design comparison. No universal acceptance from generic VLM.",
+  "no_render_no_shared_GPU_no_model_called": true
+}
