@@ -1,0 +1,502 @@
+{
+  "date": "2026-10-25",
+  "research_owner": "SWAAG primary-research perceptual analyzer choices, original testing/GUI/media instructions",
+  "source": "TempGlitch arxiv:2605.21443v1 and original asgaardlab/TempGlitch HuggingFace MIT dataset source; 750 engineered temporal gameplay video glitches + 750 source normal category controls",
+  "original_full_dataset_godot_engine_and_game_environments": "Two Godot authored demo environments, five known temporal glitch mechanisms with 150 clean/150 buggy in each; SOURCE AUTHORS encoded labels from injected logic, not external blind adjudicators",
+  "primary_arxiv_html_source_sha256": "93116f3dd67c07a42cf82fec010a762a3ee23587e5381fbd4b0f083b3cd4ef88",
+  "raw_research_snapshots_sha256": {
+    "published_confusion_reanalysis_22_model_settings": "f869d82f61dc6de2d18fcf880fdce1ffcf2223103375db346a4e87327c5e22a7",
+    "complete_1500_clip_size_source_and_pair_integrity": "d118376fa45ba18823bb790a98215a35a043e36f9c31c94ffd41a32e0116be2d"
+  },
+  "complete_real_source_records_not_committed_to_git": true,
+  "independent_video_download_or_local_VLM_inference": false,
+  "actual_author_evaluation": {
+    "dataset_video_n": 1500,
+    "n_clean_original": 750,
+    "n_glitchy_injected": 750,
+    "n_vlms": 12,
+    "n_model_input_settings_scored": 22,
+    "paper_model_results_recomputed_from_author_actual_TP_TN_FP_FN": true,
+    "best_overall": {
+      "model": "GPT 5.4 Mini",
+      "setting": "sampled_5fps",
+      "accuracy_pct": 54.06666666666667,
+      "true_positives": 173,
+      "false_positives": 112,
+      "false_negatives": 577,
+      "true_negatives": 638
+    },
+    "selected_model_exact_source_matrices": {
+      "GPT 5.4 Mini": {
+        "provider": "OpenAI",
+        "original_source_model_checkpoint": "gpt-5.4-mini-2026-03-17",
+        "settings": {
+          "sampled_1fps": {
+            "TP": 139,
+            "TN": 647,
+            "FP": 103,
+            "FN": 611,
+            "glitch_truth_n": 750,
+            "clean_truth_n": 750,
+            "n": 1500,
+            "accuracy_pct": 52.4,
+            "precision_pct": 57.43801652892562,
+            "recall_pct": 18.533333333333335,
+            "f1_pct": 28.024193548387096,
+            "false_positive_rate_pct": 13.733333333333333,
+            "false_negative_rate_pct": 81.46666666666667,
+            "balanced_accuracy_pct": 52.400000000000006,
+            "source_authors_original_reported_accuracy_precision_recall_f1_pct": [
+              52.4,
+              57.4,
+              18.5,
+              28.0
+            ]
+          },
+          "sampled_5fps": {
+            "TP": 173,
+            "TN": 638,
+            "FP": 112,
+            "FN": 577,
+            "glitch_truth_n": 750,
+            "clean_truth_n": 750,
+            "n": 1500,
+            "accuracy_pct": 54.06666666666667,
+            "precision_pct": 60.70175438596491,
+            "recall_pct": 23.066666666666666,
+            "f1_pct": 33.429951690821255,
+            "false_positive_rate_pct": 14.933333333333334,
+            "false_negative_rate_pct": 76.93333333333334,
+            "balanced_accuracy_pct": 54.06666666666666,
+            "source_authors_original_reported_accuracy_precision_recall_f1_pct": [
+              54.1,
+              60.7,
+              23.1,
+              33.4
+            ]
+          }
+        }
+      },
+      "Qwen3VL 8B": {
+        "provider": "Unsloth",
+        "original_source_model_checkpoint": "Qwen3-VL-8B-Instruct-unsloth-bnb-4bit",
+        "settings": {
+          "sampled_1fps": {
+            "TP": 18,
+            "TN": 742,
+            "FP": 8,
+            "FN": 732,
+            "glitch_truth_n": 750,
+            "clean_truth_n": 750,
+            "n": 1500,
+            "accuracy_pct": 50.666666666666664,
+            "precision_pct": 69.23076923076923,
+            "recall_pct": 2.4,
+            "f1_pct": 4.639175257731959,
+            "false_positive_rate_pct": 1.0666666666666667,
+            "false_negative_rate_pct": 97.6,
+            "balanced_accuracy_pct": 50.66666666666666,
+            "source_authors_original_reported_accuracy_precision_recall_f1_pct": [
+              50.7,
+              69.2,
+              2.4,
+              4.6
+            ]
+          },
+          "sampled_5fps": {
+            "TP": 2,
+            "TN": 750,
+            "FP": 0,
+            "FN": 748,
+            "glitch_truth_n": 750,
+            "clean_truth_n": 750,
+            "n": 1500,
+            "accuracy_pct": 50.13333333333333,
+            "precision_pct": 100.0,
+            "recall_pct": 0.26666666666666666,
+            "f1_pct": 0.5319148936170213,
+            "false_positive_rate_pct": 0.0,
+            "false_negative_rate_pct": 99.73333333333333,
+            "balanced_accuracy_pct": 50.13333333333333,
+            "source_authors_original_reported_accuracy_precision_recall_f1_pct": [
+              50.1,
+              100.0,
+              0.3,
+              0.5
+            ]
+          }
+        }
+      },
+      "Qwen3.6 27B": {
+        "provider": "Unsloth",
+        "original_source_model_checkpoint": "Qwen3.6-27B",
+        "settings": {
+          "sampled_1fps": {
+            "TP": 407,
+            "TN": 351,
+            "FP": 399,
+            "FN": 343,
+            "glitch_truth_n": 750,
+            "clean_truth_n": 750,
+            "n": 1500,
+            "accuracy_pct": 50.53333333333333,
+            "precision_pct": 50.49627791563275,
+            "recall_pct": 54.266666666666666,
+            "f1_pct": 52.31362467866324,
+            "false_positive_rate_pct": 53.2,
+            "false_negative_rate_pct": 45.733333333333334,
+            "balanced_accuracy_pct": 50.53333333333333,
+            "source_authors_original_reported_accuracy_precision_recall_f1_pct": [
+              50.5,
+              50.5,
+              54.3,
+              52.3
+            ]
+          },
+          "sampled_5fps": {
+            "TP": 409,
+            "TN": 348,
+            "FP": 402,
+            "FN": 341,
+            "glitch_truth_n": 750,
+            "clean_truth_n": 750,
+            "n": 1500,
+            "accuracy_pct": 50.46666666666667,
+            "precision_pct": 50.43156596794081,
+            "recall_pct": 54.53333333333333,
+            "f1_pct": 52.40230621396541,
+            "false_positive_rate_pct": 53.6,
+            "false_negative_rate_pct": 45.46666666666667,
+            "balanced_accuracy_pct": 50.46666666666667,
+            "source_authors_original_reported_accuracy_precision_recall_f1_pct": [
+              50.5,
+              50.4,
+              54.5,
+              52.4
+            ]
+          }
+        }
+      },
+      "Gemini 3 Flash": {
+        "provider": "Gemini",
+        "original_source_model_checkpoint": "gemini-3-flash-preview-12-25",
+        "settings": {
+          "native_raw_video": {
+            "TP": 654,
+            "TN": 100,
+            "FP": 650,
+            "FN": 96,
+            "glitch_truth_n": 750,
+            "clean_truth_n": 750,
+            "n": 1500,
+            "accuracy_pct": 50.266666666666666,
+            "precision_pct": 50.15337423312884,
+            "recall_pct": 87.2,
+            "f1_pct": 63.68062317429406,
+            "false_positive_rate_pct": 86.66666666666667,
+            "false_negative_rate_pct": 12.8,
+            "balanced_accuracy_pct": 50.26666666666667,
+            "source_authors_original_reported_accuracy_precision_recall_f1_pct": [
+              50.3,
+              50.2,
+              87.2,
+              63.7
+            ]
+          }
+        }
+      },
+      "Gemma4 31B": {
+        "provider": "Unsloth",
+        "original_source_model_checkpoint": "gemma-4-31B-it",
+        "settings": {
+          "sampled_1fps": {
+            "TP": 298,
+            "TN": 487,
+            "FP": 263,
+            "FN": 452,
+            "glitch_truth_n": 750,
+            "clean_truth_n": 750,
+            "n": 1500,
+            "accuracy_pct": 52.333333333333336,
+            "precision_pct": 53.11942959001782,
+            "recall_pct": 39.733333333333334,
+            "f1_pct": 45.46147978642258,
+            "false_positive_rate_pct": 35.06666666666667,
+            "false_negative_rate_pct": 60.266666666666666,
+            "balanced_accuracy_pct": 52.33333333333333,
+            "source_authors_original_reported_accuracy_precision_recall_f1_pct": [
+              52.3,
+              53.1,
+              39.7,
+              45.5
+            ]
+          },
+          "sampled_5fps": {
+            "TP": 326,
+            "TN": 469,
+            "FP": 281,
+            "FN": 424,
+            "glitch_truth_n": 750,
+            "clean_truth_n": 750,
+            "n": 1500,
+            "accuracy_pct": 53.0,
+            "precision_pct": 53.70675453047776,
+            "recall_pct": 43.46666666666667,
+            "f1_pct": 48.04716285924834,
+            "false_positive_rate_pct": 37.46666666666667,
+            "false_negative_rate_pct": 56.53333333333333,
+            "balanced_accuracy_pct": 53.0,
+            "source_authors_original_reported_accuracy_precision_recall_f1_pct": [
+              53.0,
+              53.7,
+              43.5,
+              48.0
+            ]
+          }
+        }
+      },
+      "GPT 5.5": {
+        "provider": "OpenAI",
+        "original_source_model_checkpoint": "gpt-5.5-2026-04-23",
+        "settings": {
+          "sampled_1fps": {
+            "TP": 29,
+            "TN": 729,
+            "FP": 21,
+            "FN": 721,
+            "glitch_truth_n": 750,
+            "clean_truth_n": 750,
+            "n": 1500,
+            "accuracy_pct": 50.53333333333333,
+            "precision_pct": 58.0,
+            "recall_pct": 3.8666666666666667,
+            "f1_pct": 7.25,
+            "false_positive_rate_pct": 2.8,
+            "false_negative_rate_pct": 96.13333333333334,
+            "balanced_accuracy_pct": 50.53333333333333,
+            "source_authors_original_reported_accuracy_precision_recall_f1_pct": [
+              50.5,
+              58.0,
+              3.9,
+              7.2
+            ]
+          },
+          "sampled_5fps": {
+            "TP": 32,
+            "TN": 735,
+            "FP": 15,
+            "FN": 718,
+            "glitch_truth_n": 750,
+            "clean_truth_n": 750,
+            "n": 1500,
+            "accuracy_pct": 51.13333333333333,
+            "precision_pct": 68.08510638297872,
+            "recall_pct": 4.266666666666667,
+            "f1_pct": 8.030112923462987,
+            "false_positive_rate_pct": 2.0,
+            "false_negative_rate_pct": 95.73333333333333,
+            "balanced_accuracy_pct": 51.13333333333333,
+            "source_authors_original_reported_accuracy_precision_recall_f1_pct": [
+              51.1,
+              68.1,
+              4.3,
+              8.0
+            ]
+          }
+        }
+      }
+    },
+    "trivial_all_glitch_policy": {
+      "TP": 750,
+      "TN": 0,
+      "FP": 750,
+      "FN": 0,
+      "glitch_truth_n": 750,
+      "clean_truth_n": 750,
+      "n": 1500,
+      "accuracy_pct": 50.0,
+      "precision_pct": 50.0,
+      "recall_pct": 100.0,
+      "f1_pct": 66.66666666666667,
+      "false_positive_rate_pct": 100.0,
+      "false_negative_rate_pct": 0.0,
+      "balanced_accuracy_pct": 50.0
+    },
+    "trivial_all_clean_policy": {
+      "TP": 0,
+      "TN": 750,
+      "FP": 0,
+      "FN": 750,
+      "glitch_truth_n": 750,
+      "clean_truth_n": 750,
+      "n": 1500,
+      "accuracy_pct": 50.0,
+      "precision_pct": 0.0,
+      "recall_pct": 0.0,
+      "f1_pct": 0.0,
+      "false_positive_rate_pct": 0.0,
+      "false_negative_rate_pct": 100.0,
+      "balanced_accuracy_pct": 50.0
+    },
+    "authors_implementation": "Open weight six model inference used four NVIDIA L40S GPUs via Unsloth; proprietary models provider APIs; no local Nitro/Thor VLM or latency/price claim"
+  },
+  "full_original_video_file_metadata_independent_audit": {
+    "all_source_files": 1500,
+    "source_git_revision": "1d46a63c31ebfe3b675b51a2231d547da372eff9",
+    "original_category_matched_pairs": 750,
+    "Stuck_in_Place_environment_reused_numeric_IDs": "75 Platformer IDs plus 75 TPS IDs, do not pair numeric IDs without environment",
+    "source_category_file_size_statistics": {
+      "Blinking": {
+        "pairs": 150,
+        "buggy_size_median_MiB": 21.98,
+        "normal_size_median_MiB": 20.51,
+        "fraction_pairs_buggy_file_larger_than_clean": 0.4066666666666667,
+        "median_log_buggy_clean_size_ratio": -0.10421602482126452,
+        "fraction_pairs_abs_log_ratio_over_30pct": 0.7,
+        "paired_sign_test_p_two_sided": 0.027152590737646094,
+        "original_pair_env_counts": {
+          "Default": 150
+        }
+      },
+      "Frozen Animation": {
+        "pairs": 150,
+        "buggy_size_median_MiB": 36.52,
+        "normal_size_median_MiB": 48.1,
+        "fraction_pairs_buggy_file_larger_than_clean": 0.31333333333333335,
+        "median_log_buggy_clean_size_ratio": -0.28340461018982427,
+        "fraction_pairs_abs_log_ratio_over_30pct": 0.6733333333333333,
+        "paired_sign_test_p_two_sided": 5.597619670017182e-06,
+        "original_pair_env_counts": {
+          "Default": 150
+        }
+      },
+      "Shooting Error": {
+        "pairs": 150,
+        "buggy_size_median_MiB": 29.53,
+        "normal_size_median_MiB": 28.04,
+        "fraction_pairs_buggy_file_larger_than_clean": 0.6133333333333333,
+        "median_log_buggy_clean_size_ratio": 0.07783437682992547,
+        "fraction_pairs_abs_log_ratio_over_30pct": 0.5466666666666666,
+        "paired_sign_test_p_two_sided": 0.006851639068173706,
+        "original_pair_env_counts": {
+          "Default": 150
+        }
+      },
+      "Stuck in Place": {
+        "pairs": 150,
+        "buggy_size_median_MiB": 42.34,
+        "normal_size_median_MiB": 48.92,
+        "fraction_pairs_buggy_file_larger_than_clean": 0.34,
+        "median_log_buggy_clean_size_ratio": -0.1300190085740252,
+        "fraction_pairs_abs_log_ratio_over_30pct": 0.54,
+        "paired_sign_test_p_two_sided": 0.00010978172637063558,
+        "original_pair_env_counts": {
+          "Platformer": 75,
+          "TPS": 75
+        }
+      },
+      "Velocity Bug": {
+        "pairs": 150,
+        "buggy_size_median_MiB": 38.95,
+        "normal_size_median_MiB": 42.47,
+        "fraction_pairs_buggy_file_larger_than_clean": 0.44666666666666666,
+        "median_log_buggy_clean_size_ratio": -0.03215471527015132,
+        "fraction_pairs_abs_log_ratio_over_30pct": 0.46,
+        "paired_sign_test_p_two_sided": 0.22054483769441544,
+        "original_pair_env_counts": {
+          "Default": 150
+        }
+      }
+    },
+    "metadata_size_only_source_pair_heldout_model": {
+      "n_total_video_files": 1500,
+      "n_total_source_pairs": 750,
+      "n_fit_source_clips": 1180,
+      "n_heldout_source_clips": 320,
+      "n_fit_buggy": 590,
+      "n_test_buggy": 160,
+      "n_test_normal": 160,
+      "test_roc_auc": 0.59890625,
+      "TP": 87,
+      "FP": 66,
+      "FN": 73,
+      "TN": 94,
+      "test_balanced_accuracy": 0.565625,
+      "test_feature_only_model_logistic_fit_completed": true,
+      "pair_group_bootstrap_2500_source95pct_AUROC": [
+        0.5466,
+        0.6527
+      ],
+      "pair_group_bootstrap_2500_source95pct_balanced_accuracy": [
+        0.5188,
+        0.6125
+      ]
+    },
+    "metadata_only_per_category_source_holdout": {
+      "Blinking": {
+        "test_n": 66,
+        "test_buggy": 33,
+        "ROC_AUC": 0.4839302112029385,
+        "TP": 15,
+        "FP": 19,
+        "FN": 18,
+        "TN": 14,
+        "balanced_accuracy": 0.4393939393939394
+      },
+      "Frozen Animation": {
+        "test_n": 48,
+        "test_buggy": 24,
+        "ROC_AUC": 0.7239583333333334,
+        "TP": 15,
+        "FP": 7,
+        "FN": 9,
+        "TN": 17,
+        "balanced_accuracy": 0.6666666666666667
+      },
+      "Shooting Error": {
+        "test_n": 76,
+        "test_buggy": 38,
+        "ROC_AUC": 0.577562326869806,
+        "TP": 24,
+        "FP": 19,
+        "FN": 14,
+        "TN": 19,
+        "balanced_accuracy": 0.5657894736842105
+      },
+      "Stuck in Place": {
+        "test_n": 70,
+        "test_buggy": 35,
+        "ROC_AUC": 0.623673469387755,
+        "TP": 17,
+        "FP": 11,
+        "FN": 18,
+        "TN": 24,
+        "balanced_accuracy": 0.5857142857142857
+      },
+      "Velocity Bug": {
+        "test_n": 60,
+        "test_buggy": 30,
+        "ROC_AUC": 0.6088888888888889,
+        "TP": 16,
+        "FP": 10,
+        "FN": 14,
+        "TN": 20,
+        "balanced_accuracy": 0.6
+      }
+    },
+    "important_warning": "File bytes and source group are not part of typical frame-only VLM inputs; this is dataset construction leakage risk and an intentionally nonvisual baseline, NOT a model proving a video defect."
+  },
+  "verdict": "No full-video/general VLM judge tested achieves acceptable miss/false alarm rates for author-injected temporal gameplay anomalies. Best author accuracy 54.1pct, near chance balanced dataset. Qwen3-VL-8B 5 FPS TP2 FN748 FP0, an always-clean bias. Gemini3 Flash raw video TP654 FN96 FP650, an almost-everything-is-defective bias. Authors source tables independently rechecked. Metadata-only clip size/class classifier 56.6pct heldout on 320 separate source files, cannot be directly statistically compared to VLM on all1500.",
+  "conditional_immediate_tool_selection": "Source/DOM geometry and exact approved timeline for hard known constraints; OCR/feature tracking/pHash as evidence and abstain where uncertain, no VLM automatic verdict. For engine temporal failures, require object-level state, pose and displacement continuity or debug instrumentation, distinguish world-state defects from full-frame stalls. Any VLM recommendation requires new source-engine, human clean/defective labels, calibrated per-type FN/FP, latency and work-group contention tests.",
+  "limitations": [
+    "Published author in-engine source glitch/normal truth is not blind independent subjective fault annotation; output cannot establish perceptual natural render stalls.",
+    "Published models were run by authors, on four L40S for open-model family, not locally on Thor/Nitro; service versions, quantization, prompts and workloads differ.",
+    "Only two Godot demo environments; clip variants correlate within source and scene, and published Table3 does not provide a heldout new rendering engine result.",
+    "Some models obtain high recall simply by predicting nearly all videos glitchy; always-glitch untrained baseline F1 66.7pct on 1:1 class data.",
+    "Higher sampling frame rate from 1 to 5 FPS does not consistently improve practical accuracy or model calibration; Gemini raw-video accuracy still near chance.",
+    "The source metadata 320-file heldout split trained on other indices from the SAME source engine and categories, not untouched external game generators; source file size may encode duration, bitrate or scene content.",
+    "Source frozen animation means CHARACTER POSE not updating while world video continues; FFmpeg whole-screen freezedetect cannot prove absence of this anomaly.",
+    "Source original dataset videos ~60GB were deliberately not downloaded to avoid production resource contention and source media redistribution; quantitative VLM confusion is literature, not reproduced model inference.",
+    "No event-level temporal IoU or defect timing ground truth extracted and no natural-visual-quality human MOS on new source provided."
+  ]
+}
