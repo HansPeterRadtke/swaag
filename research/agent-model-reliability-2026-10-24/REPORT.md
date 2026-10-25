@@ -1,5 +1,7 @@
 # Agent Model Relevance and Reliability Research — measured continuation, 2026-10-24
 
+**Latest direct answers and matched local model comparisons (25 October 2026):** `DIRECT_ORIGINAL_QUESTION_VERDICTS_2026-10-25.md`. The earlier reports remain dated experiment snapshots; this document provides the current conditional verdicts on all original owner questions.
+
 **October twenty-fourth second-pass continuation:** `SECOND_PASS_2026-10-24.md` is the latest measured conclusion and explicitly supersedes earlier counts and the earlier statement that no training-level auxiliary experiment had run. Original first-pass figures below remain a dated historical checkpoint and are not silently overwritten.
 
 ## Status and scope
