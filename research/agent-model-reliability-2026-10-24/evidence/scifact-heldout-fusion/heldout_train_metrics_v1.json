@@ -1,0 +1,3202 @@
+{
+  "cascade": [
+    {
+      "complete_rationale_pipeline_rate": 0.29307,
+      "doc_method": "tfidf",
+      "doc_topk": 1,
+      "known_doc_hit_claims": 334,
+      "n_claims": 505,
+      "sentence_method": "tfidf",
+      "sentence_topk": 1,
+      "success_claims": 148
+    },
+    {
+      "complete_rationale_pipeline_rate": 0.53069,
+      "doc_method": "tfidf",
+      "doc_topk": 1,
+      "known_doc_hit_claims": 334,
+      "n_claims": 505,
+      "sentence_method": "tfidf",
+      "sentence_topk": 3,
+      "success_claims": 268
+    },
+    {
+      "complete_rationale_pipeline_rate": 0.61584,
+      "doc_method": "tfidf",
+      "doc_topk": 1,
+      "known_doc_hit_claims": 334,
+      "n_claims": 505,
+      "sentence_method": "tfidf",
+      "sentence_topk": 5,
+      "success_claims": 311
+    },
+    {
+      "complete_rationale_pipeline_rate": 0.32079,
+      "doc_method": "tfidf",
+      "doc_topk": 1,
+      "known_doc_hit_claims": 334,
+      "n_claims": 505,
+      "sentence_method": "bm25",
+      "sentence_topk": 1,
+      "success_claims": 162
+    },
+    {
+      "complete_rationale_pipeline_rate": 0.55248,
+      "doc_method": "tfidf",
+      "doc_topk": 1,
+      "known_doc_hit_claims": 334,
+      "n_claims": 505,
+      "sentence_method": "bm25",
+      "sentence_topk": 3,
+      "success_claims": 279
+    },
+    {
+      "complete_rationale_pipeline_rate": 0.62772,
+      "doc_method": "tfidf",
+      "doc_topk": 1,
+      "known_doc_hit_claims": 334,
+      "n_claims": 505,
+      "sentence_method": "bm25",
+      "sentence_topk": 5,
+      "success_claims": 317
+    },
+    {
+      "complete_rationale_pipeline_rate": 0.02178,
+      "doc_method": "tfidf",
+      "doc_topk": 1,
+      "known_doc_hit_claims": 334,
+      "n_claims": 505,
+      "sentence_method": "first",
+      "sentence_topk": 1,
+      "success_claims": 11
+    },
+    {
+      "complete_rationale_pipeline_rate": 0.14455,
+      "doc_method": "tfidf",
+      "doc_topk": 1,
+      "known_doc_hit_claims": 334,
+      "n_claims": 505,
+      "sentence_method": "first",
+      "sentence_topk": 3,
+      "success_claims": 73
+    },
+    {
+      "complete_rationale_pipeline_rate": 0.31881,
+      "doc_method": "tfidf",
+      "doc_topk": 1,
+      "known_doc_hit_claims": 334,
+      "n_claims": 505,
+      "sentence_method": "first",
+      "sentence_topk": 5,
+      "success_claims": 161
+    },
+    {
+      "complete_rationale_pipeline_rate": 0.16634,
+      "doc_method": "tfidf",
+      "doc_topk": 1,
+      "known_doc_hit_claims": 334,
+      "n_claims": 505,
+      "sentence_method": "last",
+      "sentence_topk": 1,
+      "success_claims": 84
+    },
+    {
+      "complete_rationale_pipeline_rate": 0.44752,
+      "doc_method": "tfidf",
+      "doc_topk": 1,
+      "known_doc_hit_claims": 334,
+      "n_claims": 505,
+      "sentence_method": "last",
+      "sentence_topk": 3,
+      "success_claims": 226
+    },
+    {
+      "complete_rationale_pipeline_rate": 0.5802,
+      "doc_method": "tfidf",
+      "doc_topk": 1,
+      "known_doc_hit_claims": 334,
+      "n_claims": 505,
+      "sentence_method": "last",
+      "sentence_topk": 5,
+      "success_claims": 293
+    },
+    {
+      "complete_rationale_pipeline_rate": 0.11287,
+      "doc_method": "tfidf",
+      "doc_topk": 1,
+      "known_doc_hit_claims": 334,
+      "n_claims": 505,
+      "sentence_method": "random",
+      "sentence_topk": 1,
+      "success_claims": 57
+    },
+    {
+      "complete_rationale_pipeline_rate": 0.29901,
+      "doc_method": "tfidf",
+      "doc_topk": 1,
+      "known_doc_hit_claims": 334,
+      "n_claims": 505,
+      "sentence_method": "random",
+      "sentence_topk": 3,
+      "success_claims": 151
+    },
+    {
+      "complete_rationale_pipeline_rate": 0.45941,
+      "doc_method": "tfidf",
+      "doc_topk": 1,
+      "known_doc_hit_claims": 334,
+      "n_claims": 505,
+      "sentence_method": "random",
+      "sentence_topk": 5,
+      "success_claims": 232
+    },
+    {
+      "complete_rationale_pipeline_rate": 0.28515,
+      "doc_method": "tfidf",
+      "doc_topk": 1,
+      "known_doc_hit_claims": 334,
+      "n_claims": 505,
+      "sentence_method": "rrf_lexical",
+      "sentence_topk": 1,
+      "success_claims": 144
+    },
+    {
+      "complete_rationale_pipeline_rate": 0.54257,
+      "doc_method": "tfidf",
+      "doc_topk": 1,
+      "known_doc_hit_claims": 334,
+      "n_claims": 505,
+      "sentence_method": "rrf_lexical",
+      "sentence_topk": 3,
+      "success_claims": 274
+    },
+    {
+      "complete_rationale_pipeline_rate": 0.6297,
+      "doc_method": "tfidf",
+      "doc_topk": 1,
+      "known_doc_hit_claims": 334,
+      "n_claims": 505,
+      "sentence_method": "rrf_lexical",
+      "sentence_topk": 5,
+      "success_claims": 318
+    },
+    {
+      "complete_rationale_pipeline_rate": 0.32079,
+      "doc_method": "tfidf",
+      "doc_topk": 1,
+      "known_doc_hit_claims": 334,
+      "n_claims": 505,
+      "sentence_method": "alternate_lexical",
+      "sentence_topk": 1,
+      "success_claims": 162
+    },
+    {
+      "complete_rationale_pipeline_rate": 0.54653,
+      "doc_method": "tfidf",
+      "doc_topk": 1,
+      "known_doc_hit_claims": 334,
+      "n_claims": 505,
+      "sentence_method": "alternate_lexical",
+      "sentence_topk": 3,
+      "success_claims": 276
+    },
+    {
+      "complete_rationale_pipeline_rate": 0.62772,
+      "doc_method": "tfidf",
+      "doc_topk": 1,
+      "known_doc_hit_claims": 334,
+      "n_claims": 505,
+      "sentence_method": "alternate_lexical",
+      "sentence_topk": 5,
+      "success_claims": 317
+    },
+    {
+      "complete_rationale_pipeline_rate": 0.33663,
+      "doc_method": "tfidf",
+      "doc_topk": 1,
+      "known_doc_hit_claims": 334,
+      "n_claims": 505,
+      "sentence_method": "rrf_tfidf_last",
+      "sentence_topk": 1,
+      "success_claims": 170
+    },
+    {
+      "complete_rationale_pipeline_rate": 0.54653,
+      "doc_method": "tfidf",
+      "doc_topk": 1,
+      "known_doc_hit_claims": 334,
+      "n_claims": 505,
+      "sentence_method": "rrf_tfidf_last",
+      "sentence_topk": 3,
+      "success_claims": 276
+    },
+    {
+      "complete_rationale_pipeline_rate": 0.62376,
+      "doc_method": "tfidf",
+      "doc_topk": 1,
+      "known_doc_hit_claims": 334,
+      "n_claims": 505,
+      "sentence_method": "rrf_tfidf_last",
+      "sentence_topk": 5,
+      "success_claims": 315
+    },
+    {
+      "complete_rationale_pipeline_rate": 0.35446,
+      "doc_method": "tfidf",
+      "doc_topk": 1,
+      "known_doc_hit_claims": 334,
+      "n_claims": 505,
+      "sentence_method": "rrf_bm25_last",
+      "sentence_topk": 1,
+      "success_claims": 179
+    },
+    {
+      "complete_rationale_pipeline_rate": 0.56238,
+      "doc_method": "tfidf",
+      "doc_topk": 1,
+      "known_doc_hit_claims": 334,
+      "n_claims": 505,
+      "sentence_method": "rrf_bm25_last",
+      "sentence_topk": 3,
+      "success_claims": 284
+    },
+    {
+      "complete_rationale_pipeline_rate": 0.63564,
+      "doc_method": "tfidf",
+      "doc_topk": 1,
+      "known_doc_hit_claims": 334,
+      "n_claims": 505,
+      "sentence_method": "rrf_bm25_last",
+      "sentence_topk": 5,
+      "success_claims": 321
+    },
+    {
+      "complete_rationale_pipeline_rate": 0.38416,
+      "doc_method": "tfidf",
+      "doc_topk": 1,
+      "known_doc_hit_claims": 334,
+      "n_claims": 505,
+      "sentence_method": "rrf_three",
+      "sentence_topk": 1,
+      "success_claims": 194
+    },
+    {
+      "complete_rationale_pipeline_rate": 0.5703,
+      "doc_method": "tfidf",
+      "doc_topk": 1,
+      "known_doc_hit_claims": 334,
+      "n_claims": 505,
+      "sentence_method": "rrf_three",
+      "sentence_topk": 3,
+      "success_claims": 288
+    },
+    {
+      "complete_rationale_pipeline_rate": 0.63564,
+      "doc_method": "tfidf",
+      "doc_topk": 1,
+      "known_doc_hit_claims": 334,
+      "n_claims": 505,
+      "sentence_method": "rrf_three",
+      "sentence_topk": 5,
+      "success_claims": 321
+    },
+    {
+      "complete_rationale_pipeline_rate": 0.37426,
+      "doc_method": "tfidf",
+      "doc_topk": 5,
+      "known_doc_hit_claims": 424,
+      "n_claims": 505,
+      "sentence_method": "tfidf",
+      "sentence_topk": 1,
+      "success_claims": 189
+    },
+    {
+      "complete_rationale_pipeline_rate": 0.67525,
+      "doc_method": "tfidf",
+      "doc_topk": 5,
+      "known_doc_hit_claims": 424,
+      "n_claims": 505,
+      "sentence_method": "tfidf",
+      "sentence_topk": 3,
+      "success_claims": 341
+    },
+    {
+      "complete_rationale_pipeline_rate": 0.77624,
+      "doc_method": "tfidf",
+      "doc_topk": 5,
+      "known_doc_hit_claims": 424,
+      "n_claims": 505,
+      "sentence_method": "tfidf",
+      "sentence_topk": 5,
+      "success_claims": 392
+    },
+    {
+      "complete_rationale_pipeline_rate": 0.41188,
+      "doc_method": "tfidf",
+      "doc_topk": 5,
+      "known_doc_hit_claims": 424,
+      "n_claims": 505,
+      "sentence_method": "bm25",
+      "sentence_topk": 1,
+      "success_claims": 208
+    },
+    {
+      "complete_rationale_pipeline_rate": 0.69505,
+      "doc_method": "tfidf",
+      "doc_topk": 5,
+      "known_doc_hit_claims": 424,
+      "n_claims": 505,
+      "sentence_method": "bm25",
+      "sentence_topk": 3,
+      "success_claims": 351
+    },
+    {
+      "complete_rationale_pipeline_rate": 0.7901,
+      "doc_method": "tfidf",
+      "doc_topk": 5,
+      "known_doc_hit_claims": 424,
+      "n_claims": 505,
+      "sentence_method": "bm25",
+      "sentence_topk": 5,
+      "success_claims": 399
+    },
+    {
+      "complete_rationale_pipeline_rate": 0.0495,
+      "doc_method": "tfidf",
+      "doc_topk": 5,
+      "known_doc_hit_claims": 424,
+      "n_claims": 505,
+      "sentence_method": "first",
+      "sentence_topk": 1,
+      "success_claims": 25
+    },
+    {
+      "complete_rationale_pipeline_rate": 0.22178,
+      "doc_method": "tfidf",
+      "doc_topk": 5,
+      "known_doc_hit_claims": 424,
+      "n_claims": 505,
+      "sentence_method": "first",
+      "sentence_topk": 3,
+      "success_claims": 112
+    },
+    {
+      "complete_rationale_pipeline_rate": 0.42376,
+      "doc_method": "tfidf",
+      "doc_topk": 5,
+      "known_doc_hit_claims": 424,
+      "n_claims": 505,
+      "sentence_method": "first",
+      "sentence_topk": 5,
+      "success_claims": 214
+    },
+    {
+      "complete_rationale_pipeline_rate": 0.20792,
+      "doc_method": "tfidf",
+      "doc_topk": 5,
+      "known_doc_hit_claims": 424,
+      "n_claims": 505,
+      "sentence_method": "last",
+      "sentence_topk": 1,
+      "success_claims": 105
+    },
+    {
+      "complete_rationale_pipeline_rate": 0.57822,
+      "doc_method": "tfidf",
+      "doc_topk": 5,
+      "known_doc_hit_claims": 424,
+      "n_claims": 505,
+      "sentence_method": "last",
+      "sentence_topk": 3,
+      "success_claims": 292
+    },
+    {
+      "complete_rationale_pipeline_rate": 0.73663,
+      "doc_method": "tfidf",
+      "doc_topk": 5,
+      "known_doc_hit_claims": 424,
+      "n_claims": 505,
+      "sentence_method": "last",
+      "sentence_topk": 5,
+      "success_claims": 372
+    },
+    {
+      "complete_rationale_pipeline_rate": 0.15644,
+      "doc_method": "tfidf",
+      "doc_topk": 5,
+      "known_doc_hit_claims": 424,
+      "n_claims": 505,
+      "sentence_method": "random",
+      "sentence_topk": 1,
+      "success_claims": 79
+    },
+    {
+      "complete_rationale_pipeline_rate": 0.39604,
+      "doc_method": "tfidf",
+      "doc_topk": 5,
+      "known_doc_hit_claims": 424,
+      "n_claims": 505,
+      "sentence_method": "random",
+      "sentence_topk": 3,
+      "success_claims": 200
+    },
+    {
+      "complete_rationale_pipeline_rate": 0.6099,
+      "doc_method": "tfidf",
+      "doc_topk": 5,
+      "known_doc_hit_claims": 424,
+      "n_claims": 505,
+      "sentence_method": "random",
+      "sentence_topk": 5,
+      "success_claims": 308
+    },
+    {
+      "complete_rationale_pipeline_rate": 0.36832,
+      "doc_method": "tfidf",
+      "doc_topk": 5,
+      "known_doc_hit_claims": 424,
+      "n_claims": 505,
+      "sentence_method": "rrf_lexical",
+      "sentence_topk": 1,
+      "success_claims": 186
+    },
+    {
+      "complete_rationale_pipeline_rate": 0.68713,
+      "doc_method": "tfidf",
+      "doc_topk": 5,
+      "known_doc_hit_claims": 424,
+      "n_claims": 505,
+      "sentence_method": "rrf_lexical",
+      "sentence_topk": 3,
+      "success_claims": 347
+    },
+    {
+      "complete_rationale_pipeline_rate": 0.7901,
+      "doc_method": "tfidf",
+      "doc_topk": 5,
+      "known_doc_hit_claims": 424,
+      "n_claims": 505,
+      "sentence_method": "rrf_lexical",
+      "sentence_topk": 5,
+      "success_claims": 399
+    },
+    {
+      "complete_rationale_pipeline_rate": 0.41188,
+      "doc_method": "tfidf",
+      "doc_topk": 5,
+      "known_doc_hit_claims": 424,
+      "n_claims": 505,
+      "sentence_method": "alternate_lexical",
+      "sentence_topk": 1,
+      "success_claims": 208
+    },
+    {
+      "complete_rationale_pipeline_rate": 0.68911,
+      "doc_method": "tfidf",
+      "doc_topk": 5,
+      "known_doc_hit_claims": 424,
+      "n_claims": 505,
+      "sentence_method": "alternate_lexical",
+      "sentence_topk": 3,
+      "success_claims": 348
+    },
+    {
+      "complete_rationale_pipeline_rate": 0.7901,
+      "doc_method": "tfidf",
+      "doc_topk": 5,
+      "known_doc_hit_claims": 424,
+      "n_claims": 505,
+      "sentence_method": "alternate_lexical",
+      "sentence_topk": 5,
+      "success_claims": 399
+    },
+    {
+      "complete_rationale_pipeline_rate": 0.44554,
+      "doc_method": "tfidf",
+      "doc_topk": 5,
+      "known_doc_hit_claims": 424,
+      "n_claims": 505,
+      "sentence_method": "rrf_tfidf_last",
+      "sentence_topk": 1,
+      "success_claims": 225
+    },
+    {
+      "complete_rationale_pipeline_rate": 0.69901,
+      "doc_method": "tfidf",
+      "doc_topk": 5,
+      "known_doc_hit_claims": 424,
+      "n_claims": 505,
+      "sentence_method": "rrf_tfidf_last",
+      "sentence_topk": 3,
+      "success_claims": 353
+    },
+    {
+      "complete_rationale_pipeline_rate": 0.78812,
+      "doc_method": "tfidf",
+      "doc_topk": 5,
+      "known_doc_hit_claims": 424,
+      "n_claims": 505,
+      "sentence_method": "rrf_tfidf_last",
+      "sentence_topk": 5,
+      "success_claims": 398
+    },
+    {
+      "complete_rationale_pipeline_rate": 0.46733,
+      "doc_method": "tfidf",
+      "doc_topk": 5,
+      "known_doc_hit_claims": 424,
+      "n_claims": 505,
+      "sentence_method": "rrf_bm25_last",
+      "sentence_topk": 1,
+      "success_claims": 236
+    },
+    {
+      "complete_rationale_pipeline_rate": 0.71089,
+      "doc_method": "tfidf",
+      "doc_topk": 5,
+      "known_doc_hit_claims": 424,
+      "n_claims": 505,
+      "sentence_method": "rrf_bm25_last",
+      "sentence_topk": 3,
+      "success_claims": 359
+    },
+    {
+      "complete_rationale_pipeline_rate": 0.8,
+      "doc_method": "tfidf",
+      "doc_topk": 5,
+      "known_doc_hit_claims": 424,
+      "n_claims": 505,
+      "sentence_method": "rrf_bm25_last",
+      "sentence_topk": 5,
+      "success_claims": 404
+    },
+    {
+      "complete_rationale_pipeline_rate": 0.49901,
+      "doc_method": "tfidf",
+      "doc_topk": 5,
+      "known_doc_hit_claims": 424,
+      "n_claims": 505,
+      "sentence_method": "rrf_three",
+      "sentence_topk": 1,
+      "success_claims": 252
+    },
+    {
+      "complete_rationale_pipeline_rate": 0.72475,
+      "doc_method": "tfidf",
+      "doc_topk": 5,
+      "known_doc_hit_claims": 424,
+      "n_claims": 505,
+      "sentence_method": "rrf_three",
+      "sentence_topk": 3,
+      "success_claims": 366
+    },
+    {
+      "complete_rationale_pipeline_rate": 0.80396,
+      "doc_method": "tfidf",
+      "doc_topk": 5,
+      "known_doc_hit_claims": 424,
+      "n_claims": 505,
+      "sentence_method": "rrf_three",
+      "sentence_topk": 5,
+      "success_claims": 406
+    },
+    {
+      "complete_rationale_pipeline_rate": 0.40594,
+      "doc_method": "tfidf",
+      "doc_topk": 10,
+      "known_doc_hit_claims": 454,
+      "n_claims": 505,
+      "sentence_method": "tfidf",
+      "sentence_topk": 1,
+      "success_claims": 205
+    },
+    {
+      "complete_rationale_pipeline_rate": 0.72871,
+      "doc_method": "tfidf",
+      "doc_topk": 10,
+      "known_doc_hit_claims": 454,
+      "n_claims": 505,
+      "sentence_method": "tfidf",
+      "sentence_topk": 3,
+      "success_claims": 368
+    },
+    {
+      "complete_rationale_pipeline_rate": 0.83366,
+      "doc_method": "tfidf",
+      "doc_topk": 10,
+      "known_doc_hit_claims": 454,
+      "n_claims": 505,
+      "sentence_method": "tfidf",
+      "sentence_topk": 5,
+      "success_claims": 421
+    },
+    {
+      "complete_rationale_pipeline_rate": 0.4396,
+      "doc_method": "tfidf",
+      "doc_topk": 10,
+      "known_doc_hit_claims": 454,
+      "n_claims": 505,
+      "sentence_method": "bm25",
+      "sentence_topk": 1,
+      "success_claims": 222
+    },
+    {
+      "complete_rationale_pipeline_rate": 0.74851,
+      "doc_method": "tfidf",
+      "doc_topk": 10,
+      "known_doc_hit_claims": 454,
+      "n_claims": 505,
+      "sentence_method": "bm25",
+      "sentence_topk": 3,
+      "success_claims": 378
+    },
+    {
+      "complete_rationale_pipeline_rate": 0.84554,
+      "doc_method": "tfidf",
+      "doc_topk": 10,
+      "known_doc_hit_claims": 454,
+      "n_claims": 505,
+      "sentence_method": "bm25",
+      "sentence_topk": 5,
+      "success_claims": 427
+    },
+    {
+      "complete_rationale_pipeline_rate": 0.05545,
+      "doc_method": "tfidf",
+      "doc_topk": 10,
+      "known_doc_hit_claims": 454,
+      "n_claims": 505,
+      "sentence_method": "first",
+      "sentence_topk": 1,
+      "success_claims": 28
+    },
+    {
+      "complete_rationale_pipeline_rate": 0.23564,
+      "doc_method": "tfidf",
+      "doc_topk": 10,
+      "known_doc_hit_claims": 454,
+      "n_claims": 505,
+      "sentence_method": "first",
+      "sentence_topk": 3,
+      "success_claims": 119
+    },
+    {
+      "complete_rationale_pipeline_rate": 0.45149,
+      "doc_method": "tfidf",
+      "doc_topk": 10,
+      "known_doc_hit_claims": 454,
+      "n_claims": 505,
+      "sentence_method": "first",
+      "sentence_topk": 5,
+      "success_claims": 228
+    },
+    {
+      "complete_rationale_pipeline_rate": 0.21782,
+      "doc_method": "tfidf",
+      "doc_topk": 10,
+      "known_doc_hit_claims": 454,
+      "n_claims": 505,
+      "sentence_method": "last",
+      "sentence_topk": 1,
+      "success_claims": 110
+    },
+    {
+      "complete_rationale_pipeline_rate": 0.6198,
+      "doc_method": "tfidf",
+      "doc_topk": 10,
+      "known_doc_hit_claims": 454,
+      "n_claims": 505,
+      "sentence_method": "last",
+      "sentence_topk": 3,
+      "success_claims": 313
+    },
+    {
+      "complete_rationale_pipeline_rate": 0.78614,
+      "doc_method": "tfidf",
+      "doc_topk": 10,
+      "known_doc_hit_claims": 454,
+      "n_claims": 505,
+      "sentence_method": "last",
+      "sentence_topk": 5,
+      "success_claims": 397
+    },
+    {
+      "complete_rationale_pipeline_rate": 0.16238,
+      "doc_method": "tfidf",
+      "doc_topk": 10,
+      "known_doc_hit_claims": 454,
+      "n_claims": 505,
+      "sentence_method": "random",
+      "sentence_topk": 1,
+      "success_claims": 82
+    },
+    {
+      "complete_rationale_pipeline_rate": 0.41584,
+      "doc_method": "tfidf",
+      "doc_topk": 10,
+      "known_doc_hit_claims": 454,
+      "n_claims": 505,
+      "sentence_method": "random",
+      "sentence_topk": 3,
+      "success_claims": 210
+    },
+    {
+      "complete_rationale_pipeline_rate": 0.64356,
+      "doc_method": "tfidf",
+      "doc_topk": 10,
+      "known_doc_hit_claims": 454,
+      "n_claims": 505,
+      "sentence_method": "random",
+      "sentence_topk": 5,
+      "success_claims": 325
+    },
+    {
+      "complete_rationale_pipeline_rate": 0.39604,
+      "doc_method": "tfidf",
+      "doc_topk": 10,
+      "known_doc_hit_claims": 454,
+      "n_claims": 505,
+      "sentence_method": "rrf_lexical",
+      "sentence_topk": 1,
+      "success_claims": 200
+    },
+    {
+      "complete_rationale_pipeline_rate": 0.74059,
+      "doc_method": "tfidf",
+      "doc_topk": 10,
+      "known_doc_hit_claims": 454,
+      "n_claims": 505,
+      "sentence_method": "rrf_lexical",
+      "sentence_topk": 3,
+      "success_claims": 374
+    },
+    {
+      "complete_rationale_pipeline_rate": 0.84752,
+      "doc_method": "tfidf",
+      "doc_topk": 10,
+      "known_doc_hit_claims": 454,
+      "n_claims": 505,
+      "sentence_method": "rrf_lexical",
+      "sentence_topk": 5,
+      "success_claims": 428
+    },
+    {
+      "complete_rationale_pipeline_rate": 0.4396,
+      "doc_method": "tfidf",
+      "doc_topk": 10,
+      "known_doc_hit_claims": 454,
+      "n_claims": 505,
+      "sentence_method": "alternate_lexical",
+      "sentence_topk": 1,
+      "success_claims": 222
+    },
+    {
+      "complete_rationale_pipeline_rate": 0.74257,
+      "doc_method": "tfidf",
+      "doc_topk": 10,
+      "known_doc_hit_claims": 454,
+      "n_claims": 505,
+      "sentence_method": "alternate_lexical",
+      "sentence_topk": 3,
+      "success_claims": 375
+    },
+    {
+      "complete_rationale_pipeline_rate": 0.84752,
+      "doc_method": "tfidf",
+      "doc_topk": 10,
+      "known_doc_hit_claims": 454,
+      "n_claims": 505,
+      "sentence_method": "alternate_lexical",
+      "sentence_topk": 5,
+      "success_claims": 428
+    },
+    {
+      "complete_rationale_pipeline_rate": 0.48317,
+      "doc_method": "tfidf",
+      "doc_topk": 10,
+      "known_doc_hit_claims": 454,
+      "n_claims": 505,
+      "sentence_method": "rrf_tfidf_last",
+      "sentence_topk": 1,
+      "success_claims": 244
+    },
+    {
+      "complete_rationale_pipeline_rate": 0.74851,
+      "doc_method": "tfidf",
+      "doc_topk": 10,
+      "known_doc_hit_claims": 454,
+      "n_claims": 505,
+      "sentence_method": "rrf_tfidf_last",
+      "sentence_topk": 3,
+      "success_claims": 378
+    },
+    {
+      "complete_rationale_pipeline_rate": 0.84554,
+      "doc_method": "tfidf",
+      "doc_topk": 10,
+      "known_doc_hit_claims": 454,
+      "n_claims": 505,
+      "sentence_method": "rrf_tfidf_last",
+      "sentence_topk": 5,
+      "success_claims": 427
+    },
+    {
+      "complete_rationale_pipeline_rate": 0.50297,
+      "doc_method": "tfidf",
+      "doc_topk": 10,
+      "known_doc_hit_claims": 454,
+      "n_claims": 505,
+      "sentence_method": "rrf_bm25_last",
+      "sentence_topk": 1,
+      "success_claims": 254
+    },
+    {
+      "complete_rationale_pipeline_rate": 0.76238,
+      "doc_method": "tfidf",
+      "doc_topk": 10,
+      "known_doc_hit_claims": 454,
+      "n_claims": 505,
+      "sentence_method": "rrf_bm25_last",
+      "sentence_topk": 3,
+      "success_claims": 385
+    },
+    {
+      "complete_rationale_pipeline_rate": 0.85545,
+      "doc_method": "tfidf",
+      "doc_topk": 10,
+      "known_doc_hit_claims": 454,
+      "n_claims": 505,
+      "sentence_method": "rrf_bm25_last",
+      "sentence_topk": 5,
+      "success_claims": 432
+    },
+    {
+      "complete_rationale_pipeline_rate": 0.54257,
+      "doc_method": "tfidf",
+      "doc_topk": 10,
+      "known_doc_hit_claims": 454,
+      "n_claims": 505,
+      "sentence_method": "rrf_three",
+      "sentence_topk": 1,
+      "success_claims": 274
+    },
+    {
+      "complete_rationale_pipeline_rate": 0.77624,
+      "doc_method": "tfidf",
+      "doc_topk": 10,
+      "known_doc_hit_claims": 454,
+      "n_claims": 505,
+      "sentence_method": "rrf_three",
+      "sentence_topk": 3,
+      "success_claims": 392
+    },
+    {
+      "complete_rationale_pipeline_rate": 0.86139,
+      "doc_method": "tfidf",
+      "doc_topk": 10,
+      "known_doc_hit_claims": 454,
+      "n_claims": 505,
+      "sentence_method": "rrf_three",
+      "sentence_topk": 5,
+      "success_claims": 435
+    },
+    {
+      "complete_rationale_pipeline_rate": 0.32871,
+      "doc_method": "bm25",
+      "doc_topk": 1,
+      "known_doc_hit_claims": 379,
+      "n_claims": 505,
+      "sentence_method": "tfidf",
+      "sentence_topk": 1,
+      "success_claims": 166
+    },
+    {
+      "complete_rationale_pipeline_rate": 0.61386,
+      "doc_method": "bm25",
+      "doc_topk": 1,
+      "known_doc_hit_claims": 379,
+      "n_claims": 505,
+      "sentence_method": "tfidf",
+      "sentence_topk": 3,
+      "success_claims": 310
+    },
+    {
+      "complete_rationale_pipeline_rate": 0.70693,
+      "doc_method": "bm25",
+      "doc_topk": 1,
+      "known_doc_hit_claims": 379,
+      "n_claims": 505,
+      "sentence_method": "tfidf",
+      "sentence_topk": 5,
+      "success_claims": 357
+    },
+    {
+      "complete_rationale_pipeline_rate": 0.36238,
+      "doc_method": "bm25",
+      "doc_topk": 1,
+      "known_doc_hit_claims": 379,
+      "n_claims": 505,
+      "sentence_method": "bm25",
+      "sentence_topk": 1,
+      "success_claims": 183
+    },
+    {
+      "complete_rationale_pipeline_rate": 0.6297,
+      "doc_method": "bm25",
+      "doc_topk": 1,
+      "known_doc_hit_claims": 379,
+      "n_claims": 505,
+      "sentence_method": "bm25",
+      "sentence_topk": 3,
+      "success_claims": 318
+    },
+    {
+      "complete_rationale_pipeline_rate": 0.71485,
+      "doc_method": "bm25",
+      "doc_topk": 1,
+      "known_doc_hit_claims": 379,
+      "n_claims": 505,
+      "sentence_method": "bm25",
+      "sentence_topk": 5,
+      "success_claims": 361
+    },
+    {
+      "complete_rationale_pipeline_rate": 0.02574,
+      "doc_method": "bm25",
+      "doc_topk": 1,
+      "known_doc_hit_claims": 379,
+      "n_claims": 505,
+      "sentence_method": "first",
+      "sentence_topk": 1,
+      "success_claims": 13
+    },
+    {
+      "complete_rationale_pipeline_rate": 0.16832,
+      "doc_method": "bm25",
+      "doc_topk": 1,
+      "known_doc_hit_claims": 379,
+      "n_claims": 505,
+      "sentence_method": "first",
+      "sentence_topk": 3,
+      "success_claims": 85
+    },
+    {
+      "complete_rationale_pipeline_rate": 0.35842,
+      "doc_method": "bm25",
+      "doc_topk": 1,
+      "known_doc_hit_claims": 379,
+      "n_claims": 505,
+      "sentence_method": "first",
+      "sentence_topk": 5,
+      "success_claims": 181
+    },
+    {
+      "complete_rationale_pipeline_rate": 0.1802,
+      "doc_method": "bm25",
+      "doc_topk": 1,
+      "known_doc_hit_claims": 379,
+      "n_claims": 505,
+      "sentence_method": "last",
+      "sentence_topk": 1,
+      "success_claims": 91
+    },
+    {
+      "complete_rationale_pipeline_rate": 0.53267,
+      "doc_method": "bm25",
+      "doc_topk": 1,
+      "known_doc_hit_claims": 379,
+      "n_claims": 505,
+      "sentence_method": "last",
+      "sentence_topk": 3,
+      "success_claims": 269
+    },
+    {
+      "complete_rationale_pipeline_rate": 0.66733,
+      "doc_method": "bm25",
+      "doc_topk": 1,
+      "known_doc_hit_claims": 379,
+      "n_claims": 505,
+      "sentence_method": "last",
+      "sentence_topk": 5,
+      "success_claims": 337
+    },
+    {
+      "complete_rationale_pipeline_rate": 0.13465,
+      "doc_method": "bm25",
+      "doc_topk": 1,
+      "known_doc_hit_claims": 379,
+      "n_claims": 505,
+      "sentence_method": "random",
+      "sentence_topk": 1,
+      "success_claims": 68
+    },
+    {
+      "complete_rationale_pipeline_rate": 0.33663,
+      "doc_method": "bm25",
+      "doc_topk": 1,
+      "known_doc_hit_claims": 379,
+      "n_claims": 505,
+      "sentence_method": "random",
+      "sentence_topk": 3,
+      "success_claims": 170
+    },
+    {
+      "complete_rationale_pipeline_rate": 0.52673,
+      "doc_method": "bm25",
+      "doc_topk": 1,
+      "known_doc_hit_claims": 379,
+      "n_claims": 505,
+      "sentence_method": "random",
+      "sentence_topk": 5,
+      "success_claims": 266
+    },
+    {
+      "complete_rationale_pipeline_rate": 0.32079,
+      "doc_method": "bm25",
+      "doc_topk": 1,
+      "known_doc_hit_claims": 379,
+      "n_claims": 505,
+      "sentence_method": "rrf_lexical",
+      "sentence_topk": 1,
+      "success_claims": 162
+    },
+    {
+      "complete_rationale_pipeline_rate": 0.62772,
+      "doc_method": "bm25",
+      "doc_topk": 1,
+      "known_doc_hit_claims": 379,
+      "n_claims": 505,
+      "sentence_method": "rrf_lexical",
+      "sentence_topk": 3,
+      "success_claims": 317
+    },
+    {
+      "complete_rationale_pipeline_rate": 0.71683,
+      "doc_method": "bm25",
+      "doc_topk": 1,
+      "known_doc_hit_claims": 379,
+      "n_claims": 505,
+      "sentence_method": "rrf_lexical",
+      "sentence_topk": 5,
+      "success_claims": 362
+    },
+    {
+      "complete_rationale_pipeline_rate": 0.36238,
+      "doc_method": "bm25",
+      "doc_topk": 1,
+      "known_doc_hit_claims": 379,
+      "n_claims": 505,
+      "sentence_method": "alternate_lexical",
+      "sentence_topk": 1,
+      "success_claims": 183
+    },
+    {
+      "complete_rationale_pipeline_rate": 0.62772,
+      "doc_method": "bm25",
+      "doc_topk": 1,
+      "known_doc_hit_claims": 379,
+      "n_claims": 505,
+      "sentence_method": "alternate_lexical",
+      "sentence_topk": 3,
+      "success_claims": 317
+    },
+    {
+      "complete_rationale_pipeline_rate": 0.71485,
+      "doc_method": "bm25",
+      "doc_topk": 1,
+      "known_doc_hit_claims": 379,
+      "n_claims": 505,
+      "sentence_method": "alternate_lexical",
+      "sentence_topk": 5,
+      "success_claims": 361
+    },
+    {
+      "complete_rationale_pipeline_rate": 0.39604,
+      "doc_method": "bm25",
+      "doc_topk": 1,
+      "known_doc_hit_claims": 379,
+      "n_claims": 505,
+      "sentence_method": "rrf_tfidf_last",
+      "sentence_topk": 1,
+      "success_claims": 200
+    },
+    {
+      "complete_rationale_pipeline_rate": 0.63762,
+      "doc_method": "bm25",
+      "doc_topk": 1,
+      "known_doc_hit_claims": 379,
+      "n_claims": 505,
+      "sentence_method": "rrf_tfidf_last",
+      "sentence_topk": 3,
+      "success_claims": 322
+    },
+    {
+      "complete_rationale_pipeline_rate": 0.71683,
+      "doc_method": "bm25",
+      "doc_topk": 1,
+      "known_doc_hit_claims": 379,
+      "n_claims": 505,
+      "sentence_method": "rrf_tfidf_last",
+      "sentence_topk": 5,
+      "success_claims": 362
+    },
+    {
+      "complete_rationale_pipeline_rate": 0.42178,
+      "doc_method": "bm25",
+      "doc_topk": 1,
+      "known_doc_hit_claims": 379,
+      "n_claims": 505,
+      "sentence_method": "rrf_bm25_last",
+      "sentence_topk": 1,
+      "success_claims": 213
+    },
+    {
+      "complete_rationale_pipeline_rate": 0.65347,
+      "doc_method": "bm25",
+      "doc_topk": 1,
+      "known_doc_hit_claims": 379,
+      "n_claims": 505,
+      "sentence_method": "rrf_bm25_last",
+      "sentence_topk": 3,
+      "success_claims": 330
+    },
+    {
+      "complete_rationale_pipeline_rate": 0.72475,
+      "doc_method": "bm25",
+      "doc_topk": 1,
+      "known_doc_hit_claims": 379,
+      "n_claims": 505,
+      "sentence_method": "rrf_bm25_last",
+      "sentence_topk": 5,
+      "success_claims": 366
+    },
+    {
+      "complete_rationale_pipeline_rate": 0.4495,
+      "doc_method": "bm25",
+      "doc_topk": 1,
+      "known_doc_hit_claims": 379,
+      "n_claims": 505,
+      "sentence_method": "rrf_three",
+      "sentence_topk": 1,
+      "success_claims": 227
+    },
+    {
+      "complete_rationale_pipeline_rate": 0.66139,
+      "doc_method": "bm25",
+      "doc_topk": 1,
+      "known_doc_hit_claims": 379,
+      "n_claims": 505,
+      "sentence_method": "rrf_three",
+      "sentence_topk": 3,
+      "success_claims": 334
+    },
+    {
+      "complete_rationale_pipeline_rate": 0.73069,
+      "doc_method": "bm25",
+      "doc_topk": 1,
+      "known_doc_hit_claims": 379,
+      "n_claims": 505,
+      "sentence_method": "rrf_three",
+      "sentence_topk": 5,
+      "success_claims": 369
+    },
+    {
+      "complete_rationale_pipeline_rate": 0.40594,
+      "doc_method": "bm25",
+      "doc_topk": 5,
+      "known_doc_hit_claims": 456,
+      "n_claims": 505,
+      "sentence_method": "tfidf",
+      "sentence_topk": 1,
+      "success_claims": 205
+    },
+    {
+      "complete_rationale_pipeline_rate": 0.72673,
+      "doc_method": "bm25",
+      "doc_topk": 5,
+      "known_doc_hit_claims": 456,
+      "n_claims": 505,
+      "sentence_method": "tfidf",
+      "sentence_topk": 3,
+      "success_claims": 367
+    },
+    {
+      "complete_rationale_pipeline_rate": 0.83168,
+      "doc_method": "bm25",
+      "doc_topk": 5,
+      "known_doc_hit_claims": 456,
+      "n_claims": 505,
+      "sentence_method": "tfidf",
+      "sentence_topk": 5,
+      "success_claims": 420
+    },
+    {
+      "complete_rationale_pipeline_rate": 0.43564,
+      "doc_method": "bm25",
+      "doc_topk": 5,
+      "known_doc_hit_claims": 456,
+      "n_claims": 505,
+      "sentence_method": "bm25",
+      "sentence_topk": 1,
+      "success_claims": 220
+    },
+    {
+      "complete_rationale_pipeline_rate": 0.7505,
+      "doc_method": "bm25",
+      "doc_topk": 5,
+      "known_doc_hit_claims": 456,
+      "n_claims": 505,
+      "sentence_method": "bm25",
+      "sentence_topk": 3,
+      "success_claims": 379
+    },
+    {
+      "complete_rationale_pipeline_rate": 0.84554,
+      "doc_method": "bm25",
+      "doc_topk": 5,
+      "known_doc_hit_claims": 456,
+      "n_claims": 505,
+      "sentence_method": "bm25",
+      "sentence_topk": 5,
+      "success_claims": 427
+    },
+    {
+      "complete_rationale_pipeline_rate": 0.0495,
+      "doc_method": "bm25",
+      "doc_topk": 5,
+      "known_doc_hit_claims": 456,
+      "n_claims": 505,
+      "sentence_method": "first",
+      "sentence_topk": 1,
+      "success_claims": 25
+    },
+    {
+      "complete_rationale_pipeline_rate": 0.23366,
+      "doc_method": "bm25",
+      "doc_topk": 5,
+      "known_doc_hit_claims": 456,
+      "n_claims": 505,
+      "sentence_method": "first",
+      "sentence_topk": 3,
+      "success_claims": 118
+    },
+    {
+      "complete_rationale_pipeline_rate": 0.44752,
+      "doc_method": "bm25",
+      "doc_topk": 5,
+      "known_doc_hit_claims": 456,
+      "n_claims": 505,
+      "sentence_method": "first",
+      "sentence_topk": 5,
+      "success_claims": 226
+    },
+    {
+      "complete_rationale_pipeline_rate": 0.2198,
+      "doc_method": "bm25",
+      "doc_topk": 5,
+      "known_doc_hit_claims": 456,
+      "n_claims": 505,
+      "sentence_method": "last",
+      "sentence_topk": 1,
+      "success_claims": 111
+    },
+    {
+      "complete_rationale_pipeline_rate": 0.62178,
+      "doc_method": "bm25",
+      "doc_topk": 5,
+      "known_doc_hit_claims": 456,
+      "n_claims": 505,
+      "sentence_method": "last",
+      "sentence_topk": 3,
+      "success_claims": 314
+    },
+    {
+      "complete_rationale_pipeline_rate": 0.79406,
+      "doc_method": "bm25",
+      "doc_topk": 5,
+      "known_doc_hit_claims": 456,
+      "n_claims": 505,
+      "sentence_method": "last",
+      "sentence_topk": 5,
+      "success_claims": 401
+    },
+    {
+      "complete_rationale_pipeline_rate": 0.16238,
+      "doc_method": "bm25",
+      "doc_topk": 5,
+      "known_doc_hit_claims": 456,
+      "n_claims": 505,
+      "sentence_method": "random",
+      "sentence_topk": 1,
+      "success_claims": 82
+    },
+    {
+      "complete_rationale_pipeline_rate": 0.41584,
+      "doc_method": "bm25",
+      "doc_topk": 5,
+      "known_doc_hit_claims": 456,
+      "n_claims": 505,
+      "sentence_method": "random",
+      "sentence_topk": 3,
+      "success_claims": 210
+    },
+    {
+      "complete_rationale_pipeline_rate": 0.64356,
+      "doc_method": "bm25",
+      "doc_topk": 5,
+      "known_doc_hit_claims": 456,
+      "n_claims": 505,
+      "sentence_method": "random",
+      "sentence_topk": 5,
+      "success_claims": 325
+    },
+    {
+      "complete_rationale_pipeline_rate": 0.39406,
+      "doc_method": "bm25",
+      "doc_topk": 5,
+      "known_doc_hit_claims": 456,
+      "n_claims": 505,
+      "sentence_method": "rrf_lexical",
+      "sentence_topk": 1,
+      "success_claims": 199
+    },
+    {
+      "complete_rationale_pipeline_rate": 0.74257,
+      "doc_method": "bm25",
+      "doc_topk": 5,
+      "known_doc_hit_claims": 456,
+      "n_claims": 505,
+      "sentence_method": "rrf_lexical",
+      "sentence_topk": 3,
+      "success_claims": 375
+    },
+    {
+      "complete_rationale_pipeline_rate": 0.84554,
+      "doc_method": "bm25",
+      "doc_topk": 5,
+      "known_doc_hit_claims": 456,
+      "n_claims": 505,
+      "sentence_method": "rrf_lexical",
+      "sentence_topk": 5,
+      "success_claims": 427
+    },
+    {
+      "complete_rationale_pipeline_rate": 0.43564,
+      "doc_method": "bm25",
+      "doc_topk": 5,
+      "known_doc_hit_claims": 456,
+      "n_claims": 505,
+      "sentence_method": "alternate_lexical",
+      "sentence_topk": 1,
+      "success_claims": 220
+    },
+    {
+      "complete_rationale_pipeline_rate": 0.74455,
+      "doc_method": "bm25",
+      "doc_topk": 5,
+      "known_doc_hit_claims": 456,
+      "n_claims": 505,
+      "sentence_method": "alternate_lexical",
+      "sentence_topk": 3,
+      "success_claims": 376
+    },
+    {
+      "complete_rationale_pipeline_rate": 0.84554,
+      "doc_method": "bm25",
+      "doc_topk": 5,
+      "known_doc_hit_claims": 456,
+      "n_claims": 505,
+      "sentence_method": "alternate_lexical",
+      "sentence_topk": 5,
+      "success_claims": 427
+    },
+    {
+      "complete_rationale_pipeline_rate": 0.47723,
+      "doc_method": "bm25",
+      "doc_topk": 5,
+      "known_doc_hit_claims": 456,
+      "n_claims": 505,
+      "sentence_method": "rrf_tfidf_last",
+      "sentence_topk": 1,
+      "success_claims": 241
+    },
+    {
+      "complete_rationale_pipeline_rate": 0.75644,
+      "doc_method": "bm25",
+      "doc_topk": 5,
+      "known_doc_hit_claims": 456,
+      "n_claims": 505,
+      "sentence_method": "rrf_tfidf_last",
+      "sentence_topk": 3,
+      "success_claims": 382
+    },
+    {
+      "complete_rationale_pipeline_rate": 0.8495,
+      "doc_method": "bm25",
+      "doc_topk": 5,
+      "known_doc_hit_claims": 456,
+      "n_claims": 505,
+      "sentence_method": "rrf_tfidf_last",
+      "sentence_topk": 5,
+      "success_claims": 429
+    },
+    {
+      "complete_rationale_pipeline_rate": 0.49505,
+      "doc_method": "bm25",
+      "doc_topk": 5,
+      "known_doc_hit_claims": 456,
+      "n_claims": 505,
+      "sentence_method": "rrf_bm25_last",
+      "sentence_topk": 1,
+      "success_claims": 250
+    },
+    {
+      "complete_rationale_pipeline_rate": 0.76832,
+      "doc_method": "bm25",
+      "doc_topk": 5,
+      "known_doc_hit_claims": 456,
+      "n_claims": 505,
+      "sentence_method": "rrf_bm25_last",
+      "sentence_topk": 3,
+      "success_claims": 388
+    },
+    {
+      "complete_rationale_pipeline_rate": 0.86139,
+      "doc_method": "bm25",
+      "doc_topk": 5,
+      "known_doc_hit_claims": 456,
+      "n_claims": 505,
+      "sentence_method": "rrf_bm25_last",
+      "sentence_topk": 5,
+      "success_claims": 435
+    },
+    {
+      "complete_rationale_pipeline_rate": 0.53267,
+      "doc_method": "bm25",
+      "doc_topk": 5,
+      "known_doc_hit_claims": 456,
+      "n_claims": 505,
+      "sentence_method": "rrf_three",
+      "sentence_topk": 1,
+      "success_claims": 269
+    },
+    {
+      "complete_rationale_pipeline_rate": 0.77822,
+      "doc_method": "bm25",
+      "doc_topk": 5,
+      "known_doc_hit_claims": 456,
+      "n_claims": 505,
+      "sentence_method": "rrf_three",
+      "sentence_topk": 3,
+      "success_claims": 393
+    },
+    {
+      "complete_rationale_pipeline_rate": 0.86139,
+      "doc_method": "bm25",
+      "doc_topk": 5,
+      "known_doc_hit_claims": 456,
+      "n_claims": 505,
+      "sentence_method": "rrf_three",
+      "sentence_topk": 5,
+      "success_claims": 435
+    },
+    {
+      "complete_rationale_pipeline_rate": 0.4198,
+      "doc_method": "bm25",
+      "doc_topk": 10,
+      "known_doc_hit_claims": 472,
+      "n_claims": 505,
+      "sentence_method": "tfidf",
+      "sentence_topk": 1,
+      "success_claims": 212
+    },
+    {
+      "complete_rationale_pipeline_rate": 0.7505,
+      "doc_method": "bm25",
+      "doc_topk": 10,
+      "known_doc_hit_claims": 472,
+      "n_claims": 505,
+      "sentence_method": "tfidf",
+      "sentence_topk": 3,
+      "success_claims": 379
+    },
+    {
+      "complete_rationale_pipeline_rate": 0.86139,
+      "doc_method": "bm25",
+      "doc_topk": 10,
+      "known_doc_hit_claims": 472,
+      "n_claims": 505,
+      "sentence_method": "tfidf",
+      "sentence_topk": 5,
+      "success_claims": 435
+    },
+    {
+      "complete_rationale_pipeline_rate": 0.45149,
+      "doc_method": "bm25",
+      "doc_topk": 10,
+      "known_doc_hit_claims": 472,
+      "n_claims": 505,
+      "sentence_method": "bm25",
+      "sentence_topk": 1,
+      "success_claims": 228
+    },
+    {
+      "complete_rationale_pipeline_rate": 0.7703,
+      "doc_method": "bm25",
+      "doc_topk": 10,
+      "known_doc_hit_claims": 472,
+      "n_claims": 505,
+      "sentence_method": "bm25",
+      "sentence_topk": 3,
+      "success_claims": 389
+    },
+    {
+      "complete_rationale_pipeline_rate": 0.87525,
+      "doc_method": "bm25",
+      "doc_topk": 10,
+      "known_doc_hit_claims": 472,
+      "n_claims": 505,
+      "sentence_method": "bm25",
+      "sentence_topk": 5,
+      "success_claims": 442
+    },
+    {
+      "complete_rationale_pipeline_rate": 0.05545,
+      "doc_method": "bm25",
+      "doc_topk": 10,
+      "known_doc_hit_claims": 472,
+      "n_claims": 505,
+      "sentence_method": "first",
+      "sentence_topk": 1,
+      "success_claims": 28
+    },
+    {
+      "complete_rationale_pipeline_rate": 0.2396,
+      "doc_method": "bm25",
+      "doc_topk": 10,
+      "known_doc_hit_claims": 472,
+      "n_claims": 505,
+      "sentence_method": "first",
+      "sentence_topk": 3,
+      "success_claims": 121
+    },
+    {
+      "complete_rationale_pipeline_rate": 0.46337,
+      "doc_method": "bm25",
+      "doc_topk": 10,
+      "known_doc_hit_claims": 472,
+      "n_claims": 505,
+      "sentence_method": "first",
+      "sentence_topk": 5,
+      "success_claims": 234
+    },
+    {
+      "complete_rationale_pipeline_rate": 0.22772,
+      "doc_method": "bm25",
+      "doc_topk": 10,
+      "known_doc_hit_claims": 472,
+      "n_claims": 505,
+      "sentence_method": "last",
+      "sentence_topk": 1,
+      "success_claims": 115
+    },
+    {
+      "complete_rationale_pipeline_rate": 0.64752,
+      "doc_method": "bm25",
+      "doc_topk": 10,
+      "known_doc_hit_claims": 472,
+      "n_claims": 505,
+      "sentence_method": "last",
+      "sentence_topk": 3,
+      "success_claims": 327
+    },
+    {
+      "complete_rationale_pipeline_rate": 0.81782,
+      "doc_method": "bm25",
+      "doc_topk": 10,
+      "known_doc_hit_claims": 472,
+      "n_claims": 505,
+      "sentence_method": "last",
+      "sentence_topk": 5,
+      "success_claims": 413
+    },
+    {
+      "complete_rationale_pipeline_rate": 0.16832,
+      "doc_method": "bm25",
+      "doc_topk": 10,
+      "known_doc_hit_claims": 472,
+      "n_claims": 505,
+      "sentence_method": "random",
+      "sentence_topk": 1,
+      "success_claims": 85
+    },
+    {
+      "complete_rationale_pipeline_rate": 0.43564,
+      "doc_method": "bm25",
+      "doc_topk": 10,
+      "known_doc_hit_claims": 472,
+      "n_claims": 505,
+      "sentence_method": "random",
+      "sentence_topk": 3,
+      "success_claims": 220
+    },
+    {
+      "complete_rationale_pipeline_rate": 0.66535,
+      "doc_method": "bm25",
+      "doc_topk": 10,
+      "known_doc_hit_claims": 472,
+      "n_claims": 505,
+      "sentence_method": "random",
+      "sentence_topk": 5,
+      "success_claims": 336
+    },
+    {
+      "complete_rationale_pipeline_rate": 0.4099,
+      "doc_method": "bm25",
+      "doc_topk": 10,
+      "known_doc_hit_claims": 472,
+      "n_claims": 505,
+      "sentence_method": "rrf_lexical",
+      "sentence_topk": 1,
+      "success_claims": 207
+    },
+    {
+      "complete_rationale_pipeline_rate": 0.76238,
+      "doc_method": "bm25",
+      "doc_topk": 10,
+      "known_doc_hit_claims": 472,
+      "n_claims": 505,
+      "sentence_method": "rrf_lexical",
+      "sentence_topk": 3,
+      "success_claims": 385
+    },
+    {
+      "complete_rationale_pipeline_rate": 0.87525,
+      "doc_method": "bm25",
+      "doc_topk": 10,
+      "known_doc_hit_claims": 472,
+      "n_claims": 505,
+      "sentence_method": "rrf_lexical",
+      "sentence_topk": 5,
+      "success_claims": 442
+    },
+    {
+      "complete_rationale_pipeline_rate": 0.45149,
+      "doc_method": "bm25",
+      "doc_topk": 10,
+      "known_doc_hit_claims": 472,
+      "n_claims": 505,
+      "sentence_method": "alternate_lexical",
+      "sentence_topk": 1,
+      "success_claims": 228
+    },
+    {
+      "complete_rationale_pipeline_rate": 0.76436,
+      "doc_method": "bm25",
+      "doc_topk": 10,
+      "known_doc_hit_claims": 472,
+      "n_claims": 505,
+      "sentence_method": "alternate_lexical",
+      "sentence_topk": 3,
+      "success_claims": 386
+    },
+    {
+      "complete_rationale_pipeline_rate": 0.87723,
+      "doc_method": "bm25",
+      "doc_topk": 10,
+      "known_doc_hit_claims": 472,
+      "n_claims": 505,
+      "sentence_method": "alternate_lexical",
+      "sentence_topk": 5,
+      "success_claims": 443
+    },
+    {
+      "complete_rationale_pipeline_rate": 0.49505,
+      "doc_method": "bm25",
+      "doc_topk": 10,
+      "known_doc_hit_claims": 472,
+      "n_claims": 505,
+      "sentence_method": "rrf_tfidf_last",
+      "sentence_topk": 1,
+      "success_claims": 250
+    },
+    {
+      "complete_rationale_pipeline_rate": 0.77624,
+      "doc_method": "bm25",
+      "doc_topk": 10,
+      "known_doc_hit_claims": 472,
+      "n_claims": 505,
+      "sentence_method": "rrf_tfidf_last",
+      "sentence_topk": 3,
+      "success_claims": 392
+    },
+    {
+      "complete_rationale_pipeline_rate": 0.87723,
+      "doc_method": "bm25",
+      "doc_topk": 10,
+      "known_doc_hit_claims": 472,
+      "n_claims": 505,
+      "sentence_method": "rrf_tfidf_last",
+      "sentence_topk": 5,
+      "success_claims": 443
+    },
+    {
+      "complete_rationale_pipeline_rate": 0.51485,
+      "doc_method": "bm25",
+      "doc_topk": 10,
+      "known_doc_hit_claims": 472,
+      "n_claims": 505,
+      "sentence_method": "rrf_bm25_last",
+      "sentence_topk": 1,
+      "success_claims": 260
+    },
+    {
+      "complete_rationale_pipeline_rate": 0.79208,
+      "doc_method": "bm25",
+      "doc_topk": 10,
+      "known_doc_hit_claims": 472,
+      "n_claims": 505,
+      "sentence_method": "rrf_bm25_last",
+      "sentence_topk": 3,
+      "success_claims": 400
+    },
+    {
+      "complete_rationale_pipeline_rate": 0.88713,
+      "doc_method": "bm25",
+      "doc_topk": 10,
+      "known_doc_hit_claims": 472,
+      "n_claims": 505,
+      "sentence_method": "rrf_bm25_last",
+      "sentence_topk": 5,
+      "success_claims": 448
+    },
+    {
+      "complete_rationale_pipeline_rate": 0.55446,
+      "doc_method": "bm25",
+      "doc_topk": 10,
+      "known_doc_hit_claims": 472,
+      "n_claims": 505,
+      "sentence_method": "rrf_three",
+      "sentence_topk": 1,
+      "success_claims": 280
+    },
+    {
+      "complete_rationale_pipeline_rate": 0.8,
+      "doc_method": "bm25",
+      "doc_topk": 10,
+      "known_doc_hit_claims": 472,
+      "n_claims": 505,
+      "sentence_method": "rrf_three",
+      "sentence_topk": 3,
+      "success_claims": 404
+    },
+    {
+      "complete_rationale_pipeline_rate": 0.89307,
+      "doc_method": "bm25",
+      "doc_topk": 10,
+      "known_doc_hit_claims": 472,
+      "n_claims": 505,
+      "sentence_method": "rrf_three",
+      "sentence_topk": 5,
+      "success_claims": 451
+    },
+    {
+      "complete_rationale_pipeline_rate": 0.31287,
+      "doc_method": "rrf_lexical",
+      "doc_topk": 1,
+      "known_doc_hit_claims": 367,
+      "n_claims": 505,
+      "sentence_method": "tfidf",
+      "sentence_topk": 1,
+      "success_claims": 158
+    },
+    {
+      "complete_rationale_pipeline_rate": 0.5802,
+      "doc_method": "rrf_lexical",
+      "doc_topk": 1,
+      "known_doc_hit_claims": 367,
+      "n_claims": 505,
+      "sentence_method": "tfidf",
+      "sentence_topk": 3,
+      "success_claims": 293
+    },
+    {
+      "complete_rationale_pipeline_rate": 0.67723,
+      "doc_method": "rrf_lexical",
+      "doc_topk": 1,
+      "known_doc_hit_claims": 367,
+      "n_claims": 505,
+      "sentence_method": "tfidf",
+      "sentence_topk": 5,
+      "success_claims": 342
+    },
+    {
+      "complete_rationale_pipeline_rate": 0.34851,
+      "doc_method": "rrf_lexical",
+      "doc_topk": 1,
+      "known_doc_hit_claims": 367,
+      "n_claims": 505,
+      "sentence_method": "bm25",
+      "sentence_topk": 1,
+      "success_claims": 176
+    },
+    {
+      "complete_rationale_pipeline_rate": 0.6,
+      "doc_method": "rrf_lexical",
+      "doc_topk": 1,
+      "known_doc_hit_claims": 367,
+      "n_claims": 505,
+      "sentence_method": "bm25",
+      "sentence_topk": 3,
+      "success_claims": 303
+    },
+    {
+      "complete_rationale_pipeline_rate": 0.68713,
+      "doc_method": "rrf_lexical",
+      "doc_topk": 1,
+      "known_doc_hit_claims": 367,
+      "n_claims": 505,
+      "sentence_method": "bm25",
+      "sentence_topk": 5,
+      "success_claims": 347
+    },
+    {
+      "complete_rationale_pipeline_rate": 0.02772,
+      "doc_method": "rrf_lexical",
+      "doc_topk": 1,
+      "known_doc_hit_claims": 367,
+      "n_claims": 505,
+      "sentence_method": "first",
+      "sentence_topk": 1,
+      "success_claims": 14
+    },
+    {
+      "complete_rationale_pipeline_rate": 0.16436,
+      "doc_method": "rrf_lexical",
+      "doc_topk": 1,
+      "known_doc_hit_claims": 367,
+      "n_claims": 505,
+      "sentence_method": "first",
+      "sentence_topk": 3,
+      "success_claims": 83
+    },
+    {
+      "complete_rationale_pipeline_rate": 0.34851,
+      "doc_method": "rrf_lexical",
+      "doc_topk": 1,
+      "known_doc_hit_claims": 367,
+      "n_claims": 505,
+      "sentence_method": "first",
+      "sentence_topk": 5,
+      "success_claims": 176
+    },
+    {
+      "complete_rationale_pipeline_rate": 0.17624,
+      "doc_method": "rrf_lexical",
+      "doc_topk": 1,
+      "known_doc_hit_claims": 367,
+      "n_claims": 505,
+      "sentence_method": "last",
+      "sentence_topk": 1,
+      "success_claims": 89
+    },
+    {
+      "complete_rationale_pipeline_rate": 0.50297,
+      "doc_method": "rrf_lexical",
+      "doc_topk": 1,
+      "known_doc_hit_claims": 367,
+      "n_claims": 505,
+      "sentence_method": "last",
+      "sentence_topk": 3,
+      "success_claims": 254
+    },
+    {
+      "complete_rationale_pipeline_rate": 0.6396,
+      "doc_method": "rrf_lexical",
+      "doc_topk": 1,
+      "known_doc_hit_claims": 367,
+      "n_claims": 505,
+      "sentence_method": "last",
+      "sentence_topk": 5,
+      "success_claims": 323
+    },
+    {
+      "complete_rationale_pipeline_rate": 0.12673,
+      "doc_method": "rrf_lexical",
+      "doc_topk": 1,
+      "known_doc_hit_claims": 367,
+      "n_claims": 505,
+      "sentence_method": "random",
+      "sentence_topk": 1,
+      "success_claims": 64
+    },
+    {
+      "complete_rationale_pipeline_rate": 0.32673,
+      "doc_method": "rrf_lexical",
+      "doc_topk": 1,
+      "known_doc_hit_claims": 367,
+      "n_claims": 505,
+      "sentence_method": "random",
+      "sentence_topk": 3,
+      "success_claims": 165
+    },
+    {
+      "complete_rationale_pipeline_rate": 0.50693,
+      "doc_method": "rrf_lexical",
+      "doc_topk": 1,
+      "known_doc_hit_claims": 367,
+      "n_claims": 505,
+      "sentence_method": "random",
+      "sentence_topk": 5,
+      "success_claims": 256
+    },
+    {
+      "complete_rationale_pipeline_rate": 0.30693,
+      "doc_method": "rrf_lexical",
+      "doc_topk": 1,
+      "known_doc_hit_claims": 367,
+      "n_claims": 505,
+      "sentence_method": "rrf_lexical",
+      "sentence_topk": 1,
+      "success_claims": 155
+    },
+    {
+      "complete_rationale_pipeline_rate": 0.59406,
+      "doc_method": "rrf_lexical",
+      "doc_topk": 1,
+      "known_doc_hit_claims": 367,
+      "n_claims": 505,
+      "sentence_method": "rrf_lexical",
+      "sentence_topk": 3,
+      "success_claims": 300
+    },
+    {
+      "complete_rationale_pipeline_rate": 0.68911,
+      "doc_method": "rrf_lexical",
+      "doc_topk": 1,
+      "known_doc_hit_claims": 367,
+      "n_claims": 505,
+      "sentence_method": "rrf_lexical",
+      "sentence_topk": 5,
+      "success_claims": 348
+    },
+    {
+      "complete_rationale_pipeline_rate": 0.34851,
+      "doc_method": "rrf_lexical",
+      "doc_topk": 1,
+      "known_doc_hit_claims": 367,
+      "n_claims": 505,
+      "sentence_method": "alternate_lexical",
+      "sentence_topk": 1,
+      "success_claims": 176
+    },
+    {
+      "complete_rationale_pipeline_rate": 0.59604,
+      "doc_method": "rrf_lexical",
+      "doc_topk": 1,
+      "known_doc_hit_claims": 367,
+      "n_claims": 505,
+      "sentence_method": "alternate_lexical",
+      "sentence_topk": 3,
+      "success_claims": 301
+    },
+    {
+      "complete_rationale_pipeline_rate": 0.68713,
+      "doc_method": "rrf_lexical",
+      "doc_topk": 1,
+      "known_doc_hit_claims": 367,
+      "n_claims": 505,
+      "sentence_method": "alternate_lexical",
+      "sentence_topk": 5,
+      "success_claims": 347
+    },
+    {
+      "complete_rationale_pipeline_rate": 0.37228,
+      "doc_method": "rrf_lexical",
+      "doc_topk": 1,
+      "known_doc_hit_claims": 367,
+      "n_claims": 505,
+      "sentence_method": "rrf_tfidf_last",
+      "sentence_topk": 1,
+      "success_claims": 188
+    },
+    {
+      "complete_rationale_pipeline_rate": 0.60198,
+      "doc_method": "rrf_lexical",
+      "doc_topk": 1,
+      "known_doc_hit_claims": 367,
+      "n_claims": 505,
+      "sentence_method": "rrf_tfidf_last",
+      "sentence_topk": 3,
+      "success_claims": 304
+    },
+    {
+      "complete_rationale_pipeline_rate": 0.68713,
+      "doc_method": "rrf_lexical",
+      "doc_topk": 1,
+      "known_doc_hit_claims": 367,
+      "n_claims": 505,
+      "sentence_method": "rrf_tfidf_last",
+      "sentence_topk": 5,
+      "success_claims": 347
+    },
+    {
+      "complete_rationale_pipeline_rate": 0.39802,
+      "doc_method": "rrf_lexical",
+      "doc_topk": 1,
+      "known_doc_hit_claims": 367,
+      "n_claims": 505,
+      "sentence_method": "rrf_bm25_last",
+      "sentence_topk": 1,
+      "success_claims": 201
+    },
+    {
+      "complete_rationale_pipeline_rate": 0.6198,
+      "doc_method": "rrf_lexical",
+      "doc_topk": 1,
+      "known_doc_hit_claims": 367,
+      "n_claims": 505,
+      "sentence_method": "rrf_bm25_last",
+      "sentence_topk": 3,
+      "success_claims": 313
+    },
+    {
+      "complete_rationale_pipeline_rate": 0.69703,
+      "doc_method": "rrf_lexical",
+      "doc_topk": 1,
+      "known_doc_hit_claims": 367,
+      "n_claims": 505,
+      "sentence_method": "rrf_bm25_last",
+      "sentence_topk": 5,
+      "success_claims": 352
+    },
+    {
+      "complete_rationale_pipeline_rate": 0.42574,
+      "doc_method": "rrf_lexical",
+      "doc_topk": 1,
+      "known_doc_hit_claims": 367,
+      "n_claims": 505,
+      "sentence_method": "rrf_three",
+      "sentence_topk": 1,
+      "success_claims": 215
+    },
+    {
+      "complete_rationale_pipeline_rate": 0.62574,
+      "doc_method": "rrf_lexical",
+      "doc_topk": 1,
+      "known_doc_hit_claims": 367,
+      "n_claims": 505,
+      "sentence_method": "rrf_three",
+      "sentence_topk": 3,
+      "success_claims": 316
+    },
+    {
+      "complete_rationale_pipeline_rate": 0.70099,
+      "doc_method": "rrf_lexical",
+      "doc_topk": 1,
+      "known_doc_hit_claims": 367,
+      "n_claims": 505,
+      "sentence_method": "rrf_three",
+      "sentence_topk": 5,
+      "success_claims": 354
+    },
+    {
+      "complete_rationale_pipeline_rate": 0.4,
+      "doc_method": "rrf_lexical",
+      "doc_topk": 5,
+      "known_doc_hit_claims": 449,
+      "n_claims": 505,
+      "sentence_method": "tfidf",
+      "sentence_topk": 1,
+      "success_claims": 202
+    },
+    {
+      "complete_rationale_pipeline_rate": 0.72277,
+      "doc_method": "rrf_lexical",
+      "doc_topk": 5,
+      "known_doc_hit_claims": 449,
+      "n_claims": 505,
+      "sentence_method": "tfidf",
+      "sentence_topk": 3,
+      "success_claims": 365
+    },
+    {
+      "complete_rationale_pipeline_rate": 0.82376,
+      "doc_method": "rrf_lexical",
+      "doc_topk": 5,
+      "known_doc_hit_claims": 449,
+      "n_claims": 505,
+      "sentence_method": "tfidf",
+      "sentence_topk": 5,
+      "success_claims": 416
+    },
+    {
+      "complete_rationale_pipeline_rate": 0.43168,
+      "doc_method": "rrf_lexical",
+      "doc_topk": 5,
+      "known_doc_hit_claims": 449,
+      "n_claims": 505,
+      "sentence_method": "bm25",
+      "sentence_topk": 1,
+      "success_claims": 218
+    },
+    {
+      "complete_rationale_pipeline_rate": 0.74257,
+      "doc_method": "rrf_lexical",
+      "doc_topk": 5,
+      "known_doc_hit_claims": 449,
+      "n_claims": 505,
+      "sentence_method": "bm25",
+      "sentence_topk": 3,
+      "success_claims": 375
+    },
+    {
+      "complete_rationale_pipeline_rate": 0.83762,
+      "doc_method": "rrf_lexical",
+      "doc_topk": 5,
+      "known_doc_hit_claims": 449,
+      "n_claims": 505,
+      "sentence_method": "bm25",
+      "sentence_topk": 5,
+      "success_claims": 423
+    },
+    {
+      "complete_rationale_pipeline_rate": 0.05347,
+      "doc_method": "rrf_lexical",
+      "doc_topk": 5,
+      "known_doc_hit_claims": 449,
+      "n_claims": 505,
+      "sentence_method": "first",
+      "sentence_topk": 1,
+      "success_claims": 27
+    },
+    {
+      "complete_rationale_pipeline_rate": 0.23366,
+      "doc_method": "rrf_lexical",
+      "doc_topk": 5,
+      "known_doc_hit_claims": 449,
+      "n_claims": 505,
+      "sentence_method": "first",
+      "sentence_topk": 3,
+      "success_claims": 118
+    },
+    {
+      "complete_rationale_pipeline_rate": 0.44554,
+      "doc_method": "rrf_lexical",
+      "doc_topk": 5,
+      "known_doc_hit_claims": 449,
+      "n_claims": 505,
+      "sentence_method": "first",
+      "sentence_topk": 5,
+      "success_claims": 225
+    },
+    {
+      "complete_rationale_pipeline_rate": 0.21584,
+      "doc_method": "rrf_lexical",
+      "doc_topk": 5,
+      "known_doc_hit_claims": 449,
+      "n_claims": 505,
+      "sentence_method": "last",
+      "sentence_topk": 1,
+      "success_claims": 109
+    },
+    {
+      "complete_rationale_pipeline_rate": 0.61188,
+      "doc_method": "rrf_lexical",
+      "doc_topk": 5,
+      "known_doc_hit_claims": 449,
+      "n_claims": 505,
+      "sentence_method": "last",
+      "sentence_topk": 3,
+      "success_claims": 309
+    },
+    {
+      "complete_rationale_pipeline_rate": 0.77822,
+      "doc_method": "rrf_lexical",
+      "doc_topk": 5,
+      "known_doc_hit_claims": 449,
+      "n_claims": 505,
+      "sentence_method": "last",
+      "sentence_topk": 5,
+      "success_claims": 393
+    },
+    {
+      "complete_rationale_pipeline_rate": 0.15842,
+      "doc_method": "rrf_lexical",
+      "doc_topk": 5,
+      "known_doc_hit_claims": 449,
+      "n_claims": 505,
+      "sentence_method": "random",
+      "sentence_topk": 1,
+      "success_claims": 80
+    },
+    {
+      "complete_rationale_pipeline_rate": 0.40594,
+      "doc_method": "rrf_lexical",
+      "doc_topk": 5,
+      "known_doc_hit_claims": 449,
+      "n_claims": 505,
+      "sentence_method": "random",
+      "sentence_topk": 3,
+      "success_claims": 205
+    },
+    {
+      "complete_rationale_pipeline_rate": 0.63366,
+      "doc_method": "rrf_lexical",
+      "doc_topk": 5,
+      "known_doc_hit_claims": 449,
+      "n_claims": 505,
+      "sentence_method": "random",
+      "sentence_topk": 5,
+      "success_claims": 320
+    },
+    {
+      "complete_rationale_pipeline_rate": 0.3901,
+      "doc_method": "rrf_lexical",
+      "doc_topk": 5,
+      "known_doc_hit_claims": 449,
+      "n_claims": 505,
+      "sentence_method": "rrf_lexical",
+      "sentence_topk": 1,
+      "success_claims": 197
+    },
+    {
+      "complete_rationale_pipeline_rate": 0.73465,
+      "doc_method": "rrf_lexical",
+      "doc_topk": 5,
+      "known_doc_hit_claims": 449,
+      "n_claims": 505,
+      "sentence_method": "rrf_lexical",
+      "sentence_topk": 3,
+      "success_claims": 371
+    },
+    {
+      "complete_rationale_pipeline_rate": 0.83762,
+      "doc_method": "rrf_lexical",
+      "doc_topk": 5,
+      "known_doc_hit_claims": 449,
+      "n_claims": 505,
+      "sentence_method": "rrf_lexical",
+      "sentence_topk": 5,
+      "success_claims": 423
+    },
+    {
+      "complete_rationale_pipeline_rate": 0.43168,
+      "doc_method": "rrf_lexical",
+      "doc_topk": 5,
+      "known_doc_hit_claims": 449,
+      "n_claims": 505,
+      "sentence_method": "alternate_lexical",
+      "sentence_topk": 1,
+      "success_claims": 218
+    },
+    {
+      "complete_rationale_pipeline_rate": 0.73663,
+      "doc_method": "rrf_lexical",
+      "doc_topk": 5,
+      "known_doc_hit_claims": 449,
+      "n_claims": 505,
+      "sentence_method": "alternate_lexical",
+      "sentence_topk": 3,
+      "success_claims": 372
+    },
+    {
+      "complete_rationale_pipeline_rate": 0.83762,
+      "doc_method": "rrf_lexical",
+      "doc_topk": 5,
+      "known_doc_hit_claims": 449,
+      "n_claims": 505,
+      "sentence_method": "alternate_lexical",
+      "sentence_topk": 5,
+      "success_claims": 423
+    },
+    {
+      "complete_rationale_pipeline_rate": 0.47327,
+      "doc_method": "rrf_lexical",
+      "doc_topk": 5,
+      "known_doc_hit_claims": 449,
+      "n_claims": 505,
+      "sentence_method": "rrf_tfidf_last",
+      "sentence_topk": 1,
+      "success_claims": 239
+    },
+    {
+      "complete_rationale_pipeline_rate": 0.74257,
+      "doc_method": "rrf_lexical",
+      "doc_topk": 5,
+      "known_doc_hit_claims": 449,
+      "n_claims": 505,
+      "sentence_method": "rrf_tfidf_last",
+      "sentence_topk": 3,
+      "success_claims": 375
+    },
+    {
+      "complete_rationale_pipeline_rate": 0.83564,
+      "doc_method": "rrf_lexical",
+      "doc_topk": 5,
+      "known_doc_hit_claims": 449,
+      "n_claims": 505,
+      "sentence_method": "rrf_tfidf_last",
+      "sentence_topk": 5,
+      "success_claims": 422
+    },
+    {
+      "complete_rationale_pipeline_rate": 0.49109,
+      "doc_method": "rrf_lexical",
+      "doc_topk": 5,
+      "known_doc_hit_claims": 449,
+      "n_claims": 505,
+      "sentence_method": "rrf_bm25_last",
+      "sentence_topk": 1,
+      "success_claims": 248
+    },
+    {
+      "complete_rationale_pipeline_rate": 0.75446,
+      "doc_method": "rrf_lexical",
+      "doc_topk": 5,
+      "known_doc_hit_claims": 449,
+      "n_claims": 505,
+      "sentence_method": "rrf_bm25_last",
+      "sentence_topk": 3,
+      "success_claims": 381
+    },
+    {
+      "complete_rationale_pipeline_rate": 0.84752,
+      "doc_method": "rrf_lexical",
+      "doc_topk": 5,
+      "known_doc_hit_claims": 449,
+      "n_claims": 505,
+      "sentence_method": "rrf_bm25_last",
+      "sentence_topk": 5,
+      "success_claims": 428
+    },
+    {
+      "complete_rationale_pipeline_rate": 0.53267,
+      "doc_method": "rrf_lexical",
+      "doc_topk": 5,
+      "known_doc_hit_claims": 449,
+      "n_claims": 505,
+      "sentence_method": "rrf_three",
+      "sentence_topk": 1,
+      "success_claims": 269
+    },
+    {
+      "complete_rationale_pipeline_rate": 0.7703,
+      "doc_method": "rrf_lexical",
+      "doc_topk": 5,
+      "known_doc_hit_claims": 449,
+      "n_claims": 505,
+      "sentence_method": "rrf_three",
+      "sentence_topk": 3,
+      "success_claims": 389
+    },
+    {
+      "complete_rationale_pipeline_rate": 0.85149,
+      "doc_method": "rrf_lexical",
+      "doc_topk": 5,
+      "known_doc_hit_claims": 449,
+      "n_claims": 505,
+      "sentence_method": "rrf_three",
+      "sentence_topk": 5,
+      "success_claims": 430
+    },
+    {
+      "complete_rationale_pipeline_rate": 0.41584,
+      "doc_method": "rrf_lexical",
+      "doc_topk": 10,
+      "known_doc_hit_claims": 469,
+      "n_claims": 505,
+      "sentence_method": "tfidf",
+      "sentence_topk": 1,
+      "success_claims": 210
+    },
+    {
+      "complete_rationale_pipeline_rate": 0.74653,
+      "doc_method": "rrf_lexical",
+      "doc_topk": 10,
+      "known_doc_hit_claims": 469,
+      "n_claims": 505,
+      "sentence_method": "tfidf",
+      "sentence_topk": 3,
+      "success_claims": 377
+    },
+    {
+      "complete_rationale_pipeline_rate": 0.85347,
+      "doc_method": "rrf_lexical",
+      "doc_topk": 10,
+      "known_doc_hit_claims": 469,
+      "n_claims": 505,
+      "sentence_method": "tfidf",
+      "sentence_topk": 5,
+      "success_claims": 431
+    },
+    {
+      "complete_rationale_pipeline_rate": 0.44752,
+      "doc_method": "rrf_lexical",
+      "doc_topk": 10,
+      "known_doc_hit_claims": 469,
+      "n_claims": 505,
+      "sentence_method": "bm25",
+      "sentence_topk": 1,
+      "success_claims": 226
+    },
+    {
+      "complete_rationale_pipeline_rate": 0.76634,
+      "doc_method": "rrf_lexical",
+      "doc_topk": 10,
+      "known_doc_hit_claims": 469,
+      "n_claims": 505,
+      "sentence_method": "bm25",
+      "sentence_topk": 3,
+      "success_claims": 387
+    },
+    {
+      "complete_rationale_pipeline_rate": 0.86733,
+      "doc_method": "rrf_lexical",
+      "doc_topk": 10,
+      "known_doc_hit_claims": 469,
+      "n_claims": 505,
+      "sentence_method": "bm25",
+      "sentence_topk": 5,
+      "success_claims": 438
+    },
+    {
+      "complete_rationale_pipeline_rate": 0.05545,
+      "doc_method": "rrf_lexical",
+      "doc_topk": 10,
+      "known_doc_hit_claims": 469,
+      "n_claims": 505,
+      "sentence_method": "first",
+      "sentence_topk": 1,
+      "success_claims": 28
+    },
+    {
+      "complete_rationale_pipeline_rate": 0.23564,
+      "doc_method": "rrf_lexical",
+      "doc_topk": 10,
+      "known_doc_hit_claims": 469,
+      "n_claims": 505,
+      "sentence_method": "first",
+      "sentence_topk": 3,
+      "success_claims": 119
+    },
+    {
+      "complete_rationale_pipeline_rate": 0.45743,
+      "doc_method": "rrf_lexical",
+      "doc_topk": 10,
+      "known_doc_hit_claims": 469,
+      "n_claims": 505,
+      "sentence_method": "first",
+      "sentence_topk": 5,
+      "success_claims": 231
+    },
+    {
+      "complete_rationale_pipeline_rate": 0.22772,
+      "doc_method": "rrf_lexical",
+      "doc_topk": 10,
+      "known_doc_hit_claims": 469,
+      "n_claims": 505,
+      "sentence_method": "last",
+      "sentence_topk": 1,
+      "success_claims": 115
+    },
+    {
+      "complete_rationale_pipeline_rate": 0.64158,
+      "doc_method": "rrf_lexical",
+      "doc_topk": 10,
+      "known_doc_hit_claims": 469,
+      "n_claims": 505,
+      "sentence_method": "last",
+      "sentence_topk": 3,
+      "success_claims": 324
+    },
+    {
+      "complete_rationale_pipeline_rate": 0.81386,
+      "doc_method": "rrf_lexical",
+      "doc_topk": 10,
+      "known_doc_hit_claims": 469,
+      "n_claims": 505,
+      "sentence_method": "last",
+      "sentence_topk": 5,
+      "success_claims": 411
+    },
+    {
+      "complete_rationale_pipeline_rate": 0.16832,
+      "doc_method": "rrf_lexical",
+      "doc_topk": 10,
+      "known_doc_hit_claims": 469,
+      "n_claims": 505,
+      "sentence_method": "random",
+      "sentence_topk": 1,
+      "success_claims": 85
+    },
+    {
+      "complete_rationale_pipeline_rate": 0.4297,
+      "doc_method": "rrf_lexical",
+      "doc_topk": 10,
+      "known_doc_hit_claims": 469,
+      "n_claims": 505,
+      "sentence_method": "random",
+      "sentence_topk": 3,
+      "success_claims": 217
+    },
+    {
+      "complete_rationale_pipeline_rate": 0.65941,
+      "doc_method": "rrf_lexical",
+      "doc_topk": 10,
+      "known_doc_hit_claims": 469,
+      "n_claims": 505,
+      "sentence_method": "random",
+      "sentence_topk": 5,
+      "success_claims": 333
+    },
+    {
+      "complete_rationale_pipeline_rate": 0.40594,
+      "doc_method": "rrf_lexical",
+      "doc_topk": 10,
+      "known_doc_hit_claims": 469,
+      "n_claims": 505,
+      "sentence_method": "rrf_lexical",
+      "sentence_topk": 1,
+      "success_claims": 205
+    },
+    {
+      "complete_rationale_pipeline_rate": 0.75842,
+      "doc_method": "rrf_lexical",
+      "doc_topk": 10,
+      "known_doc_hit_claims": 469,
+      "n_claims": 505,
+      "sentence_method": "rrf_lexical",
+      "sentence_topk": 3,
+      "success_claims": 383
+    },
+    {
+      "complete_rationale_pipeline_rate": 0.86733,
+      "doc_method": "rrf_lexical",
+      "doc_topk": 10,
+      "known_doc_hit_claims": 469,
+      "n_claims": 505,
+      "sentence_method": "rrf_lexical",
+      "sentence_topk": 5,
+      "success_claims": 438
+    },
+    {
+      "complete_rationale_pipeline_rate": 0.44752,
+      "doc_method": "rrf_lexical",
+      "doc_topk": 10,
+      "known_doc_hit_claims": 469,
+      "n_claims": 505,
+      "sentence_method": "alternate_lexical",
+      "sentence_topk": 1,
+      "success_claims": 226
+    },
+    {
+      "complete_rationale_pipeline_rate": 0.7604,
+      "doc_method": "rrf_lexical",
+      "doc_topk": 10,
+      "known_doc_hit_claims": 469,
+      "n_claims": 505,
+      "sentence_method": "alternate_lexical",
+      "sentence_topk": 3,
+      "success_claims": 384
+    },
+    {
+      "complete_rationale_pipeline_rate": 0.86931,
+      "doc_method": "rrf_lexical",
+      "doc_topk": 10,
+      "known_doc_hit_claims": 469,
+      "n_claims": 505,
+      "sentence_method": "alternate_lexical",
+      "sentence_topk": 5,
+      "success_claims": 439
+    },
+    {
+      "complete_rationale_pipeline_rate": 0.49505,
+      "doc_method": "rrf_lexical",
+      "doc_topk": 10,
+      "known_doc_hit_claims": 469,
+      "n_claims": 505,
+      "sentence_method": "rrf_tfidf_last",
+      "sentence_topk": 1,
+      "success_claims": 250
+    },
+    {
+      "complete_rationale_pipeline_rate": 0.7703,
+      "doc_method": "rrf_lexical",
+      "doc_topk": 10,
+      "known_doc_hit_claims": 469,
+      "n_claims": 505,
+      "sentence_method": "rrf_tfidf_last",
+      "sentence_topk": 3,
+      "success_claims": 389
+    },
+    {
+      "complete_rationale_pipeline_rate": 0.86931,
+      "doc_method": "rrf_lexical",
+      "doc_topk": 10,
+      "known_doc_hit_claims": 469,
+      "n_claims": 505,
+      "sentence_method": "rrf_tfidf_last",
+      "sentence_topk": 5,
+      "success_claims": 439
+    },
+    {
+      "complete_rationale_pipeline_rate": 0.51485,
+      "doc_method": "rrf_lexical",
+      "doc_topk": 10,
+      "known_doc_hit_claims": 469,
+      "n_claims": 505,
+      "sentence_method": "rrf_bm25_last",
+      "sentence_topk": 1,
+      "success_claims": 260
+    },
+    {
+      "complete_rationale_pipeline_rate": 0.78614,
+      "doc_method": "rrf_lexical",
+      "doc_topk": 10,
+      "known_doc_hit_claims": 469,
+      "n_claims": 505,
+      "sentence_method": "rrf_bm25_last",
+      "sentence_topk": 3,
+      "success_claims": 397
+    },
+    {
+      "complete_rationale_pipeline_rate": 0.87921,
+      "doc_method": "rrf_lexical",
+      "doc_topk": 10,
+      "known_doc_hit_claims": 469,
+      "n_claims": 505,
+      "sentence_method": "rrf_bm25_last",
+      "sentence_topk": 5,
+      "success_claims": 444
+    },
+    {
+      "complete_rationale_pipeline_rate": 0.55248,
+      "doc_method": "rrf_lexical",
+      "doc_topk": 10,
+      "known_doc_hit_claims": 469,
+      "n_claims": 505,
+      "sentence_method": "rrf_three",
+      "sentence_topk": 1,
+      "success_claims": 279
+    },
+    {
+      "complete_rationale_pipeline_rate": 0.79406,
+      "doc_method": "rrf_lexical",
+      "doc_topk": 10,
+      "known_doc_hit_claims": 469,
+      "n_claims": 505,
+      "sentence_method": "rrf_three",
+      "sentence_topk": 3,
+      "success_claims": 401
+    },
+    {
+      "complete_rationale_pipeline_rate": 0.88515,
+      "doc_method": "rrf_lexical",
+      "doc_topk": 10,
+      "known_doc_hit_claims": 469,
+      "n_claims": 505,
+      "sentence_method": "rrf_three",
+      "sentence_topk": 5,
+      "success_claims": 447
+    }
+  ],
+  "cluster_bootstrap_effects": {
+    "rrf_lexical_minus_bm25": {
+      "claim_cluster_bootstrap_interval_95pct": [
+        -0.02342,
+        0.00178
+      ],
+      "clusters": 505,
+      "estimate": -0.01064,
+      "interpretation": "paired train-split descriptive CI, not model semantic correctness",
+      "resamples": 1000
+    },
+    "rrf_lexical_minus_tfidf": {
+      "claim_cluster_bootstrap_interval_95pct": [
+        0.0,
+        0.03621
+      ],
+      "clusters": 505,
+      "estimate": 0.01773,
+      "interpretation": "paired train-split descriptive CI, not model semantic correctness",
+      "resamples": 1000
+    },
+    "rrf_tfidf_last_minus_tfidf": {
+      "claim_cluster_bootstrap_interval_95pct": [
+        0.0,
+        0.06352
+      ],
+      "clusters": 505,
+      "estimate": 0.03191,
+      "interpretation": "paired train-split descriptive CI, not model semantic correctness",
+      "resamples": 1000
+    },
+    "rrf_three_minus_tfidf": {
+      "claim_cluster_bootstrap_interval_95pct": [
+        0.02862,
+        0.07867
+      ],
+      "clusters": 505,
+      "estimate": 0.05319,
+      "interpretation": "paired train-split descriptive CI, not model semantic correctness",
+      "resamples": 1000
+    },
+    "tfidf_minus_first": {
+      "claim_cluster_bootstrap_interval_95pct": [
+        0.48155,
+        0.56856
+      ],
+      "clusters": 505,
+      "estimate": 0.52305,
+      "interpretation": "paired train-split descriptive CI, not model semantic correctness",
+      "resamples": 1000
+    }
+  },
+  "critical_limitations": "Expert evidence source retrieval only; no final answer/worker effect accuracy. Dev-informed positional methods evaluated on train claims excluding identical dev texts; scientific papers may overlap across splits; no true-negative unannotated-paper ground truth.",
+  "document_results": [
+    {
+      "any_annotated_gold_hit_at_k": {
+        "1": 0.66139,
+        "10": 0.89901,
+        "20": 0.93465,
+        "5": 0.8396,
+        "50": 0.9604
+      },
+      "method": "tfidf"
+    },
+    {
+      "any_annotated_gold_hit_at_k": {
+        "1": 0.7505,
+        "10": 0.93465,
+        "20": 0.95644,
+        "5": 0.90297,
+        "50": 0.96238
+      },
+      "method": "bm25"
+    },
+    {
+      "any_annotated_gold_hit_at_k": {
+        "1": 0.72673,
+        "10": 0.92871,
+        "20": 0.94455,
+        "5": 0.88911,
+        "50": 0.96634
+      },
+      "method": "rrf_lexical"
+    }
+  ],
+  "excluded_duplicate_dev_claim_ids": [
+    871,
+    1291
+  ],
+  "groups": [
+    {
+      "label": "ALL",
+      "methods": [
+        {
+          "complete_gold_rationale_at_k": {
+            "1": 0.42199,
+            "2": 0.63652,
+            "3": 0.78014,
+            "4": 0.87766,
+            "5": 0.91135
+          },
+          "mean_source_char_fraction_at3": 0.38356,
+          "method": "tfidf",
+          "multisentence_complete_at3": 0.3125
+        },
+        {
+          "complete_gold_rationale_at_k": {
+            "1": 0.45213,
+            "2": 0.69326,
+            "3": 0.80851,
+            "4": 0.88121,
+            "5": 0.92376
+          },
+          "mean_source_char_fraction_at3": 0.39087,
+          "method": "bm25",
+          "multisentence_complete_at3": 0.28125
+        },
+        {
+          "complete_gold_rationale_at_k": {
+            "1": 0.0656,
+            "2": 0.15426,
+            "3": 0.25709,
+            "4": 0.39007,
+            "5": 0.50355
+          },
+          "mean_source_char_fraction_at3": 0.35233,
+          "method": "first",
+          "multisentence_complete_at3": 0.09375
+        },
+        {
+          "complete_gold_rationale_at_k": {
+            "1": 0.24113,
+            "2": 0.4805,
+            "3": 0.66312,
+            "4": 0.79255,
+            "5": 0.86702
+          },
+          "mean_source_char_fraction_at3": 0.37521,
+          "method": "last",
+          "multisentence_complete_at3": 0.375
+        },
+        {
+          "complete_gold_rationale_at_k": {
+            "1": 0.17908,
+            "2": 0.32801,
+            "3": 0.46986,
+            "4": 0.60816,
+            "5": 0.70567
+          },
+          "mean_source_char_fraction_at3": 0.3639,
+          "method": "random",
+          "multisentence_complete_at3": 0.15625
+        },
+        {
+          "complete_gold_rationale_at_k": {
+            "1": 0.41312,
+            "2": 0.67021,
+            "3": 0.79787,
+            "4": 0.88121,
+            "5": 0.92376
+          },
+          "mean_source_char_fraction_at3": 0.38772,
+          "method": "rrf_lexical",
+          "multisentence_complete_at3": 0.28125
+        },
+        {
+          "complete_gold_rationale_at_k": {
+            "1": 0.45213,
+            "2": 0.6578,
+            "3": 0.80142,
+            "4": 0.88475,
+            "5": 0.92553
+          },
+          "mean_source_char_fraction_at3": 0.3886,
+          "method": "alternate_lexical",
+          "multisentence_complete_at3": 0.28125
+        },
+        {
+          "complete_gold_rationale_at_k": {
+            "1": 0.49823,
+            "2": 0.69681,
+            "3": 0.81206,
+            "4": 0.87589,
+            "5": 0.92199
+          },
+          "mean_source_char_fraction_at3": 0.38705,
+          "method": "rrf_tfidf_last",
+          "multisentence_complete_at3": 0.40625
+        },
+        {
+          "complete_gold_rationale_at_k": {
+            "1": 0.51418,
+            "2": 0.71986,
+            "3": 0.8227,
+            "4": 0.89362,
+            "5": 0.93617
+          },
+          "mean_source_char_fraction_at3": 0.39204,
+          "method": "rrf_bm25_last",
+          "multisentence_complete_at3": 0.375
+        },
+        {
+          "complete_gold_rationale_at_k": {
+            "1": 0.55851,
+            "2": 0.73936,
+            "3": 0.83333,
+            "4": 0.90071,
+            "5": 0.94326
+          },
+          "mean_source_char_fraction_at3": 0.38995,
+          "method": "rrf_three",
+          "multisentence_complete_at3": 0.3125
+        }
+      ],
+      "multi_sentence_rationale_n": 32,
+      "n_pairs": 564
+    },
+    {
+      "label": "SUPPORT",
+      "methods": [
+        {
+          "complete_gold_rationale_at_k": {
+            "1": 0.43514,
+            "2": 0.64324,
+            "3": 0.78108,
+            "4": 0.88649,
+            "5": 0.92703
+          },
+          "mean_source_char_fraction_at3": 0.40037,
+          "method": "tfidf",
+          "multisentence_complete_at3": 0.30435
+        },
+        {
+          "complete_gold_rationale_at_k": {
+            "1": 0.48108,
+            "2": 0.70541,
+            "3": 0.81081,
+            "4": 0.88919,
+            "5": 0.93784
+          },
+          "mean_source_char_fraction_at3": 0.40693,
+          "method": "bm25",
+          "multisentence_complete_at3": 0.26087
+        },
+        {
+          "complete_gold_rationale_at_k": {
+            "1": 0.07027,
+            "2": 0.16216,
+            "3": 0.28108,
+            "4": 0.42973,
+            "5": 0.55946
+          },
+          "mean_source_char_fraction_at3": 0.37165,
+          "method": "first",
+          "multisentence_complete_at3": 0.08696
+        },
+        {
+          "complete_gold_rationale_at_k": {
+            "1": 0.23784,
+            "2": 0.48649,
+            "3": 0.66216,
+            "4": 0.8027,
+            "5": 0.86216
+          },
+          "mean_source_char_fraction_at3": 0.39553,
+          "method": "last",
+          "multisentence_complete_at3": 0.43478
+        },
+        {
+          "complete_gold_rationale_at_k": {
+            "1": 0.18108,
+            "2": 0.32703,
+            "3": 0.49189,
+            "4": 0.64054,
+            "5": 0.72973
+          },
+          "mean_source_char_fraction_at3": 0.38311,
+          "method": "random",
+          "multisentence_complete_at3": 0.17391
+        },
+        {
+          "complete_gold_rationale_at_k": {
+            "1": 0.42973,
+            "2": 0.68378,
+            "3": 0.8,
+            "4": 0.88919,
+            "5": 0.93784
+          },
+          "mean_source_char_fraction_at3": 0.40345,
+          "method": "rrf_lexical",
+          "multisentence_complete_at3": 0.26087
+        },
+        {
+          "complete_gold_rationale_at_k": {
+            "1": 0.48108,
+            "2": 0.67838,
+            "3": 0.80811,
+            "4": 0.89459,
+            "5": 0.94054
+          },
+          "mean_source_char_fraction_at3": 0.40536,
+          "method": "alternate_lexical",
+          "multisentence_complete_at3": 0.26087
+        },
+        {
+          "complete_gold_rationale_at_k": {
+            "1": 0.48378,
+            "2": 0.68378,
+            "3": 0.8027,
+            "4": 0.88378,
+            "5": 0.93243
+          },
+          "mean_source_char_fraction_at3": 0.40426,
+          "method": "rrf_tfidf_last",
+          "multisentence_complete_at3": 0.47826
+        },
+        {
+          "complete_gold_rationale_at_k": {
+            "1": 0.4973,
+            "2": 0.71351,
+            "3": 0.81892,
+            "4": 0.9027,
+            "5": 0.94324
+          },
+          "mean_source_char_fraction_at3": 0.41068,
+          "method": "rrf_bm25_last",
+          "multisentence_complete_at3": 0.43478
+        },
+        {
+          "complete_gold_rationale_at_k": {
+            "1": 0.55676,
+            "2": 0.73514,
+            "3": 0.82432,
+            "4": 0.91892,
+            "5": 0.95405
+          },
+          "mean_source_char_fraction_at3": 0.40563,
+          "method": "rrf_three",
+          "multisentence_complete_at3": 0.30435
+        }
+      ],
+      "multi_sentence_rationale_n": 23,
+      "n_pairs": 370
+    },
+    {
+      "label": "CONTRADICT",
+      "methods": [
+        {
+          "complete_gold_rationale_at_k": {
+            "1": 0.39691,
+            "2": 0.62371,
+            "3": 0.77835,
+            "4": 0.86082,
+            "5": 0.88144
+          },
+          "mean_source_char_fraction_at3": 0.35151,
+          "method": "tfidf",
+          "multisentence_complete_at3": 0.33333
+        },
+        {
+          "complete_gold_rationale_at_k": {
+            "1": 0.39691,
+            "2": 0.6701,
+            "3": 0.80412,
+            "4": 0.86598,
+            "5": 0.89691
+          },
+          "mean_source_char_fraction_at3": 0.36024,
+          "method": "bm25",
+          "multisentence_complete_at3": 0.33333
+        },
+        {
+          "complete_gold_rationale_at_k": {
+            "1": 0.0567,
+            "2": 0.13918,
+            "3": 0.21134,
+            "4": 0.31443,
+            "5": 0.39691
+          },
+          "mean_source_char_fraction_at3": 0.31547,
+          "method": "first",
+          "multisentence_complete_at3": 0.11111
+        },
+        {
+          "complete_gold_rationale_at_k": {
+            "1": 0.24742,
+            "2": 0.46907,
+            "3": 0.66495,
+            "4": 0.7732,
+            "5": 0.87629
+          },
+          "mean_source_char_fraction_at3": 0.33645,
+          "method": "last",
+          "multisentence_complete_at3": 0.22222
+        },
+        {
+          "complete_gold_rationale_at_k": {
+            "1": 0.17526,
+            "2": 0.3299,
+            "3": 0.42784,
+            "4": 0.54639,
+            "5": 0.65979
+          },
+          "mean_source_char_fraction_at3": 0.32727,
+          "method": "random",
+          "multisentence_complete_at3": 0.11111
+        },
+        {
+          "complete_gold_rationale_at_k": {
+            "1": 0.38144,
+            "2": 0.64433,
+            "3": 0.79381,
+            "4": 0.86598,
+            "5": 0.89691
+          },
+          "mean_source_char_fraction_at3": 0.35772,
+          "method": "rrf_lexical",
+          "multisentence_complete_at3": 0.33333
+        },
+        {
+          "complete_gold_rationale_at_k": {
+            "1": 0.39691,
+            "2": 0.61856,
+            "3": 0.78866,
+            "4": 0.86598,
+            "5": 0.89691
+          },
+          "mean_source_char_fraction_at3": 0.35662,
+          "method": "alternate_lexical",
+          "multisentence_complete_at3": 0.33333
+        },
+        {
+          "complete_gold_rationale_at_k": {
+            "1": 0.52577,
+            "2": 0.72165,
+            "3": 0.8299,
+            "4": 0.86082,
+            "5": 0.90206
+          },
+          "mean_source_char_fraction_at3": 0.35422,
+          "method": "rrf_tfidf_last",
+          "multisentence_complete_at3": 0.22222
+        },
+        {
+          "complete_gold_rationale_at_k": {
+            "1": 0.54639,
+            "2": 0.73196,
+            "3": 0.8299,
+            "4": 0.87629,
+            "5": 0.92268
+          },
+          "mean_source_char_fraction_at3": 0.35649,
+          "method": "rrf_bm25_last",
+          "multisentence_complete_at3": 0.22222
+        },
+        {
+          "complete_gold_rationale_at_k": {
+            "1": 0.56186,
+            "2": 0.74742,
+            "3": 0.85052,
+            "4": 0.86598,
+            "5": 0.92268
+          },
+          "mean_source_char_fraction_at3": 0.36005,
+          "method": "rrf_three",
+          "multisentence_complete_at3": 0.33333
+        }
+      ],
+      "multi_sentence_rationale_n": 9,
+      "n_pairs": 194
+    }
+  ],
+  "lexical_selector_joint_errors_top3": {
+    "bm25_only": 28,
+    "both_hit": 428,
+    "both_missed": 96,
+    "phi_correlation": 0.78617,
+    "tfidf_only": 12,
+    "type": "lexical evidence retrieval, NOT model ensemble truth judgments"
+  },
+  "methods_frozen_before_run": [
+    "tfidf",
+    "bm25",
+    "first",
+    "last",
+    "random",
+    "rrf_lexical",
+    "alternate_lexical",
+    "rrf_tfidf_last",
+    "rrf_bm25_last",
+    "rrf_three"
+  ],
+  "n_annotated_claims": 505,
+  "n_expert_annotated_claim_doc_pairs": 564,
+  "no_training_on_expert_annotations": true,
+  "original_rationale_alternatives": 957,
+  "source_sha256": "11c621288d41ac144d29b13b0f8503b3820b7d6e8b1f6ff24dff335c196d76be",
+  "split": "train"
+}
