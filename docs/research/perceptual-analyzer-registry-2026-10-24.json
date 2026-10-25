@@ -225,6 +225,53 @@
       "n": 0,
       "correct": null,
       "status": "candidate_not_benchmarked"
+    },
+    {
+      "task": "Human-judged generated 3D missing semantic parts, structural flags on original GLBs",
+      "method": "Trimesh fixed numeric source mesh invariants, including AABB overlap >2%, no learned vision model",
+      "version": "trimesh 5.0.0 / Python 3.12 / CPU one thread",
+      "scope": "119 GLBs untouched by the prior 10-case preliminary experiment; source two-rater majority labels 33 missing / 86 not, correlated generator prompts",
+      "n": 119,
+      "correct": null,
+      "status": "rejected_as_semantic_missing_parts_judge",
+      "metrics": {
+        "TP": 9,
+        "FP": 20,
+        "FN": 24,
+        "TN": 66,
+        "AABB_AUROC": 0.5232558139534884,
+        "AABB_AUROC_prompt_group_CI": {
+          "low": 0.4354,
+          "high": 0.6235,
+          "successful_replicates": 2000
+        }
+      },
+      "source_report": "perceptual-analyzers-independent-heldouts-2026-10-25.md",
+      "limitations": "Valid/open geometry has no semantic part inventory or physics constraint. Broadphase AABB overlaps can be intended and do not prove contact. This remains useful only for explicit geometry properties."
+    },
+    {
+      "task": "Paired mobile GUI reference-to-implementation visible typography/missing content anomaly",
+      "method": "Tesseract PSM 11 paired reference word-loss, >30% unique ref-word loss selected on 35 calibration screens",
+      "version": "Tesseract 5.3.4 / CPU single thread, 640x1152 maximum OCR input",
+      "scope": "132 real human-reviewed paired screenshots, 52 app groups, 97 evaluation screens in 38 other app groups, 28 human typography OR missing-content tags",
+      "n": 97,
+      "correct": null,
+      "status": "useful_change_evidence_not_acceptance_gate",
+      "metrics": {
+        "TP": 21,
+        "FP": 34,
+        "FN": 7,
+        "TN": 35,
+        "OCR_AUROC": 0.6211180124223603,
+        "SSIM_AUROC_on_same_images": 0.4720496894409938,
+        "app_bootstrap_AUROC_delta_95pct": {
+          "low": 0.0267,
+          "high": 0.2818,
+          "successful_replicates": 2000
+        }
+      },
+      "source_report": "perceptual-analyzers-independent-heldouts-2026-10-25.md",
+      "limitations": "Missing Content includes nontext objects, Typography often preserves words. The other-tagged screen negatives are not proof of absence of errors. Calibration/test source dataset already previously used, not untouched super-test."
     }
   ],
   "second_continuation_2026_10_24": {
@@ -383,5 +430,14 @@
       "hardware": "CPU-only one torch thread, 2039.73 s total, mean 63.418 s/image, peak 1.03GB RAM; no GPU use",
       "caveat": "one target DOM rectangle per page, not exhaustive element annotations; model not a defect classifier, overflowing/hidden CSS extent mismatched with visible boxes"
     }
+  },
+  "independent_source_text_and_3d_holdouts_2026_10_25": {
+    "status": "PARTIAL, general autonomous visual/video QA remains unqualified",
+    "report": "perceptual-analyzers-independent-heldouts-2026-10-25.md",
+    "aggregate_evidence": "perceptual-asset-and-text-holdout-uncertainty-2026-10-25.json",
+    "notable_source_correction": "98/99 label crosswalk was based on duplicate prompt/model overwrite. Valid unambiguous 97/97 shared-source adjudication comparison for 3 labels; 2 ambiguous and 1 unmatched expert IDs. Not independent human consensus.",
+    "3D_semantic_result": "AABB source overlap on 119 heldout real GLB assets: missing parts 9/33 recall, 20/86 flag negative, AUC 0.523 CI 0.435\u20130.624; no valid source geometry semantic completeness gate.",
+    "GUI_text_result": "Tesseract paired OCR 132 real screenshots across 52 apps, app-disjoint evaluation 97: 21/28 tagged text issues found, 34/69 other cases flagged; ROC 0.621 vs SSIM 0.472 on same examples, app-cluster delta CI 0.027\u20130.282; no qualified standalone text/layout gate.",
+    "source_scope": "Original licensed dataset assets only in /data/var; signed negative results and previous stored source remained untouched; CPU nice scheduling, no shared model GPU use."
   }
 }

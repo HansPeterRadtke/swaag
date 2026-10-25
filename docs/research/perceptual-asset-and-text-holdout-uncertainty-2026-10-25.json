@@ -1,0 +1,200 @@
+{
+  "date": "2026-10-25",
+  "topic": "independent external human labels versus frozen numeric 3D source checks and paired image OCR, with source grouped uncertainty",
+  "real_GLBS": {
+    "evidence_SHA256": {
+      "full129_manifest": "5d0495e2f6137620e2456977c43ceb399ee87d4c43b79e7bbe98257e678aa5f4",
+      "frozen_119_GLBS": "86843f813f66d370c3dd24d14763835b93fdfb0fa2b70ab9fb20a9b1632f67dd",
+      "heldout_119_scoring": "8a4682773952412b965d6a12389af567adf76bb65d74c3f531f4330b74407c27",
+      "expert_adjudicated_reference_SHA256": "5cd8145050a45493c749d8c8550acb66c85fb21e9cf2511ace9a6ec5cb348b64"
+    },
+    "source_claims": "129 golden labeled original generated GLBs, 10 used in prior geometry pilot; 119 heldout original geometry run, 33 human missing-parts majority, 86 not missing; same preset mesh numerical flags",
+    "source_holdout_n": 119,
+    "label_missing_positives": 33,
+    "bad_coords_flag_n": 0,
+    "open_mesh_flag_n": 119,
+    "degenerate_face_flag_n": 0,
+    "AABB_broadphase_missingparts_confusion": {
+      "TP": 9,
+      "FP": 20,
+      "FN": 24,
+      "TN": 66,
+      "recall": 0.2727272727272727,
+      "specificity": 0.7674418604651163,
+      "precision": 0.3103448275862069,
+      "balanced_accuracy": 0.5200845665961945
+    },
+    "AABB_overlap_fraction_AUROC": 0.5232558139534884,
+    "prompt_cluster_bootstrap": {
+      "clusters": 72,
+      "iterations": 2000,
+      "seed": 20261025,
+      "intervals": {
+        "recall": {
+          "low": 0.1154,
+          "high": 0.4583,
+          "successful_replicates": 2000
+        },
+        "specificity": {
+          "low": 0.6506,
+          "high": 0.8652,
+          "successful_replicates": 2000
+        },
+        "precision": {
+          "low": 0.1481,
+          "high": 0.4762,
+          "successful_replicates": 2000
+        },
+        "AABB_AUROC": {
+          "low": 0.4354,
+          "high": 0.6235,
+          "successful_replicates": 2000
+        }
+      }
+    },
+    "rater_agreement_subsets": {
+      "0.5": {
+        "n": 21,
+        "missing_positives": 21,
+        "AABB_counts": {
+          "TP": 6,
+          "FP": 0,
+          "FN": 15,
+          "TN": 0,
+          "recall": 0.2857142857142857,
+          "specificity": null,
+          "precision": 1.0,
+          "balanced_accuracy": null
+        }
+      },
+      "1.0": {
+        "n": 98,
+        "missing_positives": 12,
+        "AABB_counts": {
+          "TP": 3,
+          "FP": 20,
+          "FN": 9,
+          "TN": 66,
+          "recall": 0.25,
+          "specificity": 0.7674418604651163,
+          "precision": 0.13043478260869565,
+          "balanced_accuracy": 0.5087209302325582
+        }
+      }
+    },
+    "expert_crosswalk": {
+      "unambiguous_n": 97,
+      "ambiguous_prompt_generator_n": 2,
+      "not_found_n": 1,
+      "full_agreement_on_unique_keys": {
+        "Incorrect Prompt Quantity/Missing Parts": {
+          "matched_unambiguously": 97,
+          "agreement": 97
+        },
+        "Fused or Incomplete Parts": {
+          "matched_unambiguously": 97,
+          "agreement": 97
+        },
+        "Form and Surface Quality Issues": {
+          "matched_unambiguously": 97,
+          "agreement": 97
+        }
+      },
+      "ambiguous": [
+        {
+          "source_prompt": "dragon",
+          "generator": "Gen-B",
+          "possible_source_ids": [
+            "681",
+            "1168"
+          ]
+        },
+        {
+          "source_prompt": "guitar",
+          "generator": "Gen-B",
+          "possible_source_ids": [
+            "739",
+            "1228"
+          ]
+        }
+      ],
+      "not_found": [
+        {
+          "prompt_sha256": "f4aeed5d0ed0683ec0991a0db83db55acb62cfdb20d8510e95b6de35d53841ce",
+          "generator": "Gen-B"
+        }
+      ],
+      "note": "Earlier preliminary 98/99 claim used a dict that overwrote two duplicate prompt/generator keys, therefore was overly broad. Only 97 unambiguous matches support a source-to-expert agreement statement. Do NOT merge duplicated objects by guessed identity."
+    },
+    "limitations": "Released generated GLBs rather than industrial CAD metrology, benchmark human majority from two annotators with conflicts, generated object prompts repeat, classes include nonmechanical props. Open mesh/AABB flags are not intended to detect semantic missing parts, and aabb overlaps are not narrowphase actual collisions."
+  },
+  "real_paired_mobile_screenshots": {
+    "source_SHA256": {
+      "frozen_Tesseract_pair_scores": "1d33c0f73c7eabb402e11e50938ee4f0e04d8e28d59608c31f5ee7bbc274b00c",
+      "human_issue_scoring": "69fc486a77a2d60452b2eab0249ab5e5ef37a8de7c5c26d9605e3900b6ec8af5",
+      "frozen_old_SSIM_for_same_cases": "65d01a3a8519d6bfc10f163488dd742bc2712c3eb2b88e9667e9dc813e3dd2fc"
+    },
+    "total_sample": 132,
+    "calibration_n": 35,
+    "app_disjoint_eval_n": 97,
+    "calibration_app_n": 14,
+    "evaluation_app_n": 38,
+    "human_typography_n_in_eval": 11,
+    "human_missing_content_n_in_eval": 21,
+    "human_either_text_tag_n_in_eval": 28,
+    "calibration_selected_OCR_token_loss_threshold": 0.3,
+    "heldout_ocr_missing_token_confusion": {
+      "TP": 21,
+      "FP": 34,
+      "FN": 7,
+      "TN": 35,
+      "recall": 0.75,
+      "specificity": 0.5072463768115942,
+      "precision": 0.38181818181818183,
+      "balanced_accuracy": 0.6286231884057971
+    },
+    "heldout_ocr_auroc": 0.6211180124223603,
+    "same_source_heldout_SSIM_auroc": 0.4720496894409938,
+    "app_grouped_bootstrap": {
+      "clusters": 38,
+      "iterations": 2000,
+      "seed": 20261026,
+      "intervals": {
+        "recall": {
+          "low": 0.5909,
+          "high": 0.9091,
+          "successful_replicates": 2000
+        },
+        "specificity_against_unlabeled_text": {
+          "low": 0.3788,
+          "high": 0.6352,
+          "successful_replicates": 2000
+        },
+        "precision_vs_annotations": {
+          "low": 0.2632,
+          "high": 0.5102,
+          "successful_replicates": 2000
+        },
+        "OCR_AUROC": {
+          "low": 0.4874,
+          "high": 0.7541,
+          "successful_replicates": 2000
+        },
+        "SSIM_AUROC": {
+          "low": 0.3768,
+          "high": 0.5722,
+          "successful_replicates": 2000
+        },
+        "paired_AUROC_delta_OCR_minus_SSIM": {
+          "low": 0.0267,
+          "high": 0.2818,
+          "successful_replicates": 2000
+        }
+      }
+    },
+    "limitations": "These are actual paired human-reviewed app screenshots but positive labels for typography/missing content are neither exhaustive OCR-loss labels nor necessarily text-specific: some missing content is icons. Text changes due intentional design and OCR errors may be false alarms against available tags. Split app group was reused from previous Scry benchmark, so not untouched final evaluation. Calibration threshold .3 chosen on 35 cases and tested on other app groups only."
+  },
+  "external_media_stays_local": true,
+  "no_new_inference_or_untouched_holdout_claim": true,
+  "interpretation": "AABB overlap and generic watertightness cannot detect missing semantic 3D parts (119 original human labeled holdout). Paired OCR word loss has modest text-tag ranking beyond SSIM (97 other-app screens), but screen rejection false alarm proxy extremely high. No general visual acceptance judge qualified."
+}
