@@ -1,0 +1,529 @@
+{
+  "contradictory_configuration_means": 0,
+  "evidence_type": "EXPLORATORY reanalysis of publisher primary raw per-instance task successes and heterogeneous-team configuration means",
+  "exactly_reconciled_configuration_means": 70,
+  "heterogeneous_reviewer_and_worker_role_results": [
+    {
+      "centralized": {
+        "High+Low": 0.19,
+        "High-only": 0.34,
+        "Low+High": 0.21,
+        "Low-only": 0.27
+      },
+      "decentralized": {
+        "High-only": 0.5,
+        "Low-only": 0.32,
+        "Mixed": 0.53
+      },
+      "family": "OpenAI",
+      "low_lead_strong_worker_vs_strong_only_pp": -13.0,
+      "mixed_peers_vs_strong_only_pp": 3.0,
+      "strong_lead_low_worker_vs_strong_only_pp": -15.0,
+      "strong_subagent_minus_strong_orchestrator_pp": 2.0
+    },
+    {
+      "centralized": {
+        "High+Low": 0.37,
+        "High-only": 0.32,
+        "Low+High": 0.42,
+        "Low-only": 0.34
+      },
+      "decentralized": {
+        "High-only": 0.37,
+        "Low-only": 0.29,
+        "Mixed": 0.47
+      },
+      "family": "Anthropic",
+      "low_lead_strong_worker_vs_strong_only_pp": 10.0,
+      "mixed_peers_vs_strong_only_pp": 10.0,
+      "strong_lead_low_worker_vs_strong_only_pp": 5.0,
+      "strong_subagent_minus_strong_orchestrator_pp": 5.0
+    },
+    {
+      "centralized": {
+        "High+Low": 0.18,
+        "High-only": 0.37,
+        "Low+High": 0.23,
+        "Low-only": 0.22
+      },
+      "decentralized": {
+        "High-only": 0.43,
+        "Low-only": 0.18,
+        "Mixed": 0.42
+      },
+      "family": "Gemini",
+      "low_lead_strong_worker_vs_strong_only_pp": -14.0,
+      "mixed_peers_vs_strong_only_pp": -1.0,
+      "strong_lead_low_worker_vs_strong_only_pp": -19.0,
+      "strong_subagent_minus_strong_orchestrator_pp": 5.0
+    }
+  ],
+  "limitations": [
+    "Binary resolved outcome is an external task-grader result; no candidate text, reviewer critique, or majority-vote output was released here.",
+    "Pairwise outcome correlations may reflect common task difficulty, source selection or model capability; they are not calibrated critic-judgment dependence.",
+    "Every base task repeats across seven model versions and five architectures; total rows are not independent benchmark instances.",
+    "Heterogeneous-team table reports configuration means on BrowseComp-Plus; three families, no task-paired outcomes, no separate latency/token measurements.",
+    "SWE-bench and Terminal-Bench source samples include 20 task IDs each; no generalization or automatic routing rule is proven.",
+    "The publisher article reports architecture-level communication turn and token overhead but the raw per-instance release does not include full cost."
+  ],
+  "original_archive_sha256": "3b6752af8271db7319b1b23dbbe93733bd13e585c87e6f1abc4a17e15b96dc35",
+  "original_figure_1_2_sha256": "402a9fea7430bf4dbf1645c8bafd7850811ffb5bb331568e8088d85c4dc9ffd9",
+  "original_heterogeneous_figure_2_sha256": "df497545c1f007ca8a6c1a9d41eb26602b1060a83f99b0ed0055919653f77c3f",
+  "per_instance_source_sha256": "c7bde9eac1f28a29397c10ab10e29f0962595e9dd45f17aedc2d309289b12007",
+  "unmatched_configuration_model_identifiers": 20,
+  "verified_task_outcomes": [
+    {
+      "dataset": "swebench-verified",
+      "distinct_benchmark_task_ids": 20,
+      "hard_unsolved_task_count": 4,
+      "matched_model_versions": [
+        "claude-sonnet-4-20250514",
+        "gemini-2.0-flash",
+        "gemini-2.5-flash",
+        "gemini-2.5-pro",
+        "gpt-5",
+        "gpt-5-mini",
+        "gpt-5-nano"
+      ],
+      "model_task_units": 140,
+      "original_task_ids_unsolved_by_all_7_models_and_all_5_architectures": [
+        "0000",
+        "0014",
+        "0017",
+        "0019"
+      ],
+      "pairwise_architecture_dependence": [
+        {
+          "arch_one": "single-agent",
+          "arch_two": "multi-agent-independent",
+          "binary_success_phi": 0.53626,
+          "both_fail": 64,
+          "both_succeed": 44,
+          "first_only": 19,
+          "paired_discordant_count": 32,
+          "second_only": 13
+        },
+        {
+          "arch_one": "single-agent",
+          "arch_two": "multi-agent-centralized",
+          "binary_success_phi": 0.52318,
+          "both_fail": 61,
+          "both_succeed": 46,
+          "first_only": 17,
+          "paired_discordant_count": 33,
+          "second_only": 16
+        },
+        {
+          "arch_one": "single-agent",
+          "arch_two": "multi-agent-decentralized",
+          "binary_success_phi": 0.56554,
+          "both_fail": 64,
+          "both_succeed": 46,
+          "first_only": 17,
+          "paired_discordant_count": 30,
+          "second_only": 13
+        },
+        {
+          "arch_one": "single-agent",
+          "arch_two": "multi-agent-hybrid",
+          "binary_success_phi": 0.5671,
+          "both_fail": 62,
+          "both_succeed": 48,
+          "first_only": 15,
+          "paired_discordant_count": 30,
+          "second_only": 15
+        },
+        {
+          "arch_one": "multi-agent-independent",
+          "arch_two": "multi-agent-centralized",
+          "binary_success_phi": 0.66608,
+          "both_fail": 69,
+          "both_succeed": 48,
+          "first_only": 9,
+          "paired_discordant_count": 23,
+          "second_only": 14
+        },
+        {
+          "arch_one": "multi-agent-independent",
+          "arch_two": "multi-agent-decentralized",
+          "binary_success_phi": 0.61767,
+          "both_fail": 69,
+          "both_succeed": 45,
+          "first_only": 12,
+          "paired_discordant_count": 26,
+          "second_only": 14
+        },
+        {
+          "arch_one": "multi-agent-independent",
+          "arch_two": "multi-agent-hybrid",
+          "binary_success_phi": 0.68237,
+          "both_fail": 69,
+          "both_succeed": 49,
+          "first_only": 8,
+          "paired_discordant_count": 22,
+          "second_only": 14
+        },
+        {
+          "arch_one": "multi-agent-centralized",
+          "arch_two": "multi-agent-decentralized",
+          "binary_success_phi": 0.66605,
+          "both_fail": 68,
+          "both_succeed": 49,
+          "first_only": 13,
+          "paired_discordant_count": 23,
+          "second_only": 10
+        },
+        {
+          "arch_one": "multi-agent-centralized",
+          "arch_two": "multi-agent-hybrid",
+          "binary_success_phi": 0.6388,
+          "both_fail": 65,
+          "both_succeed": 50,
+          "first_only": 12,
+          "paired_discordant_count": 25,
+          "second_only": 13
+        },
+        {
+          "arch_one": "multi-agent-decentralized",
+          "arch_two": "multi-agent-hybrid",
+          "binary_success_phi": 0.59462,
+          "both_fail": 65,
+          "both_succeed": 47,
+          "first_only": 12,
+          "paired_discordant_count": 28,
+          "second_only": 16
+        }
+      ],
+      "per_task_independent_model_solutions": {
+        "0000": {
+          "models_all_architectures_failed": 7,
+          "models_evaluated": 7,
+          "single_agent_model_solved": 0
+        },
+        "0001": {
+          "models_all_architectures_failed": 4,
+          "models_evaluated": 7,
+          "single_agent_model_solved": 2
+        },
+        "0002": {
+          "models_all_architectures_failed": 2,
+          "models_evaluated": 7,
+          "single_agent_model_solved": 5
+        },
+        "0003": {
+          "models_all_architectures_failed": 0,
+          "models_evaluated": 7,
+          "single_agent_model_solved": 6
+        },
+        "0004": {
+          "models_all_architectures_failed": 0,
+          "models_evaluated": 7,
+          "single_agent_model_solved": 4
+        },
+        "0005": {
+          "models_all_architectures_failed": 1,
+          "models_evaluated": 7,
+          "single_agent_model_solved": 5
+        },
+        "0006": {
+          "models_all_architectures_failed": 4,
+          "models_evaluated": 7,
+          "single_agent_model_solved": 2
+        },
+        "0007": {
+          "models_all_architectures_failed": 6,
+          "models_evaluated": 7,
+          "single_agent_model_solved": 1
+        },
+        "0008": {
+          "models_all_architectures_failed": 0,
+          "models_evaluated": 7,
+          "single_agent_model_solved": 6
+        },
+        "0009": {
+          "models_all_architectures_failed": 0,
+          "models_evaluated": 7,
+          "single_agent_model_solved": 5
+        },
+        "0010": {
+          "models_all_architectures_failed": 2,
+          "models_evaluated": 7,
+          "single_agent_model_solved": 3
+        },
+        "0011": {
+          "models_all_architectures_failed": 0,
+          "models_evaluated": 7,
+          "single_agent_model_solved": 5
+        },
+        "0012": {
+          "models_all_architectures_failed": 0,
+          "models_evaluated": 7,
+          "single_agent_model_solved": 3
+        },
+        "0013": {
+          "models_all_architectures_failed": 1,
+          "models_evaluated": 7,
+          "single_agent_model_solved": 3
+        },
+        "0014": {
+          "models_all_architectures_failed": 7,
+          "models_evaluated": 7,
+          "single_agent_model_solved": 0
+        },
+        "0015": {
+          "models_all_architectures_failed": 0,
+          "models_evaluated": 7,
+          "single_agent_model_solved": 5
+        },
+        "0016": {
+          "models_all_architectures_failed": 1,
+          "models_evaluated": 7,
+          "single_agent_model_solved": 6
+        },
+        "0017": {
+          "models_all_architectures_failed": 7,
+          "models_evaluated": 7,
+          "single_agent_model_solved": 0
+        },
+        "0018": {
+          "models_all_architectures_failed": 5,
+          "models_evaluated": 7,
+          "single_agent_model_solved": 2
+        },
+        "0019": {
+          "models_all_architectures_failed": 7,
+          "models_evaluated": 7,
+          "single_agent_model_solved": 0
+        }
+      }
+    },
+    {
+      "dataset": "terminalbench",
+      "distinct_benchmark_task_ids": 20,
+      "hard_unsolved_task_count": 7,
+      "matched_model_versions": [
+        "claude-sonnet-4-20250514",
+        "gemini-2.0-flash",
+        "gemini-2.5-flash",
+        "gemini-2.5-pro",
+        "gpt-5",
+        "gpt-5-mini",
+        "gpt-5-nano"
+      ],
+      "model_task_units": 140,
+      "original_task_ids_unsolved_by_all_7_models_and_all_5_architectures": [
+        "0000",
+        "0005",
+        "0007",
+        "0008",
+        "0009",
+        "0012",
+        "0013"
+      ],
+      "pairwise_architecture_dependence": [
+        {
+          "arch_one": "single-agent",
+          "arch_two": "multi-agent-independent",
+          "binary_success_phi": 0.6117,
+          "both_fail": 87,
+          "both_succeed": 30,
+          "first_only": 8,
+          "paired_discordant_count": 23,
+          "second_only": 15
+        },
+        {
+          "arch_one": "single-agent",
+          "arch_two": "multi-agent-centralized",
+          "binary_success_phi": 0.33214,
+          "both_fail": 88,
+          "both_succeed": 17,
+          "first_only": 21,
+          "paired_discordant_count": 35,
+          "second_only": 14
+        },
+        {
+          "arch_one": "single-agent",
+          "arch_two": "multi-agent-decentralized",
+          "binary_success_phi": 0.48063,
+          "both_fail": 87,
+          "both_succeed": 24,
+          "first_only": 14,
+          "paired_discordant_count": 29,
+          "second_only": 15
+        },
+        {
+          "arch_one": "single-agent",
+          "arch_two": "multi-agent-hybrid",
+          "binary_success_phi": 0.44093,
+          "both_fail": 89,
+          "both_succeed": 21,
+          "first_only": 17,
+          "paired_discordant_count": 30,
+          "second_only": 13
+        },
+        {
+          "arch_one": "multi-agent-independent",
+          "arch_two": "multi-agent-centralized",
+          "binary_success_phi": 0.55385,
+          "both_fail": 89,
+          "both_succeed": 25,
+          "first_only": 20,
+          "paired_discordant_count": 26,
+          "second_only": 6
+        },
+        {
+          "arch_one": "multi-agent-independent",
+          "arch_two": "multi-agent-decentralized",
+          "binary_success_phi": 0.62994,
+          "both_fail": 87,
+          "both_succeed": 31,
+          "first_only": 14,
+          "paired_discordant_count": 22,
+          "second_only": 8
+        },
+        {
+          "arch_one": "multi-agent-independent",
+          "arch_two": "multi-agent-hybrid",
+          "binary_success_phi": 0.60889,
+          "both_fail": 89,
+          "both_succeed": 28,
+          "first_only": 17,
+          "paired_discordant_count": 23,
+          "second_only": 6
+        },
+        {
+          "arch_one": "multi-agent-centralized",
+          "arch_two": "multi-agent-decentralized",
+          "binary_success_phi": 0.62797,
+          "both_fail": 95,
+          "both_succeed": 25,
+          "first_only": 6,
+          "paired_discordant_count": 20,
+          "second_only": 14
+        },
+        {
+          "arch_one": "multi-agent-centralized",
+          "arch_two": "multi-agent-hybrid",
+          "binary_success_phi": 0.62069,
+          "both_fail": 98,
+          "both_succeed": 23,
+          "first_only": 8,
+          "paired_discordant_count": 19,
+          "second_only": 11
+        },
+        {
+          "arch_one": "multi-agent-decentralized",
+          "arch_two": "multi-agent-hybrid",
+          "binary_success_phi": 0.65131,
+          "both_fail": 94,
+          "both_succeed": 27,
+          "first_only": 12,
+          "paired_discordant_count": 19,
+          "second_only": 7
+        }
+      ],
+      "per_task_independent_model_solutions": {
+        "0000": {
+          "models_all_architectures_failed": 7,
+          "models_evaluated": 7,
+          "single_agent_model_solved": 0
+        },
+        "0001": {
+          "models_all_architectures_failed": 2,
+          "models_evaluated": 7,
+          "single_agent_model_solved": 5
+        },
+        "0002": {
+          "models_all_architectures_failed": 3,
+          "models_evaluated": 7,
+          "single_agent_model_solved": 4
+        },
+        "0003": {
+          "models_all_architectures_failed": 4,
+          "models_evaluated": 7,
+          "single_agent_model_solved": 3
+        },
+        "0004": {
+          "models_all_architectures_failed": 3,
+          "models_evaluated": 7,
+          "single_agent_model_solved": 3
+        },
+        "0005": {
+          "models_all_architectures_failed": 7,
+          "models_evaluated": 7,
+          "single_agent_model_solved": 0
+        },
+        "0006": {
+          "models_all_architectures_failed": 0,
+          "models_evaluated": 7,
+          "single_agent_model_solved": 7
+        },
+        "0007": {
+          "models_all_architectures_failed": 7,
+          "models_evaluated": 7,
+          "single_agent_model_solved": 0
+        },
+        "0008": {
+          "models_all_architectures_failed": 7,
+          "models_evaluated": 7,
+          "single_agent_model_solved": 0
+        },
+        "0009": {
+          "models_all_architectures_failed": 7,
+          "models_evaluated": 7,
+          "single_agent_model_solved": 0
+        },
+        "0010": {
+          "models_all_architectures_failed": 1,
+          "models_evaluated": 7,
+          "single_agent_model_solved": 5
+        },
+        "0011": {
+          "models_all_architectures_failed": 2,
+          "models_evaluated": 7,
+          "single_agent_model_solved": 3
+        },
+        "0012": {
+          "models_all_architectures_failed": 7,
+          "models_evaluated": 7,
+          "single_agent_model_solved": 0
+        },
+        "0013": {
+          "models_all_architectures_failed": 7,
+          "models_evaluated": 7,
+          "single_agent_model_solved": 0
+        },
+        "0014": {
+          "models_all_architectures_failed": 2,
+          "models_evaluated": 7,
+          "single_agent_model_solved": 0
+        },
+        "0015": {
+          "models_all_architectures_failed": 6,
+          "models_evaluated": 7,
+          "single_agent_model_solved": 0
+        },
+        "0016": {
+          "models_all_architectures_failed": 1,
+          "models_evaluated": 7,
+          "single_agent_model_solved": 2
+        },
+        "0017": {
+          "models_all_architectures_failed": 0,
+          "models_evaluated": 7,
+          "single_agent_model_solved": 2
+        },
+        "0018": {
+          "models_all_architectures_failed": 2,
+          "models_evaluated": 7,
+          "single_agent_model_solved": 1
+        },
+        "0019": {
+          "models_all_architectures_failed": 2,
+          "models_evaluated": 7,
+          "single_agent_model_solved": 3
+        }
+      }
+    }
+  ]
+}
