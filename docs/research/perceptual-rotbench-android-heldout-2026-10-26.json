@@ -1,0 +1,1908 @@
+{
+  "confidence_descriptive_exact_binomial": {
+    "clip_recall_14of25": [
+      0.3493,
+      0.756
+    ],
+    "localized_FPR_0of50": [
+      0,
+      0.0711
+    ],
+    "localized_recall_39of50": [
+      0.6404,
+      0.8847
+    ],
+    "overlap_recall_25of25": [
+      0.8628,
+      1
+    ]
+  },
+  "confusion": {
+    "aligned_global": {
+      "FN": 47,
+      "FP": 0,
+      "TN": 50,
+      "TP": 3,
+      "abstained": 0
+    },
+    "aligned_localized": {
+      "FN": 11,
+      "FP": 0,
+      "TN": 50,
+      "TP": 39,
+      "abstained": 0
+    },
+    "mismatched_global": {
+      "FN": 0,
+      "FP": 50,
+      "TN": 0,
+      "TP": 50,
+      "abstained": 0
+    },
+    "mismatched_localized": {
+      "FN": 0,
+      "FP": 50,
+      "TN": 0,
+      "TP": 50,
+      "abstained": 0
+    }
+  },
+  "copyright_and_license": "Original image files / 47 MB isolated under /data/var and NOT in Git; no explicit screenshot license in retrieved dataset card.",
+  "cost": {
+    "GPU_used": false,
+    "download_bytes_total": 47167211,
+    "download_seconds": 71.068,
+    "primary_and_global_shared_native_pixel_compute_seconds": 66.126,
+    "resource_note": "busy Nitro, low-priority CPU; time per proposal cannot be separated when source-aligned features share decoded pixels",
+    "sham_identical_operations_pixel_compute_seconds": 81.279
+  },
+  "date": "2026-10-26",
+  "false_negative_pixel_scope": {
+    "all_are_clip_mutations": true,
+    "all_have_different_PNG_bytes": true,
+    "changed_area_fraction_max": 0.000463542,
+    "changed_area_fraction_min": 5.3819e-05,
+    "human_visible_severity_unknown": true,
+    "n": 11
+  },
+  "method": {
+    "gold_join": "after source-blind prediction and sham prediction SHA frozen",
+    "main": "fraction of native RGB pixels whose max-channel abs difference from matched right reference >=24; flag if >0.0005",
+    "negative_control": "shuffled other-activity CLEAN reference, exact same native orientation dimensions and pixel calculation; abstain if not available",
+    "no_GPU_models_loaded": true,
+    "null": "always no defect",
+    "same_input_same_cost_baseline": "global mean RGB absolute delta >1.5 on exact same decoded image/reference arrays"
+  },
+  "paired_same_positive_global_vs_localized": {
+    "caution": "posthoc paired description with app correlated cases; not a preregistered model selection or extrapolation",
+    "exact_discordance_p_conditional": 2.9103830456733704e-11,
+    "global_only": 0,
+    "localized_only": 36
+  },
+  "rows": [
+    {
+      "aligned_global": false,
+      "aligned_localized": false,
+      "app": "com.github.dyhkwong.sagernet",
+      "changed_fraction_max": 0.000257813,
+      "group": "mutated-layout-clip",
+      "id": 247,
+      "max_global_rgb_mae": 0.029931,
+      "mismatched_global": true,
+      "mismatched_localized": true,
+      "reference_image_identical": [
+        true,
+        false
+      ],
+      "source_activity": "io.nekohasekai.sagernet.ui.profile.BrookSettingsActivity_portrait.png",
+      "source_author_bug": true
+    },
+    {
+      "aligned_global": false,
+      "aligned_localized": false,
+      "app": "com.byagowi.persiancalendar",
+      "changed_fraction_max": 0.000193576,
+      "group": "mutated-layout-clip",
+      "id": 180,
+      "max_global_rgb_mae": 0.016769,
+      "mismatched_global": true,
+      "mismatched_localized": true,
+      "reference_image_identical": [
+        true,
+        false
+      ],
+      "source_activity": "com.byagowi.persiancalendar.ui.MainActivity_portrait.png",
+      "source_author_bug": true
+    },
+    {
+      "aligned_global": false,
+      "aligned_localized": false,
+      "app": "com.swordfish.lemuroid",
+      "changed_fraction_max": 0.000422743,
+      "group": "mutated-layout-clip",
+      "id": 213,
+      "max_global_rgb_mae": 0.023804,
+      "mismatched_global": true,
+      "mismatched_localized": true,
+      "reference_image_identical": [
+        false,
+        true
+      ],
+      "source_activity": "com.swordfish.lemuroid.app.tv.folderpicker.TVFolderPickerActivity_portrait.png",
+      "source_author_bug": true
+    },
+    {
+      "aligned_global": false,
+      "aligned_localized": false,
+      "app": "org.pacien.tincapp",
+      "changed_fraction_max": 0.000463542,
+      "group": "mutated-layout-clip",
+      "id": 125,
+      "max_global_rgb_mae": 0.056594,
+      "mismatched_global": true,
+      "mismatched_localized": true,
+      "reference_image_identical": [
+        true,
+        false
+      ],
+      "source_activity": "org.pacien.tincapp.activities.configure.ConfigureActivity_portrait.png",
+      "source_author_bug": true
+    },
+    {
+      "aligned_global": false,
+      "aligned_localized": false,
+      "app": "com.hegocre.nextcloudpasswords",
+      "changed_fraction_max": 0.000282986,
+      "group": "mutated-layout-clip",
+      "id": 309,
+      "max_global_rgb_mae": 0.03123,
+      "mismatched_global": true,
+      "mismatched_localized": true,
+      "reference_image_identical": [
+        false,
+        true
+      ],
+      "source_activity": "com.hegocre.nextcloudpasswords.ui.activities.LoginActivity_portrait.png",
+      "source_author_bug": true
+    },
+    {
+      "aligned_global": false,
+      "aligned_localized": true,
+      "app": "com.github.dyhkwong.sagernet",
+      "changed_fraction_max": 0.000526042,
+      "group": "mutated-layout-clip",
+      "id": 189,
+      "max_global_rgb_mae": 0.065627,
+      "mismatched_global": true,
+      "mismatched_localized": true,
+      "reference_image_identical": [
+        true,
+        false
+      ],
+      "source_activity": "io.nekohasekai.sagernet.ui.profile.Hysteria2SettingsActivity_portrait.png",
+      "source_author_bug": true
+    },
+    {
+      "aligned_global": false,
+      "aligned_localized": true,
+      "app": "com.encrypt.bwt",
+      "changed_fraction_max": 0.006453125,
+      "group": "mutated-layout-clip",
+      "id": 279,
+      "max_global_rgb_mae": 0.759154,
+      "mismatched_global": true,
+      "mismatched_localized": true,
+      "reference_image_identical": [
+        false,
+        true
+      ],
+      "source_activity": "com.encrypt.bwt.QuickEncryptActivity_portrait.png",
+      "source_author_bug": true
+    },
+    {
+      "aligned_global": false,
+      "aligned_localized": true,
+      "app": "com.hegocre.nextcloudpasswords",
+      "changed_fraction_max": 0.001892361,
+      "group": "mutated-layout-clip",
+      "id": 201,
+      "max_global_rgb_mae": 0.151608,
+      "mismatched_global": true,
+      "mismatched_localized": true,
+      "reference_image_identical": [
+        true,
+        false
+      ],
+      "source_activity": "com.hegocre.nextcloudpasswords.ui.activities.SettingsActivity_portrait.png",
+      "source_author_bug": true
+    },
+    {
+      "aligned_global": false,
+      "aligned_localized": false,
+      "app": "de.badaix.snapcast",
+      "changed_fraction_max": 0.000188368,
+      "group": "mutated-layout-clip",
+      "id": 284,
+      "max_global_rgb_mae": 0.033131,
+      "mismatched_global": true,
+      "mismatched_localized": true,
+      "reference_image_identical": [
+        false,
+        true
+      ],
+      "source_activity": "de.badaix.snapcast.AboutActivity_portrait.png",
+      "source_author_bug": true
+    },
+    {
+      "aligned_global": false,
+      "aligned_localized": false,
+      "app": "chat.delta.lite",
+      "changed_fraction_max": 0.000232639,
+      "group": "mutated-layout-clip",
+      "id": 212,
+      "max_global_rgb_mae": 0.023007,
+      "mismatched_global": true,
+      "mismatched_localized": true,
+      "reference_image_identical": [
+        true,
+        false
+      ],
+      "source_activity": "org.thoughtcrime.securesms.LogViewActivity_portrait.png",
+      "source_author_bug": true
+    },
+    {
+      "aligned_global": false,
+      "aligned_localized": true,
+      "app": "de.nulide.findmydevice",
+      "changed_fraction_max": 0.000904514,
+      "group": "mutated-layout-clip",
+      "id": 99,
+      "max_global_rgb_mae": 0.14611,
+      "mismatched_global": true,
+      "mismatched_localized": true,
+      "reference_image_identical": [
+        true,
+        false
+      ],
+      "source_activity": "de.nulide.findmydevice.ui.settings.LogViewActivity_portrait.png",
+      "source_author_bug": true
+    },
+    {
+      "aligned_global": false,
+      "aligned_localized": false,
+      "app": "cz.vitskalicky.lepsirozvrh",
+      "changed_fraction_max": 0.000193576,
+      "group": "mutated-layout-clip",
+      "id": 203,
+      "max_global_rgb_mae": 0.030572,
+      "mismatched_global": true,
+      "mismatched_localized": true,
+      "reference_image_identical": [
+        false,
+        true
+      ],
+      "source_activity": "cz.vitskalicky.lepsirozvrh.widget.WideWidgetConfigActivity_portrait.png",
+      "source_author_bug": true
+    },
+    {
+      "aligned_global": false,
+      "aligned_localized": true,
+      "app": "cz.vitskalicky.lepsirozvrh",
+      "changed_fraction_max": 0.000551215,
+      "group": "mutated-layout-clip",
+      "id": 314,
+      "max_global_rgb_mae": 0.082542,
+      "mismatched_global": true,
+      "mismatched_localized": true,
+      "reference_image_identical": [
+        true,
+        false
+      ],
+      "source_activity": "cz.vitskalicky.lepsirozvrh.settings.ThemeSettingsActivity_portrait.png",
+      "source_author_bug": true
+    },
+    {
+      "aligned_global": false,
+      "aligned_localized": true,
+      "app": "org.petero.droidfish",
+      "changed_fraction_max": 0.001026042,
+      "group": "mutated-layout-clip",
+      "id": 323,
+      "max_global_rgb_mae": 0.157457,
+      "mismatched_global": true,
+      "mismatched_localized": true,
+      "reference_image_identical": [
+        true,
+        false
+      ],
+      "source_activity": "org.petero.droidfish.activities.CPUWarning_portrait.png",
+      "source_author_bug": true
+    },
+    {
+      "aligned_global": true,
+      "aligned_localized": true,
+      "app": "dev.theolm.wwc",
+      "changed_fraction_max": 0.066548611,
+      "group": "mutated-layout-clip",
+      "id": 22,
+      "max_global_rgb_mae": 4.115464,
+      "mismatched_global": true,
+      "mismatched_localized": true,
+      "reference_image_identical": [
+        true,
+        false
+      ],
+      "source_activity": "dev.theolm.wwc.ui.dialog.MainActivity_portrait.png",
+      "source_author_bug": true
+    },
+    {
+      "aligned_global": false,
+      "aligned_localized": true,
+      "app": "com.byagowi.persiancalendar",
+      "changed_fraction_max": 0.000625868,
+      "group": "mutated-layout-clip",
+      "id": 92,
+      "max_global_rgb_mae": 0.051791,
+      "mismatched_global": true,
+      "mismatched_localized": true,
+      "reference_image_identical": [
+        false,
+        true
+      ],
+      "source_activity": "com.byagowi.persiancalendar.ui.settings.wallpaper.DreamSettingsActivity_portrait.png",
+      "source_author_bug": true
+    },
+    {
+      "aligned_global": false,
+      "aligned_localized": true,
+      "app": "dev.theolm.wwc",
+      "changed_fraction_max": 0.000684896,
+      "group": "mutated-layout-clip",
+      "id": 30,
+      "max_global_rgb_mae": 0.092626,
+      "mismatched_global": true,
+      "mismatched_localized": true,
+      "reference_image_identical": [
+        true,
+        false
+      ],
+      "source_activity": "dev.theolm.wwc.ui.settings.SettingsActivity_portrait.png",
+      "source_author_bug": true
+    },
+    {
+      "aligned_global": false,
+      "aligned_localized": false,
+      "app": "chat.delta.lite",
+      "changed_fraction_max": 5.3819e-05,
+      "group": "mutated-layout-clip",
+      "id": 176,
+      "max_global_rgb_mae": 0.004629,
+      "mismatched_global": true,
+      "mismatched_localized": true,
+      "reference_image_identical": [
+        false,
+        true
+      ],
+      "source_activity": "org.thoughtcrime.securesms.InstantOnboardingActivity_portrait.png",
+      "source_author_bug": true
+    },
+    {
+      "aligned_global": true,
+      "aligned_localized": true,
+      "app": "cz.vitskalicky.lepsirozvrh",
+      "changed_fraction_max": 0.035953125,
+      "group": "mutated-layout-clip",
+      "id": 178,
+      "max_global_rgb_mae": 8.280054,
+      "mismatched_global": true,
+      "mismatched_localized": true,
+      "reference_image_identical": [
+        true,
+        false
+      ],
+      "source_activity": "cz.vitskalicky.lepsirozvrh.widget.WideWidgetConfigActivity_portrait.png",
+      "source_author_bug": true
+    },
+    {
+      "aligned_global": false,
+      "aligned_localized": false,
+      "app": "com.byagowi.persiancalendar",
+      "changed_fraction_max": 0.000235243,
+      "group": "mutated-layout-clip",
+      "id": 305,
+      "max_global_rgb_mae": 0.031529,
+      "mismatched_global": true,
+      "mismatched_localized": true,
+      "reference_image_identical": [
+        false,
+        true
+      ],
+      "source_activity": "com.byagowi.persiancalendar.ui.settings.wallpaper.WallpaperSettingsActivity_portrait.png",
+      "source_author_bug": true
+    },
+    {
+      "aligned_global": false,
+      "aligned_localized": true,
+      "app": "com.hegocre.nextcloudpasswords",
+      "changed_fraction_max": 0.001133681,
+      "group": "mutated-layout-clip",
+      "id": 34,
+      "max_global_rgb_mae": 0.159632,
+      "mismatched_global": true,
+      "mismatched_localized": true,
+      "reference_image_identical": [
+        false,
+        true
+      ],
+      "source_activity": "com.hegocre.nextcloudpasswords.ui.activities.SettingsActivity_portrait.png",
+      "source_author_bug": true
+    },
+    {
+      "aligned_global": false,
+      "aligned_localized": true,
+      "app": "com.databag",
+      "changed_fraction_max": 0.00099566,
+      "group": "mutated-layout-clip",
+      "id": 265,
+      "max_global_rgb_mae": 0.157503,
+      "mismatched_global": true,
+      "mismatched_localized": true,
+      "reference_image_identical": [
+        false,
+        true
+      ],
+      "source_activity": "com.databag.MainActivity_portrait.png",
+      "source_author_bug": true
+    },
+    {
+      "aligned_global": false,
+      "aligned_localized": true,
+      "app": "com.hegocre.nextcloudpasswords",
+      "changed_fraction_max": 0.004157986,
+      "group": "mutated-layout-clip",
+      "id": 292,
+      "max_global_rgb_mae": 0.557486,
+      "mismatched_global": true,
+      "mismatched_localized": true,
+      "reference_image_identical": [
+        true,
+        false
+      ],
+      "source_activity": "com.hegocre.nextcloudpasswords.ui.activities.LoginActivity_portrait.png",
+      "source_author_bug": true
+    },
+    {
+      "aligned_global": false,
+      "aligned_localized": false,
+      "app": "cz.vitskalicky.lepsirozvrh",
+      "changed_fraction_max": 0.000416667,
+      "group": "mutated-layout-clip",
+      "id": 118,
+      "max_global_rgb_mae": 0.044088,
+      "mismatched_global": true,
+      "mismatched_localized": true,
+      "reference_image_identical": [
+        true,
+        false
+      ],
+      "source_activity": "cz.vitskalicky.lepsirozvrh.accountPicker.AccountPickerActivity_portrait.png",
+      "source_author_bug": true
+    },
+    {
+      "aligned_global": false,
+      "aligned_localized": true,
+      "app": "io.pslab",
+      "changed_fraction_max": 0.007262153,
+      "group": "mutated-layout-clip",
+      "id": 231,
+      "max_global_rgb_mae": 1.134804,
+      "mismatched_global": true,
+      "mismatched_localized": true,
+      "reference_image_identical": [
+        true,
+        false
+      ],
+      "source_activity": "io.pslab.activity.ControlActivity_portrait.png",
+      "source_author_bug": true
+    },
+    {
+      "aligned_global": false,
+      "aligned_localized": true,
+      "app": "com.albertobonacina.wassword",
+      "changed_fraction_max": 0.001552083,
+      "group": "mutated-layout-overlap",
+      "id": 253,
+      "max_global_rgb_mae": 0.187896,
+      "mismatched_global": true,
+      "mismatched_localized": true,
+      "reference_image_identical": [
+        false,
+        true
+      ],
+      "source_activity": "com.albertobonacina.wassword.MainActivity_portrait.png",
+      "source_author_bug": true
+    },
+    {
+      "aligned_global": false,
+      "aligned_localized": true,
+      "app": "com.hegocre.nextcloudpasswords",
+      "changed_fraction_max": 0.000940104,
+      "group": "mutated-layout-overlap",
+      "id": 113,
+      "max_global_rgb_mae": 0.101098,
+      "mismatched_global": true,
+      "mismatched_localized": true,
+      "reference_image_identical": [
+        false,
+        true
+      ],
+      "source_activity": "com.hegocre.nextcloudpasswords.ui.activities.AboutActivity_portrait.png",
+      "source_author_bug": true
+    },
+    {
+      "aligned_global": false,
+      "aligned_localized": true,
+      "app": "dev.octoshrimpy.quik",
+      "changed_fraction_max": 0.000862847,
+      "group": "mutated-layout-overlap",
+      "id": 215,
+      "max_global_rgb_mae": 0.12355,
+      "mismatched_global": true,
+      "mismatched_localized": true,
+      "reference_image_identical": [
+        true,
+        false
+      ],
+      "source_activity": "dev.octoshrimpy.quik.feature.blocking.BlockingActivity_portrait.png",
+      "source_author_bug": true
+    },
+    {
+      "aligned_global": false,
+      "aligned_localized": true,
+      "app": "dev.octoshrimpy.quik",
+      "changed_fraction_max": 0.005802951,
+      "group": "mutated-layout-overlap",
+      "id": 276,
+      "max_global_rgb_mae": 0.917912,
+      "mismatched_global": true,
+      "mismatched_localized": true,
+      "reference_image_identical": [
+        true,
+        false
+      ],
+      "source_activity": "dev.octoshrimpy.quik.feature.scheduled.ScheduledActivity_portrait.png",
+      "source_author_bug": true
+    },
+    {
+      "aligned_global": false,
+      "aligned_localized": true,
+      "app": "cz.vitskalicky.lepsirozvrh",
+      "changed_fraction_max": 0.001321181,
+      "group": "mutated-layout-overlap",
+      "id": 171,
+      "max_global_rgb_mae": 0.210464,
+      "mismatched_global": true,
+      "mismatched_localized": true,
+      "reference_image_identical": [
+        true,
+        false
+      ],
+      "source_activity": "cz.vitskalicky.lepsirozvrh.widget.SmallWidgetConfigActivity_portrait.png",
+      "source_author_bug": true
+    },
+    {
+      "aligned_global": false,
+      "aligned_localized": true,
+      "app": "chat.delta.lite",
+      "changed_fraction_max": 0.003091146,
+      "group": "mutated-layout-overlap",
+      "id": 333,
+      "max_global_rgb_mae": 0.321315,
+      "mismatched_global": true,
+      "mismatched_localized": true,
+      "reference_image_identical": [
+        false,
+        true
+      ],
+      "source_activity": "org.thoughtcrime.securesms.CreateProfileActivity_portrait.png",
+      "source_author_bug": true
+    },
+    {
+      "aligned_global": false,
+      "aligned_localized": true,
+      "app": "cz.vitskalicky.lepsirozvrh",
+      "changed_fraction_max": 0.008310764,
+      "group": "mutated-layout-overlap",
+      "id": 264,
+      "max_global_rgb_mae": 0.549168,
+      "mismatched_global": true,
+      "mismatched_localized": true,
+      "reference_image_identical": [
+        false,
+        true
+      ],
+      "source_activity": "cz.vitskalicky.lepsirozvrh.settings.ImportThemeActivity_portrait.png",
+      "source_author_bug": true
+    },
+    {
+      "aligned_global": false,
+      "aligned_localized": true,
+      "app": "com.fsck.k9",
+      "changed_fraction_max": 0.00778125,
+      "group": "mutated-layout-overlap",
+      "id": 236,
+      "max_global_rgb_mae": 1.308693,
+      "mismatched_global": true,
+      "mismatched_localized": true,
+      "reference_image_identical": [
+        true,
+        false
+      ],
+      "source_activity": "com.fsck.k9.ui.changelog.RecentChangesActivity_portrait.png",
+      "source_author_bug": true
+    },
+    {
+      "aligned_global": false,
+      "aligned_localized": true,
+      "app": "ru.tech.imageresizershrinker",
+      "changed_fraction_max": 0.004170139,
+      "group": "mutated-layout-overlap",
+      "id": 234,
+      "max_global_rgb_mae": 0.457082,
+      "mismatched_global": true,
+      "mismatched_localized": true,
+      "reference_image_identical": [
+        true,
+        false
+      ],
+      "source_activity": "ru.tech.imageresizershrinker.app.presentation.AppActivity_portrait.png",
+      "source_author_bug": true
+    },
+    {
+      "aligned_global": false,
+      "aligned_localized": true,
+      "app": "com.github.dyhkwong.sagernet",
+      "changed_fraction_max": 0.006512153,
+      "group": "mutated-layout-overlap",
+      "id": 291,
+      "max_global_rgb_mae": 0.807302,
+      "mismatched_global": true,
+      "mismatched_localized": true,
+      "reference_image_identical": [
+        false,
+        true
+      ],
+      "source_activity": "io.nekohasekai.sagernet.ui.AssetsActivity_portrait.png",
+      "source_author_bug": true
+    },
+    {
+      "aligned_global": false,
+      "aligned_localized": true,
+      "app": "com.github.dyhkwong.sagernet",
+      "changed_fraction_max": 0.00646441,
+      "group": "mutated-layout-overlap",
+      "id": 226,
+      "max_global_rgb_mae": 0.796451,
+      "mismatched_global": true,
+      "mismatched_localized": true,
+      "reference_image_identical": [
+        true,
+        false
+      ],
+      "source_activity": "io.nekohasekai.sagernet.ui.GroupSettingsActivity_portrait.png",
+      "source_author_bug": true
+    },
+    {
+      "aligned_global": false,
+      "aligned_localized": true,
+      "app": "com.fsck.k9",
+      "changed_fraction_max": 0.003164931,
+      "group": "mutated-layout-overlap",
+      "id": 271,
+      "max_global_rgb_mae": 0.554981,
+      "mismatched_global": true,
+      "mismatched_localized": true,
+      "reference_image_identical": [
+        false,
+        true
+      ],
+      "source_activity": "com.fsck.k9.ui.changelog.RecentChangesActivity_portrait.png",
+      "source_author_bug": true
+    },
+    {
+      "aligned_global": false,
+      "aligned_localized": true,
+      "app": "de.kromke.andreas.safmediascanner",
+      "changed_fraction_max": 0.009332465,
+      "group": "mutated-layout-overlap",
+      "id": 85,
+      "max_global_rgb_mae": 0.926486,
+      "mismatched_global": true,
+      "mismatched_localized": true,
+      "reference_image_identical": [
+        false,
+        true
+      ],
+      "source_activity": "de.kromke.andreas.safmediascanner.MyPreferenceActivity_portrait.png",
+      "source_author_bug": true
+    },
+    {
+      "aligned_global": false,
+      "aligned_localized": true,
+      "app": "org.androidlabs.applistbackup",
+      "changed_fraction_max": 0.001362847,
+      "group": "mutated-layout-overlap",
+      "id": 207,
+      "max_global_rgb_mae": 0.165931,
+      "mismatched_global": true,
+      "mismatched_localized": true,
+      "reference_image_identical": [
+        true,
+        false
+      ],
+      "source_activity": "org.androidlabs.applistbackup.reader.BackupReaderActivity_portrait.png",
+      "source_author_bug": true
+    },
+    {
+      "aligned_global": false,
+      "aligned_localized": true,
+      "app": "net.turtton.ytalarm",
+      "changed_fraction_max": 0.005681424,
+      "group": "mutated-layout-overlap",
+      "id": 58,
+      "max_global_rgb_mae": 1.034005,
+      "mismatched_global": true,
+      "mismatched_localized": true,
+      "reference_image_identical": [
+        true,
+        false
+      ],
+      "source_activity": "net.turtton.ytalarm.activity.MainActivity_portrait.png",
+      "source_author_bug": true
+    },
+    {
+      "aligned_global": false,
+      "aligned_localized": true,
+      "app": "de.kitshn.android",
+      "changed_fraction_max": 0.004147569,
+      "group": "mutated-layout-overlap",
+      "id": 165,
+      "max_global_rgb_mae": 0.775565,
+      "mismatched_global": true,
+      "mismatched_localized": true,
+      "reference_image_identical": [
+        false,
+        true
+      ],
+      "source_activity": "de.kitshn.AppActivity_portrait.png",
+      "source_author_bug": true
+    },
+    {
+      "aligned_global": false,
+      "aligned_localized": true,
+      "app": "de.jepfa.personaltasklogger",
+      "changed_fraction_max": 0.001317708,
+      "group": "mutated-layout-overlap",
+      "id": 229,
+      "max_global_rgb_mae": 0.228358,
+      "mismatched_global": true,
+      "mismatched_localized": true,
+      "reference_image_identical": [
+        true,
+        false
+      ],
+      "source_activity": "de.jepfa.personaltasklogger.MainActivity_portrait.png",
+      "source_author_bug": true
+    },
+    {
+      "aligned_global": false,
+      "aligned_localized": true,
+      "app": "com.fsck.k9",
+      "changed_fraction_max": 0.002164931,
+      "group": "mutated-layout-overlap",
+      "id": 37,
+      "max_global_rgb_mae": 0.371169,
+      "mismatched_global": true,
+      "mismatched_localized": true,
+      "reference_image_identical": [
+        true,
+        false
+      ],
+      "source_activity": "com.fsck.k9.ui.push.PushInfoActivity_portrait.png",
+      "source_author_bug": true
+    },
+    {
+      "aligned_global": false,
+      "aligned_localized": true,
+      "app": "com.philkes.notallyx",
+      "changed_fraction_max": 0.017965278,
+      "group": "mutated-layout-overlap",
+      "id": 223,
+      "max_global_rgb_mae": 1.353821,
+      "mismatched_global": true,
+      "mismatched_localized": true,
+      "reference_image_identical": [
+        true,
+        false
+      ],
+      "source_activity": "com.philkes.notallyx.presentation.activity.main.MainActivity_portrait.png",
+      "source_author_bug": true
+    },
+    {
+      "aligned_global": false,
+      "aligned_localized": true,
+      "app": "cz.vitskalicky.lepsirozvrh",
+      "changed_fraction_max": 0.000901042,
+      "group": "mutated-layout-overlap",
+      "id": 273,
+      "max_global_rgb_mae": 0.136145,
+      "mismatched_global": true,
+      "mismatched_localized": true,
+      "reference_image_identical": [
+        true,
+        false
+      ],
+      "source_activity": "cz.vitskalicky.lepsirozvrh.widget.WideWidgetConfigActivity_portrait.png",
+      "source_author_bug": true
+    },
+    {
+      "aligned_global": false,
+      "aligned_localized": true,
+      "app": "de.nulide.findmydevice",
+      "changed_fraction_max": 0.001876736,
+      "group": "mutated-layout-overlap",
+      "id": 35,
+      "max_global_rgb_mae": 0.284793,
+      "mismatched_global": true,
+      "mismatched_localized": true,
+      "reference_image_identical": [
+        false,
+        true
+      ],
+      "source_activity": "com.mikepenz.aboutlibraries.ui.LibsActivity_portrait.png",
+      "source_author_bug": true
+    },
+    {
+      "aligned_global": false,
+      "aligned_localized": true,
+      "app": "dev.octoshrimpy.quik",
+      "changed_fraction_max": 0.005722222,
+      "group": "mutated-layout-overlap",
+      "id": 97,
+      "max_global_rgb_mae": 0.736802,
+      "mismatched_global": true,
+      "mismatched_localized": true,
+      "reference_image_identical": [
+        false,
+        true
+      ],
+      "source_activity": "dev.octoshrimpy.quik.feature.scheduled.ScheduledActivity_portrait.png",
+      "source_author_bug": true
+    },
+    {
+      "aligned_global": true,
+      "aligned_localized": true,
+      "app": "com.illiouchine.jm",
+      "changed_fraction_max": 0.048577257,
+      "group": "mutated-layout-overlap",
+      "id": 195,
+      "max_global_rgb_mae": 7.651394,
+      "mismatched_global": true,
+      "mismatched_localized": true,
+      "reference_image_identical": [
+        true,
+        false
+      ],
+      "source_activity": "com.illiouchine.jm.MainActivity_portrait.png",
+      "source_author_bug": true
+    },
+    {
+      "aligned_global": false,
+      "aligned_localized": true,
+      "app": "com.osfans.trime",
+      "changed_fraction_max": 0.005949653,
+      "group": "mutated-layout-overlap",
+      "id": 259,
+      "max_global_rgb_mae": 0.399922,
+      "mismatched_global": true,
+      "mismatched_localized": true,
+      "reference_image_identical": [
+        true,
+        false
+      ],
+      "source_activity": "com.osfans.trime.ui.main.LogActivity_portrait.png",
+      "source_author_bug": true
+    },
+    {
+      "aligned_global": false,
+      "aligned_localized": true,
+      "app": "net.turtton.ytalarm",
+      "changed_fraction_max": 0.005709201,
+      "group": "mutated-layout-overlap",
+      "id": 69,
+      "max_global_rgb_mae": 1.030687,
+      "mismatched_global": true,
+      "mismatched_localized": true,
+      "reference_image_identical": [
+        false,
+        true
+      ],
+      "source_activity": "net.turtton.ytalarm.activity.MainActivity_portrait.png",
+      "source_author_bug": true
+    },
+    {
+      "aligned_global": false,
+      "aligned_localized": false,
+      "app": "com.github.dyhkwong.sagernet",
+      "changed_fraction_max": 0.0,
+      "group": "original-right",
+      "id": 282,
+      "max_global_rgb_mae": 0.0,
+      "mismatched_global": true,
+      "mismatched_localized": true,
+      "reference_image_identical": [
+        true,
+        true
+      ],
+      "source_activity": "io.nekohasekai.sagernet.ui.profile.ShadowsocksRSettingsActivity_portrait.png",
+      "source_author_bug": false
+    },
+    {
+      "aligned_global": false,
+      "aligned_localized": false,
+      "app": "com.swordfish.lemuroid",
+      "changed_fraction_max": 0.0,
+      "group": "original-right",
+      "id": 25,
+      "max_global_rgb_mae": 0.0,
+      "mismatched_global": true,
+      "mismatched_localized": true,
+      "reference_image_identical": [
+        true,
+        true
+      ],
+      "source_activity": "com.swordfish.lemuroid.app.tv.settings.TVSettingsActivity_portrait.png",
+      "source_author_bug": false
+    },
+    {
+      "aligned_global": false,
+      "aligned_localized": false,
+      "app": "org.strongswan.android",
+      "changed_fraction_max": 0.0,
+      "group": "original-right",
+      "id": 326,
+      "max_global_rgb_mae": 0.0,
+      "mismatched_global": true,
+      "mismatched_localized": true,
+      "reference_image_identical": [
+        true,
+        true
+      ],
+      "source_activity": "org.strongswan.android.ui.LogActivity_portrait.png",
+      "source_author_bug": false
+    },
+    {
+      "aligned_global": false,
+      "aligned_localized": false,
+      "app": "com.osfans.trime",
+      "changed_fraction_max": 0.0,
+      "group": "original-right",
+      "id": 163,
+      "max_global_rgb_mae": 0.0,
+      "mismatched_global": true,
+      "mismatched_localized": true,
+      "reference_image_identical": [
+        true,
+        true
+      ],
+      "source_activity": "com.osfans.trime.ui.main.LogActivity_portrait.png",
+      "source_author_bug": false
+    },
+    {
+      "aligned_global": false,
+      "aligned_localized": false,
+      "app": "de.nulide.findmydevice",
+      "changed_fraction_max": 0.0,
+      "group": "original-right",
+      "id": 56,
+      "max_global_rgb_mae": 0.0,
+      "mismatched_global": true,
+      "mismatched_localized": true,
+      "reference_image_identical": [
+        true,
+        true
+      ],
+      "source_activity": "de.nulide.findmydevice.ui.settings.FMDServerActivity_portrait.png",
+      "source_author_bug": false
+    },
+    {
+      "aligned_global": false,
+      "aligned_localized": false,
+      "app": "cz.vitskalicky.lepsirozvrh",
+      "changed_fraction_max": 0.0,
+      "group": "original-right",
+      "id": 217,
+      "max_global_rgb_mae": 0.0,
+      "mismatched_global": true,
+      "mismatched_localized": true,
+      "reference_image_identical": [
+        true,
+        true
+      ],
+      "source_activity": "cz.vitskalicky.lepsirozvrh.LicencesActivity_portrait.png",
+      "source_author_bug": false
+    },
+    {
+      "aligned_global": false,
+      "aligned_localized": false,
+      "app": "org.tasks",
+      "changed_fraction_max": 0.0,
+      "group": "original-right",
+      "id": 324,
+      "max_global_rgb_mae": 0.0,
+      "mismatched_global": true,
+      "mismatched_localized": true,
+      "reference_image_identical": [
+        true,
+        true
+      ],
+      "source_activity": "at.bitfire.cert4android.TrustCertificateActivity_portrait.png",
+      "source_author_bug": false
+    },
+    {
+      "aligned_global": false,
+      "aligned_localized": false,
+      "app": "chat.delta.lite",
+      "changed_fraction_max": 0.0,
+      "group": "original-right",
+      "id": 55,
+      "max_global_rgb_mae": 0.0,
+      "mismatched_global": true,
+      "mismatched_localized": true,
+      "reference_image_identical": [
+        true,
+        true
+      ],
+      "source_activity": "org.thoughtcrime.securesms.InstantOnboardingActivity_portrait.png",
+      "source_author_bug": false
+    },
+    {
+      "aligned_global": false,
+      "aligned_localized": false,
+      "app": "cz.vitskalicky.lepsirozvrh",
+      "changed_fraction_max": 0.0,
+      "group": "original-right",
+      "id": 293,
+      "max_global_rgb_mae": 0.0,
+      "mismatched_global": true,
+      "mismatched_localized": true,
+      "reference_image_identical": [
+        true,
+        true
+      ],
+      "source_activity": "cz.vitskalicky.lepsirozvrh.settings.ImportThemeActivity_portrait.png",
+      "source_author_bug": false
+    },
+    {
+      "aligned_global": false,
+      "aligned_localized": false,
+      "app": "io.pslab",
+      "changed_fraction_max": 0.0,
+      "group": "original-right",
+      "id": 71,
+      "max_global_rgb_mae": 0.0,
+      "mismatched_global": true,
+      "mismatched_localized": true,
+      "reference_image_identical": [
+        true,
+        true
+      ],
+      "source_activity": "io.pslab.activity.DataLoggerActivity_portrait.png",
+      "source_author_bug": false
+    },
+    {
+      "aligned_global": false,
+      "aligned_localized": false,
+      "app": "cz.vitskalicky.lepsirozvrh",
+      "changed_fraction_max": 0.0,
+      "group": "original-right",
+      "id": 136,
+      "max_global_rgb_mae": 0.0,
+      "mismatched_global": true,
+      "mismatched_localized": true,
+      "reference_image_identical": [
+        true,
+        true
+      ],
+      "source_activity": "cz.vitskalicky.lepsirozvrh.settings.ThemeSettingsActivity_portrait.png",
+      "source_author_bug": false
+    },
+    {
+      "aligned_global": false,
+      "aligned_localized": false,
+      "app": "com.encrypt.bwt",
+      "changed_fraction_max": 0.0,
+      "group": "original-right",
+      "id": 49,
+      "max_global_rgb_mae": 0.0,
+      "mismatched_global": true,
+      "mismatched_localized": true,
+      "reference_image_identical": [
+        true,
+        true
+      ],
+      "source_activity": "com.encrypt.bwt.DecryptProcessActivity_portrait.png",
+      "source_author_bug": false
+    },
+    {
+      "aligned_global": false,
+      "aligned_localized": false,
+      "app": "org.tasks",
+      "changed_fraction_max": 0.0,
+      "group": "original-right",
+      "id": 43,
+      "max_global_rgb_mae": 0.0,
+      "mismatched_global": true,
+      "mismatched_localized": true,
+      "reference_image_identical": [
+        true,
+        true
+      ],
+      "source_activity": "org.tasks.activities.FilterSettingsActivity_portrait.png",
+      "source_author_bug": false
+    },
+    {
+      "aligned_global": false,
+      "aligned_localized": false,
+      "app": "com.github.dyhkwong.sagernet",
+      "changed_fraction_max": 0.0,
+      "group": "original-right",
+      "id": 191,
+      "max_global_rgb_mae": 0.0,
+      "mismatched_global": true,
+      "mismatched_localized": true,
+      "reference_image_identical": [
+        true,
+        true
+      ],
+      "source_activity": "io.nekohasekai.sagernet.ui.profile.ChainSettingsActivity_portrait.png",
+      "source_author_bug": false
+    },
+    {
+      "aligned_global": false,
+      "aligned_localized": false,
+      "app": "github.rikodot.kardi_notes",
+      "changed_fraction_max": 0.0,
+      "group": "original-right",
+      "id": 102,
+      "max_global_rgb_mae": 0.0,
+      "mismatched_global": true,
+      "mismatched_localized": true,
+      "reference_image_identical": [
+        true,
+        true
+      ],
+      "source_activity": "github.rikodot.kardi_notes.MainActivity_portrait.png",
+      "source_author_bug": false
+    },
+    {
+      "aligned_global": false,
+      "aligned_localized": false,
+      "app": "de.nulide.findmydevice",
+      "changed_fraction_max": 0.0,
+      "group": "original-right",
+      "id": 246,
+      "max_global_rgb_mae": 0.0,
+      "mismatched_global": true,
+      "mismatched_localized": true,
+      "reference_image_identical": [
+        true,
+        true
+      ],
+      "source_activity": "de.nulide.findmydevice.ui.MainActivity_portrait.png",
+      "source_author_bug": false
+    },
+    {
+      "aligned_global": false,
+      "aligned_localized": false,
+      "app": "com.hegocre.nextcloudpasswords",
+      "changed_fraction_max": 0.0,
+      "group": "original-right",
+      "id": 167,
+      "max_global_rgb_mae": 0.0,
+      "mismatched_global": true,
+      "mismatched_localized": true,
+      "reference_image_identical": [
+        true,
+        true
+      ],
+      "source_activity": "com.hegocre.nextcloudpasswords.ui.activities.LoginActivity_portrait.png",
+      "source_author_bug": false
+    },
+    {
+      "aligned_global": false,
+      "aligned_localized": false,
+      "app": "org.eu.exodus_privacy.exodusprivacy",
+      "changed_fraction_max": 0.0,
+      "group": "original-right",
+      "id": 54,
+      "max_global_rgb_mae": 0.0,
+      "mismatched_global": true,
+      "mismatched_localized": true,
+      "reference_image_identical": [
+        true,
+        true
+      ],
+      "source_activity": "org.eu.exodus_privacy.exodusprivacy.MainActivity_portrait.png",
+      "source_author_bug": false
+    },
+    {
+      "aligned_global": false,
+      "aligned_localized": false,
+      "app": "de.nulide.findmydevice",
+      "changed_fraction_max": 0.0,
+      "group": "original-right",
+      "id": 268,
+      "max_global_rgb_mae": 0.0,
+      "mismatched_global": true,
+      "mismatched_localized": true,
+      "reference_image_identical": [
+        true,
+        true
+      ],
+      "source_activity": "de.nulide.findmydevice.ui.settings.AddAccountActivity_portrait.png",
+      "source_author_bug": false
+    },
+    {
+      "aligned_global": false,
+      "aligned_localized": false,
+      "app": "com.github.dyhkwong.sagernet",
+      "changed_fraction_max": 0.0,
+      "group": "original-right",
+      "id": 65,
+      "max_global_rgb_mae": 0.0,
+      "mismatched_global": true,
+      "mismatched_localized": true,
+      "reference_image_identical": [
+        true,
+        true
+      ],
+      "source_activity": "com.jakewharton.processphoenix.PhoenixActivity_portrait.png",
+      "source_author_bug": false
+    },
+    {
+      "aligned_global": false,
+      "aligned_localized": false,
+      "app": "com.kaajjo.libresudoku",
+      "changed_fraction_max": 0.0,
+      "group": "original-right",
+      "id": 143,
+      "max_global_rgb_mae": 0.0,
+      "mismatched_global": true,
+      "mismatched_localized": true,
+      "reference_image_identical": [
+        true,
+        true
+      ],
+      "source_activity": "com.kaajjo.libresudoku.ui.app_crash.CrashActivity_portrait.png",
+      "source_author_bug": false
+    },
+    {
+      "aligned_global": false,
+      "aligned_localized": false,
+      "app": "org.stypox.dicio",
+      "changed_fraction_max": 0.0,
+      "group": "original-right",
+      "id": 250,
+      "max_global_rgb_mae": 0.0,
+      "mismatched_global": true,
+      "mismatched_localized": true,
+      "reference_image_identical": [
+        true,
+        true
+      ],
+      "source_activity": "org.stypox.dicio.error.ErrorActivity_portrait.png",
+      "source_author_bug": false
+    },
+    {
+      "aligned_global": false,
+      "aligned_localized": false,
+      "app": "org.tasks",
+      "changed_fraction_max": 0.0,
+      "group": "original-right",
+      "id": 232,
+      "max_global_rgb_mae": 0.0,
+      "mismatched_global": true,
+      "mismatched_localized": true,
+      "reference_image_identical": [
+        true,
+        true
+      ],
+      "source_activity": "org.tasks.activities.TagSettingsActivity_portrait.png",
+      "source_author_bug": false
+    },
+    {
+      "aligned_global": false,
+      "aligned_localized": false,
+      "app": "org.stypox.tridenta",
+      "changed_fraction_max": 0.0,
+      "group": "original-right",
+      "id": 104,
+      "max_global_rgb_mae": 0.0,
+      "mismatched_global": true,
+      "mismatched_localized": true,
+      "reference_image_identical": [
+        true,
+        true
+      ],
+      "source_activity": "org.stypox.tridenta.ui.MainActivity_portrait.png",
+      "source_author_bug": false
+    },
+    {
+      "aligned_global": false,
+      "aligned_localized": false,
+      "app": "com.github.dyhkwong.sagernet",
+      "changed_fraction_max": 0.0,
+      "group": "original-right",
+      "id": 294,
+      "max_global_rgb_mae": 0.0,
+      "mismatched_global": true,
+      "mismatched_localized": true,
+      "reference_image_identical": [
+        true,
+        true
+      ],
+      "source_activity": "io.nekohasekai.sagernet.ui.profile.HttpSettingsActivity_portrait.png",
+      "source_author_bug": false
+    },
+    {
+      "aligned_global": false,
+      "aligned_localized": false,
+      "app": "org.onionshare.android.fdroid",
+      "changed_fraction_max": 0.0,
+      "group": "original-right",
+      "id": 84,
+      "max_global_rgb_mae": 0.0,
+      "mismatched_global": true,
+      "mismatched_localized": true,
+      "reference_image_identical": [
+        true,
+        true
+      ],
+      "source_activity": "org.onionshare.android.ui.MainActivity_portrait.png",
+      "source_author_bug": false
+    },
+    {
+      "aligned_global": false,
+      "aligned_localized": false,
+      "app": "com.github.dyhkwong.sagernet",
+      "changed_fraction_max": 0.0,
+      "group": "original-right",
+      "id": 183,
+      "max_global_rgb_mae": 0.0,
+      "mismatched_global": true,
+      "mismatched_localized": true,
+      "reference_image_identical": [
+        true,
+        true
+      ],
+      "source_activity": "io.nekohasekai.sagernet.ui.profile.HysteriaSettingsActivity_portrait.png",
+      "source_author_bug": false
+    },
+    {
+      "aligned_global": false,
+      "aligned_localized": false,
+      "app": "cz.vitskalicky.lepsirozvrh",
+      "changed_fraction_max": 0.0,
+      "group": "original-right",
+      "id": 18,
+      "max_global_rgb_mae": 0.0,
+      "mismatched_global": true,
+      "mismatched_localized": true,
+      "reference_image_identical": [
+        true,
+        true
+      ],
+      "source_activity": "cz.vitskalicky.lepsirozvrh.settings.ExportThemeActivity_portrait.png",
+      "source_author_bug": false
+    },
+    {
+      "aligned_global": false,
+      "aligned_localized": false,
+      "app": "cz.vitskalicky.lepsirozvrh",
+      "changed_fraction_max": 0.0,
+      "group": "original-right",
+      "id": 60,
+      "max_global_rgb_mae": 0.0,
+      "mismatched_global": true,
+      "mismatched_localized": true,
+      "reference_image_identical": [
+        true,
+        true
+      ],
+      "source_activity": "cz.vitskalicky.lepsirozvrh.widget.WideWidgetConfigActivity_portrait.png",
+      "source_author_bug": false
+    },
+    {
+      "aligned_global": false,
+      "aligned_localized": false,
+      "app": "org.tasks",
+      "changed_fraction_max": 0.0,
+      "group": "original-right",
+      "id": 75,
+      "max_global_rgb_mae": 0.0,
+      "mismatched_global": true,
+      "mismatched_localized": true,
+      "reference_image_identical": [
+        true,
+        true
+      ],
+      "source_activity": "org.tasks.locale.ui.activity.TaskerCreateTaskActivity_portrait.png",
+      "source_author_bug": false
+    },
+    {
+      "aligned_global": false,
+      "aligned_localized": false,
+      "app": "com.mubarak.mbcompass",
+      "changed_fraction_max": 0.0,
+      "group": "original-right",
+      "id": 126,
+      "max_global_rgb_mae": 0.0,
+      "mismatched_global": true,
+      "mismatched_localized": true,
+      "reference_image_identical": [
+        true,
+        true
+      ],
+      "source_activity": "com.mubarak.mbcompass.MainActivity_portrait.png",
+      "source_author_bug": false
+    },
+    {
+      "aligned_global": false,
+      "aligned_localized": false,
+      "app": "com.feko.generictabletoprpg",
+      "changed_fraction_max": 0.0,
+      "group": "original-right",
+      "id": 160,
+      "max_global_rgb_mae": 0.0,
+      "mismatched_global": true,
+      "mismatched_localized": true,
+      "reference_image_identical": [
+        true,
+        true
+      ],
+      "source_activity": "com.feko.generictabletoprpg.MainActivity_portrait.png",
+      "source_author_bug": false
+    },
+    {
+      "aligned_global": false,
+      "aligned_localized": false,
+      "app": "org.xcsoar",
+      "changed_fraction_max": 0.0,
+      "group": "original-right",
+      "id": 40,
+      "max_global_rgb_mae": 0.0,
+      "mismatched_global": true,
+      "mismatched_localized": true,
+      "reference_image_identical": [
+        true,
+        true
+      ],
+      "source_activity": "org.xcsoar.XCSoar_portrait.png",
+      "source_author_bug": false
+    },
+    {
+      "aligned_global": false,
+      "aligned_localized": false,
+      "app": "org.petero.droidfish",
+      "changed_fraction_max": 0.0,
+      "group": "original-right",
+      "id": 289,
+      "max_global_rgb_mae": 0.0,
+      "mismatched_global": true,
+      "mismatched_localized": true,
+      "reference_image_identical": [
+        true,
+        true
+      ],
+      "source_activity": "org.petero.droidfish.activities.Preferences_portrait.png",
+      "source_author_bug": false
+    },
+    {
+      "aligned_global": false,
+      "aligned_localized": false,
+      "app": "com.github.dyhkwong.sagernet",
+      "changed_fraction_max": 0.0,
+      "group": "original-right",
+      "id": 251,
+      "max_global_rgb_mae": 0.0,
+      "mismatched_global": true,
+      "mismatched_localized": true,
+      "reference_image_identical": [
+        true,
+        true
+      ],
+      "source_activity": "io.nekohasekai.sagernet.tasker.TaskerActivity_portrait.png",
+      "source_author_bug": false
+    },
+    {
+      "aligned_global": false,
+      "aligned_localized": false,
+      "app": "org.tasks",
+      "changed_fraction_max": 0.0,
+      "group": "original-right",
+      "id": 298,
+      "max_global_rgb_mae": 0.0,
+      "mismatched_global": true,
+      "mismatched_localized": true,
+      "reference_image_identical": [
+        true,
+        true
+      ],
+      "source_activity": "org.tasks.etebase.EtebaseAccountSettingsActivity_portrait.png",
+      "source_author_bug": false
+    },
+    {
+      "aligned_global": false,
+      "aligned_localized": false,
+      "app": "com.philkes.notallyx",
+      "changed_fraction_max": 0.0,
+      "group": "original-right",
+      "id": 209,
+      "max_global_rgb_mae": 0.0,
+      "mismatched_global": true,
+      "mismatched_localized": true,
+      "reference_image_identical": [
+        true,
+        true
+      ],
+      "source_activity": "com.philkes.notallyx.utils.ErrorActivity_portrait.png",
+      "source_author_bug": false
+    },
+    {
+      "aligned_global": false,
+      "aligned_localized": false,
+      "app": "com.logseq.app",
+      "changed_fraction_max": 0.0,
+      "group": "original-right",
+      "id": 137,
+      "max_global_rgb_mae": 0.0,
+      "mismatched_global": true,
+      "mismatched_localized": true,
+      "reference_image_identical": [
+        true,
+        true
+      ],
+      "source_activity": "com.logseq.app.MainActivity_portrait.png",
+      "source_author_bug": false
+    },
+    {
+      "aligned_global": false,
+      "aligned_localized": false,
+      "app": "org.tasks",
+      "changed_fraction_max": 0.0,
+      "group": "original-right",
+      "id": 79,
+      "max_global_rgb_mae": 0.0,
+      "mismatched_global": true,
+      "mismatched_localized": true,
+      "reference_image_identical": [
+        true,
+        true
+      ],
+      "source_activity": "org.tasks.reminders.NotificationActivity_portrait.png",
+      "source_author_bug": false
+    },
+    {
+      "aligned_global": false,
+      "aligned_localized": false,
+      "app": "de.nulide.findmydevice",
+      "changed_fraction_max": 0.0,
+      "group": "original-right",
+      "id": 169,
+      "max_global_rgb_mae": 0.0,
+      "mismatched_global": true,
+      "mismatched_localized": true,
+      "reference_image_identical": [
+        true,
+        true
+      ],
+      "source_activity": "de.nulide.findmydevice.ui.settings.LogViewActivity_portrait.png",
+      "source_author_bug": false
+    },
+    {
+      "aligned_global": false,
+      "aligned_localized": false,
+      "app": "com.hegocre.nextcloudpasswords",
+      "changed_fraction_max": 0.0,
+      "group": "original-right",
+      "id": 66,
+      "max_global_rgb_mae": 0.0,
+      "mismatched_global": true,
+      "mismatched_localized": true,
+      "reference_image_identical": [
+        true,
+        true
+      ],
+      "source_activity": "com.hegocre.nextcloudpasswords.ui.activities.AboutActivity_portrait.png",
+      "source_author_bug": false
+    },
+    {
+      "aligned_global": false,
+      "aligned_localized": false,
+      "app": "com.android.geto",
+      "changed_fraction_max": 0.0,
+      "group": "original-right",
+      "id": 211,
+      "max_global_rgb_mae": 0.0,
+      "mismatched_global": true,
+      "mismatched_localized": true,
+      "reference_image_identical": [
+        true,
+        true
+      ],
+      "source_activity": "com.android.geto.MainActivity_portrait.png",
+      "source_author_bug": false
+    },
+    {
+      "aligned_global": false,
+      "aligned_localized": false,
+      "app": "com.byagowi.persiancalendar",
+      "changed_fraction_max": 0.0,
+      "group": "original-right",
+      "id": 78,
+      "max_global_rgb_mae": 0.0,
+      "mismatched_global": true,
+      "mismatched_localized": true,
+      "reference_image_identical": [
+        true,
+        true
+      ],
+      "source_activity": "com.byagowi.persiancalendar.ui.settings.wallpaper.WallpaperSettingsActivity_portrait.png",
+      "source_author_bug": false
+    },
+    {
+      "aligned_global": false,
+      "aligned_localized": false,
+      "app": "chat.delta.lite",
+      "changed_fraction_max": 0.0,
+      "group": "original-right",
+      "id": 140,
+      "max_global_rgb_mae": 0.0,
+      "mismatched_global": true,
+      "mismatched_localized": true,
+      "reference_image_identical": [
+        true,
+        true
+      ],
+      "source_activity": "org.thoughtcrime.securesms.RegistrationActivity_portrait.png",
+      "source_author_bug": false
+    },
+    {
+      "aligned_global": false,
+      "aligned_localized": false,
+      "app": "dev.theolm.wwc",
+      "changed_fraction_max": 0.0,
+      "group": "original-right",
+      "id": 57,
+      "max_global_rgb_mae": 0.0,
+      "mismatched_global": true,
+      "mismatched_localized": true,
+      "reference_image_identical": [
+        true,
+        true
+      ],
+      "source_activity": "dev.theolm.wwc.ui.settings.SettingsActivity_portrait.png",
+      "source_author_bug": false
+    },
+    {
+      "aligned_global": false,
+      "aligned_localized": false,
+      "app": "net.turtton.ytalarm",
+      "changed_fraction_max": 0.0,
+      "group": "original-right",
+      "id": 8,
+      "max_global_rgb_mae": 0.0,
+      "mismatched_global": true,
+      "mismatched_localized": true,
+      "reference_image_identical": [
+        true,
+        true
+      ],
+      "source_activity": "net.turtton.ytalarm.activity.MainActivity_portrait.png",
+      "source_author_bug": false
+    },
+    {
+      "aligned_global": false,
+      "aligned_localized": false,
+      "app": "com.github.dyhkwong.sagernet",
+      "changed_fraction_max": 0.0,
+      "group": "original-right",
+      "id": 172,
+      "max_global_rgb_mae": 0.0,
+      "mismatched_global": true,
+      "mismatched_localized": true,
+      "reference_image_identical": [
+        true,
+        true
+      ],
+      "source_activity": "io.nekohasekai.sagernet.ui.profile.AnyTLSSettingsActivity_portrait.png",
+      "source_author_bug": false
+    },
+    {
+      "aligned_global": false,
+      "aligned_localized": false,
+      "app": "com.swordfish.lemuroid",
+      "changed_fraction_max": 0.0,
+      "group": "original-right",
+      "id": 120,
+      "max_global_rgb_mae": 0.0,
+      "mismatched_global": true,
+      "mismatched_localized": true,
+      "reference_image_identical": [
+        true,
+        true
+      ],
+      "source_activity": "com.swordfish.lemuroid.app.tv.folderpicker.TVFolderPickerActivity_portrait.png",
+      "source_author_bug": false
+    },
+    {
+      "aligned_global": false,
+      "aligned_localized": false,
+      "app": "org.strongswan.android",
+      "changed_fraction_max": 0.0,
+      "group": "original-right",
+      "id": 220,
+      "max_global_rgb_mae": 0.0,
+      "mismatched_global": true,
+      "mismatched_localized": true,
+      "reference_image_identical": [
+        true,
+        true
+      ],
+      "source_activity": "org.strongswan.android.ui.SettingsActivity_portrait.png",
+      "source_author_bug": false
+    },
+    {
+      "aligned_global": false,
+      "aligned_localized": false,
+      "app": "org.tasks",
+      "changed_fraction_max": 0.0,
+      "group": "original-right",
+      "id": 269,
+      "max_global_rgb_mae": 0.0,
+      "mismatched_global": true,
+      "mismatched_localized": true,
+      "reference_image_identical": [
+        true,
+        true
+      ],
+      "source_activity": "org.tasks.repeats.CustomRecurrenceActivity_portrait.png",
+      "source_author_bug": false
+    }
+  ],
+  "sample": {
+    "downloaded_distinct_original_PNGs": 262,
+    "image_pairs": 100,
+    "right_controls": 50,
+    "synthetic_clip": 25,
+    "synthetic_overlap": 25,
+    "unique_activities": 81,
+    "unique_android_apps": 39
+  },
+  "scientific_limits": [
+    "Controls are EXACT clean reference bytes, so zero false positives is a construction shortcut and not robust to legitimate changing native application content",
+    "Sources include 39 Android apps for 100 cases; samples are correlated, so independent-binomial confidence is illustrative only",
+    "Authors synthetic mutation label is not independent human judgment of actual visually objectionable clipping/overlap",
+    "An exact approved screenshot mismatch is a narrow source-defined property only, not sufficient to auto-reject semantic rendering flaws in dynamic screens",
+    "The source alignment method has extra clean reference input; sham controls isolate reference identity but cannot substitute for a same-input generic image-only model",
+    "No actual new owner render/audio/video, no natural frame-level fault timing gold, no certified engineering machine reference, no live SWAAG hook or production GPU inference evaluated"
+  ],
+  "selection": "Externally released test split only, hash ranked 25 clip +25 overlap +50 right; image extraction before author-label join; names encode classes but prediction functions never inspect class names.",
+  "source": "https://huggingface.co/datasets/ImDim/RotBench",
+  "source_and_predictions_SHA256": {
+    "design.json": "8e8ed89246bf167aa1b2e182139c155b78db42e579f3be655875957689fa6f2a",
+    "predictions.json": "8bc7860b4e5861d1d00330ac87ebacfabbd44ad886ec9aa52a9b179f8b27ebeb",
+    "scored.json": "11eb3e7fb00eccca5faa2941afa6d9db6a7934925b4fdb5df916ddd8cfa3c888",
+    "selection.json": "2dee311bfaa8a4161178f37eb93ad5af8bcd55695ec9ab0fab5401caf7f93a86",
+    "sham_reference_predictions.json": "4a9c264b65e2f84d12051b28013c54fa0fcc0b88fafb4b5765cefb6572afff9c",
+    "source_test.json": "0586b29f82590636806e7dd05a45e6933d46286318a52e444cee4241fb785ca7"
+  },
+  "source_gold_scope": "Author manually curated original right Android screens then independently injected synthetic clipping and overlap mutations. These are not new human-adjudicated screenshots or production user-visible severity labels.",
+  "source_pinned_revision": "25b6e8214c5be600f54dc0834eaf4597fa9192e6",
+  "status": "PARTIAL",
+  "subsets": {
+    "all": {
+      "always_no_defect": {
+        "FN": 50,
+        "FP": 0,
+        "TN": 50,
+        "TP": 0,
+        "abstained": 0
+      },
+      "changed_area_0p05pct": {
+        "FN": 11,
+        "FP": 0,
+        "TN": 50,
+        "TP": 39,
+        "abstained": 0
+      },
+      "global_meanabs_gt1p5": {
+        "FN": 47,
+        "FP": 0,
+        "TN": 50,
+        "TP": 3,
+        "abstained": 0
+      }
+    },
+    "mutated-layout-clip": {
+      "always_no_defect": {
+        "FN": 25,
+        "FP": 0,
+        "TN": 0,
+        "TP": 0,
+        "abstained": 0
+      },
+      "changed_area_0p05pct": {
+        "FN": 11,
+        "FP": 0,
+        "TN": 0,
+        "TP": 14,
+        "abstained": 0
+      },
+      "global_meanabs_gt1p5": {
+        "FN": 23,
+        "FP": 0,
+        "TN": 0,
+        "TP": 2,
+        "abstained": 0
+      }
+    },
+    "mutated-layout-overlap": {
+      "always_no_defect": {
+        "FN": 25,
+        "FP": 0,
+        "TN": 0,
+        "TP": 0,
+        "abstained": 0
+      },
+      "changed_area_0p05pct": {
+        "FN": 0,
+        "FP": 0,
+        "TN": 0,
+        "TP": 25,
+        "abstained": 0
+      },
+      "global_meanabs_gt1p5": {
+        "FN": 24,
+        "FP": 0,
+        "TN": 0,
+        "TP": 1,
+        "abstained": 0
+      }
+    },
+    "original-right": {
+      "always_no_defect": {
+        "FN": 0,
+        "FP": 0,
+        "TN": 50,
+        "TP": 0,
+        "abstained": 0
+      },
+      "changed_area_0p05pct": {
+        "FN": 0,
+        "FP": 0,
+        "TN": 50,
+        "TP": 0,
+        "abstained": 0
+      },
+      "global_meanabs_gt1p5": {
+        "FN": 0,
+        "FP": 0,
+        "TN": 50,
+        "TP": 0,
+        "abstained": 0
+      }
+    }
+  }
+}
