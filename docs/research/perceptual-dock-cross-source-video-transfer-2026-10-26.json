@@ -1,0 +1,315 @@
+{
+  "FFmpeg_freezedetect_negative_control": {
+    "clean_dock_2_reencodes_events": 0,
+    "different_from_warehouse_camera_hold": "New dock source uses continuous camera and no authorized final three-second static hold",
+    "faulted_dock_holds_events": 3,
+    "faulted_dock_reversal_events": 0
+  },
+  "GPU_used": false,
+  "browser_decoded_user_facing": {
+    "clean_crf23": {
+      "actual_end_playback_seconds": 14,
+      "source_frame_fault_candidates": 0,
+      "success": true,
+      "video_SHA256": "64f52ffb48c24a0c894c1168751167bbaa49937d8aa71a0255c522195ecc85d5",
+      "wall_s": 16.112
+    },
+    "reversals_crf17": {
+      "actual_end_playback_seconds": 14,
+      "source_frame_fault_candidates": 6,
+      "success": true,
+      "video_SHA256": "7c48192f6672ffbac29419c872f520b68ac613244f25b71414239236ff0f1a0c",
+      "wall_s": 15.468
+    }
+  },
+  "conditional_descriptive_95pct_exact_binomial_intervals": {
+    "false_positive_rate_no_ref": [
+      0.0,
+      0.00443
+    ],
+    "false_positive_rate_source": [
+      0.0,
+      0.00443
+    ],
+    "sensitivity_no_ref": [
+      0.07485,
+      0.7007
+    ],
+    "sensitivity_source": [
+      0.66373,
+      1.0
+    ]
+  },
+  "current_source_dock_original_against_Cycles_min_PSNR_dB": 35.7432,
+  "date": "2026-10-26",
+  "frame_confusion": {
+    "no_reference": {
+      "FN": 6,
+      "FP": 0,
+      "TN": 831,
+      "TP": 3
+    },
+    "source_verified": {
+      "FN": 0,
+      "FP": 0,
+      "TN": 831,
+      "TP": 9
+    }
+  },
+  "frozen_reference_warehouse_transfer_code_SHA256": "935196c06091265d70dffb95ed244c3e197df75467eb591a877592abd2f7bfff",
+  "frozen_source_protocol_rule": {
+    "all_video_PTS": "210 frames, 15fps, monotonic; this is necessary but not sufficient",
+    "clean_crf17": "no source sequence candidate; clean correctly version-bound native H264 transfer",
+    "clean_crf23": "no source sequence candidate; transcode-only negative control different allowed compression level, note not production-approved codec contract",
+    "do_not_retune_thresholds": true,
+    "fault_recall_at_least": 8,
+    "scripted_fault_frames": 9,
+    "source_sequence_false_alarms_max_on_all_unedited_positions": 6
+  },
+  "latency": {
+    "GPU_used": false,
+    "original_extract_s": 33.267,
+    "source_verify_and_decode_png_seconds": 31.424,
+    "variant_CPU_decode_s": {
+      "clean_crf17": 11.103,
+      "clean_crf23": 3.383,
+      "holds_crf17": 4.115,
+      "reversals_crf17": 2.726
+    },
+    "variant_both_rules_feature_CPU_s": {
+      "clean_crf17": 2.015,
+      "clean_crf23": 1.177,
+      "holds_crf17": 1.189,
+      "reversals_crf17": 0.856
+    },
+    "variant_ffmpeg_freezedetect_wall_s": {
+      "clean_crf17": 4.79,
+      "clean_crf23": 2.256,
+      "holds_crf17": 3.481,
+      "reversals_crf17": 3.513
+    },
+    "variant_ffprobe_CPU_wall_s": {
+      "clean_crf17": 5.469,
+      "clean_crf23": 2.66,
+      "holds_crf17": 3.13,
+      "reversals_crf17": 3.974
+    },
+    "variants_encode_s": {
+      "clean_crf17": 58.321,
+      "clean_crf23": 44.057,
+      "holds_crf17": 55.525,
+      "reversals_crf17": 52.133
+    }
+  },
+  "limits": [
+    "9 frame edits represent six controlled event groups in only ONE previously unseen dock video; frame-level beta intervals assume independence and are descriptive, NOT general deployment CIs",
+    "Both positives and negatives are generated or author approved (not independently human-adjudicated natural video faults); frame edits fixed before video processing",
+    "The current scene and original movie may have imperfections independently unrelated to frame ordering; source contract alone cannot judge photorealism, engineering or aesthetics",
+    "The CRF23 clean transcode is an independent benign compression change, not a previously buyer-approved exact encoding contract",
+    "Wrong warehouse source comparison tests reference identity and must abstain regardless of numeric score",
+    "No audio track, so audio/event sync cannot be tested",
+    "Live SWAAG tool registration, end-user approval and shared GPU resource contention not tested",
+    "A different owner Blender scene and a different product is genuinely different source; the 9 faults were scripted on authentic output and NOT independently adjudicated natural failures",
+    "This validates detection under a predeclared ordered-frame integrity contract, NOT mechanical physics, photorealism, visual intention, game animation or AV sync",
+    "CLI policy replay is OFFLINE, SWAAG registered/user-facing live tool and GPU contention unproved",
+    "Source-content comparison can verify only an approved frame contract; clips legitimately edited without reference updates must REVIEW rather than auto-fail"
+  ],
+  "method_by_case": {
+    "clean_crf17": {
+      "CPU_both_feature_rules_wall_s": 2.015,
+      "CPU_decode_wall_s": 11.103,
+      "FFmpeg_freezedetect_events_total": 0,
+      "FFmpeg_freezedetect_start_seconds": [],
+      "FFmpeg_freezedetect_wall_s": 4.79,
+      "PSNR_source_exact_frame_median_dB": 41.3114,
+      "PSNR_source_exact_frame_min_dB": 38.9608,
+      "PTS_max_error_s": 3.333333342681044e-07,
+      "PTS_monotonic": true,
+      "encoded_MP4_SHA256": "b659a8f39fcdfa1dd3f6fdb72a11bcdb469153f47431b1850f9779175b8a5b39",
+      "encoder_CRf": 17,
+      "ffprobe_wall_s": 5.469,
+      "frozen_edit_positions": [],
+      "no_reference_method": {
+        "FN": 0,
+        "FP": 0,
+        "TN": 210,
+        "TP": 0
+      },
+      "no_reference_predicted_frame_indices": [],
+      "source_bound_predicted_frame_indices": [],
+      "source_method": {
+        "FN": 0,
+        "FP": 0,
+        "TN": 210,
+        "TP": 0
+      }
+    },
+    "clean_crf23": {
+      "CPU_both_feature_rules_wall_s": 1.177,
+      "CPU_decode_wall_s": 3.383,
+      "FFmpeg_freezedetect_events_total": 0,
+      "FFmpeg_freezedetect_start_seconds": [],
+      "FFmpeg_freezedetect_wall_s": 2.256,
+      "PSNR_source_exact_frame_median_dB": 37.9185,
+      "PSNR_source_exact_frame_min_dB": 36.1174,
+      "PTS_max_error_s": 3.333333342681044e-07,
+      "PTS_monotonic": true,
+      "encoded_MP4_SHA256": "64f52ffb48c24a0c894c1168751167bbaa49937d8aa71a0255c522195ecc85d5",
+      "encoder_CRf": 23,
+      "ffprobe_wall_s": 2.66,
+      "frozen_edit_positions": [],
+      "no_reference_method": {
+        "FN": 0,
+        "FP": 0,
+        "TN": 210,
+        "TP": 0
+      },
+      "no_reference_predicted_frame_indices": [],
+      "source_bound_predicted_frame_indices": [],
+      "source_method": {
+        "FN": 0,
+        "FP": 0,
+        "TN": 210,
+        "TP": 0
+      }
+    },
+    "holds_crf17": {
+      "CPU_both_feature_rules_wall_s": 1.189,
+      "CPU_decode_wall_s": 4.115,
+      "FFmpeg_freezedetect_events_total": 3,
+      "FFmpeg_freezedetect_start_seconds": [
+        2.6,
+        5.73333,
+        9.13333
+      ],
+      "FFmpeg_freezedetect_wall_s": 3.481,
+      "PSNR_source_exact_frame_median_dB": 41.0871,
+      "PSNR_source_exact_frame_min_dB": 20.2405,
+      "PTS_max_error_s": 3.333333342681044e-07,
+      "PTS_monotonic": true,
+      "encoded_MP4_SHA256": "14732b576bf9f65a564bbe53d5fac4aaf3f663e88eda1ecd686228f5fff72eef",
+      "encoder_CRf": 17,
+      "ffprobe_wall_s": 3.13,
+      "frozen_edit_positions": [
+        41,
+        88,
+        139
+      ],
+      "no_reference_method": {
+        "FN": 0,
+        "FP": 0,
+        "TN": 207,
+        "TP": 3
+      },
+      "no_reference_predicted_frame_indices": [
+        41,
+        88,
+        139
+      ],
+      "source_bound_predicted_frame_indices": [
+        41,
+        88,
+        139
+      ],
+      "source_method": {
+        "FN": 0,
+        "FP": 0,
+        "TN": 207,
+        "TP": 3
+      }
+    },
+    "reversals_crf17": {
+      "CPU_both_feature_rules_wall_s": 0.856,
+      "CPU_decode_wall_s": 2.726,
+      "FFmpeg_freezedetect_events_total": 0,
+      "FFmpeg_freezedetect_start_seconds": [],
+      "FFmpeg_freezedetect_wall_s": 3.513,
+      "PSNR_source_exact_frame_median_dB": 41.2912,
+      "PSNR_source_exact_frame_min_dB": 18.2385,
+      "PTS_max_error_s": 3.333333342681044e-07,
+      "PTS_monotonic": true,
+      "encoded_MP4_SHA256": "7c48192f6672ffbac29419c872f520b68ac613244f25b71414239236ff0f1a0c",
+      "encoder_CRf": 17,
+      "ffprobe_wall_s": 3.974,
+      "frozen_edit_positions": [
+        63,
+        64,
+        121,
+        122,
+        161,
+        162
+      ],
+      "no_reference_method": {
+        "FN": 6,
+        "FP": 0,
+        "TN": 204,
+        "TP": 0
+      },
+      "no_reference_predicted_frame_indices": [],
+      "source_bound_predicted_frame_indices": [
+        63,
+        64,
+        121,
+        122,
+        161,
+        162
+      ],
+      "source_method": {
+        "FN": 0,
+        "FP": 0,
+        "TN": 204,
+        "TP": 6
+      }
+    }
+  },
+  "new_dock_source_blend_SHA256": "7c1bda0b4c78df455b609c1022b79e17c4e3bce48dbd6675c8d014425f97dbc4",
+  "new_dock_source_final_mp4_SHA256": "75ef01e7316d099759f4e1dccec304f4c3ea8a995949deebe7f6b41962c6ef93",
+  "overall": "PARTIAL",
+  "preregistered_checks": {
+    "PTS_all_outputs_210_monotonic_correct": true,
+    "clean_original_source_min_PSN_28dB": true,
+    "detect_at_least_8_of_9_scripted_change_positions": true,
+    "not_more_than_6_FP_all_other_positions": true,
+    "two_reencodes_zero_source_false_flags": true
+  },
+  "preregistered_result": "PASS",
+  "source_attested_actual_SWAAG_policy_replay": {
+    "clean_crf17": {
+      "unverified_CV_proposal": "review",
+      "verified_source_property": "pass",
+      "wrong_product_reference": "review"
+    },
+    "clean_crf23": {
+      "unverified_CV_proposal": "review",
+      "verified_source_property": "pass",
+      "wrong_product_reference": "review"
+    },
+    "holds_crf17": {
+      "unverified_CV_proposal": "review",
+      "verified_source_property": "fail",
+      "wrong_product_reference": "review"
+    },
+    "reversals_crf17": {
+      "unverified_CV_proposal": "review",
+      "verified_source_property": "fail",
+      "wrong_product_reference": "review"
+    }
+  },
+  "source_data_receipts_SHA256": {
+    "actual_policy_replay.json": "5fcb2fa9073595871ed1acb099ea37c00d6ca6a6f69d5ebd2003bf1171dd713c",
+    "canonical_source_decoded.json": "2e3b0a6e7370f4e30ef9bbda2f92b8959857b0e204244f15357fceb37ddf711e",
+    "encodes.json": "e73d76bedbab8989a46e9c8d4de1f25d0b2b434db5efc5505c4db621ece80958",
+    "firefox_transferred_output.json": "1b9d29fa7fcb7c1430be2be12be4e25b4435720728b46079d3cd084b1b673461",
+    "frozen_protocol.json": "b6e5cbd157a624e30d77b1cc4223b8b54785df21bbbfa20f36b048cb61444374",
+    "source_manifest.json": "1b167bbf680898163cda6ca1e2350e2b9fc4dd6d940a9876b7e944ad70a11b33",
+    "transfer_scored.json": "bc780a80aa036d8099a52346dee41a84bfa7f044edb487a1634541621fe74741"
+  },
+  "source_prior_warehouse_report_sha256": "7e42a74d7faf174318b05a14249c5d759a8573165f6faf400fc67ff2813d0fed",
+  "source_version_and_original_png_sha_verification": "210 original dock Cycles PNGs independently match their original SHA manifest; dock final H264 source-to-Cycles min PSNR>35dB; no source missing",
+  "test": "Warehouse v47 to independent dock v46 scene and finished MP4, frozen threshold/source-protocol cross-product transfer",
+  "transferred_no_ref_gray_motion_threshold": 1.0,
+  "transferred_source_psnr_threshold_dB": 28.0,
+  "video_binary_bytes_embedded_in_git": false,
+  "wrong_source_original_warehouse_reference_median_PSNR_dB": 9.0525,
+  "wrong_source_ref_verdict": "REVIEW for all; unrelated product source hash disqualifies it regardless of image difference"
+}
