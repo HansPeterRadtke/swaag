@@ -24,6 +24,19 @@ def session_control_lock(history, session_id):
 
 
 @contextmanager
+def session_journal_lock(history, session_id):
+    """Serialize that session's canonical JSONL validation with appends.
+
+    The lock is cross-process and per-session: rescan of a large journal must
+    not monopolize the shared SQLite database's global writer transaction.
+    Cooperating writers take it before SQLite BEGIN IMMEDIATE; readers take it
+    before opening the JSONL source, and release it after validating/indexing.
+    """
+    with _session_lock(history, session_id, 'history_journal.lock') as acquired:
+        yield acquired
+
+
+@contextmanager
 def _session_lock(history, session_id, filename, *, blocking=True):
     path = history.active_run_path(session_id).with_name(filename)
     key = str(path.resolve())

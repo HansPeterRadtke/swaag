@@ -13,7 +13,7 @@ from typing import Any, Callable, Iterable, Iterator
 from weakref import WeakValueDictionary
 
 from swaag.capacity import positive_capacity, require_capacity
-from swaag.session_lock import exclusive_control_mutation
+from swaag.session_lock import exclusive_control_mutation, session_journal_lock
 from swaag.questions import question_record, normalize_question, QUESTION_FIELDS
 from swaag.redaction import redact_for_persistence
 from swaag.environment.state import EnvironmentState, ProcessRecord, ShellSessionState, WorkspaceState
@@ -407,29 +407,47 @@ class HistoryStore:
             # The exact same file and SQLite cursor were already checked in this
             # process. Avoid full replay for each recorded model/tool event.
             return
-        events = list(self._iter_history_jsonl(
-            session_id, start_sequence=max(1, indexed_through + 1)))
-        if events:
-            with self._sqlite_connect() as connection:
-                connection.execute("BEGIN IMMEDIATE")
-                for event in events:
-                    self._sqlite_insert_event(connection, event)
-                connection.execute(
-                    """
-                    INSERT INTO indexed_sessions(session_id, complete_through) VALUES (?, ?)
-                    ON CONFLICT(session_id) DO UPDATE SET complete_through=excluded.complete_through
-                    """,
-                    (session_id, events[-1].sequence),
-                )
-                connection.commit()
-            indexed_through = events[-1].sequence
-        after_stamp = self._jsonl_file_stamp(path)
-        if before_stamp == after_stamp:
-            # If an independent writer changed the file mid-validation,
-            # deliberately leave it uncached; the next access rechecks it.
-            self._verified_jsonl_stats[session_id] = (indexed_through, after_stamp)
-        else:
-            self._verified_jsonl_stats.pop(session_id, None)
+
+        # The append writer holds the same per-session cross-process file lock
+        # from before its SQLite BEGIN IMMEDIATE until the whole JSONL event is
+        # committed. A streaming reader may not verify a partial append. A
+        # session-local lock, rather than a global SQLite write transaction
+        # around this *entire* scan, lets unrelated sessions keep working.
+        with session_journal_lock(self, session_id):
+            # Another writer/indexer may have completed while acquiring the
+            # lock: reread both the SQLite cursor and exact source file stamp.
+            indexed_through = self._sqlite_complete_through(session_id)
+            before_stamp = self._jsonl_file_stamp(path)
+            if self._verified_jsonl_stats.get(session_id) == (indexed_through, before_stamp):
+                return
+            # Malformed or tampered source is STILL an error: no generic parse
+            # retry or silent truncated-line skipping is permitted.
+            events = list(self._iter_history_jsonl(
+                session_id, start_sequence=max(1, indexed_through + 1)))
+            if events:
+                # Only the short SQLite index write needs the shared database
+                # transaction; the potentially large source scan is protected
+                # by the journal's per-session lock instead.
+                with self._sqlite_connect() as connection:
+                    connection.execute("BEGIN IMMEDIATE")
+                    for event in events:
+                        self._sqlite_insert_event(connection, event)
+                    connection.execute(
+                        """
+                        INSERT INTO indexed_sessions(session_id, complete_through) VALUES (?, ?)
+                        ON CONFLICT(session_id) DO UPDATE SET complete_through=excluded.complete_through
+                        """,
+                        (session_id, events[-1].sequence),
+                    )
+                    connection.commit()
+                indexed_through = events[-1].sequence
+            after_stamp = self._jsonl_file_stamp(path)
+            if before_stamp == after_stamp:
+                # Independently modified source stamp invalidates the cache;
+                # legitimate validated appends share this per-session lock.
+                self._verified_jsonl_stats[session_id] = (indexed_through, after_stamp)
+            else:
+                self._verified_jsonl_stats.pop(session_id, None)
 
     def _iter_history_sqlite(
         self,
@@ -1484,43 +1502,44 @@ class HistoryStore:
         self._ensure_session_indexed(state.session_id)
         history_file = self.history_path(state.session_id)
         verified_before = self._verified_jsonl_stats.get(state.session_id)
-        with self._sqlite_connect() as connection:
-            connection.execute("BEGIN IMMEDIATE")
-            row = connection.execute(
-                "SELECT COALESCE(MAX(sequence), 0) FROM events WHERE session_id=?",
-                (state.session_id,),
-            ).fetchone()
-            expected = int(row[0]) + 1
-            if expected != event.sequence:
-                raise HistoryInvariantError(
-                    f"Concurrent/stale history writer for {state.session_id}: expected sequence {expected}, got {event.sequence}"
+        with session_journal_lock(self, state.session_id):
+            with self._sqlite_connect() as connection:
+                connection.execute("BEGIN IMMEDIATE")
+                row = connection.execute(
+                    "SELECT COALESCE(MAX(sequence), 0) FROM events WHERE session_id=?",
+                    (state.session_id,),
+                ).fetchone()
+                expected = int(row[0]) + 1
+                if expected != event.sequence:
+                    raise HistoryInvariantError(
+                        f"Concurrent/stale history writer for {state.session_id}: expected sequence {expected}, got {event.sequence}"
+                    )
+                self._sqlite_insert_event(connection, event)
+                encoded = stable_json_dumps(asdict(event)) + "\n"
+                append_text(self.history_path(state.session_id), encoded, encoding="utf-8")
+                connection.execute(
+                    """
+                    INSERT INTO indexed_sessions(session_id, complete_through) VALUES (?, ?)
+                    ON CONFLICT(session_id) DO UPDATE SET complete_through=excluded.complete_through
+                    """,
+                    (state.session_id, event.sequence),
                 )
-            self._sqlite_insert_event(connection, event)
-            encoded = stable_json_dumps(asdict(event)) + "\n"
-            append_text(self.history_path(state.session_id), encoded, encoding="utf-8")
-            connection.execute(
-                """
-                INSERT INTO indexed_sessions(session_id, complete_through) VALUES (?, ?)
-                ON CONFLICT(session_id) DO UPDATE SET complete_through=excluded.complete_through
-                """,
-                (state.session_id, event.sequence),
-            )
-            connection.commit()
-        now_stamp = self._jsonl_file_stamp(history_file)
-        if verified_before is None and event.sequence == 1:
-            # First event in our own freshly created history file.
-            self._verified_jsonl_stats[state.session_id] = (event.sequence, now_stamp)
-        elif (
-            verified_before is not None
-            and verified_before[0] == event.sequence - 1
-            and verified_before[1][0:2] == now_stamp[0:2]
-            and now_stamp[2] == verified_before[1][2] + len(encoded.encode("utf-8"))
-        ):
-            # Only our exact validated append was added. SQLite has committed
-            # the identical event and its hash; retain the verified cursor.
-            self._verified_jsonl_stats[state.session_id] = (event.sequence, now_stamp)
-        else:
-            self._verified_jsonl_stats.pop(state.session_id, None)
+                connection.commit()
+            now_stamp = self._jsonl_file_stamp(history_file)
+            if verified_before is None and event.sequence == 1:
+                # First event in our own freshly created history file.
+                self._verified_jsonl_stats[state.session_id] = (event.sequence, now_stamp)
+            elif (
+                verified_before is not None
+                and verified_before[0] == event.sequence - 1
+                and verified_before[1][0:2] == now_stamp[0:2]
+                and now_stamp[2] == verified_before[1][2] + len(encoded.encode("utf-8"))
+            ):
+                # Only our exact validated append was added. SQLite has committed
+                # the identical event and its hash; retain the verified cursor.
+                self._verified_jsonl_stats[state.session_id] = (event.sequence, now_stamp)
+            else:
+                self._verified_jsonl_stats.pop(state.session_id, None)
         self._apply_event(state, event)
         if self.write_projections:
             self._write_projections(state)

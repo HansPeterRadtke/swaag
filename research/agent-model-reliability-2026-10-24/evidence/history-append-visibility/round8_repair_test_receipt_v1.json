@@ -1,0 +1,73 @@
+{
+  "final_per_session_lock_regression": {
+    "focused_partial_append_and_source_integrity_cases_failed": 0,
+    "focused_partial_append_and_source_integrity_cases_passed": 7,
+    "full_history_read_and_is_event_available_and_stream_cursor_test_passed": true,
+    "invalid_externally_truncated_jsonl_still_rejected": true,
+    "same_length_external_history_tamper_still_rejected": true,
+    "separate_os_process_writer_and_stream_reader_test_passed": true,
+    "unrelated_session_writer_completes_before_test_bound_seconds": 0.8
+  },
+  "first_global_sqlite_lock_attempt": {
+    "first_attempt_not_committed_or_deployed": true,
+    "partial_append_race_regression_passed": true,
+    "unrelated_session_writer_throughput_regression_failed_at_test_bound_seconds": 0.8
+  },
+  "full_integration_regression": {
+    "components": [
+      "history",
+      "replay",
+      "stream",
+      "orchestrator",
+      "foreground",
+      "source_provenance"
+    ],
+    "tests_failed": 0,
+    "tests_passed": 100,
+    "wall_seconds": 163.62
+  },
+  "full_research_regression": {
+    "prior_pre_fix_evidence_hash_now_resolves_immutable_old_git_revision": true,
+    "tests_failed": 0,
+    "tests_passed": 124,
+    "wall_seconds": 18.292
+  },
+  "limits": {
+    "denied_Thor_multistage_or_private_source_movements_retried": false,
+    "external_owner_side_effects": 0,
+    "must_update_cooperating_readers_and_writers_together_before_live_claim": true,
+    "new_Qwen_inference_calls": 0,
+    "old_file_history_tamper_or_crash_recovery_improved": false,
+    "production_change_or_restart": false,
+    "research_worktree_only": true
+  },
+  "original_owner_task": "CALTASK_8a15abc293c05b3ad548",
+  "passive_real_GPU_snapshots": {
+    "GPU": "NVIDIA GeForce RTX 3060 Laptop GPU",
+    "approx_used_MiB_at_times_Europe_Berlin": {
+      "22:19": 4641,
+      "22:29": 4562,
+      "22:35": 4546
+    },
+    "existing_service_workloads_not_stopped": true,
+    "total_MiB": 6144,
+    "true_local_Qwen_inference_GPU_cost_measured": false
+  },
+  "pre_fix_independent_repro": {
+    "pre_fix_original_file_did_not_change_during_test": true,
+    "regression_test_failed_before_fix": true,
+    "source_full_history_reader_completed_while_partial": true
+  },
+  "prior_root_cause_evidence_file": "research/agent-model-reliability-2026-10-24/evidence/final-foreground-receipts/history_partial_append_v1.json",
+  "prior_source_version_commit": "5a0ffde868bac6290bccbe4d045abcab6cdbedac",
+  "source_after_sha256": {
+    "docs/history-index-cost-2026-10-16.md": "ce9d7691f7fdc3f4c0ef019809c945bfd05b9c8a5855c4d916bea7785006ce72",
+    "research/agent-model-reliability-2026-10-24/ROUND8_HISTORY_APPEND_VISIBILITY_2026-10-26.md": "942dee28345e1a44d5f7b6c7c31ec1ca922d1cb38c1a54b526b113d4115e554f",
+    "research/agent-model-reliability-2026-10-24/test_history_race_evidence_20261026.py": "e2355085f7a21df9334f229c0c212b5a3b165b93798f64f013c28d434a54ff78",
+    "src/swaag/history.py": "e5efdb3b61b0e81e793185e683307d3dbafc25a4118eab89ae8e4e7a0fc799fe",
+    "src/swaag/session_lock.py": "3cb43d75190e7cf7bd1f9f5c4f804c6cc914ba0d4461c726d63fd09596d7fbfc",
+    "tests/test_history_partial_append_visibility.py": "3df017d02a5bb114e5b70735fe0ff1c949889c25d67635be369ef90eb8932a8e"
+  },
+  "source_prior_sha256": "74ede3f4b58bf387ffc6a9478c8fdc0b56f6b48cc042f0f69a5bfd6e2486516a",
+  "version": "swaag_agent_reliability_history_source_fence_20261026_round8_v1"
+}
