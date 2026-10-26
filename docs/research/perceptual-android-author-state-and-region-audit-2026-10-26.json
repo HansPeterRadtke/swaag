@@ -1,0 +1,3464 @@
+{
+  "annotated_missed_cases": [
+    {
+      "bbox_valid": true,
+      "case_id": 91,
+      "changed_fraction": 0.00042274305555555555,
+      "changed_pixel_fraction_inside_gold_bbox": 0.5954825462012321,
+      "defect_type": "layout-miss"
+    },
+    {
+      "bbox_valid": true,
+      "case_id": 186,
+      "changed_fraction": 0.0003845486111111111,
+      "changed_pixel_fraction_inside_gold_bbox": 1.0,
+      "defect_type": "layout-overlap"
+    },
+    {
+      "bbox_valid": true,
+      "case_id": 212,
+      "changed_fraction": 0.0002326388888888889,
+      "changed_pixel_fraction_inside_gold_bbox": 1.0,
+      "defect_type": "layout-clip"
+    },
+    {
+      "bbox_valid": true,
+      "case_id": 233,
+      "changed_fraction": 0.0003671875,
+      "changed_pixel_fraction_inside_gold_bbox": 1.0,
+      "defect_type": "layout-clip"
+    },
+    {
+      "bbox_valid": true,
+      "case_id": 240,
+      "changed_fraction": 0.0004809027777777778,
+      "changed_pixel_fraction_inside_gold_bbox": 1.0,
+      "defect_type": "layout-miss"
+    },
+    {
+      "bbox_valid": true,
+      "case_id": 247,
+      "changed_fraction": 0.0002578125,
+      "changed_pixel_fraction_inside_gold_bbox": 1.0,
+      "defect_type": "layout-clip"
+    },
+    {
+      "bbox_valid": true,
+      "case_id": 310,
+      "changed_fraction": 0.00048697916666666665,
+      "changed_pixel_fraction_inside_gold_bbox": 1.0,
+      "defect_type": "layout-miss"
+    }
+  ],
+  "clean_alternative_state_negative": {
+    "author_clean_bad_flags_any_pixel_wrong_activity_ref": 352,
+    "author_clean_bad_flags_global_wrong_activity_ref": 351,
+    "author_clean_bad_flags_localized_wrong_activity_ref": 352,
+    "author_clean_distinct_activity_pairs": 352,
+    "correct_source_binding_review_for_wrong_activity": 352,
+    "distinct_apps": 28,
+    "distinct_author_clean_cases": 137,
+    "distinct_wrong_activity_sources": 135,
+    "exact_self_ref_bad_flags_localized": 0,
+    "max_reuses_of_one_source_case": 3,
+    "paired_orientation_comparisons": 704
+  },
+  "correct_source_binding_verdict": "REVIEW for every alternate same-app different-activity reference; PASS only for verified immutable exact self reference in this sample, not a blanket GUI acceptance",
+  "cost": {
+    "GPU_calls": 0,
+    "aborted_first_attempt_no_frozen_predictions": true,
+    "aborted_first_clean_state_CPU_wall_seconds": 512.764,
+    "clean_alternative_state_image_CPU_seconds": 416.817,
+    "region_author_bbox_native_CPU_seconds": 36.387
+  },
+  "date": "2026-10-26",
+  "evidence_SHA256": {
+    "rotbench-android-heldout-20261026/predictions.json": "8bc7860b4e5861d1d00330ac87ebacfabbd44ad886ec9aa52a9b179f8b27ebeb",
+    "rotbench-author-region-frozen-audit-20261026/classification_source.json": "20205c875b10dba7501fd5b4304d2dfd3ceb26ac840f3fde08160a4156faf422",
+    "rotbench-author-region-frozen-audit-20261026/evaluated.json": "5d7df83ca7b7d9beca4301ccc5493efb0d4748eaadae7ea1c8518b2f22e68cd5",
+    "rotbench-author-region-frozen-audit-20261026/inventory.json": "e433c6505a2e244578899edf5006d18ca0c1ea290295ac7f85e74734fd24d895",
+    "rotbench-same-app-clean-state-negative-20261026/design.json": "073d282efe204f8fa12f0adfaa48cddfd9eab01fb411f5d986f20db30c05d21d",
+    "rotbench-same-app-clean-state-negative-20261026/frozen_pairs.json": "ede80b2b8d568887bcb926c7d738f676e54b2c2b76ee9146930ccaf0a4124659",
+    "rotbench-same-app-clean-state-negative-20261026/image_only_results.json": "dd4e9e478c0b4315815d230424df1ec995d69fd97a0aa9bce65e5e1ded50404f",
+    "rotbench-same-app-clean-state-negative-20261026/scored.json": "9913fec6ae7c739d55134e7098fc72f968f201d4c6297ce004ff28c91c6dde6a",
+    "rotbench-unused-source-split-20261026/predictions.json": "0414fb609ab5decba2f1a114dcb67eacba1f55ee9ca61dd647e8fc5cdc1bb7db"
+  },
+  "gold_region_cross_split": {
+    "abstained_missing_original_refs": 2,
+    "all_seven_missed_synthetic_changes_smaller_than_screen_fraction": 0.0005,
+    "author_bbox_out_of_original_png": 8,
+    "author_bbox_within_original_png": 62,
+    "bbox_valid_changed_pixels_denominator": 62,
+    "bbox_valid_changed_pixels_inside_90pct_or_more": 51,
+    "by_type": {
+      "direction-mismatch": {
+        "abstain": 0,
+        "detected": 11,
+        "misses": 0,
+        "n": 11
+      },
+      "layout-clip": {
+        "abstain": 1,
+        "detected": 3,
+        "misses": 3,
+        "n": 7
+      },
+      "layout-miss": {
+        "abstain": 0,
+        "detected": 6,
+        "misses": 3,
+        "n": 9
+      },
+      "layout-overlap": {
+        "abstain": 1,
+        "detected": 12,
+        "misses": 1,
+        "n": 14
+      },
+      "state-loseinput": {
+        "abstain": 0,
+        "detected": 31,
+        "misses": 0,
+        "n": 31
+      }
+    },
+    "exact_modified_file_matches": 72,
+    "invalid_native_bbox_indices": [
+      86,
+      109,
+      115,
+      161,
+      165,
+      249,
+      256,
+      271
+    ],
+    "new_detector_misses_with_bbox": 5,
+    "old_detector_misses_with_bbox": 2,
+    "original_refs_available": 70
+  },
+  "overall": "PARTIAL",
+  "per_app": {
+    "chat.delta.lite": {
+      "comparisons": 21,
+      "global_bad_flags": 21,
+      "localized_bad_flags": 21
+    },
+    "com.byagowi.persiancalendar": {
+      "comparisons": 12,
+      "global_bad_flags": 12,
+      "localized_bad_flags": 12
+    },
+    "com.encrypt.bwt": {
+      "comparisons": 15,
+      "global_bad_flags": 15,
+      "localized_bad_flags": 15
+    },
+    "com.fsck.k9": {
+      "comparisons": 12,
+      "global_bad_flags": 12,
+      "localized_bad_flags": 12
+    },
+    "com.github.dyhkwong.sagernet": {
+      "comparisons": 66,
+      "global_bad_flags": 66,
+      "localized_bad_flags": 66
+    },
+    "com.github.olga_yakovleva.rhvoice.android": {
+      "comparisons": 2,
+      "global_bad_flags": 2,
+      "localized_bad_flags": 2
+    },
+    "com.hegocre.nextcloudpasswords": {
+      "comparisons": 6,
+      "global_bad_flags": 6,
+      "localized_bad_flags": 6
+    },
+    "com.mrsep.musicrecognizer": {
+      "comparisons": 2,
+      "global_bad_flags": 2,
+      "localized_bad_flags": 2
+    },
+    "com.osfans.trime": {
+      "comparisons": 2,
+      "global_bad_flags": 2,
+      "localized_bad_flags": 2
+    },
+    "com.philkes.notallyx": {
+      "comparisons": 15,
+      "global_bad_flags": 15,
+      "localized_bad_flags": 15
+    },
+    "com.swordfish.lemuroid": {
+      "comparisons": 6,
+      "global_bad_flags": 6,
+      "localized_bad_flags": 6
+    },
+    "cz.vitskalicky.lepsirozvrh": {
+      "comparisons": 24,
+      "global_bad_flags": 24,
+      "localized_bad_flags": 24
+    },
+    "de.nulide.findmydevice": {
+      "comparisons": 30,
+      "global_bad_flags": 30,
+      "localized_bad_flags": 30
+    },
+    "dev.octoshrimpy.quik": {
+      "comparisons": 21,
+      "global_bad_flags": 21,
+      "localized_bad_flags": 21
+    },
+    "dev.theolm.wwc": {
+      "comparisons": 2,
+      "global_bad_flags": 2,
+      "localized_bad_flags": 2
+    },
+    "io.pslab": {
+      "comparisons": 15,
+      "global_bad_flags": 15,
+      "localized_bad_flags": 15
+    },
+    "net.alexbarry.calc_android": {
+      "comparisons": 2,
+      "global_bad_flags": 2,
+      "localized_bad_flags": 2
+    },
+    "net.turtton.ytalarm": {
+      "comparisons": 2,
+      "global_bad_flags": 2,
+      "localized_bad_flags": 2
+    },
+    "org.androidlabs.applistbackup": {
+      "comparisons": 2,
+      "global_bad_flags": 2,
+      "localized_bad_flags": 2
+    },
+    "org.pacien.tincapp": {
+      "comparisons": 2,
+      "global_bad_flags": 2,
+      "localized_bad_flags": 2
+    },
+    "org.petero.droidfish": {
+      "comparisons": 6,
+      "global_bad_flags": 6,
+      "localized_bad_flags": 6
+    },
+    "org.smc.inputmethod.indic": {
+      "comparisons": 6,
+      "global_bad_flags": 6,
+      "localized_bad_flags": 6
+    },
+    "org.strongswan.android": {
+      "comparisons": 15,
+      "global_bad_flags": 14,
+      "localized_bad_flags": 15
+    },
+    "org.stypox.dicio": {
+      "comparisons": 2,
+      "global_bad_flags": 2,
+      "localized_bad_flags": 2
+    },
+    "org.tasks": {
+      "comparisons": 54,
+      "global_bad_flags": 54,
+      "localized_bad_flags": 54
+    },
+    "org.torproject.torservices": {
+      "comparisons": 2,
+      "global_bad_flags": 2,
+      "localized_bad_flags": 2
+    },
+    "pl.edu.pjwstk.s999844.shoppinglist": {
+      "comparisons": 2,
+      "global_bad_flags": 2,
+      "localized_bad_flags": 2
+    },
+    "ru.tech.imageresizershrinker": {
+      "comparisons": 6,
+      "global_bad_flags": 6,
+      "localized_bad_flags": 6
+    }
+  },
+  "review_limitations": [
+    "The original RIGHT GUI screens are author-filtered negatives, not independently human adjudicated; a clean screen from different Activity must not be used as a valid immutable source match.",
+    "352 comparisons are correlated repetitions of 137 original clean screen pairs from 28 apps, with at most 3 different other Activities per original case. These are not 352 independent application samples.",
+    "Author bbox coordinates in 8 available annotated cases extend beyond actual rendered native PNG, so those bboxes cannot be used as exact pixel localization truth without an author-documented map.",
+    "The published RotBench natural 100 developer-confirmed bug set was not available as raw matched labelled media in this project; author-reported RotVL model scores are not local inference or our measured performance.",
+    "No independent human judgments on native Android interaction, no genuinely changing same Activity captures, no owner warehouse final photorealism and no time-coded natural video fault/clean gold.",
+    "SWAAG InspectImageTool default disabled and existing conservative policy not proven in a live tool call; this study measures off-line CPU pixels only."
+  ],
+  "same_app_clean_cases": [
+    {
+      "alternate_id": 105,
+      "any_pixel_flag": true,
+      "case_id": 1,
+      "correct_source_binding": "review",
+      "exact_original_flag": false,
+      "global_flag": true,
+      "localized_flag": true
+    },
+    {
+      "alternate_id": 220,
+      "any_pixel_flag": true,
+      "case_id": 1,
+      "correct_source_binding": "review",
+      "exact_original_flag": false,
+      "global_flag": true,
+      "localized_flag": true
+    },
+    {
+      "alternate_id": 326,
+      "any_pixel_flag": true,
+      "case_id": 1,
+      "correct_source_binding": "review",
+      "exact_original_flag": false,
+      "global_flag": false,
+      "localized_flag": true
+    },
+    {
+      "alternate_id": 173,
+      "any_pixel_flag": true,
+      "case_id": 7,
+      "correct_source_binding": "review",
+      "exact_original_flag": false,
+      "global_flag": true,
+      "localized_flag": true
+    },
+    {
+      "alternate_id": 316,
+      "any_pixel_flag": true,
+      "case_id": 7,
+      "correct_source_binding": "review",
+      "exact_original_flag": false,
+      "global_flag": true,
+      "localized_flag": true
+    },
+    {
+      "alternate_id": 205,
+      "any_pixel_flag": true,
+      "case_id": 7,
+      "correct_source_binding": "review",
+      "exact_original_flag": false,
+      "global_flag": true,
+      "localized_flag": true
+    },
+    {
+      "alternate_id": 17,
+      "any_pixel_flag": true,
+      "case_id": 8,
+      "correct_source_binding": "review",
+      "exact_original_flag": false,
+      "global_flag": true,
+      "localized_flag": true
+    },
+    {
+      "alternate_id": 315,
+      "any_pixel_flag": true,
+      "case_id": 11,
+      "correct_source_binding": "review",
+      "exact_original_flag": false,
+      "global_flag": true,
+      "localized_flag": true
+    },
+    {
+      "alternate_id": 169,
+      "any_pixel_flag": true,
+      "case_id": 11,
+      "correct_source_binding": "review",
+      "exact_original_flag": false,
+      "global_flag": true,
+      "localized_flag": true
+    },
+    {
+      "alternate_id": 56,
+      "any_pixel_flag": true,
+      "case_id": 11,
+      "correct_source_binding": "review",
+      "exact_original_flag": false,
+      "global_flag": true,
+      "localized_flag": true
+    },
+    {
+      "alternate_id": 149,
+      "any_pixel_flag": true,
+      "case_id": 13,
+      "correct_source_binding": "review",
+      "exact_original_flag": false,
+      "global_flag": true,
+      "localized_flag": true
+    },
+    {
+      "alternate_id": 324,
+      "any_pixel_flag": true,
+      "case_id": 13,
+      "correct_source_binding": "review",
+      "exact_original_flag": false,
+      "global_flag": true,
+      "localized_flag": true
+    },
+    {
+      "alternate_id": 232,
+      "any_pixel_flag": true,
+      "case_id": 13,
+      "correct_source_binding": "review",
+      "exact_original_flag": false,
+      "global_flag": true,
+      "localized_flag": true
+    },
+    {
+      "alternate_id": 151,
+      "any_pixel_flag": true,
+      "case_id": 14,
+      "correct_source_binding": "review",
+      "exact_original_flag": false,
+      "global_flag": true,
+      "localized_flag": true
+    },
+    {
+      "alternate_id": 114,
+      "any_pixel_flag": true,
+      "case_id": 15,
+      "correct_source_binding": "review",
+      "exact_original_flag": false,
+      "global_flag": true,
+      "localized_flag": true
+    },
+    {
+      "alternate_id": 257,
+      "any_pixel_flag": true,
+      "case_id": 15,
+      "correct_source_binding": "review",
+      "exact_original_flag": false,
+      "global_flag": true,
+      "localized_flag": true
+    },
+    {
+      "alternate_id": 280,
+      "any_pixel_flag": true,
+      "case_id": 15,
+      "correct_source_binding": "review",
+      "exact_original_flag": false,
+      "global_flag": true,
+      "localized_flag": true
+    },
+    {
+      "alternate_id": 1,
+      "any_pixel_flag": true,
+      "case_id": 16,
+      "correct_source_binding": "review",
+      "exact_original_flag": false,
+      "global_flag": true,
+      "localized_flag": true
+    },
+    {
+      "alternate_id": 105,
+      "any_pixel_flag": true,
+      "case_id": 16,
+      "correct_source_binding": "review",
+      "exact_original_flag": false,
+      "global_flag": true,
+      "localized_flag": true
+    },
+    {
+      "alternate_id": 326,
+      "any_pixel_flag": true,
+      "case_id": 16,
+      "correct_source_binding": "review",
+      "exact_original_flag": false,
+      "global_flag": true,
+      "localized_flag": true
+    },
+    {
+      "alternate_id": 8,
+      "any_pixel_flag": true,
+      "case_id": 17,
+      "correct_source_binding": "review",
+      "exact_original_flag": false,
+      "global_flag": true,
+      "localized_flag": true
+    },
+    {
+      "alternate_id": 335,
+      "any_pixel_flag": true,
+      "case_id": 18,
+      "correct_source_binding": "review",
+      "exact_original_flag": false,
+      "global_flag": true,
+      "localized_flag": true
+    },
+    {
+      "alternate_id": 70,
+      "any_pixel_flag": true,
+      "case_id": 18,
+      "correct_source_binding": "review",
+      "exact_original_flag": false,
+      "global_flag": true,
+      "localized_flag": true
+    },
+    {
+      "alternate_id": 227,
+      "any_pixel_flag": true,
+      "case_id": 18,
+      "correct_source_binding": "review",
+      "exact_original_flag": false,
+      "global_flag": true,
+      "localized_flag": true
+    },
+    {
+      "alternate_id": 254,
+      "any_pixel_flag": true,
+      "case_id": 20,
+      "correct_source_binding": "review",
+      "exact_original_flag": false,
+      "global_flag": true,
+      "localized_flag": true
+    },
+    {
+      "alternate_id": 148,
+      "any_pixel_flag": true,
+      "case_id": 21,
+      "correct_source_binding": "review",
+      "exact_original_flag": false,
+      "global_flag": true,
+      "localized_flag": true
+    },
+    {
+      "alternate_id": 270,
+      "any_pixel_flag": true,
+      "case_id": 21,
+      "correct_source_binding": "review",
+      "exact_original_flag": false,
+      "global_flag": true,
+      "localized_flag": true
+    },
+    {
+      "alternate_id": 93,
+      "any_pixel_flag": true,
+      "case_id": 21,
+      "correct_source_binding": "review",
+      "exact_original_flag": false,
+      "global_flag": true,
+      "localized_flag": true
+    },
+    {
+      "alternate_id": 288,
+      "any_pixel_flag": true,
+      "case_id": 25,
+      "correct_source_binding": "review",
+      "exact_original_flag": false,
+      "global_flag": true,
+      "localized_flag": true
+    },
+    {
+      "alternate_id": 120,
+      "any_pixel_flag": true,
+      "case_id": 25,
+      "correct_source_binding": "review",
+      "exact_original_flag": false,
+      "global_flag": true,
+      "localized_flag": true
+    },
+    {
+      "alternate_id": 61,
+      "any_pixel_flag": true,
+      "case_id": 27,
+      "correct_source_binding": "review",
+      "exact_original_flag": false,
+      "global_flag": true,
+      "localized_flag": true
+    },
+    {
+      "alternate_id": 283,
+      "any_pixel_flag": true,
+      "case_id": 27,
+      "correct_source_binding": "review",
+      "exact_original_flag": false,
+      "global_flag": true,
+      "localized_flag": true
+    },
+    {
+      "alternate_id": 77,
+      "any_pixel_flag": true,
+      "case_id": 27,
+      "correct_source_binding": "review",
+      "exact_original_flag": false,
+      "global_flag": true,
+      "localized_flag": true
+    },
+    {
+      "alternate_id": 13,
+      "any_pixel_flag": true,
+      "case_id": 31,
+      "correct_source_binding": "review",
+      "exact_original_flag": false,
+      "global_flag": true,
+      "localized_flag": true
+    },
+    {
+      "alternate_id": 90,
+      "any_pixel_flag": true,
+      "case_id": 31,
+      "correct_source_binding": "review",
+      "exact_original_flag": false,
+      "global_flag": true,
+      "localized_flag": true
+    },
+    {
+      "alternate_id": 141,
+      "any_pixel_flag": true,
+      "case_id": 31,
+      "correct_source_binding": "review",
+      "exact_original_flag": false,
+      "global_flag": true,
+      "localized_flag": true
+    },
+    {
+      "alternate_id": 41,
+      "any_pixel_flag": true,
+      "case_id": 33,
+      "correct_source_binding": "review",
+      "exact_original_flag": false,
+      "global_flag": true,
+      "localized_flag": true
+    },
+    {
+      "alternate_id": 94,
+      "any_pixel_flag": true,
+      "case_id": 33,
+      "correct_source_binding": "review",
+      "exact_original_flag": false,
+      "global_flag": true,
+      "localized_flag": true
+    },
+    {
+      "alternate_id": 149,
+      "any_pixel_flag": true,
+      "case_id": 33,
+      "correct_source_binding": "review",
+      "exact_original_flag": false,
+      "global_flag": true,
+      "localized_flag": true
+    },
+    {
+      "alternate_id": 298,
+      "any_pixel_flag": true,
+      "case_id": 41,
+      "correct_source_binding": "review",
+      "exact_original_flag": false,
+      "global_flag": true,
+      "localized_flag": true
+    },
+    {
+      "alternate_id": 98,
+      "any_pixel_flag": true,
+      "case_id": 41,
+      "correct_source_binding": "review",
+      "exact_original_flag": false,
+      "global_flag": true,
+      "localized_flag": true
+    },
+    {
+      "alternate_id": 79,
+      "any_pixel_flag": true,
+      "case_id": 41,
+      "correct_source_binding": "review",
+      "exact_original_flag": false,
+      "global_flag": true,
+      "localized_flag": true
+    },
+    {
+      "alternate_id": 141,
+      "any_pixel_flag": true,
+      "case_id": 43,
+      "correct_source_binding": "review",
+      "exact_original_flag": false,
+      "global_flag": true,
+      "localized_flag": true
+    },
+    {
+      "alternate_id": 13,
+      "any_pixel_flag": true,
+      "case_id": 43,
+      "correct_source_binding": "review",
+      "exact_original_flag": false,
+      "global_flag": true,
+      "localized_flag": true
+    },
+    {
+      "alternate_id": 269,
+      "any_pixel_flag": true,
+      "case_id": 43,
+      "correct_source_binding": "review",
+      "exact_original_flag": false,
+      "global_flag": true,
+      "localized_flag": true
+    },
+    {
+      "alternate_id": 190,
+      "any_pixel_flag": true,
+      "case_id": 44,
+      "correct_source_binding": "review",
+      "exact_original_flag": false,
+      "global_flag": true,
+      "localized_flag": true
+    },
+    {
+      "alternate_id": 328,
+      "any_pixel_flag": true,
+      "case_id": 44,
+      "correct_source_binding": "review",
+      "exact_original_flag": false,
+      "global_flag": true,
+      "localized_flag": true
+    },
+    {
+      "alternate_id": 78,
+      "any_pixel_flag": true,
+      "case_id": 44,
+      "correct_source_binding": "review",
+      "exact_original_flag": false,
+      "global_flag": true,
+      "localized_flag": true
+    },
+    {
+      "alternate_id": 302,
+      "any_pixel_flag": true,
+      "case_id": 49,
+      "correct_source_binding": "review",
+      "exact_original_flag": false,
+      "global_flag": true,
+      "localized_flag": true
+    },
+    {
+      "alternate_id": 230,
+      "any_pixel_flag": true,
+      "case_id": 49,
+      "correct_source_binding": "review",
+      "exact_original_flag": false,
+      "global_flag": true,
+      "localized_flag": true
+    },
+    {
+      "alternate_id": 174,
+      "any_pixel_flag": true,
+      "case_id": 49,
+      "correct_source_binding": "review",
+      "exact_original_flag": false,
+      "global_flag": true,
+      "localized_flag": true
+    },
+    {
+      "alternate_id": 312,
+      "any_pixel_flag": true,
+      "case_id": 51,
+      "correct_source_binding": "review",
+      "exact_original_flag": false,
+      "global_flag": true,
+      "localized_flag": true
+    },
+    {
+      "alternate_id": 320,
+      "any_pixel_flag": true,
+      "case_id": 51,
+      "correct_source_binding": "review",
+      "exact_original_flag": false,
+      "global_flag": true,
+      "localized_flag": true
+    },
+    {
+      "alternate_id": 146,
+      "any_pixel_flag": true,
+      "case_id": 51,
+      "correct_source_binding": "review",
+      "exact_original_flag": false,
+      "global_flag": true,
+      "localized_flag": true
+    },
+    {
+      "alternate_id": 170,
+      "any_pixel_flag": true,
+      "case_id": 55,
+      "correct_source_binding": "review",
+      "exact_original_flag": false,
+      "global_flag": true,
+      "localized_flag": true
+    },
+    {
+      "alternate_id": 313,
+      "any_pixel_flag": true,
+      "case_id": 55,
+      "correct_source_binding": "review",
+      "exact_original_flag": false,
+      "global_flag": true,
+      "localized_flag": true
+    },
+    {
+      "alternate_id": 322,
+      "any_pixel_flag": true,
+      "case_id": 55,
+      "correct_source_binding": "review",
+      "exact_original_flag": false,
+      "global_flag": true,
+      "localized_flag": true
+    },
+    {
+      "alternate_id": 121,
+      "any_pixel_flag": true,
+      "case_id": 56,
+      "correct_source_binding": "review",
+      "exact_original_flag": false,
+      "global_flag": true,
+      "localized_flag": true
+    },
+    {
+      "alternate_id": 315,
+      "any_pixel_flag": true,
+      "case_id": 56,
+      "correct_source_binding": "review",
+      "exact_original_flag": false,
+      "global_flag": true,
+      "localized_flag": true
+    },
+    {
+      "alternate_id": 152,
+      "any_pixel_flag": true,
+      "case_id": 56,
+      "correct_source_binding": "review",
+      "exact_original_flag": false,
+      "global_flag": true,
+      "localized_flag": true
+    },
+    {
+      "alternate_id": 82,
+      "any_pixel_flag": true,
+      "case_id": 57,
+      "correct_source_binding": "review",
+      "exact_original_flag": false,
+      "global_flag": true,
+      "localized_flag": true
+    },
+    {
+      "alternate_id": 335,
+      "any_pixel_flag": true,
+      "case_id": 60,
+      "correct_source_binding": "review",
+      "exact_original_flag": false,
+      "global_flag": true,
+      "localized_flag": true
+    },
+    {
+      "alternate_id": 217,
+      "any_pixel_flag": true,
+      "case_id": 60,
+      "correct_source_binding": "review",
+      "exact_original_flag": false,
+      "global_flag": true,
+      "localized_flag": true
+    },
+    {
+      "alternate_id": 227,
+      "any_pixel_flag": true,
+      "case_id": 60,
+      "correct_source_binding": "review",
+      "exact_original_flag": false,
+      "global_flag": true,
+      "localized_flag": true
+    },
+    {
+      "alternate_id": 183,
+      "any_pixel_flag": true,
+      "case_id": 61,
+      "correct_source_binding": "review",
+      "exact_original_flag": false,
+      "global_flag": true,
+      "localized_flag": true
+    },
+    {
+      "alternate_id": 27,
+      "any_pixel_flag": true,
+      "case_id": 61,
+      "correct_source_binding": "review",
+      "exact_original_flag": false,
+      "global_flag": true,
+      "localized_flag": true
+    },
+    {
+      "alternate_id": 239,
+      "any_pixel_flag": true,
+      "case_id": 61,
+      "correct_source_binding": "review",
+      "exact_original_flag": false,
+      "global_flag": true,
+      "localized_flag": true
+    },
+    {
+      "alternate_id": 239,
+      "any_pixel_flag": true,
+      "case_id": 65,
+      "correct_source_binding": "review",
+      "exact_original_flag": false,
+      "global_flag": true,
+      "localized_flag": true
+    },
+    {
+      "alternate_id": 191,
+      "any_pixel_flag": true,
+      "case_id": 65,
+      "correct_source_binding": "review",
+      "exact_original_flag": false,
+      "global_flag": true,
+      "localized_flag": true
+    },
+    {
+      "alternate_id": 282,
+      "any_pixel_flag": true,
+      "case_id": 65,
+      "correct_source_binding": "review",
+      "exact_original_flag": false,
+      "global_flag": true,
+      "localized_flag": true
+    },
+    {
+      "alternate_id": 167,
+      "any_pixel_flag": true,
+      "case_id": 66,
+      "correct_source_binding": "review",
+      "exact_original_flag": false,
+      "global_flag": true,
+      "localized_flag": true
+    },
+    {
+      "alternate_id": 300,
+      "any_pixel_flag": true,
+      "case_id": 66,
+      "correct_source_binding": "review",
+      "exact_original_flag": false,
+      "global_flag": true,
+      "localized_flag": true
+    },
+    {
+      "alternate_id": 159,
+      "any_pixel_flag": true,
+      "case_id": 68,
+      "correct_source_binding": "review",
+      "exact_original_flag": false,
+      "global_flag": true,
+      "localized_flag": true
+    },
+    {
+      "alternate_id": 77,
+      "any_pixel_flag": true,
+      "case_id": 68,
+      "correct_source_binding": "review",
+      "exact_original_flag": false,
+      "global_flag": true,
+      "localized_flag": true
+    },
+    {
+      "alternate_id": 294,
+      "any_pixel_flag": true,
+      "case_id": 68,
+      "correct_source_binding": "review",
+      "exact_original_flag": false,
+      "global_flag": true,
+      "localized_flag": true
+    },
+    {
+      "alternate_id": 227,
+      "any_pixel_flag": true,
+      "case_id": 70,
+      "correct_source_binding": "review",
+      "exact_original_flag": false,
+      "global_flag": true,
+      "localized_flag": true
+    },
+    {
+      "alternate_id": 18,
+      "any_pixel_flag": true,
+      "case_id": 70,
+      "correct_source_binding": "review",
+      "exact_original_flag": false,
+      "global_flag": true,
+      "localized_flag": true
+    },
+    {
+      "alternate_id": 136,
+      "any_pixel_flag": true,
+      "case_id": 70,
+      "correct_source_binding": "review",
+      "exact_original_flag": false,
+      "global_flag": true,
+      "localized_flag": true
+    },
+    {
+      "alternate_id": 257,
+      "any_pixel_flag": true,
+      "case_id": 71,
+      "correct_source_binding": "review",
+      "exact_original_flag": false,
+      "global_flag": true,
+      "localized_flag": true
+    },
+    {
+      "alternate_id": 15,
+      "any_pixel_flag": true,
+      "case_id": 71,
+      "correct_source_binding": "review",
+      "exact_original_flag": false,
+      "global_flag": true,
+      "localized_flag": true
+    },
+    {
+      "alternate_id": 114,
+      "any_pixel_flag": true,
+      "case_id": 71,
+      "correct_source_binding": "review",
+      "exact_original_flag": false,
+      "global_flag": true,
+      "localized_flag": true
+    },
+    {
+      "alternate_id": 89,
+      "any_pixel_flag": true,
+      "case_id": 75,
+      "correct_source_binding": "review",
+      "exact_original_flag": false,
+      "global_flag": true,
+      "localized_flag": true
+    },
+    {
+      "alternate_id": 298,
+      "any_pixel_flag": true,
+      "case_id": 75,
+      "correct_source_binding": "review",
+      "exact_original_flag": false,
+      "global_flag": true,
+      "localized_flag": true
+    },
+    {
+      "alternate_id": 43,
+      "any_pixel_flag": true,
+      "case_id": 75,
+      "correct_source_binding": "review",
+      "exact_original_flag": false,
+      "global_flag": true,
+      "localized_flag": true
+    },
+    {
+      "alternate_id": 68,
+      "any_pixel_flag": true,
+      "case_id": 77,
+      "correct_source_binding": "review",
+      "exact_original_flag": false,
+      "global_flag": true,
+      "localized_flag": true
+    },
+    {
+      "alternate_id": 27,
+      "any_pixel_flag": true,
+      "case_id": 77,
+      "correct_source_binding": "review",
+      "exact_original_flag": false,
+      "global_flag": true,
+      "localized_flag": true
+    },
+    {
+      "alternate_id": 317,
+      "any_pixel_flag": true,
+      "case_id": 77,
+      "correct_source_binding": "review",
+      "exact_original_flag": false,
+      "global_flag": true,
+      "localized_flag": true
+    },
+    {
+      "alternate_id": 190,
+      "any_pixel_flag": true,
+      "case_id": 78,
+      "correct_source_binding": "review",
+      "exact_original_flag": false,
+      "global_flag": true,
+      "localized_flag": true
+    },
+    {
+      "alternate_id": 44,
+      "any_pixel_flag": true,
+      "case_id": 78,
+      "correct_source_binding": "review",
+      "exact_original_flag": false,
+      "global_flag": true,
+      "localized_flag": true
+    },
+    {
+      "alternate_id": 328,
+      "any_pixel_flag": true,
+      "case_id": 78,
+      "correct_source_binding": "review",
+      "exact_original_flag": false,
+      "global_flag": true,
+      "localized_flag": true
+    },
+    {
+      "alternate_id": 75,
+      "any_pixel_flag": true,
+      "case_id": 79,
+      "correct_source_binding": "review",
+      "exact_original_flag": false,
+      "global_flag": true,
+      "localized_flag": true
+    },
+    {
+      "alternate_id": 232,
+      "any_pixel_flag": true,
+      "case_id": 79,
+      "correct_source_binding": "review",
+      "exact_original_flag": false,
+      "global_flag": true,
+      "localized_flag": true
+    },
+    {
+      "alternate_id": 90,
+      "any_pixel_flag": true,
+      "case_id": 79,
+      "correct_source_binding": "review",
+      "exact_original_flag": false,
+      "global_flag": true,
+      "localized_flag": true
+    },
+    {
+      "alternate_id": 57,
+      "any_pixel_flag": true,
+      "case_id": 82,
+      "correct_source_binding": "review",
+      "exact_original_flag": false,
+      "global_flag": true,
+      "localized_flag": true
+    },
+    {
+      "alternate_id": 168,
+      "any_pixel_flag": true,
+      "case_id": 87,
+      "correct_source_binding": "review",
+      "exact_original_flag": false,
+      "global_flag": true,
+      "localized_flag": true
+    },
+    {
+      "alternate_id": 123,
+      "any_pixel_flag": true,
+      "case_id": 87,
+      "correct_source_binding": "review",
+      "exact_original_flag": false,
+      "global_flag": true,
+      "localized_flag": true
+    },
+    {
+      "alternate_id": 177,
+      "any_pixel_flag": true,
+      "case_id": 88,
+      "correct_source_binding": "review",
+      "exact_original_flag": false,
+      "global_flag": true,
+      "localized_flag": true
+    },
+    {
+      "alternate_id": 232,
+      "any_pixel_flag": true,
+      "case_id": 89,
+      "correct_source_binding": "review",
+      "exact_original_flag": false,
+      "global_flag": true,
+      "localized_flag": true
+    },
+    {
+      "alternate_id": 324,
+      "any_pixel_flag": true,
+      "case_id": 89,
+      "correct_source_binding": "review",
+      "exact_original_flag": false,
+      "global_flag": true,
+      "localized_flag": true
+    },
+    {
+      "alternate_id": 269,
+      "any_pixel_flag": true,
+      "case_id": 89,
+      "correct_source_binding": "review",
+      "exact_original_flag": false,
+      "global_flag": true,
+      "localized_flag": true
+    },
+    {
+      "alternate_id": 41,
+      "any_pixel_flag": true,
+      "case_id": 90,
+      "correct_source_binding": "review",
+      "exact_original_flag": false,
+      "global_flag": true,
+      "localized_flag": true
+    },
+    {
+      "alternate_id": 98,
+      "any_pixel_flag": true,
+      "case_id": 90,
+      "correct_source_binding": "review",
+      "exact_original_flag": false,
+      "global_flag": true,
+      "localized_flag": true
+    },
+    {
+      "alternate_id": 324,
+      "any_pixel_flag": true,
+      "case_id": 90,
+      "correct_source_binding": "review",
+      "exact_original_flag": false,
+      "global_flag": true,
+      "localized_flag": true
+    },
+    {
+      "alternate_id": 153,
+      "any_pixel_flag": true,
+      "case_id": 93,
+      "correct_source_binding": "review",
+      "exact_original_flag": false,
+      "global_flag": true,
+      "localized_flag": true
+    },
+    {
+      "alternate_id": 148,
+      "any_pixel_flag": true,
+      "case_id": 93,
+      "correct_source_binding": "review",
+      "exact_original_flag": false,
+      "global_flag": true,
+      "localized_flag": true
+    },
+    {
+      "alternate_id": 21,
+      "any_pixel_flag": true,
+      "case_id": 93,
+      "correct_source_binding": "review",
+      "exact_original_flag": false,
+      "global_flag": true,
+      "localized_flag": true
+    },
+    {
+      "alternate_id": 13,
+      "any_pixel_flag": true,
+      "case_id": 94,
+      "correct_source_binding": "review",
+      "exact_original_flag": false,
+      "global_flag": true,
+      "localized_flag": true
+    },
+    {
+      "alternate_id": 141,
+      "any_pixel_flag": true,
+      "case_id": 94,
+      "correct_source_binding": "review",
+      "exact_original_flag": false,
+      "global_flag": true,
+      "localized_flag": true
+    },
+    {
+      "alternate_id": 31,
+      "any_pixel_flag": true,
+      "case_id": 94,
+      "correct_source_binding": "review",
+      "exact_original_flag": false,
+      "global_flag": true,
+      "localized_flag": true
+    },
+    {
+      "alternate_id": 41,
+      "any_pixel_flag": true,
+      "case_id": 98,
+      "correct_source_binding": "review",
+      "exact_original_flag": false,
+      "global_flag": true,
+      "localized_flag": true
+    },
+    {
+      "alternate_id": 232,
+      "any_pixel_flag": true,
+      "case_id": 98,
+      "correct_source_binding": "review",
+      "exact_original_flag": false,
+      "global_flag": true,
+      "localized_flag": true
+    },
+    {
+      "alternate_id": 198,
+      "any_pixel_flag": true,
+      "case_id": 98,
+      "correct_source_binding": "review",
+      "exact_original_flag": false,
+      "global_flag": true,
+      "localized_flag": true
+    },
+    {
+      "alternate_id": 230,
+      "any_pixel_flag": true,
+      "case_id": 103,
+      "correct_source_binding": "review",
+      "exact_original_flag": false,
+      "global_flag": true,
+      "localized_flag": true
+    },
+    {
+      "alternate_id": 302,
+      "any_pixel_flag": true,
+      "case_id": 103,
+      "correct_source_binding": "review",
+      "exact_original_flag": false,
+      "global_flag": true,
+      "localized_flag": true
+    },
+    {
+      "alternate_id": 174,
+      "any_pixel_flag": true,
+      "case_id": 103,
+      "correct_source_binding": "review",
+      "exact_original_flag": false,
+      "global_flag": true,
+      "localized_flag": true
+    },
+    {
+      "alternate_id": 326,
+      "any_pixel_flag": true,
+      "case_id": 105,
+      "correct_source_binding": "review",
+      "exact_original_flag": false,
+      "global_flag": true,
+      "localized_flag": true
+    },
+    {
+      "alternate_id": 220,
+      "any_pixel_flag": true,
+      "case_id": 105,
+      "correct_source_binding": "review",
+      "exact_original_flag": false,
+      "global_flag": true,
+      "localized_flag": true
+    },
+    {
+      "alternate_id": 1,
+      "any_pixel_flag": true,
+      "case_id": 105,
+      "correct_source_binding": "review",
+      "exact_original_flag": false,
+      "global_flag": true,
+      "localized_flag": true
+    },
+    {
+      "alternate_id": 56,
+      "any_pixel_flag": true,
+      "case_id": 108,
+      "correct_source_binding": "review",
+      "exact_original_flag": false,
+      "global_flag": true,
+      "localized_flag": true
+    },
+    {
+      "alternate_id": 315,
+      "any_pixel_flag": true,
+      "case_id": 108,
+      "correct_source_binding": "review",
+      "exact_original_flag": false,
+      "global_flag": true,
+      "localized_flag": true
+    },
+    {
+      "alternate_id": 152,
+      "any_pixel_flag": true,
+      "case_id": 108,
+      "correct_source_binding": "review",
+      "exact_original_flag": false,
+      "global_flag": true,
+      "localized_flag": true
+    },
+    {
+      "alternate_id": 179,
+      "any_pixel_flag": true,
+      "case_id": 110,
+      "correct_source_binding": "review",
+      "exact_original_flag": false,
+      "global_flag": true,
+      "localized_flag": true
+    },
+    {
+      "alternate_id": 330,
+      "any_pixel_flag": true,
+      "case_id": 110,
+      "correct_source_binding": "review",
+      "exact_original_flag": false,
+      "global_flag": true,
+      "localized_flag": true
+    },
+    {
+      "alternate_id": 257,
+      "any_pixel_flag": true,
+      "case_id": 114,
+      "correct_source_binding": "review",
+      "exact_original_flag": false,
+      "global_flag": true,
+      "localized_flag": true
+    },
+    {
+      "alternate_id": 71,
+      "any_pixel_flag": true,
+      "case_id": 114,
+      "correct_source_binding": "review",
+      "exact_original_flag": false,
+      "global_flag": true,
+      "localized_flag": true
+    },
+    {
+      "alternate_id": 15,
+      "any_pixel_flag": true,
+      "case_id": 114,
+      "correct_source_binding": "review",
+      "exact_original_flag": false,
+      "global_flag": true,
+      "localized_flag": true
+    },
+    {
+      "alternate_id": 25,
+      "any_pixel_flag": true,
+      "case_id": 120,
+      "correct_source_binding": "review",
+      "exact_original_flag": false,
+      "global_flag": true,
+      "localized_flag": true
+    },
+    {
+      "alternate_id": 288,
+      "any_pixel_flag": true,
+      "case_id": 120,
+      "correct_source_binding": "review",
+      "exact_original_flag": false,
+      "global_flag": true,
+      "localized_flag": true
+    },
+    {
+      "alternate_id": 152,
+      "any_pixel_flag": true,
+      "case_id": 121,
+      "correct_source_binding": "review",
+      "exact_original_flag": false,
+      "global_flag": true,
+      "localized_flag": true
+    },
+    {
+      "alternate_id": 56,
+      "any_pixel_flag": true,
+      "case_id": 121,
+      "correct_source_binding": "review",
+      "exact_original_flag": false,
+      "global_flag": true,
+      "localized_flag": true
+    },
+    {
+      "alternate_id": 315,
+      "any_pixel_flag": true,
+      "case_id": 121,
+      "correct_source_binding": "review",
+      "exact_original_flag": false,
+      "global_flag": true,
+      "localized_flag": true
+    },
+    {
+      "alternate_id": 168,
+      "any_pixel_flag": true,
+      "case_id": 123,
+      "correct_source_binding": "review",
+      "exact_original_flag": false,
+      "global_flag": true,
+      "localized_flag": true
+    },
+    {
+      "alternate_id": 87,
+      "any_pixel_flag": true,
+      "case_id": 123,
+      "correct_source_binding": "review",
+      "exact_original_flag": false,
+      "global_flag": true,
+      "localized_flag": true
+    },
+    {
+      "alternate_id": 281,
+      "any_pixel_flag": true,
+      "case_id": 132,
+      "correct_source_binding": "review",
+      "exact_original_flag": false,
+      "global_flag": true,
+      "localized_flag": true
+    },
+    {
+      "alternate_id": 241,
+      "any_pixel_flag": true,
+      "case_id": 133,
+      "correct_source_binding": "review",
+      "exact_original_flag": false,
+      "global_flag": true,
+      "localized_flag": true
+    },
+    {
+      "alternate_id": 18,
+      "any_pixel_flag": true,
+      "case_id": 136,
+      "correct_source_binding": "review",
+      "exact_original_flag": false,
+      "global_flag": true,
+      "localized_flag": true
+    },
+    {
+      "alternate_id": 227,
+      "any_pixel_flag": true,
+      "case_id": 136,
+      "correct_source_binding": "review",
+      "exact_original_flag": false,
+      "global_flag": true,
+      "localized_flag": true
+    },
+    {
+      "alternate_id": 335,
+      "any_pixel_flag": true,
+      "case_id": 136,
+      "correct_source_binding": "review",
+      "exact_original_flag": false,
+      "global_flag": true,
+      "localized_flag": true
+    },
+    {
+      "alternate_id": 191,
+      "any_pixel_flag": true,
+      "case_id": 139,
+      "correct_source_binding": "review",
+      "exact_original_flag": false,
+      "global_flag": true,
+      "localized_flag": true
+    },
+    {
+      "alternate_id": 185,
+      "any_pixel_flag": true,
+      "case_id": 139,
+      "correct_source_binding": "review",
+      "exact_original_flag": false,
+      "global_flag": true,
+      "localized_flag": true
+    },
+    {
+      "alternate_id": 210,
+      "any_pixel_flag": true,
+      "case_id": 139,
+      "correct_source_binding": "review",
+      "exact_original_flag": false,
+      "global_flag": true,
+      "localized_flag": true
+    },
+    {
+      "alternate_id": 55,
+      "any_pixel_flag": true,
+      "case_id": 140,
+      "correct_source_binding": "review",
+      "exact_original_flag": false,
+      "global_flag": true,
+      "localized_flag": true
+    },
+    {
+      "alternate_id": 155,
+      "any_pixel_flag": true,
+      "case_id": 140,
+      "correct_source_binding": "review",
+      "exact_original_flag": false,
+      "global_flag": true,
+      "localized_flag": true
+    },
+    {
+      "alternate_id": 322,
+      "any_pixel_flag": true,
+      "case_id": 140,
+      "correct_source_binding": "review",
+      "exact_original_flag": false,
+      "global_flag": true,
+      "localized_flag": true
+    },
+    {
+      "alternate_id": 298,
+      "any_pixel_flag": true,
+      "case_id": 141,
+      "correct_source_binding": "review",
+      "exact_original_flag": false,
+      "global_flag": true,
+      "localized_flag": true
+    },
+    {
+      "alternate_id": 94,
+      "any_pixel_flag": true,
+      "case_id": 141,
+      "correct_source_binding": "review",
+      "exact_original_flag": false,
+      "global_flag": true,
+      "localized_flag": true
+    },
+    {
+      "alternate_id": 13,
+      "any_pixel_flag": true,
+      "case_id": 141,
+      "correct_source_binding": "review",
+      "exact_original_flag": false,
+      "global_flag": true,
+      "localized_flag": true
+    },
+    {
+      "alternate_id": 21,
+      "any_pixel_flag": true,
+      "case_id": 142,
+      "correct_source_binding": "review",
+      "exact_original_flag": false,
+      "global_flag": true,
+      "localized_flag": true
+    },
+    {
+      "alternate_id": 148,
+      "any_pixel_flag": true,
+      "case_id": 142,
+      "correct_source_binding": "review",
+      "exact_original_flag": false,
+      "global_flag": true,
+      "localized_flag": true
+    },
+    {
+      "alternate_id": 270,
+      "any_pixel_flag": true,
+      "case_id": 142,
+      "correct_source_binding": "review",
+      "exact_original_flag": false,
+      "global_flag": true,
+      "localized_flag": true
+    },
+    {
+      "alternate_id": 320,
+      "any_pixel_flag": true,
+      "case_id": 146,
+      "correct_source_binding": "review",
+      "exact_original_flag": false,
+      "global_flag": true,
+      "localized_flag": true
+    },
+    {
+      "alternate_id": 209,
+      "any_pixel_flag": true,
+      "case_id": 146,
+      "correct_source_binding": "review",
+      "exact_original_flag": false,
+      "global_flag": true,
+      "localized_flag": true
+    },
+    {
+      "alternate_id": 312,
+      "any_pixel_flag": true,
+      "case_id": 146,
+      "correct_source_binding": "review",
+      "exact_original_flag": false,
+      "global_flag": true,
+      "localized_flag": true
+    },
+    {
+      "alternate_id": 153,
+      "any_pixel_flag": true,
+      "case_id": 148,
+      "correct_source_binding": "review",
+      "exact_original_flag": false,
+      "global_flag": true,
+      "localized_flag": true
+    },
+    {
+      "alternate_id": 325,
+      "any_pixel_flag": true,
+      "case_id": 148,
+      "correct_source_binding": "review",
+      "exact_original_flag": false,
+      "global_flag": true,
+      "localized_flag": true
+    },
+    {
+      "alternate_id": 142,
+      "any_pixel_flag": true,
+      "case_id": 148,
+      "correct_source_binding": "review",
+      "exact_original_flag": false,
+      "global_flag": true,
+      "localized_flag": true
+    },
+    {
+      "alternate_id": 75,
+      "any_pixel_flag": true,
+      "case_id": 149,
+      "correct_source_binding": "review",
+      "exact_original_flag": false,
+      "global_flag": true,
+      "localized_flag": true
+    },
+    {
+      "alternate_id": 324,
+      "any_pixel_flag": true,
+      "case_id": 149,
+      "correct_source_binding": "review",
+      "exact_original_flag": false,
+      "global_flag": true,
+      "localized_flag": true
+    },
+    {
+      "alternate_id": 232,
+      "any_pixel_flag": true,
+      "case_id": 149,
+      "correct_source_binding": "review",
+      "exact_original_flag": false,
+      "global_flag": true,
+      "localized_flag": true
+    },
+    {
+      "alternate_id": 14,
+      "any_pixel_flag": true,
+      "case_id": 151,
+      "correct_source_binding": "review",
+      "exact_original_flag": false,
+      "global_flag": true,
+      "localized_flag": true
+    },
+    {
+      "alternate_id": 11,
+      "any_pixel_flag": true,
+      "case_id": 152,
+      "correct_source_binding": "review",
+      "exact_original_flag": false,
+      "global_flag": true,
+      "localized_flag": true
+    },
+    {
+      "alternate_id": 108,
+      "any_pixel_flag": true,
+      "case_id": 152,
+      "correct_source_binding": "review",
+      "exact_original_flag": false,
+      "global_flag": true,
+      "localized_flag": true
+    },
+    {
+      "alternate_id": 121,
+      "any_pixel_flag": true,
+      "case_id": 152,
+      "correct_source_binding": "review",
+      "exact_original_flag": false,
+      "global_flag": true,
+      "localized_flag": true
+    },
+    {
+      "alternate_id": 148,
+      "any_pixel_flag": true,
+      "case_id": 153,
+      "correct_source_binding": "review",
+      "exact_original_flag": false,
+      "global_flag": true,
+      "localized_flag": true
+    },
+    {
+      "alternate_id": 270,
+      "any_pixel_flag": true,
+      "case_id": 153,
+      "correct_source_binding": "review",
+      "exact_original_flag": false,
+      "global_flag": true,
+      "localized_flag": true
+    },
+    {
+      "alternate_id": 93,
+      "any_pixel_flag": true,
+      "case_id": 153,
+      "correct_source_binding": "review",
+      "exact_original_flag": false,
+      "global_flag": true,
+      "localized_flag": true
+    },
+    {
+      "alternate_id": 140,
+      "any_pixel_flag": true,
+      "case_id": 155,
+      "correct_source_binding": "review",
+      "exact_original_flag": false,
+      "global_flag": true,
+      "localized_flag": true
+    },
+    {
+      "alternate_id": 313,
+      "any_pixel_flag": true,
+      "case_id": 155,
+      "correct_source_binding": "review",
+      "exact_original_flag": false,
+      "global_flag": true,
+      "localized_flag": true
+    },
+    {
+      "alternate_id": 170,
+      "any_pixel_flag": true,
+      "case_id": 155,
+      "correct_source_binding": "review",
+      "exact_original_flag": false,
+      "global_flag": true,
+      "localized_flag": true
+    },
+    {
+      "alternate_id": 27,
+      "any_pixel_flag": true,
+      "case_id": 159,
+      "correct_source_binding": "review",
+      "exact_original_flag": false,
+      "global_flag": true,
+      "localized_flag": true
+    },
+    {
+      "alternate_id": 172,
+      "any_pixel_flag": true,
+      "case_id": 159,
+      "correct_source_binding": "review",
+      "exact_original_flag": false,
+      "global_flag": true,
+      "localized_flag": true
+    },
+    {
+      "alternate_id": 317,
+      "any_pixel_flag": true,
+      "case_id": 159,
+      "correct_source_binding": "review",
+      "exact_original_flag": false,
+      "global_flag": true,
+      "localized_flag": true
+    },
+    {
+      "alternate_id": 277,
+      "any_pixel_flag": true,
+      "case_id": 163,
+      "correct_source_binding": "review",
+      "exact_original_flag": false,
+      "global_flag": true,
+      "localized_flag": true
+    },
+    {
+      "alternate_id": 250,
+      "any_pixel_flag": true,
+      "case_id": 164,
+      "correct_source_binding": "review",
+      "exact_original_flag": false,
+      "global_flag": true,
+      "localized_flag": true
+    },
+    {
+      "alternate_id": 300,
+      "any_pixel_flag": true,
+      "case_id": 167,
+      "correct_source_binding": "review",
+      "exact_original_flag": false,
+      "global_flag": true,
+      "localized_flag": true
+    },
+    {
+      "alternate_id": 66,
+      "any_pixel_flag": true,
+      "case_id": 167,
+      "correct_source_binding": "review",
+      "exact_original_flag": false,
+      "global_flag": true,
+      "localized_flag": true
+    },
+    {
+      "alternate_id": 87,
+      "any_pixel_flag": true,
+      "case_id": 168,
+      "correct_source_binding": "review",
+      "exact_original_flag": false,
+      "global_flag": true,
+      "localized_flag": true
+    },
+    {
+      "alternate_id": 123,
+      "any_pixel_flag": true,
+      "case_id": 168,
+      "correct_source_binding": "review",
+      "exact_original_flag": false,
+      "global_flag": true,
+      "localized_flag": true
+    },
+    {
+      "alternate_id": 334,
+      "any_pixel_flag": true,
+      "case_id": 169,
+      "correct_source_binding": "review",
+      "exact_original_flag": false,
+      "global_flag": true,
+      "localized_flag": true
+    },
+    {
+      "alternate_id": 152,
+      "any_pixel_flag": true,
+      "case_id": 169,
+      "correct_source_binding": "review",
+      "exact_original_flag": false,
+      "global_flag": true,
+      "localized_flag": true
+    },
+    {
+      "alternate_id": 56,
+      "any_pixel_flag": true,
+      "case_id": 169,
+      "correct_source_binding": "review",
+      "exact_original_flag": false,
+      "global_flag": true,
+      "localized_flag": true
+    },
+    {
+      "alternate_id": 155,
+      "any_pixel_flag": true,
+      "case_id": 170,
+      "correct_source_binding": "review",
+      "exact_original_flag": false,
+      "global_flag": true,
+      "localized_flag": true
+    },
+    {
+      "alternate_id": 322,
+      "any_pixel_flag": true,
+      "case_id": 170,
+      "correct_source_binding": "review",
+      "exact_original_flag": false,
+      "global_flag": true,
+      "localized_flag": true
+    },
+    {
+      "alternate_id": 55,
+      "any_pixel_flag": true,
+      "case_id": 170,
+      "correct_source_binding": "review",
+      "exact_original_flag": false,
+      "global_flag": true,
+      "localized_flag": true
+    },
+    {
+      "alternate_id": 210,
+      "any_pixel_flag": true,
+      "case_id": 172,
+      "correct_source_binding": "review",
+      "exact_original_flag": false,
+      "global_flag": true,
+      "localized_flag": true
+    },
+    {
+      "alternate_id": 183,
+      "any_pixel_flag": true,
+      "case_id": 172,
+      "correct_source_binding": "review",
+      "exact_original_flag": false,
+      "global_flag": true,
+      "localized_flag": true
+    },
+    {
+      "alternate_id": 283,
+      "any_pixel_flag": true,
+      "case_id": 172,
+      "correct_source_binding": "review",
+      "exact_original_flag": false,
+      "global_flag": true,
+      "localized_flag": true
+    },
+    {
+      "alternate_id": 205,
+      "any_pixel_flag": true,
+      "case_id": 173,
+      "correct_source_binding": "review",
+      "exact_original_flag": false,
+      "global_flag": true,
+      "localized_flag": true
+    },
+    {
+      "alternate_id": 316,
+      "any_pixel_flag": true,
+      "case_id": 173,
+      "correct_source_binding": "review",
+      "exact_original_flag": false,
+      "global_flag": true,
+      "localized_flag": true
+    },
+    {
+      "alternate_id": 7,
+      "any_pixel_flag": true,
+      "case_id": 173,
+      "correct_source_binding": "review",
+      "exact_original_flag": false,
+      "global_flag": true,
+      "localized_flag": true
+    },
+    {
+      "alternate_id": 230,
+      "any_pixel_flag": true,
+      "case_id": 174,
+      "correct_source_binding": "review",
+      "exact_original_flag": false,
+      "global_flag": true,
+      "localized_flag": true
+    },
+    {
+      "alternate_id": 302,
+      "any_pixel_flag": true,
+      "case_id": 174,
+      "correct_source_binding": "review",
+      "exact_original_flag": false,
+      "global_flag": true,
+      "localized_flag": true
+    },
+    {
+      "alternate_id": 49,
+      "any_pixel_flag": true,
+      "case_id": 174,
+      "correct_source_binding": "review",
+      "exact_original_flag": false,
+      "global_flag": true,
+      "localized_flag": true
+    },
+    {
+      "alternate_id": 88,
+      "any_pixel_flag": true,
+      "case_id": 177,
+      "correct_source_binding": "review",
+      "exact_original_flag": false,
+      "global_flag": true,
+      "localized_flag": true
+    },
+    {
+      "alternate_id": 110,
+      "any_pixel_flag": true,
+      "case_id": 179,
+      "correct_source_binding": "review",
+      "exact_original_flag": false,
+      "global_flag": true,
+      "localized_flag": true
+    },
+    {
+      "alternate_id": 330,
+      "any_pixel_flag": true,
+      "case_id": 179,
+      "correct_source_binding": "review",
+      "exact_original_flag": false,
+      "global_flag": true,
+      "localized_flag": true
+    },
+    {
+      "alternate_id": 225,
+      "any_pixel_flag": true,
+      "case_id": 183,
+      "correct_source_binding": "review",
+      "exact_original_flag": false,
+      "global_flag": true,
+      "localized_flag": true
+    },
+    {
+      "alternate_id": 68,
+      "any_pixel_flag": true,
+      "case_id": 183,
+      "correct_source_binding": "review",
+      "exact_original_flag": false,
+      "global_flag": true,
+      "localized_flag": true
+    },
+    {
+      "alternate_id": 294,
+      "any_pixel_flag": true,
+      "case_id": 183,
+      "correct_source_binding": "review",
+      "exact_original_flag": false,
+      "global_flag": true,
+      "localized_flag": true
+    },
+    {
+      "alternate_id": 191,
+      "any_pixel_flag": true,
+      "case_id": 185,
+      "correct_source_binding": "review",
+      "exact_original_flag": false,
+      "global_flag": true,
+      "localized_flag": true
+    },
+    {
+      "alternate_id": 77,
+      "any_pixel_flag": true,
+      "case_id": 185,
+      "correct_source_binding": "review",
+      "exact_original_flag": false,
+      "global_flag": true,
+      "localized_flag": true
+    },
+    {
+      "alternate_id": 282,
+      "any_pixel_flag": true,
+      "case_id": 185,
+      "correct_source_binding": "review",
+      "exact_original_flag": false,
+      "global_flag": true,
+      "localized_flag": true
+    },
+    {
+      "alternate_id": 328,
+      "any_pixel_flag": true,
+      "case_id": 190,
+      "correct_source_binding": "review",
+      "exact_original_flag": false,
+      "global_flag": true,
+      "localized_flag": true
+    },
+    {
+      "alternate_id": 78,
+      "any_pixel_flag": true,
+      "case_id": 190,
+      "correct_source_binding": "review",
+      "exact_original_flag": false,
+      "global_flag": true,
+      "localized_flag": true
+    },
+    {
+      "alternate_id": 44,
+      "any_pixel_flag": true,
+      "case_id": 190,
+      "correct_source_binding": "review",
+      "exact_original_flag": false,
+      "global_flag": true,
+      "localized_flag": true
+    },
+    {
+      "alternate_id": 183,
+      "any_pixel_flag": true,
+      "case_id": 191,
+      "correct_source_binding": "review",
+      "exact_original_flag": false,
+      "global_flag": true,
+      "localized_flag": true
+    },
+    {
+      "alternate_id": 159,
+      "any_pixel_flag": true,
+      "case_id": 191,
+      "correct_source_binding": "review",
+      "exact_original_flag": false,
+      "global_flag": true,
+      "localized_flag": true
+    },
+    {
+      "alternate_id": 210,
+      "any_pixel_flag": true,
+      "case_id": 191,
+      "correct_source_binding": "review",
+      "exact_original_flag": false,
+      "global_flag": true,
+      "localized_flag": true
+    },
+    {
+      "alternate_id": 65,
+      "any_pixel_flag": true,
+      "case_id": 196,
+      "correct_source_binding": "review",
+      "exact_original_flag": false,
+      "global_flag": true,
+      "localized_flag": true
+    },
+    {
+      "alternate_id": 251,
+      "any_pixel_flag": true,
+      "case_id": 196,
+      "correct_source_binding": "review",
+      "exact_original_flag": false,
+      "global_flag": true,
+      "localized_flag": true
+    },
+    {
+      "alternate_id": 317,
+      "any_pixel_flag": true,
+      "case_id": 196,
+      "correct_source_binding": "review",
+      "exact_original_flag": false,
+      "global_flag": true,
+      "localized_flag": true
+    },
+    {
+      "alternate_id": 98,
+      "any_pixel_flag": true,
+      "case_id": 198,
+      "correct_source_binding": "review",
+      "exact_original_flag": false,
+      "global_flag": true,
+      "localized_flag": true
+    },
+    {
+      "alternate_id": 75,
+      "any_pixel_flag": true,
+      "case_id": 198,
+      "correct_source_binding": "review",
+      "exact_original_flag": false,
+      "global_flag": true,
+      "localized_flag": true
+    },
+    {
+      "alternate_id": 41,
+      "any_pixel_flag": true,
+      "case_id": 198,
+      "correct_source_binding": "review",
+      "exact_original_flag": false,
+      "global_flag": true,
+      "localized_flag": true
+    },
+    {
+      "alternate_id": 214,
+      "any_pixel_flag": true,
+      "case_id": 202,
+      "correct_source_binding": "review",
+      "exact_original_flag": false,
+      "global_flag": true,
+      "localized_flag": true
+    },
+    {
+      "alternate_id": 289,
+      "any_pixel_flag": true,
+      "case_id": 202,
+      "correct_source_binding": "review",
+      "exact_original_flag": false,
+      "global_flag": true,
+      "localized_flag": true
+    },
+    {
+      "alternate_id": 173,
+      "any_pixel_flag": true,
+      "case_id": 205,
+      "correct_source_binding": "review",
+      "exact_original_flag": false,
+      "global_flag": true,
+      "localized_flag": true
+    },
+    {
+      "alternate_id": 7,
+      "any_pixel_flag": true,
+      "case_id": 205,
+      "correct_source_binding": "review",
+      "exact_original_flag": false,
+      "global_flag": true,
+      "localized_flag": true
+    },
+    {
+      "alternate_id": 316,
+      "any_pixel_flag": true,
+      "case_id": 205,
+      "correct_source_binding": "review",
+      "exact_original_flag": false,
+      "global_flag": true,
+      "localized_flag": true
+    },
+    {
+      "alternate_id": 242,
+      "any_pixel_flag": true,
+      "case_id": 206,
+      "correct_source_binding": "review",
+      "exact_original_flag": false,
+      "global_flag": true,
+      "localized_flag": true
+    },
+    {
+      "alternate_id": 290,
+      "any_pixel_flag": true,
+      "case_id": 208,
+      "correct_source_binding": "review",
+      "exact_original_flag": false,
+      "global_flag": true,
+      "localized_flag": true
+    },
+    {
+      "alternate_id": 51,
+      "any_pixel_flag": true,
+      "case_id": 209,
+      "correct_source_binding": "review",
+      "exact_original_flag": false,
+      "global_flag": true,
+      "localized_flag": true
+    },
+    {
+      "alternate_id": 320,
+      "any_pixel_flag": true,
+      "case_id": 209,
+      "correct_source_binding": "review",
+      "exact_original_flag": false,
+      "global_flag": true,
+      "localized_flag": true
+    },
+    {
+      "alternate_id": 312,
+      "any_pixel_flag": true,
+      "case_id": 209,
+      "correct_source_binding": "review",
+      "exact_original_flag": false,
+      "global_flag": true,
+      "localized_flag": true
+    },
+    {
+      "alternate_id": 185,
+      "any_pixel_flag": true,
+      "case_id": 210,
+      "correct_source_binding": "review",
+      "exact_original_flag": false,
+      "global_flag": true,
+      "localized_flag": true
+    },
+    {
+      "alternate_id": 299,
+      "any_pixel_flag": true,
+      "case_id": 210,
+      "correct_source_binding": "review",
+      "exact_original_flag": false,
+      "global_flag": true,
+      "localized_flag": true
+    },
+    {
+      "alternate_id": 294,
+      "any_pixel_flag": true,
+      "case_id": 210,
+      "correct_source_binding": "review",
+      "exact_original_flag": false,
+      "global_flag": true,
+      "localized_flag": true
+    },
+    {
+      "alternate_id": 202,
+      "any_pixel_flag": true,
+      "case_id": 214,
+      "correct_source_binding": "review",
+      "exact_original_flag": false,
+      "global_flag": true,
+      "localized_flag": true
+    },
+    {
+      "alternate_id": 289,
+      "any_pixel_flag": true,
+      "case_id": 214,
+      "correct_source_binding": "review",
+      "exact_original_flag": false,
+      "global_flag": true,
+      "localized_flag": true
+    },
+    {
+      "alternate_id": 293,
+      "any_pixel_flag": true,
+      "case_id": 217,
+      "correct_source_binding": "review",
+      "exact_original_flag": false,
+      "global_flag": true,
+      "localized_flag": true
+    },
+    {
+      "alternate_id": 136,
+      "any_pixel_flag": true,
+      "case_id": 217,
+      "correct_source_binding": "review",
+      "exact_original_flag": false,
+      "global_flag": true,
+      "localized_flag": true
+    },
+    {
+      "alternate_id": 70,
+      "any_pixel_flag": true,
+      "case_id": 217,
+      "correct_source_binding": "review",
+      "exact_original_flag": false,
+      "global_flag": true,
+      "localized_flag": true
+    },
+    {
+      "alternate_id": 1,
+      "any_pixel_flag": true,
+      "case_id": 220,
+      "correct_source_binding": "review",
+      "exact_original_flag": false,
+      "global_flag": true,
+      "localized_flag": true
+    },
+    {
+      "alternate_id": 326,
+      "any_pixel_flag": true,
+      "case_id": 220,
+      "correct_source_binding": "review",
+      "exact_original_flag": false,
+      "global_flag": true,
+      "localized_flag": true
+    },
+    {
+      "alternate_id": 105,
+      "any_pixel_flag": true,
+      "case_id": 220,
+      "correct_source_binding": "review",
+      "exact_original_flag": false,
+      "global_flag": true,
+      "localized_flag": true
+    },
+    {
+      "alternate_id": 68,
+      "any_pixel_flag": true,
+      "case_id": 225,
+      "correct_source_binding": "review",
+      "exact_original_flag": false,
+      "global_flag": true,
+      "localized_flag": true
+    },
+    {
+      "alternate_id": 159,
+      "any_pixel_flag": true,
+      "case_id": 225,
+      "correct_source_binding": "review",
+      "exact_original_flag": false,
+      "global_flag": true,
+      "localized_flag": true
+    },
+    {
+      "alternate_id": 27,
+      "any_pixel_flag": true,
+      "case_id": 225,
+      "correct_source_binding": "review",
+      "exact_original_flag": false,
+      "global_flag": true,
+      "localized_flag": true
+    },
+    {
+      "alternate_id": 18,
+      "any_pixel_flag": true,
+      "case_id": 227,
+      "correct_source_binding": "review",
+      "exact_original_flag": false,
+      "global_flag": true,
+      "localized_flag": true
+    },
+    {
+      "alternate_id": 60,
+      "any_pixel_flag": true,
+      "case_id": 227,
+      "correct_source_binding": "review",
+      "exact_original_flag": false,
+      "global_flag": true,
+      "localized_flag": true
+    },
+    {
+      "alternate_id": 335,
+      "any_pixel_flag": true,
+      "case_id": 227,
+      "correct_source_binding": "review",
+      "exact_original_flag": false,
+      "global_flag": true,
+      "localized_flag": true
+    },
+    {
+      "alternate_id": 302,
+      "any_pixel_flag": true,
+      "case_id": 230,
+      "correct_source_binding": "review",
+      "exact_original_flag": false,
+      "global_flag": true,
+      "localized_flag": true
+    },
+    {
+      "alternate_id": 103,
+      "any_pixel_flag": true,
+      "case_id": 230,
+      "correct_source_binding": "review",
+      "exact_original_flag": false,
+      "global_flag": true,
+      "localized_flag": true
+    },
+    {
+      "alternate_id": 49,
+      "any_pixel_flag": true,
+      "case_id": 230,
+      "correct_source_binding": "review",
+      "exact_original_flag": false,
+      "global_flag": true,
+      "localized_flag": true
+    },
+    {
+      "alternate_id": 13,
+      "any_pixel_flag": true,
+      "case_id": 232,
+      "correct_source_binding": "review",
+      "exact_original_flag": false,
+      "global_flag": true,
+      "localized_flag": true
+    },
+    {
+      "alternate_id": 149,
+      "any_pixel_flag": true,
+      "case_id": 232,
+      "correct_source_binding": "review",
+      "exact_original_flag": false,
+      "global_flag": true,
+      "localized_flag": true
+    },
+    {
+      "alternate_id": 75,
+      "any_pixel_flag": true,
+      "case_id": 232,
+      "correct_source_binding": "review",
+      "exact_original_flag": false,
+      "global_flag": true,
+      "localized_flag": true
+    },
+    {
+      "alternate_id": 185,
+      "any_pixel_flag": true,
+      "case_id": 239,
+      "correct_source_binding": "review",
+      "exact_original_flag": false,
+      "global_flag": true,
+      "localized_flag": true
+    },
+    {
+      "alternate_id": 172,
+      "any_pixel_flag": true,
+      "case_id": 239,
+      "correct_source_binding": "review",
+      "exact_original_flag": false,
+      "global_flag": true,
+      "localized_flag": true
+    },
+    {
+      "alternate_id": 77,
+      "any_pixel_flag": true,
+      "case_id": 239,
+      "correct_source_binding": "review",
+      "exact_original_flag": false,
+      "global_flag": true,
+      "localized_flag": true
+    },
+    {
+      "alternate_id": 133,
+      "any_pixel_flag": true,
+      "case_id": 241,
+      "correct_source_binding": "review",
+      "exact_original_flag": false,
+      "global_flag": true,
+      "localized_flag": true
+    },
+    {
+      "alternate_id": 206,
+      "any_pixel_flag": true,
+      "case_id": 242,
+      "correct_source_binding": "review",
+      "exact_original_flag": false,
+      "global_flag": true,
+      "localized_flag": true
+    },
+    {
+      "alternate_id": 108,
+      "any_pixel_flag": true,
+      "case_id": 246,
+      "correct_source_binding": "review",
+      "exact_original_flag": false,
+      "global_flag": true,
+      "localized_flag": true
+    },
+    {
+      "alternate_id": 334,
+      "any_pixel_flag": true,
+      "case_id": 246,
+      "correct_source_binding": "review",
+      "exact_original_flag": false,
+      "global_flag": true,
+      "localized_flag": true
+    },
+    {
+      "alternate_id": 315,
+      "any_pixel_flag": true,
+      "case_id": 246,
+      "correct_source_binding": "review",
+      "exact_original_flag": false,
+      "global_flag": true,
+      "localized_flag": true
+    },
+    {
+      "alternate_id": 164,
+      "any_pixel_flag": true,
+      "case_id": 250,
+      "correct_source_binding": "review",
+      "exact_original_flag": false,
+      "global_flag": true,
+      "localized_flag": true
+    },
+    {
+      "alternate_id": 225,
+      "any_pixel_flag": true,
+      "case_id": 251,
+      "correct_source_binding": "review",
+      "exact_original_flag": false,
+      "global_flag": true,
+      "localized_flag": true
+    },
+    {
+      "alternate_id": 65,
+      "any_pixel_flag": true,
+      "case_id": 251,
+      "correct_source_binding": "review",
+      "exact_original_flag": false,
+      "global_flag": true,
+      "localized_flag": true
+    },
+    {
+      "alternate_id": 283,
+      "any_pixel_flag": true,
+      "case_id": 251,
+      "correct_source_binding": "review",
+      "exact_original_flag": false,
+      "global_flag": true,
+      "localized_flag": true
+    },
+    {
+      "alternate_id": 20,
+      "any_pixel_flag": true,
+      "case_id": 254,
+      "correct_source_binding": "review",
+      "exact_original_flag": false,
+      "global_flag": true,
+      "localized_flag": true
+    },
+    {
+      "alternate_id": 114,
+      "any_pixel_flag": true,
+      "case_id": 257,
+      "correct_source_binding": "review",
+      "exact_original_flag": false,
+      "global_flag": true,
+      "localized_flag": true
+    },
+    {
+      "alternate_id": 15,
+      "any_pixel_flag": true,
+      "case_id": 257,
+      "correct_source_binding": "review",
+      "exact_original_flag": false,
+      "global_flag": true,
+      "localized_flag": true
+    },
+    {
+      "alternate_id": 71,
+      "any_pixel_flag": true,
+      "case_id": 257,
+      "correct_source_binding": "review",
+      "exact_original_flag": false,
+      "global_flag": true,
+      "localized_flag": true
+    },
+    {
+      "alternate_id": 169,
+      "any_pixel_flag": true,
+      "case_id": 268,
+      "correct_source_binding": "review",
+      "exact_original_flag": false,
+      "global_flag": true,
+      "localized_flag": true
+    },
+    {
+      "alternate_id": 334,
+      "any_pixel_flag": true,
+      "case_id": 268,
+      "correct_source_binding": "review",
+      "exact_original_flag": false,
+      "global_flag": true,
+      "localized_flag": true
+    },
+    {
+      "alternate_id": 315,
+      "any_pixel_flag": true,
+      "case_id": 268,
+      "correct_source_binding": "review",
+      "exact_original_flag": false,
+      "global_flag": true,
+      "localized_flag": true
+    },
+    {
+      "alternate_id": 324,
+      "any_pixel_flag": true,
+      "case_id": 269,
+      "correct_source_binding": "review",
+      "exact_original_flag": false,
+      "global_flag": true,
+      "localized_flag": true
+    },
+    {
+      "alternate_id": 89,
+      "any_pixel_flag": true,
+      "case_id": 269,
+      "correct_source_binding": "review",
+      "exact_original_flag": false,
+      "global_flag": true,
+      "localized_flag": true
+    },
+    {
+      "alternate_id": 90,
+      "any_pixel_flag": true,
+      "case_id": 269,
+      "correct_source_binding": "review",
+      "exact_original_flag": false,
+      "global_flag": true,
+      "localized_flag": true
+    },
+    {
+      "alternate_id": 93,
+      "any_pixel_flag": true,
+      "case_id": 270,
+      "correct_source_binding": "review",
+      "exact_original_flag": false,
+      "global_flag": true,
+      "localized_flag": true
+    },
+    {
+      "alternate_id": 142,
+      "any_pixel_flag": true,
+      "case_id": 270,
+      "correct_source_binding": "review",
+      "exact_original_flag": false,
+      "global_flag": true,
+      "localized_flag": true
+    },
+    {
+      "alternate_id": 153,
+      "any_pixel_flag": true,
+      "case_id": 270,
+      "correct_source_binding": "review",
+      "exact_original_flag": false,
+      "global_flag": true,
+      "localized_flag": true
+    },
+    {
+      "alternate_id": 163,
+      "any_pixel_flag": true,
+      "case_id": 277,
+      "correct_source_binding": "review",
+      "exact_original_flag": false,
+      "global_flag": true,
+      "localized_flag": true
+    },
+    {
+      "alternate_id": 71,
+      "any_pixel_flag": true,
+      "case_id": 280,
+      "correct_source_binding": "review",
+      "exact_original_flag": false,
+      "global_flag": true,
+      "localized_flag": true
+    },
+    {
+      "alternate_id": 114,
+      "any_pixel_flag": true,
+      "case_id": 280,
+      "correct_source_binding": "review",
+      "exact_original_flag": false,
+      "global_flag": true,
+      "localized_flag": true
+    },
+    {
+      "alternate_id": 15,
+      "any_pixel_flag": true,
+      "case_id": 280,
+      "correct_source_binding": "review",
+      "exact_original_flag": false,
+      "global_flag": true,
+      "localized_flag": true
+    },
+    {
+      "alternate_id": 132,
+      "any_pixel_flag": true,
+      "case_id": 281,
+      "correct_source_binding": "review",
+      "exact_original_flag": false,
+      "global_flag": true,
+      "localized_flag": true
+    },
+    {
+      "alternate_id": 77,
+      "any_pixel_flag": true,
+      "case_id": 282,
+      "correct_source_binding": "review",
+      "exact_original_flag": false,
+      "global_flag": true,
+      "localized_flag": true
+    },
+    {
+      "alternate_id": 251,
+      "any_pixel_flag": true,
+      "case_id": 282,
+      "correct_source_binding": "review",
+      "exact_original_flag": false,
+      "global_flag": true,
+      "localized_flag": true
+    },
+    {
+      "alternate_id": 65,
+      "any_pixel_flag": true,
+      "case_id": 282,
+      "correct_source_binding": "review",
+      "exact_original_flag": false,
+      "global_flag": true,
+      "localized_flag": true
+    },
+    {
+      "alternate_id": 287,
+      "any_pixel_flag": true,
+      "case_id": 283,
+      "correct_source_binding": "review",
+      "exact_original_flag": false,
+      "global_flag": true,
+      "localized_flag": true
+    },
+    {
+      "alternate_id": 251,
+      "any_pixel_flag": true,
+      "case_id": 283,
+      "correct_source_binding": "review",
+      "exact_original_flag": false,
+      "global_flag": true,
+      "localized_flag": true
+    },
+    {
+      "alternate_id": 159,
+      "any_pixel_flag": true,
+      "case_id": 283,
+      "correct_source_binding": "review",
+      "exact_original_flag": false,
+      "global_flag": true,
+      "localized_flag": true
+    },
+    {
+      "alternate_id": 196,
+      "any_pixel_flag": true,
+      "case_id": 287,
+      "correct_source_binding": "review",
+      "exact_original_flag": false,
+      "global_flag": true,
+      "localized_flag": true
+    },
+    {
+      "alternate_id": 77,
+      "any_pixel_flag": true,
+      "case_id": 287,
+      "correct_source_binding": "review",
+      "exact_original_flag": false,
+      "global_flag": true,
+      "localized_flag": true
+    },
+    {
+      "alternate_id": 283,
+      "any_pixel_flag": true,
+      "case_id": 287,
+      "correct_source_binding": "review",
+      "exact_original_flag": false,
+      "global_flag": true,
+      "localized_flag": true
+    },
+    {
+      "alternate_id": 120,
+      "any_pixel_flag": true,
+      "case_id": 288,
+      "correct_source_binding": "review",
+      "exact_original_flag": false,
+      "global_flag": true,
+      "localized_flag": true
+    },
+    {
+      "alternate_id": 25,
+      "any_pixel_flag": true,
+      "case_id": 288,
+      "correct_source_binding": "review",
+      "exact_original_flag": false,
+      "global_flag": true,
+      "localized_flag": true
+    },
+    {
+      "alternate_id": 214,
+      "any_pixel_flag": true,
+      "case_id": 289,
+      "correct_source_binding": "review",
+      "exact_original_flag": false,
+      "global_flag": true,
+      "localized_flag": true
+    },
+    {
+      "alternate_id": 202,
+      "any_pixel_flag": true,
+      "case_id": 289,
+      "correct_source_binding": "review",
+      "exact_original_flag": false,
+      "global_flag": true,
+      "localized_flag": true
+    },
+    {
+      "alternate_id": 208,
+      "any_pixel_flag": true,
+      "case_id": 290,
+      "correct_source_binding": "review",
+      "exact_original_flag": false,
+      "global_flag": true,
+      "localized_flag": true
+    },
+    {
+      "alternate_id": 18,
+      "any_pixel_flag": true,
+      "case_id": 293,
+      "correct_source_binding": "review",
+      "exact_original_flag": false,
+      "global_flag": true,
+      "localized_flag": true
+    },
+    {
+      "alternate_id": 60,
+      "any_pixel_flag": true,
+      "case_id": 293,
+      "correct_source_binding": "review",
+      "exact_original_flag": false,
+      "global_flag": true,
+      "localized_flag": true
+    },
+    {
+      "alternate_id": 70,
+      "any_pixel_flag": true,
+      "case_id": 293,
+      "correct_source_binding": "review",
+      "exact_original_flag": false,
+      "global_flag": true,
+      "localized_flag": true
+    },
+    {
+      "alternate_id": 251,
+      "any_pixel_flag": true,
+      "case_id": 294,
+      "correct_source_binding": "review",
+      "exact_original_flag": false,
+      "global_flag": true,
+      "localized_flag": true
+    },
+    {
+      "alternate_id": 210,
+      "any_pixel_flag": true,
+      "case_id": 294,
+      "correct_source_binding": "review",
+      "exact_original_flag": false,
+      "global_flag": true,
+      "localized_flag": true
+    },
+    {
+      "alternate_id": 299,
+      "any_pixel_flag": true,
+      "case_id": 294,
+      "correct_source_binding": "review",
+      "exact_original_flag": false,
+      "global_flag": true,
+      "localized_flag": true
+    },
+    {
+      "alternate_id": 41,
+      "any_pixel_flag": true,
+      "case_id": 298,
+      "correct_source_binding": "review",
+      "exact_original_flag": false,
+      "global_flag": true,
+      "localized_flag": true
+    },
+    {
+      "alternate_id": 324,
+      "any_pixel_flag": true,
+      "case_id": 298,
+      "correct_source_binding": "review",
+      "exact_original_flag": false,
+      "global_flag": true,
+      "localized_flag": true
+    },
+    {
+      "alternate_id": 269,
+      "any_pixel_flag": true,
+      "case_id": 298,
+      "correct_source_binding": "review",
+      "exact_original_flag": false,
+      "global_flag": true,
+      "localized_flag": true
+    },
+    {
+      "alternate_id": 287,
+      "any_pixel_flag": true,
+      "case_id": 299,
+      "correct_source_binding": "review",
+      "exact_original_flag": false,
+      "global_flag": true,
+      "localized_flag": true
+    },
+    {
+      "alternate_id": 196,
+      "any_pixel_flag": true,
+      "case_id": 299,
+      "correct_source_binding": "review",
+      "exact_original_flag": false,
+      "global_flag": true,
+      "localized_flag": true
+    },
+    {
+      "alternate_id": 77,
+      "any_pixel_flag": true,
+      "case_id": 299,
+      "correct_source_binding": "review",
+      "exact_original_flag": false,
+      "global_flag": true,
+      "localized_flag": true
+    },
+    {
+      "alternate_id": 167,
+      "any_pixel_flag": true,
+      "case_id": 300,
+      "correct_source_binding": "review",
+      "exact_original_flag": false,
+      "global_flag": true,
+      "localized_flag": true
+    },
+    {
+      "alternate_id": 66,
+      "any_pixel_flag": true,
+      "case_id": 300,
+      "correct_source_binding": "review",
+      "exact_original_flag": false,
+      "global_flag": true,
+      "localized_flag": true
+    },
+    {
+      "alternate_id": 230,
+      "any_pixel_flag": true,
+      "case_id": 302,
+      "correct_source_binding": "review",
+      "exact_original_flag": false,
+      "global_flag": true,
+      "localized_flag": true
+    },
+    {
+      "alternate_id": 103,
+      "any_pixel_flag": true,
+      "case_id": 302,
+      "correct_source_binding": "review",
+      "exact_original_flag": false,
+      "global_flag": true,
+      "localized_flag": true
+    },
+    {
+      "alternate_id": 174,
+      "any_pixel_flag": true,
+      "case_id": 302,
+      "correct_source_binding": "review",
+      "exact_original_flag": false,
+      "global_flag": true,
+      "localized_flag": true
+    },
+    {
+      "alternate_id": 320,
+      "any_pixel_flag": true,
+      "case_id": 312,
+      "correct_source_binding": "review",
+      "exact_original_flag": false,
+      "global_flag": true,
+      "localized_flag": true
+    },
+    {
+      "alternate_id": 146,
+      "any_pixel_flag": true,
+      "case_id": 312,
+      "correct_source_binding": "review",
+      "exact_original_flag": false,
+      "global_flag": true,
+      "localized_flag": true
+    },
+    {
+      "alternate_id": 51,
+      "any_pixel_flag": true,
+      "case_id": 312,
+      "correct_source_binding": "review",
+      "exact_original_flag": false,
+      "global_flag": true,
+      "localized_flag": true
+    },
+    {
+      "alternate_id": 170,
+      "any_pixel_flag": true,
+      "case_id": 313,
+      "correct_source_binding": "review",
+      "exact_original_flag": false,
+      "global_flag": true,
+      "localized_flag": true
+    },
+    {
+      "alternate_id": 55,
+      "any_pixel_flag": true,
+      "case_id": 313,
+      "correct_source_binding": "review",
+      "exact_original_flag": false,
+      "global_flag": true,
+      "localized_flag": true
+    },
+    {
+      "alternate_id": 321,
+      "any_pixel_flag": true,
+      "case_id": 313,
+      "correct_source_binding": "review",
+      "exact_original_flag": false,
+      "global_flag": true,
+      "localized_flag": true
+    },
+    {
+      "alternate_id": 108,
+      "any_pixel_flag": true,
+      "case_id": 315,
+      "correct_source_binding": "review",
+      "exact_original_flag": false,
+      "global_flag": true,
+      "localized_flag": true
+    },
+    {
+      "alternate_id": 56,
+      "any_pixel_flag": true,
+      "case_id": 315,
+      "correct_source_binding": "review",
+      "exact_original_flag": false,
+      "global_flag": true,
+      "localized_flag": true
+    },
+    {
+      "alternate_id": 11,
+      "any_pixel_flag": true,
+      "case_id": 315,
+      "correct_source_binding": "review",
+      "exact_original_flag": false,
+      "global_flag": true,
+      "localized_flag": true
+    },
+    {
+      "alternate_id": 205,
+      "any_pixel_flag": true,
+      "case_id": 316,
+      "correct_source_binding": "review",
+      "exact_original_flag": false,
+      "global_flag": true,
+      "localized_flag": true
+    },
+    {
+      "alternate_id": 7,
+      "any_pixel_flag": true,
+      "case_id": 316,
+      "correct_source_binding": "review",
+      "exact_original_flag": false,
+      "global_flag": true,
+      "localized_flag": true
+    },
+    {
+      "alternate_id": 173,
+      "any_pixel_flag": true,
+      "case_id": 316,
+      "correct_source_binding": "review",
+      "exact_original_flag": false,
+      "global_flag": true,
+      "localized_flag": true
+    },
+    {
+      "alternate_id": 185,
+      "any_pixel_flag": true,
+      "case_id": 317,
+      "correct_source_binding": "review",
+      "exact_original_flag": false,
+      "global_flag": true,
+      "localized_flag": true
+    },
+    {
+      "alternate_id": 139,
+      "any_pixel_flag": true,
+      "case_id": 317,
+      "correct_source_binding": "review",
+      "exact_original_flag": false,
+      "global_flag": true,
+      "localized_flag": true
+    },
+    {
+      "alternate_id": 196,
+      "any_pixel_flag": true,
+      "case_id": 317,
+      "correct_source_binding": "review",
+      "exact_original_flag": false,
+      "global_flag": true,
+      "localized_flag": true
+    },
+    {
+      "alternate_id": 312,
+      "any_pixel_flag": true,
+      "case_id": 320,
+      "correct_source_binding": "review",
+      "exact_original_flag": false,
+      "global_flag": true,
+      "localized_flag": true
+    },
+    {
+      "alternate_id": 146,
+      "any_pixel_flag": true,
+      "case_id": 320,
+      "correct_source_binding": "review",
+      "exact_original_flag": false,
+      "global_flag": true,
+      "localized_flag": true
+    },
+    {
+      "alternate_id": 51,
+      "any_pixel_flag": true,
+      "case_id": 320,
+      "correct_source_binding": "review",
+      "exact_original_flag": false,
+      "global_flag": true,
+      "localized_flag": true
+    },
+    {
+      "alternate_id": 155,
+      "any_pixel_flag": true,
+      "case_id": 321,
+      "correct_source_binding": "review",
+      "exact_original_flag": false,
+      "global_flag": true,
+      "localized_flag": true
+    },
+    {
+      "alternate_id": 313,
+      "any_pixel_flag": true,
+      "case_id": 321,
+      "correct_source_binding": "review",
+      "exact_original_flag": false,
+      "global_flag": true,
+      "localized_flag": true
+    },
+    {
+      "alternate_id": 140,
+      "any_pixel_flag": true,
+      "case_id": 321,
+      "correct_source_binding": "review",
+      "exact_original_flag": false,
+      "global_flag": true,
+      "localized_flag": true
+    },
+    {
+      "alternate_id": 55,
+      "any_pixel_flag": true,
+      "case_id": 322,
+      "correct_source_binding": "review",
+      "exact_original_flag": false,
+      "global_flag": true,
+      "localized_flag": true
+    },
+    {
+      "alternate_id": 155,
+      "any_pixel_flag": true,
+      "case_id": 322,
+      "correct_source_binding": "review",
+      "exact_original_flag": false,
+      "global_flag": true,
+      "localized_flag": true
+    },
+    {
+      "alternate_id": 170,
+      "any_pixel_flag": true,
+      "case_id": 322,
+      "correct_source_binding": "review",
+      "exact_original_flag": false,
+      "global_flag": true,
+      "localized_flag": true
+    },
+    {
+      "alternate_id": 89,
+      "any_pixel_flag": true,
+      "case_id": 324,
+      "correct_source_binding": "review",
+      "exact_original_flag": false,
+      "global_flag": true,
+      "localized_flag": true
+    },
+    {
+      "alternate_id": 75,
+      "any_pixel_flag": true,
+      "case_id": 324,
+      "correct_source_binding": "review",
+      "exact_original_flag": false,
+      "global_flag": true,
+      "localized_flag": true
+    },
+    {
+      "alternate_id": 98,
+      "any_pixel_flag": true,
+      "case_id": 324,
+      "correct_source_binding": "review",
+      "exact_original_flag": false,
+      "global_flag": true,
+      "localized_flag": true
+    },
+    {
+      "alternate_id": 148,
+      "any_pixel_flag": true,
+      "case_id": 325,
+      "correct_source_binding": "review",
+      "exact_original_flag": false,
+      "global_flag": true,
+      "localized_flag": true
+    },
+    {
+      "alternate_id": 142,
+      "any_pixel_flag": true,
+      "case_id": 325,
+      "correct_source_binding": "review",
+      "exact_original_flag": false,
+      "global_flag": true,
+      "localized_flag": true
+    },
+    {
+      "alternate_id": 153,
+      "any_pixel_flag": true,
+      "case_id": 325,
+      "correct_source_binding": "review",
+      "exact_original_flag": false,
+      "global_flag": true,
+      "localized_flag": true
+    },
+    {
+      "alternate_id": 16,
+      "any_pixel_flag": true,
+      "case_id": 326,
+      "correct_source_binding": "review",
+      "exact_original_flag": false,
+      "global_flag": true,
+      "localized_flag": true
+    },
+    {
+      "alternate_id": 220,
+      "any_pixel_flag": true,
+      "case_id": 326,
+      "correct_source_binding": "review",
+      "exact_original_flag": false,
+      "global_flag": true,
+      "localized_flag": true
+    },
+    {
+      "alternate_id": 105,
+      "any_pixel_flag": true,
+      "case_id": 326,
+      "correct_source_binding": "review",
+      "exact_original_flag": false,
+      "global_flag": true,
+      "localized_flag": true
+    },
+    {
+      "alternate_id": 78,
+      "any_pixel_flag": true,
+      "case_id": 328,
+      "correct_source_binding": "review",
+      "exact_original_flag": false,
+      "global_flag": true,
+      "localized_flag": true
+    },
+    {
+      "alternate_id": 44,
+      "any_pixel_flag": true,
+      "case_id": 328,
+      "correct_source_binding": "review",
+      "exact_original_flag": false,
+      "global_flag": true,
+      "localized_flag": true
+    },
+    {
+      "alternate_id": 190,
+      "any_pixel_flag": true,
+      "case_id": 328,
+      "correct_source_binding": "review",
+      "exact_original_flag": false,
+      "global_flag": true,
+      "localized_flag": true
+    },
+    {
+      "alternate_id": 179,
+      "any_pixel_flag": true,
+      "case_id": 330,
+      "correct_source_binding": "review",
+      "exact_original_flag": false,
+      "global_flag": true,
+      "localized_flag": true
+    },
+    {
+      "alternate_id": 110,
+      "any_pixel_flag": true,
+      "case_id": 330,
+      "correct_source_binding": "review",
+      "exact_original_flag": false,
+      "global_flag": true,
+      "localized_flag": true
+    },
+    {
+      "alternate_id": 315,
+      "any_pixel_flag": true,
+      "case_id": 334,
+      "correct_source_binding": "review",
+      "exact_original_flag": false,
+      "global_flag": true,
+      "localized_flag": true
+    },
+    {
+      "alternate_id": 121,
+      "any_pixel_flag": true,
+      "case_id": 334,
+      "correct_source_binding": "review",
+      "exact_original_flag": false,
+      "global_flag": true,
+      "localized_flag": true
+    },
+    {
+      "alternate_id": 246,
+      "any_pixel_flag": true,
+      "case_id": 334,
+      "correct_source_binding": "review",
+      "exact_original_flag": false,
+      "global_flag": true,
+      "localized_flag": true
+    },
+    {
+      "alternate_id": 293,
+      "any_pixel_flag": true,
+      "case_id": 335,
+      "correct_source_binding": "review",
+      "exact_original_flag": false,
+      "global_flag": true,
+      "localized_flag": true
+    },
+    {
+      "alternate_id": 136,
+      "any_pixel_flag": true,
+      "case_id": 335,
+      "correct_source_binding": "review",
+      "exact_original_flag": false,
+      "global_flag": true,
+      "localized_flag": true
+    },
+    {
+      "alternate_id": 60,
+      "any_pixel_flag": true,
+      "case_id": 335,
+      "correct_source_binding": "review",
+      "exact_original_flag": false,
+      "global_flag": true,
+      "localized_flag": true
+    }
+  ],
+  "source": "https://huggingface.co/datasets/ImDim/RotBench",
+  "source_test_json_sha256": "0586b29f82590636806e7dd05a45e6933d46286318a52e444cee4241fb785ca7",
+  "source_version": "25b6e8214c5be600f54dc0834eaf4597fa9192e6"
+}
