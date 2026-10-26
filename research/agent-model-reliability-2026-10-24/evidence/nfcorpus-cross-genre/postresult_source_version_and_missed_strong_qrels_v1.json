@@ -1,0 +1,1460 @@
+{
+  "error_inventory": {
+    "bm25_full_corpus": {
+      "largest_original_grade2_miss_examples_ids_only": [
+        {
+          "n_original_high_grade_qrels": 14,
+          "original_grade2_doc_ids": [
+            "MED-1711",
+            "MED-1712",
+            "MED-1714",
+            "MED-1715",
+            "MED-1716",
+            "MED-1717",
+            "MED-1718",
+            "MED-1719",
+            "MED-1720",
+            "MED-1721",
+            "MED-1722",
+            "MED-1723",
+            "MED-1724",
+            "MED-2763"
+          ],
+          "original_qrel_source": "BEIR NFCorpus test.tsv score2",
+          "query_id": "PLAIN-2520",
+          "retrieved_top10_doc_ids": [
+            "MED-3273",
+            "MED-4996",
+            "MED-5335",
+            "MED-2138",
+            "MED-4831",
+            "MED-1991",
+            "MED-2519",
+            "MED-2506",
+            "MED-4469",
+            "MED-3201"
+          ],
+          "semantic_false_positive_inference_disallowed": true
+        },
+        {
+          "n_original_high_grade_qrels": 9,
+          "original_grade2_doc_ids": [
+            "MED-2288",
+            "MED-2290",
+            "MED-2291",
+            "MED-2292",
+            "MED-2293",
+            "MED-2294",
+            "MED-2295",
+            "MED-2296",
+            "MED-3137"
+          ],
+          "original_qrel_source": "BEIR NFCorpus test.tsv score2",
+          "query_id": "PLAIN-2590",
+          "retrieved_top10_doc_ids": [
+            "MED-5226",
+            "MED-5198",
+            "MED-934",
+            "MED-4163",
+            "MED-1540",
+            "MED-5204",
+            "MED-2939",
+            "MED-1135",
+            "MED-5325",
+            "MED-4600"
+          ],
+          "semantic_false_positive_inference_disallowed": true
+        },
+        {
+          "n_original_high_grade_qrels": 8,
+          "original_grade2_doc_ids": [
+            "MED-5128",
+            "MED-5129",
+            "MED-5130",
+            "MED-5131",
+            "MED-5132",
+            "MED-5133",
+            "MED-5134",
+            "MED-5135"
+          ],
+          "original_qrel_source": "BEIR NFCorpus test.tsv score2",
+          "query_id": "PLAIN-3422",
+          "retrieved_top10_doc_ids": [
+            "MED-4373",
+            "MED-2762",
+            "MED-2761",
+            "MED-4156",
+            "MED-5136",
+            "MED-4930",
+            "MED-4873",
+            "MED-2452",
+            "MED-4566",
+            "MED-1830"
+          ],
+          "semantic_false_positive_inference_disallowed": true
+        },
+        {
+          "n_original_high_grade_qrels": 8,
+          "original_grade2_doc_ids": [
+            "MED-3169",
+            "MED-3172",
+            "MED-3174",
+            "MED-3175",
+            "MED-3176",
+            "MED-3178",
+            "MED-3181",
+            "MED-3182"
+          ],
+          "original_qrel_source": "BEIR NFCorpus test.tsv score2",
+          "query_id": "PLAIN-91",
+          "retrieved_top10_doc_ids": [
+            "MED-3171",
+            "MED-3515",
+            "MED-3288",
+            "MED-4963",
+            "MED-2341",
+            "MED-4818",
+            "MED-4746",
+            "MED-1979",
+            "MED-2352",
+            "MED-1983"
+          ],
+          "semantic_false_positive_inference_disallowed": true
+        },
+        {
+          "n_original_high_grade_qrels": 7,
+          "original_grade2_doc_ids": [
+            "MED-2513",
+            "MED-2517",
+            "MED-2518",
+            "MED-2519",
+            "MED-2520",
+            "MED-2521",
+            "MED-5237"
+          ],
+          "original_qrel_source": "BEIR NFCorpus test.tsv score2",
+          "query_id": "PLAIN-12",
+          "retrieved_top10_doc_ids": [
+            "MED-4711",
+            "MED-5042",
+            "MED-2501",
+            "MED-4698",
+            "MED-2333",
+            "MED-4884",
+            "MED-1376",
+            "MED-2603",
+            "MED-2136",
+            "MED-1167"
+          ],
+          "semantic_false_positive_inference_disallowed": true
+        },
+        {
+          "n_original_high_grade_qrels": 6,
+          "original_grade2_doc_ids": [
+            "MED-3474",
+            "MED-3477",
+            "MED-3479",
+            "MED-3482",
+            "MED-3484",
+            "MED-3485"
+          ],
+          "original_qrel_source": "BEIR NFCorpus test.tsv score2",
+          "query_id": "PLAIN-123",
+          "retrieved_top10_doc_ids": [
+            "MED-4256",
+            "MED-4969",
+            "MED-4429",
+            "MED-4804",
+            "MED-1020",
+            "MED-4392",
+            "MED-4922",
+            "MED-2501",
+            "MED-3483",
+            "MED-3436"
+          ],
+          "semantic_false_positive_inference_disallowed": true
+        },
+        {
+          "n_original_high_grade_qrels": 6,
+          "original_grade2_doc_ids": [
+            "MED-2524",
+            "MED-2525",
+            "MED-2527",
+            "MED-2528",
+            "MED-2529",
+            "MED-2530"
+          ],
+          "original_qrel_source": "BEIR NFCorpus test.tsv score2",
+          "query_id": "PLAIN-2550",
+          "retrieved_top10_doc_ids": [
+            "MED-2301",
+            "MED-728",
+            "MED-3718",
+            "MED-2924",
+            "MED-1548",
+            "MED-4961",
+            "MED-3577",
+            "MED-1398",
+            "MED-1429",
+            "MED-2754"
+          ],
+          "semantic_false_positive_inference_disallowed": true
+        },
+        {
+          "n_original_high_grade_qrels": 6,
+          "original_grade2_doc_ids": [
+            "MED-2777",
+            "MED-2780",
+            "MED-2787",
+            "MED-2788",
+            "MED-2810",
+            "MED-2816"
+          ],
+          "original_qrel_source": "BEIR NFCorpus test.tsv score2",
+          "query_id": "PLAIN-44",
+          "retrieved_top10_doc_ids": [
+            "MED-2782",
+            "MED-2786",
+            "MED-1942",
+            "MED-2783",
+            "MED-2821",
+            "MED-1811",
+            "MED-2819",
+            "MED-1032",
+            "MED-2742",
+            "MED-4796"
+          ],
+          "semantic_false_positive_inference_disallowed": true
+        }
+      ],
+      "num_source_queries_with_no_grade2_in_top10": 40
+    },
+    "hash_query_doc_control": {
+      "largest_original_grade2_miss_examples_ids_only": [
+        {
+          "n_original_high_grade_qrels": 21,
+          "original_grade2_doc_ids": [
+            "MED-2643",
+            "MED-2644",
+            "MED-2645",
+            "MED-2646",
+            "MED-2647",
+            "MED-2648",
+            "MED-2649",
+            "MED-2650",
+            "MED-2651",
+            "MED-2652",
+            "MED-2653",
+            "MED-2654",
+            "MED-2655",
+            "MED-2656",
+            "MED-2657",
+            "MED-2658",
+            "MED-2659",
+            "MED-2660",
+            "MED-2661",
+            "MED-2662",
+            "MED-4551"
+          ],
+          "original_qrel_source": "BEIR NFCorpus test.tsv score2",
+          "query_id": "PLAIN-2630",
+          "retrieved_top10_doc_ids": [
+            "MED-1765",
+            "MED-3943",
+            "MED-1435",
+            "MED-3250",
+            "MED-1948",
+            "MED-4816",
+            "MED-5209",
+            "MED-1695",
+            "MED-3806",
+            "MED-3645"
+          ],
+          "semantic_false_positive_inference_disallowed": true
+        },
+        {
+          "n_original_high_grade_qrels": 20,
+          "original_grade2_doc_ids": [
+            "MED-2904",
+            "MED-2905",
+            "MED-2906",
+            "MED-2907",
+            "MED-2910",
+            "MED-2913",
+            "MED-2917",
+            "MED-2921",
+            "MED-3012",
+            "MED-3013",
+            "MED-3021",
+            "MED-3023",
+            "MED-3024",
+            "MED-3025",
+            "MED-3027",
+            "MED-3028",
+            "MED-3030",
+            "MED-3033",
+            "MED-3034",
+            "MED-3035"
+          ],
+          "original_qrel_source": "BEIR NFCorpus test.tsv score2",
+          "query_id": "PLAIN-2660",
+          "retrieved_top10_doc_ids": [
+            "MED-5362",
+            "MED-5165",
+            "MED-4710",
+            "MED-2161",
+            "MED-1598",
+            "MED-2266",
+            "MED-1455",
+            "MED-4812",
+            "MED-707",
+            "MED-4288"
+          ],
+          "semantic_false_positive_inference_disallowed": true
+        },
+        {
+          "n_original_high_grade_qrels": 19,
+          "original_grade2_doc_ids": [
+            "MED-2544",
+            "MED-2546",
+            "MED-2568",
+            "MED-2570",
+            "MED-2571",
+            "MED-2572",
+            "MED-2573",
+            "MED-2574",
+            "MED-2575",
+            "MED-2577",
+            "MED-2578",
+            "MED-2579",
+            "MED-2580",
+            "MED-2581",
+            "MED-2583",
+            "MED-2584",
+            "MED-2585",
+            "MED-2988",
+            "MED-4319"
+          ],
+          "original_qrel_source": "BEIR NFCorpus test.tsv score2",
+          "query_id": "PLAIN-2620",
+          "retrieved_top10_doc_ids": [
+            "MED-1513",
+            "MED-4222",
+            "MED-1604",
+            "MED-1638",
+            "MED-2009",
+            "MED-3175",
+            "MED-2216",
+            "MED-2203",
+            "MED-1186",
+            "MED-4749"
+          ],
+          "semantic_false_positive_inference_disallowed": true
+        },
+        {
+          "n_original_high_grade_qrels": 16,
+          "original_grade2_doc_ids": [
+            "MED-1634",
+            "MED-1635",
+            "MED-1636",
+            "MED-1637",
+            "MED-1638",
+            "MED-1639",
+            "MED-1640",
+            "MED-1641",
+            "MED-1642",
+            "MED-1643",
+            "MED-1645",
+            "MED-1646",
+            "MED-1647",
+            "MED-1648",
+            "MED-1649",
+            "MED-5258"
+          ],
+          "original_qrel_source": "BEIR NFCorpus test.tsv score2",
+          "query_id": "PLAIN-2510",
+          "retrieved_top10_doc_ids": [
+            "MED-3473",
+            "MED-3762",
+            "MED-4174",
+            "MED-5107",
+            "MED-4337",
+            "MED-5228",
+            "MED-2946",
+            "MED-4600",
+            "MED-1953",
+            "MED-920"
+          ],
+          "semantic_false_positive_inference_disallowed": true
+        },
+        {
+          "n_original_high_grade_qrels": 15,
+          "original_grade2_doc_ids": [
+            "MED-3137",
+            "MED-980",
+            "MED-981",
+            "MED-982",
+            "MED-983",
+            "MED-984",
+            "MED-985",
+            "MED-986",
+            "MED-987",
+            "MED-988",
+            "MED-990",
+            "MED-991",
+            "MED-992",
+            "MED-993",
+            "MED-994"
+          ],
+          "original_qrel_source": "BEIR NFCorpus test.tsv score2",
+          "query_id": "PLAIN-2430",
+          "retrieved_top10_doc_ids": [
+            "MED-2717",
+            "MED-4182",
+            "MED-2546",
+            "MED-4629",
+            "MED-3682",
+            "MED-1304",
+            "MED-3971",
+            "MED-3637",
+            "MED-2799",
+            "MED-1664"
+          ],
+          "semantic_false_positive_inference_disallowed": true
+        },
+        {
+          "n_original_high_grade_qrels": 15,
+          "original_grade2_doc_ids": [
+            "MED-1796",
+            "MED-1797",
+            "MED-1798",
+            "MED-1799",
+            "MED-1800",
+            "MED-1801",
+            "MED-1802",
+            "MED-1803",
+            "MED-1804",
+            "MED-1806",
+            "MED-1807",
+            "MED-1808",
+            "MED-1810",
+            "MED-4767",
+            "MED-4769"
+          ],
+          "original_qrel_source": "BEIR NFCorpus test.tsv score2",
+          "query_id": "PLAIN-2530",
+          "retrieved_top10_doc_ids": [
+            "MED-1308",
+            "MED-4026",
+            "MED-5025",
+            "MED-4852",
+            "MED-4402",
+            "MED-1375",
+            "MED-3232",
+            "MED-4598",
+            "MED-3029",
+            "MED-2434"
+          ],
+          "semantic_false_positive_inference_disallowed": true
+        },
+        {
+          "n_original_high_grade_qrels": 15,
+          "original_grade2_doc_ids": [
+            "MED-5260",
+            "MED-5261",
+            "MED-5262",
+            "MED-5263",
+            "MED-5265",
+            "MED-5266",
+            "MED-5267",
+            "MED-5268",
+            "MED-5269",
+            "MED-5270",
+            "MED-5271",
+            "MED-5272",
+            "MED-5273",
+            "MED-5274",
+            "MED-5278"
+          ],
+          "original_qrel_source": "BEIR NFCorpus test.tsv score2",
+          "query_id": "PLAIN-3462",
+          "retrieved_top10_doc_ids": [
+            "MED-1192",
+            "MED-3771",
+            "MED-2225",
+            "MED-4197",
+            "MED-1063",
+            "MED-2296",
+            "MED-1268",
+            "MED-4998",
+            "MED-1309",
+            "MED-2006"
+          ],
+          "semantic_false_positive_inference_disallowed": true
+        },
+        {
+          "n_original_high_grade_qrels": 14,
+          "original_grade2_doc_ids": [
+            "MED-1711",
+            "MED-1712",
+            "MED-1714",
+            "MED-1715",
+            "MED-1716",
+            "MED-1717",
+            "MED-1718",
+            "MED-1719",
+            "MED-1720",
+            "MED-1721",
+            "MED-1722",
+            "MED-1723",
+            "MED-1724",
+            "MED-2763"
+          ],
+          "original_qrel_source": "BEIR NFCorpus test.tsv score2",
+          "query_id": "PLAIN-2520",
+          "retrieved_top10_doc_ids": [
+            "MED-4955",
+            "MED-5120",
+            "MED-897",
+            "MED-1229",
+            "MED-1387",
+            "MED-4774",
+            "MED-3862",
+            "MED-1572",
+            "MED-2281",
+            "MED-5238"
+          ],
+          "semantic_false_positive_inference_disallowed": true
+        }
+      ],
+      "num_source_queries_with_no_grade2_in_top10": 117
+    },
+    "rrf_bm25_tfidf": {
+      "largest_original_grade2_miss_examples_ids_only": [
+        {
+          "n_original_high_grade_qrels": 14,
+          "original_grade2_doc_ids": [
+            "MED-1711",
+            "MED-1712",
+            "MED-1714",
+            "MED-1715",
+            "MED-1716",
+            "MED-1717",
+            "MED-1718",
+            "MED-1719",
+            "MED-1720",
+            "MED-1721",
+            "MED-1722",
+            "MED-1723",
+            "MED-1724",
+            "MED-2763"
+          ],
+          "original_qrel_source": "BEIR NFCorpus test.tsv score2",
+          "query_id": "PLAIN-2520",
+          "retrieved_top10_doc_ids": [
+            "MED-3273",
+            "MED-4996",
+            "MED-4831",
+            "MED-1991",
+            "MED-2138",
+            "MED-2519",
+            "MED-1997",
+            "MED-2506",
+            "MED-5335",
+            "MED-1874"
+          ],
+          "semantic_false_positive_inference_disallowed": true
+        },
+        {
+          "n_original_high_grade_qrels": 9,
+          "original_grade2_doc_ids": [
+            "MED-2288",
+            "MED-2290",
+            "MED-2291",
+            "MED-2292",
+            "MED-2293",
+            "MED-2294",
+            "MED-2295",
+            "MED-2296",
+            "MED-3137"
+          ],
+          "original_qrel_source": "BEIR NFCorpus test.tsv score2",
+          "query_id": "PLAIN-2590",
+          "retrieved_top10_doc_ids": [
+            "MED-5226",
+            "MED-934",
+            "MED-1540",
+            "MED-4163",
+            "MED-5204",
+            "MED-4600",
+            "MED-2939",
+            "MED-1135",
+            "MED-1613",
+            "MED-5198"
+          ],
+          "semantic_false_positive_inference_disallowed": true
+        },
+        {
+          "n_original_high_grade_qrels": 8,
+          "original_grade2_doc_ids": [
+            "MED-5128",
+            "MED-5129",
+            "MED-5130",
+            "MED-5131",
+            "MED-5132",
+            "MED-5133",
+            "MED-5134",
+            "MED-5135"
+          ],
+          "original_qrel_source": "BEIR NFCorpus test.tsv score2",
+          "query_id": "PLAIN-3422",
+          "retrieved_top10_doc_ids": [
+            "MED-4373",
+            "MED-4930",
+            "MED-2762",
+            "MED-2452",
+            "MED-4873",
+            "MED-5136",
+            "MED-2761",
+            "MED-2942",
+            "MED-4156",
+            "MED-3157"
+          ],
+          "semantic_false_positive_inference_disallowed": true
+        },
+        {
+          "n_original_high_grade_qrels": 8,
+          "original_grade2_doc_ids": [
+            "MED-3169",
+            "MED-3172",
+            "MED-3174",
+            "MED-3175",
+            "MED-3176",
+            "MED-3178",
+            "MED-3181",
+            "MED-3182"
+          ],
+          "original_qrel_source": "BEIR NFCorpus test.tsv score2",
+          "query_id": "PLAIN-91",
+          "retrieved_top10_doc_ids": [
+            "MED-3171",
+            "MED-2341",
+            "MED-3515",
+            "MED-2352",
+            "MED-4818",
+            "MED-4963",
+            "MED-3288",
+            "MED-2340",
+            "MED-3891",
+            "MED-1979"
+          ],
+          "semantic_false_positive_inference_disallowed": true
+        },
+        {
+          "n_original_high_grade_qrels": 7,
+          "original_grade2_doc_ids": [
+            "MED-2513",
+            "MED-2517",
+            "MED-2518",
+            "MED-2519",
+            "MED-2520",
+            "MED-2521",
+            "MED-5237"
+          ],
+          "original_qrel_source": "BEIR NFCorpus test.tsv score2",
+          "query_id": "PLAIN-12",
+          "retrieved_top10_doc_ids": [
+            "MED-4711",
+            "MED-5042",
+            "MED-2501",
+            "MED-4698",
+            "MED-1376",
+            "MED-2603",
+            "MED-2136",
+            "MED-1167",
+            "MED-2815",
+            "MED-4812"
+          ],
+          "semantic_false_positive_inference_disallowed": true
+        },
+        {
+          "n_original_high_grade_qrels": 7,
+          "original_grade2_doc_ids": [
+            "MED-4962",
+            "MED-4963",
+            "MED-4964",
+            "MED-4966",
+            "MED-4967",
+            "MED-4968",
+            "MED-4969"
+          ],
+          "original_qrel_source": "BEIR NFCorpus test.tsv score2",
+          "query_id": "PLAIN-3312",
+          "retrieved_top10_doc_ids": [
+            "MED-4360",
+            "MED-3717",
+            "MED-3561",
+            "MED-3655",
+            "MED-4328",
+            "MED-1569",
+            "MED-4961",
+            "MED-3515",
+            "MED-4959",
+            "MED-943"
+          ],
+          "semantic_false_positive_inference_disallowed": true
+        },
+        {
+          "n_original_high_grade_qrels": 6,
+          "original_grade2_doc_ids": [
+            "MED-3474",
+            "MED-3477",
+            "MED-3479",
+            "MED-3482",
+            "MED-3484",
+            "MED-3485"
+          ],
+          "original_qrel_source": "BEIR NFCorpus test.tsv score2",
+          "query_id": "PLAIN-123",
+          "retrieved_top10_doc_ids": [
+            "MED-4256",
+            "MED-4969",
+            "MED-4392",
+            "MED-4804",
+            "MED-4429",
+            "MED-3483",
+            "MED-4769",
+            "MED-1982",
+            "MED-1020",
+            "MED-2742"
+          ],
+          "semantic_false_positive_inference_disallowed": true
+        },
+        {
+          "n_original_high_grade_qrels": 6,
+          "original_grade2_doc_ids": [
+            "MED-2777",
+            "MED-2780",
+            "MED-2787",
+            "MED-2788",
+            "MED-2810",
+            "MED-2816"
+          ],
+          "original_qrel_source": "BEIR NFCorpus test.tsv score2",
+          "query_id": "PLAIN-44",
+          "retrieved_top10_doc_ids": [
+            "MED-2786",
+            "MED-2782",
+            "MED-2823",
+            "MED-2791",
+            "MED-1942",
+            "MED-2821",
+            "MED-2607",
+            "MED-2785",
+            "MED-1948",
+            "MED-1811"
+          ],
+          "semantic_false_positive_inference_disallowed": true
+        }
+      ],
+      "num_source_queries_with_no_grade2_in_top10": 42
+    },
+    "tfidf_full_corpus": {
+      "largest_original_grade2_miss_examples_ids_only": [
+        {
+          "n_original_high_grade_qrels": 19,
+          "original_grade2_doc_ids": [
+            "MED-2544",
+            "MED-2546",
+            "MED-2568",
+            "MED-2570",
+            "MED-2571",
+            "MED-2572",
+            "MED-2573",
+            "MED-2574",
+            "MED-2575",
+            "MED-2577",
+            "MED-2578",
+            "MED-2579",
+            "MED-2580",
+            "MED-2581",
+            "MED-2583",
+            "MED-2584",
+            "MED-2585",
+            "MED-2988",
+            "MED-4319"
+          ],
+          "original_qrel_source": "BEIR NFCorpus test.tsv score2",
+          "query_id": "PLAIN-2620",
+          "retrieved_top10_doc_ids": [
+            "MED-4987",
+            "MED-2134",
+            "MED-920",
+            "MED-3795",
+            "MED-3271",
+            "MED-2435",
+            "MED-5224",
+            "MED-1861",
+            "MED-4391",
+            "MED-1314"
+          ],
+          "semantic_false_positive_inference_disallowed": true
+        },
+        {
+          "n_original_high_grade_qrels": 14,
+          "original_grade2_doc_ids": [
+            "MED-1711",
+            "MED-1712",
+            "MED-1714",
+            "MED-1715",
+            "MED-1716",
+            "MED-1717",
+            "MED-1718",
+            "MED-1719",
+            "MED-1720",
+            "MED-1721",
+            "MED-1722",
+            "MED-1723",
+            "MED-1724",
+            "MED-2763"
+          ],
+          "original_qrel_source": "BEIR NFCorpus test.tsv score2",
+          "query_id": "PLAIN-2520",
+          "retrieved_top10_doc_ids": [
+            "MED-4831",
+            "MED-1991",
+            "MED-4996",
+            "MED-3273",
+            "MED-2138",
+            "MED-1997",
+            "MED-2519",
+            "MED-1874",
+            "MED-2432",
+            "MED-2506"
+          ],
+          "semantic_false_positive_inference_disallowed": true
+        },
+        {
+          "n_original_high_grade_qrels": 14,
+          "original_grade2_doc_ids": [
+            "MED-3169",
+            "MED-3170",
+            "MED-3171",
+            "MED-3172",
+            "MED-3173",
+            "MED-3174",
+            "MED-3175",
+            "MED-3176",
+            "MED-3177",
+            "MED-3178",
+            "MED-3179",
+            "MED-3180",
+            "MED-3181",
+            "MED-3182"
+          ],
+          "original_qrel_source": "BEIR NFCorpus test.tsv score2",
+          "query_id": "PLAIN-2690",
+          "retrieved_top10_doc_ids": [
+            "MED-2341",
+            "MED-3653",
+            "MED-2352",
+            "MED-2340",
+            "MED-3891",
+            "MED-4818",
+            "MED-3515",
+            "MED-1178",
+            "MED-3307",
+            "MED-4797"
+          ],
+          "semantic_false_positive_inference_disallowed": true
+        },
+        {
+          "n_original_high_grade_qrels": 9,
+          "original_grade2_doc_ids": [
+            "MED-2288",
+            "MED-2290",
+            "MED-2291",
+            "MED-2292",
+            "MED-2293",
+            "MED-2294",
+            "MED-2295",
+            "MED-2296",
+            "MED-3137"
+          ],
+          "original_qrel_source": "BEIR NFCorpus test.tsv score2",
+          "query_id": "PLAIN-2590",
+          "retrieved_top10_doc_ids": [
+            "MED-934",
+            "MED-972",
+            "MED-5226",
+            "MED-1540",
+            "MED-5204",
+            "MED-4600",
+            "MED-4163",
+            "MED-1613",
+            "MED-1135",
+            "MED-2939"
+          ],
+          "semantic_false_positive_inference_disallowed": true
+        },
+        {
+          "n_original_high_grade_qrels": 8,
+          "original_grade2_doc_ids": [
+            "MED-5128",
+            "MED-5129",
+            "MED-5130",
+            "MED-5131",
+            "MED-5132",
+            "MED-5133",
+            "MED-5134",
+            "MED-5135"
+          ],
+          "original_qrel_source": "BEIR NFCorpus test.tsv score2",
+          "query_id": "PLAIN-3422",
+          "retrieved_top10_doc_ids": [
+            "MED-4930",
+            "MED-4373",
+            "MED-2452",
+            "MED-2942",
+            "MED-5186",
+            "MED-4873",
+            "MED-992",
+            "MED-2762",
+            "MED-3157",
+            "MED-5136"
+          ],
+          "semantic_false_positive_inference_disallowed": true
+        },
+        {
+          "n_original_high_grade_qrels": 8,
+          "original_grade2_doc_ids": [
+            "MED-3169",
+            "MED-3172",
+            "MED-3174",
+            "MED-3175",
+            "MED-3176",
+            "MED-3178",
+            "MED-3181",
+            "MED-3182"
+          ],
+          "original_qrel_source": "BEIR NFCorpus test.tsv score2",
+          "query_id": "PLAIN-91",
+          "retrieved_top10_doc_ids": [
+            "MED-2341",
+            "MED-3171",
+            "MED-3653",
+            "MED-2352",
+            "MED-2340",
+            "MED-3891",
+            "MED-4818",
+            "MED-3515",
+            "MED-1178",
+            "MED-3307"
+          ],
+          "semantic_false_positive_inference_disallowed": true
+        },
+        {
+          "n_original_high_grade_qrels": 7,
+          "original_grade2_doc_ids": [
+            "MED-2513",
+            "MED-2517",
+            "MED-2518",
+            "MED-2519",
+            "MED-2520",
+            "MED-2521",
+            "MED-5237"
+          ],
+          "original_qrel_source": "BEIR NFCorpus test.tsv score2",
+          "query_id": "PLAIN-12",
+          "retrieved_top10_doc_ids": [
+            "MED-5042",
+            "MED-4711",
+            "MED-4698",
+            "MED-2501",
+            "MED-1376",
+            "MED-2603",
+            "MED-2136",
+            "MED-1167",
+            "MED-2815",
+            "MED-4695"
+          ],
+          "semantic_false_positive_inference_disallowed": true
+        },
+        {
+          "n_original_high_grade_qrels": 7,
+          "original_grade2_doc_ids": [
+            "MED-4962",
+            "MED-4963",
+            "MED-4964",
+            "MED-4966",
+            "MED-4967",
+            "MED-4968",
+            "MED-4969"
+          ],
+          "original_qrel_source": "BEIR NFCorpus test.tsv score2",
+          "query_id": "PLAIN-3312",
+          "retrieved_top10_doc_ids": [
+            "MED-3717",
+            "MED-4360",
+            "MED-3561",
+            "MED-3655",
+            "MED-1569",
+            "MED-4328",
+            "MED-4961",
+            "MED-3515",
+            "MED-3556",
+            "MED-943"
+          ],
+          "semantic_false_positive_inference_disallowed": true
+        }
+      ],
+      "num_source_queries_with_no_grade2_in_top10": 46
+    },
+    "train_popularity_query_blind_control": {
+      "largest_original_grade2_miss_examples_ids_only": [
+        {
+          "n_original_high_grade_qrels": 21,
+          "original_grade2_doc_ids": [
+            "MED-2643",
+            "MED-2644",
+            "MED-2645",
+            "MED-2646",
+            "MED-2647",
+            "MED-2648",
+            "MED-2649",
+            "MED-2650",
+            "MED-2651",
+            "MED-2652",
+            "MED-2653",
+            "MED-2654",
+            "MED-2655",
+            "MED-2656",
+            "MED-2657",
+            "MED-2658",
+            "MED-2659",
+            "MED-2660",
+            "MED-2661",
+            "MED-2662",
+            "MED-4551"
+          ],
+          "original_qrel_source": "BEIR NFCorpus test.tsv score2",
+          "query_id": "PLAIN-2630",
+          "retrieved_top10_doc_ids": [
+            "MED-5337",
+            "MED-5328",
+            "MED-5341",
+            "MED-5333",
+            "MED-5339",
+            "MED-5324",
+            "MED-5330",
+            "MED-5322",
+            "MED-5323",
+            "MED-5334"
+          ],
+          "semantic_false_positive_inference_disallowed": true
+        },
+        {
+          "n_original_high_grade_qrels": 20,
+          "original_grade2_doc_ids": [
+            "MED-2904",
+            "MED-2905",
+            "MED-2906",
+            "MED-2907",
+            "MED-2910",
+            "MED-2913",
+            "MED-2917",
+            "MED-2921",
+            "MED-3012",
+            "MED-3013",
+            "MED-3021",
+            "MED-3023",
+            "MED-3024",
+            "MED-3025",
+            "MED-3027",
+            "MED-3028",
+            "MED-3030",
+            "MED-3033",
+            "MED-3034",
+            "MED-3035"
+          ],
+          "original_qrel_source": "BEIR NFCorpus test.tsv score2",
+          "query_id": "PLAIN-2660",
+          "retrieved_top10_doc_ids": [
+            "MED-5337",
+            "MED-5328",
+            "MED-5341",
+            "MED-5333",
+            "MED-5339",
+            "MED-5324",
+            "MED-5330",
+            "MED-5322",
+            "MED-5323",
+            "MED-5334"
+          ],
+          "semantic_false_positive_inference_disallowed": true
+        },
+        {
+          "n_original_high_grade_qrels": 19,
+          "original_grade2_doc_ids": [
+            "MED-2544",
+            "MED-2546",
+            "MED-2568",
+            "MED-2570",
+            "MED-2571",
+            "MED-2572",
+            "MED-2573",
+            "MED-2574",
+            "MED-2575",
+            "MED-2577",
+            "MED-2578",
+            "MED-2579",
+            "MED-2580",
+            "MED-2581",
+            "MED-2583",
+            "MED-2584",
+            "MED-2585",
+            "MED-2988",
+            "MED-4319"
+          ],
+          "original_qrel_source": "BEIR NFCorpus test.tsv score2",
+          "query_id": "PLAIN-2620",
+          "retrieved_top10_doc_ids": [
+            "MED-5337",
+            "MED-5328",
+            "MED-5341",
+            "MED-5333",
+            "MED-5339",
+            "MED-5324",
+            "MED-5330",
+            "MED-5322",
+            "MED-5323",
+            "MED-5334"
+          ],
+          "semantic_false_positive_inference_disallowed": true
+        },
+        {
+          "n_original_high_grade_qrels": 16,
+          "original_grade2_doc_ids": [
+            "MED-1634",
+            "MED-1635",
+            "MED-1636",
+            "MED-1637",
+            "MED-1638",
+            "MED-1639",
+            "MED-1640",
+            "MED-1641",
+            "MED-1642",
+            "MED-1643",
+            "MED-1645",
+            "MED-1646",
+            "MED-1647",
+            "MED-1648",
+            "MED-1649",
+            "MED-5258"
+          ],
+          "original_qrel_source": "BEIR NFCorpus test.tsv score2",
+          "query_id": "PLAIN-2510",
+          "retrieved_top10_doc_ids": [
+            "MED-5337",
+            "MED-5328",
+            "MED-5341",
+            "MED-5333",
+            "MED-5339",
+            "MED-5324",
+            "MED-5330",
+            "MED-5322",
+            "MED-5323",
+            "MED-5334"
+          ],
+          "semantic_false_positive_inference_disallowed": true
+        },
+        {
+          "n_original_high_grade_qrels": 15,
+          "original_grade2_doc_ids": [
+            "MED-3137",
+            "MED-980",
+            "MED-981",
+            "MED-982",
+            "MED-983",
+            "MED-984",
+            "MED-985",
+            "MED-986",
+            "MED-987",
+            "MED-988",
+            "MED-990",
+            "MED-991",
+            "MED-992",
+            "MED-993",
+            "MED-994"
+          ],
+          "original_qrel_source": "BEIR NFCorpus test.tsv score2",
+          "query_id": "PLAIN-2430",
+          "retrieved_top10_doc_ids": [
+            "MED-5337",
+            "MED-5328",
+            "MED-5341",
+            "MED-5333",
+            "MED-5339",
+            "MED-5324",
+            "MED-5330",
+            "MED-5322",
+            "MED-5323",
+            "MED-5334"
+          ],
+          "semantic_false_positive_inference_disallowed": true
+        },
+        {
+          "n_original_high_grade_qrels": 15,
+          "original_grade2_doc_ids": [
+            "MED-1796",
+            "MED-1797",
+            "MED-1798",
+            "MED-1799",
+            "MED-1800",
+            "MED-1801",
+            "MED-1802",
+            "MED-1803",
+            "MED-1804",
+            "MED-1806",
+            "MED-1807",
+            "MED-1808",
+            "MED-1810",
+            "MED-4767",
+            "MED-4769"
+          ],
+          "original_qrel_source": "BEIR NFCorpus test.tsv score2",
+          "query_id": "PLAIN-2530",
+          "retrieved_top10_doc_ids": [
+            "MED-5337",
+            "MED-5328",
+            "MED-5341",
+            "MED-5333",
+            "MED-5339",
+            "MED-5324",
+            "MED-5330",
+            "MED-5322",
+            "MED-5323",
+            "MED-5334"
+          ],
+          "semantic_false_positive_inference_disallowed": true
+        },
+        {
+          "n_original_high_grade_qrels": 15,
+          "original_grade2_doc_ids": [
+            "MED-5260",
+            "MED-5261",
+            "MED-5262",
+            "MED-5263",
+            "MED-5265",
+            "MED-5266",
+            "MED-5267",
+            "MED-5268",
+            "MED-5269",
+            "MED-5270",
+            "MED-5271",
+            "MED-5272",
+            "MED-5273",
+            "MED-5274",
+            "MED-5278"
+          ],
+          "original_qrel_source": "BEIR NFCorpus test.tsv score2",
+          "query_id": "PLAIN-3462",
+          "retrieved_top10_doc_ids": [
+            "MED-5337",
+            "MED-5328",
+            "MED-5341",
+            "MED-5333",
+            "MED-5339",
+            "MED-5324",
+            "MED-5330",
+            "MED-5322",
+            "MED-5323",
+            "MED-5334"
+          ],
+          "semantic_false_positive_inference_disallowed": true
+        },
+        {
+          "n_original_high_grade_qrels": 14,
+          "original_grade2_doc_ids": [
+            "MED-1711",
+            "MED-1712",
+            "MED-1714",
+            "MED-1715",
+            "MED-1716",
+            "MED-1717",
+            "MED-1718",
+            "MED-1719",
+            "MED-1720",
+            "MED-1721",
+            "MED-1722",
+            "MED-1723",
+            "MED-1724",
+            "MED-2763"
+          ],
+          "original_qrel_source": "BEIR NFCorpus test.tsv score2",
+          "query_id": "PLAIN-2520",
+          "retrieved_top10_doc_ids": [
+            "MED-5337",
+            "MED-5328",
+            "MED-5341",
+            "MED-5333",
+            "MED-5339",
+            "MED-5324",
+            "MED-5330",
+            "MED-5322",
+            "MED-5323",
+            "MED-5334"
+          ],
+          "semantic_false_positive_inference_disallowed": true
+        }
+      ],
+      "num_source_queries_with_no_grade2_in_top10": 118
+    }
+  },
+  "methods": {
+    "bm25_full_corpus": {
+      "annotated_lower_grade1_vs_higher_grade2_pairs": {
+        "correct_graded_order_pairs": 11767,
+        "inverted_graded_order_pairs": 4336,
+        "pairs": 16103
+      },
+      "mean_strong_grade2_qrel_recall_by_total_labels_micro": 0.260417,
+      "mean_unknown_unjudged_top10_per_query_not_semantic_false_positives": 7.832817,
+      "missed_high_grade_test_qrels_in_top10": 426,
+      "pair_weighted_strong_grade_preference_AUC": 0.730733,
+      "queries_with_any_high_grade_judgment": 119,
+      "queries_with_stronger_lower_rank_than_weaker_at_least_half_pairs": 16,
+      "queries_with_zero_high_grade_retrieved_top10": 40,
+      "retrieved_high_grade_test_qrels_in_top10": 150,
+      "test_qrel_high_grade_records": 576,
+      "test_queries": 323,
+      "test_queries_with_both_grades": 106,
+      "test_queries_with_no_graded_top10_sources": 101,
+      "top10_source_slots": 3230,
+      "top10_strong_grade2_documents": 150,
+      "top10_unjudged_original_documents": 2530,
+      "top10_weaker_grade1_documents": 550
+    },
+    "hash_query_doc_control": {
+      "annotated_lower_grade1_vs_higher_grade2_pairs": {
+        "correct_graded_order_pairs": 7800,
+        "inverted_graded_order_pairs": 8303,
+        "pairs": 16103
+      },
+      "mean_strong_grade2_qrel_recall_by_total_labels_micro": 0.003472,
+      "mean_unknown_unjudged_top10_per_query_not_semantic_false_positives": 9.860681,
+      "missed_high_grade_test_qrels_in_top10": 574,
+      "pair_weighted_strong_grade_preference_AUC": 0.484382,
+      "queries_with_any_high_grade_judgment": 119,
+      "queries_with_stronger_lower_rank_than_weaker_at_least_half_pairs": 58,
+      "queries_with_zero_high_grade_retrieved_top10": 117,
+      "retrieved_high_grade_test_qrels_in_top10": 2,
+      "test_qrel_high_grade_records": 576,
+      "test_queries": 323,
+      "test_queries_with_both_grades": 106,
+      "test_queries_with_no_graded_top10_sources": 286,
+      "top10_source_slots": 3230,
+      "top10_strong_grade2_documents": 2,
+      "top10_unjudged_original_documents": 3185,
+      "top10_weaker_grade1_documents": 43
+    },
+    "rrf_bm25_tfidf": {
+      "annotated_lower_grade1_vs_higher_grade2_pairs": {
+        "correct_graded_order_pairs": 11770,
+        "inverted_graded_order_pairs": 4333,
+        "pairs": 16103
+      },
+      "mean_strong_grade2_qrel_recall_by_total_labels_micro": 0.255208,
+      "mean_unknown_unjudged_top10_per_query_not_semantic_false_positives": 7.826625,
+      "missed_high_grade_test_qrels_in_top10": 429,
+      "pair_weighted_strong_grade_preference_AUC": 0.73092,
+      "queries_with_any_high_grade_judgment": 119,
+      "queries_with_stronger_lower_rank_than_weaker_at_least_half_pairs": 19,
+      "queries_with_zero_high_grade_retrieved_top10": 42,
+      "retrieved_high_grade_test_qrels_in_top10": 147,
+      "test_qrel_high_grade_records": 576,
+      "test_queries": 323,
+      "test_queries_with_both_grades": 106,
+      "test_queries_with_no_graded_top10_sources": 103,
+      "top10_source_slots": 3230,
+      "top10_strong_grade2_documents": 147,
+      "top10_unjudged_original_documents": 2528,
+      "top10_weaker_grade1_documents": 555
+    },
+    "tfidf_full_corpus": {
+      "annotated_lower_grade1_vs_higher_grade2_pairs": {
+        "correct_graded_order_pairs": 11763,
+        "inverted_graded_order_pairs": 4340,
+        "pairs": 16103
+      },
+      "mean_strong_grade2_qrel_recall_by_total_labels_micro": 0.227431,
+      "mean_unknown_unjudged_top10_per_query_not_semantic_false_positives": 7.910217,
+      "missed_high_grade_test_qrels_in_top10": 445,
+      "pair_weighted_strong_grade_preference_AUC": 0.730485,
+      "queries_with_any_high_grade_judgment": 119,
+      "queries_with_stronger_lower_rank_than_weaker_at_least_half_pairs": 19,
+      "queries_with_zero_high_grade_retrieved_top10": 46,
+      "retrieved_high_grade_test_qrels_in_top10": 131,
+      "test_qrel_high_grade_records": 576,
+      "test_queries": 323,
+      "test_queries_with_both_grades": 106,
+      "test_queries_with_no_graded_top10_sources": 106,
+      "top10_source_slots": 3230,
+      "top10_strong_grade2_documents": 131,
+      "top10_unjudged_original_documents": 2555,
+      "top10_weaker_grade1_documents": 544
+    },
+    "train_popularity_query_blind_control": {
+      "annotated_lower_grade1_vs_higher_grade2_pairs": {
+        "correct_graded_order_pairs": 5837,
+        "inverted_graded_order_pairs": 10266,
+        "pairs": 16103
+      },
+      "mean_strong_grade2_qrel_recall_by_total_labels_micro": 0.001736,
+      "mean_unknown_unjudged_top10_per_query_not_semantic_false_positives": 9.083591,
+      "missed_high_grade_test_qrels_in_top10": 575,
+      "pair_weighted_strong_grade_preference_AUC": 0.362479,
+      "queries_with_any_high_grade_judgment": 119,
+      "queries_with_stronger_lower_rank_than_weaker_at_least_half_pairs": 78,
+      "queries_with_zero_high_grade_retrieved_top10": 118,
+      "retrieved_high_grade_test_qrels_in_top10": 1,
+      "test_qrel_high_grade_records": 576,
+      "test_queries": 323,
+      "test_queries_with_both_grades": 106,
+      "test_queries_with_no_graded_top10_sources": 283,
+      "top10_source_slots": 3230,
+      "top10_strong_grade2_documents": 1,
+      "top10_unjudged_original_documents": 2934,
+      "top10_weaker_grade1_documents": 295
+    }
+  },
+  "original_beir_archive_sha256": "efe5be03f8c5b86a5870102d0599d227c8c6e2484328e68c6522560385671b0b",
+  "scope_limitations": [
+    "The original NFCorpus and BEIR-preprocessed subsets are NOT identical source populations; do not transfer metrics to the full native release.",
+    "Exact grade count coincidences are consistent with removal/remapping of the weakest original grade, but row-by-row equality is not proved.",
+    "Unjudged top-10 results are UNKNOWN. Strong-grade omissions are FN only against known citation-derived stronger-grade judgments.",
+    "Within-judged grades 1 and 2 reflect link strength not factual entailment or worker/user role priority.",
+    "This is a separate post-result descriptive error inventory and does not modify the preregistered ranking/acceptance rule."
+  ],
+  "source_retrieval_report_sha256": "e7d7930ee5fdee98719b5a6008cd24672ffd7e856a5fc56350c5686f99d6daaf",
+  "source_top10_receipts_sha256": "170d0c4617dea13882468c56f9b0da16c58fbf3afc9ba730b76c1540229bff14",
+  "version": "NFCorpus_BEIR_original_version_scope_and_false_miss_v1_20261026",
+  "version_reconciliation": {
+    "NOT_verified_rowwise_original_to_BEIR_label_transform": true,
+    "beir_repackaged_dataset_url": "https://huggingface.co/datasets/BeIR/nfcorpus",
+    "count_consistency_only": true,
+    "native_nfcorpus_reported_document_count_approx": 5371,
+    "native_nfcorpus_reported_original_test_grade1_topic_links": 3486,
+    "native_nfcorpus_reported_original_test_grade2_indirect_links": 11758,
+    "native_nfcorpus_reported_original_test_grade3_direct_citations": 576,
+    "native_nfcorpus_reported_original_test_qrels": 15820,
+    "native_nfcorpus_reported_test_query_count": 325,
+    "original_ir_datasets_metadata_url": "https://ir-datasets.com/nfcorpus.html",
+    "original_release_metadata_url": "https://semproc.cl.uni-heidelberg.de/statnlpgroup/nfcorpus/",
+    "tested_beir_grade1_count": 11758,
+    "tested_beir_grade2_count": 576,
+    "tested_beir_processed_n_original_docs": 3633,
+    "tested_beir_processed_n_test_queries": 323,
+    "tested_beir_processed_test_qrel_count": 12334
+  }
+}

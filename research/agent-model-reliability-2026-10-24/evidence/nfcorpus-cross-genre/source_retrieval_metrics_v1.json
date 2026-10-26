@@ -1,0 +1,677 @@
+{
+  "case_count": 323,
+  "cost": {
+    "actual_gpu_inference_calls": 0,
+    "actual_qwen_model_calls": 0,
+    "method_index_build_and_source_data": {
+      "bm25_index": {
+        "index_build_seconds": 4.18399,
+        "indexed_document_token_total": 892964,
+        "mean_source_document_whitespace_words_proxy": 233.765,
+        "source_document_characters_indexed": 5779318,
+        "unique_index_terms": 26475
+      },
+      "tfidf_index": {
+        "feature_count": 100000,
+        "index_build_seconds": 10.67825,
+        "nonzero_doc_features": 1005132
+      },
+      "train_popularity": {
+        "mean_train_citations_per_doc": 30.818,
+        "training_labeled_query_ids": 2590,
+        "unique_train_cited_docs": 3588
+      }
+    },
+    "peak_process_resident_memory_kib": 379052,
+    "per_query_ranking_wall_seconds_total": {
+      "bm25_full_corpus": 7.4207,
+      "hash_query_doc_control": 12.50065,
+      "rrf_bm25_tfidf": 7.20948,
+      "tfidf_full_corpus": 25.61422,
+      "train_popularity_query_blind_control": 0.00035
+    },
+    "real_SWAAG_end_to_end_actions": 0,
+    "token_estimator": "whole-source whitespace words only; no llama.cpp tokenizer",
+    "total_source_validation_indexing_scoring_bootstrap_seconds": 107.3931
+  },
+  "frozen_acceptance_rule_outcome": {
+    "bm25_vs_two_query_blind_negative_controls_passes_frozen_acceptance": true,
+    "candidate_replacement_tests": {
+      "rrf_bm25_tfidf": {
+        "bootstrap_lower_bound_positive": false,
+        "eligible_to_replace_bm25": false,
+        "mean_ndcg_gain_over_bm25": -0.00268,
+        "strong_recall_point_delta_from_bm25": 0.00227
+      },
+      "tfidf_full_corpus": {
+        "bootstrap_lower_bound_positive": false,
+        "eligible_to_replace_bm25": false,
+        "mean_ndcg_gain_over_bm25": -0.01344,
+        "strong_recall_point_delta_from_bm25": -0.010628
+      }
+    },
+    "lexical_ranker_with_best_supported_cross_genre_evidence": "bm25_full_corpus",
+    "qualification": "Ranking-only recommendation for original NFCorpus judged-document retrieval, not a semantic fact checker, Qwen, or SWAAG user/worker relevance winner."
+  },
+  "limitations": [
+    "Citation-derived graded NFCorpus qrels, not independent human entailment or authentic user/worker SWAAG task effects.",
+    "No test grade-zero judgments. A score1 remains source graded relevant; unjudged is UNKNOWN, only conventional benchmark nDCG uses zero gain.",
+    "323 test queries are ID-disjoint from dev/train but document IDs and topics may repeat; bootstrap captures queries, not independent clinical facts.",
+    "Only 119 queries contain any score2 positive; only 106 permit explicit grade2 versus grade1 ranking comparison.",
+    "Whole-corpus retrieval is document ranking, not SciFact sentence-complete rationale or final factual correctness; never pool success percentages across tasks.",
+    "CPU wall and lexical words are not actual Qwen GPU, batching, review latency, tokens or production actions."
+  ],
+  "metrics_and_paired_bootstrap": {
+    "graded_nDCG@10": {
+      "bootstrap_query_replicates": 1000,
+      "individual": {
+        "bm25_full_corpus": {
+          "mean": 0.308066,
+          "query_bootstrap_95pct": [
+            0.276198,
+            0.342579
+          ],
+          "query_count": 323
+        },
+        "hash_query_doc_control": {
+          "mean": 0.013057,
+          "query_bootstrap_95pct": [
+            0.008386,
+            0.017921
+          ],
+          "query_count": 323
+        },
+        "rrf_bm25_tfidf": {
+          "mean": 0.305386,
+          "query_bootstrap_95pct": [
+            0.271442,
+            0.339108
+          ],
+          "query_count": 323
+        },
+        "tfidf_full_corpus": {
+          "mean": 0.294626,
+          "query_bootstrap_95pct": [
+            0.261423,
+            0.32711
+          ],
+          "query_count": 323
+        },
+        "train_popularity_query_blind_control": {
+          "mean": 0.063567,
+          "query_bootstrap_95pct": [
+            0.04316,
+            0.088111
+          ],
+          "query_count": 323
+        }
+      },
+      "paired_differences": {
+        "bm25_full_corpus_minus_hash_query_doc_control": {
+          "mean_difference": 0.295009,
+          "paired_query_bootstrap_95pct": [
+            0.258776,
+            0.329159
+          ],
+          "query_count": 323
+        },
+        "bm25_full_corpus_minus_train_popularity_query_blind_control": {
+          "mean_difference": 0.2445,
+          "paired_query_bootstrap_95pct": [
+            0.202672,
+            0.288134
+          ],
+          "query_count": 323
+        },
+        "hash_query_doc_control_minus_bm25_full_corpus": {
+          "mean_difference": -0.295009,
+          "paired_query_bootstrap_95pct": [
+            -0.330222,
+            -0.261654
+          ],
+          "query_count": 323
+        },
+        "hash_query_doc_control_minus_train_popularity_query_blind_control": {
+          "mean_difference": -0.050509,
+          "paired_query_bootstrap_95pct": [
+            -0.073371,
+            -0.029982
+          ],
+          "query_count": 323
+        },
+        "rrf_bm25_tfidf_minus_bm25_full_corpus": {
+          "mean_difference": -0.00268,
+          "paired_query_bootstrap_95pct": [
+            -0.009746,
+            0.004662
+          ],
+          "query_count": 323
+        },
+        "rrf_bm25_tfidf_minus_hash_query_doc_control": {
+          "mean_difference": 0.292329,
+          "paired_query_bootstrap_95pct": [
+            0.259858,
+            0.328831
+          ],
+          "query_count": 323
+        },
+        "rrf_bm25_tfidf_minus_train_popularity_query_blind_control": {
+          "mean_difference": 0.241819,
+          "paired_query_bootstrap_95pct": [
+            0.200371,
+            0.281225
+          ],
+          "query_count": 323
+        },
+        "tfidf_full_corpus_minus_bm25_full_corpus": {
+          "mean_difference": -0.01344,
+          "paired_query_bootstrap_95pct": [
+            -0.025165,
+            -0.003529
+          ],
+          "query_count": 323
+        },
+        "tfidf_full_corpus_minus_hash_query_doc_control": {
+          "mean_difference": 0.281569,
+          "paired_query_bootstrap_95pct": [
+            0.247035,
+            0.315491
+          ],
+          "query_count": 323
+        },
+        "tfidf_full_corpus_minus_train_popularity_query_blind_control": {
+          "mean_difference": 0.23106,
+          "paired_query_bootstrap_95pct": [
+            0.188199,
+            0.268861
+          ],
+          "query_count": 323
+        },
+        "train_popularity_query_blind_control_minus_bm25_full_corpus": {
+          "mean_difference": -0.2445,
+          "paired_query_bootstrap_95pct": [
+            -0.284154,
+            -0.200196
+          ],
+          "query_count": 323
+        },
+        "train_popularity_query_blind_control_minus_hash_query_doc_control": {
+          "mean_difference": 0.050509,
+          "paired_query_bootstrap_95pct": [
+            0.029041,
+            0.074583
+          ],
+          "query_count": 323
+        }
+      },
+      "source_gold_caveat": "Original NFCorpus qrel grade 1/2 is citation-derived, not human entailment; unjudged unknown"
+    },
+    "judged_grade2_vs_grade1_AUC": {
+      "bootstrap_query_replicates": 1000,
+      "individual": {
+        "bm25_full_corpus": {
+          "mean": 0.725279,
+          "query_bootstrap_95pct": [
+            0.675484,
+            0.768669
+          ],
+          "query_count": 106
+        },
+        "hash_query_doc_control": {
+          "mean": 0.486171,
+          "query_bootstrap_95pct": [
+            0.443416,
+            0.525385
+          ],
+          "query_count": 106
+        },
+        "rrf_bm25_tfidf": {
+          "mean": 0.723136,
+          "query_bootstrap_95pct": [
+            0.678707,
+            0.769109
+          ],
+          "query_count": 106
+        },
+        "tfidf_full_corpus": {
+          "mean": 0.720075,
+          "query_bootstrap_95pct": [
+            0.669709,
+            0.766022
+          ],
+          "query_count": 106
+        },
+        "train_popularity_query_blind_control": {
+          "mean": 0.315152,
+          "query_bootstrap_95pct": [
+            0.258843,
+            0.369618
+          ],
+          "query_count": 106
+        }
+      },
+      "paired_differences": {
+        "bm25_full_corpus_minus_hash_query_doc_control": {
+          "mean_difference": 0.239108,
+          "paired_query_bootstrap_95pct": [
+            0.165091,
+            0.294795
+          ],
+          "query_count": 106
+        },
+        "bm25_full_corpus_minus_train_popularity_query_blind_control": {
+          "mean_difference": 0.410127,
+          "paired_query_bootstrap_95pct": [
+            0.327156,
+            0.491459
+          ],
+          "query_count": 106
+        },
+        "hash_query_doc_control_minus_bm25_full_corpus": {
+          "mean_difference": -0.239108,
+          "paired_query_bootstrap_95pct": [
+            -0.309435,
+            -0.173079
+          ],
+          "query_count": 106
+        },
+        "hash_query_doc_control_minus_train_popularity_query_blind_control": {
+          "mean_difference": 0.171019,
+          "paired_query_bootstrap_95pct": [
+            0.101438,
+            0.236026
+          ],
+          "query_count": 106
+        },
+        "rrf_bm25_tfidf_minus_bm25_full_corpus": {
+          "mean_difference": -0.002143,
+          "paired_query_bootstrap_95pct": [
+            -0.009472,
+            0.005534
+          ],
+          "query_count": 106
+        },
+        "rrf_bm25_tfidf_minus_hash_query_doc_control": {
+          "mean_difference": 0.236965,
+          "paired_query_bootstrap_95pct": [
+            0.171785,
+            0.305949
+          ],
+          "query_count": 106
+        },
+        "rrf_bm25_tfidf_minus_train_popularity_query_blind_control": {
+          "mean_difference": 0.407984,
+          "paired_query_bootstrap_95pct": [
+            0.336018,
+            0.489301
+          ],
+          "query_count": 106
+        },
+        "tfidf_full_corpus_minus_bm25_full_corpus": {
+          "mean_difference": -0.005204,
+          "paired_query_bootstrap_95pct": [
+            -0.016488,
+            0.004459
+          ],
+          "query_count": 106
+        },
+        "tfidf_full_corpus_minus_hash_query_doc_control": {
+          "mean_difference": 0.233904,
+          "paired_query_bootstrap_95pct": [
+            0.167439,
+            0.2987
+          ],
+          "query_count": 106
+        },
+        "tfidf_full_corpus_minus_train_popularity_query_blind_control": {
+          "mean_difference": 0.404923,
+          "paired_query_bootstrap_95pct": [
+            0.323729,
+            0.47831
+          ],
+          "query_count": 106
+        },
+        "train_popularity_query_blind_control_minus_bm25_full_corpus": {
+          "mean_difference": -0.410127,
+          "paired_query_bootstrap_95pct": [
+            -0.490005,
+            -0.329999
+          ],
+          "query_count": 106
+        },
+        "train_popularity_query_blind_control_minus_hash_query_doc_control": {
+          "mean_difference": -0.171019,
+          "paired_query_bootstrap_95pct": [
+            -0.236583,
+            -0.099018
+          ],
+          "query_count": 106
+        }
+      },
+      "source_gold_caveat": "Original NFCorpus qrel grade 1/2 is citation-derived, not human entailment; unjudged unknown"
+    },
+    "strong_recall@10": {
+      "bootstrap_query_replicates": 1000,
+      "individual": {
+        "bm25_full_corpus": {
+          "mean": 0.335607,
+          "query_bootstrap_95pct": [
+            0.272524,
+            0.401895
+          ],
+          "query_count": 119
+        },
+        "hash_query_doc_control": {
+          "mean": 0.004966,
+          "query_bootstrap_95pct": [
+            0.0,
+            0.014133
+          ],
+          "query_count": 119
+        },
+        "rrf_bm25_tfidf": {
+          "mean": 0.337877,
+          "query_bootstrap_95pct": [
+            0.270677,
+            0.408029
+          ],
+          "query_count": 119
+        },
+        "tfidf_full_corpus": {
+          "mean": 0.324979,
+          "query_bootstrap_95pct": [
+            0.259453,
+            0.388988
+          ],
+          "query_count": 119
+        },
+        "train_popularity_query_blind_control": {
+          "mean": 0.002801,
+          "query_bootstrap_95pct": [
+            0.0,
+            0.008403
+          ],
+          "query_count": 119
+        }
+      },
+      "paired_differences": {
+        "bm25_full_corpus_minus_hash_query_doc_control": {
+          "mean_difference": 0.330642,
+          "paired_query_bootstrap_95pct": [
+            0.265656,
+            0.396769
+          ],
+          "query_count": 119
+        },
+        "bm25_full_corpus_minus_train_popularity_query_blind_control": {
+          "mean_difference": 0.332806,
+          "paired_query_bootstrap_95pct": [
+            0.275209,
+            0.395171
+          ],
+          "query_count": 119
+        },
+        "hash_query_doc_control_minus_bm25_full_corpus": {
+          "mean_difference": -0.330642,
+          "paired_query_bootstrap_95pct": [
+            -0.396395,
+            -0.269582
+          ],
+          "query_count": 119
+        },
+        "hash_query_doc_control_minus_train_popularity_query_blind_control": {
+          "mean_difference": 0.002165,
+          "paired_query_bootstrap_95pct": [
+            -0.007639,
+            0.014006
+          ],
+          "query_count": 119
+        },
+        "rrf_bm25_tfidf_minus_bm25_full_corpus": {
+          "mean_difference": 0.00227,
+          "paired_query_bootstrap_95pct": [
+            -0.020983,
+            0.028872
+          ],
+          "query_count": 119
+        },
+        "rrf_bm25_tfidf_minus_hash_query_doc_control": {
+          "mean_difference": 0.332912,
+          "paired_query_bootstrap_95pct": [
+            0.267775,
+            0.398491
+          ],
+          "query_count": 119
+        },
+        "rrf_bm25_tfidf_minus_train_popularity_query_blind_control": {
+          "mean_difference": 0.335076,
+          "paired_query_bootstrap_95pct": [
+            0.267055,
+            0.400446
+          ],
+          "query_count": 119
+        },
+        "tfidf_full_corpus_minus_bm25_full_corpus": {
+          "mean_difference": -0.010629,
+          "paired_query_bootstrap_95pct": [
+            -0.047069,
+            0.027537
+          ],
+          "query_count": 119
+        },
+        "tfidf_full_corpus_minus_hash_query_doc_control": {
+          "mean_difference": 0.320013,
+          "paired_query_bootstrap_95pct": [
+            0.253408,
+            0.3871
+          ],
+          "query_count": 119
+        },
+        "tfidf_full_corpus_minus_train_popularity_query_blind_control": {
+          "mean_difference": 0.322178,
+          "paired_query_bootstrap_95pct": [
+            0.25927,
+            0.39595
+          ],
+          "query_count": 119
+        },
+        "train_popularity_query_blind_control_minus_bm25_full_corpus": {
+          "mean_difference": -0.332806,
+          "paired_query_bootstrap_95pct": [
+            -0.39727,
+            -0.269633
+          ],
+          "query_count": 119
+        },
+        "train_popularity_query_blind_control_minus_hash_query_doc_control": {
+          "mean_difference": -0.002165,
+          "paired_query_bootstrap_95pct": [
+            -0.013369,
+            0.007639
+          ],
+          "query_count": 119
+        }
+      },
+      "source_gold_caveat": "Original NFCorpus qrel grade 1/2 is citation-derived, not human entailment; unjudged unknown"
+    },
+    "strong_recall@20": {
+      "bootstrap_query_replicates": 1000,
+      "individual": {
+        "bm25_full_corpus": {
+          "mean": 0.432679,
+          "query_bootstrap_95pct": [
+            0.3641,
+            0.497923
+          ],
+          "query_count": 119
+        },
+        "hash_query_doc_control": {
+          "mean": 0.007066,
+          "query_bootstrap_95pct": [
+            0.0,
+            0.017571
+          ],
+          "query_count": 119
+        },
+        "rrf_bm25_tfidf": {
+          "mean": 0.409188,
+          "query_bootstrap_95pct": [
+            0.343335,
+            0.479996
+          ],
+          "query_count": 119
+        },
+        "tfidf_full_corpus": {
+          "mean": 0.393191,
+          "query_bootstrap_95pct": [
+            0.32624,
+            0.463102
+          ],
+          "query_count": 119
+        },
+        "train_popularity_query_blind_control": {
+          "mean": 0.013305,
+          "query_bootstrap_95pct": [
+            0.0,
+            0.033613
+          ],
+          "query_count": 119
+        }
+      },
+      "paired_differences": {
+        "bm25_full_corpus_minus_hash_query_doc_control": {
+          "mean_difference": 0.425612,
+          "paired_query_bootstrap_95pct": [
+            0.36067,
+            0.493736
+          ],
+          "query_count": 119
+        },
+        "bm25_full_corpus_minus_train_popularity_query_blind_control": {
+          "mean_difference": 0.419373,
+          "paired_query_bootstrap_95pct": [
+            0.344218,
+            0.493054
+          ],
+          "query_count": 119
+        },
+        "hash_query_doc_control_minus_bm25_full_corpus": {
+          "mean_difference": -0.425612,
+          "paired_query_bootstrap_95pct": [
+            -0.48811,
+            -0.360278
+          ],
+          "query_count": 119
+        },
+        "hash_query_doc_control_minus_train_popularity_query_blind_control": {
+          "mean_difference": -0.006239,
+          "paired_query_bootstrap_95pct": [
+            -0.028011,
+            0.010695
+          ],
+          "query_count": 119
+        },
+        "rrf_bm25_tfidf_minus_bm25_full_corpus": {
+          "mean_difference": -0.02349,
+          "paired_query_bootstrap_95pct": [
+            -0.053455,
+            -0.002465
+          ],
+          "query_count": 119
+        },
+        "rrf_bm25_tfidf_minus_hash_query_doc_control": {
+          "mean_difference": 0.402122,
+          "paired_query_bootstrap_95pct": [
+            0.3328,
+            0.468906
+          ],
+          "query_count": 119
+        },
+        "rrf_bm25_tfidf_minus_train_popularity_query_blind_control": {
+          "mean_difference": 0.395883,
+          "paired_query_bootstrap_95pct": [
+            0.325756,
+            0.465187
+          ],
+          "query_count": 119
+        },
+        "tfidf_full_corpus_minus_bm25_full_corpus": {
+          "mean_difference": -0.039488,
+          "paired_query_bootstrap_95pct": [
+            -0.075293,
+            -0.005879
+          ],
+          "query_count": 119
+        },
+        "tfidf_full_corpus_minus_hash_query_doc_control": {
+          "mean_difference": 0.386124,
+          "paired_query_bootstrap_95pct": [
+            0.321968,
+            0.456128
+          ],
+          "query_count": 119
+        },
+        "tfidf_full_corpus_minus_train_popularity_query_blind_control": {
+          "mean_difference": 0.379886,
+          "paired_query_bootstrap_95pct": [
+            0.309601,
+            0.451272
+          ],
+          "query_count": 119
+        },
+        "train_popularity_query_blind_control_minus_bm25_full_corpus": {
+          "mean_difference": -0.419373,
+          "paired_query_bootstrap_95pct": [
+            -0.487213,
+            -0.3497
+          ],
+          "query_count": 119
+        },
+        "train_popularity_query_blind_control_minus_hash_query_doc_control": {
+          "mean_difference": 0.006239,
+          "paired_query_bootstrap_95pct": [
+            -0.010568,
+            0.027247
+          ],
+          "query_count": 119
+        }
+      },
+      "source_gold_caveat": "Original NFCorpus qrel grade 1/2 is citation-derived, not human entailment; unjudged unknown"
+    }
+  },
+  "no_unjudged_source_is_labelled_semantically_irrelevant": true,
+  "prespecified_protocol_file": "NFCORPUS_CROSS_GENRE_RELEVANCE_PROTOCOL_2026-10-26.md",
+  "prespecified_protocol_sha256": "8a9521d308b43b437a2f196e55582ffa6da981e77f80dfd60001f6fe9e124498",
+  "ranking_methods": [
+    "hash_query_doc_control",
+    "train_popularity_query_blind_control",
+    "bm25_full_corpus",
+    "tfidf_full_corpus",
+    "rrf_bm25_tfidf"
+  ],
+  "source_gold_kind": "citation_derived_grade1_and_grade2_not_independent_human_semantic_gold",
+  "source_version": {
+    "num_dev_qrels": 11385,
+    "num_original_queries": 3237,
+    "num_source_documents": 3633,
+    "num_test_qrels": 12334,
+    "num_train_qrels": 110575,
+    "original_label_kind": "citation_link_derived_relevance_grade_not_human_entailment",
+    "original_member_sha256": {
+      "nfcorpus/corpus.jsonl": "10cc83ef1826b1425e6a87090b5140b39b27755d5a27e48215a88611c899991f",
+      "nfcorpus/qrels/dev.tsv": "b1d38b5e8f78c4a5820bce2b7ec2db54911d7690dc601e76811846b211180bd8",
+      "nfcorpus/qrels/test.tsv": "f8fba6ef3d4dd9c3a242a8ba4ae38276fc3622fce7dcbae764766d564542fd2a",
+      "nfcorpus/qrels/train.tsv": "6336b80f9bffc4f063f3aa450047ad35c0b7c534efe4a6ba35e16dbace047f6a",
+      "nfcorpus/queries.jsonl": "d024e6621b84925d485ae473d316a0c3af31c62c8068a59fb29d22f7613aef2a"
+    },
+    "original_source_zip_sha256": "efe5be03f8c5b86a5870102d0599d227c8c6e2484328e68c6522560385671b0b",
+    "source_read_sha_checks_seconds": 2.19231,
+    "test_grade1_judgments": 11758,
+    "test_grade2_judgments": 576,
+    "test_queries": 323,
+    "test_queries_with_both_graded_levels": 106,
+    "test_queries_with_strong_grade2": 119,
+    "test_query_ids_overlap_train_or_dev": 0
+  },
+  "version": "NFCorpus_cross_genre_original_grades_v1_20261026"
+}
